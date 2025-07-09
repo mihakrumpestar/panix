@@ -38,7 +38,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&config.C.Global.DryRun, "dry-run", false, "show what would be done without executing")
 	rootCmd.PersistentFlags().BoolVarP(&config.C.Global.Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().IntVar(&config.C.Global.Concurrency, "concurrency", 4, "number of concurrent operations")
-	rootCmd.PersistentFlags().IntVar(&config.C.Global.Timeout, "timeout", 300, "timeout for operations in seconds")
+	rootCmd.PersistentFlags().DurationVar(&config.C.Global.Timeout, "timeout", 300, "timeout for operations in seconds")
 
 	// rootCmd.MarkFlagsMutuallyExclusive("require-all", "continue-on-error")
 
@@ -70,5 +70,10 @@ func parseTags(tagStrings []string) []string {
 
 func getFilteredMachines() []config.MachineConfig {
 	filterTags := parseTags(config.C.Global.Tags)
-	return config.C.GetMachinesByTags(filterTags)
+	machines, err := config.C.GetMachinesByTags(filterTags)
+	if err != nil {
+		panic(err)
+	}
+
+	return machines
 }

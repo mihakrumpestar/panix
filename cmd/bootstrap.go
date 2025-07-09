@@ -28,9 +28,9 @@ This command will:
 			fmt.Println("DRY RUN: Would bootstrap the following machines:")
 			for _, machine := range machines {
 				if machine.Bootstrap != nil {
-					fmt.Printf("  - %s (%s@%s:%d)\n", machine.Name, machine.User, machine.Host, machine.Port)
+					fmt.Printf("  - %s (%s@%s:%d)\n", machine.Name, machine.Ssh.User, machine.Ssh.Host, machine.Ssh.Port)
 				} else {
-					fmt.Printf("  - %s (%s@%s:%d) - auto-detect bootstrap\n", machine.Name, machine.User, machine.Host, machine.Port)
+					fmt.Printf("  - %s (%s@%s:%d) - auto-detect bootstrap\n", machine.Name, machine.Ssh.User, machine.Ssh.Host, machine.Ssh.Port)
 				}
 			}
 			return nil

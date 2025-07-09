@@ -2,42 +2,51 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Global GlobalConfig  `mapstructure:"global"`
-	Flakes []FlakeConfig `mapstructure:"flakes"`
+	Global GlobalConfig           `mapstructure:"global"`
+	Flakes map[string]FlakeConfig `mapstructure:"flakes"`
 }
 
 type GlobalConfig struct {
-	Tags              []string `mapstructure:"tags"`
-	RequireAllSuccess bool     `mapstructure:"requireAllSuccess"`
-	AutoBootstrap     bool     `mapstructure:"autoBootstrap"`
-	DisableBootstrap  bool     `mapstructure:"disableBootstrap"`
-	DryRun            bool     `mapstructure:"dryRun"`
-	SSHUser           string   `mapstructure:"sshUser"`
-	SSHPrivateKey     string   `mapstructure:"sshPrivateKey"`
-	Timeout           int      `mapstructure:"timeout"`
-	Concurrency       int      `mapstructure:"concurrency"`
-	Verbose           bool     `mapstructure:"verbose"`
+	Tags              []string        `mapstructure:"tags"`
+	RequireAllSuccess bool            `mapstructure:"requireAllSuccess"`
+	AutoBootstrap     bool            `mapstructure:"autoBootstrap"`
+	DisableBootstrap  bool            `mapstructure:"disableBootstrap"`
+	DryRun            bool            `mapstructure:"dryRun"`
+	SshClientConfig   SshClientConfig `mapstructure:"sshClientConfig"`
+	Timeout           time.Duration   `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
+	Concurrency       int             `mapstructure:"concurrency"`
+	Verbose           bool            `mapstructure:"verbose"`
 }
 
 type FlakeConfig struct {
-	Flake    string          `mapstructure:"flake"`
-	Machines []MachineConfig `mapstructure:"machines"`
+	FlakePath       string                   `mapstructure:"flakePath"`
+	SshClientConfig SshClientConfig          `mapstructure:"sshClientConfig"`
+	Machines        map[string]MachineConfig `mapstructure:"machines"`
 }
 
 type MachineConfig struct {
-	Name        string           `mapstructure:"name"`
-	Host        string           `mapstructure:"host"`
-	User        string           `mapstructure:"user"`
-	Port        int              `mapstructure:"port"`
+	Name        string           `mapstructure:"name"` // Optional
+	FlakeName   string           `mapstructure:"flakeName"`
+	FlakePath   string           `mapstructure:"flakePath"`
+	Ssh         SshClientConfig  `mapstructure:"ssh"`
 	Tags        []string         `mapstructure:"tags"`
-	FlakeOutput string           `mapstructure:"flakeOutput"`
+	FlakeOutput string           `mapstructure:"flakeOutput"` // Optional
 	Bootstrap   *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
 	Secrets     []SecretConfig   `mapstructure:"secrets,omitempty"`
+}
+
+type SshClientConfig struct {
+	User       string `mapstructure:"user"`
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	PrivateKey string `mapstructure:"privateKey"`
+	PublicKey  string `mapstructure:"publicKey"`
 }
 
 type BootstrapConfig struct {
@@ -81,6 +90,8 @@ func LoadConfig(configPath string) (*Config, error) {
 		panic(fmt.Errorf("unable to decode into struct, %v", err))
 	}
 
+	C.Global.Timeout *= time.Second
+
 	if err := validateConfig(&C); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -93,27 +104,14 @@ func validateConfig(c *Config) error {
 		return fmt.Errorf("flakes is required")
 	}
 
-	for i, flake := range c.Flakes {
-
-		if flake.Flake == "" {
-			return fmt.Errorf("flakes[%d].flake path is required", i)
-		}
-
+	for flakeName, flake := range c.Flakes {
 		if len(flake.Machines) == 0 {
-			return fmt.Errorf("at least one machine must be configured")
+			return fmt.Errorf("flakes[%s]machines is empty", flakeName)
 		}
 
-		for i, machine := range flake.Machines {
-			if machine.Name == "" {
-				return fmt.Errorf("machine[%d].name is required", i)
-			}
-
-			if machine.Host == "" {
-				return fmt.Errorf("machine[%d].host is required", i)
-			}
-
-			if machine.FlakeOutput == "" {
-				return fmt.Errorf("machine[%d].flakeOutput is required", i)
+		for machineName, machine := range flake.Machines {
+			if machine.Ssh.Host == "" {
+				return fmt.Errorf("flakes[%s]machines[%s].ssh.host is empty", flakeName, machineName)
 			}
 		}
 	}
@@ -122,32 +120,50 @@ func validateConfig(c *Config) error {
 }
 
 // GetMachinesByTags filters machines by tags.
-func (c *Config) GetMachinesByTags(tags []string) []MachineConfig {
+func (c *Config) GetMachinesByTags(tags []string) ([]MachineConfig, error) {
 	// Aggregate all machines across flakes
 	var allMachines []MachineConfig
-	for _, flake := range c.Flakes {
-		allMachines = append(allMachines, flake.Machines...)
+	for flakeName, flake := range c.Flakes {
+		for machineName, machine := range flake.Machines {
+
+			if machine.FlakePath == "" {
+				if flake.FlakePath == "" {
+					return nil, fmt.Errorf("machine.flakePath and flake.flakePath can't be empty at the same time")
+				}
+
+				machine.Name = machineName
+				machine.FlakeName = flakeName
+				machine.FlakePath = flake.FlakePath
+			}
+
+			allMachines = append(allMachines, machine)
+		}
 	}
+
 	if len(tags) == 0 {
-		return allMachines
+		return allMachines, nil
 	}
+
 	var filtered []MachineConfig
 	for _, m := range allMachines {
 		if matchesTags(m.Tags, tags) {
 			filtered = append(filtered, m)
 		}
 	}
-	return filtered
+	return filtered, nil
 }
 
 func matchesTags(machineTags, filterTags []string) bool {
 	if len(filterTags) == 0 {
 		return true
 	}
+
 	tagSet := make(map[string]bool)
+
 	for _, t := range machineTags {
 		tagSet[t] = true
 	}
+
 	for _, ft := range filterTags {
 		switch ft[0] {
 		case '+':
@@ -164,5 +180,6 @@ func matchesTags(machineTags, filterTags []string) bool {
 			}
 		}
 	}
+
 	return true
 }

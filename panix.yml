@@ -7,12 +7,14 @@ global:
   dry_run: false
 
 flakes:
-  - flake: ../infrastructure
+  infrastructure:
+    flakePath: ../infrastructure
     machines:
-      - name: personal-workstation
+      personal-workstation:
         description: My personal NixOS workstation
-        host: "local"
-        flakeOutput: personal-workstation
+        ssh:
+          host: "local"
+        #flakeOutput: personal-workstation
         tags:
           - workstation
           - personal
