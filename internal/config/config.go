@@ -2,130 +2,139 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
-	"github.com/BurntSushi/toml"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Global   GlobalConfig    `toml:"global"`
-	Machines []MachineConfig `toml:"machine"`
+	Global GlobalConfig  `mapstructure:"global"`
+	Flakes []FlakeConfig `mapstructure:"flakes"`
 }
 
 type GlobalConfig struct {
-	Flake             string `yaml:"flake"`
-	RequireAllSuccess bool   `yaml:"requireAllSuccess"`
-	AutoBootstrap     bool   `yaml:"autoBootstrap"`
-	Concurrency       int    `yaml:"concurrency"`
-	Timeout           int    `yaml:"timeout"`
+	Tags              []string `mapstructure:"tags"`
+	RequireAllSuccess bool     `mapstructure:"requireAllSuccess"`
+	AutoBootstrap     bool     `mapstructure:"autoBootstrap"`
+	DisableBootstrap  bool     `mapstructure:"disableBootstrap"`
+	DryRun            bool     `mapstructure:"dryRun"`
+	SSHUser           string   `mapstructure:"sshUser"`
+	SSHPrivateKey     string   `mapstructure:"sshPrivateKey"`
+	Timeout           int      `mapstructure:"timeout"`
+	Concurrency       int      `mapstructure:"concurrency"`
+	Verbose           bool     `mapstructure:"verbose"`
+}
+
+type FlakeConfig struct {
+	Flake    string          `mapstructure:"flake"`
+	Machines []MachineConfig `mapstructure:"machines"`
 }
 
 type MachineConfig struct {
-	Name        string           `toml:"name"`
-	Host        string           `toml:"host"`
-	User        string           `toml:"user"`
-	Port        int              `toml:"port"`
-	Tags        []string         `toml:"tags"`
-	FlakeOutput string           `toml:"flakeOutput"`
-	Bootstrap   *BootstrapConfig `toml:"bootstrap,omitempty"`
-	Secrets     []SecretConfig   `toml:"secrets,omitempty"`
+	Name        string           `mapstructure:"name"`
+	Host        string           `mapstructure:"host"`
+	User        string           `mapstructure:"user"`
+	Port        int              `mapstructure:"port"`
+	Tags        []string         `mapstructure:"tags"`
+	FlakeOutput string           `mapstructure:"flakeOutput"`
+	Bootstrap   *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
+	Secrets     []SecretConfig   `mapstructure:"secrets,omitempty"`
 }
 
 type BootstrapConfig struct {
-	FlakeAttr string            `toml:"flakeAttr"`
-	ExtraArgs []string          `toml:"extraArgs"`
-	Env       map[string]string `toml:"env"`
+	FlakeAttr string            `mapstructure:"flakeAttr"`
+	ExtraArgs []string          `mapstructure:"extraArgs"`
+	Env       map[string]string `mapstructure:"env"`
 }
 
 type SecretConfig struct {
-	LocalPath  string `yaml:"localPath"`
-	RemotePath string `yaml:"remotePath"`
-	Mode       string `yaml:"mode"`
+	LocalPath  string `mapstructure:"localPath"`
+	RemotePath string `mapstructure:"remotePath"`
+	Mode       string `mapstructure:"mode"`
 }
 
+var C Config
+
+// LoadConfig reads and parses the config file.
 func LoadConfig(configPath string) (*Config, error) {
 	if configPath == "" {
-		configPath = "panix.toml"
+		configPath = "panix.yml"
 	}
 
-	if !filepath.IsAbs(configPath) {
-		wd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get working directory: %w", err)
-		}
-		configPath = filepath.Join(wd, configPath)
+	vpr := viper.New()
+
+	// Defaults (already specified in cmd.root at flag init)
+	//viper.SetDefault("global.concurrency", 4)
+	//viper.SetDefault("global.timeout", 300)
+
+	// File config
+	vpr.SetConfigFile(configPath)
+	// ENV config
+	vpr.SetEnvPrefix("PANIX")
+
+	err := vpr.ReadInConfig() // Find and read the config file
+	if err != nil {           // Handle errors reading the config file
+		panic(fmt.Errorf("fatal error config file: %w", err))
 	}
 
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("config file not found: %s", configPath)
+	err = vpr.Unmarshal(&C)
+	if err != nil {
+		panic(fmt.Errorf("unable to decode into struct, %v", err))
 	}
 
-	var config Config
-	if _, err := toml.DecodeFile(configPath, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	if err := validateConfig(&config); err != nil {
+	if err := validateConfig(&C); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	setDefaults(&config)
-
-	return &config, nil
+	return &C, nil
 }
 
-func validateConfig(config *Config) error {
-	if config.Global.Flake == "" {
-		return fmt.Errorf("global.flake is required")
+func validateConfig(c *Config) error {
+	if len(c.Flakes) == 0 {
+		return fmt.Errorf("flakes is required")
 	}
 
-	if len(config.Machines) == 0 {
-		return fmt.Errorf("at least one machine must be configured")
-	}
+	for i, flake := range c.Flakes {
 
-	for i, machine := range config.Machines {
-		if machine.Name == "" {
-			return fmt.Errorf("machine[%d].name is required", i)
+		if flake.Flake == "" {
+			return fmt.Errorf("flakes[%d].flake path is required", i)
 		}
-		if machine.Host == "" {
-			return fmt.Errorf("machine[%d].host is required", i)
+
+		if len(flake.Machines) == 0 {
+			return fmt.Errorf("at least one machine must be configured")
 		}
-		if machine.User == "" {
-			return fmt.Errorf("machine[%d].user is required", i)
-		}
-		if machine.FlakeOutput == "" {
-			return fmt.Errorf("machine[%d].flakeOutput is required", i)
+
+		for i, machine := range flake.Machines {
+			if machine.Name == "" {
+				return fmt.Errorf("machine[%d].name is required", i)
+			}
+
+			if machine.Host == "" {
+				return fmt.Errorf("machine[%d].host is required", i)
+			}
+
+			if machine.FlakeOutput == "" {
+				return fmt.Errorf("machine[%d].flakeOutput is required", i)
+			}
 		}
 	}
 
 	return nil
 }
 
-func setDefaults(config *Config) {
-	if config.Global.Concurrency == 0 {
-		config.Global.Concurrency = 4
-	}
-	if config.Global.Timeout == 0 {
-		config.Global.Timeout = 300
-	}
-
-	for i := range config.Machines {
-		if config.Machines[i].Port == 0 {
-			config.Machines[i].Port = 22
-		}
-	}
-}
-
+// GetMachinesByTags filters machines by tags.
 func (c *Config) GetMachinesByTags(tags []string) []MachineConfig {
-	if len(tags) == 0 {
-		return c.Machines
+	// Aggregate all machines across flakes
+	var allMachines []MachineConfig
+	for _, flake := range c.Flakes {
+		allMachines = append(allMachines, flake.Machines...)
 	}
-
+	if len(tags) == 0 {
+		return allMachines
+	}
 	var filtered []MachineConfig
-	for _, machine := range c.Machines {
-		if matchesTags(machine.Tags, tags) {
-			filtered = append(filtered, machine)
+	for _, m := range allMachines {
+		if matchesTags(m.Tags, tags) {
+			filtered = append(filtered, m)
 		}
 	}
 	return filtered
@@ -135,27 +144,25 @@ func matchesTags(machineTags, filterTags []string) bool {
 	if len(filterTags) == 0 {
 		return true
 	}
-
-	machineTagSet := make(map[string]bool)
-	for _, tag := range machineTags {
-		machineTagSet[tag] = true
+	tagSet := make(map[string]bool)
+	for _, t := range machineTags {
+		tagSet[t] = true
 	}
-
-	for _, filterTag := range filterTags {
-		if filterTag[0] == '+' {
-			if !machineTagSet[filterTag[1:]] {
+	for _, ft := range filterTags {
+		switch ft[0] {
+		case '+':
+			if !tagSet[ft[1:]] {
 				return false
 			}
-		} else if filterTag[0] == '-' {
-			if machineTagSet[filterTag[1:]] {
+		case '-':
+			if tagSet[ft[1:]] {
 				return false
 			}
-		} else {
-			if !machineTagSet[filterTag] {
+		default:
+			if !tagSet[ft] {
 				return false
 			}
 		}
 	}
-
 	return true
 }

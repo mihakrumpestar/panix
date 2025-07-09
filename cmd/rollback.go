@@ -48,7 +48,7 @@ Use --to-generation to specify a specific generation number.`,
 
 		fmt.Printf("Rolling back %d machines...\n", len(machines))
 
-		if dryRun {
+		if config.C.Global.DryRun {
 			fmt.Println("DRY RUN: Would rollback the following machines:")
 			for _, machine := range machines {
 				if toGeneration > 0 {

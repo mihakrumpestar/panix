@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,7 @@ This includes:
 
 		fmt.Printf("Checking status of %d machines...\n", len(machines))
 
-		if dryRun {
+		if config.C.Global.DryRun {
 			fmt.Println("DRY RUN: Would check status of the following machines:")
 			for _, machine := range machines {
 				fmt.Printf("  - %s (%s@%s:%d)\n", machine.Name, machine.User, machine.Host, machine.Port)

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
 )
@@ -27,10 +28,10 @@ This is the main command for deploying NixOS configurations.`,
 
 		fmt.Printf("Deploying to %d machines...\n", len(machines))
 
-		executor := workflow.NewWorkflowExecutor(cfg, machines)
+		executor := workflow.NewWorkflowExecutor(&config.C, machines)
 		opts := workflow.WorkflowOptions{
-			DryRun:  dryRun,
-			Verbose: verbose,
+			DryRun:  config.C.Global.DryRun,
+			Verbose: config.C.Global.Verbose,
 		}
 
 		return executor.Execute(opts)
