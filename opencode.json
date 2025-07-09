@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "opencode",
+  "autoshare": false,
+  "autoupdate": false,
+  "mcp": {
+    "localmcp": {
+      "type": "local",
+      "command": ["bunx", "-y", "@upstash/context7-mcp"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value"
+      }
+    }
+  }
+}
