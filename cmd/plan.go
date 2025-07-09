@@ -26,7 +26,7 @@ without actually performing any changes. It displays:
 
 		for _, machine := range machines {
 			fmt.Printf("\nMachine: %s\n", machine.Name)
-			fmt.Printf("  Host: %s@%s:%d\n", machine.User, machine.Host, machine.Port)
+			fmt.Printf("  Host: %s@%s:%d\n", machine.Ssh.User, machine.Ssh.Host, machine.Ssh.Port)
 			fmt.Printf("  Flake Output: %s\n", machine.FlakeOutput)
 			fmt.Printf("  Tags: %v\n", machine.Tags)
 

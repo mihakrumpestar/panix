@@ -27,7 +27,7 @@ This includes:
 		if config.C.Global.DryRun {
 			fmt.Println("DRY RUN: Would check status of the following machines:")
 			for _, machine := range machines {
-				fmt.Printf("  - %s (%s@%s:%d)\n", machine.Name, machine.User, machine.Host, machine.Port)
+				fmt.Printf("  - %s (%s@%s:%d)\n", machine.Name, machine.Ssh.User, machine.Ssh.Host, machine.Ssh.Port)
 			}
 			return nil
 		}
