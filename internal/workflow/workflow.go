@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 )
@@ -31,7 +30,7 @@ type WorkflowOptions struct {
 }
 
 func NewWorkflowExecutor(cfg *config.Config, machines []config.MachineConfig) *WorkflowExecutor {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Global.Timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Global.Timeout)
 
 	return &WorkflowExecutor{
 		config:   cfg,
