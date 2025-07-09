@@ -1,0 +1,338 @@
+version: "3"
+
+vars:
+  BINARY_NAME: panix
+  BUILD_DIR: ./build
+  DIST_DIR: ./dist
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_TIME:
+    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
+  LDFLAGS: >-
+    -s -w
+    -X main.version={{.VERSION}}
+    -X main.commit={{.COMMIT}}
+    -X main.buildTime={{.BUILD_TIME}}
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Development tasks
+  dev:
+    desc: Run the application in development mode
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}
+
+  run:
+    desc: Run the application with go run
+    cmds:
+      - go run main.go {{.CLI_ARGS}}
+
+  watch:
+    desc: Watch for changes and rebuild
+    deps: [install-tools]
+    cmds:
+      - air
+
+  # Build tasks
+  build:
+    desc: Build the binary for current platform
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BUILD_DIR}}/{{.BINARY_NAME}}"
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} main.go
+
+  build-all:
+    desc: Build binaries for all platforms
+    cmds:
+      - task: build-linux
+      - task: build-darwin
+      - task: build-windows
+
+  build-linux:
+    desc: Build Linux binary
+    cmds:
+      - mkdir -p {{.DIST_DIR}}
+      - GOOS=linux GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o {{.DIST_DIR}}/{{.BINARY_NAME}}-linux-amd64 main.go
+      - GOOS=linux GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o {{.DIST_DIR}}/{{.BINARY_NAME}}-linux-arm64 main.go
+
+  build-darwin:
+    desc: Build macOS binary
+    cmds:
+      - mkdir -p {{.DIST_DIR}}
+      - GOOS=darwin GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o {{.DIST_DIR}}/{{.BINARY_NAME}}-darwin-amd64 main.go
+      - GOOS=darwin GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o {{.DIST_DIR}}/{{.BINARY_NAME}}-darwin-arm64 main.go
+
+  build-windows:
+    desc: Build Windows binary
+    cmds:
+      - mkdir -p {{.DIST_DIR}}
+      - GOOS=windows GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o {{.DIST_DIR}}/{{.BINARY_NAME}}-windows-amd64.exe main.go
+
+  # Testing tasks
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -v ./...
+
+  test-race:
+    desc: Run tests with race detection
+    cmds:
+      - go test -race -v ./...
+
+  test-coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - |
+        echo "Coverage report generated: coverage.html"
+
+  test-integration:
+    desc: Run integration tests
+    cmds:
+      - go test -tags=integration -v ./...
+
+  benchmark:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem ./...
+
+  # Code quality tasks
+  lint:
+    desc: Run linter
+    deps: [install-tools]
+    cmds:
+      - golangci-lint run
+
+  lint-fix:
+    desc: Run linter with auto-fix
+    deps: [install-tools]
+    cmds:
+      - golangci-lint run --fix
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  check:
+    desc: Run all code quality checks
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: lint
+      - task: test
+
+  # Security tasks
+  security:
+    desc: Run security checks
+    deps: [install-tools]
+    cmds:
+      - gosec ./...
+
+  vuln:
+    desc: Check for vulnerabilities
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # Documentation tasks
+  docs:
+    desc: Generate documentation
+    cmds:
+      - mkdir -p docs
+      - go run main.go completion bash > docs/completion.bash
+      - go run main.go completion zsh > docs/completion.zsh
+      - go run main.go completion fish > docs/completion.fish
+      - go run main.go completion powershell > docs/completion.ps1
+
+  docs-serve:
+    desc: Serve documentation locally
+    deps: [install-tools]
+    cmds:
+      - godoc -http=:6060
+
+  # Dependency management
+  deps:
+    desc: Download dependencies
+    cmds:
+      - go mod download
+
+  deps-update:
+    desc: Update dependencies
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  deps-verify:
+    desc: Verify dependencies
+    cmds:
+      - go mod verify
+
+  tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+
+  # Tool installation
+  install-tools:
+    desc: Install development tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+      - go install github.com/cosmtrek/air@latest
+
+  # Release tasks
+  release:
+    desc: Create a release
+    deps: [check, test, build-all]
+    cmds:
+      - echo "Release {{.VERSION}} ready in {{.DIST_DIR}}"
+
+  tag:
+    desc: Create a git tag
+    cmds:
+      - git tag -a {{.TAG}} -m "Release {{.TAG}}"
+      - git push origin {{.TAG}}
+    requires:
+      vars: [TAG]
+
+  # Cleanup tasks
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -rf {{.DIST_DIR}}
+      - rm -f coverage.out coverage.html
+
+  clean-all:
+    desc: Clean everything including dependencies
+    cmds:
+      - task: clean
+      - go clean -modcache
+
+  # Docker tasks
+  docker-build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t {{.BINARY_NAME}}:{{.VERSION}} .
+      - docker build -t {{.BINARY_NAME}}:latest .
+
+  docker-run:
+    desc: Run Docker container
+    cmds:
+      - docker run --rm -it {{.BINARY_NAME}}:latest {{.CLI_ARGS}}
+
+  # Nix tasks
+  nix-build:
+    desc: Build with Nix
+    cmds:
+      - nix build
+
+  nix-shell:
+    desc: Enter Nix development shell
+    cmds:
+      - nix develop
+
+  nix-check:
+    desc: Check Nix flake
+    cmds:
+      - nix flake check
+
+  # Configuration validation
+  validate-config:
+    desc: Validate configuration file
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} plan --dry-run
+
+  # Example/demo tasks
+  demo:
+    desc: Run demo deployment
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} plan --verbose
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --dry-run --verbose
+
+  demo-bootstrap:
+    desc: Demo bootstrap process
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} bootstrap --dry-run --verbose
+
+  demo-rollback:
+    desc: Demo rollback process
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} rollback --dry-run --verbose
+
+  # CI/CD tasks
+  ci:
+    desc: Run CI pipeline
+    cmds:
+      - task: deps
+      - task: check
+      - task: test-race
+      - task: test-coverage
+      - task: security
+      - task: build-all
+
+  pre-commit:
+    desc: Run pre-commit checks
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: test
+      - task: lint
+
+  # Performance tasks
+  profile:
+    desc: Run with CPU profiling
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --dry-run -cpuprofile=cpu.prof
+      - go tool pprof cpu.prof
+
+  trace:
+    desc: Run with execution tracing
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --dry-run -trace=trace.out
+      - go tool trace trace.out
+
+  # Development environment setup
+  setup:
+    desc: Setup development environment
+    cmds:
+      - task: install-tools
+      - task: deps
+      - echo "Development environment setup complete"
+
+  # Help tasks
+  help:
+    desc: Show help for the application
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} --help
+
+  help-deploy:
+    desc: Show help for deploy command
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --help
