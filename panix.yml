@@ -1,0 +1,19 @@
+global:
+  ssh_user: root
+  ssh_timeout: 10
+  concurrency: 5
+  require_all_success: false
+  auto_bootstrap: false
+  dry_run: false
+
+flakes:
+  - flake: ../infrastructure
+    machines:
+      - name: personal-workstation
+        description: My personal NixOS workstation
+        host: "local"
+        flakeOutput: personal-workstation
+        tags:
+          - workstation
+          - personal
+          - nixos
