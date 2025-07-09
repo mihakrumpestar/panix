@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,7 @@ without deploying them. This is useful for:
 
 		fmt.Printf("Building configurations for %d machines...\n", len(machines))
 
-		if dryRun {
+		if config.C.Global.DryRun {
 			fmt.Println("DRY RUN: Would build the following configurations:")
 			for _, machine := range machines {
 				fmt.Printf("  - %s: %s\n", machine.Name, machine.FlakeOutput)
