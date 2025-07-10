@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/sshclient"
 	"github.com/spf13/cobra"
 )
 
@@ -22,8 +23,6 @@ This includes:
 			return fmt.Errorf("no machines match the specified filters")
 		}
 
-		fmt.Printf("Checking status of %d machines...\n", len(machines))
-
 		if config.C.Global.DryRun {
 			fmt.Println("DRY RUN: Would check status of the following machines:")
 			for _, machine := range machines {
@@ -32,8 +31,18 @@ This includes:
 			return nil
 		}
 
-		// TODO: Implement actual status checking logic
-		fmt.Println("Status functionality not yet implemented")
+		fmt.Printf("Checking status of %d machines...\n", len(machines))
+
+		sshClients, err := sshclient.New(config.C, machines)
+		if err != nil {
+			return fmt.Errorf("failed to initialize SSH clients: %w", err)
+		}
+
+		statuses := sshClients.GetAllMachineStatuses(machines)
+
+		fmt.Println()
+		sshclient.PrintStatusTable(statuses)
+
 		return nil
 	},
 }

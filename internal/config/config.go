@@ -31,14 +31,16 @@ type FlakeConfig struct {
 }
 
 type MachineConfig struct {
-	Name        string           `mapstructure:"name"` // Optional
-	FlakeName   string           `mapstructure:"flakeName"`
-	FlakePath   string           `mapstructure:"flakePath"`
-	Ssh         SshClientConfig  `mapstructure:"ssh"`
-	Tags        []string         `mapstructure:"tags"`
-	FlakeOutput string           `mapstructure:"flakeOutput"` // Optional
-	Bootstrap   *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
-	Secrets     []SecretConfig   `mapstructure:"secrets,omitempty"`
+	Name                 string           `mapstructure:"name"` // Optional
+	FlakeName            string           `mapstructure:"flakeName"`
+	FlakePath            string           `mapstructure:"flakePath"`
+	Ssh                  SshClientConfig  `mapstructure:"ssh"`
+	Tags                 []string         `mapstructure:"tags"`
+	FlakeOutput          string           `mapstructure:"flakeOutput"`          // Optional
+	FlakeBuildOutputPath string           `mapstructure:"flakeBuildOutputPath"` // Not input
+	Errors               error            `mapstructure:"errors"`               // Not input
+	Bootstrap            *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
+	Secrets              []SecretConfig   `mapstructure:"secrets,omitempty"`
 }
 
 type SshClientConfig struct {
@@ -134,6 +136,10 @@ func (c *Config) GetMachinesByTags(tags []string) ([]MachineConfig, error) {
 				machine.Name = machineName
 				machine.FlakeName = flakeName
 				machine.FlakePath = flake.FlakePath
+
+				if machine.FlakeOutput == "" {
+					machine.FlakeOutput = machine.Name
+				}
 			}
 
 			allMachines = append(allMachines, machine)

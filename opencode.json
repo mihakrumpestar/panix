@@ -4,9 +4,17 @@
   "autoshare": false,
   "autoupdate": false,
   "mcp": {
-    "localmcp": {
+    "context7": {
       "type": "local",
       "command": ["bunx", "-y", "@upstash/context7-mcp"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value"
+      }
+    },
+    "nix": {
+      "type": "local",
+      "command": ["uvx", "mcp-nixos"],
       "enabled": true,
       "environment": {
         "MY_ENV_VAR": "my_env_var_value"
