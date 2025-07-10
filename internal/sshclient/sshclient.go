@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/kevinburke/ssh_config"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/olekukonko/tablewriter"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -174,37 +176,221 @@ func (c *SshClients) GetMachine(machineConfig config.MachineConfig) (*SshClient,
 	return sshClient, nil
 }
 
+type CheckDepth int
+
+const (
+	CheckMinimal CheckDepth = iota // Only reachability and SSH connection
+	CheckFull                      // Full status including generation and deploy time
+)
+
+type MachineStatus struct {
+	Machine           config.MachineConfig
+	Reachable         bool
+	SSHConnectable    bool
+	Bootstrapped      bool
+	AllOk             bool
+	CurrentGeneration string
+	LastDeployTime    string
+	Error             error
+}
+
 // CheckHost performs TCP reachability, SSH login, and bootstrap detection
-// Returns true if machine is bootstrapped
-func (c *SshClients) CheckHost(machineConfig config.MachineConfig) (bool, error) {
+// depth parameter controls how much information to gather
+func (c *SshClients) CheckHost(machineConfig config.MachineConfig, depth CheckDepth) (*MachineStatus, error) {
+	status := &MachineStatus{
+		Machine:           machineConfig,
+		Reachable:         false,
+		SSHConnectable:    false,
+		Bootstrapped:      false,
+		AllOk:             false,
+		CurrentGeneration: "unknown",
+		LastDeployTime:    "unknown",
+	}
 
 	sshClient, err := c.GetMachine(machineConfig)
 	if err != nil {
-		return false, err
+		status.Error = err
+		return status, err
 	}
 
 	// TCP check
 	if _, err := net.DialTimeout("tcp", sshClient.params.address, config.C.Global.Timeout); err != nil {
-		return false, fmt.Errorf("%s unreachable: %w", sshClient.params.address, err)
+		status.Error = fmt.Errorf("%s unreachable: %w", sshClient.params.address, err)
+		return status, status.Error
 	}
+	status.Reachable = true
 
 	// SSH connect
 	client, err := sshClient.Client()
 	if err != nil {
-		return false, fmt.Errorf("ssh failed: %w", err)
+		status.Error = fmt.Errorf("ssh failed: %w", err)
+		return status, status.Error
 	}
 	defer client.Close()
+	status.SSHConnectable = true
 
 	// Run bootstrap detection
 	sess, err := client.NewSession()
 	if err != nil {
-		return false, fmt.Errorf("session failed: %w", err)
+		status.Error = fmt.Errorf("session failed: %w", err)
+		return status, status.Error
 	}
 	defer sess.Close()
 
 	if err := sess.Run("test -e /run/current-system"); err != nil {
-		return false, nil // not bootstrapped
+		return status, nil // not bootstrapped
+	}
+	status.Bootstrapped = true
+
+	// If full check requested, gather additional information
+	if depth == CheckFull {
+		if generation, err := c.getCurrentGeneration(client); err == nil {
+			status.CurrentGeneration = generation
+		}
+
+		if deployTime, err := c.getLastDeployTime(client); err == nil {
+			status.LastDeployTime = deployTime
+		}
 	}
 
-	return true, nil
+	status.AllOk = true
+	return status, nil
+}
+
+func (c *SshClients) GetMachineStatus(machineConfig config.MachineConfig) *MachineStatus {
+	status, _ := c.CheckHost(machineConfig, CheckFull)
+	return status
+}
+
+func (c *SshClients) getCurrentGeneration(client *ssh.Client) (string, error) {
+	sess, err := client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	output, err := sess.Output("nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
+	if err != nil {
+		return "", err
+	}
+
+	return string(bytes.TrimSpace(output)), nil
+}
+
+func (c *SshClients) getLastDeployTime(client *ssh.Client) (string, error) {
+	sess, err := client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer sess.Close()
+
+	output, err := sess.Output("stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
+	if err != nil {
+		return "", err
+	}
+
+	return string(bytes.TrimSpace(output)), nil
+}
+
+func (c *SshClients) GetAllMachineStatuses(machines []config.MachineConfig) []*MachineStatus {
+	concurrency := config.C.Global.Concurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+
+	jobs := make(chan config.MachineConfig, len(machines))
+	results := make(chan *MachineStatus, len(machines))
+
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for machine := range jobs {
+				status := c.GetMachineStatus(machine)
+				results <- status
+			}
+		}()
+	}
+
+	for _, machine := range machines {
+		jobs <- machine
+	}
+	close(jobs)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var statuses []*MachineStatus
+	for status := range results {
+		statuses = append(statuses, status)
+	}
+
+	return statuses
+}
+
+func (s *MachineStatus) GetStatusIcon() string {
+	if s.Error != nil {
+		return "❌"
+	}
+	if !s.Reachable {
+		return "🔴"
+	}
+	if !s.SSHConnectable {
+		return "🟡"
+	}
+	if !s.Bootstrapped {
+		return "🟠"
+	}
+	return "✅"
+}
+
+func (s *MachineStatus) GetStatusText() string {
+	if s.Error != nil {
+		return fmt.Sprintf("ERROR: %s", s.Error.Error())
+	}
+	if !s.Reachable {
+		return "UNREACHABLE"
+	}
+	if !s.SSHConnectable {
+		return "SSH_FAILED"
+	}
+	if !s.Bootstrapped {
+		return "NOT_BOOTSTRAPPED"
+	}
+	return "OK"
+}
+
+func PrintStatusTable(statuses []*MachineStatus) {
+	if len(statuses) == 0 {
+		fmt.Println("No machines to display")
+		return
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header("", "MACHINE", "HOST", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR")
+
+	for _, status := range statuses {
+		errorMsg := ""
+		if status.Error != nil {
+			errorMsg = status.Error.Error()
+			if len(errorMsg) > 50 {
+				errorMsg = errorMsg[:47] + "..."
+			}
+		}
+
+		table.Append(
+			status.GetStatusIcon(),
+			status.Machine.Name,
+			status.Machine.Ssh.Host,
+			status.GetStatusText(),
+			status.CurrentGeneration,
+			status.LastDeployTime,
+			errorMsg,
+		)
+	}
+
+	table.Render()
 }

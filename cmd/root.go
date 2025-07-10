@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -41,10 +38,6 @@ func init() {
 	rootCmd.PersistentFlags().DurationVar(&config.C.Global.Timeout, "timeout", 300, "timeout for operations in seconds")
 
 	// rootCmd.MarkFlagsMutuallyExclusive("require-all", "continue-on-error")
-
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	pflag.Parse()
-	viper.BindPFlags(pflag.CommandLine)
 }
 
 func initConfig() {
