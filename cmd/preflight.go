@@ -24,7 +24,7 @@ var preflightCmd = &cobra.Command{
 		}
 
 		for _, m := range machines {
-			bootstrapped, err := client.CheckHost(m)
+			status, err := client.CheckHost(m, sshclient.CheckMinimal)
 			if err != nil {
 				fmt.Printf("Machine %s check failed: %v\n", m.Name, err)
 				if config.C.Global.RequireAllSuccess {
@@ -32,7 +32,7 @@ var preflightCmd = &cobra.Command{
 				}
 				continue
 			}
-			if bootstrapped {
+			if status.AllOk {
 				fmt.Printf("Machine %s is bootstrapped\n", m.Name)
 			} else {
 				fmt.Printf("Machine %s not bootstrapped\n", m.Name)
