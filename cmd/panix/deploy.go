@@ -1,4 +1,4 @@
-package cmd
+package panix
 
 import (
 	"fmt"
@@ -28,10 +28,18 @@ This is the main command for deploying NixOS configurations.`,
 
 		fmt.Printf("Deploying to %d machines...\n", len(machines))
 
-		executor := workflow.NewWorkflowExecutor(&config.C, machines)
+		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C.Global, machines)
 		opts := workflow.WorkflowOptions{
 			DryRun:  config.C.Global.DryRun,
 			Verbose: config.C.Global.Verbose,
+			Phases: []workflow.WorkflowPhase{
+				workflow.PhasePreflight,
+				workflow.PhaseBootstrap,
+				workflow.PhaseSecrets,
+				workflow.PhaseBuild,
+				workflow.PhaseTransfer,
+				workflow.PhaseActivate,
+			},
 		}
 
 		return executor.Execute(opts)
