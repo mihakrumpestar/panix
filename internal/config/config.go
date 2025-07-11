@@ -38,6 +38,7 @@ type MachineConfig struct {
 	Tags                 []string         `mapstructure:"tags"`
 	FlakeOutput          string           `mapstructure:"flakeOutput"`          // Optional
 	FlakeBuildOutputPath string           `mapstructure:"flakeBuildOutputPath"` // Not input
+	Transport            string           `mapstructure:"transport"`            // Optional
 	Errors               error            `mapstructure:"errors"`               // Not input
 	Bootstrap            *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
 	Secrets              []SecretConfig   `mapstructure:"secrets,omitempty"`
