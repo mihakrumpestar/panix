@@ -8,8 +8,20 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
+type WorkflowPhase string
+
+const (
+	PhasePreflight WorkflowPhase = "preflight"
+	PhaseBootstrap WorkflowPhase = "bootstrap"
+	PhaseSecrets   WorkflowPhase = "secrets"
+	PhaseBuild     WorkflowPhase = "build"
+	PhaseTransfer  WorkflowPhase = "transfer"
+	PhaseActivate  WorkflowPhase = "activate"
+	PhaseStatus    WorkflowPhase = "status"
+)
+
 type WorkflowExecutor struct {
-	config   *config.Config
+	config   *config.GlobalConfig
 	machines []config.MachineConfig
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -17,8 +29,7 @@ type WorkflowExecutor struct {
 
 type ExecutionResult struct {
 	Machine config.MachineConfig
-	Phase   string
-	Success bool
+	Phase   WorkflowPhase
 	Error   error
 	Output  string
 }
@@ -26,11 +37,12 @@ type ExecutionResult struct {
 type WorkflowOptions struct {
 	DryRun    bool
 	Verbose   bool
-	SkipPhase map[string]bool
+	Phases    []WorkflowPhase
+	SkipPhase map[WorkflowPhase]bool
 }
 
-func NewWorkflowExecutor(cfg *config.Config, machines []config.MachineConfig) *WorkflowExecutor {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Global.Timeout)
+func NewWorkflowExecutor(ctx context.Context, cfg *config.GlobalConfig, machines []config.MachineConfig) *WorkflowExecutor {
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 
 	return &WorkflowExecutor{
 		config:   cfg,
@@ -43,9 +55,9 @@ func NewWorkflowExecutor(cfg *config.Config, machines []config.MachineConfig) *W
 func (w *WorkflowExecutor) Execute(opts WorkflowOptions) error {
 	defer w.cancel()
 
-	phases := []string{"preflight", "bootstrap", "secrets", "build", "transfer", "activate"}
+	currentMachines := w.machines
 
-	for _, phase := range phases {
+	for _, phase := range opts.Phases {
 		if opts.SkipPhase[phase] {
 			continue
 		}
@@ -54,8 +66,10 @@ func (w *WorkflowExecutor) Execute(opts WorkflowOptions) error {
 			fmt.Printf("Starting phase: %s\n", phase)
 		}
 
-		if err := w.executePhase(phase, opts); err != nil {
-			if w.config.Global.RequireAllSuccess {
+		var err error
+		currentMachines, err = w.executePhase(phase, opts, currentMachines)
+		if err != nil {
+			if w.config.RequireAllSuccess {
 				return fmt.Errorf("phase %s failed: %w", phase, err)
 			}
 			fmt.Printf("Warning: phase %s failed but continuing: %v\n", phase, err)
@@ -65,30 +79,24 @@ func (w *WorkflowExecutor) Execute(opts WorkflowOptions) error {
 	return nil
 }
 
-func (w *WorkflowExecutor) executePhase(phase string, opts WorkflowOptions) error {
+func (w *WorkflowExecutor) executePhase(phase WorkflowPhase, opts WorkflowOptions, machines []config.MachineConfig) ([]config.MachineConfig, error) {
 	var wg sync.WaitGroup
-	resultChan := make(chan ExecutionResult, len(w.machines))
-	semaphore := make(chan struct{}, w.config.Global.Concurrency)
+	resultChan := make(chan ExecutionResult, len(machines))
 
-	for _, machine := range w.machines {
+	for _, machine := range machines {
 		wg.Add(1)
 		go func(m config.MachineConfig) {
 			defer wg.Done()
-
 			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-
-				result := w.executeMachinePhase(m, phase, opts)
-				resultChan <- result
-
 			case <-w.ctx.Done():
 				resultChan <- ExecutionResult{
 					Machine: m,
 					Phase:   phase,
-					Success: false,
 					Error:   w.ctx.Err(),
 				}
+			default:
+				result := w.executeMachinePhase(m, phase, opts)
+				resultChan <- result
 			}
 		}(machine)
 	}
@@ -99,67 +107,59 @@ func (w *WorkflowExecutor) executePhase(phase string, opts WorkflowOptions) erro
 	}()
 
 	var failures []ExecutionResult
+	var nextMachines []config.MachineConfig
 	for result := range resultChan {
 		if opts.Verbose {
-			if result.Success {
+			if result.Error == nil {
 				fmt.Printf("✓ %s: %s completed\n", result.Machine.Name, result.Phase)
 			} else {
 				fmt.Printf("✗ %s: %s failed: %v\n", result.Machine.Name, result.Phase, result.Error)
 			}
 		}
 
-		if !result.Success {
+		if result.Error != nil {
 			failures = append(failures, result)
 		}
+		nextMachines = append(nextMachines, result.Machine)
 	}
 
-	if len(failures) > 0 && w.config.Global.RequireAllSuccess {
-		return fmt.Errorf("%d machines failed in phase %s", len(failures), phase)
+	if len(failures) > 0 {
+		return nextMachines, fmt.Errorf("%d machines failed in phase %s", len(failures), phase)
 	}
 
-	return nil
+	return nextMachines, nil
 }
 
-func (w *WorkflowExecutor) executeMachinePhase(machine config.MachineConfig, phase string, opts WorkflowOptions) ExecutionResult {
+func (w *WorkflowExecutor) executeMachinePhase(machine config.MachineConfig, phase WorkflowPhase, opts WorkflowOptions) ExecutionResult {
 	if opts.DryRun {
 		return ExecutionResult{
 			Machine: machine,
 			Phase:   phase,
-			Success: true,
 			Output:  fmt.Sprintf("DRY RUN: would execute %s for %s", phase, machine.Name),
 		}
 	}
 
 	switch phase {
-	case "preflight":
+	case PhasePreflight:
 		return w.executePreflight(machine)
-	case "bootstrap":
+	case PhaseBootstrap:
 		return w.executeBootstrap(machine)
-	case "secrets":
+	case PhaseSecrets:
 		return w.executeSecrets(machine)
-	case "build":
+	case PhaseBuild:
 		return w.executeBuild(machine)
-	case "transfer":
+	case PhaseTransfer:
 		return w.executeTransfer(machine)
-	case "activate":
+	case PhaseActivate:
 		return w.executeActivate(machine)
+	case PhaseStatus:
+		return w.executeStatus(machine)
 	default:
 		return ExecutionResult{
 			Machine: machine,
 			Phase:   phase,
-			Success: false,
 			Error:   fmt.Errorf("unknown phase: %s", phase),
 		}
-	}
-}
-
-func (w *WorkflowExecutor) executePreflight(machine config.MachineConfig) ExecutionResult {
-	// TODO: Implement SSH connectivity check and bootstrap detection
-	return ExecutionResult{
-		Machine: machine,
-		Phase:   "preflight",
-		Success: true,
-		Output:  "Preflight checks passed",
 	}
 }
 
@@ -168,7 +168,6 @@ func (w *WorkflowExecutor) executeBootstrap(machine config.MachineConfig) Execut
 	return ExecutionResult{
 		Machine: machine,
 		Phase:   "bootstrap",
-		Success: true,
 		Output:  "Bootstrap completed",
 	}
 }
@@ -178,37 +177,6 @@ func (w *WorkflowExecutor) executeSecrets(machine config.MachineConfig) Executio
 	return ExecutionResult{
 		Machine: machine,
 		Phase:   "secrets",
-		Success: true,
 		Output:  "Secrets deployed",
-	}
-}
-
-func (w *WorkflowExecutor) executeBuild(machine config.MachineConfig) ExecutionResult {
-	// TODO: Implement nix build
-	return ExecutionResult{
-		Machine: machine,
-		Phase:   "build",
-		Success: true,
-		Output:  "Build completed",
-	}
-}
-
-func (w *WorkflowExecutor) executeTransfer(machine config.MachineConfig) ExecutionResult {
-	// TODO: Implement nix copy
-	return ExecutionResult{
-		Machine: machine,
-		Phase:   "transfer",
-		Success: true,
-		Output:  "Transfer completed",
-	}
-}
-
-func (w *WorkflowExecutor) executeActivate(machine config.MachineConfig) ExecutionResult {
-	// TODO: Implement nixos-rebuild switch
-	return ExecutionResult{
-		Machine: machine,
-		Phase:   "activate",
-		Success: true,
-		Output:  "Activation completed",
 	}
 }

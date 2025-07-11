@@ -2,13 +2,11 @@
 
 This document outlines the guidelines for automated agents working within the Panix repository.
 
-## Build, Lint, and Test Commands
+## Build, Lint Commands
 
 *   **Build:** `go build ./...`
 *   **Lint:** `go vet ./...`
 *   **Format:** `go fmt ./...`
-*   **Run all tests:** `go test ./...`
-*   **Run a single test:** `go test -run <TestName> <path/to/package>` (e.g., `go test -run TestMyFunction internal/config`)
 
 ## Code Style Guidelines (Go)
 
@@ -133,7 +131,7 @@ A Go-based, flakes-aware, SSH-first deployer combining:
 6. Architecture & Modules  
 
     Package structure (suggested):  
-    - config    – TOML parsing & validation  
+    - config    – YAML parsing & validation  
     - ssh       – connection pooling, host-key checking  
     - secrets   – file/dir detection & upload via SFTP or scp  
     - bootstrap – wrapper around nixos-anywhere invocation  

@@ -19,3 +19,4 @@ flakes:
           - workstation
           - personal
           - nixos
+        transport: ssh
