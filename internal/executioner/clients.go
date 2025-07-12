@@ -8,28 +8,29 @@ import (
 )
 
 type Executioner struct {
-	ctx   context.Context
-	local bool
-	ssh   config.Ssh
+	ctx       context.Context
+	local     bool
+	sshConfig config.Ssh
 }
 
 type ExecutionerOutput struct {
-	Stdout bytes.Buffer
-	Stderr bytes.Buffer
+	Command string
+	Stdout  bytes.Buffer
+	Stderr  bytes.Buffer
 }
 
 func New(ctx context.Context, local bool, ssh config.Ssh) (*Executioner, error) {
 	return &Executioner{
-		ctx:   ctx,
-		local: local,
-		ssh:   ssh,
+		ctx:       ctx,
+		local:     local,
+		sshConfig: ssh,
 	}, nil
 }
 
 func (ex *Executioner) Exec(name string, args ...string) (ExecutionerOutput, error) {
 	if ex.local {
-		return ex.Shell(name, args...)
+		return ex.shell(name, args...)
 	} else {
-		return ex.Ssh(name, args...)
+		return ex.ssh(name, args...)
 	}
 }

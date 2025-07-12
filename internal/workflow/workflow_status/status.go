@@ -1,12 +1,12 @@
 package workflow_status
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"net"
+	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/clients"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/executioner"
 )
 
 type CheckDepth int
@@ -17,7 +17,8 @@ const (
 )
 
 type MachineStatus struct {
-	Machine           config.MachineConfig
+	Name              string
+	Machine           config.Machine
 	Reachable         bool
 	SSHConnectable    bool
 	Bootstrapped      bool
@@ -29,8 +30,9 @@ type MachineStatus struct {
 
 // CheckHost performs TCP reachability, SSH login, and bootstrap detection
 // depth parameter controls how much information to gather
-func CheckHost(c *clients.SshClients, machineConfig config.MachineConfig, depth CheckDepth) (*MachineStatus, error) {
-	status := &MachineStatus{
+func CheckHost(ctx context.Context, machineName string, machineConfig config.Machine, depth CheckDepth) (status *MachineStatus) {
+	status = &MachineStatus{
+		Name:              machineName,
 		Machine:           machineConfig,
 		Reachable:         false,
 		SSHConnectable:    false,
@@ -40,59 +42,56 @@ func CheckHost(c *clients.SshClients, machineConfig config.MachineConfig, depth 
 		LastDeployTime:    "unknown",
 	}
 
-	sshClient, err := c.GetMachine(machineConfig)
-	if err != nil {
-		status.Error = err
-		return status, err
+	var exc *executioner.Executioner
+	exc, status.Error = executioner.New(ctx, false, machineConfig.Ssh)
+	if status.Error != nil {
+		return
 	}
 
 	// TCP check
-	if _, err := net.DialTimeout("tcp", sshClient.Params.Address, config.C.Global.Timeout); err != nil {
-		status.Error = fmt.Errorf("%s unreachable: %w", sshClient.Params.Address, err)
-		return status, status.Error
-	}
-	status.Reachable = true
+	/*
+		if _, err := net.DialTimeout("tcp", machineConfig.Ssh.Alias, config.C.Global.Timeout); err != nil {
+
+			return status, fmt.Errorf("%s unreachable: %w", sshClient.Params.Address, err)
+		}
+		status.Reachable = true
+	*/
 
 	// SSH connect
-	client, err := sshClient.Client()
-	if err != nil {
-		status.Error = fmt.Errorf("ssh failed: %w", err)
-		return status, status.Error
+	var output executioner.ExecutionerOutput
+	output, status.Error = exc.Exec("exit 0")
+	if status.Error != nil {
+		status.Error = fmt.Errorf("ssh failed: %w\n%s", status.Error, &output.Stderr)
+		return
 	}
-	defer client.Close()
+	status.Reachable = true
 	status.SSHConnectable = true
 
 	// Run bootstrap detection
-	sess, err := client.NewSession()
-	if err != nil {
-		status.Error = fmt.Errorf("session failed: %w", err)
-		return status, status.Error
-	}
-	defer sess.Close()
-
-	err = sess.Run("test -e /run/current-system")
-	if err != nil {
-		return status, nil // not bootstrapped
+	_, status.Error = exc.Exec("test -e /run/current-system")
+	if status.Error != nil {
+		status.Error = nil // just not bootstrapped
+		return
 	}
 	status.Bootstrapped = true
 
 	// If full check requested, gather additional information
 	if depth == CheckFull {
 		// Get current generation
-		output, err := sess.Output("nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
-		if err != nil {
-			return nil, err
+		output, status.Error = exc.Exec("nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
+		if status.Error != nil {
+			return
 		}
-		status.CurrentGeneration = string(bytes.TrimSpace(output))
+		status.CurrentGeneration = strings.TrimSpace(output.Stdout.String())
 
 		// Get last deploy time
-		output, err = sess.Output("stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
-		if err != nil {
-			return nil, err
+		output, status.Error = exc.Exec("stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
+		if status.Error != nil {
+			return
 		}
-		status.LastDeployTime = string(bytes.TrimSpace(output))
+		status.LastDeployTime = strings.TrimSpace(output.Stdout.String())
 	}
 
 	status.AllOk = true
-	return status, nil
+	return
 }

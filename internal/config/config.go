@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/viper"
 )
 
@@ -13,14 +14,15 @@ type Config struct {
 }
 
 type Global struct {
-	Filters           Filters       `mapstructure:"filters"`
-	RequireAllSuccess bool          `mapstructure:"requireAllSuccess"`
-	AutoBootstrap     bool          `mapstructure:"autoBootstrap"`
-	DryRun            bool          `mapstructure:"dryRun"`
-	Ssh               Ssh           `mapstructure:"ssh"`
-	Timeout           time.Duration `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
-	Concurrency       int           `mapstructure:"concurrency"`
-	Verbose           bool          `mapstructure:"verbose"`
+	Filters           Filters                             `mapstructure:"filters"`
+	RequireAllSuccess bool                                `mapstructure:"requireAllSuccess"`
+	AutoBootstrap     bool                                `mapstructure:"autoBootstrap"`
+	DryRun            bool                                `mapstructure:"dryRun"`
+	Ssh               Ssh                                 `mapstructure:"ssh"`
+	Timeout           time.Duration                       `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
+	Concurrency       int                                 `mapstructure:"concurrency"`
+	SkipPhases        []workflow_definition.WorkflowPhase `mapstructure:"skipPhases"`
+	Verbose           bool                                `mapstructure:"verbose"`
 }
 
 type Filters struct {
@@ -39,12 +41,11 @@ type Flake struct {
 type Configuration struct {
 	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
 	treeStyleParams `mapstructure:",squash"`
-	Machines        map[string]MachineConfig `mapstructure:"machines"`
+	Machines        map[string]Machine `mapstructure:"machines"`
 }
 
-type MachineConfig struct {
-	FlakeOutput     string `mapstructure:"flakeOutput,omitempty"`
-	Local           bool   `mapstructure:"local"`
+type Machine struct {
+	Local           bool `mapstructure:"local"`
 	treeStyleParams `mapstructure:",squash"`
 }
 
@@ -59,7 +60,7 @@ type Ssh struct {
 	Alias      string `mapstructure:"alias"`
 	User       string `mapstructure:"user"`
 	Host       string `mapstructure:"host"`
-	Port       int    `mapstructure:"port"`
+	Port       int    `mapstructure:"port,omitzero"`
 	PrivateKey string `mapstructure:"privateKey"`
 	PublicKey  string `mapstructure:"publicKey"`
 }
@@ -96,7 +97,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("fatal error config file: %w", err)
 	}
 
-	err = vpr.Unmarshal(&C)
+	err = vpr.UnmarshalExact(&C)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode into struct, %v", err)
 	}
@@ -171,7 +172,7 @@ func (c *Config) filterConfigEntrys() (map[string]Flake, error) {
 				continue
 			}
 
-			filteredMachines := make(map[string]MachineConfig)
+			filteredMachines := make(map[string]Machine)
 			for machineName, machine := range conf.Machines {
 				if len(machinesSet) > 0 && !machinesSet[machineName] {
 					continue

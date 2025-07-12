@@ -1,32 +1,44 @@
 package workflow
 
 import (
-	"github.com/mihakrumpestar/panix/internal/clients"
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_status"
 )
 
-func (w *WorkflowExecutor) executeStatus(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
-	result := ExecutionResult{
-		Machine: machine,
-		Phase:   PhaseStatus,
+func (w *WorkflowExecutor) executeStatus(nextPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Executing status phase\n")
 	}
 
-	sshClient, err := clients.New(config.Config{Global: *w.cfg}, []config.MachineConfig{machine})
-	if err != nil {
-		result.Error = err
-		return result
+	// Status phase runs separately (fully branched) to check all machines
+	// This is handled by the executeBranching function with no branching flags
+	// since status needs to check all machines but doesn't cascade branching
+
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
 	}
 
-	status, err := workflow_status.CheckHost(sshClient, machine, workflow_status.CheckFull)
-	if err != nil {
-		result.Error = err
-		return result
+	return &ExecutionResult{}, nil
+}
+
+// This function is called by executeMachineStatus for individual machine status checks
+func (w *WorkflowExecutor) statusMachine(flakeName, configName, machineName string, machine config.Machine) error {
+	if w.cfg.Global.DryRun {
+		fmt.Printf("DRY RUN: Would check status of %s/%s/%s\n", flakeName, configName, machineName)
+		return nil
+	}
+
+	status := workflow_status.CheckHost(w.ctx, machineName, machine, workflow_status.CheckFull)
+	if status.Error != nil {
+		return status.Error
 	}
 
 	workflow_status.PrintStatusTable([]*workflow_status.MachineStatus{status})
 
-	result.Output = "Status check completed"
+	fmt.Println("Status check completed")
 
-	return result
+	return nil
 }

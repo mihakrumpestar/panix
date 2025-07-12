@@ -1,32 +1,46 @@
 package workflow
 
 import (
-	"github.com/mihakrumpestar/panix/internal/clients"
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_status"
 )
 
-func (w *WorkflowExecutor) executePreflight(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
-	result := ExecutionResult{
-		Machine: machine,
-		Phase:   PhasePreflight,
+func (w *WorkflowExecutor) executePreflight(nextPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Executing preflight phase\n")
 	}
 
-	sshClient, err := clients.New(config.Config{Global: *w.cfg}, []config.MachineConfig{machine})
-	if err != nil {
-		result.Error = err
-		return result
+	// Preflight runs separately but branches internally to contact all machines
+	// This is handled by the executeBranching function with no branching flags
+	// since preflight needs to contact all machines but doesn't cascade branching
+
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
 	}
 
-	status, err := workflow_status.CheckHost(sshClient, machine, workflow_status.CheckMinimal)
-	if err != nil {
-		result.Error = err
-		return result
+	return &ExecutionResult{}, nil
+}
+
+// This function is called by executeMachinePreflight for individual machine preflight checks
+func (w *WorkflowExecutor) preflightMachine(flakeName, configName, machineName string, machine config.Machine) error {
+	if w.cfg.Global.DryRun {
+		fmt.Printf("DRY RUN: Would check preflight of %s/%s/%s\n", flakeName, configName, machineName)
+		return nil
+	}
+
+	//fmt.Printf("\nsshConfig: %+v\n\n", machine.Ssh)
+
+	status := workflow_status.CheckHost(w.ctx, machineName, machine, workflow_status.CheckMinimal)
+	if status.Error != nil {
+		return status.Error
 	}
 
 	workflow_status.PrintStatusTable([]*workflow_status.MachineStatus{status})
 
-	result.Output = "Status check completed"
+	fmt.Println("Preflight check completed")
 
-	return result
+	return nil
 }
