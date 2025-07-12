@@ -3,11 +3,9 @@ package workflow
 import (
 	"fmt"
 	"os/exec"
-
-	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (w *WorkflowExecutor) executeActivate(machine config.MachineConfig) ExecutionResult {
+func (w *WorkflowExecutor) executeActivate(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
 	result := ExecutionResult{
 		Machine: machine,
 		Phase:   PhaseActivate,

@@ -7,7 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (w *WorkflowExecutor) executeTransfer(machine config.MachineConfig) ExecutionResult {
+func (w *WorkflowExecutor) executeTransfer(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
 	result := ExecutionResult{
 		Machine: machine,
 		Phase:   PhaseStatus,

@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (w *WorkflowExecutor) executeBuild(machine config.MachineConfig) ExecutionResult {
+func (w *WorkflowExecutor) executeBuild(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
 	result := ExecutionResult{
 		Machine: machine,
 		Phase:   PhaseBuild,
