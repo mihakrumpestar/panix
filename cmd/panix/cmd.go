@@ -45,6 +45,8 @@ func init() {
 func initConfig() {
 	_, err := config.LoadConfig(cfgFile)
 	if err != nil {
-		panic(fmt.Errorf("failed to load config: %w", err))
+		err = fmt.Errorf("failed to load config: %w", err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }

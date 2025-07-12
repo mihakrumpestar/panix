@@ -1,11 +1,13 @@
 package executioner
 
-func (ex *Executioner) Ssh(name string, args ...string) (ExecutionerOutput, error) {
+func (ex *Executioner) ssh(name string, args ...string) (ExecutionerOutput, error) {
 
 	sshArgs := []string{}
 
-	if ex.ssh.Alias != "" {
-		sshArgs = append(sshArgs, ex.ssh.Alias)
+	//fmt.Printf("\nsshConfig: %+v\n\n", ex.sshConfig)
+
+	if ex.sshConfig.Alias != "" {
+		sshArgs = append(sshArgs, ex.sshConfig.Alias)
 	}
 
 	// TODO: implement more than alias
@@ -13,5 +15,5 @@ func (ex *Executioner) Ssh(name string, args ...string) (ExecutionerOutput, erro
 	sshArgs = append(sshArgs, name)
 	sshArgs = append(sshArgs, args...)
 
-	return ex.Shell("ssh", sshArgs...)
+	return ex.shell("ssh", sshArgs...)
 }

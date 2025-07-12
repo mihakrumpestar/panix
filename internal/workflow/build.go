@@ -6,21 +6,45 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-func (w *WorkflowExecutor) executeBuild(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
-	result := ExecutionResult{
-		Machine: machine,
-		Phase:   PhaseBuild,
+func (w *WorkflowExecutor) executeBuild(nextPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Executing build phase\n")
 	}
 
-	abs, err := filepath.Abs(machine.FlakePath)
+	// Build phase branches on Flakes and Configurations and cascades this branching
+	// to all subsequent phases. This is handled by the executeBranching function.
+
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
+	}
+
+	return &ExecutionResult{}, nil
+}
+
+// This function is called by executeMachineBuild for individual machine builds
+func (w *WorkflowExecutor) buildFlakeConfiguration(flakeName, configName string, flake config.Flake) error {
+	if w.cfg.Global.DryRun {
+		fmt.Printf("DRY RUN: Would build %s/%s\n", flakeName, configName)
+		return nil
+	}
+
+	// Get the flake path from the flake configuration
+	flakePath := flake.Url
+	if flakePath == "" {
+		return fmt.Errorf("flake %s has no URL configured", flakeName)
+	}
+
+	abs, err := filepath.Abs(flakePath)
 	if err != nil {
-		result.Error = err
-		return result
+		return fmt.Errorf("failed to get absolute path for flake %s: %w", flakeName, err)
 	}
 
-	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, machine.FlakeOutput)
+	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configName)
 	cmd := exec.CommandContext(w.ctx, "nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref)
 
 	var outBuf, errBuf bytes.Buffer
@@ -28,8 +52,7 @@ func (w *WorkflowExecutor) executeBuild(currentPhases []WorkflowPhase) (*Executi
 	cmd.Stderr = &errBuf
 	err = cmd.Run()
 	if err != nil {
-		result.Error = fmt.Errorf("%w: %s", err, errBuf.String())
-		return result
+		return fmt.Errorf("build failed for %s/%s: %w: %s", flakeName, configName, err, errBuf.String())
 	}
 
 	var nr []struct {
@@ -39,12 +62,16 @@ func (w *WorkflowExecutor) executeBuild(currentPhases []WorkflowPhase) (*Executi
 	}
 	err = json.Unmarshal(outBuf.Bytes(), &nr)
 	if err != nil || len(nr) == 0 {
-		result.Error = fmt.Errorf("invalid build output: %s", outBuf.String())
-		return result
+		return fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configName, outBuf.String())
 	}
 
-	result.Machine.FlakeBuildOutputPath = nr[0].Outputs.Out
-	result.Output = "Build OK"
+	// Store the build output path in metadata for later phases like transfer and activate
+	buildOutputPath := nr[0].Outputs.Out
+	w.setBuildOutputPath(flakeName, configName, buildOutputPath)
 
-	return result
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Built %s/%s -> %s\n", flakeName, configName, buildOutputPath)
+	}
+
+	return nil
 }
