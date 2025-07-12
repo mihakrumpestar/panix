@@ -21,7 +21,7 @@ const (
 )
 
 type WorkflowExecutor struct {
-	config   *config.GlobalConfig
+	config   *config.Global
 	machines []config.MachineConfig
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -41,7 +41,7 @@ type WorkflowOptions struct {
 	SkipPhase map[WorkflowPhase]bool
 }
 
-func NewWorkflowExecutor(ctx context.Context, cfg *config.GlobalConfig, machines []config.MachineConfig) *WorkflowExecutor {
+func NewWorkflowExecutor(ctx context.Context, cfg *config.Global, machines []config.MachineConfig) *WorkflowExecutor {
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 
 	return &WorkflowExecutor{

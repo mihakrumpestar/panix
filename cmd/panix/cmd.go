@@ -3,7 +3,6 @@ package panix
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
@@ -29,7 +28,10 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is panix.yml)")
-	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Tags, "tags", nil, "filter machines by tags (e.g., +prod,-canary)")
+	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Flakes, "flakes", nil, "a list of flakes to deploy")
+	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Configurations, "configurations", nil, "a list of configurations to deploy")
+	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Machines, "machines", nil, "a list of machines to deploy")
+	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Tags, "tags", nil, "filter machines by tags (e.g., +prod,-canary)")
 	rootCmd.PersistentFlags().BoolVar(&config.C.Global.RequireAllSuccess, "require-all", false, "abort & rollback if any host fails")
 	rootCmd.PersistentFlags().BoolVar(&config.C.Global.AutoBootstrap, "auto-bootstrap", false, "automatically bootstrap uninitialized hosts")
 	rootCmd.PersistentFlags().BoolVar(&config.C.Global.DryRun, "dry-run", false, "show what would be done without executing")
@@ -45,28 +47,4 @@ func initConfig() {
 	if err != nil {
 		panic(fmt.Errorf("failed to load config: %w", err))
 	}
-}
-
-func parseTags(tagStrings []string) []string {
-	var result []string
-	for _, tagString := range tagStrings {
-		tags := strings.Split(tagString, ",")
-		for _, tag := range tags {
-			tag = strings.TrimSpace(tag)
-			if tag != "" {
-				result = append(result, tag)
-			}
-		}
-	}
-	return result
-}
-
-func getFilteredMachines() []config.MachineConfig {
-	filterTags := parseTags(config.C.Global.Tags)
-	machines, err := config.C.GetMachinesByTags(filterTags)
-	if err != nil {
-		panic(err)
-	}
-
-	return machines
 }

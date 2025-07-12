@@ -8,43 +8,55 @@ import (
 )
 
 type Config struct {
-	Global GlobalConfig           `mapstructure:"global"`
-	Flakes map[string]FlakeConfig `mapstructure:"flakes"`
+	Global Global           `mapstructure:"global"`
+	Flakes map[string]Flake `mapstructure:"flakes"`
 }
 
-type GlobalConfig struct {
-	Tags              []string        `mapstructure:"tags"`
-	RequireAllSuccess bool            `mapstructure:"requireAllSuccess"`
-	AutoBootstrap     bool            `mapstructure:"autoBootstrap"`
-	DisableBootstrap  bool            `mapstructure:"disableBootstrap"`
-	DryRun            bool            `mapstructure:"dryRun"`
-	SshClientConfig   SshClientConfig `mapstructure:"sshClientConfig"`
-	Timeout           time.Duration   `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
-	Concurrency       int             `mapstructure:"concurrency"`
-	Verbose           bool            `mapstructure:"verbose"`
+type Global struct {
+	Filters           Filters       `mapstructure:"filters"`
+	RequireAllSuccess bool          `mapstructure:"requireAllSuccess"`
+	AutoBootstrap     bool          `mapstructure:"autoBootstrap"`
+	DryRun            bool          `mapstructure:"dryRun"`
+	Ssh               Ssh           `mapstructure:"ssh"`
+	Timeout           time.Duration `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
+	Concurrency       int           `mapstructure:"concurrency"`
+	Verbose           bool          `mapstructure:"verbose"`
 }
 
-type FlakeConfig struct {
-	FlakePath       string                   `mapstructure:"flakePath"`
-	SshClientConfig SshClientConfig          `mapstructure:"sshClientConfig"`
+type Filters struct {
+	Flakes         []string `mapstructure:"flakes"`
+	Configurations []string `mapstructure:"configurations"`
+	Machines       []string `mapstructure:"machines"`
+	Tags           []string `mapstructure:"tags"`
+}
+
+type Flake struct {
+	Url             string `mapstructure:"url"` // Flake path or url
+	treeStyleParams `mapstructure:",squash"`
+	Configurations  map[string]Configuration `mapstructure:"configurations"`
+}
+
+type Configuration struct {
+	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
+	treeStyleParams `mapstructure:",squash"`
 	Machines        map[string]MachineConfig `mapstructure:"machines"`
 }
 
 type MachineConfig struct {
-	Name                 string           `mapstructure:"name"` // Optional
-	FlakeName            string           `mapstructure:"flakeName"`
-	FlakePath            string           `mapstructure:"flakePath"`
-	Ssh                  SshClientConfig  `mapstructure:"ssh"`
-	Tags                 []string         `mapstructure:"tags"`
-	FlakeOutput          string           `mapstructure:"flakeOutput"`          // Optional
-	FlakeBuildOutputPath string           `mapstructure:"flakeBuildOutputPath"` // Not input
-	Transport            string           `mapstructure:"transport"`            // Optional
-	Errors               error            `mapstructure:"errors"`               // Not input
-	Bootstrap            *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
-	Secrets              []SecretConfig   `mapstructure:"secrets,omitempty"`
+	FlakeOutput     string `mapstructure:"flakeOutput,omitempty"`
+	Local           bool   `mapstructure:"local"`
+	treeStyleParams `mapstructure:",squash"`
 }
 
-type SshClientConfig struct {
+type treeStyleParams struct {
+	Ssh       Ssh              `mapstructure:"ssh"`
+	Tags      []string         `mapstructure:"tags"`
+	Bootstrap *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
+	Secrets   []SecretConfig   `mapstructure:"secrets,omitempty"`
+}
+
+type Ssh struct {
+	Alias      string `mapstructure:"alias"`
 	User       string `mapstructure:"user"`
 	Host       string `mapstructure:"host"`
 	Port       int    `mapstructure:"port"`
@@ -74,10 +86,6 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	vpr := viper.New()
 
-	// Defaults (already specified in cmd.root at flag init)
-	//viper.SetDefault("global.concurrency", 4)
-	//viper.SetDefault("global.timeout", 300)
-
 	// File config
 	vpr.SetConfigFile(configPath)
 	// ENV config
@@ -85,36 +93,48 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	err := vpr.ReadInConfig() // Find and read the config file
 	if err != nil {           // Handle errors reading the config file
-		panic(fmt.Errorf("fatal error config file: %w", err))
+		return nil, fmt.Errorf("fatal error config file: %w", err)
 	}
 
 	err = vpr.Unmarshal(&C)
 	if err != nil {
-		panic(fmt.Errorf("unable to decode into struct, %v", err))
+		return nil, fmt.Errorf("unable to decode into struct, %v", err)
 	}
 
 	C.Global.Timeout *= time.Second
 
-	if err := validateConfig(&C); err != nil {
+	err = C.validateConfig()
+	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	C.Flakes, err = C.filterConfigEntrys()
+	if err != nil {
+		panic(fmt.Errorf("failed to filter config: %w", err))
 	}
 
 	return &C, nil
 }
 
-func validateConfig(c *Config) error {
+func (c *Config) validateConfig() error {
 	if len(c.Flakes) == 0 {
 		return fmt.Errorf("flakes is required")
 	}
 
 	for flakeName, flake := range c.Flakes {
-		if len(flake.Machines) == 0 {
-			return fmt.Errorf("flakes[%s]machines is empty", flakeName)
+		if len(flake.Configurations) == 0 {
+			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		for machineName, machine := range flake.Machines {
-			if machine.Ssh.Host == "" {
-				return fmt.Errorf("flakes[%s]machines[%s].ssh.host is empty", flakeName, machineName)
+		for configurationName, configuration := range flake.Configurations {
+			if len(configuration.Machines) == 0 {
+				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
+			}
+
+			for machineName, machine := range configuration.Machines {
+				if !machine.Local && machine.Ssh.Alias == "" && machine.Ssh.Host == "" {
+					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s].ssh is not configured and deploy is not local", flakeName, configurationName, machineName)
+				}
 			}
 		}
 	}
@@ -122,42 +142,75 @@ func validateConfig(c *Config) error {
 	return nil
 }
 
-// GetMachinesByTags filters machines by tags.
-func (c *Config) GetMachinesByTags(tags []string) ([]MachineConfig, error) {
-	// Aggregate all machines across flakes
-	var allMachines []MachineConfig
+// FilterConfigEntrys filters the configuration based on command-line selections.
+// An entry is kept if it matches all provided filters (flakes, configurations, machines, tags).
+// If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
+func (c *Config) filterConfigEntrys() (map[string]Flake, error) {
+	filteredFlakes := make(map[string]Flake)
+
+	toSet := func(s []string) map[string]bool {
+		set := make(map[string]bool, len(s))
+		for _, item := range s {
+			set[item] = true
+		}
+		return set
+	}
+
+	flakesSet := toSet(C.Global.Filters.Flakes)
+	configurationsSet := toSet(C.Global.Filters.Configurations)
+	machinesSet := toSet(C.Global.Filters.Machines)
+
 	for flakeName, flake := range c.Flakes {
-		for machineName, machine := range flake.Machines {
+		if len(flakesSet) > 0 && !flakesSet[flakeName] {
+			continue
+		}
 
-			if machine.FlakePath == "" {
-				if flake.FlakePath == "" {
-					return nil, fmt.Errorf("machine.flakePath and flake.flakePath can't be empty at the same time")
-				}
-
-				machine.Name = machineName
-				machine.FlakeName = flakeName
-				machine.FlakePath = flake.FlakePath
-
-				if machine.FlakeOutput == "" {
-					machine.FlakeOutput = machine.Name
-				}
+		filteredConfs := make(map[string]Configuration)
+		for confName, conf := range flake.Configurations {
+			if len(configurationsSet) > 0 && !configurationsSet[confName] {
+				continue
 			}
 
-			allMachines = append(allMachines, machine)
+			filteredMachines := make(map[string]MachineConfig)
+			for machineName, machine := range conf.Machines {
+				if len(machinesSet) > 0 && !machinesSet[machineName] {
+					continue
+				}
+
+				// A machine must match the tag filters if they are provided.
+				if len(C.Global.Filters.Tags) > 0 {
+					allMachineTags := append([]string{}, flake.Tags...)
+					allMachineTags = append(allMachineTags, conf.Tags...)
+					allMachineTags = append(allMachineTags, machine.Tags...)
+
+					if !matchesTags(allMachineTags, C.Global.Filters.Tags) {
+						continue // Skip this machine if tags don't match
+					}
+				}
+
+				// If we reach here, the machine has passed all filters.
+				filteredMachines[machineName] = machine
+			}
+
+			if len(filteredMachines) > 0 {
+				newConf := conf
+				newConf.Machines = filteredMachines
+				filteredConfs[confName] = newConf
+			}
+		}
+
+		if len(filteredConfs) > 0 {
+			newFlake := flake
+			newFlake.Configurations = filteredConfs
+			filteredFlakes[flakeName] = newFlake
 		}
 	}
 
-	if len(tags) == 0 {
-		return allMachines, nil
+	if len(filteredFlakes) == 0 {
+		return nil, fmt.Errorf("flakes configuration empty after filtering")
 	}
 
-	var filtered []MachineConfig
-	for _, m := range allMachines {
-		if matchesTags(m.Tags, tags) {
-			filtered = append(filtered, m)
-		}
-	}
-	return filtered, nil
+	return filteredFlakes, nil
 }
 
 func matchesTags(machineTags, filterTags []string) bool {
