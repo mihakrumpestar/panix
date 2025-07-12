@@ -2,7 +2,7 @@ package executioner
 
 func (ex *Executioner) ssh(name string, args ...string) (ExecutionerOutput, error) {
 
-	sshArgs := []string{}
+	sshArgs := []string{"-q"} // Silance banners
 
 	//fmt.Printf("\nsshConfig: %+v\n\n", ex.sshConfig)
 
