@@ -1,22 +1,25 @@
 global:
-  ssh_user: root
-  ssh_timeout: 10
+  timeout: 10
   concurrency: 5
-  require_all_success: false
-  auto_bootstrap: false
-  dry_run: false
+  requireAllSuccess: false
+  autoBootstrap: false
+  dryRun: false
 
 flakes:
   infrastructure:
-    flakePath: ../infrastructure
-    machines:
+    url: ../infrastructure
+    configurations:
       personal-workstation:
-        description: My personal NixOS workstation
-        ssh:
-          host: "local"
-        #flakeOutput: personal-workstation
-        tags:
-          - workstation
-          - personal
-          - nixos
-        transport: ssh
+        machines:
+          default:
+            ssh:
+              alias: local
+            tags:
+              - workstation
+              - personal
+              - nixos
+      server-03:
+        machines:
+          server:
+            ssh:
+              alias: server-03

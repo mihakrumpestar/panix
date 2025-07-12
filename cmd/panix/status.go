@@ -1,10 +1,9 @@
 package panix
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/cobra"
 )
 
@@ -18,21 +17,14 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		machines := getFilteredMachines()
-		if len(machines) == 0 {
-			return fmt.Errorf("no machines match the specified filters")
+		phases := []workflow_definition.WorkflowPhase{workflow_definition.PhaseStatus}
+		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C, phases)
+		if err != nil {
+			return err
 		}
 
-		fmt.Printf("Checking status of %d machines...\n", len(machines))
-
-		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C.Global, machines)
-		opts := workflow.WorkflowOptions{
-			DryRun:  config.C.Global.DryRun,
-			Verbose: config.C.Global.Verbose,
-			Phases:  []workflow.WorkflowPhase{workflow.PhaseStatus},
-		}
-
-		return executor.Execute(opts)
+		_, err = executor.Execute()
+		return err
 	},
 }
 

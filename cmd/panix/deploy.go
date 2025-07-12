@@ -1,10 +1,9 @@
 package panix
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/cobra"
 )
 
@@ -21,28 +20,21 @@ var deployCmd = &cobra.Command{
 
 This is the main command for deploying NixOS configurations.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		machines := getFilteredMachines()
-		if len(machines) == 0 {
-			return fmt.Errorf("no machines match the specified filters")
+		phases := []workflow_definition.WorkflowPhase{
+			workflow_definition.PhasePreflight,
+			workflow_definition.PhaseBuild,
+			workflow_definition.PhaseTransfer,
+			//workflow_definition.PhaseBootstrap,
+			workflow_definition.PhaseSecrets,
+			workflow_definition.PhaseActivate,
+		}
+		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C, phases)
+		if err != nil {
+			return err
 		}
 
-		fmt.Printf("Deploying to %d machines...\n", len(machines))
-
-		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C.Global, machines)
-		opts := workflow.WorkflowOptions{
-			DryRun:  config.C.Global.DryRun,
-			Verbose: config.C.Global.Verbose,
-			Phases: []workflow.WorkflowPhase{
-				workflow.PhasePreflight,
-				workflow.PhaseBootstrap,
-				workflow.PhaseSecrets,
-				workflow.PhaseBuild,
-				workflow.PhaseTransfer,
-				workflow.PhaseActivate,
-			},
-		}
-
-		return executor.Execute(opts)
+		_, err = executor.Execute()
+		return err
 	},
 }
 

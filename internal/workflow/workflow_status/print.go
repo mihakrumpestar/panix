@@ -59,7 +59,7 @@ func PrintStatusTable(statuses []*MachineStatus) {
 
 		table.Append(
 			status.getStatusIcon(),
-			status.Machine.Name,
+			status.Name,
 			status.Machine.Ssh.Host,
 			status.getStatusText(),
 			status.CurrentGeneration,
