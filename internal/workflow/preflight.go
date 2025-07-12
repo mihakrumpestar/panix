@@ -6,13 +6,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_status"
 )
 
-func (w *WorkflowExecutor) executePreflight(machine config.MachineConfig) ExecutionResult {
+func (w *WorkflowExecutor) executePreflight(currentPhases []WorkflowPhase) (*ExecutionResult, error) {
 	result := ExecutionResult{
 		Machine: machine,
 		Phase:   PhasePreflight,
 	}
 
-	sshClient, err := clients.New(config.Config{Global: *w.config}, []config.MachineConfig{machine})
+	sshClient, err := clients.New(config.Config{Global: *w.cfg}, []config.MachineConfig{machine})
 	if err != nil {
 		result.Error = err
 		return result
