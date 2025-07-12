@@ -49,13 +49,12 @@ func CheckHost(ctx context.Context, machineName string, machineConfig config.Mac
 	}
 
 	// TCP check
-	/*
-		if _, err := net.DialTimeout("tcp", machineConfig.Ssh.Alias, config.C.Global.Timeout); err != nil {
-
-			return status, fmt.Errorf("%s unreachable: %w", sshClient.Params.Address, err)
-		}
-		status.Reachable = true
-	*/
+	_, status.Error = exc.Ping()
+	if status.Error != nil {
+		status.Error = fmt.Errorf("machine %s unreachable: %w", machineName, status.Error)
+		return
+	}
+	status.Reachable = true
 
 	// SSH connect
 	var output executioner.ExecutionerOutput
