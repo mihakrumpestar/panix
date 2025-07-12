@@ -93,21 +93,25 @@ func (w *WorkflowExecutor) executePhase(currentPhases []WorkflowPhase) (*Executi
 	}
 
 	switch currentPhase {
+	// Runs seperate (fully branched)
 	case PhasePreflight:
 		return w.executePreflight(nextPhases)
+	// Branching is cascaded (branches Flakes and Configurations)
 	case PhaseBuild:
-		// Branches Flakes, Configurations
 		return w.executeBuild(nextPhases)
-		// Branches Machines
+	// Branching is cascaded (branches Machines)
 	case PhaseBootstrap:
 		return w.executeBootstrap(nextPhases)
+	// Branching should already be cascaded (fully branched)
 	case PhaseTransfer:
 		return w.executeTransfer(nextPhases)
+	// Branching should already be cascaded (fully branched)
 	case PhaseSecrets:
 		return w.executeSecrets(nextPhases)
+	// Branching should already be cascaded (fully branched)
 	case PhaseActivate:
 		return w.executeActivate(nextPhases)
-	// Runs seperate
+	// Runs seperate (fully branched)
 	case PhaseStatus:
 		return w.executeStatus(nextPhases)
 	default:
