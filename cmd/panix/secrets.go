@@ -7,21 +7,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var preflightCmd = &cobra.Command{
-	Use:   "preflight",
-	Short: "Check host reachability and bootstrap status",
+// secretsCmd represents the secrets command
+var secretsCmd = &cobra.Command{
+	Use:   "secrets",
+	Short: "Deploy secrets to all machines",
+	Long:  `Secrets deploys encrypted secrets and credentials to all selected machines.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{workflow_definition.PhasePreflight}
+		phases := []workflow_definition.WorkflowPhase{workflow_definition.PhaseSecrets}
 		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C, phases)
 		if err != nil {
 			return err
 		}
 
-		_, err = executor.Execute()
-		return err
+		return executor.Execute()
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(preflightCmd)
+	rootCmd.AddCommand(secretsCmd)
 }
