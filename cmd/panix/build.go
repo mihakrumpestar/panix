@@ -19,8 +19,7 @@ var buildCmd = &cobra.Command{
 			return err
 		}
 
-		_, err = executor.Execute()
-		return err
+		return executor.Execute()
 	},
 }
 

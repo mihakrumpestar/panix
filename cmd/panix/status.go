@@ -23,8 +23,7 @@ This includes:
 			return err
 		}
 
-		_, err = executor.Execute()
-		return err
+		return executor.Execute()
 	},
 }
 

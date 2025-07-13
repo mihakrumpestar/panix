@@ -4,55 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sync"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-func (w *WorkflowExecutor) executeBuild(nextPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
-	if w.cfg.Global.Verbose {
-		fmt.Printf("Executing build phase\n")
-	}
-
-	// Build configurations in parallel
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errors []error
-
-	for flakeName, flake := range w.cfg.Flakes {
-		for configName := range flake.Configurations {
-			wg.Add(1)
-			go func(f, c string, flake *config.Flake) {
-				defer wg.Done()
-				err := w.buildFlakeConfiguration(f, c, flake)
-				if err != nil {
-					mu.Lock()
-					errors = append(errors, fmt.Errorf("%s/%s: %w", f, c, err))
-					mu.Unlock()
-				}
-			}(flakeName, configName, flake)
-		}
-	}
-
-	wg.Wait()
-
-	// Handle errors
-	if len(errors) > 0 {
-		if w.cfg.Global.RequireAllSuccess {
-			return w.metadata, fmt.Errorf("build phase failed: %v", errors)
-		}
-		for _, err := range errors {
-			fmt.Printf("Warning: %v\n", err)
-		}
-	}
-
-	if len(nextPhases) > 0 {
-		return w.executePhase(nextPhases)
-	}
-
-	return w.metadata, nil
+func (w *WorkflowExecutor) executeBuild(nextPhases []workflow_definition.WorkflowPhase) error {
+	return w.executeParallelConfigs("build", w.buildFlakeConfiguration, nextPhases)
 }
 
 // This function is called by executeMachineBuild for individual machine builds

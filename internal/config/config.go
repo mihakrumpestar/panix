@@ -57,7 +57,16 @@ func (c *Configuration) GetBuildOutputPath() string {
 
 type Machine struct {
 	Local           bool `mapstructure:"local"`
+	activationError error
 	treeStyleParams `mapstructure:",squash"`
+}
+
+func (m *Machine) SetActivationError(err error) {
+	m.activationError = err
+}
+
+func (m *Machine) GetActivationError() error {
+	return m.activationError
 }
 
 type treeStyleParams struct {

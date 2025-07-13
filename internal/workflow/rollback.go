@@ -2,26 +2,20 @@ package workflow
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-func (w *WorkflowExecutor) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
-	return fmt.Errorf("rollback not implemented for machine %s", machineName)
+func (w *WorkflowExecutor) executeRollback(nextPhases []workflow_definition.WorkflowPhase) error {
+	return w.executeParallelMachines("rollback", w.executeMachineRollback, nextPhases)
 }
 
-func (w *WorkflowExecutor) rollbackMachines(machines []machineInfo) {
-	var wg sync.WaitGroup
-	for _, mi := range machines {
-		wg.Add(1)
-		go func(mi machineInfo) {
-			defer wg.Done()
-			err := w.executeMachineRollback(mi.flakeName, mi.configName, mi.machineName, mi.machine)
-			if err != nil {
-				fmt.Printf("Warning: rollback failed for machine %s: %v\n", mi.machineName, err)
-			}
-		}(mi)
+func (w *WorkflowExecutor) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
+	// TODO: Implement secrets deployment
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Secrets deployment for machine %s/%s/%s: TODO - implement secrets deployment\n", flakeName, configName, machineName)
 	}
-	wg.Wait()
+
+	return nil
 }

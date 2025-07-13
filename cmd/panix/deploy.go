@@ -21,7 +21,7 @@ var deployCmd = &cobra.Command{
 This is the main command for deploying NixOS configurations.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		phases := []workflow_definition.WorkflowPhase{
-			workflow_definition.PhasePreflight,
+			workflow_definition.PhaseStatus,
 			workflow_definition.PhaseBuild,
 			workflow_definition.PhaseTransfer,
 			//workflow_definition.PhaseBootstrap,
@@ -33,8 +33,7 @@ This is the main command for deploying NixOS configurations.`,
 			return err
 		}
 
-		_, err = executor.Execute()
-		return err
+		return executor.Execute()
 	},
 }
 
