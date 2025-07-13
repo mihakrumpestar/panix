@@ -11,6 +11,10 @@ import (
 )
 
 func (ex *Executioner) Ping() (ExecutionerOutput, error) {
+	if ex.local { // If local, no need to ping
+		return ExecutionerOutput{}, nil
+	}
+
 	sshArgs := []string{}
 
 	sshArgs = append(sshArgs, "-zvw1")
@@ -30,7 +34,7 @@ func (ex *Executioner) Ping() (ExecutionerOutput, error) {
 	return ex.shell("nc", sshArgs...)
 }
 
-func retriveAliasParamsFromSshConfig(sshConfig config.Ssh) (*config.Ssh, error) {
+func retriveAliasParamsFromSshConfig(sshConfig *config.Ssh) (*config.Ssh, error) {
 	result := config.Ssh{}
 
 	sshCfg, err := loadSshConfig()

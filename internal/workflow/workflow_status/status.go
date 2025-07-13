@@ -18,7 +18,7 @@ const (
 
 type MachineStatus struct {
 	Name              string
-	Machine           config.Machine
+	Machine           *config.Machine
 	Reachable         bool
 	SSHConnectable    bool
 	Bootstrapped      bool
@@ -30,7 +30,7 @@ type MachineStatus struct {
 
 // CheckHost performs TCP reachability, SSH login, and bootstrap detection
 // depth parameter controls how much information to gather
-func CheckHost(ctx context.Context, machineName string, machineConfig config.Machine, depth CheckDepth) (status *MachineStatus) {
+func CheckHost(ctx context.Context, conf config.Global, machineName string, machineConfig *config.Machine, depth CheckDepth) (status *MachineStatus) {
 	status = &MachineStatus{
 		Name:              machineName,
 		Machine:           machineConfig,
@@ -43,7 +43,7 @@ func CheckHost(ctx context.Context, machineName string, machineConfig config.Mac
 	}
 
 	var exc *executioner.Executioner
-	exc, status.Error = executioner.New(ctx, false, machineConfig.Ssh)
+	exc, status.Error = executioner.New(ctx, conf.DryRun, machineConfig)
 	if status.Error != nil {
 		return
 	}
