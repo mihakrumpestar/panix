@@ -14,37 +14,14 @@ func (w *WorkflowExecutor) executeStatus(nextPhases []workflow_definition.Workfl
 		fmt.Printf("Executing status phase\n")
 	}
 
-	// Status phase runs separately (fully branched) to check all machines
-	// This is handled by the executeBranching function with no branching flags
-	// since status needs to check all machines but doesn't cascade branching
-
 	// Collect all machine statuses
 	var allStatuses []*workflow_status.MachineStatus
 	var mu sync.Mutex
-
-	// Execute the status phase with branching, collecting results
-	err := w.executeStatusBranching(allStatuses, &mu)
-	if err != nil {
-		return w.metadata, err
-	}
-
-	// Print the combined status table ONCE after all machines are checked
-	workflow_status.PrintStatusTable(allStatuses)
-	fmt.Println("Status check completed")
-
-	if len(nextPhases) > 0 {
-		return w.executePhase(nextPhases)
-	}
-
-	return w.metadata, nil
-}
-
-// executeStatusBranching handles the parallel execution of status checks
-func (w *WorkflowExecutor) executeStatusBranching(allStatuses []*workflow_status.MachineStatus, mu *sync.Mutex) error {
 	var wg sync.WaitGroup
 	var errors []error
 	var errorMu sync.Mutex
 
+	// Execute status checks for all machines in parallel
 	for flakeName, flake := range w.cfg.Flakes {
 		for configName, configuration := range flake.Configurations {
 			for machineName, machine := range configuration.Machines {
@@ -70,21 +47,24 @@ func (w *WorkflowExecutor) executeStatusBranching(allStatuses []*workflow_status
 
 	wg.Wait()
 
+	// Print the combined status table ONCE after all machines are checked
+	workflow_status.PrintStatusTable(allStatuses)
+	fmt.Println("Status check completed")
+
+	// Handle errors
 	if len(errors) > 0 && w.cfg.Global.RequireAllSuccess {
-		return fmt.Errorf("status check failed: %v", errors)
+		return w.metadata, fmt.Errorf("status check failed: %v", errors)
 	}
 
-	return nil
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
+	}
+
+	return w.metadata, nil
 }
 
 // This function is called by executeStatusBranching for individual machine status checks
 func (w *WorkflowExecutor) statusMachineStatus(flakeName, configName, machineName string, machine *config.Machine) *workflow_status.MachineStatus {
 	status := workflow_status.CheckHost(w.ctx, w.cfg.Global, machineName, machine, workflow_status.CheckFull)
 	return status
-}
-
-// This function is called by executeMachineStatus for individual machine status checks (legacy)
-func (w *WorkflowExecutor) statusMachine(flakeName, configName, machineName string, machine *config.Machine) error {
-	status := w.statusMachineStatus(flakeName, configName, machineName, machine)
-	return status.Error
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sync"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -15,13 +16,36 @@ func (w *WorkflowExecutor) executeBuild(nextPhases []workflow_definition.Workflo
 		fmt.Printf("Executing build phase\n")
 	}
 
-	// Build phase branches on Flakes and Configurations and cascades this branching
-	// to all subsequent phases. This is handled by the executeBranching function.
+	// Build configurations in parallel
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []error
 
-	// Execute the build phase with branching
-	_, err := w.executeBranching(workflow_definition.PhaseBuild, []workflow_definition.WorkflowPhase{}, true, true, false)
-	if err != nil {
-		return w.metadata, err
+	for flakeName, flake := range w.cfg.Flakes {
+		for configName := range flake.Configurations {
+			wg.Add(1)
+			go func(f, c string, flake *config.Flake) {
+				defer wg.Done()
+				err := w.buildFlakeConfiguration(f, c, flake)
+				if err != nil {
+					mu.Lock()
+					errors = append(errors, fmt.Errorf("%s/%s: %w", f, c, err))
+					mu.Unlock()
+				}
+			}(flakeName, configName, flake)
+		}
+	}
+
+	wg.Wait()
+
+	// Handle errors
+	if len(errors) > 0 {
+		if w.cfg.Global.RequireAllSuccess {
+			return w.metadata, fmt.Errorf("build phase failed: %v", errors)
+		}
+		for _, err := range errors {
+			fmt.Printf("Warning: %v\n", err)
+		}
 	}
 
 	if len(nextPhases) > 0 {

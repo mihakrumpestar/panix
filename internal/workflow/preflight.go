@@ -14,37 +14,14 @@ func (w *WorkflowExecutor) executePreflight(nextPhases []workflow_definition.Wor
 		fmt.Printf("Executing preflight phase\n")
 	}
 
-	// Preflight runs separately but branches internally to contact all machines
-	// This is handled by the executeBranching function with no branching flags
-	// since preflight needs to contact all machines but doesn't cascade branching
-
 	// Collect all machine statuses
 	var allStatuses []*workflow_status.MachineStatus
 	var mu sync.Mutex
-
-	// Execute the preflight phase with branching, collecting results
-	err := w.executePreflightBranching(allStatuses, &mu)
-	if err != nil {
-		return w.metadata, err
-	}
-
-	// Print the combined status table ONCE after all machines are checked
-	workflow_status.PrintStatusTable(allStatuses)
-	fmt.Println("Preflight check completed")
-
-	if len(nextPhases) > 0 {
-		return w.executePhase(nextPhases)
-	}
-
-	return w.metadata, nil
-}
-
-// executePreflightBranching handles the parallel execution of preflight checks
-func (w *WorkflowExecutor) executePreflightBranching(allStatuses []*workflow_status.MachineStatus, mu *sync.Mutex) error {
 	var wg sync.WaitGroup
 	var errors []error
 	var errorMu sync.Mutex
 
+	// Execute preflight checks for all machines in parallel
 	for flakeName, flake := range w.cfg.Flakes {
 		for configName, configuration := range flake.Configurations {
 			for machineName, machine := range configuration.Machines {
@@ -70,11 +47,20 @@ func (w *WorkflowExecutor) executePreflightBranching(allStatuses []*workflow_sta
 
 	wg.Wait()
 
+	// Print the combined status table ONCE after all machines are checked
+	workflow_status.PrintStatusTable(allStatuses)
+	fmt.Println("Preflight check completed")
+
+	// Handle errors
 	if len(errors) > 0 && w.cfg.Global.RequireAllSuccess {
-		return fmt.Errorf("preflight failed: %v", errors)
+		return w.metadata, fmt.Errorf("preflight failed: %v", errors)
 	}
 
-	return nil
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
+	}
+
+	return w.metadata, nil
 }
 
 // This function is called by executePreflightBranching for individual machine preflight checks
