@@ -1,9 +1,9 @@
 global:
-  timeout: 10
+  timeout: 7200 # 2h
   concurrency: 5
   requireAllSuccess: false
   autoBootstrap: false
-  dryRun: false
+  #dryRun: false
 
 flakes:
   infrastructure:
@@ -20,6 +20,6 @@ flakes:
               - nixos
       server-03:
         machines:
-          server:
+          default:
             ssh:
               alias: server-03

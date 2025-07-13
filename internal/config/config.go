@@ -2,15 +2,17 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/viper"
+	"github.com/yassinebenaid/godump"
 )
 
 type Config struct {
-	Global Global           `mapstructure:"global"`
-	Flakes map[string]Flake `mapstructure:"flakes"`
+	Global Global            `mapstructure:"global"`
+	Flakes map[string]*Flake `mapstructure:"flakes"`
 }
 
 type Global struct {
@@ -18,7 +20,7 @@ type Global struct {
 	RequireAllSuccess bool                                `mapstructure:"requireAllSuccess"`
 	AutoBootstrap     bool                                `mapstructure:"autoBootstrap"`
 	DryRun            bool                                `mapstructure:"dryRun"`
-	Ssh               Ssh                                 `mapstructure:"ssh"`
+	Ssh               *Ssh                                `mapstructure:"ssh"`
 	Timeout           time.Duration                       `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
 	Concurrency       int                                 `mapstructure:"concurrency"`
 	SkipPhases        []workflow_definition.WorkflowPhase `mapstructure:"skipPhases"`
@@ -35,13 +37,22 @@ type Filters struct {
 type Flake struct {
 	Url             string `mapstructure:"url"` // Flake path or url
 	treeStyleParams `mapstructure:",squash"`
-	Configurations  map[string]Configuration `mapstructure:"configurations"`
+	Configurations  map[string]*Configuration `mapstructure:"configurations"`
 }
 
 type Configuration struct {
 	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
+	buildOutputPath string
 	treeStyleParams `mapstructure:",squash"`
-	Machines        map[string]Machine `mapstructure:"machines"`
+	Machines        map[string]*Machine `mapstructure:"machines"`
+}
+
+func (c *Configuration) SetBuildOutputPath(buildOutputPath string) {
+	c.buildOutputPath = buildOutputPath
+}
+
+func (c *Configuration) GetBuildOutputPath() string {
+	return c.buildOutputPath
 }
 
 type Machine struct {
@@ -50,25 +61,18 @@ type Machine struct {
 }
 
 type treeStyleParams struct {
-	Ssh       Ssh              `mapstructure:"ssh"`
-	Tags      []string         `mapstructure:"tags"`
-	Bootstrap *BootstrapConfig `mapstructure:"bootstrap,omitempty"`
-	Secrets   []SecretConfig   `mapstructure:"secrets,omitempty"`
+	Ssh     *Ssh           `mapstructure:"ssh,omitempty"`
+	Tags    []string       `mapstructure:"tags"`
+	Secrets []SecretConfig `mapstructure:"secrets,omitempty"`
 }
 
 type Ssh struct {
 	Alias      string `mapstructure:"alias"`
 	User       string `mapstructure:"user"`
 	Host       string `mapstructure:"host"`
-	Port       int    `mapstructure:"port,omitzero"`
+	Port       int    `mapstructure:"port"`
 	PrivateKey string `mapstructure:"privateKey"`
 	PublicKey  string `mapstructure:"publicKey"`
-}
-
-type BootstrapConfig struct {
-	FlakeAttr string            `mapstructure:"flakeAttr"`
-	ExtraArgs []string          `mapstructure:"extraArgs"`
-	Env       map[string]string `mapstructure:"env"`
 }
 
 type SecretConfig struct {
@@ -77,18 +81,17 @@ type SecretConfig struct {
 	Mode       string `mapstructure:"mode"`
 }
 
-var C Config
+var (
+	ConfigFile string
+	C          Config
+)
 
 // LoadConfig reads and parses the config file.
-func LoadConfig(configPath string) (*Config, error) {
-	if configPath == "" {
-		configPath = "panix.yml"
-	}
-
+func LoadConfig() (*Config, error) {
 	vpr := viper.New()
 
 	// File config
-	vpr.SetConfigFile(configPath)
+	vpr.SetConfigFile(ConfigFile)
 	// ENV config
 	vpr.SetEnvPrefix("PANIX")
 
@@ -104,15 +107,17 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	C.Global.Timeout *= time.Second
 
+	C.Flakes, err = C.filterConfigEntrys()
+	if err != nil {
+		panic(fmt.Errorf("failed to filter config: %w", err))
+	}
+
 	err = C.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	C.Flakes, err = C.filterConfigEntrys()
-	if err != nil {
-		panic(fmt.Errorf("failed to filter config: %w", err))
-	}
+	godump.Dump(C)
 
 	return &C, nil
 }
@@ -143,38 +148,31 @@ func (c *Config) validateConfig() error {
 	return nil
 }
 
-// FilterConfigEntrys filters the configuration based on command-line selections.
+// FilterConfigEntrys filters the configuration based on command-line or global selections.
 // An entry is kept if it matches all provided filters (flakes, configurations, machines, tags).
 // If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
-func (c *Config) filterConfigEntrys() (map[string]Flake, error) {
-	filteredFlakes := make(map[string]Flake)
+func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
+	cC := *c // Copy
 
-	toSet := func(s []string) map[string]bool {
-		set := make(map[string]bool, len(s))
-		for _, item := range s {
-			set[item] = true
-		}
-		return set
-	}
+	flakesFilter := cC.Global.Filters.Flakes
+	configurationsFilter := cC.Global.Filters.Configurations
+	machinesFilter := cC.Global.Filters.Machines
 
-	flakesSet := toSet(C.Global.Filters.Flakes)
-	configurationsSet := toSet(C.Global.Filters.Configurations)
-	machinesSet := toSet(C.Global.Filters.Machines)
-
-	for flakeName, flake := range c.Flakes {
-		if len(flakesSet) > 0 && !flakesSet[flakeName] {
+	for flakeName, flake := range cC.Flakes {
+		if len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName) {
+			delete(cC.Flakes, flakeName)
 			continue
 		}
 
-		filteredConfs := make(map[string]Configuration)
-		for confName, conf := range flake.Configurations {
-			if len(configurationsSet) > 0 && !configurationsSet[confName] {
+		for configurationName, conf := range flake.Configurations {
+			if len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName) {
+				delete(cC.Flakes, configurationName)
 				continue
 			}
 
-			filteredMachines := make(map[string]Machine)
 			for machineName, machine := range conf.Machines {
-				if len(machinesSet) > 0 && !machinesSet[machineName] {
+				if len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName) {
+					delete(cC.Flakes, machineName)
 					continue
 				}
 
@@ -188,57 +186,25 @@ func (c *Config) filterConfigEntrys() (map[string]Flake, error) {
 						continue // Skip this machine if tags don't match
 					}
 				}
-
-				// If we reach here, the machine has passed all filters.
-				filteredMachines[machineName] = machine
 			}
-
-			if len(filteredMachines) > 0 {
-				newConf := conf
-				newConf.Machines = filteredMachines
-				filteredConfs[confName] = newConf
-			}
-		}
-
-		if len(filteredConfs) > 0 {
-			newFlake := flake
-			newFlake.Configurations = filteredConfs
-			filteredFlakes[flakeName] = newFlake
 		}
 	}
 
-	if len(filteredFlakes) == 0 {
+	if len(cC.Flakes) == 0 {
 		return nil, fmt.Errorf("flakes configuration empty after filtering")
 	}
 
-	return filteredFlakes, nil
+	return cC.Flakes, nil
 }
 
-func matchesTags(machineTags, filterTags []string) bool {
+func matchesTags(tags, filterTags []string) bool {
 	if len(filterTags) == 0 {
 		return true
 	}
 
-	tagSet := make(map[string]bool)
-
-	for _, t := range machineTags {
-		tagSet[t] = true
-	}
-
-	for _, ft := range filterTags {
-		switch ft[0] {
-		case '+':
-			if !tagSet[ft[1:]] {
-				return false
-			}
-		case '-':
-			if tagSet[ft[1:]] {
-				return false
-			}
-		default:
-			if !tagSet[ft] {
-				return false
-			}
+	for _, filterTag := range filterTags {
+		if !slices.Contains(tags, filterTag) {
+			return false
 		}
 	}
 

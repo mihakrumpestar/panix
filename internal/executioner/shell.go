@@ -15,6 +15,10 @@ func (ex *Executioner) shell(name string, args ...string) (ExecutionerOutput, er
 
 	fmt.Println(output.Command)
 
+	if ex.dryRun {
+		return output, nil
+	}
+
 	cmd.Stdout = &output.Stdout
 	cmd.Stderr = &output.Stderr
 	err := cmd.Run()
