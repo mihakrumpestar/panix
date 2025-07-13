@@ -10,7 +10,8 @@ import (
 type Executioner struct {
 	ctx       context.Context
 	local     bool
-	sshConfig config.Ssh
+	dryRun    bool
+	sshConfig *config.Ssh
 }
 
 type ExecutionerOutput struct {
@@ -19,11 +20,12 @@ type ExecutionerOutput struct {
 	Stderr  bytes.Buffer
 }
 
-func New(ctx context.Context, local bool, ssh config.Ssh) (*Executioner, error) {
+func New(ctx context.Context, dryRun bool, machine *config.Machine) (*Executioner, error) {
 	return &Executioner{
 		ctx:       ctx,
-		local:     local,
-		sshConfig: ssh,
+		local:     machine.Local,
+		dryRun:    dryRun,
+		sshConfig: machine.Ssh,
 	}, nil
 }
 

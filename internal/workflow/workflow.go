@@ -92,19 +92,19 @@ func (w *WorkflowExecutor) executePhase(currentPhases []workflow_definition.Work
 
 	switch currentPhase {
 	case workflow_definition.PhasePreflight:
-		return w.executeBranching(currentPhase, nextPhases, false, false, false)
+		return w.executePreflight(nextPhases)
 	case workflow_definition.PhaseBuild:
-		return w.executeBranching(currentPhase, nextPhases, true, true, false)
+		return w.executeBuild(nextPhases)
 	case workflow_definition.PhaseBootstrap:
-		return w.executeBranching(currentPhase, nextPhases, true, true, true)
+		return w.executeBootstrap(nextPhases)
 	case workflow_definition.PhaseTransfer:
-		return w.executeBranching(currentPhase, nextPhases, true, true, true)
+		return w.executeTransfer(nextPhases)
 	case workflow_definition.PhaseSecrets:
-		return w.executeBranching(currentPhase, nextPhases, true, true, true)
+		return w.executeSecrets(nextPhases)
 	case workflow_definition.PhaseActivate:
 		return w.executeActivatePhase(nextPhases)
 	case workflow_definition.PhaseStatus:
-		return w.executeBranching(currentPhase, nextPhases, false, false, false)
+		return w.executeStatus(nextPhases)
 	default:
 		return nil, fmt.Errorf("unknown phase: %s", currentPhase)
 	}
@@ -123,7 +123,7 @@ func (w *WorkflowExecutor) executeBranching(currentPhase workflow_definition.Wor
 	for flakeName, flake := range w.cfg.Flakes {
 		if branchFlakes {
 			wg.Add(1)
-			go func(fname string, f config.Flake) {
+			go func(fname string, f *config.Flake) {
 				defer wg.Done()
 				err := w.executeFlakeBranch(currentPhase, nextPhases, fname, f, branchConfigs, branchMachines)
 				mu.Lock()
@@ -170,7 +170,7 @@ func (w *WorkflowExecutor) executeBranching(currentPhase workflow_definition.Wor
 	return result, nil
 }
 
-func (w *WorkflowExecutor) executeFlakeBranch(currentPhase workflow_definition.WorkflowPhase, nextPhases []workflow_definition.WorkflowPhase, flakeName string, flake config.Flake, branchConfigs, branchMachines bool) error {
+func (w *WorkflowExecutor) executeFlakeBranch(currentPhase workflow_definition.WorkflowPhase, nextPhases []workflow_definition.WorkflowPhase, flakeName string, flake *config.Flake, branchConfigs, branchMachines bool) error {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errors []error
@@ -179,7 +179,7 @@ func (w *WorkflowExecutor) executeFlakeBranch(currentPhase workflow_definition.W
 	for configName, configuration := range flake.Configurations {
 		if branchConfigs {
 			wg.Add(1)
-			go func(cname string, conf config.Configuration) {
+			go func(cname string, conf *config.Configuration) {
 				defer wg.Done()
 				err := w.executeConfigBranch(currentPhase, flakeName, cname, conf, branchMachines)
 				mu.Lock()
@@ -222,7 +222,7 @@ func (w *WorkflowExecutor) executeFlakeBranch(currentPhase workflow_definition.W
 	return nil
 }
 
-func (w *WorkflowExecutor) executeConfigBranch(currentPhase workflow_definition.WorkflowPhase, flakeName, configName string, configuration config.Configuration, branchMachines bool) error {
+func (w *WorkflowExecutor) executeConfigBranch(currentPhase workflow_definition.WorkflowPhase, flakeName, configName string, configuration *config.Configuration, branchMachines bool) error {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var errors []error
@@ -232,7 +232,7 @@ func (w *WorkflowExecutor) executeConfigBranch(currentPhase workflow_definition.
 		if branchMachines {
 			fmt.Println("Branch machines")
 			wg.Add(1)
-			go func(mname string, m config.Machine) {
+			go func(mname string, m *config.Machine) {
 				defer wg.Done()
 				err := w.executeMachinePhase(currentPhase, flakeName, configName, mname, m)
 				mu.Lock()
@@ -275,7 +275,7 @@ func (w *WorkflowExecutor) executeConfigBranch(currentPhase workflow_definition.
 	return nil
 }
 
-func (w *WorkflowExecutor) executeMachinePhase(currentPhase workflow_definition.WorkflowPhase, flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachinePhase(currentPhase workflow_definition.WorkflowPhase, flakeName, configName, machineName string, machine *config.Machine) error {
 	switch currentPhase {
 	case workflow_definition.PhasePreflight:
 		return w.executeMachinePreflight(flakeName, configName, machineName, machine)
@@ -359,14 +359,14 @@ type machineInfo struct {
 	flakeName   string
 	configName  string
 	machineName string
-	machine     config.Machine
+	machine     *config.Machine
 }
 
-func (w *WorkflowExecutor) executeMachinePreflight(flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachinePreflight(flakeName, configName, machineName string, machine *config.Machine) error {
 	return w.preflightMachine(flakeName, configName, machineName, machine)
 }
 
-func (w *WorkflowExecutor) executeMachineBuild(flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachineBuild(flakeName, configName, machineName string, machine *config.Machine) error {
 	// Get the flake configuration
 	flake, exists := w.cfg.Flakes[flakeName]
 	if !exists {
@@ -376,12 +376,7 @@ func (w *WorkflowExecutor) executeMachineBuild(flakeName, configName, machineNam
 	return w.buildFlakeConfiguration(flakeName, configName, flake)
 }
 
-func (w *WorkflowExecutor) executeMachineBootstrap(flakeName, configName, machineName string, machine config.Machine) error {
-	if w.cfg.Global.DryRun {
-		fmt.Printf("DRY RUN: Would bootstrap %s/%s/%s\n", flakeName, configName, machineName)
-		return nil
-	}
-
+func (w *WorkflowExecutor) executeMachineBootstrap(flakeName, configName, machineName string, machine *config.Machine) error {
 	// TODO: Implement nixos-anywhere bootstrap
 	if w.cfg.Global.Verbose {
 		fmt.Printf("Bootstrap for machine %s/%s/%s: TODO - implement nixos-anywhere\n", flakeName, configName, machineName)
@@ -390,19 +385,14 @@ func (w *WorkflowExecutor) executeMachineBootstrap(flakeName, configName, machin
 	return nil
 }
 
-func (w *WorkflowExecutor) executeMachineTransfer(flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachineTransfer(flakeName, configName, machineName string, machine *config.Machine) error {
 	// Get the build output path from metadata
-	buildOutputPath := w.getBuildOutputPath(flakeName, configName)
+	buildOutputPath := w.cfg.Flakes[flakeName].Configurations[configName].GetBuildOutputPath()
 
 	return w.transferToMachine(flakeName, configName, machineName, machine, buildOutputPath)
 }
 
-func (w *WorkflowExecutor) executeMachineSecrets(flakeName, configName, machineName string, machine config.Machine) error {
-	if w.cfg.Global.DryRun {
-		fmt.Printf("DRY RUN: Would deploy secrets to %s/%s/%s\n", flakeName, configName, machineName)
-		return nil
-	}
-
+func (w *WorkflowExecutor) executeMachineSecrets(flakeName, configName, machineName string, machine *config.Machine) error {
 	// TODO: Implement secrets deployment
 	if w.cfg.Global.Verbose {
 		fmt.Printf("Secrets deployment for machine %s/%s/%s: TODO - implement secrets deployment\n", flakeName, configName, machineName)
@@ -410,83 +400,58 @@ func (w *WorkflowExecutor) executeMachineSecrets(flakeName, configName, machineN
 
 	return nil
 }
-func (w *WorkflowExecutor) executeMachineActivate(flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachineActivate(flakeName, configName, machineName string, machine *config.Machine) error {
 	// Get the build output path from metadata
-	buildOutputPath := w.getBuildOutputPath(flakeName, configName)
+	buildOutputPath := w.cfg.Flakes[flakeName].Configurations[configName].GetBuildOutputPath()
 
 	return w.activateMachine(flakeName, configName, machineName, machine, buildOutputPath)
 }
 
-func (w *WorkflowExecutor) executeMachineStatus(flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachineStatus(flakeName, configName, machineName string, machine *config.Machine) error {
 	return w.statusMachine(flakeName, configName, machineName, machine)
 }
 
-func (w *WorkflowExecutor) executeMachineRollback(flakeName, configName, machineName string, machine config.Machine) error {
+func (w *WorkflowExecutor) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
 	return fmt.Errorf("rollback not implemented for machine %s", machineName)
 }
 
-// Metadata management functions
-
-func (w *WorkflowExecutor) setBuildOutputPath(flakeName, configName, buildOutputPath string) {
-	// Find or create flake metadata
-	var flakeMetadata *FlakeMetadata
-	for i := range w.metadata.FlakesMetadata {
-		if w.metadata.FlakesMetadata[i].Name == flakeName {
-			flakeMetadata = &w.metadata.FlakesMetadata[i]
-			break
-		}
+func (w *WorkflowExecutor) executeBootstrap(nextPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Executing bootstrap phase\n")
 	}
 
-	if flakeMetadata == nil {
-		// Create new flake metadata
-		w.metadata.FlakesMetadata = append(w.metadata.FlakesMetadata, FlakeMetadata{
-			Name:            flakeName,
-			ConfigsMetadata: make([]ConfigMetadata, 0),
-		})
-		flakeMetadata = &w.metadata.FlakesMetadata[len(w.metadata.FlakesMetadata)-1]
+	// Bootstrap phase branches on Flakes, Configurations, and Machines
+	// and cascades this branching to all subsequent phases
+
+	// Execute the bootstrap phase with branching
+	_, err := w.executeBranching(workflow_definition.PhaseBootstrap, []workflow_definition.WorkflowPhase{}, true, true, true)
+	if err != nil {
+		return w.metadata, err
 	}
 
-	// Find or create config metadata
-	var configMetadata *ConfigMetadata
-	for i := range flakeMetadata.ConfigsMetadata {
-		if flakeMetadata.ConfigsMetadata[i].Name == configName {
-			configMetadata = &flakeMetadata.ConfigsMetadata[i]
-			break
-		}
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
 	}
 
-	if configMetadata == nil {
-		// Create new config metadata
-		flakeMetadata.ConfigsMetadata = append(flakeMetadata.ConfigsMetadata, ConfigMetadata{
-			Name:             configName,
-			BuildOutputPath:  buildOutputPath,
-			MachinesMetadata: make([]MachineMetadata, 0),
-		})
-	} else {
-		configMetadata.BuildOutputPath = buildOutputPath
-	}
-}
-func (w *WorkflowExecutor) getBuildOutputPath(flakeName, configName string) string {
-	// Find flake metadata
-	for _, flakeMetadata := range w.metadata.FlakesMetadata {
-		if flakeMetadata.Name == flakeName {
-			// Find config metadata
-			for _, configMetadata := range flakeMetadata.ConfigsMetadata {
-				if configMetadata.Name == configName {
-					return configMetadata.BuildOutputPath
-				}
-			}
-		}
-	}
-	return ""
+	return w.metadata, nil
 }
 
-func (w *WorkflowExecutor) executeBootstrap(currentPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
-	// TODO: Implement nixos-anywhere bootstrap
-	return nil, nil
-}
+func (w *WorkflowExecutor) executeSecrets(nextPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
+	if w.cfg.Global.Verbose {
+		fmt.Printf("Executing secrets phase\n")
+	}
 
-func (w *WorkflowExecutor) executeSecrets(currentPhases []workflow_definition.WorkflowPhase) (*ExecutionResult, error) {
-	// TODO: Implement secrets deployment
-	return nil, nil
+	// Secrets phase should already be fully branched from previous phases
+
+	// Execute the secrets phase with branching
+	_, err := w.executeBranching(workflow_definition.PhaseSecrets, []workflow_definition.WorkflowPhase{}, true, true, true)
+	if err != nil {
+		return w.metadata, err
+	}
+
+	if len(nextPhases) > 0 {
+		return w.executePhase(nextPhases)
+	}
+
+	return w.metadata, nil
 }
