@@ -3,7 +3,13 @@ package workflow
 import (
 	"fmt"
 	"sync"
+
+	"github.com/mihakrumpestar/panix/internal/config"
 )
+
+func (w *WorkflowExecutor) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
+	return fmt.Errorf("rollback not implemented for machine %s", machineName)
+}
 
 func (w *WorkflowExecutor) rollbackMachines(machines []machineInfo) {
 	var wg sync.WaitGroup
