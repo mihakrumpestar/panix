@@ -13,7 +13,7 @@ func (w *WorkflowExecutor) executeActivatePhase(nextPhases []workflow_definition
 }
 
 func (w *WorkflowExecutor) activateMachine(flakeName, configName, machineName string, machine *config.Machine) error {
-	buildOutputPath := w.cfg.Flakes[flakeName].Configurations[configName].GetBuildOutputPath()
+	buildOutputPath := w.cfg.Flakes[flakeName].Configurations[configName].Metadata.BuildOutputPath
 	if buildOutputPath == "" {
 		return fmt.Errorf("machine %s/%s/%s has no build output path, cannot activate", flakeName, configName, machineName)
 	}
