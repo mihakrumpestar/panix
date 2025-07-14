@@ -1,9 +1,10 @@
 package panix
 
 import (
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/cobra"
 )
 
@@ -20,20 +21,24 @@ var deployCmd = &cobra.Command{
 
 This is the main command for deploying NixOS configurations.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{
-			workflow_definition.PhaseStatus,
-			workflow_definition.PhaseBuild,
-			workflow_definition.PhaseTransfer,
-			//workflow_definition.PhaseBootstrap,
-			workflow_definition.PhaseSecrets,
-			workflow_definition.PhaseActivate,
-		}
-		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C, phases)
+		wexc, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
 		if err != nil {
 			return err
 		}
 
-		return executor.Execute()
+		statusMetadata, err := wexc.ExecuteStatusPhase()
+		if err != nil {
+			return err
+		}
+
+		configurationMetadata, err := wexc.ExecuteBuildPhase(statusMetadata)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(configurationMetadata)
+
+		return nil
 	},
 }
 
