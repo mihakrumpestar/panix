@@ -14,7 +14,7 @@ func (w *WorkflowExecutor) executeTransfer(nextPhases []workflow_definition.Work
 
 // This function is called by executeMachineTransfer for individual machine transfers
 func (w *WorkflowExecutor) transferToMachine(flakeName, configName, machineName string, machine *config.Machine) error {
-	buildOutputPath := w.cfg.Flakes[flakeName].Configurations[configName].GetBuildOutputPath()
+	buildOutputPath := w.cfg.Flakes[flakeName].Configurations[configName].Metadata.BuildOutputPath
 	if buildOutputPath == "" {
 		return fmt.Errorf("machine %s/%s/%s has no build output path", flakeName, configName, machineName)
 	}
