@@ -26,6 +26,7 @@ type Global struct {
 	SkipPhases        []workflow_definition.WorkflowPhase `mapstructure:"skipPhases"`
 	Verbose           bool                                `mapstructure:"verbose"`
 	Debug             bool                                `mapstructure:"debug"`
+	//Json              bool                                `mapstructure:"json"` // Maybe later
 }
 
 type Filters struct {
@@ -75,35 +76,42 @@ type SecretConfig struct {
 }
 
 var (
-	ConfigFile string
-	C          Config
+	C Config
 )
 
 // LoadConfig reads and parses the config file.
-func LoadConfig() (*Config, error) {
-	vpr := viper.New()
-
-	// File config
-	vpr.SetConfigFile(ConfigFile)
-	// ENV config
-	vpr.SetEnvPrefix("PANIX")
-
-	err := vpr.ReadInConfig() // Find and read the config file
-	if err != nil {           // Handle errors reading the config file
-		return nil, fmt.Errorf("fatal error config file: %w", err)
+func LoadConfig(vpr *viper.Viper, configFile string) (*Config, error) {
+	if vpr == nil {
+		vpr = viper.New()
 	}
 
-	err = vpr.UnmarshalExact(&C)
+	// File config
+	vpr.SetConfigFile(configFile)
+
+	// ENV config
+	vpr.SetEnvPrefix("PANIX")
+	vpr.AutomaticEnv()
+
+	// Read config file if it exists
+	if err := vpr.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("fatal error config file: %w", err)
+		}
+		// Config file not found is okay, we'll use defaults and flags
+	}
+
+	// Now unmarshal the full config
+	err := vpr.UnmarshalExact(&C)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode into struct, %v", err)
 	}
 
-	// Defaults
+	// Convert timeout from seconds to duration
 	C.Global.Timeout *= time.Second
 
 	C.Flakes, err = C.filterConfigEntrys()
 	if err != nil {
-		panic(fmt.Errorf("failed to filter config: %w", err))
+		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
 	err = C.validateConfig()

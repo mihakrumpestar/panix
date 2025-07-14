@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
 type StatusMetadata struct {
@@ -24,20 +23,19 @@ type StatusMetadata struct {
 
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
-func (w *WorkflowExecutor) executeStatusPhase(nextPhases []workflow_definition.WorkflowPhase) ([]StatusMetadata, error) {
+func (w *WorkflowExecutor) ExecuteStatusPhase() ([]StatusMetadata, error) {
 
 	if w.cfg.Global.Verbose {
 		fmt.Println("Executing status phase across all machines")
 	}
 
-	// Create a pool with limited concurrency
 	pool := pond.NewResultPool[StatusMetadata](w.cfg.Global.Concurrency)
 	group := pool.NewGroupContext(w.ctx)
 
 	forAllMachines(w.cfg.Flakes, func(flakeName, configurationName, machineName string, machine *config.Machine) {
 		group.SubmitErr(func() (StatusMetadata, error) {
-			wp := WorkflowExecutorConfigurationMachine{w.ctx, &w.cfg.Global}
-			result, err := wp.statusPhaseMachine(flakeName, configurationName, machineName, machine)
+			wp := WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
+			result, err := wp.executeStatusPhaseMachine(flakeName, configurationName, machineName, machine)
 			result.Error = err
 
 			return result, nil
@@ -60,16 +58,12 @@ func (w *WorkflowExecutor) executeStatusPhase(nextPhases []workflow_definition.W
 
 	w.PrintStatusPhaseMachineTable(results)
 
-	if len(nextPhases) > 0 {
-		return results, w.executePhase(nextPhases)
-	}
-
 	return results, nil
 }
 
 // CheckHost performs TCP reachability, SSH login, and bootstrap detection
 // depth parameter controls how much information to gather
-func (w *WorkflowExecutorConfigurationMachine) statusPhaseMachine(flakeName, configurationName, machineName string, machine *config.Machine) (sm StatusMetadata, err error) {
+func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachine(flakeName, configurationName, machineName string, machine *config.Machine) (sm StatusMetadata, err error) {
 	sm.MetadataID = MetadataID{
 		FlakeName:         flakeName,
 		ConfigurationName: configurationName,
