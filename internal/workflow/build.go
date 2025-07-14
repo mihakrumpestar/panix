@@ -53,7 +53,7 @@ func (w *WorkflowExecutor) buildFlakeConfiguration(flakeName, configName string,
 		buildOutputPath = nr[0].Outputs.Out
 	}
 
-	w.cfg.Flakes[flakeName].Configurations[configName].SetBuildOutputPath(buildOutputPath)
+	w.cfg.Flakes[flakeName].Configurations[configName].Metadata.BuildOutputPath = buildOutputPath
 
 	if w.cfg.Global.Verbose {
 		fmt.Printf("Built %s/%s -> %s\n", flakeName, configName, buildOutputPath)

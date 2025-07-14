@@ -25,6 +25,7 @@ type Global struct {
 	Concurrency       int                                 `mapstructure:"concurrency"`
 	SkipPhases        []workflow_definition.WorkflowPhase `mapstructure:"skipPhases"`
 	Verbose           bool                                `mapstructure:"verbose"`
+	Debug             bool                                `mapstructure:"debug"`
 }
 
 type Filters struct {
@@ -41,38 +42,48 @@ type Flake struct {
 }
 
 type Configuration struct {
-	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
-	buildOutputPath string
+	FlakeOutput     string                `mapstructure:"flakeOutput"` // Override if not standard style
+	Metadata        ConfigurationMetadata `mapstructure:"-"`
 	treeStyleParams `mapstructure:",squash"`
 	Machines        map[string]*Machine `mapstructure:"machines"`
 }
 
-func (c *Configuration) SetBuildOutputPath(buildOutputPath string) {
-	c.buildOutputPath = buildOutputPath
-}
-
-func (c *Configuration) GetBuildOutputPath() string {
-	return c.buildOutputPath
+type ConfigurationMetadata struct {
+	BuildOutputPath string
 }
 
 type Machine struct {
-	Local           bool `mapstructure:"local"`
-	activationError error
+	Local           bool            `mapstructure:"local"`
+	Metadata        MachineMetadata `mapstructure:"-"`
 	treeStyleParams `mapstructure:",squash"`
 }
 
-func (m *Machine) SetActivationError(err error) {
-	m.activationError = err
+type MachineMetadata struct {
+	FlakeName         string
+	ConfigurationName string
+	MachineName       string
+	Status            MachineMetadataStatus
+	Activation        MachineMetadataActivation
 }
 
-func (m *Machine) GetActivationError() error {
-	return m.activationError
+type MachineMetadataStatus struct {
+	Reachable         bool
+	SSHConnectable    bool
+	Bootstrapped      bool
+	CurrentGeneration string
+	LastDeployTime    string
+	Error             error
+}
+
+type MachineMetadataActivation struct {
+	Error error
 }
 
 type treeStyleParams struct {
-	Ssh     *Ssh           `mapstructure:"ssh,omitempty"`
-	Tags    []string       `mapstructure:"tags"`
-	Secrets []SecretConfig `mapstructure:"secrets,omitempty"`
+	Ssh      *Ssh           `mapstructure:"ssh,omitempty"`
+	Tags     []string       `mapstructure:"tags"`
+	Secrets  []SecretConfig `mapstructure:"secrets,omitempty"`
+	Disabled bool           `mapstructure:"disabled"`
 }
 
 type Ssh struct {
@@ -126,7 +137,9 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	godump.Dump(C)
+	if C.Global.Debug {
+		godump.Dump(C)
+	}
 
 	return &C, nil
 }
@@ -158,7 +171,7 @@ func (c *Config) validateConfig() error {
 }
 
 // FilterConfigEntrys filters the configuration based on command-line or global selections.
-// An entry is kept if it matches all provided filters (flakes, configurations, machines, tags).
+// An entry is kept if it matches all provided filters (flakes, configurations, machines, tags) and is not disabled.
 // If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
 func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 	cC := *c // Copy
@@ -168,34 +181,47 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 	machinesFilter := cC.Global.Filters.Machines
 
 	for flakeName, flake := range cC.Flakes {
-		if len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName) {
+		if (len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName)) || flake.Disabled {
 			delete(cC.Flakes, flakeName)
 			continue
 		}
 
-		for configurationName, conf := range flake.Configurations {
-			if len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName) {
-				delete(cC.Flakes, configurationName)
+		for configurationName, configuration := range flake.Configurations {
+			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
+				delete(flake.Configurations, configurationName)
 				continue
 			}
 
-			for machineName, machine := range conf.Machines {
-				if len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName) {
-					delete(cC.Flakes, machineName)
+			for machineName, machine := range configuration.Machines {
+				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName)) || flake.Disabled {
+					delete(configuration.Machines, machineName)
 					continue
 				}
 
 				// A machine must match the tag filters if they are provided.
-				if len(C.Global.Filters.Tags) > 0 {
-					allMachineTags := append([]string{}, flake.Tags...)
-					allMachineTags = append(allMachineTags, conf.Tags...)
+				if len(cC.Global.Filters.Tags) > 0 {
+					allMachineTags := flake.Tags
+					allMachineTags = append(allMachineTags, configuration.Tags...)
 					allMachineTags = append(allMachineTags, machine.Tags...)
 
 					if !matchesTags(allMachineTags, C.Global.Filters.Tags) {
-						continue // Skip this machine if tags don't match
+						delete(configuration.Machines, machineName)
+						continue
 					}
 				}
+
+				machine.Metadata.FlakeName = flakeName
+				machine.Metadata.ConfigurationName = configurationName
+				machine.Metadata.MachineName = machineName
 			}
+
+			if len(configuration.Machines) == 0 {
+				delete(flake.Configurations, configurationName)
+			}
+		}
+
+		if len(flake.Configurations) == 0 {
+			delete(cC.Flakes, flakeName)
 		}
 	}
 
