@@ -42,41 +42,14 @@ type Flake struct {
 }
 
 type Configuration struct {
-	FlakeOutput     string                `mapstructure:"flakeOutput"` // Override if not standard style
-	Metadata        ConfigurationMetadata `mapstructure:"-"`
+	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
 	treeStyleParams `mapstructure:",squash"`
 	Machines        map[string]*Machine `mapstructure:"machines"`
 }
 
-type ConfigurationMetadata struct {
-	BuildOutputPath string
-}
-
 type Machine struct {
-	Local           bool            `mapstructure:"local"`
-	Metadata        MachineMetadata `mapstructure:"-"`
+	Local           bool `mapstructure:"local"`
 	treeStyleParams `mapstructure:",squash"`
-}
-
-type MachineMetadata struct {
-	FlakeName         string
-	ConfigurationName string
-	MachineName       string
-	Status            MachineMetadataStatus
-	Activation        MachineMetadataActivation
-}
-
-type MachineMetadataStatus struct {
-	Reachable         bool
-	SSHConnectable    bool
-	Bootstrapped      bool
-	CurrentGeneration string
-	LastDeployTime    string
-	Error             error
-}
-
-type MachineMetadataActivation struct {
-	Error error
 }
 
 type treeStyleParams struct {
@@ -125,6 +98,7 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("unable to decode into struct, %v", err)
 	}
 
+	// Defaults
 	C.Global.Timeout *= time.Second
 
 	C.Flakes, err = C.filterConfigEntrys()
@@ -209,10 +183,6 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 						continue
 					}
 				}
-
-				machine.Metadata.FlakeName = flakeName
-				machine.Metadata.ConfigurationName = configurationName
-				machine.Metadata.MachineName = machineName
 			}
 
 			if len(configuration.Machines) == 0 {

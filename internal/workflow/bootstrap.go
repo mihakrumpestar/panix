@@ -4,12 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
-
-func (w *WorkflowExecutor) executeBootstrap(nextPhases []workflow_definition.WorkflowPhase) error {
-	return w.executeParallelMachines("bootstrap", w.executeMachineBootstrap, nextPhases)
-}
 
 func (w *WorkflowExecutor) executeMachineBootstrap(flakeName, configName, machineName string, machine *config.Machine) error {
 	// TODO: Implement nixos-anywhere bootstrap
