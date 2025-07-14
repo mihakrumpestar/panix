@@ -7,6 +7,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var rootCmd = &cobra.Command{
@@ -23,25 +24,44 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVarP(&config.ConfigFile, "config", "c", "panix.yml", "config file")
-	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Flakes, "flakes", nil, "a list of flakes to deploy")
-	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Configurations, "configurations", nil, "a list of configurations to deploy")
-	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Machines, "machines", nil, "a list of machines to deploy")
-	rootCmd.PersistentFlags().StringSliceVar(&config.C.Global.Filters.Tags, "tags", nil, "filter machines by tags (e.g., +prod,-canary)")
-	rootCmd.PersistentFlags().BoolVar(&config.C.Global.RequireAllSuccess, "require-all", false, "abort & rollback if any host fails")
-	rootCmd.PersistentFlags().BoolVar(&config.C.Global.AutoBootstrap, "auto-bootstrap", false, "automatically bootstrap uninitialized hosts")
-	rootCmd.PersistentFlags().BoolVar(&config.C.Global.DryRun, "dry-run", false, "show what would be done without executing")
-	rootCmd.PersistentFlags().BoolVarP(&config.C.Global.Verbose, "verbose", "v", false, "verbose output")
-	rootCmd.PersistentFlags().BoolVarP(&config.C.Global.Debug, "debug", "d", false, "debug output")
-	rootCmd.PersistentFlags().IntVar(&config.C.Global.Concurrency, "concurrency", runtime.NumCPU(), "number of concurrent operations")
-	rootCmd.PersistentFlags().DurationVar(&config.C.Global.Timeout, "timeout", 7200, "timeout for operations in seconds")
+	var configFile string
 
-	// rootCmd.MarkFlagsMutuallyExclusive("require-all", "continue-on-error")
+	// Config file flag
+	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "panix.yml", "config file")
+
+	// Filter flags
+	rootCmd.PersistentFlags().StringSlice("flakes", nil, "a list of flakes to deploy")
+	rootCmd.PersistentFlags().StringSlice("configurations", nil, "a list of configurations to deploy")
+	rootCmd.PersistentFlags().StringSlice("machines", nil, "a list of machines to deploy")
+	rootCmd.PersistentFlags().StringSlice("tags", nil, "filter machines by tags")
+
+	// Global flags
+	rootCmd.PersistentFlags().Bool("require-all", false, "abort & rollback if any host fails")
+	rootCmd.PersistentFlags().Bool("auto-bootstrap", false, "automatically bootstrap uninitialized hosts")
+	rootCmd.PersistentFlags().Bool("dry-run", false, "show what would be done without executing")
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
+	rootCmd.PersistentFlags().Int("concurrency", runtime.NumCPU(), "number of concurrent operations")
+	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for operations in seconds")
+
+	// Bind flags to viper
+	viper.BindPFlag("global.filters.flakes", rootCmd.PersistentFlags().Lookup("flakes"))
+	viper.BindPFlag("global.filters.configurations", rootCmd.PersistentFlags().Lookup("configurations"))
+	viper.BindPFlag("global.filters.machines", rootCmd.PersistentFlags().Lookup("machines"))
+	viper.BindPFlag("global.filters.tags", rootCmd.PersistentFlags().Lookup("tags"))
+	viper.BindPFlag("global.requireAllSuccess", rootCmd.PersistentFlags().Lookup("require-all"))
+	viper.BindPFlag("global.autoBootstrap", rootCmd.PersistentFlags().Lookup("auto-bootstrap"))
+	viper.BindPFlag("global.dryRun", rootCmd.PersistentFlags().Lookup("dry-run"))
+	viper.BindPFlag("global.verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	viper.BindPFlag("global.debug", rootCmd.PersistentFlags().Lookup("debug"))
+	viper.BindPFlag("global.concurrency", rootCmd.PersistentFlags().Lookup("concurrency"))
+	viper.BindPFlag("global.timeout", rootCmd.PersistentFlags().Lookup("timeout"))
+
+	cobra.OnInitialize(func() { initConfig(configFile) })
 }
 
-func initConfig() {
-	_, err := config.LoadConfig()
+func initConfig(configFile string) {
+	_, err := config.LoadConfig(viper.GetViper(), configFile)
 	if err != nil {
 		err = fmt.Errorf("failed to load config: %w", err)
 		fmt.Println(err)

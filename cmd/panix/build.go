@@ -3,7 +3,6 @@ package panix
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/cobra"
 )
 
@@ -13,13 +12,17 @@ var buildCmd = &cobra.Command{
 	Short: "Build all selected closures",
 	Long:  `Build compiles the NixOS configurations for all selected machines without deploying them.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{workflow_definition.PhaseBuild}
-		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C, phases)
+		wexc, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
 		if err != nil {
 			return err
 		}
 
-		return executor.Execute()
+		_, err = wexc.ExecuteBuildPhase(nil)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	},
 }
 
