@@ -45,7 +45,7 @@ func (w *WorkflowExecutor) ExecuteBuildPhase(sms []StatusMetadata) ([]Configurat
 				if !slices.Contains(w.cfg.Global.SkipPhases, workflow_definition.PhaseBootstrap) {
 					bootstrapGroup.SubmitErr(func() (ConfigurationMetadata, error) {
 
-						err := wp.executeBootstrapPhaseMachine(flakeName, configurationName, machineName, machine)
+						err := wp.executeBootstrapPhaseMachine(flakeName, configurationName, &machineName, machine)
 
 						if err != nil && w.cfg.Global.RequireAllSuccess {
 							return result, err
@@ -103,7 +103,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeBuildPhaseConfigurat
 
 	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
 
-	exc, err := executioner.New(w.ctx, w.cfg.DryRun, &config.Machine{Local: true})
+	exc, err := executioner.New(w.ctx, w.cfg, nil, nil)
 	if err != nil {
 		return
 	}
