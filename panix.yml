@@ -11,15 +11,8 @@ flakes:
     configurations:
       personal-workstation:
         machines:
-          default:
-            ssh:
-              alias: local
-            tags:
-              - workstation
-              - personal
-              - nixos
+          personal-workstation:
+
       server-03:
         machines:
-          default:
-            ssh:
-              alias: server-03
+          server-03:

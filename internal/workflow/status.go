@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -46,7 +47,7 @@ func (w *WorkflowExecutor) ExecuteStatusPhase() <-chan StatusMetadatas {
 	pool := pond.NewPool(w.cfg.Global.Concurrency)
 	group := pool.NewGroupContext(w.ctx)
 
-	forAllMachines(w.cfg.Flakes, func(i int, flakeName, configurationName, machineName string, machine *config.Machine) {
+	forAllMachines(w.cfg.Flakes, func(i int, flakeName, configurationName string, machineName *url.URL, machine *config.Machine) {
 		group.Submit(func() {
 
 			// initialize sm with MetadataID
@@ -59,7 +60,7 @@ func (w *WorkflowExecutor) ExecuteStatusPhase() <-chan StatusMetadatas {
 			}
 
 			wp := WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
-			updates := wp.executeStatusPhaseMachineStreams(machine, sm)
+			updates := wp.executeStatusPhaseMachineStreams(machineName, machine, sm)
 			sms.Statuses = append(sms.Statuses, sm)
 
 			var lastUpdate StatusMetadata
@@ -103,7 +104,7 @@ func (w *WorkflowExecutor) ExecuteStatusPhase() <-chan StatusMetadatas {
 // Each time a field on sm changes (or an error occurs), an updated copy
 // of sm is sent.  The channel is closed as soon as we finish or hit an unrecoverable error.
 func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineStreams(
-	machine *config.Machine, sm StatusMetadata) <-chan StatusMetadata {
+	machineName *url.URL, machine *config.Machine, sm StatusMetadata) <-chan StatusMetadata {
 	ch := make(chan StatusMetadata)
 
 	go func() {
@@ -111,13 +112,13 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 		send := func() { ch <- sm }
 		sendWithError := func(err error) {
 			sm.Error = err
-			fmt.Printf("\n\nERR: %s\n\n", err.Error())
+			//fmt.Printf("\n\nERR: %s\n\n", err.Error())
 			send()
 		}
 		send() // initial state
 
 		// create executor
-		exc, err := executioner.New(w.ctx, w.cfg.DryRun, machine)
+		exc, err := executioner.New(w.ctx, w.cfg, machineName, machine)
 		if err != nil {
 			sendWithError(fmt.Errorf("failed to create executor: %w", err))
 			return
@@ -237,7 +238,7 @@ func (w *WorkflowExecutor) PrintStatusPhaseMachineTable(sms []StatusMetadata) {
 			sm.getStatusIcon(),
 			sm.FlakeName,
 			sm.ConfigurationName,
-			sm.MachineName,
+			sm.MachineName.String(),
 			//machine.Ssh.Alias,
 			sm.getStatusText(),
 			sm.CurrentGeneration,

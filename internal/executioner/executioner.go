@@ -2,16 +2,19 @@ package executioner
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
 type Executioner struct {
-	ctx       context.Context
-	local     bool
-	dryRun    bool
-	sshConfig *config.Ssh
+	ctx         context.Context
+	local       bool
+	dryRun      bool
+	usesAlias   bool
+	machineName *url.URL
+	sshConfig   *config.Ssh
 }
 
 type ExecutionerOutput struct {
@@ -31,12 +34,14 @@ type ExecStep struct {
 	OnSuccess func(out ExecutionerOutput) // OnSuccess is invoked *once* if the final ExecutionerOutput has Error == nil.
 }
 
-func New(ctx context.Context, dryRun bool, machine *config.Machine) (*Executioner, error) {
+func New(ctx context.Context, c *config.Global, machineName *url.URL, machine *config.Machine) (*Executioner, error) {
 	return &Executioner{
-		ctx:       ctx,
-		local:     machine.Local,
-		dryRun:    dryRun,
-		sshConfig: machine.Ssh,
+		ctx:         ctx,
+		local:       !(machineName != nil && c.LocalMachine != machineName.String()),
+		dryRun:      c.DryRun,
+		usesAlias:   machineName != nil && machineName.User.String() == "",
+		machineName: machineName,
+		sshConfig:   machine.Ssh,
 	}, nil
 }
 

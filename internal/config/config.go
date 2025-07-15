@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"time"
 
@@ -19,6 +20,7 @@ type Global struct {
 	Filters           Filters                             `mapstructure:"filters"`
 	RequireAllSuccess bool                                `mapstructure:"requireAllSuccess"`
 	AutoBootstrap     bool                                `mapstructure:"autoBootstrap"`
+	LocalMachine      string                              `mapstructure:"localMachine"`
 	DryRun            bool                                `mapstructure:"dryRun"`
 	Ssh               *Ssh                                `mapstructure:"ssh"`
 	Timeout           time.Duration                       `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
@@ -45,11 +47,10 @@ type Flake struct {
 type Configuration struct {
 	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
 	treeStyleParams `mapstructure:",squash"`
-	Machines        map[string]*Machine `mapstructure:"machines"`
+	Machines        map[url.URL]*Machine `mapstructure:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
 }
 
 type Machine struct {
-	Local           bool `mapstructure:"local"`
 	treeStyleParams `mapstructure:",squash"`
 }
 
@@ -61,12 +62,9 @@ type treeStyleParams struct {
 }
 
 type Ssh struct {
-	Alias      string `mapstructure:"alias"`
-	User       string `mapstructure:"user"`
-	Host       string `mapstructure:"host"`
-	Port       int    `mapstructure:"port"`
-	PrivateKey string `mapstructure:"privateKey"`
-	PublicKey  string `mapstructure:"publicKey"`
+	Url        *url.URL `mapstructure:"-"`
+	PrivateKey string   `mapstructure:"privateKey"`
+	PublicKey  string   `mapstructure:"publicKey"`
 }
 
 type SecretConfig struct {
@@ -109,6 +107,15 @@ func LoadConfig(vpr *viper.Viper, configFile string) (*Config, error) {
 	// Convert timeout from seconds to duration
 	C.Global.Timeout *= time.Second
 
+	if C.Global.Debug {
+		godump.Dump(C)
+	}
+
+	err = C.validateConfig()
+	if err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	C.Flakes, err = C.filterConfigEntrys()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
@@ -141,9 +148,9 @@ func (c *Config) validateConfig() error {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			for machineName, machine := range configuration.Machines {
-				if !machine.Local && machine.Ssh.Alias == "" && machine.Ssh.Host == "" {
-					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s].ssh is not configured and deploy is not local", flakeName, configurationName, machineName)
+			for machineName, _ := range configuration.Machines {
+				if machineName.Host == "" {
+					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s].ssh host is empty", flakeName, configurationName, machineName.String())
 				}
 			}
 		}
@@ -158,6 +165,11 @@ func (c *Config) validateConfig() error {
 func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 	cC := *c // Copy
 
+	sc, err := LoadSshConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	flakesFilter := cC.Global.Filters.Flakes
 	configurationsFilter := cC.Global.Filters.Configurations
 	machinesFilter := cC.Global.Filters.Machines
@@ -168,14 +180,21 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 			continue
 		}
 
+		fmt.Println(flakeName)
+
 		for configurationName, configuration := range flake.Configurations {
+
+			fmt.Printf("disabled:%v\n", configuration.Disabled)
+
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
 				delete(flake.Configurations, configurationName)
 				continue
 			}
 
+			fmt.Println(configurationName)
+
 			for machineName, machine := range configuration.Machines {
-				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName)) || flake.Disabled {
+				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {
 					delete(configuration.Machines, machineName)
 					continue
 				}
@@ -189,6 +208,13 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 					if !matchesTags(allMachineTags, C.Global.Filters.Tags) {
 						delete(configuration.Machines, machineName)
 						continue
+					}
+				}
+
+				if machineName.User.Username() == "" {
+					machine.Ssh.Url, err = sc.RetriveFullParamsFromSshConfig(machineName)
+					if err != nil {
+						return nil, err
 					}
 				}
 			}
