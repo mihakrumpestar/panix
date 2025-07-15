@@ -6,11 +6,11 @@ func (ex *Executioner) sshStream(name string, args ...string) <-chan Executioner
 
 	//fmt.Printf("\nsshConfig: %+v\n\n", ex.sshConfig)
 
-	if ex.sshConfig.Alias != "" {
-		sshArgs = append(sshArgs, ex.sshConfig.Alias)
+	if ex.usesAlias {
+		sshArgs = append(sshArgs, ex.machineName.Host)
+	} else {
+		// TODO: implement more than alias
 	}
-
-	// TODO: implement more than alias
 
 	sshArgs = append(sshArgs, name)
 	sshArgs = append(sshArgs, args...)

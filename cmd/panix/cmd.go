@@ -36,12 +36,16 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice("tags", nil, "filter machines by tags")
 
 	// Global flags
+	hostname, _ := os.Hostname()
+	concurrency := runtime.GOMAXPROCS(0)
+
 	rootCmd.PersistentFlags().Bool("require-all", false, "abort & rollback if any host fails")
 	rootCmd.PersistentFlags().Bool("auto-bootstrap", false, "automatically bootstrap uninitialized hosts")
+	rootCmd.PersistentFlags().String("local-machine", hostname, "machine name that is local (won't use ssh to connect to it)")
 	rootCmd.PersistentFlags().Bool("dry-run", false, "show what would be done without executing")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
-	rootCmd.PersistentFlags().Int("concurrency", runtime.GOMAXPROCS(0), "number of concurrent operations")
+	rootCmd.PersistentFlags().Int("concurrency", concurrency, "number of concurrent operations")
 	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for operations in seconds")
 
 	// Bind flags to viper
@@ -51,6 +55,7 @@ func init() {
 	viper.BindPFlag("global.filters.tags", rootCmd.PersistentFlags().Lookup("tags"))
 	viper.BindPFlag("global.requireAllSuccess", rootCmd.PersistentFlags().Lookup("require-all"))
 	viper.BindPFlag("global.autoBootstrap", rootCmd.PersistentFlags().Lookup("auto-bootstrap"))
+	viper.BindPFlag("global.localMachine", rootCmd.PersistentFlags().Lookup("local-machine"))
 	viper.BindPFlag("global.dryRun", rootCmd.PersistentFlags().Lookup("dry-run"))
 	viper.BindPFlag("global.verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 	viper.BindPFlag("global.debug", rootCmd.PersistentFlags().Lookup("debug"))
