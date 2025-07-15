@@ -1,30 +1,90 @@
 package executioner
 
 import (
-	"fmt"
+	"bufio"
 	"os/exec"
 	"strings"
+
+	"github.com/alitto/pond/v2"
 )
 
-func (ex *Executioner) shell(name string, args ...string) (ExecutionerOutput, error) {
+func (ex *Executioner) shellStream(name string, args ...string) <-chan ExecutionerOutput {
+	ch := make(chan ExecutionerOutput)
 
-	cmd := exec.CommandContext(ex.ctx, name, args...)
-	output := ExecutionerOutput{
-		Command: strings.Join(cmd.Args, " "),
-	}
+	go func() {
+		defer close(ch)
 
-	fmt.Println(output.Command)
+		// prepare initial event
+		cmd := exec.CommandContext(ex.ctx, name, args...)
+		excOut := ExecutionerOutput{
+			Command: strings.Join(cmd.Args, " "),
+		}
+		ch <- excOut
 
-	if ex.dryRun {
-		return output, nil
-	}
+		// dry-run short-circuit
+		if ex.dryRun {
+			return
+		}
 
-	cmd.Stdout = &output.Stdout
-	cmd.Stderr = &output.Stderr
-	err := cmd.Run()
-	if err != nil {
-		return output, err
-	}
+		// wire up pipes
+		stdoutPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			excOut.Error = err
+			ch <- excOut
+			return
+		}
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			excOut.Error = err
+			ch <- excOut
+			return
+		}
 
-	return output, nil
+		// start the process
+		if err := cmd.Start(); err != nil {
+			excOut.Error = err
+			ch <- excOut
+			return
+		}
+
+		// use a tiny pond pool of size 2 to read both streams
+		pool := pond.NewPool(2)
+		group := pool.NewGroupContext(ex.ctx)
+
+		group.Submit(func() {
+			scanner := bufio.NewScanner(stdoutPipe)
+			for scanner.Scan() {
+				toIngest := scanner.Text() + "\n"
+
+				excOut.Stdout.WriteString(toIngest)
+				excOut.StdCombined.WriteString(toIngest)
+				ch <- excOut
+			}
+		})
+		group.Submit(func() {
+			scanner := bufio.NewScanner(stderrPipe)
+			for scanner.Scan() {
+				toIngest := scanner.Text() + "\n"
+
+				excOut.Stderr.WriteString(toIngest)
+				excOut.StdCombined.WriteString(toIngest)
+				ch <- excOut
+			}
+		})
+
+		// wait for both readers to finish
+		_ = group.Wait()
+
+		// finally wait for the process itself
+		if err := cmd.Wait(); err != nil {
+			excOut.Error = err
+			ch <- excOut
+			return
+		}
+
+		// one last event on success
+		ch <- excOut
+	}()
+
+	return ch
 }

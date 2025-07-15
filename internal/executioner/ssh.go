@@ -1,6 +1,6 @@
 package executioner
 
-func (ex *Executioner) ssh(name string, args ...string) (ExecutionerOutput, error) {
+func (ex *Executioner) sshStream(name string, args ...string) <-chan ExecutionerOutput {
 
 	sshArgs := []string{"-q"} // Silance banners
 
@@ -15,5 +15,5 @@ func (ex *Executioner) ssh(name string, args ...string) (ExecutionerOutput, erro
 	sshArgs = append(sshArgs, name)
 	sshArgs = append(sshArgs, args...)
 
-	return ex.shell("ssh", sshArgs...)
+	return ex.shellStream("ssh", sshArgs...)
 }

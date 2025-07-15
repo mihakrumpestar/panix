@@ -39,11 +39,13 @@ func NewWorkflowExecutor(ctx context.Context, cfg *config.Config) (*WorkflowExec
 
 // Helpers
 
-func forAllMachines(conf map[string]*config.Flake, function func(flakeName, configurationName, machineName string, machine *config.Machine)) {
+func forAllMachines(conf map[string]*config.Flake, function func(i int, flakeName, configurationName, machineName string, machine *config.Machine)) {
+	i := 0
 	for flakeName, flake := range conf {
 		for configurationName, configuration := range flake.Configurations {
 			for machineName, machine := range configuration.Machines {
-				function(flakeName, configurationName, machineName, machine)
+				function(i, flakeName, configurationName, machineName, machine)
+				i++
 			}
 		}
 	}

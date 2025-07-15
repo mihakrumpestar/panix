@@ -41,7 +41,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("dry-run", false, "show what would be done without executing")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
-	rootCmd.PersistentFlags().Int("concurrency", runtime.NumCPU(), "number of concurrent operations")
+	rootCmd.PersistentFlags().Int("concurrency", runtime.GOMAXPROCS(0), "number of concurrent operations")
 	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for operations in seconds")
 
 	// Bind flags to viper
