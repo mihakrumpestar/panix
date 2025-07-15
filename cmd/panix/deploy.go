@@ -25,18 +25,20 @@ This is the main command for deploying NixOS configurations.`,
 		if err != nil {
 			return err
 		}
+		/*
+			statusMetadatas := wexc.ExecuteStatusPhase()
 
-		statusMetadata, err := wexc.ExecuteStatusPhase()
-		if err != nil {
-			return err
-		}
 
-		configurationMetadata, err := wexc.ExecuteBuildPhase(statusMetadata)
-		if err != nil {
-			return err
-		}
 
-		fmt.Println(configurationMetadata)
+			configurationMetadata, err := wexc.ExecuteBuildPhase(statusMetadata)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println(configurationMetadata)
+		*/
+
+		fmt.Println(wexc)
 
 		return nil
 	},
