@@ -107,10 +107,14 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeBuildPhaseConfigurat
 	if err != nil {
 		return
 	}
-	output, err := exc.Exec("nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref)
-	if err != nil {
-		err = fmt.Errorf("build failed for %s/%s: %w: %s", flakeName, configurationName, err, output.Stderr.String())
-		return
+
+	var outputFinal executioner.ExecutionerOutput
+	for output := range exc.Exec("nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref) {
+		outputFinal = output
+		if err != nil {
+			err = fmt.Errorf("build failed for %s/%s: %w: %s", flakeName, configurationName, err, output.Stderr.String())
+			return
+		}
 	}
 
 	buildOutputPath := "BUILD_OUTPUT_PATH_PLACEHOLDER"
@@ -120,9 +124,9 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeBuildPhaseConfigurat
 				Out string `json:"out"`
 			} `json:"outputs"`
 		}
-		err = json.Unmarshal(output.Stdout.Bytes(), &nr)
+		err = json.Unmarshal([]byte(outputFinal.Stdout.String()), &nr)
 		if err != nil || len(nr) == 0 {
-			err = fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configurationName, output.Stdout.Bytes())
+			err = fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configurationName, outputFinal.Stdout.String())
 			return
 		}
 		// Store the build output path in metadata for later phases like transfer and activate

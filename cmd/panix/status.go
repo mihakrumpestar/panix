@@ -1,6 +1,8 @@
 package panix
 
 import (
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
@@ -21,7 +23,10 @@ This includes:
 			return err
 		}
 
-		_, err = executor.ExecuteStatusPhase()
+		for statusMetadatas := range executor.ExecuteStatusPhase() {
+			fmt.Println(statusMetadatas.Statuses)
+		}
+
 		return err
 	},
 }
