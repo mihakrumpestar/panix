@@ -3,9 +3,11 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"reflect"
 	"slices"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/viper"
 	"github.com/yassinebenaid/godump"
@@ -73,6 +75,32 @@ type SecretConfig struct {
 	Mode       string `mapstructure:"mode"`
 }
 
+func urlURLHookFunc() mapstructure.DecodeHookFuncType {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{},
+	) (interface{}, error) {
+		// Check that the data is string
+		if f.Kind() != reflect.String {
+			return data, nil
+		}
+
+		// Check that the target type is our custom type
+		if t != reflect.TypeOf(url.URL{}) {
+			return data, nil
+		}
+
+		// Return the parsed value
+		dataVal := data.(string)
+		url, err := url.Parse(dataVal)
+		if err != nil {
+			return nil, err
+		}
+		return url, nil
+	}
+}
+
 var (
 	C Config
 )
@@ -92,14 +120,11 @@ func LoadConfig(vpr *viper.Viper, configFile string) (*Config, error) {
 
 	// Read config file if it exists
 	if err := vpr.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("fatal error config file: %w", err)
-		}
-		// Config file not found is okay, we'll use defaults and flags
+		return nil, fmt.Errorf("fatal error config file: %w", err)
 	}
 
 	// Now unmarshal the full config
-	err := vpr.UnmarshalExact(&C)
+	err := vpr.UnmarshalExact(&C, viper.DecodeHook(urlURLHookFunc()))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode into struct, %v", err)
 	}
@@ -212,6 +237,9 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 				}
 
 				if machineName.User.Username() == "" {
+					if machine.Ssh == nil {
+						machine.Ssh = &Ssh{}
+					}
 					machine.Ssh.Url, err = sc.RetriveFullParamsFromSshConfig(machineName)
 					if err != nil {
 						return nil, err
