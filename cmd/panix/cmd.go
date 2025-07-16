@@ -7,13 +7,14 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "panix",
 	Short: "Universal NixOS Deployment Tool",
-	Long:  `Panix - Universal NixOS Deployment Tool // TODO: add proper description`,
+	Long: `Panix - Universal NixOS Deployment Tool
+	// TODO: add proper description
+	`,
 }
 
 func Execute() {
@@ -48,25 +49,11 @@ func init() {
 	rootCmd.PersistentFlags().Int("concurrency", concurrency, "number of concurrent operations")
 	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for operations in seconds")
 
-	// Bind flags to viper
-	viper.BindPFlag("global.filters.flakes", rootCmd.PersistentFlags().Lookup("flakes"))
-	viper.BindPFlag("global.filters.configurations", rootCmd.PersistentFlags().Lookup("configurations"))
-	viper.BindPFlag("global.filters.machines", rootCmd.PersistentFlags().Lookup("machines"))
-	viper.BindPFlag("global.filters.tags", rootCmd.PersistentFlags().Lookup("tags"))
-	viper.BindPFlag("global.requireAllSuccess", rootCmd.PersistentFlags().Lookup("require-all"))
-	viper.BindPFlag("global.autoBootstrap", rootCmd.PersistentFlags().Lookup("auto-bootstrap"))
-	viper.BindPFlag("global.localMachine", rootCmd.PersistentFlags().Lookup("local-machine"))
-	viper.BindPFlag("global.dryRun", rootCmd.PersistentFlags().Lookup("dry-run"))
-	viper.BindPFlag("global.verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("global.debug", rootCmd.PersistentFlags().Lookup("debug"))
-	viper.BindPFlag("global.concurrency", rootCmd.PersistentFlags().Lookup("concurrency"))
-	viper.BindPFlag("global.timeout", rootCmd.PersistentFlags().Lookup("timeout"))
-
 	cobra.OnInitialize(func() { initConfig(configFile) })
 }
 
 func initConfig(configFile string) {
-	_, err := config.LoadConfig(viper.GetViper(), configFile)
+	_, err := config.LoadConfig(configFile, rootCmd.Flags())
 	if err != nil {
 		err = fmt.Errorf("failed to load config: %w", err)
 		fmt.Println(err)

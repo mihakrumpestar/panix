@@ -168,7 +168,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 
 			// SSH connectivity
 			mkStep(
-				exc.Exec("exit 0"),
+				exc.Exec("sh", "-c", "exit 0"),
 				func(out executioner.ExecutionerOutput) {
 					sendWithError(fmt.Errorf("ssh failed: %w\n%s", out.Error, out.Stderr.String()))
 				},
@@ -179,7 +179,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 
 			// Bootstrap detection
 			mkStep(
-				exc.Exec("test -e /run/current-system"),
+				exc.Exec("sh", "-c", "test -e /run/current-system"),
 				func(_ executioner.ExecutionerOutput) {
 					// not bootstrapped → stop, but not an error
 				},
@@ -190,7 +190,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 
 			// Current generation
 			mkStep(
-				exc.Exec("nixos-rebuild list-generations | tail -1 | awk '{print $1}'"),
+				exc.Exec("sh", "-c", "nixos-rebuild list-generations | tail -1 | awk '{print $1}'"),
 				func(out executioner.ExecutionerOutput) {
 					sendWithError(fmt.Errorf("generation lookup failed: %w\n%s", out.Error, out.Stderr.String()))
 				},
@@ -201,7 +201,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 
 			// Last deploy time
 			mkStep(
-				exc.Exec("stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'"),
+				exc.Exec("sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'"),
 				func(out executioner.ExecutionerOutput) {
 					sendWithError(fmt.Errorf("failed to get last deploy time: %w\n%s", out.Error, out.Stderr.String()))
 				},
