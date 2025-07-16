@@ -18,15 +18,17 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
-		if err != nil {
-			return err
-		}
+		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
 
 		//tui.NewTui()
-		for statusMetadatas := range executor.ExecuteStatusPhase() {
-			fmt.Sprintln(statusMetadatas.Statuses)
+		err := executor.ExecuteStatusPhase()
+		//<-executor.Done()
+
+		for i := range executor.Done() {
+			fmt.Println(i)
 		}
+
+		executor.PrintStatusPhaseMachineTable()
 
 		return err
 	},

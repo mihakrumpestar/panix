@@ -2,220 +2,121 @@ package workflow
 
 import (
 	"fmt"
-	"net/url"
-	"slices"
 	"strings"
 
-	"github.com/alitto/pond/v2"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/pkg/errors"
 )
 
 type StatusMetadatas struct {
-	Statuses []StatusMetadata
-	Err      error
+	*MetadatasBase
+	Statuses []*StatusMetadata
 }
 
 type StatusMetadata struct {
-	MetadataID
+	*executioner.BaseMetadata
 	Reachable         bool
 	SSHConnectable    bool
 	Bootstrapped      bool
 	CurrentGeneration string
 	LastDeployTime    string
-	CommandOutputs    []executioner.ExecutionerOutput
-	Finished          bool
-	Error             error
 }
 
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
-func (w *WorkflowExecutor) ExecuteStatusPhase() <-chan StatusMetadatas {
-	out := make(chan StatusMetadatas)
+func (w *WorkflowExecutor) ExecuteStatusPhase() error {
+	sms := w.metadatas.StatusMetadatas
+	if sms == nil {
+		sms = &StatusMetadatas{}
+	}
 
-	sms := StatusMetadatas{
-		Statuses: make([]StatusMetadata, 0),
+	if sms.Statuses == nil {
+		sms.Statuses = make([]*StatusMetadata, 0)
 	}
 
 	if w.cfg.Global.Verbose {
 		fmt.Println("Executing status phase across all machines")
 	}
 
-	pool := pond.NewPool(w.cfg.Global.Concurrency)
-	group := pool.NewGroupContext(w.ctx)
+	err := w.forEachFlakeConfiguration(sms.MetadatasBase, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMetadata, configuration *config.Configuration) error {
+		statuses := sms.Statuses
 
-	forAllMachines(w.cfg.Flakes, func(i int, flakeName, configurationName string, machineName *url.URL, machine *config.Machine) {
-		group.Submit(func() {
+		sm := &StatusMetadata{}
+		statuses = append(statuses, sm)
 
-			// initialize sm with MetadataID
-			sm := StatusMetadata{
-				MetadataID: MetadataID{
-					FlakeName:         flakeName,
-					ConfigurationName: configurationName,
-					MachineName:       machineName,
-				},
-			}
-
-			wp := WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
-			updates := wp.executeStatusPhaseMachineStreams(machineName, machine, sm)
-			sms.Statuses = append(sms.Statuses, sm)
-
-			var lastUpdate StatusMetadata
-			for update := range updates {
-				lastUpdate = update
-				sms.Statuses[i] = lastUpdate
-				out <- sms
-			}
-
-			lastUpdate.Finished = true
-			sms.Statuses[i] = lastUpdate
-			out <- sms
-
-			if w.cfg.Global.RequireAllSuccess && lastUpdate.Error != nil {
-				sms.Err = fmt.Errorf("status phase failed because of 'RequireAllSuccess': %v", lastUpdate.Error)
-				out <- sms
-				return
-			}
+		return w.forEachConfigurationMachine(configuration, sms.MetadatasBase, bm, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMetadata, machine *config.Machine) error {
+			return wp.executeStatusPhaseMachineStreams(sm, machine, w.hook.OnUpdateHook())
 		})
 	})
 
-	// Stop the pool and wait for all submitted tasks to complete
-
-	go func() {
-		defer close(out)
-
-		_ = group.Wait()
-
-		if !slices.ContainsFunc(sms.Statuses, func(sm StatusMetadata) bool { return sm.Error == nil }) {
-			sms.Err = fmt.Errorf("status phase failed because of all machines failed status phase")
-			out <- sms
-		}
-
-		w.PrintStatusPhaseMachineTable(sms.Statuses)
-	}()
-
-	return out
+	return err
 }
 
-// executeStatusPhaseMachineStreams returns a read-only channel of StatusMetadata.
-// Each time a field on sm changes (or an error occurs), an updated copy
-// of sm is sent.  The channel is closed as soon as we finish or hit an unrecoverable error.
-func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineStreams(
-	machineName *url.URL, machine *config.Machine, sm StatusMetadata) <-chan StatusMetadata {
-	ch := make(chan StatusMetadata)
+func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineStreams(sm *StatusMetadata, machine *config.Machine, onUpdateHook func()) error {
+	exc := executioner.New(w.ctx, sm.BaseMetadata, onUpdateHook, w.cfg, machine)
 
-	go func() {
-		defer close(ch)
-		send := func() { ch <- sm }
-		sendWithError := func(err error) {
-			sm.Error = err
-			//fmt.Printf("\n\nERR: %s\n\n", err.Error())
-			send()
-		}
-		send() // initial state
+	// TCP check
+	err := exc.PingStream(
+		func(bm *executioner.BaseMetadata, err error) error {
+			return fmt.Errorf("machine unreachable: %w", err)
+		},
+		func(bm *executioner.BaseMetadata) {
+			sm.Reachable = true
+		})
+	if err != nil {
+		return err
+	}
 
-		// create executor
-		exc, err := executioner.New(w.ctx, w.cfg, machineName, machine)
-		if err != nil {
-			sendWithError(fmt.Errorf("failed to create executor: %w", err))
-			return
-		}
+	// SSH connect
+	err = exc.Exec(
+		func(bm *executioner.BaseMetadata, err error) error {
+			return errors.Wrapf(err, "ssh test failed: %s", bm.CommandOutputs[len(bm.CommandOutputs)-1].Stderr.String())
+		},
+		func(bm *executioner.BaseMetadata) {
+			sm.SSHConnectable = true
+		}, "sh", "-c", "exit 0")
+	if err != nil {
+		return err
+	}
 
-		mkStep := func(
-			stream <-chan executioner.ExecutionerOutput,
-			onError func(out executioner.ExecutionerOutput),
-			onSuccess func(out executioner.ExecutionerOutput),
-		) executioner.ExecStep {
-			return executioner.ExecStep{
-				Stream: stream,
-				OnInit: func() {
-					sm.CommandOutputs = append(sm.CommandOutputs, executioner.ExecutionerOutput{})
-				},
-				OnEvent: func(out executioner.ExecutionerOutput) {
-					last := len(sm.CommandOutputs) - 1
-					sm.CommandOutputs[last] = out
-					send()
-				},
-				OnError: func(out executioner.ExecutionerOutput) {
-					last := len(sm.CommandOutputs) - 1
-					sm.CommandOutputs[last] = out
-					onError(out)
-					send()
-				},
-				OnSuccess: func(out executioner.ExecutionerOutput) {
-					last := len(sm.CommandOutputs) - 1
-					sm.CommandOutputs[last] = out
-					onSuccess(out)
-					send()
-				},
-			}
-		}
+	// Run bootstrap detection
+	err = exc.Exec(
+		nil,
+		func(bm *executioner.BaseMetadata) {
+			sm.Bootstrapped = true
+		}, "sh", "-c", "test -e /run/current-system")
+	if err != nil {
+		return nil // just not bootstrapped, not really an error
+	}
 
-		exc.ExecBatch(
-			// 1) Ping (TCP reachability)
-			mkStep(
-				exc.PingStream(),
-				func(out executioner.ExecutionerOutput) {
-					sendWithError(fmt.Errorf("unreachable: %w\n%s", out.Error, out.Stderr.String()))
-				},
-				func(_ executioner.ExecutionerOutput) {
-					sm.Reachable = true
-				},
-			),
+	// Get current generation
+	err = exc.Exec(
+		nil,
+		func(bm *executioner.BaseMetadata) {
+			sm.CurrentGeneration = strings.TrimSpace(bm.CommandOutputs[len(bm.CommandOutputs)-1].Stdout.String())
+		}, "sh", "-c", "nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
+	if err != nil {
+		return err
+	}
 
-			// SSH connectivity
-			mkStep(
-				exc.Exec("sh", "-c", "exit 0"),
-				func(out executioner.ExecutionerOutput) {
-					sendWithError(fmt.Errorf("ssh failed: %w\n%s", out.Error, out.Stderr.String()))
-				},
-				func(_ executioner.ExecutionerOutput) {
-					sm.SSHConnectable = true
-				},
-			),
+	// Get last deploy time
+	err = exc.Exec(
+		nil,
+		func(bm *executioner.BaseMetadata) {
+			sm.LastDeployTime = strings.TrimSpace(bm.CommandOutputs[len(bm.CommandOutputs)-1].Stdout.String())
+		}, "sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
+	if err != nil {
+		return err
+	}
 
-			// Bootstrap detection
-			mkStep(
-				exc.Exec("sh", "-c", "test -e /run/current-system"),
-				func(_ executioner.ExecutionerOutput) {
-					// not bootstrapped → stop, but not an error
-				},
-				func(_ executioner.ExecutionerOutput) {
-					sm.Bootstrapped = true
-				},
-			),
-
-			// Current generation
-			mkStep(
-				exc.Exec("sh", "-c", "nixos-rebuild list-generations | tail -1 | awk '{print $1}'"),
-				func(out executioner.ExecutionerOutput) {
-					sendWithError(fmt.Errorf("generation lookup failed: %w\n%s", out.Error, out.Stderr.String()))
-				},
-				func(out executioner.ExecutionerOutput) {
-					sm.CurrentGeneration = strings.TrimSpace(out.Stdout.String())
-				},
-			),
-
-			// Last deploy time
-			mkStep(
-				exc.Exec("sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'"),
-				func(out executioner.ExecutionerOutput) {
-					sendWithError(fmt.Errorf("failed to get last deploy time: %w\n%s", out.Error, out.Stderr.String()))
-				},
-				func(out executioner.ExecutionerOutput) {
-					sm.LastDeployTime = strings.TrimSpace(out.Stdout.String())
-				},
-			),
-		)
-	}()
-
-	return ch
+	return nil
 }
 
-func (w *WorkflowExecutor) PrintStatusPhaseMachineTable(sms []StatusMetadata) {
+func (w *WorkflowExecutor) PrintStatusPhaseMachineTable() {
 	if w.cfg.Global.DryRun {
 		if w.cfg.Global.Verbose {
 			fmt.Println("No status table when dry-run option is enabled")
@@ -227,7 +128,7 @@ func (w *WorkflowExecutor) PrintStatusPhaseMachineTable(sms []StatusMetadata) {
 		Border(lipgloss.NormalBorder()).
 		Headers("INDEX", "ICON", "FLAKE", "CONFIGURATION", "MACHINE" /* "HOST", */, "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR")
 
-	for i, sm := range sms {
+	for i, sm := range w.metadatas.StatusMetadatas.Statuses {
 		err := ""
 		if sm.Error != nil {
 			err = sm.Error.Error()
@@ -251,7 +152,7 @@ func (w *WorkflowExecutor) PrintStatusPhaseMachineTable(sms []StatusMetadata) {
 }
 
 func (s *StatusMetadata) getStatusIcon() string {
-	if !s.Finished {
+	if !s.EndTime.IsZero() {
 		return spinner.New().View()
 	}
 	if !s.Reachable {

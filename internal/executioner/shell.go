@@ -5,51 +5,51 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/alitto/pond/v2"
 )
 
-func (ex *Executioner) shellStream(name string, args ...string) <-chan ExecutionerOutput {
-	ch := make(chan ExecutionerOutput)
+func (ex *Executioner) shellStream(onFailure func(*BaseMetadata, error) error, onSuccess func(*BaseMetadata), name string, args ...string) error {
+	if ex.meta.CommandOutputs == nil {
+		ex.meta.CommandOutputs = make([]*ExecutionerMetadata, 0)
+	}
 
-	go func() {
-		defer close(ch)
+	exm := &ExecutionerMetadata{}
+	ex.meta.CommandOutputs = append(ex.meta.CommandOutputs, exm)
 
-		// prepare initial event
-		cmd := exec.CommandContext(ex.ctx, name, args...)
-		excOut := ExecutionerOutput{
-			Command: strings.Join(cmd.Args, " "),
+	// prepare initial event
+	cmd := exec.CommandContext(ex.ctx, name, args...)
+	exm.Command = strings.Join(cmd.Args, " ")
+	ex.onUpdateHook()
+
+	// dry-run short-circuit
+	if ex.dryRun {
+		fmt.Println(exm.Command)
+		if onSuccess != nil {
+			onSuccess(ex.meta)
 		}
-		ch <- excOut
+		return nil
+	}
 
-		// dry-run short-circuit
-		if ex.dryRun {
-			fmt.Println(excOut.Command)
-			return
-		}
-
+	execStream := func() error {
 		// wire up pipes
 		stdoutPipe, err := cmd.StdoutPipe()
 		if err != nil {
-			excOut.Error = err
-			ch <- excOut
-			return
+			return err
 		}
 		stderrPipe, err := cmd.StderrPipe()
 		if err != nil {
-			excOut.Error = err
-			ch <- excOut
-			return
+			return err
 		}
 
 		// start the process
-		if err := cmd.Start(); err != nil {
-			excOut.Error = err
-			ch <- excOut
-			return
+		err = cmd.Start()
+		if err != nil {
+			return err
 		}
 
-		// use a tiny pond pool of size 2 to read both streams
+		// use a tiny pond pool of size 2 to read both streams and update hook
 		pool := pond.NewPool(2)
 		group := pool.NewGroupContext(ex.ctx)
 
@@ -58,9 +58,9 @@ func (ex *Executioner) shellStream(name string, args ...string) <-chan Execution
 			for scanner.Scan() {
 				toIngest := scanner.Text() + "\n"
 
-				excOut.Stdout.WriteString(toIngest)
-				excOut.StdCombined.WriteString(toIngest)
-				ch <- excOut
+				exm.Stdout.WriteString(toIngest)
+				exm.StdCombined.WriteString(toIngest)
+				ex.onUpdateHook()
 			}
 		})
 		group.Submit(func() {
@@ -68,9 +68,9 @@ func (ex *Executioner) shellStream(name string, args ...string) <-chan Execution
 			for scanner.Scan() {
 				toIngest := scanner.Text() + "\n"
 
-				excOut.Stderr.WriteString(toIngest)
-				excOut.StdCombined.WriteString(toIngest)
-				ch <- excOut
+				exm.Stderr.WriteString(toIngest)
+				exm.StdCombined.WriteString(toIngest)
+				ex.onUpdateHook()
 			}
 		})
 
@@ -78,15 +78,26 @@ func (ex *Executioner) shellStream(name string, args ...string) <-chan Execution
 		_ = group.Wait()
 
 		// finally wait for the process itself
-		if err := cmd.Wait(); err != nil {
-			excOut.Error = err
-			ch <- excOut
-			return
+		return cmd.Wait()
+	}
+
+	// Blocking stream with real time updates
+	exm.StartTime = time.Now()
+	ex.onUpdateHook()
+
+	exm.Error = execStream()
+	exm.EndTime = time.Now()
+
+	if exm.Error != nil {
+		if onFailure != nil {
+			ex.meta.Error = onFailure(ex.meta, exm.Error)
+		} else {
+			ex.meta.Error = exm.Error
 		}
+	} else if onSuccess != nil {
+		onSuccess(ex.meta)
+	}
+	ex.onUpdateHook()
 
-		// one last event on success
-		ch <- excOut
-	}()
-
-	return ch
+	return exm.Error
 }
