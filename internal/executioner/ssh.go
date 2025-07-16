@@ -1,13 +1,13 @@
 package executioner
 
-func (ex *Executioner) sshStream(name string, args ...string) <-chan ExecutionerOutput {
+func (ex *Executioner) sshStream(onFailure func(*BaseMetadata, error) error, onSuccess func(*BaseMetadata), name string, args ...string) error {
 
 	sshArgs := []string{"-q"} // Silance banners
 
 	//fmt.Printf("\nsshConfig: %+v\n\n", ex.sshConfig)
 
 	if ex.usesAlias {
-		sshArgs = append(sshArgs, ex.machineName.Host)
+		sshArgs = append(sshArgs, ex.meta.MachineName.Hostname())
 	} else {
 		// TODO: implement more than alias
 	}
@@ -15,5 +15,5 @@ func (ex *Executioner) sshStream(name string, args ...string) <-chan Executioner
 	sshArgs = append(sshArgs, name)
 	sshArgs = append(sshArgs, args...)
 
-	return ex.shellStream("ssh", sshArgs...)
+	return ex.shellStream(onFailure, onSuccess, "ssh", sshArgs...)
 }
