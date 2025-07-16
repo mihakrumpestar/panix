@@ -9,10 +9,12 @@ flakes:
   infrastructure:
     url: ../infrastructure
     configurations:
-      personal-workstation:
-        machines:
-          personal-workstation:
-
       server-03:
         machines:
-          server-03:
+          ssh://server-03:
+            tags:
+              - test
+      personal-workstation:
+        machines:
+          ssh://personal-workstation:
+

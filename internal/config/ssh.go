@@ -53,7 +53,7 @@ func (sc *SshConfig) RetriveFullParamsFromSshConfig(machineName url.URL) (*url.U
 		return nil, err
 	}
 
-	urlString := fmt.Sprintf("%s@%s:%d", user, host, port)
+	urlString := fmt.Sprintf("ssh://%s@%s:%d", user, host, port)
 
 	return url.Parse(urlString)
 }
