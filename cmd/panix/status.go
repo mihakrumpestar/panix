@@ -1,8 +1,9 @@
 package panix
 
 import (
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
 )
@@ -17,17 +18,15 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		_, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
+		executor, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
 		if err != nil {
 			return err
 		}
 
-		tui.NewTui()
-		/*
-			for statusMetadatas := range executor.ExecuteStatusPhase() {
-				fmt.Println(statusMetadatas.Statuses)
-			}
-		*/
+		//tui.NewTui()
+		for statusMetadatas := range executor.ExecuteStatusPhase() {
+			fmt.Sprintln(statusMetadatas.Statuses)
+		}
 
 		return err
 	},

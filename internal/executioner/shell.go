@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"bufio"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -23,6 +24,7 @@ func (ex *Executioner) shellStream(name string, args ...string) <-chan Execution
 
 		// dry-run short-circuit
 		if ex.dryRun {
+			fmt.Println(excOut.Command)
 			return
 		}
 
