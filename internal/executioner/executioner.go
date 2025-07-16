@@ -35,13 +35,22 @@ type ExecStep struct {
 }
 
 func New(ctx context.Context, c *config.Global, machineName *url.URL, machine *config.Machine) (*Executioner, error) {
+	local := true // No machine means we are doing building (which is currently local only)
+	usesAlias := false
+	var sshConfig *config.Ssh
+	if machine != nil {
+		local = c.LocalMachine == machineName.String()
+		usesAlias = machineName.User.String() == ""
+		sshConfig = machine.Ssh
+	}
+
 	return &Executioner{
 		ctx:         ctx,
-		local:       !(machineName != nil && c.LocalMachine != machineName.String()),
+		local:       local,
 		dryRun:      c.DryRun,
-		usesAlias:   machineName != nil && machineName.User.String() == "",
+		usesAlias:   usesAlias,
 		machineName: machineName,
-		sshConfig:   machine.Ssh,
+		sshConfig:   sshConfig,
 	}, nil
 }
 

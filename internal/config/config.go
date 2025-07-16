@@ -5,77 +5,84 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/gobeam/stringy"
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/posflag"
+	"github.com/knadh/koanf/v2"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
-	"github.com/spf13/viper"
+	"github.com/spf13/pflag"
 	"github.com/yassinebenaid/godump"
 )
 
 type Config struct {
-	Global Global            `mapstructure:"global"`
-	Flakes map[string]*Flake `mapstructure:"flakes"`
+	Global Global            `koanf:"global"`
+	Flakes map[string]*Flake `koanf:"flakes"`
 }
 
 type Global struct {
-	Filters           Filters                             `mapstructure:"filters"`
-	RequireAllSuccess bool                                `mapstructure:"requireAllSuccess"`
-	AutoBootstrap     bool                                `mapstructure:"autoBootstrap"`
-	LocalMachine      string                              `mapstructure:"localMachine"`
-	DryRun            bool                                `mapstructure:"dryRun"`
-	Ssh               *Ssh                                `mapstructure:"ssh"`
-	Timeout           time.Duration                       `mapstructure:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
-	Concurrency       int                                 `mapstructure:"concurrency"`
-	SkipPhases        []workflow_definition.WorkflowPhase `mapstructure:"skipPhases"`
-	Verbose           bool                                `mapstructure:"verbose"`
-	Debug             bool                                `mapstructure:"debug"`
-	//Json              bool                                `mapstructure:"json"` // Maybe later
+	Filters           Filters                             `koanf:"filters"`
+	RequireAllSuccess bool                                `koanf:"requireAllSuccess"`
+	AutoBootstrap     bool                                `koanf:"autoBootstrap"`
+	LocalMachine      string                              `koanf:"localMachine"`
+	DryRun            bool                                `koanf:"dryRun"`
+	Ssh               *Ssh                                `koanf:"ssh"`
+	Timeout           time.Duration                       `koanf:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
+	Concurrency       int                                 `koanf:"concurrency"`
+	SkipPhases        []workflow_definition.WorkflowPhase `koanf:"skipPhases"`
+	Verbose           bool                                `koanf:"verbose"`
+	Debug             bool                                `koanf:"debug"`
+	//Json              bool                                `koanf:"json"` // Maybe later
 }
 
 type Filters struct {
-	Flakes         []string `mapstructure:"flakes"`
-	Configurations []string `mapstructure:"configurations"`
-	Machines       []string `mapstructure:"machines"`
-	Tags           []string `mapstructure:"tags"`
+	Flakes         []string `koanf:"flakes"`
+	Configurations []string `koanf:"configurations"`
+	Machines       []string `koanf:"machines"`
+	Tags           []string `koanf:"tags"`
 }
 
 type Flake struct {
-	Url             string `mapstructure:"url"` // Flake path or url
-	treeStyleParams `mapstructure:",squash"`
-	Configurations  map[string]*Configuration `mapstructure:"configurations"`
+	Url             string `koanf:"url"` // Flake path or url
+	treeStyleParams `koanf:",squash"`
+	Configurations  map[string]*Configuration `koanf:"configurations"`
 }
 
 type Configuration struct {
-	FlakeOutput     string `mapstructure:"flakeOutput"` // Override if not standard style
-	treeStyleParams `mapstructure:",squash"`
-	Machines        map[url.URL]*Machine `mapstructure:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
+	FlakeOutput     string `koanf:"flakeOutput"` // Override if not standard style
+	treeStyleParams `koanf:",squash"`
+	Machines        map[url.URL]*Machine `koanf:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
 }
 
 type Machine struct {
-	treeStyleParams `mapstructure:",squash"`
+	treeStyleParams `koanf:",squash"`
 }
 
 type treeStyleParams struct {
-	Ssh      *Ssh           `mapstructure:"ssh,omitempty"`
-	Tags     []string       `mapstructure:"tags"`
-	Secrets  []SecretConfig `mapstructure:"secrets,omitempty"`
-	Disabled bool           `mapstructure:"disabled"`
+	Ssh      *Ssh           `koanf:"ssh,omitempty"`
+	Tags     []string       `koanf:"tags"`
+	Secrets  []SecretConfig `koanf:"secrets,omitempty"`
+	Disabled bool           `koanf:"disabled"`
 }
 
 type Ssh struct {
-	Url        *url.URL `mapstructure:"-"`
-	PrivateKey string   `mapstructure:"privateKey"`
-	PublicKey  string   `mapstructure:"publicKey"`
+	Url        *url.URL `koanf:"-"`
+	PrivateKey string   `koanf:"privateKey"`
+	PublicKey  string   `koanf:"publicKey"`
 }
 
 type SecretConfig struct {
-	LocalPath  string `mapstructure:"localPath"`
-	RemotePath string `mapstructure:"remotePath"`
-	Mode       string `mapstructure:"mode"`
+	LocalPath  string `koanf:"localPath"`
+	RemotePath string `koanf:"remotePath"`
+	Mode       string `koanf:"mode"`
 }
 
-func urlURLHookFunc() mapstructure.DecodeHookFuncType {
+func urlURLHookFunc() func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 	return func(
 		f reflect.Type,
 		t reflect.Type,
@@ -97,7 +104,7 @@ func urlURLHookFunc() mapstructure.DecodeHookFuncType {
 		if err != nil {
 			return nil, err
 		}
-		return url, nil
+		return *url, nil
 	}
 }
 
@@ -106,30 +113,78 @@ var (
 )
 
 // LoadConfig reads and parses the config file.
-func LoadConfig(vpr *viper.Viper, configFile string) (*Config, error) {
-	if vpr == nil {
-		vpr = viper.New()
-	}
+func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
+	k := koanf.New(".")
 
-	// File config
-	vpr.SetConfigFile(configFile)
-
-	// ENV config
-	vpr.SetEnvPrefix("PANIX")
-	vpr.AutomaticEnv()
-
-	// Read config file if it exists
-	if err := vpr.ReadInConfig(); err != nil {
+	// Load YAML config file
+	err := k.Load(file.Provider(configFile), yaml.Parser())
+	if err != nil {
 		return nil, fmt.Errorf("fatal error config file: %w", err)
 	}
 
-	// Now unmarshal the full config
-	err := vpr.UnmarshalExact(&C, viper.DecodeHook(urlURLHookFunc()))
+	// Load environment variables with PANIX_ prefix
+	err = k.Load(
+		env.Provider(
+			"PANIX_",
+			".",
+			func(s string) string {
+				// Convert PANIX_SOME_KEY to some.key
+				return strings.ToLower(strings.TrimPrefix(s, "PANIX_"))
+			},
+		),
+		nil,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to decode into struct, %v", err)
+		return nil, fmt.Errorf("error loading environment variables: %w", err)
 	}
 
-	// Convert timeout from seconds to duration
+	// Load command line flags if provided
+	if flags != nil {
+		err := k.Load(
+			posflag.ProviderWithFlag(
+				flags,
+				".",
+				k,
+				func(f *pflag.Flag) (string, interface{}) {
+					// Transform the key in whatever manner.
+
+					keyRaw := stringy.New(f.Name).CamelCase()
+					// If special nested "filters"
+					if slices.Contains([]string{"flakes", "configurations", "machines"}, keyRaw.Get()) {
+						keyRaw.Prefix("filters.")
+					}
+
+					key := keyRaw.Prefix("global.")
+
+					//fmt.Println(key)
+
+					// Use FlagVal() and then transform the value, or don't use it at all
+					// and add custom logic to parse the value.
+					val := posflag.FlagVal(flags, f)
+
+					return key, val
+				},
+			),
+			nil,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error loading command line flags: %w", err)
+		}
+	}
+
+	// Unmarshal the configuration
+	if err := k.UnmarshalWithConf("", &C, koanf.UnmarshalConf{
+		Tag: "koanf",
+		DecoderConfig: &mapstructure.DecoderConfig{
+			DecodeHook:       urlURLHookFunc(),
+			WeaklyTypedInput: true,
+			Result:           &C,
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("unable to decode into struct: %w", err)
+	}
+
+	// Convert timeout from miliseconds to seconds for duration
 	C.Global.Timeout *= time.Second
 
 	if C.Global.Debug {
@@ -173,7 +228,7 @@ func (c *Config) validateConfig() error {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			for machineName, _ := range configuration.Machines {
+			for machineName := range configuration.Machines {
 				if machineName.Host == "" {
 					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s].ssh host is empty", flakeName, configurationName, machineName.String())
 				}
@@ -205,20 +260,17 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 			continue
 		}
 
-		fmt.Println(flakeName)
-
 		for configurationName, configuration := range flake.Configurations {
-
-			fmt.Printf("disabled:%v\n", configuration.Disabled)
-
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
 				delete(flake.Configurations, configurationName)
 				continue
 			}
 
-			fmt.Println(configurationName)
-
 			for machineName, machine := range configuration.Machines {
+				if machine == nil {
+					machine = &Machine{}
+				}
+
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {
 					delete(configuration.Machines, machineName)
 					continue

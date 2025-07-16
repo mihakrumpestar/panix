@@ -31,7 +31,7 @@ func (ex *Executioner) PingStream() <-chan ExecutionerOutput {
 		if !ex.usesAlias {
 			host = ex.sshConfig.Url.Host
 		}
-		args = append(args, host, fmt.Sprintf("%d", ex.sshConfig.Url.Port))
+		args = append(args, host, fmt.Sprintf("%s", ex.sshConfig.Url.Port()))
 
 		// 3) delegate to shellStream
 		//
