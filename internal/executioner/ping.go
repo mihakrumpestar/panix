@@ -7,11 +7,15 @@ import (
 // PingStream runs “nc -zvw1 host port” (or no‐op if local) and
 // streams back its stdout/stderr in ShellEvent.  Alias lookup
 // errors are reported as a single event with Err set.
-func (ex *Executioner) PingStream(onFailure func(*BaseMetadata, error) error, onSuccess func(*BaseMetadata)) error {
+func (ex *Executioner) PingStream(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta)) error {
 	// 1) local short‐circuit
 	if ex.local {
 		exm := &ExecutionerMetadata{
 			Command: "ping (local) → skipped",
+		}
+
+		if ex.meta.CommandOutputs == nil {
+			ex.meta.CommandOutputs = make([]*ExecutionerMetadata, 0)
 		}
 		ex.meta.CommandOutputs = append(ex.meta.CommandOutputs, exm)
 		if onSuccess != nil {

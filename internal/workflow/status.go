@@ -12,13 +12,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-type StatusMetadatas struct {
-	*MetadatasBase
-	Statuses []*StatusMetadata
+type StatusPhaseMeta struct {
+	MetadatasBase   *MetadatasBase
+	MachineStatuses []*StatusMachineMeta
 }
 
-type StatusMetadata struct {
-	*executioner.BaseMetadata
+type StatusMachineMeta struct {
+	BaseMeta          *executioner.BaseMeta
 	Reachable         bool
 	SSHConnectable    bool
 	Bootstrapped      bool
@@ -29,26 +29,36 @@ type StatusMetadata struct {
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
 func (w *WorkflowExecutor) ExecuteStatusPhase() error {
-	sms := w.metadatas.StatusMetadatas
-	if sms == nil {
-		sms = &StatusMetadatas{}
+	if w.meta.StatusPhaseMeta == nil {
+		w.meta.StatusPhaseMeta = &StatusPhaseMeta{}
 	}
+	spm := w.meta.StatusPhaseMeta
 
-	if sms.Statuses == nil {
-		sms.Statuses = make([]*StatusMetadata, 0)
+	if spm.MachineStatuses == nil {
+		spm.MachineStatuses = make([]*StatusMachineMeta, 0)
 	}
 
 	if w.cfg.Global.Verbose {
-		fmt.Println("Executing status phase across all machines")
+		fmt.Println("Executing status phase across all flake configurations")
 	}
 
-	err := w.forEachFlakeConfiguration(sms.MetadatasBase, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMetadata, configuration *config.Configuration) error {
-		statuses := sms.Statuses
+	if spm.MetadatasBase == nil {
+		spm.MetadatasBase = &MetadatasBase{}
+	}
 
-		sm := &StatusMetadata{}
-		statuses = append(statuses, sm)
+	err := w.forEachFlakeConfiguration(spm.MetadatasBase, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, configuration *config.Configuration) error {
+		if w.cfg.Global.Verbose {
+			fmt.Println("Executing status phase across all machines in " + bm.FlakeName + " " + bm.ConfigurationName)
+		}
 
-		return w.forEachConfigurationMachine(configuration, sms.MetadatasBase, bm, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMetadata, machine *config.Machine) error {
+		return w.forEachConfigurationMachine(configuration, spm.MetadatasBase, bm, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, machine *config.Machine) error {
+			sm := &StatusMachineMeta{BaseMeta: bm}
+			spm.MachineStatuses = append(spm.MachineStatuses, sm)
+
+			if w.cfg.Global.Verbose {
+				fmt.Println("Executing status phase on machine " + bm.MachineName.String())
+			}
+
 			return wp.executeStatusPhaseMachineStreams(sm, machine, w.hook.OnUpdateHook())
 		})
 	})
@@ -56,15 +66,15 @@ func (w *WorkflowExecutor) ExecuteStatusPhase() error {
 	return err
 }
 
-func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineStreams(sm *StatusMetadata, machine *config.Machine, onUpdateHook func()) error {
-	exc := executioner.New(w.ctx, sm.BaseMetadata, onUpdateHook, w.cfg, machine)
+func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineStreams(sm *StatusMachineMeta, machine *config.Machine, onUpdateHook func()) error {
+	exc := executioner.New(w.ctx, sm.BaseMeta, onUpdateHook, w.cfg, machine)
 
 	// TCP check
 	err := exc.PingStream(
-		func(bm *executioner.BaseMetadata, err error) error {
+		func(bm *executioner.BaseMeta, err error) error {
 			return fmt.Errorf("machine unreachable: %w", err)
 		},
-		func(bm *executioner.BaseMetadata) {
+		func(bm *executioner.BaseMeta) {
 			sm.Reachable = true
 		})
 	if err != nil {
@@ -73,10 +83,10 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 
 	// SSH connect
 	err = exc.Exec(
-		func(bm *executioner.BaseMetadata, err error) error {
+		func(bm *executioner.BaseMeta, err error) error {
 			return errors.Wrapf(err, "ssh test failed: %s", bm.CommandOutputs[len(bm.CommandOutputs)-1].Stderr.String())
 		},
-		func(bm *executioner.BaseMetadata) {
+		func(bm *executioner.BaseMeta) {
 			sm.SSHConnectable = true
 		}, "sh", "-c", "exit 0")
 	if err != nil {
@@ -86,7 +96,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 	// Run bootstrap detection
 	err = exc.Exec(
 		nil,
-		func(bm *executioner.BaseMetadata) {
+		func(bm *executioner.BaseMeta) {
 			sm.Bootstrapped = true
 		}, "sh", "-c", "test -e /run/current-system")
 	if err != nil {
@@ -96,7 +106,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 	// Get current generation
 	err = exc.Exec(
 		nil,
-		func(bm *executioner.BaseMetadata) {
+		func(bm *executioner.BaseMeta) {
 			sm.CurrentGeneration = strings.TrimSpace(bm.CommandOutputs[len(bm.CommandOutputs)-1].Stdout.String())
 		}, "sh", "-c", "nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
 	if err != nil {
@@ -106,7 +116,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 	// Get last deploy time
 	err = exc.Exec(
 		nil,
-		func(bm *executioner.BaseMetadata) {
+		func(bm *executioner.BaseMeta) {
 			sm.LastDeployTime = strings.TrimSpace(bm.CommandOutputs[len(bm.CommandOutputs)-1].Stdout.String())
 		}, "sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
 	if err != nil {
@@ -116,30 +126,42 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 	return nil
 }
 
-func (w *WorkflowExecutor) PrintStatusPhaseMachineTable() {
-	if w.cfg.Global.DryRun {
-		if w.cfg.Global.Verbose {
+func (meta *Metadatas) PrintStatusPhaseMachineTable() (*table.Table, error) {
+	if config.C.Global.DryRun {
+		if config.C.Global.Verbose {
 			fmt.Println("No status table when dry-run option is enabled")
 		}
-		return
+		return nil, nil
+	}
+
+	if meta == nil {
+		return nil, fmt.Errorf("meta is nil")
+	}
+
+	if meta.StatusPhaseMeta == nil {
+		return nil, fmt.Errorf("meta.StatusPhaseMeta is nil")
+	}
+
+	if meta.StatusPhaseMeta.MachineStatuses == nil {
+		return nil, fmt.Errorf("meta.StatusPhaseMeta.MachineStatuses is nil")
 	}
 
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		Headers("INDEX", "ICON", "FLAKE", "CONFIGURATION", "MACHINE" /* "HOST", */, "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR")
 
-	for i, sm := range w.metadatas.StatusMetadatas.Statuses {
+	for i, sm := range meta.StatusPhaseMeta.MachineStatuses {
 		err := ""
-		if sm.Error != nil {
-			err = sm.Error.Error()
+		if sm.BaseMeta.Error != nil {
+			err = sm.BaseMeta.Error.Error()
 		}
 
 		t.Row(
 			fmt.Sprintf("%d", i),
 			sm.getStatusIcon(),
-			sm.FlakeName,
-			sm.ConfigurationName,
-			sm.MachineName.String(),
+			sm.BaseMeta.FlakeName,
+			sm.BaseMeta.ConfigurationName,
+			sm.BaseMeta.MachineName.String(),
 			//machine.Ssh.Alias,
 			sm.getStatusText(),
 			sm.CurrentGeneration,
@@ -148,11 +170,11 @@ func (w *WorkflowExecutor) PrintStatusPhaseMachineTable() {
 		)
 	}
 
-	fmt.Println(t)
+	return t, nil
 }
 
-func (s *StatusMetadata) getStatusIcon() string {
-	if !s.EndTime.IsZero() {
+func (s *StatusMachineMeta) getStatusIcon() string {
+	if !s.BaseMeta.EndTime.IsZero() {
 		return spinner.New().View()
 	}
 	if !s.Reachable {
@@ -167,7 +189,7 @@ func (s *StatusMetadata) getStatusIcon() string {
 	return "✅"
 }
 
-func (s *StatusMetadata) getStatusText() string {
+func (s *StatusMachineMeta) getStatusText() string {
 	if !s.Reachable {
 		return "UNREACHABLE"
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/alitto/pond/v2"
 )
 
-func (ex *Executioner) shellStream(onFailure func(*BaseMetadata, error) error, onSuccess func(*BaseMetadata), name string, args ...string) error {
+func (ex *Executioner) shellStream(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta), name string, args ...string) error {
 	if ex.meta.CommandOutputs == nil {
 		ex.meta.CommandOutputs = make([]*ExecutionerMetadata, 0)
 	}

@@ -13,7 +13,7 @@ type ConfigurationMetadata struct {
 
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
-func (w *WorkflowExecutor) ExecuteBuildPhase(sms []StatusMetadata) ([]ConfigurationMetadata, error) {
+func (w *WorkflowExecutor) ExecuteBuildPhase(sms []StatusMachineMeta) ([]ConfigurationMetadata, error) {
 	/*
 		if w.cfg.Global.Verbose {
 			fmt.Println("Executing build phase across flake configurations")
