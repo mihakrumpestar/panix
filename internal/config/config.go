@@ -126,142 +126,119 @@ func orderedMapHookFunc() mapstructure.DecodeHookFuncType {
 			return data, nil
 		}
 
-		// Handle specific OrderedMap types that we know about
+		// Handle specific OrderedMap types
 		switch t.String() {
-		case "*orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Flake]",
-			"orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Flake]":
-			return createFlakeOrderedMap(data)
-		case "*orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Configuration]",
-			"orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Configuration]":
-			return createConfigurationOrderedMap(data)
-		case "*orderedmap.OrderedMap[net/url.URL,*github.com/mihakrumpestar/panix/internal/config.Machine]",
-			"orderedmap.OrderedMap[net/url.URL,*github.com/mihakrumpestar/panix/internal/config.Machine]":
-			return createMachineOrderedMap(data)
+		case "*orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Flake]":
+			return createOrderedMap(data, stringKeyDecoder, flakeValueDecoder)
+		case "*orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Configuration]":
+			return createOrderedMap(data, stringKeyDecoder, configurationValueDecoder)
+		case "*orderedmap.OrderedMap[net/url.URL,*github.com/mihakrumpestar/panix/internal/config.Machine]":
+			return createOrderedMap(data, urlKeyDecoder, machineValueDecoder)
 		default:
 			return data, nil
 		}
 	}
 }
 
-// createFlakeOrderedMap creates an OrderedMap[string, *Flake] from map data
-func createFlakeOrderedMap(data interface{}) (*orderedmap.OrderedMap[string, *Flake], error) {
+// KeyDecoder converts a raw key to the target key type
+type KeyDecoder[K comparable] func(interface{}) (K, error)
+
+// ValueDecoder converts a raw value to the target value type
+type ValueDecoder[V any] func(interface{}) (V, error)
+
+// createOrderedMap creates an OrderedMap using the provided key and value decoders
+func createOrderedMap[K comparable, V any](
+	data interface{},
+	keyDecoder KeyDecoder[K],
+	valueDecoder ValueDecoder[V],
+) (*orderedmap.OrderedMap[K, V], error) {
 	sourceMap := reflect.ValueOf(data)
-	orderedMap := orderedmap.NewOrderedMap[string, *Flake]()
+	orderedMap := orderedmap.NewOrderedMap[K, V]()
 
 	for _, key := range sourceMap.MapKeys() {
-		keyStr := key.String()
-		value := sourceMap.MapIndex(key).Interface()
+		keyInterface := key.Interface()
+		valueInterface := sourceMap.MapIndex(key).Interface()
 
-		// The value should be a *Flake or something that can be converted to *Flake
-		if flake, ok := value.(*Flake); ok {
-			orderedMap.Set(keyStr, flake)
-		} else {
-			// Use mapstructure to decode the individual value
-			var flake Flake
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				DecodeHook: mapstructure.ComposeDecodeHookFunc(
-					urlURLHookFunc(),
-					orderedMapHookFunc(),
-				),
-				WeaklyTypedInput: true,
-				Result:           &flake,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create decoder for flake %s: %w", keyStr, err)
-			}
-
-			err = decoder.Decode(value)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode flake %s: %w", keyStr, err)
-			}
-
-			orderedMap.Set(keyStr, &flake)
-		}
-	}
-
-	return orderedMap, nil
-}
-
-// createConfigurationOrderedMap creates an OrderedMap[string, *Configuration] from map data
-func createConfigurationOrderedMap(data interface{}) (*orderedmap.OrderedMap[string, *Configuration], error) {
-	sourceMap := reflect.ValueOf(data)
-	orderedMap := orderedmap.NewOrderedMap[string, *Configuration]()
-
-	for _, key := range sourceMap.MapKeys() {
-		keyStr := key.String()
-		value := sourceMap.MapIndex(key).Interface()
-
-		if config, ok := value.(*Configuration); ok {
-			orderedMap.Set(keyStr, config)
-		} else {
-			// Use mapstructure to decode the individual value
-			var config Configuration
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				DecodeHook: mapstructure.ComposeDecodeHookFunc(
-					urlURLHookFunc(),
-					orderedMapHookFunc(),
-				),
-				WeaklyTypedInput: true,
-				Result:           &config,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create decoder for configuration %s: %w", keyStr, err)
-			}
-
-			err = decoder.Decode(value)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode configuration %s: %w", keyStr, err)
-			}
-
-			orderedMap.Set(keyStr, &config)
-		}
-	}
-
-	return orderedMap, nil
-}
-
-// createMachineOrderedMap creates an OrderedMap[url.URL, *Machine] from map data
-func createMachineOrderedMap(data interface{}) (*orderedmap.OrderedMap[url.URL, *Machine], error) {
-	sourceMap := reflect.ValueOf(data)
-	orderedMap := orderedmap.NewOrderedMap[url.URL, *Machine]()
-
-	for _, key := range sourceMap.MapKeys() {
-		// Parse the key as URL
-		keyStr := key.String()
-		parsedURL, err := url.Parse(keyStr)
+		// Decode the key
+		decodedKey, err := keyDecoder(keyInterface)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse URL key %s: %w", keyStr, err)
+			return nil, fmt.Errorf("failed to decode key %v: %w", keyInterface, err)
 		}
 
-		value := sourceMap.MapIndex(key).Interface()
-
-		if machine, ok := value.(*Machine); ok {
-			orderedMap.Set(*parsedURL, machine)
-		} else {
-			// Use mapstructure to decode the individual value
-			var machine Machine
-			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-				DecodeHook: mapstructure.ComposeDecodeHookFunc(
-					urlURLHookFunc(),
-					orderedMapHookFunc(),
-				),
-				WeaklyTypedInput: true,
-				Result:           &machine,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create decoder for machine %s: %w", keyStr, err)
-			}
-
-			err = decoder.Decode(value)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode machine %s: %w", keyStr, err)
-			}
-
-			orderedMap.Set(*parsedURL, &machine)
+		// Decode the value
+		decodedValue, err := valueDecoder(valueInterface)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode value for key %v: %w", keyInterface, err)
 		}
+
+		orderedMap.Set(decodedKey, decodedValue)
 	}
 
 	return orderedMap, nil
+}
+
+// Key decoders
+func stringKeyDecoder(key interface{}) (string, error) {
+	if s, ok := key.(string); ok {
+		return s, nil
+	}
+	return "", fmt.Errorf("expected string key, got %T", key)
+}
+
+func urlKeyDecoder(key interface{}) (url.URL, error) {
+	keyStr, ok := key.(string)
+	if !ok {
+		return url.URL{}, fmt.Errorf("expected string key for URL, got %T", key)
+	}
+	parsedURL, err := url.Parse(keyStr)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("failed to parse URL: %w", err)
+	}
+	return *parsedURL, nil
+}
+
+// Value decoders
+func flakeValueDecoder(value interface{}) (*Flake, error) {
+	return decodeValue[Flake](value)
+}
+
+func configurationValueDecoder(value interface{}) (*Configuration, error) {
+	return decodeValue[Configuration](value)
+}
+
+func machineValueDecoder(value interface{}) (*Machine, error) {
+	return decodeValue[Machine](value)
+}
+
+// decodeValue decodes a value to the specified type using mapstructure
+func decodeValue[T any](value interface{}) (*T, error) {
+	// If the value is already the target type, return it
+	if typedValue, ok := value.(*T); ok {
+		return typedValue, nil
+	}
+
+	// Create a new instance of the target type
+	var result T
+
+	// Use mapstructure to decode
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			urlURLHookFunc(),
+			orderedMapHookFunc(),
+		),
+		WeaklyTypedInput: true,
+		Result:           &result,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create decoder: %w", err)
+	}
+
+	err = decoder.Decode(value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode: %w", err)
+	}
+
+	return &result, nil
 }
 
 // isOrderedMapType checks if the type is an OrderedMap
