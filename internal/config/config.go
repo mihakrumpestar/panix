@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elliotchance/orderedmap/v3"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/gobeam/stringy"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -21,8 +22,8 @@ import (
 )
 
 type Config struct {
-	Global Global            `koanf:"global"`
-	Flakes map[string]*Flake `koanf:"flakes"`
+	Global Global                                 `koanf:"global"`
+	Flakes *orderedmap.OrderedMap[string, *Flake] `koanf:"flakes"`
 }
 
 type Global struct {
@@ -50,13 +51,13 @@ type Filters struct {
 type Flake struct {
 	Url             string `koanf:"url"` // Flake path or url
 	treeStyleParams `koanf:",squash"`
-	Configurations  map[string]*Configuration `koanf:"configurations"`
+	Configurations  *orderedmap.OrderedMap[string, *Configuration] `koanf:"configurations"`
 }
 
 type Configuration struct {
 	FlakeOutput     string `koanf:"flakeOutput"` // Override if not standard style
 	treeStyleParams `koanf:",squash"`
-	Machines        map[url.URL]*Machine `koanf:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
+	Machines        *orderedmap.OrderedMap[url.URL, *Machine] `koanf:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
 }
 
 type Machine struct {
@@ -106,6 +107,180 @@ func urlURLHookFunc() func(f reflect.Type, t reflect.Type, data interface{}) (in
 		}
 		return *url, nil
 	}
+}
+
+// orderedMapHookFunc returns a DecodeHookFunc that converts maps to OrderedMap types
+func orderedMapHookFunc() mapstructure.DecodeHookFuncType {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{},
+	) (interface{}, error) {
+		// Check if target type is OrderedMap
+		if !isOrderedMapType(t) {
+			return data, nil
+		}
+
+		// Source must be a map
+		if f.Kind() != reflect.Map {
+			return data, nil
+		}
+
+		// Handle specific OrderedMap types that we know about
+		switch t.String() {
+		case "*orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Flake]",
+			"orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Flake]":
+			return createFlakeOrderedMap(data)
+		case "*orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Configuration]",
+			"orderedmap.OrderedMap[string,*github.com/mihakrumpestar/panix/internal/config.Configuration]":
+			return createConfigurationOrderedMap(data)
+		case "*orderedmap.OrderedMap[net/url.URL,*github.com/mihakrumpestar/panix/internal/config.Machine]",
+			"orderedmap.OrderedMap[net/url.URL,*github.com/mihakrumpestar/panix/internal/config.Machine]":
+			return createMachineOrderedMap(data)
+		default:
+			return data, nil
+		}
+	}
+}
+
+// createFlakeOrderedMap creates an OrderedMap[string, *Flake] from map data
+func createFlakeOrderedMap(data interface{}) (*orderedmap.OrderedMap[string, *Flake], error) {
+	sourceMap := reflect.ValueOf(data)
+	orderedMap := orderedmap.NewOrderedMap[string, *Flake]()
+
+	for _, key := range sourceMap.MapKeys() {
+		keyStr := key.String()
+		value := sourceMap.MapIndex(key).Interface()
+
+		// The value should be a *Flake or something that can be converted to *Flake
+		if flake, ok := value.(*Flake); ok {
+			orderedMap.Set(keyStr, flake)
+		} else {
+			// Use mapstructure to decode the individual value
+			var flake Flake
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				DecodeHook: mapstructure.ComposeDecodeHookFunc(
+					urlURLHookFunc(),
+					orderedMapHookFunc(),
+				),
+				WeaklyTypedInput: true,
+				Result:           &flake,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create decoder for flake %s: %w", keyStr, err)
+			}
+
+			err = decoder.Decode(value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode flake %s: %w", keyStr, err)
+			}
+
+			orderedMap.Set(keyStr, &flake)
+		}
+	}
+
+	return orderedMap, nil
+}
+
+// createConfigurationOrderedMap creates an OrderedMap[string, *Configuration] from map data
+func createConfigurationOrderedMap(data interface{}) (*orderedmap.OrderedMap[string, *Configuration], error) {
+	sourceMap := reflect.ValueOf(data)
+	orderedMap := orderedmap.NewOrderedMap[string, *Configuration]()
+
+	for _, key := range sourceMap.MapKeys() {
+		keyStr := key.String()
+		value := sourceMap.MapIndex(key).Interface()
+
+		if config, ok := value.(*Configuration); ok {
+			orderedMap.Set(keyStr, config)
+		} else {
+			// Use mapstructure to decode the individual value
+			var config Configuration
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				DecodeHook: mapstructure.ComposeDecodeHookFunc(
+					urlURLHookFunc(),
+					orderedMapHookFunc(),
+				),
+				WeaklyTypedInput: true,
+				Result:           &config,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create decoder for configuration %s: %w", keyStr, err)
+			}
+
+			err = decoder.Decode(value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode configuration %s: %w", keyStr, err)
+			}
+
+			orderedMap.Set(keyStr, &config)
+		}
+	}
+
+	return orderedMap, nil
+}
+
+// createMachineOrderedMap creates an OrderedMap[url.URL, *Machine] from map data
+func createMachineOrderedMap(data interface{}) (*orderedmap.OrderedMap[url.URL, *Machine], error) {
+	sourceMap := reflect.ValueOf(data)
+	orderedMap := orderedmap.NewOrderedMap[url.URL, *Machine]()
+
+	for _, key := range sourceMap.MapKeys() {
+		// Parse the key as URL
+		keyStr := key.String()
+		parsedURL, err := url.Parse(keyStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse URL key %s: %w", keyStr, err)
+		}
+
+		value := sourceMap.MapIndex(key).Interface()
+
+		if machine, ok := value.(*Machine); ok {
+			orderedMap.Set(*parsedURL, machine)
+		} else {
+			// Use mapstructure to decode the individual value
+			var machine Machine
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				DecodeHook: mapstructure.ComposeDecodeHookFunc(
+					urlURLHookFunc(),
+					orderedMapHookFunc(),
+				),
+				WeaklyTypedInput: true,
+				Result:           &machine,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create decoder for machine %s: %w", keyStr, err)
+			}
+
+			err = decoder.Decode(value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode machine %s: %w", keyStr, err)
+			}
+
+			orderedMap.Set(*parsedURL, &machine)
+		}
+	}
+
+	return orderedMap, nil
+}
+
+// isOrderedMapType checks if the type is an OrderedMap
+func isOrderedMapType(t reflect.Type) bool {
+	var elemType reflect.Type
+
+	if t.Kind() == reflect.Ptr {
+		elemType = t.Elem()
+	} else {
+		elemType = t
+	}
+
+	if elemType.Kind() != reflect.Struct {
+		return false
+	}
+
+	// Check if it's from the orderedmap package
+	return elemType.PkgPath() == "github.com/elliotchance/orderedmap/v3" &&
+		strings.HasPrefix(elemType.Name(), "OrderedMap")
 }
 
 var (
@@ -176,7 +351,10 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	if err := k.UnmarshalWithConf("", &C, koanf.UnmarshalConf{
 		Tag: "koanf",
 		DecoderConfig: &mapstructure.DecoderConfig{
-			DecodeHook:       urlURLHookFunc(),
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				urlURLHookFunc(),
+				orderedMapHookFunc(),
+			),
 			WeaklyTypedInput: true,
 			Result:           &C,
 		},
@@ -214,21 +392,24 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 }
 
 func (c *Config) validateConfig() error {
-	if len(c.Flakes) == 0 {
+	if c.Flakes == nil {
+		return fmt.Errorf("flakes is nil")
+	}
+	if c.Flakes.Len() == 0 {
 		return fmt.Errorf("flakes is required")
 	}
 
-	for flakeName, flake := range c.Flakes {
-		if len(flake.Configurations) == 0 {
+	for flakeName, flake := range c.Flakes.AllFromFront() {
+		if flake.Configurations == nil || flake.Configurations.Len() == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		for configurationName, configuration := range flake.Configurations {
-			if len(configuration.Machines) == 0 {
+		for configurationName, configuration := range flake.Configurations.AllFromFront() {
+			if configuration.Machines == nil || configuration.Machines.Len() == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			for machineName := range configuration.Machines {
+			for machineName := range configuration.Machines.AllFromFront() {
 				if machineName.Host == "" {
 					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s].ssh host is empty", flakeName, configurationName, machineName.String())
 				}
@@ -242,7 +423,7 @@ func (c *Config) validateConfig() error {
 // FilterConfigEntrys filters the configuration based on command-line or global selections.
 // An entry is kept if it matches all provided filters (flakes, configurations, machines, tags) and is not disabled.
 // If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
-func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
+func (c *Config) filterConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], error) {
 	cC := *c // Copy
 
 	sc, err := LoadSshConfig()
@@ -254,25 +435,25 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 	configurationsFilter := cC.Global.Filters.Configurations
 	machinesFilter := cC.Global.Filters.Machines
 
-	for flakeName, flake := range cC.Flakes {
+	for flakeName, flake := range cC.Flakes.AllFromFront() {
 		if (len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName)) || flake.Disabled {
-			delete(cC.Flakes, flakeName)
+			cC.Flakes.Delete(flakeName)
 			continue
 		}
 
-		for configurationName, configuration := range flake.Configurations {
+		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
-				delete(flake.Configurations, configurationName)
+				flake.Configurations.Delete(configurationName)
 				continue
 			}
 
-			for machineName, machine := range configuration.Machines {
+			for machineName, machine := range configuration.Machines.AllFromFront() {
 				if machine == nil {
 					machine = &Machine{}
 				}
 
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {
-					delete(configuration.Machines, machineName)
+					configuration.Machines.Delete(machineName)
 					continue
 				}
 
@@ -283,7 +464,7 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 					allMachineTags = append(allMachineTags, machine.Tags...)
 
 					if !matchesTags(allMachineTags, C.Global.Filters.Tags) {
-						delete(configuration.Machines, machineName)
+						configuration.Machines.Delete(machineName)
 						continue
 					}
 				}
@@ -299,17 +480,17 @@ func (c *Config) filterConfigEntrys() (map[string]*Flake, error) {
 				}
 			}
 
-			if len(configuration.Machines) == 0 {
-				delete(flake.Configurations, configurationName)
+			if configuration.Machines.Len() == 0 {
+				flake.Configurations.Delete(configurationName)
 			}
 		}
 
-		if len(flake.Configurations) == 0 {
-			delete(cC.Flakes, flakeName)
+		if flake.Configurations.Len() == 0 {
+			cC.Flakes.Delete(flakeName)
 		}
 	}
 
-	if len(cC.Flakes) == 0 {
+	if cC.Flakes.Len() == 0 {
 		return nil, fmt.Errorf("flakes configuration empty after filtering")
 	}
 
