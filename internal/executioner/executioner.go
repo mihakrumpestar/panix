@@ -11,7 +11,7 @@ import (
 
 type Executioner struct {
 	ctx          context.Context
-	meta         *BaseMetadata
+	meta         *BaseMeta
 	onUpdateHook func()
 	local        bool
 	dryRun       bool
@@ -19,9 +19,9 @@ type Executioner struct {
 	sshConfig    *config.Ssh
 }
 
-type BaseMetadata struct {
+type BaseMeta struct {
 	MetadataID
-	PhaseMetadata
+	PhaseMeta
 }
 
 type MetadataID struct {
@@ -30,7 +30,7 @@ type MetadataID struct {
 	MachineName       *url.URL
 }
 
-type PhaseMetadata struct {
+type PhaseMeta struct {
 	CommandOutputs []*ExecutionerMetadata
 	TimeSE
 	Error error
@@ -50,7 +50,11 @@ type TimeSE struct {
 	EndTime   time.Time
 }
 
-func New(ctx context.Context, meta *BaseMetadata, onUpdateHook func(), c *config.Global, machine *config.Machine) *Executioner {
+func New(ctx context.Context, meta *BaseMeta, onUpdateHook func(), c *config.Global, machine *config.Machine) *Executioner {
+	if meta == nil {
+		panic("meta is not allowe to be nil here")
+	}
+
 	local := true // No machine means we are doing building (which is currently local only)
 	usesAlias := false
 	var sshConfig *config.Ssh
@@ -72,7 +76,7 @@ func New(ctx context.Context, meta *BaseMetadata, onUpdateHook func(), c *config
 	}
 }
 
-func (ex *Executioner) Exec(onFailure func(*BaseMetadata, error) error, onSuccess func(*BaseMetadata), name string, args ...string) error {
+func (ex *Executioner) Exec(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta), name string, args ...string) error {
 	if ex.local {
 		return ex.shellStream(onFailure, onSuccess, name, args...)
 	} else {

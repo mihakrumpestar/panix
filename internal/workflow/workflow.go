@@ -17,16 +17,16 @@ type ActivationMetadata struct {
 }
 
 type WorkflowExecutor struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	cfg       *config.Config
-	metadatas *Metadatas
-	hook      *hook.Hook
-	pool      pond.Pool
+	ctx    context.Context
+	cancel context.CancelFunc
+	cfg    *config.Config
+	meta   *Metadatas
+	hook   *hook.Hook
+	pool   pond.Pool
 }
 
 type Metadatas struct {
-	*StatusMetadatas
+	StatusPhaseMeta *StatusPhaseMeta
 }
 
 type MetadatasBase struct {
@@ -45,17 +45,17 @@ func NewWorkflowExecutor(ctx context.Context, cfg *config.Config) *WorkflowExecu
 	hookI := hook.NewHook()
 
 	return &WorkflowExecutor{
-		ctx:       ctx,
-		cancel:    cancel,
-		cfg:       cfg,
-		metadatas: &Metadatas{},
-		hook:      hookI,
-		pool:      pond.NewPool(cfg.Global.Concurrency),
+		ctx:    ctx,
+		cancel: cancel,
+		cfg:    cfg,
+		meta:   &Metadatas{},
+		hook:   hookI,
+		pool:   pond.NewPool(cfg.Global.Concurrency),
 	}
 }
 
 func (w *WorkflowExecutor) Metadatas() *Metadatas {
-	return w.metadatas
+	return w.meta
 }
 
 func (w *WorkflowExecutor) Done() <-chan uint64 {
@@ -64,15 +64,15 @@ func (w *WorkflowExecutor) Done() <-chan uint64 {
 
 // Helpers
 
-func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, function func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMetadata, configuration *config.Configuration) error) error {
+func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, function func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, configuration *config.Configuration) error) error {
 	if msBase == nil {
-		msBase = &MetadatasBase{}
+		panic("msBase is not allowed to be nil")
 	}
+	//if msBase.groupPool == nil {
+	//	msBase.groupPool = w.pool.NewGroupContext(w.ctx)
+	//}
 
-	groupPool := msBase.groupPool
-	if groupPool == nil {
-		groupPool = w.pool.NewGroupContext(w.ctx)
-	}
+	groupPool := w.pool.NewGroupContext(w.ctx)
 
 	errCacher := make([]error, 0)
 
@@ -80,7 +80,7 @@ func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, func
 		for configurationName, configuration := range flake.Configurations {
 			wp := &WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
 
-			bm := &executioner.BaseMetadata{
+			bm := &executioner.BaseMeta{
 				MetadataID: executioner.MetadataID{
 					FlakeName:         flakeName,
 					ConfigurationName: configurationName,
@@ -105,13 +105,13 @@ func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, func
 	err := groupPool.Wait()
 
 	if err != nil {
-		msBase.Error = errors.Wrapf(err, "phase failed because of 'RequireAllSuccess'")
+		msBase.Error = errors.Wrapf(err, "forEachFlakeConfiguration: phase failed because of 'RequireAllSuccess'")
 		w.hook.OnUpdateHook()
 		return msBase.Error
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		msBase.Error = fmt.Errorf("phase failed because of all machines failed this phase")
+		msBase.Error = fmt.Errorf("forEachFlakeConfiguration: phase failed because of all machines failed this phase")
 		w.hook.OnUpdateHook()
 		return msBase.Error
 	}
@@ -119,11 +119,23 @@ func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, func
 	return nil
 }
 
-func (w *WorkflowExecutor) forEachConfigurationMachine(configuration *config.Configuration, msBase *MetadatasBase, bm *executioner.BaseMetadata, function func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMetadata, machine *config.Machine) error) error {
-	groupPool := msBase.groupPool
-	if groupPool == nil {
-		groupPool = w.pool.NewGroupContext(w.ctx)
+func (w *WorkflowExecutor) forEachConfigurationMachine(configuration *config.Configuration, msBase *MetadatasBase, bm *executioner.BaseMeta, function func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, machine *config.Machine) error) error {
+	if configuration == nil {
+		panic("configuration  is not allowed to be nil")
 	}
+
+	if msBase == nil {
+		panic("msBase  is not allowed to be nil")
+	}
+
+	if bm == nil {
+		panic("bm is not allowed to be nil")
+	}
+
+	//groupPool := msBase.groupPool
+	//if groupPool == nil {
+	groupPool := w.pool.NewGroupContext(w.ctx)
+	//}
 
 	errCacher := make([]error, 0)
 
@@ -148,24 +160,13 @@ func (w *WorkflowExecutor) forEachConfigurationMachine(configuration *config.Con
 
 	err := groupPool.Wait()
 	if err != nil {
-		msBase.Error = errors.Wrapf(err, "phase failed because of 'RequireAllSuccess'")
-		w.hook.OnUpdateHook()
-		return msBase.Error
-	}
-
-	// Only wait for Done() if no error occurred
-	select {
-	case <-w.metadatas.StatusMetadatas.groupPool.Done():
-		// Continue with normal flow
-	case <-w.ctx.Done():
-		// Context cancelled, exit early
-		msBase.Error = w.ctx.Err()
+		msBase.Error = errors.Wrapf(err, "forEachConfigurationMachine: phase failed because of 'RequireAllSuccess'")
 		w.hook.OnUpdateHook()
 		return msBase.Error
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		msBase.Error = fmt.Errorf("phase failed because of all machines failed this phase")
+		msBase.Error = fmt.Errorf("forEachConfigurationMachine: phase failed because of all machines failed this phase")
 		w.hook.OnUpdateHook()
 		return msBase.Error
 	}

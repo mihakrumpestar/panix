@@ -22,6 +22,7 @@ func (h *Hook) Close() {
 
 func (h *Hook) OnUpdateHook() func() {
 	return func() {
+		h.iteration++
 		h.channel <- h.iteration
 	}
 }
