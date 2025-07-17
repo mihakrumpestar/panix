@@ -81,7 +81,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 	// SSH connect
 	err = exc.Exec(
 		func(bm *executioner.BaseMeta, err error) error {
-			return errors.Wrapf(err, "ssh test failed: %s", bm.CommandOutputs[len(bm.CommandOutputs)-1].Stderr.String())
+			return errors.Wrapf(err, "ssh test failed: %s", bm.CommandOutputs[len(bm.CommandOutputs)-1].StdCombined.String())
 		},
 		func(bm *executioner.BaseMeta) {
 			sm.SSHConnectable = true
