@@ -1,8 +1,6 @@
 package panix
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
@@ -22,18 +20,10 @@ This includes:
 		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
 
 		go func() {
-			for i := range executor.Done() {
-				fmt.Sprintln(i)
-			}
-		}()
-
-		go func() {
 			_ = executor.ExecuteStatusPhase()
 		}()
 
-		tui.NewTui(executor.Metadatas())
-
-		//<-executor.Done()
+		return tui.NewTui(executor.Metadatas(), executor.GetChannel(), executor.Cancel())
 
 		//godump.Dump(executor.Metadatas())
 

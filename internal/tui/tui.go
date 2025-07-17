@@ -1,25 +1,27 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 )
 
 type errMsg error
 
+type updateMsg struct{}
+
 type model struct {
-	//spinner  spinner.Model
-	meta     *workflow.Metadatas
-	quitting bool
-	err      error
+	meta         *workflow.Metadatas
+	quitting     bool
+	err          error
+	updateCh     <-chan uint64
+	cancelParent context.CancelFunc
 }
 
-func NewTui(meta *workflow.Metadatas) error {
-	p := tea.NewProgram(initialModel(meta))
+func NewTui(meta *workflow.Metadatas, updateCh <-chan uint64, cancel context.CancelFunc) error {
+	p := tea.NewProgram(initialModel(meta, updateCh, cancel))
 	_, err := p.Run()
 	if err != nil {
 		return err
@@ -28,19 +30,32 @@ func NewTui(meta *workflow.Metadatas) error {
 	return nil
 }
 
-func initialModel(meta *workflow.Metadatas) model {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+func initialModel(meta *workflow.Metadatas, updateCh <-chan uint64, cancel context.CancelFunc) model {
 	return model{
-		//spinner: s,
-		meta: meta,
+		meta:         meta,
+		updateCh:     updateCh,
+		cancelParent: cancel,
 	}
 }
 
 func (m model) Init() tea.Cmd {
 	//return m.spinner.Tick
-	return nil
+	return m.listenForUpdates()
+}
+
+func (m model) listenForUpdates() tea.Cmd {
+	return func() tea.Msg {
+		_, ok := <-m.updateCh
+		if !ok {
+			return tea.Quit()
+		}
+
+		if m.meta.Error != nil {
+			return m.meta.Error
+		}
+
+		return updateMsg{}
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -49,6 +64,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.quitting = true
+			m.cancelParent()
 			return m, tea.Quit
 		default:
 			return m, nil
@@ -57,6 +73,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg
 		return m, nil
+
+	case updateMsg:
+		// Trigger re-render when update is received
+		return m, m.listenForUpdates()
 
 	default:
 		var cmd tea.Cmd

@@ -17,7 +17,10 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/yassinebenaid/godump v0.11.1
+	gopkg.in/yaml.v3 v3.0.1
 )
+
+require github.com/elliotchance/orderedmap/v3 v3.1.0
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
