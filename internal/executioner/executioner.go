@@ -27,7 +27,7 @@ type BaseMeta struct {
 type MetadataID struct {
 	FlakeName         string
 	ConfigurationName string
-	MachineName       *url.URL
+	MachineName       url.URL
 }
 
 type PhaseMeta struct {
@@ -60,7 +60,7 @@ func New(ctx context.Context, meta *BaseMeta, onUpdateHook func(), c *config.Glo
 	var sshConfig *config.Ssh
 
 	if machine != nil {
-		local = c.LocalMachine == meta.MachineName.String()
+		local = c.LocalMachine == meta.MachineName.Hostname()
 		usesAlias = meta.MachineName.User.String() == ""
 		sshConfig = machine.Ssh
 	}

@@ -18,6 +18,7 @@ type model struct {
 	err          error
 	updateCh     <-chan uint64
 	cancelParent context.CancelFunc
+	viewMode     string // "status", "detailed", or "table"
 }
 
 func NewTui(meta *workflow.Metadatas, updateCh <-chan uint64, cancel context.CancelFunc) error {
@@ -35,6 +36,7 @@ func initialModel(meta *workflow.Metadatas, updateCh <-chan uint64, cancel conte
 		meta:         meta,
 		updateCh:     updateCh,
 		cancelParent: cancel,
+		viewMode:     "status", // Default to status view
 	}
 }
 
@@ -66,6 +68,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			m.cancelParent()
 			return m, tea.Quit
+		case "d":
+			// Toggle between status and detailed views
+			if m.viewMode == "status" {
+				m.viewMode = "detailed"
+			} else {
+				m.viewMode = "status"
+			}
+			return m, nil
+		case "t":
+			// Toggle to phase meta table view
+			m.viewMode = "table"
+			return m, nil
 		default:
 			return m, nil
 		}
@@ -80,22 +94,69 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	default:
 		var cmd tea.Cmd
-		//m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	}
 }
 
 func (m model) View() string {
+
 	if m.err != nil {
-		return m.err.Error()
+		return fmt.Sprintf("Error: %v", m.err)
 	}
-	str := fmt.Sprintf("\n\n   %s Loading forever...press q to quit\n\n", nil /*m.spinner.View()*/)
-	table, err := m.meta.PrintStatusPhaseMachineTable()
-	if err != nil {
-		//panic(err)
-	} else {
-		str += table.String()
+
+	var str string
+
+	// Header with instructions
+	header := "\n=== Panix TUI ===\n"
+	instructions := "Press 'd' to toggle detailed view, 't' for table view, 'q' to quit\n\n"
+
+	// Create a defensive copy of metadata to avoid concurrent access issues
+	meta := m.meta
+
+	switch m.viewMode {
+	case "detailed":
+		if meta == nil {
+			str = header + instructions + "No metadata available"
+			break
+		}
+		detailed, err := meta.PrintDetailedPhaseMeta()
+		if err != nil {
+			str = fmt.Sprintf("Error: %v", err)
+		} else {
+			str = header + instructions + detailed
+		}
+
+	case "table":
+		if meta == nil {
+			str = header + instructions + "No metadata available"
+			break
+		}
+		table, err := meta.PrintPhaseMetaTable()
+		if err != nil {
+			str = fmt.Sprintf("Error: %v", err)
+		} else if table != nil {
+			str = header + instructions + table.String()
+		} else {
+			str = header + instructions + "No phase meta data available"
+		}
+
+	case "status":
+		fallthrough
+	default:
+		if meta == nil {
+			str = header + instructions + "No metadata available"
+			break
+		}
+		table, err := meta.PrintStatusPhaseMachineTable()
+		if err != nil {
+			str = fmt.Sprintf("Error: %v", err)
+		} else if table != nil {
+			str = header + instructions + table.String()
+		} else {
+			str = header + instructions + "No status data available"
+		}
 	}
+
 	if m.quitting {
 		return str + "\n"
 	}

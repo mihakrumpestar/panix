@@ -57,7 +57,7 @@ func (meta *Metadatas) PrintStatusPhaseMachineTable() (*table.Table, error) {
 }
 
 func (s *StatusMachineMeta) getStatusIcon() string {
-	if !s.BaseMeta.EndTime.IsZero() {
+	if s.BaseMeta.EndTime.IsZero() {
 		return spinner.New().View()
 	}
 	if !s.Reachable {

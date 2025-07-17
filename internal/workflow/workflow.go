@@ -137,17 +137,22 @@ func (w *WorkflowExecutor) forEachConfigurationMachine(configuration *config.Con
 		panic("bm is not allowed to be nil")
 	}
 
-	//groupPool := msBase.groupPool
-	//if groupPool == nil {
-	groupPool := w.pool.NewGroupContext(w.ctx)
+	// Make copy, otherwise each machine will share BaseMeta that shares same flake configuration
+
+	//if msBase.groupPool == nil {
+	//	msBase.groupPool = w.pool.NewGroupContext(w.ctx)
 	//}
+	//groupPool := msBase.groupPool
+	groupPool := w.pool.NewGroupContext(w.ctx)
 
 	errCacher := make([]error, 0)
 
 	for machineName, machine := range configuration.Machines.AllFromFront() {
 		wp := &WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
 
-		bm.MetadataID.MachineName = &machineName
+		fmt.Println("machineName", machineName)
+
+		bm.MetadataID.MachineName = machineName
 
 		if w.cfg.Global.RequireAllSuccess {
 			groupPool.SubmitErr(func() error {
