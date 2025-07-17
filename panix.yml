@@ -11,10 +11,10 @@ flakes:
     configurations:
       server-03:
         machines:
-          ssh://server-03:
+          server-03:
             tags:
               - test
+          docker-swarm:
       personal-workstation:
         machines:
-          ssh://personal-workstation:
-
+          personal-workstation:
