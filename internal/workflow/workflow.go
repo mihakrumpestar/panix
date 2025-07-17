@@ -27,6 +27,7 @@ type WorkflowExecutor struct {
 
 type Metadatas struct {
 	StatusPhaseMeta *StatusPhaseMeta
+	Error           error
 }
 
 type MetadatasBase struct {
@@ -58,8 +59,12 @@ func (w *WorkflowExecutor) Metadatas() *Metadatas {
 	return w.meta
 }
 
-func (w *WorkflowExecutor) Done() <-chan uint64 {
-	return w.hook.Done()
+func (w *WorkflowExecutor) GetChannel() <-chan uint64 {
+	return w.hook.GetChannel()
+}
+
+func (w *WorkflowExecutor) Cancel() context.CancelFunc {
+	return w.cancel
 }
 
 // Helpers
@@ -68,16 +73,16 @@ func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, func
 	if msBase == nil {
 		panic("msBase is not allowed to be nil")
 	}
-	//if msBase.groupPool == nil {
-	//	msBase.groupPool = w.pool.NewGroupContext(w.ctx)
-	//}
 
-	groupPool := w.pool.NewGroupContext(w.ctx)
+	if msBase.groupPool == nil {
+		msBase.groupPool = w.pool.NewGroupContext(w.ctx)
+	}
+	groupPool := msBase.groupPool
 
 	errCacher := make([]error, 0)
 
-	for flakeName, flake := range w.cfg.Flakes {
-		for configurationName, configuration := range flake.Configurations {
+	for flakeName, flake := range w.cfg.Flakes.AllFromFront() {
+		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 			wp := &WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
 
 			bm := &executioner.BaseMeta{
@@ -139,7 +144,7 @@ func (w *WorkflowExecutor) forEachConfigurationMachine(configuration *config.Con
 
 	errCacher := make([]error, 0)
 
-	for machineName, machine := range configuration.Machines {
+	for machineName, machine := range configuration.Machines.AllFromFront() {
 		wp := &WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
 
 		bm.MetadataID.MachineName = &machineName

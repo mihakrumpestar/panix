@@ -12,7 +12,7 @@ func NewHook() *Hook {
 	}
 }
 
-func (h *Hook) Done() <-chan uint64 {
+func (h *Hook) GetChannel() <-chan uint64 {
 	return h.channel
 }
 
