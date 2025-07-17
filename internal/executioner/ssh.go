@@ -1,6 +1,6 @@
 package executioner
 
-func (ex *Executioner) sshStream(onFailure func(*BaseMetadata, error) error, onSuccess func(*BaseMetadata), name string, args ...string) error {
+func (ex *Executioner) sshStream(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta), name string, args ...string) error {
 
 	sshArgs := []string{"-q"} // Silance banners
 

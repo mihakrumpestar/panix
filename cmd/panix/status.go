@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
 )
@@ -20,17 +21,23 @@ This includes:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
 
-		//tui.NewTui()
-		err := executor.ExecuteStatusPhase()
+		go func() {
+			for i := range executor.Done() {
+				fmt.Sprintln(i)
+			}
+		}()
+
+		go func() {
+			_ = executor.ExecuteStatusPhase()
+		}()
+
+		tui.NewTui(executor.Metadatas())
+
 		//<-executor.Done()
 
-		for i := range executor.Done() {
-			fmt.Println(i)
-		}
+		//godump.Dump(executor.Metadatas())
 
-		executor.PrintStatusPhaseMachineTable()
-
-		return err
+		return nil
 	},
 }
 
