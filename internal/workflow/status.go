@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -48,15 +49,21 @@ func (w *WorkflowExecutor) ExecuteStatusPhase() error {
 			fmt.Println("Executing status phase across all machines in " + bm.FlakeName + " " + bm.ConfigurationName)
 		}
 
-		return w.forEachConfigurationMachine(configuration, spm.MetadatasBase, bm, func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, machine *config.Machine) error {
-			sm := &StatusMachineMeta{BaseMeta: bm}
+		return w.forEachConfigurationMachine(configuration, spm.MetadatasBase, bm, func(wp *WorkflowExecutorForConfigurationAndMachine, bmi *executioner.BaseMeta, machine *config.Machine) error {
+			sm := &StatusMachineMeta{BaseMeta: bmi}
 			spm.MachineStatuses = append(spm.MachineStatuses, sm)
 
+			//fmt.Println(bmi.MachineName.String())
+
 			if w.cfg.Global.Verbose {
-				fmt.Println("Executing status phase on machine " + bm.MachineName.String())
+				fmt.Println("Executing status phase on machine " + bmi.MachineName.String())
 			}
 
-			return wp.executeStatusPhaseMachineStreams(sm, machine, w.hook.OnUpdateHook())
+			bmi.StartTime = time.Now()
+			err := wp.executeStatusPhaseMachineStreams(sm, machine, w.hook.OnUpdateHook())
+			bmi.EndTime = time.Now()
+
+			return err
 		})
 	})
 
@@ -105,7 +112,7 @@ func (w *WorkflowExecutorForConfigurationAndMachine) executeStatusPhaseMachineSt
 		nil,
 		func(bm *executioner.BaseMeta) {
 			sm.CurrentGeneration = strings.TrimSpace(bm.CommandOutputs[len(bm.CommandOutputs)-1].Stdout.String())
-		}, "sh", "-c", "nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
+		}, "sh", "-c", "sleep 5 && nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
 	if err != nil {
 		return err
 	}

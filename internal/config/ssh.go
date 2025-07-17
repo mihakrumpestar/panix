@@ -33,7 +33,7 @@ func LoadSshConfig() (*SshConfig, error) {
 }
 
 func (sc *SshConfig) RetriveFullParamsFromSshConfig(machineName url.URL) (*url.URL, error) {
-	host, err := sc.sc.Get(machineName.Host, "HostName")
+	host, err := sc.sc.Get(machineName.Hostname(), "HostName")
 	if err != nil {
 		return nil, err
 	}
