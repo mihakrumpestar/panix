@@ -8,29 +8,29 @@ import (
 )
 
 // Simplified structures for unmarshalling with regular maps
-type simplifiedConfig struct {
-	Global Global                      `koanf:"global"`
-	Flakes map[string]*simplifiedFlake `koanf:"flakes"`
+type decodingConfig struct {
+	Global Global                    `koanf:"global"`
+	Flakes map[string]*decodingFlake `koanf:"flakes"`
 }
 
-type simplifiedFlake struct {
-	Url             string `koanf:"url"`
-	treeStyleParams `koanf:",squash"`
-	Configurations  map[string]*simplifiedConfiguration `koanf:"configurations"`
+type decodingFlake struct {
+	Url               string `koanf:"url"`
+	DefaultAttributes `koanf:",squash"`
+	Configurations    map[string]*decodingConfiguration `koanf:"configurations"`
 }
 
-type simplifiedConfiguration struct {
-	FlakeOutput     string `koanf:"flakeOutput"`
-	treeStyleParams `koanf:",squash"`
-	Machines        map[string]*simplifiedMachine `koanf:"machines"`
+type decodingConfiguration struct {
+	FlakeOutput       string `koanf:"flakeOutput"`
+	DefaultAttributes `koanf:",squash"`
+	Machines          map[string]*decodingMachine `koanf:"machines"`
 }
 
-type simplifiedMachine struct {
-	treeStyleParams `koanf:",squash"`
+type decodingMachine struct {
+	DefaultAttributes `koanf:",squash"`
 }
 
 // convertToFinalConfig converts the simplified config structure to the final structure with ordered maps
-func (sc *simplifiedConfig) convertToFinalConfig() (*Config, error) {
+func (sc *decodingConfig) convertToFinalConfig() (*Config, error) {
 	final := &Config{
 		Global: sc.Global,
 		Flakes: orderedmap.NewOrderedMap[string, *Flake](),
@@ -39,9 +39,9 @@ func (sc *simplifiedConfig) convertToFinalConfig() (*Config, error) {
 	// Convert flakes
 	for flakeName, simplifiedFlake := range sc.Flakes {
 		flake := &Flake{
-			Url:             simplifiedFlake.Url,
-			treeStyleParams: simplifiedFlake.treeStyleParams,
-			Configurations:  orderedmap.NewOrderedMap[string, *Configuration](),
+			Url:               simplifiedFlake.Url,
+			DefaultAttributes: simplifiedFlake.DefaultAttributes,
+			Configurations:    orderedmap.NewOrderedMap[string, *Configuration](),
 		}
 
 		final.Flakes.Set(flakeName, flake)
@@ -49,9 +49,9 @@ func (sc *simplifiedConfig) convertToFinalConfig() (*Config, error) {
 		// Convert configurations
 		for configName, simplifiedConfig := range simplifiedFlake.Configurations {
 			configuration := &Configuration{
-				FlakeOutput:     simplifiedConfig.FlakeOutput,
-				treeStyleParams: simplifiedConfig.treeStyleParams,
-				Machines:        orderedmap.NewOrderedMap[url.URL, *Machine](),
+				FlakeOutput:       simplifiedConfig.FlakeOutput,
+				DefaultAttributes: simplifiedConfig.DefaultAttributes,
+				Machines:          orderedmap.NewOrderedMap[url.URL, *Machine](),
 			}
 
 			flake.Configurations.Set(configName, configuration)
@@ -65,7 +65,7 @@ func (sc *simplifiedConfig) convertToFinalConfig() (*Config, error) {
 
 				machine := &Machine{}
 				if simplifiedMachine != nil {
-					machine.treeStyleParams = simplifiedMachine.treeStyleParams
+					machine.DefaultAttributes = simplifiedMachine.DefaultAttributes
 				}
 
 				configuration.Machines.Set(*parsedMachineName, machine)

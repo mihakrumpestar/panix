@@ -3,80 +3,44 @@ package executioner
 import (
 	"context"
 	"net/url"
-	"strings"
-	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
 type Executioner struct {
-	ctx          context.Context
-	meta         *BaseMeta
-	onUpdateHook func()
-	local        bool
-	dryRun       bool
-	usesAlias    bool
-	sshConfig    *config.Ssh
+	ctx              context.Context
+	dryRun           bool
+	local            bool
+	usesAlias        bool
+	machineName      *url.URL
+	machineSshConfig *config.SshClient
+	log              *config.Log
+	onUpdateHook     func()
 }
 
-type BaseMeta struct {
-	MetadataID
-	PhaseMeta
-}
-
-type MetadataID struct {
-	FlakeName         string
-	ConfigurationName string
-	MachineName       url.URL
-}
-
-type PhaseMeta struct {
-	CommandOutputs []*ExecutionerMetadata
-	TimeSE
-	Error error
-}
-
-type ExecutionerMetadata struct {
-	Command     string
-	Stdout      strings.Builder
-	Stderr      strings.Builder
-	StdCombined strings.Builder
-	TimeSE
-	Error error
-}
-
-type TimeSE struct {
-	StartTime time.Time
-	EndTime   time.Time
-}
-
-func New(ctx context.Context, meta *BaseMeta, onUpdateHook func(), c *config.Global, machine *config.Machine) *Executioner {
-	if meta == nil {
-		panic("meta is not allowe to be nil here")
-	}
-
-	local := true // No machine means we are doing building (which is currently local only)
+// NewExecutioner: if machineName == nil, machineSshConfig won't be used
+func NewExecutioner(ctx context.Context, conf *config.Global, machineName *url.URL, machineSshConfig *config.SshClient, log *config.Log, onUpdateHook func()) *Executioner {
+	local := true // No machine means we are doing the building phase (which is currently local only)
 	usesAlias := false
-	var sshConfig *config.Ssh
 
-	if machine != nil {
-		local = c.LocalMachine == meta.MachineName.Hostname()
-		usesAlias = meta.MachineName.User.String() == ""
-		sshConfig = machine.Ssh
+	if machineName != nil {
+		local = conf.LocalMachine == machineName.Hostname()
+		usesAlias = machineName.User.String() == ""
 	}
 
 	return &Executioner{
-		ctx:          ctx,
-		meta:         meta,
-		onUpdateHook: onUpdateHook,
-		local:        local,
-		dryRun:       c.DryRun,
-		usesAlias:    usesAlias,
-		sshConfig:    sshConfig,
+		ctx:              ctx,
+		dryRun:           conf.DryRun,
+		local:            local,
+		usesAlias:        usesAlias,
+		machineName:      machineName,
+		machineSshConfig: machineSshConfig,
+		log:              log,
+		onUpdateHook:     onUpdateHook,
 	}
 }
 
-func (ex *Executioner) Exec(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta), name string, args ...string) error {
+func (ex *Executioner) Exec(onFailure func(*config.Log, error) error, onSuccess func(*config.Log), name string, args ...string) error {
 	if ex.local {
 		return ex.shellStream(onFailure, onSuccess, name, args...)
 	} else {

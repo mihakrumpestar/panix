@@ -14,12 +14,9 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
 	"github.com/knadh/koanf/v2"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/pflag"
 	"github.com/yassinebenaid/godump"
-)
-
-var (
-	C Config
 )
 
 // LoadConfig reads and parses the config file.
@@ -80,7 +77,7 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	}
 
 	// First, unmarshal into simplifiedConfig structure with regular maps
-	simplifiedConfig := &simplifiedConfig{}
+	simplifiedConfig := &decodingConfig{}
 	if err := k.UnmarshalWithConf("", &simplifiedConfig, koanf.UnmarshalConf{
 		Tag: "koanf",
 		DecoderConfig: &mapstructure.DecoderConfig{
@@ -100,35 +97,34 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	}
 
 	// Convert simplified structure to final structure with ordered maps
-	config, err := simplifiedConfig.convertToFinalConfig()
+	conf, err := simplifiedConfig.convertToFinalConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert config: %w", err)
 	}
 
-	err = config.validateConfig()
+	err = conf.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	config.Flakes, err = config.filterConfigEntrys()
+	conf.Flakes, err = conf.filterAndExpandConfigEntrys()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	err = config.validateConfig()
+	err = conf.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	if config.Global.Debug {
+	if conf.Global.Debug {
 		fmt.Printf("\nFINAL: AFTER FILTERING\n\n")
-		godump.Dump(config)
+		godump.Dump(conf)
 	}
 
-	C = *config
 	// Config won't be changing after this point
 
-	return config, nil
+	return conf, nil
 }
 
 func (c *Config) validateConfig() error {
@@ -163,7 +159,7 @@ func (c *Config) validateConfig() error {
 // FilterConfigEntrys filters the configuration based on command-line or global selections.
 // An entry is kept if it matches all provided filters (flakes, configurations, machines, tags) and is not disabled.
 // If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
-func (c *Config) filterConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], error) {
+func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], error) {
 	cC := *c // Copy
 
 	sc, err := LoadSshConfig()
@@ -190,6 +186,15 @@ func (c *Config) filterConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], e
 			for machineName, machine := range configuration.Machines.AllFromFront() {
 				if machine == nil {
 					machine = &Machine{}
+					configuration.Machines.Set(machineName, machine)
+				}
+
+				machine.Phases = &MachinePhases{
+					Status: &PhaseStatus{},
+				}
+
+				machine.Logs = map[workflow_definition.WorkflowPhase]*Log{
+					workflow_definition.PhaseStatus: &Log{TimeAndState: &TimeAndState{}},
 				}
 
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {
@@ -203,7 +208,7 @@ func (c *Config) filterConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], e
 					allMachineTags = append(allMachineTags, configuration.Tags...)
 					allMachineTags = append(allMachineTags, machine.Tags...)
 
-					if !matchesTags(allMachineTags, C.Global.Filters.Tags) {
+					if !matchesTags(allMachineTags, cC.Global.Filters.Tags) {
 						configuration.Machines.Delete(machineName)
 						continue
 					}
@@ -211,7 +216,7 @@ func (c *Config) filterConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], e
 
 				if machineName.User.Username() != "" {
 					if machine.Ssh == nil {
-						machine.Ssh = &Ssh{}
+						machine.Ssh = &SshClient{}
 					}
 					machine.Ssh.Url, err = sc.RetriveFullParamsFromSshConfig(machineName)
 					if err != nil {

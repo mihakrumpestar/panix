@@ -7,9 +7,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (w *WorkflowExecutorForConfigurationAndMachine) executeBootstrapPhaseMachine(flakeName, configName string, machineName *url.URL, machine *config.Machine) error {
+func (w *Workflow) executeBootstrapPhaseMachine(flakeName, configName string, machineName *url.URL, machine *config.Machine) error {
 	// TODO: Implement nixos-anywhere bootstrap
-	if w.cfg.Verbose {
+	if w.state.Conf.Global.Verbose {
 		fmt.Printf("Bootstrap for machine %s/%s/%s: TODO - implement nixos-anywhere\n", flakeName, configName, machineName)
 	}
 
