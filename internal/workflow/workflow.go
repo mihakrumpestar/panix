@@ -3,104 +3,82 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"slices"
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/hook"
 	"github.com/pkg/errors"
 )
 
-type ActivationMetadata struct {
+type Workflow struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	state  *WorkflowState
+	hook   *hook.Hook
+}
+
+type WorkflowState struct {
+	Conf  *config.Config
+	Pool  pond.Pool
 	Error error
 }
 
-type WorkflowExecutor struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	cfg    *config.Config
-	meta   *Metadatas
-	hook   *hook.Hook
-	pool   pond.Pool
-}
+func NewWorkflow(ctx context.Context) (*Workflow, error) {
+	conf := ctx.Value(config.ContextConfigKey).(*config.Config)
 
-type Metadatas struct {
-	StatusPhaseMeta *StatusPhaseMeta
-	Error           error
-}
+	if conf == nil {
+		return nil, fmt.Errorf("%s key is nil/empty in workflow context", config.ContextConfigKey)
+	}
 
-type MetadatasBase struct {
-	groupPool pond.TaskGroup
-	Error     error
-}
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Global.Timeout)
 
-type WorkflowExecutorForConfigurationAndMachine struct {
-	ctx context.Context
-	cfg *config.Global
-}
-
-func NewWorkflowExecutor(ctx context.Context, cfg *config.Config) *WorkflowExecutor {
-	ctx, cancel := context.WithTimeout(ctx, cfg.Global.Timeout)
+	pool := pond.NewPool(conf.Global.Concurrency, pond.WithContext(ctxWithTimeout))
 
 	hookI := hook.NewHook()
 
-	return &WorkflowExecutor{
-		ctx:    ctx,
+	return &Workflow{
+		ctx:    ctxWithTimeout,
 		cancel: cancel,
-		cfg:    cfg,
-		meta:   &Metadatas{},
-		hook:   hookI,
-		pool:   pond.NewPool(cfg.Global.Concurrency),
-	}
+		state: &WorkflowState{
+			Conf: conf,
+			Pool: pool,
+		},
+		hook: hookI,
+	}, nil
 }
 
-func (w *WorkflowExecutor) Metadatas() *Metadatas {
-	return w.meta
+func (w *Workflow) State() *WorkflowState {
+	return w.state
 }
 
-func (w *WorkflowExecutor) GetChannel() <-chan uint64 {
+func (w *Workflow) GetChannel() <-chan uint64 {
 	return w.hook.GetChannel()
 }
 
-func (w *WorkflowExecutor) Cancel() context.CancelFunc {
+func (w *Workflow) Cancel() context.CancelFunc {
 	return w.cancel
 }
 
 // Helpers
 
-func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, function func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, configuration *config.Configuration) error) error {
-	if msBase == nil {
-		panic("msBase is not allowed to be nil")
-	}
-
-	if msBase.groupPool == nil {
-		msBase.groupPool = w.pool.NewGroupContext(w.ctx)
-	}
-	groupPool := msBase.groupPool
+func (w *Workflow) forEachFlakeConfiguration(function func(groupPool pond.TaskGroup, flakeName, configurationName string, configuration *config.Configuration) error) error {
+	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)
 
-	for flakeName, flake := range w.cfg.Flakes.AllFromFront() {
+	for flakeName, flake := range w.state.Conf.Flakes.AllFromFront() {
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
-			wp := &WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
-
-			bm := &executioner.BaseMeta{
-				MetadataID: executioner.MetadataID{
-					FlakeName:         flakeName,
-					ConfigurationName: configurationName,
-				},
-			}
-
-			if w.cfg.Global.RequireAllSuccess {
+			if w.state.Conf.Global.RequireAllSuccess { // This will make groupPool.Wait() exit on first error
 				groupPool.SubmitErr(func() error {
-					err := function(wp, bm, configuration)
+					err := function(groupPool, flakeName, configurationName, configuration)
 					errCacher = append(errCacher, err)
 					return err
 				})
 			} else {
 				groupPool.Submit(func() {
-					err := function(wp, bm, configuration)
+					err := function(groupPool, flakeName, configurationName, configuration)
 					errCacher = append(errCacher, err)
 				})
 			}
@@ -110,100 +88,53 @@ func (w *WorkflowExecutor) forEachFlakeConfiguration(msBase *MetadatasBase, func
 	err := groupPool.Wait()
 
 	if err != nil {
-		msBase.Error = errors.Wrapf(err, "forEachFlakeConfiguration: phase failed because of 'RequireAllSuccess'")
-		w.hook.OnUpdateHook()
-		return msBase.Error
+		return errors.Wrapf(err, "forEachFlakeConfiguration: failed because of 'RequireAllSuccess'")
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		msBase.Error = fmt.Errorf("forEachFlakeConfiguration: phase failed because of all machines failed this phase")
-		w.hook.OnUpdateHook()
-		return msBase.Error
+		return fmt.Errorf("forEachFlakeConfiguration: failed because of all machines failed this phase")
 	}
 
 	return nil
 }
 
-func (w *WorkflowExecutor) forEachConfigurationMachine(configuration *config.Configuration, msBase *MetadatasBase, bm *executioner.BaseMeta, function func(wp *WorkflowExecutorForConfigurationAndMachine, bm *executioner.BaseMeta, machine *config.Machine) error) error {
-	if configuration == nil {
-		panic("configuration  is not allowed to be nil")
+func (w *Workflow) forEachConfigurationMachine(groupPool pond.TaskGroup, flakeName, configurationName string, configuration *config.Configuration, function func(machineName url.URL, machine *config.Machine) error) error {
+	// If groupPool != nil means that we are using parent groupPool and we do not block
+	if groupPool == nil {
+		groupPool = w.state.Pool.NewGroup()
 	}
 
-	if msBase == nil {
-		panic("msBase  is not allowed to be nil")
-	}
-
-	if bm == nil {
-		panic("bm is not allowed to be nil")
-	}
-
-	// Make copy, otherwise each machine will share BaseMeta that shares same flake configuration
-
-	//if msBase.groupPool == nil {
-	//	msBase.groupPool = w.pool.NewGroupContext(w.ctx)
-	//}
-	//groupPool := msBase.groupPool
-	groupPool := w.pool.NewGroupContext(w.ctx)
-
-	errCacher := make([]error, 0)
-
+	// Here we don't care if all tasks fail since we have multiple configurations
 	for machineName, machine := range configuration.Machines.AllFromFront() {
-		wp := &WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
 
-		fmt.Println("machineName", machineName)
-
-		bm.MetadataID.MachineName = machineName
-
-		if w.cfg.Global.RequireAllSuccess {
+		if w.state.Conf.Global.RequireAllSuccess {
 			groupPool.SubmitErr(func() error {
-				err := function(wp, bm, machine)
-				errCacher = append(errCacher, err)
-				return err
+				return function(machineName, machine)
 			})
 		} else {
 			groupPool.Submit(func() {
-				err := function(wp, bm, machine)
-				errCacher = append(errCacher, err)
+				function(machineName, machine)
 			})
 		}
 	}
 
 	err := groupPool.Wait()
 	if err != nil {
-		msBase.Error = errors.Wrapf(err, "forEachConfigurationMachine: phase failed because of 'RequireAllSuccess'")
-		w.hook.OnUpdateHook()
-		return msBase.Error
-	}
-
-	if !slices.Contains(errCacher, nil) {
-		msBase.Error = fmt.Errorf("forEachConfigurationMachine: phase failed because of all machines failed this phase")
-		w.hook.OnUpdateHook()
-		return msBase.Error
+		return errors.Wrapf(err, "forEachConfigurationMachine: failed because of 'RequireAllSuccess'")
 	}
 
 	return nil
 }
 
-/*
-func forAllConfigurations(conf map[string]*config.Flake, sms []StatusMetadata, function func(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration)) {
-	for flakeName, flake := range conf {
-		for configurationName, configuration := range flake.Configurations {
+func (w *WorkflowState) expandFlakeConfigurationMachine(function func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine)) {
+	i := 0
 
-			// Checker that passes only flake configurations that have at least one machine that is reachable
-			atLeastOneValid := true
-			for _, sm := range sms {
-				if sm.FlakeName == flakeName && sm.ConfigurationName == configurationName && sm.Error != nil {
-					atLeastOneValid = false
-					continue
-				}
+	for flakeName, flake := range w.Conf.Flakes.AllFromFront() {
+		for configurationName, configuration := range flake.Configurations.AllFromFront() {
+			for machineName, machine := range configuration.Machines.AllFromFront() {
+				function(i, flakeName, configurationName, configuration, machineName, machine)
+				i++
 			}
-
-			if !atLeastOneValid {
-				continue
-			}
-
-			function(flakeName, configurationName, flake, configuration)
 		}
 	}
 }
-*/

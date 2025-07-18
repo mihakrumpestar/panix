@@ -1,13 +1,15 @@
 package executioner
 
-func (ex *Executioner) sshStream(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta), name string, args ...string) error {
+import "github.com/mihakrumpestar/panix/internal/config"
+
+func (ex *Executioner) sshStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log), name string, args ...string) error {
 
 	sshArgs := []string{"-q"} // Silance banners
 
 	//fmt.Printf("\nsshConfig: %+v\n\n", ex.sshConfig)
 
 	if ex.usesAlias {
-		sshArgs = append(sshArgs, ex.meta.MachineName.Hostname())
+		sshArgs = append(sshArgs, ex.machineName.Hostname())
 	} else {
 		// TODO: implement more than alias
 	}

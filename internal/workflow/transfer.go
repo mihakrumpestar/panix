@@ -5,7 +5,7 @@ import (
 )
 
 // This function is called by executeMachineTransfer for individual machine transfers
-func (w *WorkflowExecutor) transferToMachine(flakeName, configName, machineName string, machine *config.Machine, cm *ConfigurationMetadata) error {
+func (w *Workflow) transferToMachine(flakeName, configName, machineName string, machine *config.Machine) error {
 	/*
 		if cm.BuildOutputPath == "" {
 			return fmt.Errorf("machine %s/%s/%s has no build output path", flakeName, configName, machineName)

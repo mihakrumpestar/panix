@@ -1,6 +1,7 @@
 package panix
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -9,12 +10,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var configFile string
+
 var rootCmd = &cobra.Command{
 	Use:   "panix",
 	Short: "Universal NixOS Deployment Tool",
 	Long: `Panix - Universal NixOS Deployment Tool
 	// TODO: add proper description
 	`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		conf, err := config.LoadConfig(configFile, cmd.Flags())
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		ctxWithConf := context.WithValue(cmd.Context(), config.ContextConfigKey, conf)
+
+		cmd.SetContext(ctxWithConf)
+
+		return nil
+	},
 }
 
 func Execute() {
@@ -25,8 +40,6 @@ func Execute() {
 }
 
 func init() {
-	var configFile string
-
 	// Config file flag
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "panix.yml", "config file")
 
@@ -48,15 +61,4 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
 	rootCmd.PersistentFlags().Int("concurrency", concurrency, "number of concurrent operations")
 	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for operations in seconds")
-
-	cobra.OnInitialize(func() { initConfig(configFile) })
-}
-
-func initConfig(configFile string) {
-	_, err := config.LoadConfig(configFile, rootCmd.Flags())
-	if err != nil {
-		err = fmt.Errorf("failed to load config: %w", err)
-		fmt.Println(err)
-		os.Exit(1)
-	}
 }

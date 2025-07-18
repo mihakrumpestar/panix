@@ -4,7 +4,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (w *WorkflowExecutor) activateMachine(flakeName, configName, machineName string, machine *config.Machine, cm ConfigurationMetadata) error {
+func (w *Workflow) activateMachine(flakeName, configName, machineName string, machine *config.Machine) error {
 	/*
 		if cm.BuildOutputPath == "" {
 			return fmt.Errorf("machine %s/%s/%s has no build output path, cannot activate", flakeName, configName, machineName)

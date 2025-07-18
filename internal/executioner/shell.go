@@ -2,21 +2,20 @@ package executioner
 
 import (
 	"bufio"
-	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/alitto/pond/v2"
+	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (ex *Executioner) shellStream(onFailure func(*BaseMeta, error) error, onSuccess func(*BaseMeta), name string, args ...string) error {
-	if ex.meta.CommandOutputs == nil {
-		ex.meta.CommandOutputs = make([]*ExecutionerMetadata, 0)
+func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log), name string, args ...string) error {
+	if ex.log.Commands == nil {
+		ex.log.Commands = make([]*config.CommandLog, 0)
 	}
 
-	exm := &ExecutionerMetadata{}
-	ex.meta.CommandOutputs = append(ex.meta.CommandOutputs, exm)
+	exm := &config.CommandLog{}
+	ex.log.Commands = append(ex.log.Commands, exm)
 
 	// prepare initial event
 	cmd := exec.CommandContext(ex.ctx, name, args...)
@@ -25,9 +24,8 @@ func (ex *Executioner) shellStream(onFailure func(*BaseMeta, error) error, onSuc
 
 	// dry-run short-circuit
 	if ex.dryRun {
-		fmt.Println(exm.Command)
 		if onSuccess != nil {
-			onSuccess(ex.meta)
+			onSuccess(ex.log)
 		}
 		return nil
 	}
@@ -82,22 +80,20 @@ func (ex *Executioner) shellStream(onFailure func(*BaseMeta, error) error, onSuc
 	}
 
 	// Blocking stream with real time updates
-	exm.StartTime = time.Now()
+	exm.StartTimer()
 	ex.onUpdateHook()
 
-	exm.Error = execStream()
-	exm.EndTime = time.Now()
+	err := execStream()
 
-	if exm.Error != nil {
+	if err != nil {
 		if onFailure != nil {
-			ex.meta.Error = onFailure(ex.meta, exm.Error)
-		} else {
-			ex.meta.Error = exm.Error
+			err = onFailure(ex.log, err)
 		}
 	} else if onSuccess != nil {
-		onSuccess(ex.meta)
+		onSuccess(ex.log)
 	}
+	exm.EndTimerWithError(err)
 	ex.onUpdateHook()
 
-	return exm.Error
+	return err
 }

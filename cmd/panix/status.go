@@ -1,10 +1,11 @@
 package panix
 
 import (
-	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/tui"
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
+	"github.com/yassinebenaid/godump"
 )
 
 var statusCmd = &cobra.Command{
@@ -17,13 +18,18 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		executor := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
+		executor, err := workflow.NewWorkflow(cmd.Context())
+		if err != nil {
+			return err
+		}
 
-		go func() {
-			_ = executor.ExecuteStatusPhase()
-		}()
+		//go func() {
+		_ = executor.ExecuteStatusPhase()
+		fmt.Println("ExecuteStatusPhase finished")
+		godump.Dump(executor.State())
+		//}()
 
-		return tui.NewTui(executor.Metadatas(), executor.GetChannel(), executor.Cancel())
+		//return tui.NewTui(executor.State(), executor.GetChannel(), executor.Cancel())
 
 		//godump.Dump(executor.Metadatas())
 
