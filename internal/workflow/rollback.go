@@ -6,9 +6,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (w *WorkflowExecutor) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
+func (w *Workflow) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
 	// TODO: Implement rollback functionality
-	if w.cfg.Global.Verbose {
+	if w.state.Conf.Global.Verbose {
 		fmt.Printf("Rollback for machine %s/%s/%s: TODO - implement rollback\n", flakeName, configName, machineName)
 	}
 

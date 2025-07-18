@@ -2,18 +2,11 @@ package workflow
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/executioner"
 )
-
-type ConfigurationMetadata struct {
-	executioner.MetadataID
-	BuildOutputPath string
-	Error           error
-}
 
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
-func (w *WorkflowExecutor) ExecuteBuildPhase(sms []StatusMachineMeta) ([]ConfigurationMetadata, error) {
+func (w *Workflow) ExecuteBuildPhase() error {
 	/*
 		if w.cfg.Global.Verbose {
 			fmt.Println("Executing build phase across flake configurations")
@@ -73,11 +66,11 @@ func (w *WorkflowExecutor) ExecuteBuildPhase(sms []StatusMachineMeta) ([]Configu
 		//}
 	*/
 
-	return nil, nil
+	return nil
 }
 
 // This function is called by executeMachineBuild for individual machine builds
-func (w *WorkflowExecutorForConfigurationAndMachine) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake) (cm ConfigurationMetadata, err error) {
+func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake) (err error) {
 	/*
 		cm.MetadataID = MetadataID{
 			FlakeName:         flakeName,

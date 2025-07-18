@@ -2,10 +2,15 @@ package config
 
 import (
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/elliotchance/orderedmap/v3"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+)
+
+const (
+	ContextConfigKey = "config"
 )
 
 type Config struct {
@@ -19,7 +24,7 @@ type Global struct {
 	AutoBootstrap     bool                                `koanf:"autoBootstrap"`
 	LocalMachine      string                              `koanf:"localMachine"`
 	DryRun            bool                                `koanf:"dryRun"`
-	Ssh               *Ssh                                `koanf:"ssh"`
+	Ssh               *SshClient                          `koanf:"ssh"`
 	Timeout           time.Duration                       `koanf:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
 	Concurrency       int                                 `koanf:"concurrency"`
 	SkipPhases        []workflow_definition.WorkflowPhase `koanf:"skipPhases"`
@@ -36,32 +41,88 @@ type Filters struct {
 }
 
 type Flake struct {
-	Url             string `koanf:"url"` // Flake path or url
-	treeStyleParams `koanf:",squash"`
-	Configurations  *orderedmap.OrderedMap[string, *Configuration] `koanf:"configurations"`
+	Url               string `koanf:"url"` // Flake path or url
+	DefaultAttributes `koanf:",squash"`
+	Configurations    *orderedmap.OrderedMap[string, *Configuration] `koanf:"configurations"`
 }
+
+// Configuration
 
 type Configuration struct {
-	FlakeOutput     string `koanf:"flakeOutput"` // Override if not standard style
-	treeStyleParams `koanf:",squash"`
-	Machines        *orderedmap.OrderedMap[url.URL, *Machine] `koanf:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
+	FlakeOutput       string `koanf:"flakeOutput"` // Override if not standard style
+	DefaultAttributes `koanf:",squash"`
+	Machines          *orderedmap.OrderedMap[url.URL, *Machine] `koanf:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
+	// Meta
+	Logs   map[workflow_definition.WorkflowPhase]*Log
+	Phases ConfigurationPhases
 }
 
-type Machine struct {
-	treeStyleParams `koanf:",squash"`
+type CommandLog struct {
+	Command     string
+	Stdout      strings.Builder
+	Stderr      strings.Builder
+	StdCombined strings.Builder
+	*TimeAndState
 }
 
-type treeStyleParams struct {
-	Ssh      *Ssh           `koanf:"ssh,omitempty"`
-	Tags     []string       `koanf:"tags"`
-	Secrets  []SecretConfig `koanf:"secrets,omitempty"`
-	Disabled bool           `koanf:"disabled"`
-}
-
-type Ssh struct {
+type SshClient struct {
 	Url        *url.URL `koanf:"-"`
 	PrivateKey string   `koanf:"privateKey"`
 	PublicKey  string   `koanf:"publicKey"`
+}
+
+type ConfigurationPhases struct {
+	PhaseBuild *PhaseBuild
+}
+
+type PhaseBuild struct {
+	BuildOutputPath string
+}
+
+// Machine
+
+type Machine struct {
+	DefaultAttributes `koanf:",squash"`
+	// Meta
+	Logs   map[workflow_definition.WorkflowPhase]*Log
+	Phases *MachinePhases
+}
+
+type Log struct {
+	Commands     []*CommandLog
+	TimeAndState *TimeAndState
+}
+
+func (log *Log) LastCommand() *CommandLog {
+	if len(log.Commands) == 0 {
+		return &CommandLog{}
+	}
+
+	return log.Commands[len(log.Commands)-1]
+}
+
+type MachinePhases struct {
+	Status *PhaseStatus
+	//Transfer
+	//Secrets
+	//Activation
+}
+
+type PhaseStatus struct {
+	Reachable         bool
+	SSHConnectable    bool
+	Bootstrapped      bool
+	CurrentGeneration string
+	LastDeployTime    string
+}
+
+// Configuration and Machine
+
+type DefaultAttributes struct {
+	Ssh      *SshClient      `koanf:"ssh,omitempty"`
+	Tags     []string        `koanf:"tags"`
+	Secrets  []*SecretConfig `koanf:"secrets,omitempty"`
+	Disabled bool            `koanf:"disabled"` // This attribute does not play any role after filtering
 }
 
 type SecretConfig struct {
