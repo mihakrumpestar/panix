@@ -44,7 +44,7 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable() (*table.Table, error)
 			getStatusText(ps),
 			ps.CurrentGeneration,
 			ps.LastDeployTime,
-			err+fmt.Sprintf("%s", log.LastCommand().StdCombined.String()),
+			err,
 		)
 	})
 
@@ -52,7 +52,7 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable() (*table.Table, error)
 }
 
 func getStatusIcon(ps *config.PhaseStatus, log *config.Log) string {
-	if log.TimeAndState.GetTimeAndState().Finished {
+	if !log.TimeAndState.GetTimeAndState().Finished {
 		return spinner.New().View()
 	}
 	if !ps.Reachable {
