@@ -214,7 +214,7 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 					}
 				}
 
-				if machineName.User.Username() != "" {
+				if machineName.User.Username() == "" { // If using alias, we need to retrive ssh config values
 					if machine.Ssh == nil {
 						machine.Ssh = &SshClient{}
 					}

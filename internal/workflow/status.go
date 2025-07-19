@@ -62,16 +62,14 @@ func (w *Workflow) ExecuteStatusPhase() error {
 func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *config.Machine) error {
 	log := machine.Logs[workflow_definition.PhaseStatus]
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook())
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
 
 	sm := machine.Phases.Status
 
 	// TCP check
 	err := exc.PingStream(
 		func(log *config.Log, err error) error {
-			erre := fmt.Errorf("machine unreachable: %w", err)
-			fmt.Printf("%w", erre)
-			return erre
+			return fmt.Errorf("machine unreachable: %w", err)
 		},
 		func(log *config.Log) {
 			sm.Reachable = true
