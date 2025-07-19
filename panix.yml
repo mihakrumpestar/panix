@@ -17,4 +17,4 @@ flakes:
           docker-swarm:
       personal-workstation:
         machines:
-          personal-workstation:
+          personal-workstation: 

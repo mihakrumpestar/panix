@@ -12,7 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-func (state *WorkflowState) PrintStatusPhaseMachineTable() (*table.Table, error) {
+func (state *WorkflowState) PrintStatusPhaseMachineTable(width int) (*table.Table, error) {
 	if state.Conf.Global.DryRun {
 		if state.Conf.Global.Verbose {
 			fmt.Println("No status table when dry-run option is enabled")
@@ -20,9 +20,18 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable() (*table.Table, error)
 		return nil, nil
 	}
 
+	// Use provided width, with reasonable bounds and accounting for borders
+	usableWidth := width - 4 // Account for borders and padding
+	if usableWidth < 60 {
+		usableWidth = 60 // absolute minimum
+	} else if usableWidth > 200 {
+		usableWidth = 200 // reasonable maximum
+	}
+
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
-		Headers("INDEX", "ICON", "FLAKE", "CONFIGURATION", "MACHINE", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR")
+		Headers("INDEX", "ICON", "FLAKE", "CONFIGURATION", "MACHINE", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR").
+		Width(usableWidth)
 
 	state.expandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
 		ps := machine.Phases.Status
