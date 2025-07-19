@@ -20,9 +20,12 @@ func (h *Hook) Close() {
 	close(h.channel)
 }
 
-func (h *Hook) OnUpdateHook() func() {
-	return func() {
-		h.iteration++
-		h.channel <- h.iteration
+func (h *Hook) OnUpdateHook() {
+	h.iteration++
+	select {
+	case h.channel <- h.iteration:
+		// Successfully sent update
+	default:
+		// Channel is full or no receiver, skip without blocking
 	}
 }

@@ -3,9 +3,9 @@ package panix
 import (
 	"fmt"
 
+	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
-	"github.com/yassinebenaid/godump"
 )
 
 var statusCmd = &cobra.Command{
@@ -23,13 +23,13 @@ This includes:
 			return err
 		}
 
-		//go func() {
-		_ = executor.ExecuteStatusPhase()
-		fmt.Println("ExecuteStatusPhase finished")
-		godump.Dump(executor.State())
-		//}()
+		go func() {
+			_ = executor.ExecuteStatusPhase()
+			fmt.Println("ExecuteStatusPhase finished")
+			//godump.Dump(executor.State())
+		}()
 
-		//return tui.NewTui(executor.State(), executor.GetChannel(), executor.Cancel())
+		return tui.NewTui(executor.State(), executor.GetChannel(), executor.Cancel())
 
 		//godump.Dump(executor.Metadatas())
 
