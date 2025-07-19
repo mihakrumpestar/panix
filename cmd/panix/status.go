@@ -1,8 +1,6 @@
 package panix
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
@@ -25,15 +23,9 @@ This includes:
 
 		go func() {
 			_ = executor.ExecuteStatusPhase()
-			fmt.Println("ExecuteStatusPhase finished")
-			//godump.Dump(executor.State())
 		}()
 
 		return tui.NewTui(executor.State(), executor.GetChannel(), executor.Cancel())
-
-		//godump.Dump(executor.Metadatas())
-
-		return nil
 	},
 }
 
