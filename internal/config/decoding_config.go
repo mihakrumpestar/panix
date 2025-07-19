@@ -2,31 +2,33 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 
 	"github.com/elliotchance/orderedmap/v3"
 )
 
 // Simplified structures for unmarshalling with regular maps
 type decodingConfig struct {
-	Global Global                    `koanf:"global"`
-	Flakes map[string]*decodingFlake `koanf:"flakes"`
+	Global Global                    `yaml:"global"`
+	Flakes map[string]*decodingFlake `yaml:"flakes"`
 }
 
 type decodingFlake struct {
-	Url               string `koanf:"url"`
-	DefaultAttributes `koanf:",squash"`
-	Configurations    map[string]*decodingConfiguration `koanf:"configurations"`
+	Url               string `yaml:"url"`
+	DefaultAttributes `yaml:",inline"`
+	Configurations    map[string]*decodingConfiguration `yaml:"configurations"`
 }
 
 type decodingConfiguration struct {
-	FlakeOutput       string `koanf:"flakeOutput"`
-	DefaultAttributes `koanf:",squash"`
-	Machines          map[string]*decodingMachine `koanf:"machines"`
+	FlakeOutput       string `yaml:"flakeOutput"`
+	DefaultAttributes `yaml:",inline"`
+	Machines          map[string]*decodingMachine `yaml:"machines"`
 }
 
 type decodingMachine struct {
-	DefaultAttributes `koanf:",squash"`
+	DefaultAttributes `yaml:",inline"`
 }
 
 // convertToFinalConfig converts the simplified config structure to the final structure with ordered maps
@@ -37,7 +39,9 @@ func (sc *decodingConfig) convertToFinalConfig() (*Config, error) {
 	}
 
 	// Convert flakes
-	for flakeName, simplifiedFlake := range sc.Flakes {
+	for _, flakeName := range slices.Sorted(maps.Keys(sc.Flakes)) {
+		simplifiedFlake := sc.Flakes[flakeName]
+
 		flake := &Flake{
 			Url:               simplifiedFlake.Url,
 			DefaultAttributes: simplifiedFlake.DefaultAttributes,
@@ -47,18 +51,22 @@ func (sc *decodingConfig) convertToFinalConfig() (*Config, error) {
 		final.Flakes.Set(flakeName, flake)
 
 		// Convert configurations
-		for configName, simplifiedConfig := range simplifiedFlake.Configurations {
+		for _, configName := range slices.Sorted(maps.Keys(simplifiedFlake.Configurations)) {
+			simplifiedConfiguration := simplifiedFlake.Configurations[configName]
+
 			configuration := &Configuration{
-				FlakeOutput:       simplifiedConfig.FlakeOutput,
-				DefaultAttributes: simplifiedConfig.DefaultAttributes,
+				FlakeOutput:       simplifiedConfiguration.FlakeOutput,
+				DefaultAttributes: simplifiedConfiguration.DefaultAttributes,
 				Machines:          orderedmap.NewOrderedMap[url.URL, *Machine](),
 			}
 
 			flake.Configurations.Set(configName, configuration)
 
 			// Convert machines
-			for machineName, simplifiedMachine := range simplifiedConfig.Machines {
-				parsedMachineName, err := url.ParseRequestURI("ssh://" + machineName)
+			for _, machineName := range slices.Sorted(maps.Keys(simplifiedConfiguration.Machines)) {
+				simplifiedMachine := simplifiedConfiguration.Machines[machineName]
+
+				parsedMachineName, err := url.Parse("ssh://" + machineName)
 				if err != nil {
 					return nil, fmt.Errorf("invalid machine name %s, has to be formatted as URL: %w", machineName, err)
 				}

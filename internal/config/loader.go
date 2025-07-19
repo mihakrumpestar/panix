@@ -78,13 +78,14 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 	// First, unmarshal into simplifiedConfig structure with regular maps
 	simplifiedConfig := &decodingConfig{}
-	if err := k.UnmarshalWithConf("", &simplifiedConfig, koanf.UnmarshalConf{
-		Tag: "koanf",
+	err = k.UnmarshalWithConf("", &simplifiedConfig, koanf.UnmarshalConf{
+		Tag: "yaml",
 		DecoderConfig: &mapstructure.DecoderConfig{
 			WeaklyTypedInput: true,
 			Result:           &simplifiedConfig,
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("unable to decode into struct: %w", err)
 	}
 

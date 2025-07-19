@@ -19,11 +19,18 @@ type model struct {
 	updateCh     <-chan uint64
 	cancelParent context.CancelFunc
 	viewMode     string // "status", "detailed", or "table"
+	width        int    // terminal width for responsive rendering
 }
 
 func NewTui(state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) error {
-	p := tea.NewProgram(initialModel(state, updateCh, cancel))
-	_, err := p.Run()
+	p := tea.NewProgram(initialModel(state, updateCh, cancel), tea.WithAltScreen())
+	m, err := p.Run()
+
+	// Print the final view to stdout after exiting alt-screen
+	if finalModel, ok := m.(model); ok {
+		fmt.Println(finalModel.View())
+	}
+
 	if err != nil {
 		return err
 	}
@@ -37,6 +44,7 @@ func initialModel(state *workflow.WorkflowState, updateCh <-chan uint64, cancel 
 		updateCh:     updateCh,
 		cancelParent: cancel,
 		viewMode:     "status", // Default to status view
+		width:        120,      // Default width, will be updated by WindowSizeMsg
 	}
 }
 
@@ -83,6 +91,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			return m, nil
 		}
+
+	case tea.WindowSizeMsg:
+		// Update terminal width for responsive rendering
+		m.width = msg.Width
+		return m, nil
 
 	case errMsg:
 		m.err = msg
@@ -151,7 +164,7 @@ func (m model) View() string {
 			str = header + instructions + "No metadata available"
 			break
 		}
-		table, err := state.PrintStatusPhaseMachineTable()
+		table, err := state.PrintStatusPhaseMachineTable(m.width)
 		if err != nil {
 			str = fmt.Sprintf("Error: %v", err)
 		} else if table != nil {
