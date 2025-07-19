@@ -14,44 +14,44 @@ const (
 )
 
 type Config struct {
-	Global Global                                 `koanf:"global"`
-	Flakes *orderedmap.OrderedMap[string, *Flake] `koanf:"flakes"`
+	Global Global                                 `yaml:"global"`
+	Flakes *orderedmap.OrderedMap[string, *Flake] `yaml:"flakes"`
 }
 
 type Global struct {
-	Filters           Filters                             `koanf:"filters"`
-	RequireAllSuccess bool                                `koanf:"requireAllSuccess"`
-	AutoBootstrap     bool                                `koanf:"autoBootstrap"`
-	LocalMachine      string                              `koanf:"localMachine"`
-	DryRun            bool                                `koanf:"dryRun"`
-	Ssh               *SshClient                          `koanf:"ssh"`
-	Timeout           time.Duration                       `koanf:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
-	Concurrency       int                                 `koanf:"concurrency"`
-	SkipPhases        []workflow_definition.WorkflowPhase `koanf:"skipPhases"`
-	Verbose           bool                                `koanf:"verbose"`
-	Debug             bool                                `koanf:"debug"`
-	//Json              bool                                `koanf:"json"` // Maybe later
+	Filters           Filters                             `yaml:"filters"`
+	RequireAllSuccess bool                                `yaml:"requireAllSuccess"`
+	AutoBootstrap     bool                                `yaml:"autoBootstrap"`
+	LocalMachine      string                              `yaml:"localMachine"`
+	DryRun            bool                                `yaml:"dryRun"`
+	Ssh               *SshClient                          `yaml:"ssh"`
+	Timeout           time.Duration                       `yaml:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
+	Concurrency       int                                 `yaml:"concurrency"`
+	SkipPhases        []workflow_definition.WorkflowPhase `yaml:"skipPhases"`
+	Verbose           bool                                `yaml:"verbose"`
+	Debug             bool                                `yaml:"debug"`
+	//Json              bool                                `yaml:"json"` // Maybe later
 }
 
 type Filters struct {
-	Flakes         []string `koanf:"flakes"`
-	Configurations []string `koanf:"configurations"`
-	Machines       []string `koanf:"machines"`
-	Tags           []string `koanf:"tags"`
+	Flakes         []string `yaml:"flakes"`
+	Configurations []string `yaml:"configurations"`
+	Machines       []string `yaml:"machines"`
+	Tags           []string `yaml:"tags"`
 }
 
 type Flake struct {
-	Url               string `koanf:"url"` // Flake path or url
-	DefaultAttributes `koanf:",squash"`
-	Configurations    *orderedmap.OrderedMap[string, *Configuration] `koanf:"configurations"`
+	Url               string `yaml:"url"` // Flake path or url
+	DefaultAttributes `yaml:",inline"`
+	Configurations    *orderedmap.OrderedMap[string, *Configuration] `yaml:"configurations"`
 }
 
 // Configuration
 
 type Configuration struct {
-	FlakeOutput       string `koanf:"flakeOutput"` // Override if not standard style
-	DefaultAttributes `koanf:",squash"`
-	Machines          *orderedmap.OrderedMap[url.URL, *Machine] `koanf:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
+	FlakeOutput       string `yaml:"flakeOutput"` // Override if not standard style
+	DefaultAttributes `yaml:",inline"`
+	Machines          *orderedmap.OrderedMap[url.URL, *Machine] `yaml:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
 	// Meta
 	Logs   map[workflow_definition.WorkflowPhase]*Log
 	Phases ConfigurationPhases
@@ -66,9 +66,9 @@ type CommandLog struct {
 }
 
 type SshClient struct {
-	Url        *url.URL `koanf:"-"`
-	PrivateKey string   `koanf:"privateKey"`
-	PublicKey  string   `koanf:"publicKey"`
+	Url        *url.URL `yaml:"-"`
+	PrivateKey string   `yaml:"privateKey"`
+	PublicKey  string   `yaml:"publicKey"`
 }
 
 type ConfigurationPhases struct {
@@ -82,7 +82,7 @@ type PhaseBuild struct {
 // Machine
 
 type Machine struct {
-	DefaultAttributes `koanf:",squash"`
+	DefaultAttributes `yaml:",inline"`
 	// Meta
 	Logs   map[workflow_definition.WorkflowPhase]*Log
 	Phases *MachinePhases
@@ -95,7 +95,7 @@ type Log struct {
 
 func (log *Log) LastCommand() *CommandLog {
 	if len(log.Commands) == 0 {
-		return &CommandLog{}
+		return &CommandLog{TimeAndState: &TimeAndState{}}
 	}
 
 	return log.Commands[len(log.Commands)-1]
@@ -119,14 +119,14 @@ type PhaseStatus struct {
 // Configuration and Machine
 
 type DefaultAttributes struct {
-	Ssh      *SshClient      `koanf:"ssh,omitempty"`
-	Tags     []string        `koanf:"tags"`
-	Secrets  []*SecretConfig `koanf:"secrets,omitempty"`
-	Disabled bool            `koanf:"disabled"` // This attribute does not play any role after filtering
+	Ssh      *SshClient      `yaml:"ssh,omitempty"`
+	Tags     []string        `yaml:"tags"`
+	Secrets  []*SecretConfig `yaml:"secrets,omitempty"`
+	Disabled bool            `yaml:"disabled"` // This attribute does not play any role after filtering
 }
 
 type SecretConfig struct {
-	LocalPath  string `koanf:"localPath"`
-	RemotePath string `koanf:"remotePath"`
-	Mode       string `koanf:"mode"`
+	LocalPath  string `yaml:"localPath"`
+	RemotePath string `yaml:"remotePath"`
+	Mode       string `yaml:"mode"`
 }
