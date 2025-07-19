@@ -25,6 +25,10 @@ func (tas *TimeAndState) EndTimerWithError(err error) {
 }
 
 func (tas *TimeAndState) GetTimeAndState() TimeAndStateOutput {
+	if tas == nil {
+		return TimeAndStateOutput{}
+	}
+
 	return TimeAndStateOutput{
 		tas.startTime,
 		tas.endTime,

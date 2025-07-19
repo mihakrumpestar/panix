@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mihakrumpestar/panix/internal/workflow"
@@ -11,6 +12,7 @@ import (
 type errMsg error
 
 type updateMsg struct{}
+type tickMsg struct{}
 
 type model struct {
 	state        *workflow.WorkflowState
@@ -20,6 +22,7 @@ type model struct {
 	cancelParent context.CancelFunc
 	viewMode     string // "status", "detailed", or "table"
 	width        int    // terminal width for responsive rendering
+	spinnerFrame int    // for animated spinner
 }
 
 func NewTui(state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) error {
@@ -45,12 +48,21 @@ func initialModel(state *workflow.WorkflowState, updateCh <-chan uint64, cancel 
 		cancelParent: cancel,
 		viewMode:     "status", // Default to status view
 		width:        120,      // Default width, will be updated by WindowSizeMsg
+		spinnerFrame: 0,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	//return m.spinner.Tick
-	return m.listenForUpdates()
+	return tea.Batch(
+		m.listenForUpdates(),
+		m.tick(),
+	)
+}
+
+func (m model) tick() tea.Cmd {
+	return tea.Tick(time.Millisecond*100, func(time.Time) tea.Msg {
+		return tickMsg{}
+	})
 }
 
 func (m model) listenForUpdates() tea.Cmd {
@@ -105,6 +117,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Trigger re-render when update is received
 		return m, m.listenForUpdates()
 
+	case tickMsg:
+		// Update spinner frame for animation
+		m.spinnerFrame = (m.spinnerFrame + 1) % 4
+		return m, m.tick()
+
 	default:
 		var cmd tea.Cmd
 		return m, cmd
@@ -121,7 +138,7 @@ func (m model) View() string {
 
 	// Header with instructions
 	header := "\n=== Panix TUI ===\n"
-	instructions := "Press 'd' to toggle detailed view, 't' for table view, 'q' to quit\n\n"
+	instructions := "Press 'q' to quit\n\n"
 
 	// Create a defensive copy of metadata to avoid concurrent access issues
 	state := m.state
@@ -164,13 +181,13 @@ func (m model) View() string {
 			str = header + instructions + "No metadata available"
 			break
 		}
-		table, err := state.PrintStatusPhaseMachineTable(m.width)
+		combinedView, err := state.GetCombinedView(m.width, m.spinnerFrame)
 		if err != nil {
 			str = fmt.Sprintf("Error: %v", err)
-		} else if table != nil {
-			str = header + instructions + table.String()
+		} else if combinedView != "" {
+			str = header + instructions + combinedView
 		} else {
-			str = header + instructions + "No status data available"
+			str = header + instructions + "No data available"
 		}
 	}
 

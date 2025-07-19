@@ -5,14 +5,13 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-func (state *WorkflowState) PrintStatusPhaseMachineTable(width int) (*table.Table, error) {
+func (state *WorkflowState) PrintStatusPhaseMachineTable(width int, spinnerFrame int) (*table.Table, error) {
 	if state.Conf.Global.DryRun {
 		if state.Conf.Global.Verbose {
 			fmt.Println("No status table when dry-run option is enabled")
@@ -45,7 +44,7 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable(width int) (*table.Tabl
 
 		t.Row(
 			fmt.Sprintf("%d", i),
-			getStatusIcon(ps, log),
+			getStatusIcon(ps, log, spinnerFrame),
 			flakeName,
 			configurationName,
 			strings.TrimPrefix(machineName.String(), "ssh://"),
@@ -60,9 +59,11 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable(width int) (*table.Tabl
 	return t, nil
 }
 
-func getStatusIcon(ps *config.PhaseStatus, log *config.Log) string {
-	if !log.TimeAndState.GetTimeAndState().Finished {
-		return spinner.New().View()
+func getStatusIcon(ps *config.PhaseStatus, log *config.Log, spinnerFrame int) string {
+	tas := log.TimeAndState.GetTimeAndState()
+	if !tas.Finished {
+		spinners := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+		return spinners[spinnerFrame%len(spinners)]
 	}
 	if !ps.Reachable {
 		return "🔴"
