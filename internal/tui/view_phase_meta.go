@@ -1,8 +1,7 @@
-package workflow
+package tui
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -11,22 +10,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-// BuildLogView represents a Docker-style multi-step build log view
-type BuildLogView struct {
-	width int
-}
-
-// NewBuildLogView creates a new build log view with the specified width
-func NewBuildLogView(width int) *BuildLogView {
-	return &BuildLogView{width: width}
-}
-
 // Render generates the Docker-style build log view with tree structure
-func (v *BuildLogView) Render(state *WorkflowState, spinnerFrame int) string {
-	if state == nil {
-		return "No workflow state available"
-	}
-
+func (m *model) PrintBuildLogs() string {
 	var builder strings.Builder
 
 	// Header for the log view
@@ -35,70 +20,40 @@ func (v *BuildLogView) Render(state *WorkflowState, spinnerFrame int) string {
 		Foreground(lipgloss.Color("#00ADD8")).
 		Render("=== Build Logs ===\n"))
 
-	// Collect all entries in order
-	type machineEntry struct {
-		flakeName         string
-		configurationName string
-		configuration     *config.Configuration
-		machineName       url.URL
-		machine           *config.Machine
-	}
+	for flakeName, flake := range m.state.Conf.Flakes.AllFromFront() {
 
-	var entries []machineEntry
-	state.expandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
-		entries = append(entries, machineEntry{
-			flakeName:         flakeName,
-			configurationName: configurationName,
-			configuration:     configuration,
-			machineName:       machineName,
-			machine:           machine,
-		})
-	})
+		builder.WriteString(lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FF79C6")).
+			Render(fmt.Sprintf("\n📁 %s", flakeName)))
 
-	// Process entries in order, grouping by flake and configuration
-	currentFlake := ""
-	currentConfig := ""
+		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 
-	for _, entry := range entries {
-		// Flake header (only once per flake)
-		if entry.flakeName != currentFlake {
-			builder.WriteString(lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#FF79C6")).
-				Render(fmt.Sprintf("\n📁 %s", entry.flakeName)))
-			currentFlake = entry.flakeName
-			currentConfig = "" // Reset config when flake changes
-		}
-
-		// Configuration header (only once per configuration)
-		configKey := entry.flakeName + "/" + entry.configurationName
-		if configKey != currentConfig {
 			builder.WriteString(lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#8BE9FD")).
-				Render(fmt.Sprintf("\n  📦 %s", entry.configurationName)))
-			currentConfig = configKey
+				Render(fmt.Sprintf("\n  📦 %s", configurationName)))
+
+			// Process configuration logs (if any)
+			if configuration != nil {
+				m.renderLogsForTarget(&builder, configuration.Logs, "      ")
+			}
+
+			for machineName, machine := range configuration.Machines.AllFromFront() {
+				machineHeader := fmt.Sprintf("\n    🖥️  %s", strings.TrimPrefix(machineName.String(), "ssh://"))
+				builder.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#FFB86C")).
+					Render(machineHeader) + "\n")
+
+				m.renderLogsForTarget(&builder, machine.Logs, "      ")
+			}
 		}
-
-		// Machine header
-		machineHeader := fmt.Sprintf("\n    🖥️  %s", strings.TrimPrefix(entry.machineName.String(), "ssh://"))
-		builder.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFB86C")).
-			Render(machineHeader) + "\n")
-
-		// Process configuration logs (if any)
-		if entry.configuration != nil {
-			v.renderLogsForTarget(&builder, entry.configuration.Logs, "      ", spinnerFrame)
-		}
-
-		// Process machine logs
-		v.renderLogsForTarget(&builder, entry.machine.Logs, "      ", spinnerFrame)
 	}
 
 	return builder.String()
 }
 
 // renderLogsForTarget renders logs for a specific target (configuration or machine)
-func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[workflow_definition.WorkflowPhase]*config.Log, indent string, spinnerFrame int) {
+func (m *model) renderLogsForTarget(builder *strings.Builder, logs map[workflow_definition.WorkflowPhase]*config.Log, indent string) {
 	if len(logs) == 0 {
 		return
 	}
@@ -114,10 +69,9 @@ func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[wo
 		workflow_definition.PhaseRollback,
 	}
 
-	// Spinner characters for animation
-	spinners := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-
 	for _, phase := range phases {
+		xpath := string(phase)
+
 		log, exists := logs[phase]
 		if !exists || log == nil {
 			continue
@@ -149,7 +103,7 @@ func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[wo
 		// Phase header with spinner on left and duration on right
 		spinnerPrefix := ""
 		if !tas.StartTime.IsZero() && !tas.Finished {
-			spinnerChar := spinners[spinnerFrame%len(spinners)]
+			spinnerChar := m.modelView.spinners.Spinner(xpath).View()
 			spinnerPrefix = spinnerChar + " "
 		}
 
@@ -157,7 +111,7 @@ func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[wo
 
 		// Calculate padding for right-aligned duration
 		if durationStr != "" {
-			availableWidth := v.width - len(phaseHeader) - len(durationStr) - len(indent) - 2
+			availableWidth := m.modelView.width - len(phaseHeader) - len(durationStr) - len(indent) - 2
 			if availableWidth > 0 {
 				phaseHeader += strings.Repeat(" ", availableWidth) + durationStr
 			} else {
@@ -179,6 +133,8 @@ func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[wo
 
 		// Commands and their output
 		for cmdIdx, cmd := range log.Commands {
+			xpath += cmd.Command
+
 			if cmd.Command != "" {
 				// Calculate command duration
 				cmdTas := cmd.TimeAndState.GetTimeAndState()
@@ -194,14 +150,14 @@ func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[wo
 				// Command header with spinner on left and duration on right
 				cmdSpinner := ""
 				if !cmdTas.StartTime.IsZero() && !cmdTas.Finished {
-					spinnerChar := spinners[spinnerFrame%len(spinners)]
+					spinnerChar := m.modelView.spinners.Spinner(xpath).View()
 					cmdSpinner = spinnerChar + " "
 				}
 
 				cmdHeader := fmt.Sprintf("%s    %s[%d/%d] %s", indent, cmdSpinner, cmdIdx+1, len(log.Commands), cmd.Command)
 				if durationStr != "" {
 					// Calculate padding to right-align duration
-					availableWidth := v.width - len(cmdHeader) - len(durationStr) - len(indent) - 4
+					availableWidth := m.modelView.width - len(cmdHeader) - len(durationStr) - len(indent) - 4
 					if availableWidth > 0 {
 						cmdHeader += strings.Repeat(" ", availableWidth) + durationStr
 					} else {
@@ -236,42 +192,4 @@ func (v *BuildLogView) renderLogsForTarget(builder *strings.Builder, logs map[wo
 
 		builder.WriteString("\n")
 	}
-}
-
-// Helper method to get configuration from state
-func (state *WorkflowState) getConfiguration(flakeName, configName string) *config.Configuration {
-	var foundConfig *config.Configuration
-	state.expandFlakeConfigurationMachine(func(i int, fName, cName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
-		if fName == flakeName && cName == configName && foundConfig == nil {
-			foundConfig = configuration
-		}
-	})
-	return foundConfig
-}
-
-// PrintBuildLogs returns the Docker-style build logs as a string
-func (state *WorkflowState) PrintBuildLogs(width int, spinnerFrame int) string {
-	view := NewBuildLogView(width)
-	return view.Render(state, spinnerFrame)
-}
-
-// GetCombinedView returns both the status table and build logs combined
-func (state *WorkflowState) GetCombinedView(width int, spinnerFrame int) (string, error) {
-	var builder strings.Builder
-
-	// Get status table
-	statusTable, err := state.PrintStatusPhaseMachineTable(width, spinnerFrame)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate status table: %w", err)
-	}
-
-	if statusTable != nil {
-		builder.WriteString(statusTable.String())
-	}
-
-	// Add build logs
-	buildLogs := state.PrintBuildLogs(width, spinnerFrame)
-	builder.WriteString(buildLogs)
-
-	return builder.String(), nil
 }
