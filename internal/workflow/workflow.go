@@ -49,6 +49,10 @@ func NewWorkflow(ctx context.Context) (*Workflow, error) {
 	}, nil
 }
 
+func (w *Workflow) Ctx() context.Context {
+	return w.ctx
+}
+
 func (w *Workflow) State() *WorkflowState {
 	return w.state
 }

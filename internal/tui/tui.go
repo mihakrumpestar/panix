@@ -21,6 +21,7 @@ var (
 )
 
 type model struct {
+	ctx          context.Context
 	state        *workflow.WorkflowState
 	quitting     bool
 	err          error
@@ -30,15 +31,17 @@ type model struct {
 }
 
 type modelView struct {
-	mode     TuiViewMode
-	width    int
-	height   int
-	spinners *Spinners
+	mode        TuiViewMode
+	width       int
+	height      int
+	spinners    *Spinners
+	debugOutput strings.Builder
 	//viewport viewport.Model
 }
 
-func NewTui(state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) error {
+func NewTui(ctx context.Context, state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) error {
 	p := tea.NewProgram(model{
+		ctx:          ctx,
 		state:        state,
 		updateCh:     updateCh,
 		cancelParent: cancel,
@@ -94,6 +97,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			m.quitting = true
 			m.cancelParent()
+
+			// Block quiting until Workflow finalizes and terminates its tasks
+			<-m.ctx.Done()
+
 			return m, tea.Quit
 		case "d":
 			// Toggle between status and detailed views
@@ -215,6 +222,7 @@ func (m model) View() string {
 	if m.state.Conf.Global.Debug {
 		debugHeader := "\n\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
+		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)
 	}
 
