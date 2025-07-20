@@ -30,7 +30,6 @@ type model struct {
 }
 
 type modelView struct {
-	ready    bool
 	mode     TuiViewMode
 	width    int
 	height   int
@@ -45,6 +44,8 @@ func NewTui(state *workflow.WorkflowState, updateCh <-chan uint64, cancel contex
 		cancelParent: cancel,
 		modelView: modelView{mode: TuiViewModeAll,
 			spinners: NewSpinners(),
+			width:    120,
+			height:   120,
 		},
 	},
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
@@ -63,6 +64,7 @@ func NewTui(state *workflow.WorkflowState, updateCh <-chan uint64, cancel contex
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
+		tea.WindowSize(),
 		m.stateUpdateHook(),
 		//m.modelView.spinner.Tick,
 	)
@@ -95,10 +97,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "d":
 			// Toggle between status and detailed views
-			if m.modelView.mode == TuiViewModeAll {
+			switch m.modelView.mode {
+			case TuiViewModeAll:
 				m.modelView.mode = TuiViewModeLogs
-			} else {
+			case TuiViewModeLogs:
 				m.modelView.mode = TuiViewModeStatus
+			case TuiViewModeStatus:
+				fallthrough
+			default:
+				m.modelView.mode = TuiViewModeAll
 			}
 			return m, nil
 		default:
@@ -164,12 +171,12 @@ func (m model) View() string {
 	header := "\n=== Panix TUI ===\n"
 	instructions := "Press 'q' to quit, 'd' to switch modes\n\n"
 	headerAndInstructions := header + instructions
+	builder.WriteString(headerAndInstructions)
 
 	// Create a defensive copy of metadata to avoid concurrent access issues
-	state := m.state
 
-	if state == nil {
-		builder.WriteString(headerAndInstructions + "No state available")
+	if m.state == nil {
+		builder.WriteString("No state available")
 		return builder.String()
 	}
 
@@ -179,11 +186,11 @@ func (m model) View() string {
 	case TuiViewModeStatus:
 		view := m.PrintStatusPhaseMachineTable()
 		if view == "" {
-			builder.WriteString(headerAndInstructions + "No data available")
+			builder.WriteString("No data available")
 			return builder.String()
 		}
 
-		builder.WriteString(headerAndInstructions + view)
+		builder.WriteString(view)
 
 		if m.modelView.mode != TuiViewModeAll {
 			break
@@ -193,11 +200,11 @@ func (m model) View() string {
 	case TuiViewModeLogs:
 		view := m.PrintBuildLogs()
 		if view == "" {
-			builder.WriteString(headerAndInstructions + "No data available")
+			builder.WriteString("No data available")
 			return builder.String()
 		}
 
-		builder.WriteString(headerAndInstructions + view)
+		builder.WriteString(view)
 	}
 
 	if m.quitting {
@@ -206,7 +213,7 @@ func (m model) View() string {
 	}
 
 	if m.state.Conf.Global.Debug {
-		debugHeader := "\n=== Debug ===\n"
+		debugHeader := "\n\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		builder.WriteString(debugHeader + debugContent)
 	}
