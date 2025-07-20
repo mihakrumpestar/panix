@@ -25,7 +25,7 @@ This includes:
 			_ = executor.ExecuteStatusPhase()
 		}()
 
-		return tui.NewTui(executor.State(), executor.GetChannel(), executor.Cancel())
+		return tui.NewTui(executor.Ctx(), executor.State(), executor.GetChannel(), executor.Cancel())
 	},
 }
 

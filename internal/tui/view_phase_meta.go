@@ -183,11 +183,14 @@ func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
 	lw := lipgloss.Width(left)
 	rw := lipgloss.Width(right)
 
+	m.modelView.debugOutput.WriteString(fmt.Sprintf("%d+%d > %d\n", lw, rw, avail))
+
 	// Will have to cut left as it goes over the terminal width
 	if lw+rw > avail {
 		maxSafeLeftWidth := avail - rw
 
-		fmt.Println("avail:", avail, "lw:", lw, "rw:", rw, "maxSafeLeftWidth:", maxSafeLeftWidth)
+		msg := fmt.Sprint("avail:", avail, "lw:", lw, "rw:", rw, "maxSafeLeftWidth:", maxSafeLeftWidth, "\n")
+		m.modelView.debugOutput.WriteString(msg)
 
 		left = left[:maxSafeLeftWidth-3] + "..."
 	}
