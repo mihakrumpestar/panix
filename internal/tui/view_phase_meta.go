@@ -141,7 +141,7 @@ func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.Workf
 				cmdText := m.MostLeftAndMostRight(
 					12,
 					m.LeftSideIconOrSpinner(xpath, iconOnFinished, cmdLabel, cmdTas),
-					m.RightSideDuration(tas),
+					m.RightSideDuration(cmdTas),
 				)
 
 				cmdHeader := commandStyle.Render(cmdText)
@@ -178,34 +178,29 @@ func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.Workf
 
 func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
 	termW := m.modelView.width
-
 	avail := termW - prefixLen
+
 	lw := lipgloss.Width(left)
 	rw := lipgloss.Width(right)
 
-	m.modelView.debugOutput.WriteString(fmt.Sprintf("%d+%d > %d\n", lw, rw, avail))
-
-	// Will have to cut left as it goes over the terminal width
-	if lw+rw > avail {
-		maxSafeLeftWidth := avail - rw
-
-		msg := fmt.Sprint("avail:", avail, "lw:", lw, "rw:", rw, "maxSafeLeftWidth:", maxSafeLeftWidth, "\n")
-		m.modelView.debugOutput.WriteString(msg)
-
-		left = left[:maxSafeLeftWidth-3] + "..."
+	// Ensure we don't exceed available width
+	if rw >= avail {
+		// Right side too big, truncate it
+		right = lipgloss.NewStyle().MaxWidth(avail).Render(right)
+		return right
 	}
 
-	leftBlock := lipgloss.Place(
-		prefixLen+lw, 1,
-		lipgloss.Left, lipgloss.Center,
-		left,
-	)
+	// Calculate max width for left side
+	maxLeft := avail - rw
+	if lw > maxLeft {
+		// Truncate left side
+		truncatingIndicator := "...  "
+		left = lipgloss.NewStyle().MaxWidth(maxLeft-lipgloss.Width(truncatingIndicator)).Render(left) + truncatingIndicator
+	}
 
-	rightBlock := lipgloss.Place(
-		avail-lw, 1,
-		lipgloss.Right, lipgloss.Center,
-		right,
-	)
+	// Create layout with lipgloss
+	leftBlock := lipgloss.NewStyle().Width(avail - rw).Render(left)
+	rightBlock := lipgloss.NewStyle().Width(rw).Align(lipgloss.Right).Render(right)
 
 	return lipgloss.JoinHorizontal(0, leftBlock, rightBlock)
 }
