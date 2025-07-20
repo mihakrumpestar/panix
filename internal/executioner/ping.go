@@ -1,8 +1,6 @@
 package executioner
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
@@ -12,8 +10,13 @@ import (
 func (ex *Executioner) PingStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log)) error {
 	// 1) local short‐circuit
 	if ex.local {
+		tas := &config.TimeAndState{}
+		tas.StartTimer()
+		tas.EndTimer()
+
 		exm := &config.CommandLog{
-			Command: "ping (local) → skipped",
+			Command:      "ping (local) → skipped",
+			TimeAndState: tas,
 		}
 
 		if ex.log.Commands == nil {
@@ -34,7 +37,7 @@ func (ex *Executioner) PingStream(onFailure func(*config.Log, error) error, onSu
 	if !ex.usesAlias {
 		host = ex.machineSshConfig.Url.Host
 	}
-	args = append(args, host, fmt.Sprintf("%s", ex.machineSshConfig.Url.Port()))
+	args = append(args, host, ex.machineSshConfig.Url.Port())
 
 	// 3) delegate to shellStream
 	return ex.shellStream(onFailure, onSuccess, "nc", args...)

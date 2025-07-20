@@ -16,7 +16,6 @@ import (
 	"github.com/knadh/koanf/v2"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/pflag"
-	"github.com/yassinebenaid/godump"
 )
 
 // LoadConfig reads and parses the config file.
@@ -92,10 +91,10 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	// Convert timeout from miliseconds to seconds for duration
 	simplifiedConfig.Global.Timeout *= time.Second
 
-	if simplifiedConfig.Global.Debug {
-		fmt.Printf("\nBEFORE CONVERTING\n\n")
-		godump.Dump(simplifiedConfig)
-	}
+	//if simplifiedConfig.Global.Debug {
+	//	fmt.Printf("\nBEFORE CONVERTING\n\n")
+	//	godump.Dump(simplifiedConfig)
+	//}
 
 	// Convert simplified structure to final structure with ordered maps
 	conf, err := simplifiedConfig.convertToFinalConfig()
@@ -118,10 +117,10 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	if conf.Global.Debug {
-		fmt.Printf("\nFINAL: AFTER FILTERING\n\n")
-		godump.Dump(conf)
-	}
+	//if conf.Global.Debug {
+	//	fmt.Printf("\nFINAL: AFTER FILTERING\n\n")
+	//	godump.Dump(conf)
+	//}
 
 	// Config won't be changing after this point
 

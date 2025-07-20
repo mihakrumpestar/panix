@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
@@ -20,42 +21,79 @@ func (m *model) PrintBuildLogs() string {
 		Foreground(lipgloss.Color("#00ADD8")).
 		Render("=== Build Logs ===\n"))
 
-	for flakeName, flake := range m.state.Conf.Flakes.AllFromFront() {
+	enumeratorStyle := lipgloss.NewStyle()
 
-		builder.WriteString(lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FF79C6")).
-			Render(fmt.Sprintf("\n📁 %s", flakeName)))
+	// Define styles for different tree elements
+	flakeStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#F1FA8C"))
+
+	configStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FFB86C"))
+
+	machineStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#8BE9FD"))
+
+	phaseStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF79C6"))
+
+	commandStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#BD93F9"))
+
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF5555"))
+
+	// Build separate trees for each flake
+	for flakeName, flake := range m.state.Conf.Flakes.AllFromFront() {
+		flakeTree := tree.New().
+			Root(flakeStyle.Render(fmt.Sprintf("📁 %s", flakeName))).
+			Enumerator(tree.RoundedEnumerator).
+			EnumeratorStyle(enumeratorStyle)
 
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
+			configNode := tree.New().
+				Root(configStyle.Render(fmt.Sprintf("📦 %s", configurationName)))
 
-			builder.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#8BE9FD")).
-				Render(fmt.Sprintf("\n  📦 %s", configurationName)))
-
-			// Process configuration logs (if any)
-			if configuration != nil {
-				m.renderLogsForTarget(&builder, configuration.Logs, "      ")
+			// Add configuration logs directly (no "Logs" intermediate node)
+			if configuration != nil && len(configuration.Logs) > 0 {
+				xpath := flakeName + configurationName
+				phaseNodes := m.buildPhaseNodes(xpath, configuration.Logs, phaseStyle, commandStyle, errorStyle)
+				for _, phaseNode := range phaseNodes {
+					configNode.Child(phaseNode)
+				}
 			}
 
+			// Add machines
 			for machineName, machine := range configuration.Machines.AllFromFront() {
-				machineHeader := fmt.Sprintf("\n    🖥️  %s", strings.TrimPrefix(machineName.String(), "ssh://"))
-				builder.WriteString(lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#FFB86C")).
-					Render(machineHeader) + "\n")
+				machineNode := tree.New().
+					Root(machineStyle.Render(fmt.Sprintf("🖥️  %s", strings.TrimPrefix(machineName.String(), "ssh://")))).Offset(0, 4)
 
-				m.renderLogsForTarget(&builder, machine.Logs, "      ")
+				if len(machine.Logs) > 0 {
+					xpath := flakeName + configurationName + machineName.String()
+					phaseNodes := m.buildPhaseNodes(xpath, machine.Logs, phaseStyle, commandStyle, errorStyle)
+					for _, phaseNode := range phaseNodes {
+						machineNode.Child(phaseNode)
+					}
+				}
+
+				configNode.Child(machineNode)
 			}
+
+			flakeTree.Child(configNode)
 		}
+
+		builder.WriteString("\n" + flakeTree.String())
 	}
 
 	return builder.String()
 }
 
-// renderLogsForTarget renders logs for a specific target (configuration or machine)
-func (m *model) renderLogsForTarget(builder *strings.Builder, logs map[workflow_definition.WorkflowPhase]*config.Log, indent string) {
+// buildPhaseNodes builds individual phase nodes for direct inclusion in the tree
+func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.WorkflowPhase]*config.Log, phaseStyle, commandStyle, errorStyle lipgloss.Style) []*tree.Tree {
+	phaseNodes := make([]*tree.Tree, 0)
+
 	if len(logs) == 0 {
-		return
+		return phaseNodes
 	}
 
 	// Process all phases in order
@@ -70,126 +108,131 @@ func (m *model) renderLogsForTarget(builder *strings.Builder, logs map[workflow_
 	}
 
 	for _, phase := range phases {
-		xpath := string(phase)
-
 		log, exists := logs[phase]
 		if !exists || log == nil {
 			continue
 		}
 
-		// Calculate phase duration
+		xpath += string(phase)
 		tas := log.TimeAndState.GetTimeAndState()
-		var durationStr string
-		var statusIcon string
-		var statusColor lipgloss.Color
 
-		if !tas.StartTime.IsZero() && !tas.EndTime.IsZero() {
-			duration := tas.EndTime.Sub(tas.StartTime)
-			durationStr = fmt.Sprintf("(%.2fs)", duration.Seconds())
-			statusIcon = "✓"
-			statusColor = "#50FA7B"
-		} else if !tas.StartTime.IsZero() && !tas.Finished {
-			// Live elapsed time
-			elapsed := time.Since(tas.StartTime)
-			durationStr = fmt.Sprintf("(%.2fs)", elapsed.Seconds())
-			statusIcon = "⟳"
-			statusColor = "#F1FA8C"
-		} else if tas.Error != nil {
-			durationStr = "(failed)"
-			statusIcon = "✗"
-			statusColor = "#FF5555"
-		}
+		// Phase header with spinner and right-aligned timing
+		iconOnFinished := "📋 "
+		phaseLabel := strings.ToUpper(string(phase))
 
-		// Phase header with spinner on left and duration on right
-		spinnerPrefix := ""
-		if !tas.StartTime.IsZero() && !tas.Finished {
-			spinnerChar := m.modelView.spinners.Spinner(xpath).View()
-			spinnerPrefix = spinnerChar + " "
-		}
+		phaseText := m.MostLeftAndMostRight(
+			12,
+			m.LeftSideIconOrSpinner(xpath, iconOnFinished, phaseLabel, tas),
+			m.RightSideDuration(tas),
+		)
 
-		phaseHeader := fmt.Sprintf("%s%s%s", indent, spinnerPrefix, strings.ToUpper(string(phase)))
-
-		// Calculate padding for right-aligned duration
-		if durationStr != "" {
-			availableWidth := m.modelView.width - len(phaseHeader) - len(durationStr) - len(indent) - 2
-			if availableWidth > 0 {
-				phaseHeader += strings.Repeat(" ", availableWidth) + durationStr
-			} else {
-				phaseHeader += " " + durationStr
-			}
-		}
-
-		builder.WriteString(lipgloss.NewStyle().
-			Foreground(statusColor).
-			Render(phaseHeader) + "\n")
-
-		// Show error details if failed
-		if tas.Error != nil {
-			errorMsg := fmt.Sprintf("%s  %s %v", indent, statusIcon, tas.Error)
-			builder.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF5555")).
-				Render(errorMsg) + "\n")
-		}
+		phaseHeader := phaseStyle.Render(phaseText)
+		phaseTree := tree.New().Root(phaseHeader)
 
 		// Commands and their output
 		for cmdIdx, cmd := range log.Commands {
-			xpath += cmd.Command
-
 			if cmd.Command != "" {
-				// Calculate command duration
-				cmdTas := cmd.TimeAndState.GetTimeAndState()
-				var durationStr string
-				if !cmdTas.StartTime.IsZero() && !cmdTas.EndTime.IsZero() {
-					duration := cmdTas.EndTime.Sub(cmdTas.StartTime)
-					durationStr = fmt.Sprintf("(%.2fs)", duration.Seconds())
-				} else if !cmdTas.StartTime.IsZero() && !cmdTas.Finished {
-					elapsed := time.Since(cmdTas.StartTime)
-					durationStr = fmt.Sprintf("(%.2fs)", elapsed.Seconds())
-				}
+				xpath += cmd.Command
+				cmdTas := cmd.GetTimeAndState()
 
-				// Command header with spinner on left and duration on right
-				cmdSpinner := ""
-				if !cmdTas.StartTime.IsZero() && !cmdTas.Finished {
-					spinnerChar := m.modelView.spinners.Spinner(xpath).View()
-					cmdSpinner = spinnerChar + " "
-				}
+				iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
+				cmdLabel := cmd.Command
 
-				cmdHeader := fmt.Sprintf("%s    %s[%d/%d] %s", indent, cmdSpinner, cmdIdx+1, len(log.Commands), cmd.Command)
-				if durationStr != "" {
-					// Calculate padding to right-align duration
-					availableWidth := m.modelView.width - len(cmdHeader) - len(durationStr) - len(indent) - 4
-					if availableWidth > 0 {
-						cmdHeader += strings.Repeat(" ", availableWidth) + durationStr
-					} else {
-						cmdHeader += " " + durationStr
-					}
-				}
+				cmdText := m.MostLeftAndMostRight(
+					12,
+					m.LeftSideIconOrSpinner(xpath, iconOnFinished, cmdLabel, cmdTas),
+					m.RightSideDuration(tas),
+				)
 
-				builder.WriteString(lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#BD93F9")).
-					Render(cmdHeader) + "\n")
+				cmdHeader := commandStyle.Render(cmdText)
+				cmdTree := tree.New().Root(cmdHeader)
 
 				// Command output
 				output := strings.TrimSpace(cmd.StdCombined.String())
 				if output != "" {
-					lines := strings.Split(output, "\n")
-					for _, line := range lines {
-						if strings.TrimSpace(line) != "" {
-							builder.WriteString(fmt.Sprintf("%s      %s\n", indent, line))
-						}
-					}
+					cmdTree.Child(output)
 				}
 
 				// Command error status
 				if cmdTas.Error != nil {
-					status := fmt.Sprintf("%s    ✗ Command failed: %v", indent, cmdTas.Error)
-					builder.WriteString(lipgloss.NewStyle().
-						Foreground(lipgloss.Color("#FF5555")).
-						Render(status) + "\n")
+					cmdTree.Child(errorStyle.Render(fmt.Sprintf("✗ Command failed: %v", cmdTas.Error)))
 				}
+
+				phaseTree.Child(cmdTree)
 			}
 		}
 
-		builder.WriteString("\n")
+		// Show error details if failed
+		if tas.Error != nil {
+			errorMsg := errorStyle.Render(fmt.Sprintf("✗ Phase failed: %v", tas.Error))
+			phaseTree.Child(errorMsg)
+		}
+
+		phaseNodes = append(phaseNodes, phaseTree)
 	}
+
+	return phaseNodes
+}
+
+// Helpers
+
+func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
+	termW := m.modelView.width
+
+	avail := termW - prefixLen
+	lw := lipgloss.Width(left)
+	rw := lipgloss.Width(right)
+
+	// Will have to cut left as it goes over the terminal width
+	if lw+rw > avail {
+		maxSafeLeftWidth := avail - rw
+
+		fmt.Println("avail:", avail, "lw:", lw, "rw:", rw, "maxSafeLeftWidth:", maxSafeLeftWidth)
+
+		left = left[:maxSafeLeftWidth-3] + "..."
+	}
+
+	leftBlock := lipgloss.Place(
+		prefixLen+lw, 1,
+		lipgloss.Left, lipgloss.Center,
+		left,
+	)
+
+	rightBlock := lipgloss.Place(
+		avail-lw, 1,
+		lipgloss.Right, lipgloss.Center,
+		right,
+	)
+
+	return lipgloss.JoinHorizontal(0, leftBlock, rightBlock)
+}
+
+func (m *model) RightSideDuration(tas config.TimeAndStateOutput) string {
+	var durationStr string
+
+	if tas.Started && tas.Finished {
+		duration := tas.EndTime.Sub(tas.StartTime)
+		durationStr = fmt.Sprintf("(%.2fs)", duration.Seconds())
+	} else if tas.Started && !tas.Finished {
+		// Live elapsed time
+		elapsed := time.Since(tas.StartTime)
+		durationStr = fmt.Sprintf("(%.2fs)", elapsed.Seconds())
+	}
+
+	return durationStr
+}
+
+func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content string, tas config.TimeAndStateOutput) string {
+	var iconOrSpinner string
+
+	if tas.Started && tas.Finished {
+		iconOrSpinner = iconOnFinished
+	} else if tas.Started && !tas.Finished {
+		// Spinner
+		iconOrSpinner = m.modelView.spinners.Spinner(spinnerXpath).View()
+	}
+
+	final := iconOrSpinner + content
+
+	return final
 }
