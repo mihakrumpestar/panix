@@ -3,16 +3,22 @@ package tui
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 )
 
-type errMsg error
+type stateUpdateHookMsg struct{}
 
-type updateMsg struct{}
-type tickMsg struct{}
+type TuiViewMode string
+
+var (
+	TuiViewModeAll    TuiViewMode = "all"
+	TuiViewModeStatus TuiViewMode = "status"
+	TuiViewModeLogs   TuiViewMode = "logs"
+)
 
 type model struct {
 	state        *workflow.WorkflowState
@@ -20,52 +26,49 @@ type model struct {
 	err          error
 	updateCh     <-chan uint64
 	cancelParent context.CancelFunc
-	viewMode     string // "status", "detailed", or "table"
-	width        int    // terminal width for responsive rendering
-	spinnerFrame int    // for animated spinner
+	modelView    modelView
+}
+
+type modelView struct {
+	ready    bool
+	mode     TuiViewMode
+	width    int
+	height   int
+	spinners *Spinners
+	//viewport viewport.Model
 }
 
 func NewTui(state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) error {
-	p := tea.NewProgram(initialModel(state, updateCh, cancel), tea.WithAltScreen())
-	m, err := p.Run()
-
-	// Print the final view to stdout after exiting alt-screen
-	if finalModel, ok := m.(model); ok {
-		fmt.Println(finalModel.View())
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func initialModel(state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) model {
-	return model{
+	p := tea.NewProgram(model{
 		state:        state,
 		updateCh:     updateCh,
 		cancelParent: cancel,
-		viewMode:     "status", // Default to status view
-		width:        120,      // Default width, will be updated by WindowSizeMsg
-		spinnerFrame: 0,
+		modelView: modelView{mode: TuiViewModeAll,
+			spinners: NewSpinners(),
+		},
+	},
+		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
+		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
+	)
+	m, err := p.Run()
+
+	// Print the final view to stdout after exiting alt-screen
+	finalModel, ok := m.(model)
+	if ok {
+		fmt.Println(finalModel.View())
 	}
+
+	return err
 }
 
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
-		m.listenForUpdates(),
-		m.tick(),
+		m.stateUpdateHook(),
+		//m.modelView.spinner.Tick,
 	)
 }
 
-func (m model) tick() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(time.Time) tea.Msg {
-		return tickMsg{}
-	})
-}
-
-func (m model) listenForUpdates() tea.Cmd {
+func (m model) stateUpdateHook() tea.Cmd {
 	return func() tea.Msg {
 		_, ok := <-m.updateCh
 		if !ok {
@@ -76,11 +79,13 @@ func (m model) listenForUpdates() tea.Cmd {
 			return m.state.Error
 		}
 
-		return updateMsg{}
+		return stateUpdateHookMsg{}
 	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmds := make([]tea.Cmd, 0)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -90,109 +95,121 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "d":
 			// Toggle between status and detailed views
-			if m.viewMode == "status" {
-				m.viewMode = "detailed"
+			if m.modelView.mode == TuiViewModeAll {
+				m.modelView.mode = TuiViewModeLogs
 			} else {
-				m.viewMode = "status"
+				m.modelView.mode = TuiViewModeStatus
 			}
-			return m, nil
-		case "t":
-			// Toggle to phase meta table view
-			m.viewMode = "table"
 			return m, nil
 		default:
 			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
-		// Update terminal width for responsive rendering
-		m.width = msg.Width
-		return m, nil
+		m.modelView.width = msg.Width
+		m.modelView.height = msg.Height
 
-	case errMsg:
-		m.err = msg
-		return m, nil
+		/*
+			headerHeight := lipgloss.Height(m.modelView.headerView())
+			footerHeight := lipgloss.Height(m.footerView())
+			verticalMarginHeight := headerHeight + footerHeight
 
-	case updateMsg:
-		// Trigger re-render when update is received
-		return m, m.listenForUpdates()
+			if !m.modelView.ready {
+				// Since this program is using the full size of the viewport we
+				// need to wait until we've received the window dimensions before
+				// we can initialize the viewport. The initial dimensions come in
+				// quickly, though asynchronously, which is why we wait for them
+				// here.
+				m.modelView.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+				m.modelView.viewport.YPosition = headerHeight
+				m.modelView.viewport.SetContent(m.content)
+				m.modelView.ready = true
+			} else {
+				m.modelView.viewport.Width = msg.Width
+				m.modelView.viewport.Height = msg.Height - verticalMarginHeight
+			}
+		*/
 
-	case tickMsg:
-		// Update spinner frame for animation
-		m.spinnerFrame = (m.spinnerFrame + 1) % 4
-		return m, m.tick()
+	// Trigger re-render when update is received
+	case stateUpdateHookMsg:
+		cmds = append(cmds,
+			m.stateUpdateHook(),
+			m.modelView.spinners.TickAndClean(msg),
+		)
 
-	default:
-		var cmd tea.Cmd
-		return m, cmd
+	// Update spinners
+	case spinner.TickMsg:
+		cmds = append(cmds,
+			m.modelView.spinners.UpdateAndClean(msg),
+		)
 	}
+
+	// Handle keyboard and mouse events in the viewport
+	//m.modelView.viewport, cmd = m.modelView.viewport.Update(msg)
+	//cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
-
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v", m.err)
 	}
 
-	var str string
+	m.modelView.spinners.BeforeViewConstructionHook()
+
+	var builder strings.Builder
 
 	// Header with instructions
 	header := "\n=== Panix TUI ===\n"
-	instructions := "Press 'q' to quit\n\n"
+	instructions := "Press 'q' to quit, 'd' to switch modes\n\n"
+	headerAndInstructions := header + instructions
 
 	// Create a defensive copy of metadata to avoid concurrent access issues
 	state := m.state
 
-	switch m.viewMode {
-	case "detailed":
-		if state == nil {
-			str = header + instructions + "No metadata available"
-			break
-		}
-		/*
-			detailed, err := state.PrintDetailedPhaseMeta()
-			if err != nil {
-				str = fmt.Sprintf("Error: %v", err)
-			} else {
-				str = header + instructions + detailed
-			}
-		*/
+	if state == nil {
+		builder.WriteString(headerAndInstructions + "No state available")
+		return builder.String()
+	}
 
-	case "table":
-		if state == nil {
-			str = header + instructions + "No metadata available"
-			break
-		}
-		/*
-			table, err := state.PrintPhaseMetaTable()
-			if err != nil {
-				str = fmt.Sprintf("Error: %v", err)
-			} else if table != nil {
-				str = header + instructions + table.String()
-			} else {
-				str = header + instructions + "No phase meta data available"
-			}
-		*/
-
-	case "status":
+	switch m.modelView.mode {
+	case TuiViewModeAll:
 		fallthrough
-	default:
-		if state == nil {
-			str = header + instructions + "No metadata available"
+	case TuiViewModeStatus:
+		view := m.PrintStatusPhaseMachineTable()
+		if view == "" {
+			builder.WriteString(headerAndInstructions + "No data available")
+			return builder.String()
+		}
+
+		builder.WriteString(headerAndInstructions + view)
+
+		if m.modelView.mode != TuiViewModeAll {
 			break
 		}
-		combinedView, err := state.GetCombinedView(m.width, m.spinnerFrame)
-		if err != nil {
-			str = fmt.Sprintf("Error: %v", err)
-		} else if combinedView != "" {
-			str = header + instructions + combinedView
-		} else {
-			str = header + instructions + "No data available"
+
+		fallthrough
+	case TuiViewModeLogs:
+		view := m.PrintBuildLogs()
+		if view == "" {
+			builder.WriteString(headerAndInstructions + "No data available")
+			return builder.String()
 		}
+
+		builder.WriteString(headerAndInstructions + view)
 	}
 
 	if m.quitting {
-		return str + "\n"
+		builder.WriteString("\n")
+		return builder.String()
 	}
-	return str
+
+	if m.state.Conf.Global.Debug {
+		debugHeader := "\n=== Debug ===\n"
+		debugContent := m.modelView.spinners.Debug()
+		builder.WriteString(debugHeader + debugContent)
+	}
+
+	return builder.String()
 }

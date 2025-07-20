@@ -126,7 +126,7 @@ func (w *Workflow) forEachConfigurationMachine(groupPool pond.TaskGroup, flakeNa
 	return nil
 }
 
-func (w *WorkflowState) expandFlakeConfigurationMachine(function func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine)) {
+func (w *WorkflowState) ExpandFlakeConfigurationMachine(function func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine)) {
 	i := 0
 
 	for flakeName, flake := range w.Conf.Flakes.AllFromFront() {
