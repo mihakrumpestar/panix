@@ -1,4 +1,4 @@
-package workflow
+package tui
 
 import (
 	"fmt"
@@ -11,16 +11,16 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
-func (state *WorkflowState) PrintStatusPhaseMachineTable(width int, spinnerFrame int) (*table.Table, error) {
-	if state.Conf.Global.DryRun {
-		if state.Conf.Global.Verbose {
+func (m *model) PrintStatusPhaseMachineTable() string {
+	if m.state.Conf.Global.DryRun {
+		if m.state.Conf.Global.Verbose {
 			fmt.Println("No status table when dry-run option is enabled")
 		}
-		return nil, nil
+		return "No table in dryRun"
 	}
 
 	// Use provided width, with reasonable bounds and accounting for borders
-	usableWidth := width - 4 // Account for borders and padding
+	usableWidth := m.modelView.width - 4 // Account for borders and padding
 	if usableWidth < 60 {
 		usableWidth = 60 // absolute minimum
 	} else if usableWidth > 200 {
@@ -32,7 +32,9 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable(width int, spinnerFrame
 		Headers("INDEX", "ICON", "FLAKE", "CONFIGURATION", "MACHINE", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR").
 		Width(usableWidth)
 
-	state.expandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
+	m.state.ExpandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
+		xpath := flakeName + configurationName + machineName.String()
+
 		ps := machine.Phases.Status
 		log := machine.Logs[workflow_definition.PhaseStatus]
 
@@ -44,26 +46,25 @@ func (state *WorkflowState) PrintStatusPhaseMachineTable(width int, spinnerFrame
 
 		t.Row(
 			fmt.Sprintf("%d", i),
-			getStatusIcon(ps, log, spinnerFrame),
+			m.getStatusIcon(ps, xpath, log),
 			flakeName,
 			configurationName,
 			strings.TrimPrefix(machineName.String(), "ssh://"),
 			//machine.Ssh.Alias,
-			getStatusText(ps),
+			m.getStatusText(ps, xpath, log),
 			ps.CurrentGeneration,
 			ps.LastDeployTime,
 			err,
 		)
 	})
 
-	return t, nil
+	return t.String()
 }
 
-func getStatusIcon(ps *config.PhaseStatus, log *config.Log, spinnerFrame int) string {
+func (m *model) getStatusIcon(ps *config.PhaseStatus, xpath string, log *config.Log) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
-		spinners := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-		return spinners[spinnerFrame%len(spinners)]
+		return m.modelView.spinners.Spinner(xpath).View()
 	}
 	if !ps.Reachable {
 		return "🔴"
@@ -77,7 +78,11 @@ func getStatusIcon(ps *config.PhaseStatus, log *config.Log, spinnerFrame int) st
 	return "✅"
 }
 
-func getStatusText(ps *config.PhaseStatus) string {
+func (m *model) getStatusText(ps *config.PhaseStatus, xpath string, log *config.Log) string {
+	tas := log.TimeAndState.GetTimeAndState()
+	if !tas.Finished {
+		return m.modelView.spinners.Spinner(xpath).View()
+	}
 	if !ps.Reachable {
 		return "UNREACHABLE"
 	}
