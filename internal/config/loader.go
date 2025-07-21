@@ -91,11 +91,6 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	// Convert timeout from miliseconds to seconds for duration
 	simplifiedConfig.Global.Timeout *= time.Second
 
-	//if simplifiedConfig.Global.Debug {
-	//	fmt.Printf("\nBEFORE CONVERTING\n\n")
-	//	godump.Dump(simplifiedConfig)
-	//}
-
 	// Convert simplified structure to final structure with ordered maps
 	conf, err := simplifiedConfig.convertToFinalConfig()
 	if err != nil {
@@ -117,11 +112,6 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	//if conf.Global.Debug {
-	//	fmt.Printf("\nFINAL: AFTER FILTERING\n\n")
-	//	godump.Dump(conf)
-	//}
-
 	// Config won't be changing after this point
 
 	return conf, nil
@@ -136,6 +126,10 @@ func (c *Config) validateConfig() error {
 	}
 
 	for flakeName, flake := range c.Flakes.AllFromFront() {
+		if flake.Url == "" {
+			return fmt.Errorf("flake %s has no URL configured", flakeName)
+		}
+
 		if flake.Configurations == nil || flake.Configurations.Len() == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
@@ -183,6 +177,14 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 				continue
 			}
 
+			configuration.Phases = &ConfigurationPhases{
+				Build: &PhaseBuild{},
+			}
+
+			configuration.Logs = map[workflow_definition.WorkflowPhase]*Log{
+				workflow_definition.PhaseBuild: {TimeAndState: &TimeAndState{}},
+			}
+
 			for machineName, machine := range configuration.Machines.AllFromFront() {
 				if machine == nil {
 					machine = &Machine{}
@@ -194,7 +196,7 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 				}
 
 				machine.Logs = map[workflow_definition.WorkflowPhase]*Log{
-					workflow_definition.PhaseStatus: &Log{TimeAndState: &TimeAndState{}},
+					workflow_definition.PhaseStatus: {TimeAndState: &TimeAndState{}},
 				}
 
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {

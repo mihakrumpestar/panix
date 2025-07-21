@@ -54,7 +54,7 @@ type Configuration struct {
 	Machines          *orderedmap.OrderedMap[url.URL, *Machine] `yaml:"machines"` // Key here is the ssh URL: alias, user@host or user@host:port
 	// Meta
 	Logs   map[workflow_definition.WorkflowPhase]*Log
-	Phases ConfigurationPhases
+	Phases *ConfigurationPhases
 }
 
 type CommandLog struct {
@@ -72,7 +72,7 @@ type SshClient struct {
 }
 
 type ConfigurationPhases struct {
-	PhaseBuild *PhaseBuild
+	Build *PhaseBuild
 }
 
 type PhaseBuild struct {

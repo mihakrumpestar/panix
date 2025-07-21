@@ -19,6 +19,14 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 		return "No table in dryRun"
 	}
 
+	var builder strings.Builder
+
+	// Header for the log view
+	builder.WriteString("\n" + lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#b1f132ff")).
+		Render("=== Stats table ===\n"))
+
 	// Use provided width, with reasonable bounds and accounting for borders
 	usableWidth := m.modelView.width - 4 // Account for borders and padding
 	if usableWidth < 60 {
@@ -29,7 +37,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
-		Headers("INDEX", "ICON", "FLAKE", "CONFIGURATION", "MACHINE", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR").
+		Headers("", "", "FLAKE", "CONFIGURATION", "MACHINE", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR").
 		Width(usableWidth)
 
 	m.state.ExpandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
@@ -58,13 +66,15 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 		)
 	})
 
-	return t.String()
+	builder.WriteString("\n" + t.String() + "\n")
+
+	return builder.String()
 }
 
 func (m *model) getStatusIcon(ps *config.PhaseStatus, xpath string, log *config.Log) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
-		return m.modelView.spinners.Spinner(xpath).View()
+		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 	if !ps.Reachable {
 		return "🔴"
@@ -81,7 +91,7 @@ func (m *model) getStatusIcon(ps *config.PhaseStatus, xpath string, log *config.
 func (m *model) getStatusText(ps *config.PhaseStatus, xpath string, log *config.Log) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
-		return m.modelView.spinners.Spinner(xpath).View()
+		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 	if !ps.Reachable {
 		return "UNREACHABLE"

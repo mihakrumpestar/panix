@@ -1,133 +1,101 @@
 package workflow
 
 import (
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+
+	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
 func (w *Workflow) ExecuteBuildPhase() error {
-	/*
-		if w.cfg.Global.Verbose {
-			fmt.Println("Executing build phase across flake configurations")
+	if w.state.Conf.Global.Verbose {
+		fmt.Println("Executing build phase across flake configurations")
+	}
+
+	err := w.forEachFlakeConfiguration(func(groupPool pond.TaskGroup, flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
+		if w.state.Conf.Global.Verbose {
+			fmt.Println("Executing status phase across all machines in " + flakeName + " " + configurationName)
 		}
 
-		pool := pond.NewResultPool[ConfigurationMetadata](w.cfg.Global.Concurrency)
-		buildGroup := pool.NewGroupContext(w.ctx)
-		bootstrapGroup := pool.NewGroupContext(w.ctx)
-		//transferGroup := pool.NewGroupContext(w.ctx)
-		//secretsGroup := pool.NewGroupContext(w.ctx)
+		configurationBuildTimeAndState := configuration.Logs[workflow_definition.PhaseBuild].TimeAndState
 
-		forAllConfigurations(w.cfg.Flakes, sms, func(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) {
-			buildGroup.SubmitErr(func() (ConfigurationMetadata, error) {
-				wp := WorkflowExecutorForConfigurationAndMachine{w.ctx, &w.cfg.Global}
-				result, err := wp.executeBuildPhaseConfiguration(flakeName, configurationName, flake)
-				result.Error = err
+		configurationBuildTimeAndState.StartTimer()
+		err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
+		configurationBuildTimeAndState.EndTimerWithError(err)
 
-				if result.Error != nil && w.cfg.Global.RequireAllSuccess {
-					return result, err
-				}
+		return err
+	})
 
-				for machineName, machine := range configuration.Machines {
-					if !slices.Contains(w.cfg.Global.SkipPhases, workflow_definition.PhaseBootstrap) {
-						bootstrapGroup.SubmitErr(func() (ConfigurationMetadata, error) {
+	if w.state.Conf.Global.Verbose {
+		fmt.Println("Executing finished for status phase with err %w", err)
+	}
 
-							err := wp.executeBootstrapPhaseMachine(flakeName, configurationName, &machineName, machine)
-
-							if err != nil && w.cfg.Global.RequireAllSuccess {
-								return result, err
-							}
-
-							return result, nil
-						})
-
-					}
-				}
-
-				return result, nil
-			})
-		})
-
-		results, _ := buildGroup.Wait()
-
-		errors := make([]error, 0)
-		for _, result := range results {
-			if result.Error != nil {
-				errors = append(errors, result.Error)
-			}
-		}
-
-		if len(errors) > 0 && w.cfg.Global.RequireAllSuccess {
-			return nil, fmt.Errorf("status phase failed: %v", errors)
-		}
-
-		//if !slices.Contains(w.cfg.Global.SkipPhases, workflow_definition.PhaseActivate) {
-		//	return w.executeActivationPhase(nextPhases)
-		//}
-	*/
+	w.state.Error = err
+	w.hook.OnUpdateHook()
 
 	return nil
 }
 
+type BuidOutputJson struct {
+	Outputs struct {
+		Out string `json:"out"`
+	} `json:"outputs"`
+}
+
 // This function is called by executeMachineBuild for individual machine builds
-func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake) (err error) {
-	/*
-		cm.MetadataID = MetadataID{
-			FlakeName:         flakeName,
-			ConfigurationName: configurationName,
-		}
+func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
+	bm := configuration.Phases.Build
 
-		// Get the flake path from the flake configuration
-		flakePath := flake.Url
-		if flakePath == "" {
-			fmt.Errorf("flake %s has no URL configured", flakeName)
-			return
-		}
+	if w.state.Conf.Global.DryRun {
+		bm.BuildOutputPath = "BUILD_OUTPUT_PATH_PLACEHOLDER"
+		return nil
+	}
 
-		abs, err := filepath.Abs(flakePath)
-		if err != nil {
-			err = fmt.Errorf("failed to get absolute path for flake %s: %w", flakeName, err)
-			return
-		}
+	// Get the flake path from the flake configuration
+	flakePath := flake.Url
 
-		ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
+	abs, err := filepath.Abs(flakePath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for flake %s: %w", flakeName, err)
+	}
 
-		exc, err := executioner.New(w.ctx, w.cfg, nil, nil, nil)
-		if err != nil {
-			return
-		}
+	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
 
-		var outputFinal executioner.ExecutionerMetadata
-		for output := range exc.Exec("nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref) {
-			outputFinal = output
-			if err != nil {
-				err = fmt.Errorf("build failed for %s/%s: %w: %s", flakeName, configurationName, err, output.Stderr.String())
-				return
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, configuration.Logs[workflow_definition.PhaseBuild], w.hook.OnUpdateHook)
+
+	// Build a configuration
+	err = exc.Exec(
+		func(log *config.Log, err error) error {
+			return fmt.Errorf("build failed for %s/%s: %w: %s", flakeName, configurationName, err, log.LastCommand().StdCombined.String())
+		},
+		func(log *config.Log) error {
+			var parsedOutput []BuidOutputJson
+
+			output := []byte(log.LastCommand().Stdout.String())
+
+			err = json.Unmarshal(output, &parsedOutput)
+			if err != nil || len(parsedOutput) == 0 {
+				return fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configurationName, log.LastCommand().StdCombined.String())
 			}
-		}
 
-		buildOutputPath := "BUILD_OUTPUT_PATH_PLACEHOLDER"
-		if !w.cfg.DryRun {
-			var nr []struct {
-				Outputs struct {
-					Out string `json:"out"`
-				} `json:"outputs"`
-			}
-			err = json.Unmarshal([]byte(outputFinal.Stdout.String()), &nr)
-			if err != nil || len(nr) == 0 {
-				err = fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configurationName, outputFinal.Stdout.String())
-				return
-			}
-			// Store the build output path in metadata for later phases like transfer and activate
-			buildOutputPath = nr[0].Outputs.Out
-		}
+			configuration.Phases.Build.BuildOutputPath = parsedOutput[0].Outputs.Out
+			return nil
+		},
+		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref,
+	)
+	if err != nil {
+		return err
+	}
 
-		cm.BuildOutputPath = buildOutputPath
+	if w.state.Conf.Global.Verbose {
+		fmt.Printf("Built %s/%s -> %s\n", flakeName, configurationName, bm.BuildOutputPath)
+	}
 
-		if w.cfg.Verbose {
-			fmt.Printf("Built %s/%s -> %s\n", flakeName, configurationName, buildOutputPath)
-		}
-	*/
-
-	return
+	return nil
 }
