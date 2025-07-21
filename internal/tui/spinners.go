@@ -13,7 +13,6 @@ type Spinners struct {
 }
 
 type Spinner struct {
-	used         bool
 	initTickSend bool
 	model        *spinner.Model
 }
@@ -24,18 +23,16 @@ func NewSpinners() *Spinners {
 	}
 }
 
-func (s *Spinners) Spinner(xpath string) *spinner.Model {
+func (s *Spinners) GetOrCreateSpinner(xpath string) *spinner.Model {
 	// Existing spinner
 	spnr, ok := s.spinners.Get(xpath)
 	if ok {
-		spnr.used = true
 		return spnr.model
 	}
 
 	// New spinner
 	spnrRaw := spinner.New(spinner.WithSpinner(spinner.Dot))
 	spnr = &Spinner{
-		used:  true,
 		model: &spnrRaw,
 	}
 
@@ -44,33 +41,28 @@ func (s *Spinners) Spinner(xpath string) *spinner.Model {
 	return spnr.model
 }
 
-func (s *Spinners) TickAndClean(msg tea.Msg) tea.Cmd {
+func (s *Spinners) RemoveIfExistsSpinner(xpath string) {
+	s.spinners.Delete(xpath)
+}
+
+func (s *Spinners) SendInitTickIfNotAlready() tea.Cmd {
 	cmds := make([]tea.Cmd, 0)
 
-	for xpath, spnr := range s.spinners.AllFromFront() {
-		if !spnr.used {
-			s.spinners.Delete(xpath)
-			continue
-		}
-
+	for _, spnr := range s.spinners.AllFromFront() {
 		if !spnr.initTickSend {
-			spnr.initTickSend = true
 			cmds = append(cmds, spnr.model.Tick)
+			spnr.initTickSend = true
 		}
 	}
 
 	return tea.Batch(cmds...)
 }
 
-func (s *Spinners) UpdateAndClean(msg tea.Msg) tea.Cmd {
+func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, 0)
 
-	for xpath, spnr := range s.spinners.AllFromFront() {
-		if !spnr.used {
-			s.spinners.Delete(xpath)
-			continue
-		}
-
+	for _, spnr := range s.spinners.AllFromFront() {
+		// msg only works on spinner it was ment to, so we don't have to filter or anything
 		spinnerModel, cmd := spnr.model.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
@@ -81,17 +73,11 @@ func (s *Spinners) UpdateAndClean(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (s *Spinners) BeforeViewConstructionHook() {
-	for _, spnr := range s.spinners.AllFromFront() {
-		spnr.used = false
-	}
-}
-
 func (s *Spinners) Debug() string {
 	str := fmt.Sprintf("\nSpinners: %d\n", s.spinners.Len())
 
-	for pathx, spnr := range s.spinners.AllFromFront() {
-		str += fmt.Sprintf("  %v: '%s'\n", spnr.used, pathx)
+	for pathx, _ := range s.spinners.AllFromFront() {
+		str += fmt.Sprintf("  '%s'\n", pathx)
 	}
 
 	return str

@@ -9,7 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
-func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log), name string, args ...string) error {
+func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
 	if ex.log.Commands == nil {
 		ex.log.Commands = make([]*config.CommandLog, 0)
 	}
@@ -90,7 +90,7 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 			err = onFailure(ex.log, err)
 		}
 	} else if onSuccess != nil {
-		onSuccess(ex.log)
+		err = onSuccess(ex.log)
 	}
 	exm.EndTimerWithError(err)
 	ex.onUpdateHook()

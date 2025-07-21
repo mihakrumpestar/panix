@@ -7,7 +7,7 @@ import (
 // PingStream runs “nc -zvw1 host port” (or no‐op if local) and
 // streams back its stdout/stderr in ShellEvent.  Alias lookup
 // errors are reported as a single event with Err set.
-func (ex *Executioner) PingStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log)) error {
+func (ex *Executioner) PingStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error) error {
 	// 1) local short‐circuit
 	if ex.local {
 		tas := &config.TimeAndState{}

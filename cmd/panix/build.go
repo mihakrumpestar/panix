@@ -1,6 +1,8 @@
 package panix
 
 import (
+	"github.com/mihakrumpestar/panix/internal/tui"
+	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -10,19 +12,16 @@ var buildCmd = &cobra.Command{
 	Short: "Build all selected closures",
 	Long:  `Build compiles the NixOS configurations for all selected machines without deploying them.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		/*
-			wexc, err := workflow.NewWorkflowExecutor(cmd.Context(), &config.C)
-			if err != nil {
-				return err
-			}
+		executor, err := workflow.NewWorkflow(cmd.Context())
+		if err != nil {
+			return err
+		}
 
-			_, err = wexc.ExecuteBuildPhase(nil)
-			if err != nil {
-				return err
-			}
-		*/
+		go func() {
+			_ = executor.ExecuteBuildPhase()
+		}()
 
-		return nil
+		return tui.NewTui(executor.Ctx(), executor.State(), executor.GetChannel(), executor.Cancel())
 	},
 }
 

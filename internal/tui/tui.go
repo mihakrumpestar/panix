@@ -47,8 +47,8 @@ func NewTui(ctx context.Context, state *workflow.WorkflowState, updateCh <-chan 
 		cancelParent: cancel,
 		modelView: modelView{mode: TuiViewModeAll,
 			spinners: NewSpinners(),
-			width:    120,
-			height:   120,
+			width:    120, // Initial dimensions
+			height:   120, // Initial dimensions
 		},
 	},
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
@@ -69,7 +69,6 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.WindowSize(),
 		m.stateUpdateHook(),
-		//m.modelView.spinner.Tick,
 	)
 }
 
@@ -148,14 +147,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateUpdateHookMsg:
 		cmds = append(cmds,
 			m.stateUpdateHook(),
-			m.modelView.spinners.TickAndClean(msg),
 		)
 
 	// Update spinners
 	case spinner.TickMsg:
-		cmds = append(cmds,
-			m.modelView.spinners.UpdateAndClean(msg),
-		)
+		cmds = append(cmds, m.modelView.spinners.Update(msg))
+	default:
+		cmds = append(cmds, m.modelView.spinners.SendInitTickIfNotAlready())
 	}
 
 	// Handle keyboard and mouse events in the viewport
@@ -169,8 +167,6 @@ func (m model) View() string {
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v", m.err)
 	}
-
-	m.modelView.spinners.BeforeViewConstructionHook()
 
 	var builder strings.Builder
 
@@ -214,16 +210,16 @@ func (m model) View() string {
 		builder.WriteString(view)
 	}
 
-	if m.quitting {
-		builder.WriteString("\n")
-		return builder.String()
-	}
-
 	if m.state.Conf.Global.Debug {
 		debugHeader := "\n\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)
+	}
+
+	if m.quitting {
+		builder.WriteString("\n")
+		return builder.String()
 	}
 
 	return builder.String()

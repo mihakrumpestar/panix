@@ -109,7 +109,7 @@ func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.Workf
 
 	for _, phase := range phases {
 		log, exists := logs[phase]
-		if !exists || log == nil {
+		if !exists || log == nil || len(log.Commands) == 0 {
 			continue
 		}
 
@@ -150,7 +150,8 @@ func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.Workf
 				// Command output
 				output := strings.TrimSpace(cmd.StdCombined.String())
 				if output != "" {
-					cmdTree.Child(output)
+					truncate := lastLines(output, 8)
+					cmdTree.Child(truncate)
 				}
 
 				// Command error status
@@ -225,12 +226,23 @@ func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content stri
 
 	if tas.Started && tas.Finished {
 		iconOrSpinner = iconOnFinished
+		m.modelView.spinners.RemoveIfExistsSpinner(spinnerXpath)
 	} else if tas.Started && !tas.Finished {
 		// Spinner
-		iconOrSpinner = m.modelView.spinners.Spinner(spinnerXpath).View()
+		iconOrSpinner = m.modelView.spinners.GetOrCreateSpinner(spinnerXpath).View()
 	}
 
 	final := iconOrSpinner + content
 
 	return final
+}
+
+// lastLines returns the last n lines of s.
+// If s has fewer than n lines, it returns s unchanged.
+func lastLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
 }

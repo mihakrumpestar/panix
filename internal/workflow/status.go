@@ -19,7 +19,7 @@ func (w *Workflow) ExecuteStatusPhase() error {
 		fmt.Println("Executing status phase across all flake configurations")
 	}
 
-	err := w.forEachFlakeConfiguration(func(groupPool pond.TaskGroup, flakeName string, configurationName string, configuration *config.Configuration) error {
+	err := w.forEachFlakeConfiguration(func(groupPool pond.TaskGroup, flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
 		if w.state.Conf.Global.Verbose {
 			fmt.Println("Executing status phase across all machines in " + flakeName + " " + configurationName)
 		}
@@ -71,8 +71,9 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 		func(log *config.Log, err error) error {
 			return fmt.Errorf("machine unreachable: %w", err)
 		},
-		func(log *config.Log) {
+		func(log *config.Log) error {
 			sm.Reachable = true
+			return nil
 		})
 	if err != nil {
 		return err
@@ -83,8 +84,9 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 		func(log *config.Log, err error) error {
 			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().StdCombined.String())
 		},
-		func(log *config.Log) {
+		func(log *config.Log) error {
 			sm.SSHConnectable = true
+			return nil
 		}, "sh", "-c", "exit 0")
 	if err != nil {
 		return err
@@ -93,8 +95,9 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	// Run bootstrap detection
 	err = exc.Exec(
 		nil,
-		func(log *config.Log) {
+		func(log *config.Log) error {
 			sm.Bootstrapped = true
+			return nil
 		}, "sh", "-c", "test -e /run/current-system")
 	if err != nil {
 		return nil // just not bootstrapped, not really an error
@@ -103,8 +106,9 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	// Get current generation
 	err = exc.Exec(
 		nil,
-		func(log *config.Log) {
+		func(log *config.Log) error {
 			sm.CurrentGeneration = strings.TrimSpace(log.LastCommand().StdCombined.String())
+			return nil
 		}, "sh", "-c", "sleep 5 && nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
 	if err != nil {
 		return err
@@ -113,8 +117,9 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	// Get last deploy time
 	err = exc.Exec(
 		nil,
-		func(log *config.Log) {
+		func(log *config.Log) error {
 			sm.LastDeployTime = strings.TrimSpace(log.LastCommand().StdCombined.String())
+			return nil
 		}, "sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
 	if err != nil {
 		return err

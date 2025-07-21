@@ -40,7 +40,7 @@ func NewExecutioner(ctx context.Context, conf *config.Global, machineName *url.U
 	}
 }
 
-func (ex *Executioner) Exec(onFailure func(*config.Log, error) error, onSuccess func(*config.Log), name string, args ...string) error {
+func (ex *Executioner) Exec(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
 	if ex.local {
 		return ex.shellStream(onFailure, onSuccess, name, args...)
 	} else {
