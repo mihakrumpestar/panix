@@ -1,8 +1,8 @@
 package config
 
 import (
+	"bytes"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/elliotchance/orderedmap/v3"
@@ -59,9 +59,9 @@ type Configuration struct {
 
 type CommandLog struct {
 	Command     string
-	Stdout      strings.Builder
-	Stderr      strings.Builder
-	StdCombined strings.Builder
+	Stdout      bytes.Buffer
+	Stderr      bytes.Buffer
+	StdCombined bytes.Buffer
 	*TimeAndState
 }
 
