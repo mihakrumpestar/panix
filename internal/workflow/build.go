@@ -77,7 +77,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 		func(log *config.Log) error {
 			var parsedOutput []BuidOutputJson
 
-			output := []byte(log.LastCommand().Stdout.String())
+			output := log.LastCommand().Stdout.Bytes()
 
 			err = json.Unmarshal(output, &parsedOutput)
 			if err != nil || len(parsedOutput) == 0 {
@@ -86,8 +86,8 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 
 			configuration.Phases.Build.BuildOutputPath = parsedOutput[0].Outputs.Out
 			return nil
-		},
-		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref,
+		}, // "--print-build-logs"
+		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
 	)
 	if err != nil {
 		return err

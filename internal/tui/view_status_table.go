@@ -21,11 +21,11 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 
 	var builder strings.Builder
 
+	// Use color scheme from model
+	colors := m.modelView.colors
+
 	// Header for the log view
-	builder.WriteString("\n" + lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#b1f132ff")).
-		Render("=== Stats table ===\n"))
+	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Use provided width, with reasonable bounds and accounting for borders
 	usableWidth := m.modelView.width - 4 // Account for borders and padding
@@ -35,10 +35,47 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 		usableWidth = 200 // reasonable maximum
 	}
 
+	// Header text lengths including icons
+	flakeHeader := string(colors.IconFlake) + " FLAKE"
+	configurationHeader := string(colors.IconConfiguration) + " CONFIGURATION"
+	machineHeader := string(colors.IconMachine) + " MACHINE"
+
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
-		Headers("", "", "FLAKE", "CONFIGURATION", "MACHINE", "STATUS", "GENERATION", "LAST_DEPLOY", "ERROR").
-		Width(usableWidth)
+		BorderStyle(colors.TableBorder).
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "STATUS", "GENERATION", "DEPLOY", "ERROR").
+		Width(usableWidth).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == -1 {
+				return colors.TableRow
+			}
+
+			switch col {
+			case 0: // Index
+				return colors.TableRow.Width(3).Align(lipgloss.Center)
+			case 1: // Status icon
+				return colors.TableRow.Width(3).Align(lipgloss.Center)
+			case 2: // FLAKE
+				return colors.Flake
+			case 3: // CONFIG
+				return colors.Configuration
+			case 4: // MACHINE
+				return colors.Machine
+			case 5: // Status text
+				return colors.TableRow.Width(10)
+			case 6: // Generation
+				return colors.TableRow.Width(8).Align(lipgloss.Center)
+			case 7: // Last deploy
+				return colors.TableRow.Width(8)
+			case 8: // ERROR
+				return colors.TableRow.Width(5).MaxWidth(1000)
+			default:
+				return colors.TableRow
+			}
+		})
+
+	// Track previous values to implement row spanning
+	var prevFlakeName, prevConfigName string
 
 	m.state.ExpandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
 		xpath := flakeName + configurationName + machineName.String()
@@ -52,13 +89,35 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 			err = errPtr.Error()
 		}
 
+		// Determine if we should show flake name (only on first occurrence)
+		showFlake := flakeName != prevFlakeName
+		if showFlake {
+			prevFlakeName = flakeName
+		}
+
+		// Determine if we should show config name (only on first occurrence of each config within a flake)
+		showConfig := configurationName != prevConfigName || flakeName != prevFlakeName
+		if showConfig {
+			prevConfigName = configurationName
+		}
+
+		// Get display values (empty for spanning)
+		flakeDisplay := ""
+		if showFlake {
+			flakeDisplay = flakeName
+		}
+
+		configDisplay := ""
+		if showConfig {
+			configDisplay = configurationName
+		}
+
 		t.Row(
 			fmt.Sprintf("%d", i),
 			m.getStatusIcon(ps, xpath, log),
-			flakeName,
-			configurationName,
+			flakeDisplay,
+			configDisplay,
 			strings.TrimPrefix(machineName.String(), "ssh://"),
-			//machine.Ssh.Alias,
 			m.getStatusText(ps, xpath, log),
 			ps.CurrentGeneration,
 			ps.LastDeployTime,
