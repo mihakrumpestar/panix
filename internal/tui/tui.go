@@ -36,6 +36,7 @@ type modelView struct {
 	height      int
 	spinners    *Spinners
 	debugOutput strings.Builder
+	colors      ColorScheme
 	//viewport viewport.Model
 }
 
@@ -49,6 +50,7 @@ func NewTui(ctx context.Context, state *workflow.WorkflowState, updateCh <-chan 
 			spinners: NewSpinners(),
 			width:    120, // Initial dimensions
 			height:   120, // Initial dimensions
+			colors:   DefaultColorScheme(),
 		},
 	},
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"

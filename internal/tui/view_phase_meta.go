@@ -15,44 +15,32 @@ import (
 func (m *model) PrintBuildLogs() string {
 	var builder strings.Builder
 
+	// Use color scheme from model
+	colors := m.modelView.colors
+
 	// Header for the log view
-	builder.WriteString("\n" + lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#00ADD8")).
-		Render("=== Build Logs ===\n"))
+	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Build Logs ===\n"))
 
-	enumeratorStyle := lipgloss.NewStyle()
+	enumeratorStyle := colors.TreeEnumerator
 
-	// Define styles for different tree elements
-	flakeStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#F1FA8C"))
-
-	configStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFB86C"))
-
-	machineStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#8BE9FD"))
-
-	phaseStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF79C6"))
-
-	commandStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#BD93F9"))
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF5555"))
+	// Use color scheme styles for different tree elements
+	flakeStyle := colors.Flake
+	configStyle := colors.Configuration
+	machineStyle := colors.Machine
+	phaseStyle := colors.Phase
+	commandStyle := colors.Command
+	errorStyle := colors.Error
 
 	// Build separate trees for each flake
 	for flakeName, flake := range m.state.Conf.Flakes.AllFromFront() {
 		flakeTree := tree.New().
-			Root(flakeStyle.Render(fmt.Sprintf("📁 %s", flakeName))).
+			Root(flakeStyle.Render(fmt.Sprintf("%c %s", colors.IconFlake, flakeName))).
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(enumeratorStyle)
 
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 			configNode := tree.New().
-				Root(configStyle.Render(fmt.Sprintf("📦 %s", configurationName)))
+				Root(configStyle.Render(fmt.Sprintf("%c %s", colors.IconConfiguration, configurationName)))
 
 			// Add configuration logs directly (no "Logs" intermediate node)
 			if configuration != nil && len(configuration.Logs) > 0 {
@@ -66,7 +54,7 @@ func (m *model) PrintBuildLogs() string {
 			// Add machines
 			for machineName, machine := range configuration.Machines.AllFromFront() {
 				machineNode := tree.New().
-					Root(machineStyle.Render(fmt.Sprintf("🖥️  %s", strings.TrimPrefix(machineName.String(), "ssh://")))).Offset(0, 4)
+					Root(machineStyle.Render(fmt.Sprintf("%c %s", colors.IconMachine, strings.TrimPrefix(machineName.String(), "ssh://")))).Offset(0, 4)
 
 				if len(machine.Logs) > 0 {
 					xpath := flakeName + configurationName + machineName.String()
