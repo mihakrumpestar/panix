@@ -67,7 +67,7 @@ func (w *Workflow) Cancel() context.CancelFunc {
 
 // Helpers
 
-func (w *Workflow) forEachFlakeConfiguration(function func(groupPool pond.TaskGroup, flakeName, configurationName string, configuration *config.Configuration) error) error {
+func (w *Workflow) forEachFlakeConfiguration(function func(groupPool pond.TaskGroup, flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) error) error {
 	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)
@@ -76,13 +76,13 @@ func (w *Workflow) forEachFlakeConfiguration(function func(groupPool pond.TaskGr
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 			if w.state.Conf.Global.RequireAllSuccess { // This will make groupPool.Wait() exit on first error
 				groupPool.SubmitErr(func() error {
-					err := function(groupPool, flakeName, configurationName, configuration)
+					err := function(groupPool, flakeName, configurationName, flake, configuration)
 					errCacher = append(errCacher, err)
 					return err
 				})
 			} else {
 				groupPool.Submit(func() {
-					err := function(groupPool, flakeName, configurationName, configuration)
+					err := function(groupPool, flakeName, configurationName, flake, configuration)
 					errCacher = append(errCacher, err)
 				})
 			}
