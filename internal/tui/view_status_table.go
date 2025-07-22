@@ -15,9 +15,6 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	state := m.workflow.State()
 
 	if state.Conf.Global.DryRun {
-		if state.Conf.Global.Verbose {
-			fmt.Println("No status table when dry-run option is enabled")
-		}
 		return "No table in dryRun"
 	}
 

@@ -17,19 +17,21 @@ import (
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
 func (w *Workflow) ExecuteBuildPhase() error {
-	if w.state.Conf.Global.Verbose {
-		fmt.Println("Executing build phase across flake configurations")
-	}
-
 	err := w.forEachFlakeConfiguration(
 		func(flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
+			log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
+
 			if w.state.Conf.Global.Verbose {
-				fmt.Println("Executing status phase across all machines in " + flakeName + " " + configurationName)
+				log.AddMessageOnly("Executing build phase across " + configurationName)
 			}
 
 			err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
 			if err != nil {
 				return err
+			}
+
+			if w.state.Conf.Global.Verbose {
+				log.AddMessageOnly("Executing finished for build phase ", configurationName)
 			}
 
 			err = w.forEachConfigurationMachine(configuration,
@@ -52,14 +54,16 @@ func (w *Workflow) ExecuteBuildPhase() error {
 					return nil
 				})
 
+			if err != nil {
+				return err
+			}
+
 			return err
 		})
 
-	if w.state.Conf.Global.Verbose {
-		fmt.Println("Executing finished for status phase with err %w", err)
+	if err != nil {
+		return err
 	}
-
-	w.hook.OnUpdateHook()
 
 	return nil
 }
@@ -95,6 +99,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 	}
 
 	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
+	fmt.Sprint(ref)
 
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
 
@@ -118,14 +123,15 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 
 			return nil
 		}, // "--print-build-logs"
-		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
+		//"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
+		"sh", "-c", "exit 1",
 	)
 	if err != nil {
 		return
 	}
 
 	if w.state.Conf.Global.Verbose {
-		fmt.Printf("Built %s/%s -> %s\n", flakeName, configurationName, bm.BuildOutputPath)
+		log.AddMessageOnly(fmt.Sprintf("Built %s/%s -> %s\n", flakeName, configurationName, bm.BuildOutputPath))
 	}
 
 	return

@@ -6,8 +6,6 @@ func (ex *Executioner) sshStream(onFailure func(*config.Log, error) error, onSuc
 
 	sshArgs := []string{"-q"} // Silance banners
 
-	//fmt.Printf("\nsshConfig: %+v\n\n", ex.sshConfig)
-
 	if ex.usesAlias {
 		sshArgs = append(sshArgs, ex.machineName.Hostname())
 	} else {
