@@ -79,17 +79,15 @@ func (w *Workflow) Phases() []workflow_definition.WorkflowPhase {
 }
 
 func (w *Workflow) Start() error {
-	var err error
-
 	if slices.Contains(w.phases, workflow_definition.PhaseStatus) {
-		err = w.ExecuteStatusPhase()
+		err := w.ExecuteStatusPhase()
 		if err != nil {
 			return err
 		}
 	}
 
 	if slices.Contains(w.phases, workflow_definition.PhaseBuild) {
-		err = w.ExecuteBuildPhase()
+		err := w.ExecuteBuildPhase()
 		if err != nil {
 			return err
 		}
@@ -118,64 +116,63 @@ func validatePhaseConstraints(phases, slipPhases []workflow_definition.WorkflowP
 	return phases, nil
 }
 
-func (w *Workflow) forEachFlakeConfiguration(function func(groupPool pond.TaskGroup, flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) error) error {
+func (w *Workflow) forEachFlakeConfiguration(function func(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) error) error {
 	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)
 
 	for flakeName, flake := range w.state.Conf.Flakes.AllFromFront() {
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
-			if w.state.Conf.Global.RequireAllSuccess { // This will make groupPool.Wait() exit on first error
-				groupPool.SubmitErr(func() error {
-					err := function(groupPool, flakeName, configurationName, flake, configuration)
-					errCacher = append(errCacher, err)
-					return err
-				})
-			} else {
-				groupPool.Submit(func() {
-					err := function(groupPool, flakeName, configurationName, flake, configuration)
-					errCacher = append(errCacher, err)
-				})
-			}
+			groupPool.SubmitErr(func() error {
+				err := function(flakeName, configurationName, flake, configuration)
+				errCacher = append(errCacher, err)
+
+				if !w.state.Conf.Global.RequireAllSuccess {
+					return nil
+				}
+
+				return err
+			})
 		}
 	}
 
 	err := groupPool.Wait()
-
 	if err != nil {
 		return errors.Wrapf(err, "forEachFlakeConfiguration: failed because of 'RequireAllSuccess'")
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		return fmt.Errorf("forEachFlakeConfiguration: failed because of all machines failed this phase")
+		return fmt.Errorf("forEachFlakeConfiguration: failed because of all configurations errored")
 	}
 
 	return nil
 }
 
-func (w *Workflow) forEachConfigurationMachine(groupPool pond.TaskGroup, flakeName, configurationName string, configuration *config.Configuration, function func(machineName url.URL, machine *config.Machine) error) error {
-	// If groupPool != nil means that we are using parent groupPool and we do not block
-	if groupPool == nil {
-		groupPool = w.state.Pool.NewGroup()
-	}
+func (w *Workflow) forEachConfigurationMachine(configuration *config.Configuration, function func(machineName url.URL, machine *config.Machine) error) error {
+	groupPool := w.state.Pool.NewGroup()
 
-	// Here we don't care if all tasks fail since we have multiple configurations
+	errCacher := make([]error, 0)
+
 	for machineName, machine := range configuration.Machines.AllFromFront() {
+		groupPool.SubmitErr(func() error {
+			err := function(machineName, machine)
+			errCacher = append(errCacher, err)
 
-		if w.state.Conf.Global.RequireAllSuccess {
-			groupPool.SubmitErr(func() error {
-				return function(machineName, machine)
-			})
-		} else {
-			groupPool.Submit(func() {
-				function(machineName, machine)
-			})
-		}
+			if !w.state.Conf.Global.RequireAllSuccess {
+				return nil
+			}
+
+			return err
+		})
 	}
 
 	err := groupPool.Wait()
 	if err != nil {
 		return errors.Wrapf(err, "forEachConfigurationMachine: failed because of 'RequireAllSuccess'")
+	}
+
+	if !slices.Contains(errCacher, nil) {
+		return fmt.Errorf("forEachConfigurationMachine: failed because of all machines errored")
 	}
 
 	return nil

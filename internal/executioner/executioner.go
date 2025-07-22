@@ -3,6 +3,7 @@ package executioner
 import (
 	"context"
 	"net/url"
+	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 )
@@ -40,7 +41,22 @@ func NewExecutioner(ctx context.Context, conf *config.Global, machineName *url.U
 	}
 }
 
-func (ex *Executioner) Exec(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
+func (ex *Executioner) Exec(skippable bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
+	defer ex.onUpdateHook()
+
+	// 1) local short‐circuit
+	if ex.local && skippable {
+		ex.log.AddMessageOnly("(skipped) ", name, " ", strings.Join(args, " "))
+		if onSuccess != nil {
+			err := onSuccess(ex.log)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
 	if ex.local {
 		return ex.shellStream(onFailure, onSuccess, name, args...)
 	} else {

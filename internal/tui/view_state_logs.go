@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
 // Render generates the Docker-style build log view with tree structure
@@ -43,7 +42,7 @@ func (m *model) PrintBuildLogs() string {
 				Root(configStyle.Render(fmt.Sprintf("%c %s", colors.IconConfiguration, configurationName)))
 
 			// Add configuration logs directly (no "Logs" intermediate node)
-			if configuration != nil && len(configuration.Logs) > 0 {
+			if configuration != nil && configuration.Logs.Len() > 0 {
 				xpath := flakeName + configurationName
 				phaseNodes := m.phaseNodes(xpath, configuration.Logs, phaseStyle, commandStyle, errorStyle)
 				for _, phaseNode := range phaseNodes {
@@ -56,7 +55,7 @@ func (m *model) PrintBuildLogs() string {
 				machineNode := tree.New().
 					Root(machineStyle.Render(fmt.Sprintf("%c %s", colors.IconMachine, strings.TrimPrefix(machineName.String(), "ssh://")))).Offset(0, 4)
 
-				if len(machine.Logs) > 0 {
+				if machine.Logs.Len() > 0 {
 					xpath := flakeName + configurationName + machineName.String()
 					phaseNodes := m.phaseNodes(xpath, machine.Logs, phaseStyle, commandStyle, errorStyle)
 					for _, phaseNode := range phaseNodes {
@@ -77,30 +76,14 @@ func (m *model) PrintBuildLogs() string {
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath string, logs map[workflow_definition.WorkflowPhase]*config.Log, phaseStyle, commandStyle, errorStyle lipgloss.Style) []*tree.Tree {
+func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandStyle, errorStyle lipgloss.Style) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
-	if len(logs) == 0 {
+	if logs.Len() == 0 {
 		return phaseNodes
 	}
 
-	// Process all phases in order
-	phases := []workflow_definition.WorkflowPhase{
-		workflow_definition.PhaseStatus,
-		workflow_definition.PhaseBuild,
-		workflow_definition.PhaseBootstrap,
-		workflow_definition.PhaseTransfer,
-		workflow_definition.PhaseSecrets,
-		workflow_definition.PhaseActivate,
-		workflow_definition.PhaseRollback,
-	}
-
-	for _, phase := range phases {
-		log, exists := logs[phase]
-		if !exists || log == nil || len(log.Commands) == 0 {
-			continue
-		}
-
+	for phase, log := range logs.All() {
 		xpath += string(phase)
 		tas := log.TimeAndState.GetTimeAndState()
 

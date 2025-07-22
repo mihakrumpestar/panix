@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
 
-	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
@@ -21,19 +21,39 @@ func (w *Workflow) ExecuteBuildPhase() error {
 		fmt.Println("Executing build phase across flake configurations")
 	}
 
-	err := w.forEachFlakeConfiguration(func(groupPool pond.TaskGroup, flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
-		if w.state.Conf.Global.Verbose {
-			fmt.Println("Executing status phase across all machines in " + flakeName + " " + configurationName)
-		}
+	err := w.forEachFlakeConfiguration(
+		func(flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
+			if w.state.Conf.Global.Verbose {
+				fmt.Println("Executing status phase across all machines in " + flakeName + " " + configurationName)
+			}
 
-		configurationBuildTimeAndState := configuration.Logs[workflow_definition.PhaseBuild].TimeAndState
+			err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
+			if err != nil {
+				return err
+			}
 
-		configurationBuildTimeAndState.StartTimer()
-		err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
-		configurationBuildTimeAndState.EndTimerWithError(err)
+			err = w.forEachConfigurationMachine(configuration,
+				func(machineName url.URL, machine *config.Machine) error {
 
-		return err
-	})
+					if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {
+						err := w.executeTransferPhaseMachine(configuration, machineName, machine)
+						if err != nil {
+							return err
+						}
+					}
+
+					if slices.Contains(w.phases, workflow_definition.PhaseActivate) {
+						err = w.executeActivatePhaseMachine(configuration, machineName, machine)
+						if err != nil {
+							return err
+						}
+					}
+
+					return nil
+				})
+
+			return err
+		})
 
 	if w.state.Conf.Global.Verbose {
 		fmt.Println("Executing finished for status phase with err %w", err)
@@ -51,12 +71,16 @@ type BuidOutputJson struct {
 }
 
 // This function is called by executeMachineBuild for individual machine builds
-func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
+func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) (err error) {
+	log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
+	log.TimeAndState.StartTimer()
+	defer log.TimeAndState.EndTimerWithError(err)
+
 	bm := configuration.Phases.Build
 
 	if w.state.Conf.Global.DryRun {
 		bm.BuildOutputPath = "BUILD_OUTPUT_PATH_PLACEHOLDER"
-		return nil
+		return
 	}
 
 	// Get the flake path from the flake configuration
@@ -64,15 +88,16 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 
 	abs, err := filepath.Abs(flakePath)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path for flake %s: %w", flakeName, err)
+		err = fmt.Errorf("failed to get absolute path for flake %s: %w", flakeName, err)
+		return
 	}
 
 	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, configuration.Logs[workflow_definition.PhaseBuild], w.hook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
 
 	// Build a configuration
-	err = exc.Exec(
+	err = exc.Exec(false,
 		func(log *config.Log, err error) error {
 			return fmt.Errorf("build failed for %s/%s: %w", flakeName, configurationName, err)
 		},
@@ -94,15 +119,17 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
 	)
 	if err != nil {
-		return err
+		return
 	}
 
 	if w.state.Conf.Global.Verbose {
 		fmt.Printf("Built %s/%s -> %s\n", flakeName, configurationName, bm.BuildOutputPath)
 	}
 
-	return nil
+	return
 }
+
+// Helpers
 
 func lastNonEmptyLineWithoutAnsi(b []byte) []byte {
 
