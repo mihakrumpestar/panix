@@ -32,7 +32,7 @@ func (m *model) PrintBuildLogs() string {
 	errorStyle := colors.Error
 
 	// Build separate trees for each flake
-	for flakeName, flake := range m.state.Conf.Flakes.AllFromFront() {
+	for flakeName, flake := range m.workflow.State().Conf.Flakes.AllFromFront() {
 		flakeTree := tree.New().
 			Root(flakeStyle.Render(fmt.Sprintf("%c %s", colors.IconFlake, flakeName))).
 			Enumerator(tree.RoundedEnumerator).
@@ -45,7 +45,7 @@ func (m *model) PrintBuildLogs() string {
 			// Add configuration logs directly (no "Logs" intermediate node)
 			if configuration != nil && len(configuration.Logs) > 0 {
 				xpath := flakeName + configurationName
-				phaseNodes := m.buildPhaseNodes(xpath, configuration.Logs, phaseStyle, commandStyle, errorStyle)
+				phaseNodes := m.phaseNodes(xpath, configuration.Logs, phaseStyle, commandStyle, errorStyle)
 				for _, phaseNode := range phaseNodes {
 					configNode.Child(phaseNode)
 				}
@@ -58,7 +58,7 @@ func (m *model) PrintBuildLogs() string {
 
 				if len(machine.Logs) > 0 {
 					xpath := flakeName + configurationName + machineName.String()
-					phaseNodes := m.buildPhaseNodes(xpath, machine.Logs, phaseStyle, commandStyle, errorStyle)
+					phaseNodes := m.phaseNodes(xpath, machine.Logs, phaseStyle, commandStyle, errorStyle)
 					for _, phaseNode := range phaseNodes {
 						machineNode.Child(phaseNode)
 					}
@@ -76,8 +76,8 @@ func (m *model) PrintBuildLogs() string {
 	return builder.String()
 }
 
-// buildPhaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.WorkflowPhase]*config.Log, phaseStyle, commandStyle, errorStyle lipgloss.Style) []*tree.Tree {
+// phaseNodes builds individual phase nodes for direct inclusion in the tree
+func (m *model) phaseNodes(xpath string, logs map[workflow_definition.WorkflowPhase]*config.Log, phaseStyle, commandStyle, errorStyle lipgloss.Style) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
 	if len(logs) == 0 {
@@ -136,7 +136,7 @@ func (m *model) buildPhaseNodes(xpath string, logs map[workflow_definition.Workf
 				cmdTree := tree.New().Root(cmdHeader)
 
 				// Command output
-				output := strings.TrimSpace(cmd.StdCombined.String())
+				output := strings.TrimSpace(cmd.StdInOutErr.String())
 				if output != "" {
 					truncate := lastLines(output, 8)
 					cmdTree.Child(truncate)
