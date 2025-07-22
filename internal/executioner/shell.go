@@ -1,12 +1,17 @@
 package executioner
 
 import (
-	"bufio"
+	"bytes"
+	"io"
+	"os"
 	"os/exec"
+	"regexp"
 	"strings"
+	"syscall"
 
-	"github.com/alitto/pond/v2"
+	"github.com/creack/pty"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/pkg/errors"
 )
 
 func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
@@ -25,66 +30,88 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	// dry-run short-circuit
 	if ex.dryRun {
 		if onSuccess != nil {
-			onSuccess(ex.log)
+			err := onSuccess(ex.log)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 
-	execStream := func() error {
-		// wire up pipes
-		stdoutPipe, err := cmd.StdoutPipe()
-		if err != nil {
-			return err
-		}
-		stderrPipe, err := cmd.StderrPipe()
-		if err != nil {
-			return err
-		}
-
-		// start the process
-		err = cmd.Start()
-		if err != nil {
-			return err
-		}
-
-		// use a tiny pond pool of size 2 to read both streams and update hook
-		pool := pond.NewPool(2)
-		group := pool.NewGroupContext(ex.ctx)
-
-		group.Submit(func() {
-			scanner := bufio.NewScanner(stdoutPipe)
-			for scanner.Scan() {
-				toIngest := scanner.Text() + "\n"
-
-				exm.Stdout.WriteString(toIngest)
-				exm.StdCombined.WriteString(toIngest)
-				ex.onUpdateHook()
-			}
-		})
-		group.Submit(func() {
-			scanner := bufio.NewScanner(stderrPipe)
-			for scanner.Scan() {
-				toIngest := scanner.Text() + "\n"
-
-				exm.Stderr.WriteString(toIngest)
-				exm.StdCombined.WriteString(toIngest)
-				ex.onUpdateHook()
-			}
-		})
-
-		// wait for both readers to finish
-		_ = group.Wait()
-
-		// finally wait for the process itself
-		return cmd.Wait()
-	}
-
-	// Blocking stream with real time updates
 	exm.StartTimer()
 	ex.onUpdateHook()
 
-	err := execStream()
+	// Start the process with PTY
+	ptyMaster, err := pty.Start(cmd)
+	if err != nil {
+		exm.EndTimerWithError(err)
+		ex.onUpdateHook()
+		return err
+	}
 
+	defer func() {
+		errPty := ptyMaster.Close()
+		if errPty != nil && err != nil {
+			errPty = errors.Wrap(errPty, err.Error())
+		} else if err != nil {
+			errPty = err
+		}
+		exm.EndTimerWithError(errPty)
+		ex.onUpdateHook()
+	}()
+
+	// Read from PTY and capture to buffer in real-time
+	buf := make([]byte, 8192)
+	var readErr error
+
+	for {
+		var n int
+		n, readErr = ptyMaster.Read(buf)
+		if readErr != nil {
+			readErr = ptyError(readErr)
+			if readErr != nil && readErr != io.EOF {
+				exm.StdInOutErr.WriteString("PTY read error: " + readErr.Error() + "\n")
+			}
+
+			break
+		}
+
+		if n > 0 {
+			// Process the buffer to handle every \r character (some msgs have more than one)
+			processed := bytes.ReplaceAll(buf[:n], []byte("\r"), []byte(""))
+
+			// Check if there's actual content
+			cleanedAndTrimmed := CleanAnsiAndSpace(processed)
+
+			// Only add to log if there is actual content in buffer
+			if len(cleanedAndTrimmed) == 0 {
+				continue
+			}
+
+			// Only add newline if it's not an ANSI escape sequence
+			if !bytes.HasPrefix(processed, []byte{27}) { // 27 is ESC character
+				processed = append(processed, []byte("\n")...)
+			}
+
+			// Debug ANSI
+			//processed = []byte(strconv.Quote(string(processed)))
+
+			_, err = exm.StdInOutErr.Write(processed)
+			if err != nil {
+				break
+			}
+
+			ex.onUpdateHook()
+		}
+	}
+
+	// Wait for command to complete
+	err = cmd.Wait()
+	if err != nil && readErr != nil {
+		err = errors.Wrap(err, readErr.Error())
+	} else if readErr != nil {
+		err = readErr
+	}
 	if err != nil {
 		if onFailure != nil {
 			err = onFailure(ex.log, err)
@@ -96,4 +123,32 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	ex.onUpdateHook()
 
 	return err
+}
+
+// Helpers
+
+// https://github.com/owenthereal/upterm/pull/11/files
+// Linux kernel return EIO when attempting to read from a master pseudo
+// terminal which no longer has an open slave. So ignore error here.
+// See https://github.com/creack/pty/issues/21
+func ptyError(err error) error {
+	pathErr, ok := err.(*os.PathError)
+	if !ok || pathErr.Err != syscall.EIO {
+		return err
+	}
+
+	return nil
+}
+
+func CleanAnsiAndSpace(b []byte) []byte {
+	// ANSI escape sequence regex pattern - matches common escape sequences
+	// Handles: \x1b[K (erase line), \x1b[...m (colors), \x1b[...A/B/C/D (cursor), etc.
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+	// Remove ANSI escape sequences
+	cleaned := ansiRegex.ReplaceAll(b, []byte{})
+
+	cleanedAndTrimmed := bytes.TrimSpace(cleaned)
+
+	return cleanedAndTrimmed
 }
