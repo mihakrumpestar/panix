@@ -14,13 +14,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
-	if ex.log.Commands == nil {
-		ex.log.Commands = make([]*config.CommandLog, 0)
-	}
+func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) (err error) {
+	exm := ex.log.NewCommand()
 
-	exm := &config.CommandLog{TimeAndState: config.TimeAndState{}}
-	ex.log.Commands = append(ex.log.Commands, exm)
+	exm.TimeAndState.StartTimer()
+	defer func() {
+		exm.TimeAndState.EndTimerWithError(err)
+		ex.onUpdateHook()
+	}()
 
 	// prepare initial event
 	cmd := exec.CommandContext(ex.ctx, name, args...)
@@ -38,26 +39,20 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 		return nil
 	}
 
-	exm.StartTimer()
-	ex.onUpdateHook()
-
 	// Start the process with PTY
-	ptyMaster, err := pty.Start(cmd)
+	var ptyMaster *os.File
+	ptyMaster, err = pty.Start(cmd)
 	if err != nil {
-		exm.EndTimerWithError(err)
-		ex.onUpdateHook()
-		return err
+		return
 	}
 
 	defer func() {
 		errPty := ptyMaster.Close()
-		if errPty != nil && err != nil {
-			errPty = errors.Wrap(errPty, err.Error())
-		} else if err != nil {
-			errPty = err
+		if err != nil && errPty != nil {
+			err = errors.Wrap(err, errPty.Error())
+		} else if errPty != nil {
+			err = errPty
 		}
-		exm.EndTimerWithError(errPty)
-		ex.onUpdateHook()
 	}()
 
 	// Read from PTY and capture to buffer in real-time
@@ -119,10 +114,8 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	} else if onSuccess != nil {
 		err = onSuccess(ex.log)
 	}
-	exm.EndTimerWithError(err)
-	ex.onUpdateHook()
 
-	return err
+	return
 }
 
 // Helpers

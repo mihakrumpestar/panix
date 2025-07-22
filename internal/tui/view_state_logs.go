@@ -104,7 +104,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 		for cmdIdx, cmd := range log.Commands {
 			if cmd.Command != "" {
 				xpath += cmd.Command
-				cmdTas := cmd.GetTimeAndState()
+				cmdTas := cmd.TimeAndState.GetTimeAndState()
 
 				iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
 				cmdLabel := cmd.Command
