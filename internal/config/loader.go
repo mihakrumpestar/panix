@@ -14,7 +14,6 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
 	"github.com/knadh/koanf/v2"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/spf13/pflag"
 )
 
@@ -181,9 +180,7 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 				Build: &PhaseBuild{},
 			}
 
-			configuration.Logs = map[workflow_definition.WorkflowPhase]*Log{
-				workflow_definition.PhaseBuild: {TimeAndState: &TimeAndState{}},
-			}
+			configuration.Logs = NewLogs()
 
 			for machineName, machine := range configuration.Machines.AllFromFront() {
 				if machine == nil {
@@ -195,9 +192,7 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 					Status: &PhaseStatus{},
 				}
 
-				machine.Logs = map[workflow_definition.WorkflowPhase]*Log{
-					workflow_definition.PhaseStatus: {TimeAndState: &TimeAndState{}},
-				}
+				machine.Logs = NewLogs()
 
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {
 					configuration.Machines.Delete(machineName)

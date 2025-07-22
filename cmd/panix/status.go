@@ -17,7 +17,10 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{workflow_definition.PhaseStatus}
+		phases := []workflow_definition.WorkflowPhase{
+			workflow_definition.PhaseStatus,
+		}
+
 		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)
 		if err != nil {
 			return err

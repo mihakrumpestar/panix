@@ -81,7 +81,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 		xpath := flakeName + configurationName + machineName.String()
 
 		ps := machine.Phases.Status
-		log := machine.Logs[workflow_definition.PhaseStatus]
+		log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
 
 		err := ""
 		errPtr := log.TimeAndState.GetTimeAndState().Error
