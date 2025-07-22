@@ -13,7 +13,13 @@ import (
 func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machineName url.URL, machine *config.Machine) (err error) {
 	log := machine.Logs.SafeGet(workflow_definition.PhaseActivate)
 	log.TimeAndState.StartTimer()
-	defer log.TimeAndState.EndTimerWithError(err)
+	defer func() {
+		log.TimeAndState.EndTimerWithError(err)
+	}()
+
+	if w.state.Conf.Global.Verbose {
+		log.AddMessageOnly(fmt.Sprintf("Starting activation of %s", machineName.String()))
+	}
 
 	buildOutputPath := configuration.Phases.Build.BuildOutputPath
 
@@ -29,14 +35,14 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 			return errors.Wrapf(err, "activation failed for %s", machineName.String())
 		},
 		nil,
-		"sudo", fmt.Sprintf("%s/bin/switch-to-configuration", buildOutputPath), "switch",
+		"sudo", buildOutputPath+"/bin/switch-to-configuration", "switch",
 	)
 	if err != nil {
 		return
 	}
 
 	if w.state.Conf.Global.Verbose {
-		fmt.Printf("Activated %s successfully", machineName.String())
+		log.AddMessageOnly(fmt.Sprintf("Activated %s successfully", machineName.String()))
 	}
 
 	return
