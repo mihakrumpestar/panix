@@ -13,7 +13,10 @@ var buildCmd = &cobra.Command{
 	Short: "Build all selected closures",
 	Long:  `Build compiles the NixOS configurations for all selected machines without deploying them.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{workflow_definition.PhaseBuild}
+		phases := []workflow_definition.WorkflowPhase{
+			workflow_definition.PhaseBuild,
+		}
+
 		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)
 		if err != nil {
 			return err

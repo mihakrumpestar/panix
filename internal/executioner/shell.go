@@ -19,7 +19,7 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 		ex.log.Commands = make([]*config.CommandLog, 0)
 	}
 
-	exm := &config.CommandLog{TimeAndState: &config.TimeAndState{}}
+	exm := &config.CommandLog{TimeAndState: config.TimeAndState{}}
 	ex.log.Commands = append(ex.log.Commands, exm)
 
 	// prepare initial event

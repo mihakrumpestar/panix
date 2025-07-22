@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -82,8 +84,17 @@ func (m model) Init() tea.Cmd {
 
 func (m model) startWorkflow() tea.Cmd {
 	return func() tea.Msg {
+		defer func() {
+			if r := recover(); r != nil {
+				err := errors.New("stacktrace from panic: \n" + string(debug.Stack()))
+				m.err = err
+				//return errMsg{err}
+			}
+		}()
+
 		err := m.workflow.Start()
 		if err != nil {
+			m.err = err
 			return errMsg{err}
 		}
 
@@ -109,6 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case errMsg:
+		m.err = msg.err
 		return m, tea.Quit
 
 	case tea.KeyMsg:
@@ -188,10 +200,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if m.err != nil {
-		return fmt.Sprintf("Error: %v", m.err)
-	}
-
 	var builder strings.Builder
 
 	// Header with instructions
@@ -200,9 +208,10 @@ func (m model) View() string {
 	headerAndInstructions := header + instructions
 	builder.WriteString(headerAndInstructions)
 
+	builder.WriteString(fmt.Sprintf("%v\n", m.workflow.Phases()))
+
 	if m.workflow.State() == nil {
 		builder.WriteString("No state available")
-		return builder.String()
 	}
 
 	switch m.modelView.mode {
@@ -212,10 +221,10 @@ func (m model) View() string {
 		view := m.PrintStatusPhaseMachineTable()
 		if view == "" {
 			builder.WriteString("No data available")
-			return builder.String()
-		}
+		} else {
+			builder.WriteString(view)
 
-		builder.WriteString(view)
+		}
 
 		if m.modelView.mode != TuiViewModeAll {
 			break
@@ -226,10 +235,15 @@ func (m model) View() string {
 		view := m.PrintBuildLogs()
 		if view == "" {
 			builder.WriteString("No data available")
-			return builder.String()
+		} else {
+			builder.WriteString(view)
 		}
+	}
 
-		builder.WriteString(view)
+	if m.err != nil {
+		errorHeader := "\n\n\n=== Error ===\n"
+		errorContent := "\n%s\n" + m.err.Error()
+		builder.WriteString(errorHeader + errorContent)
 	}
 
 	if m.workflow.State().Conf.Global.Debug {

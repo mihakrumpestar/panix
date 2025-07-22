@@ -1,31 +1,43 @@
 package workflow
 
 import (
+	"fmt"
+	"net/url"
+
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/pkg/errors"
 )
 
-// This function is called by executeMachineTransfer for individual machine transfers
-func (w *Workflow) transferToMachine(flakeName, configName, machineName string, machine *config.Machine) error {
-	/*
-		if cm.BuildOutputPath == "" {
-			return fmt.Errorf("machine %s/%s/%s has no build output path", flakeName, configName, machineName)
-		}
+// This function is called by executeMachineTransfer for individual configurations -> machine transfers
+func (w *Workflow) executeTransferPhaseMachine(configuration *config.Configuration, machineName url.URL, machine *config.Machine) (err error) {
+	log := machine.Logs.SafeGet(workflow_definition.PhaseTransfer)
+	log.TimeAndState.StartTimer()
+	defer log.TimeAndState.EndTimerWithError(err)
 
-		exc, err := executioner.New(w.ctx, w.cfg.Global.DryRun, machine)
-		if err != nil {
-			return err
-		}
+	buildOutputPath := configuration.Phases.Build.BuildOutputPath
 
-		sshInfo := fmt.Sprintf("ssh://%s", machine.Ssh.Alias)
-		output, err := exc.Exec("nix", "copy", "--to", sshInfo, cm.BuildOutputPath)
-		if err != nil {
-			return fmt.Errorf("nix copy failed: %w\n%s", err, output.Stderr.String())
-		}
+	if buildOutputPath == "" {
+		err = fmt.Errorf("machine %s has no build output path", machineName.String())
+		return
+	}
 
-		if w.cfg.Global.Verbose {
-			fmt.Printf("Transferred %s to %s/%s/%s\n", cm.BuildOutputPath, flakeName, configName, machineName)
-		}
-	*/
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
 
-	return nil
+	err = exc.Exec(true,
+		func(l *config.Log, err error) error {
+			return errors.Wrap(err, "nix copy failed")
+		},
+		nil,
+		"nix", "copy", "--to", machineName.String(), buildOutputPath)
+	if err != nil {
+		return
+	}
+
+	if w.state.Conf.Global.Verbose {
+		fmt.Printf("Transferred %s to %s\n", buildOutputPath, machineName.String())
+	}
+
+	return
 }

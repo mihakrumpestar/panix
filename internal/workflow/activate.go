@@ -1,29 +1,43 @@
 package workflow
 
 import (
+	"fmt"
+	"net/url"
+
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/pkg/errors"
 )
 
-func (w *Workflow) activateMachine(flakeName, configName, machineName string, machine *config.Machine) error {
-	/*
-		if cm.BuildOutputPath == "" {
-			return fmt.Errorf("machine %s/%s/%s has no build output path, cannot activate", flakeName, configName, machineName)
-		}
+func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machineName url.URL, machine *config.Machine) (err error) {
+	log := machine.Logs.SafeGet(workflow_definition.PhaseActivate)
+	log.TimeAndState.StartTimer()
+	defer log.TimeAndState.EndTimerWithError(err)
 
-		exc, err := executioner.New(w.ctx, w.cfg.Global.DryRun, machine)
-		if err != nil {
-			return err
-		}
+	buildOutputPath := configuration.Phases.Build.BuildOutputPath
 
-		output, err := exc.Exec("sudo", fmt.Sprintf("%s/bin/switch-to-configuration", cm.BuildOutputPath), "switch")
-		if err != nil {
-			return fmt.Errorf("activation failed for %s/%s/%s: %w\nOutput: %s", flakeName, configName, machineName, err, output.Stderr.String())
-		}
+	if w.state.Conf.Global.DryRun {
+		return
+	}
 
-		if w.cfg.Global.Verbose {
-			fmt.Printf("Activated %s/%s/%s successfully\n", flakeName, configName, machineName)
-		}
-	*/
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
 
-	return nil
+	// Build a configuration
+	err = exc.Exec(false,
+		func(log *config.Log, err error) error {
+			return errors.Wrapf(err, "activation failed for %s", machineName.String())
+		},
+		nil,
+		"sudo", fmt.Sprintf("%s/bin/switch-to-configuration", buildOutputPath), "switch",
+	)
+	if err != nil {
+		return
+	}
+
+	if w.state.Conf.Global.Verbose {
+		fmt.Printf("Activated %s successfully", machineName.String())
+	}
+
+	return
 }
