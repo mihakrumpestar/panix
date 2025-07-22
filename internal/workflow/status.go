@@ -57,7 +57,9 @@ func (w *Workflow) ExecuteStatusPhase() error {
 func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *config.Machine) (err error) {
 	log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
 	log.TimeAndState.StartTimer()
-	defer log.TimeAndState.EndTimerWithError(err)
+	defer func() {
+		log.TimeAndState.EndTimerWithError(err)
+	}()
 
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
 

@@ -74,7 +74,9 @@ type BuidOutputJson struct {
 func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) (err error) {
 	log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
 	log.TimeAndState.StartTimer()
-	defer log.TimeAndState.EndTimerWithError(err)
+	defer func() {
+		log.TimeAndState.EndTimerWithError(err)
+	}()
 
 	bm := configuration.Phases.Build
 

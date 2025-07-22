@@ -14,7 +14,9 @@ import (
 func (w *Workflow) executeTransferPhaseMachine(configuration *config.Configuration, machineName url.URL, machine *config.Machine) (err error) {
 	log := machine.Logs.SafeGet(workflow_definition.PhaseTransfer)
 	log.TimeAndState.StartTimer()
-	defer log.TimeAndState.EndTimerWithError(err)
+	defer func() {
+		log.TimeAndState.EndTimerWithError(err)
+	}()
 
 	buildOutputPath := configuration.Phases.Build.BuildOutputPath
 

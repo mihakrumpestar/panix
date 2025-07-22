@@ -59,9 +59,9 @@ type Configuration struct {
 }
 
 type CommandLog struct {
-	Command     string
-	StdInOutErr bytes.Buffer
-	TimeAndState
+	Command      string
+	StdInOutErr  bytes.Buffer
+	TimeAndState TimeAndState
 }
 
 type SshClient struct {
@@ -125,11 +125,20 @@ type Log struct {
 }
 
 func (log *Log) LastCommand() *CommandLog {
+	// Safety
 	if len(log.Commands) == 0 {
 		return &CommandLog{TimeAndState: TimeAndState{}}
 	}
 
 	return log.Commands[len(log.Commands)-1]
+}
+
+func (log *Log) NewCommand() *CommandLog {
+	cmd := &CommandLog{TimeAndState: TimeAndState{}}
+
+	log.Commands = append(log.Commands, cmd)
+
+	return cmd
 }
 
 func (log *Log) AddMessageOnly(msg ...string) {
@@ -141,8 +150,8 @@ func (log *Log) AddMessageOnly(msg ...string) {
 		comLog.Command += msgInstance
 	}
 
-	comLog.StartTimer()
-	comLog.EndTimer()
+	comLog.TimeAndState.StartTimer()
+	comLog.TimeAndState.EndTimer()
 
 	if log.Commands == nil {
 		log.Commands = make([]*CommandLog, 0)
