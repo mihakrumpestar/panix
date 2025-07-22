@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 	"runtime/debug"
 	"slices"
@@ -11,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/pkg/errors"
 )
 
 type stateUpdateHookMsg struct{}
@@ -84,21 +84,35 @@ func (m model) Init() tea.Cmd {
 
 func (m model) startWorkflow() tea.Cmd {
 	return func() tea.Msg {
-		defer func() {
-			if r := recover(); r != nil {
-				err := errors.New("stacktrace from panic: \n" + string(debug.Stack()))
+		// Use a closure to handle both panic recovery and error handling
+		var msg tea.Msg = nil
+
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					var err error
+					if e, ok := r.(error); ok {
+						err = fmt.Errorf("panic recovered: %w\n\n%s", e, string(debug.Stack()))
+					} else {
+						err = fmt.Errorf("panic recovered: %v\n\n%s", r, string(debug.Stack()))
+					}
+					m.err = err
+					msg = errMsg{err}
+				}
+			}()
+
+			err := m.workflow.Start()
+			if err != nil {
+				m.modelView.debugOutput.WriteString("Error: " + err.Error())
 				m.err = err
-				//return errMsg{err}
+				msg = errMsg{err}
+				return
 			}
+
+			m.modelView.debugOutput.WriteString("All ok")
 		}()
 
-		err := m.workflow.Start()
-		if err != nil {
-			m.err = err
-			return errMsg{err}
-		}
-
-		return errMsg{}
+		return msg
 	}
 }
 
@@ -130,7 +144,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.workflow.Cancel()()
 
 			// Block quiting until Workflow finalizes and terminates its tasks
-			<-m.workflow.Ctx().Done()
+			ctx := m.workflow.Ctx()
+			<-ctx.Done()
+
+			if m.err != nil && ctx.Err() != nil {
+				m.err = errors.Wrap(m.err, ctx.Err().Error())
+			} else if ctx.Err() != nil {
+				m.err = ctx.Err()
+			}
+
+			m.modelView.debugOutput.WriteString("CTX done")
 
 			return m, tea.Quit
 		case "d":
@@ -202,6 +225,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var builder strings.Builder
 
+	colors := m.modelView.colors
+
 	// Header with instructions
 	header := "\n=== Panix TUI ===\n"
 	instructions := "Press 'q' to quit, 'd' to switch modes\n\n"
@@ -241,13 +266,13 @@ func (m model) View() string {
 	}
 
 	if m.err != nil {
-		errorHeader := "\n\n\n=== Error ===\n"
-		errorContent := "\n%s\n" + m.err.Error()
-		builder.WriteString(errorHeader + errorContent)
+		errorHeader := "\n\n=== Error ===\n"
+		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
+		builder.WriteString(colors.Error.Render(errorHeader + errorContent))
 	}
 
 	if m.workflow.State().Conf.Global.Debug {
-		debugHeader := "\n\n\n=== Debug ===\n"
+		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)

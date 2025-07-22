@@ -14,44 +14,24 @@ import (
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
 func (w *Workflow) ExecuteStatusPhase() error {
-	if w.state.Conf.Global.Verbose {
-		fmt.Println("Executing status phase across all flake configurations")
-	}
-
 	err := w.forEachFlakeConfiguration(func(flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
-		if w.state.Conf.Global.Verbose {
-			fmt.Println("Executing status phase across all machines in " + flakeName + " " + configurationName)
-		}
-
 		err := w.forEachConfigurationMachine(configuration, func(machineName url.URL, machine *config.Machine) error {
-			if w.state.Conf.Global.Verbose {
-				fmt.Println("Executing status phase on machine " + machineName.String())
-			}
-
 			err := w.executeStatusPhaseMachine(machineName, machine)
 			if err != nil {
 				return err
 			}
 
-			if w.state.Conf.Global.Verbose {
-				fmt.Println("Executing finished for status phase on machine " + machineName.String())
-			}
-
 			return err
 		})
-
-		if w.state.Conf.Global.Verbose {
-			fmt.Println("Executing finished for status phase across all machines in " + flakeName + " " + configurationName)
-		}
 
 		return err
 	})
 
-	if w.state.Conf.Global.Verbose {
-		fmt.Println("Executing finished for status phase with err %w", err)
+	if err != nil {
+		return err
 	}
 
-	return err
+	return nil
 }
 
 func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *config.Machine) (err error) {
@@ -80,7 +60,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	}
 
 	// SSH connect
-	err = exc.Exec(false,
+	err = exc.Exec(true,
 		func(log *config.Log, err error) error {
 			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().StdInOutErr.String())
 		},

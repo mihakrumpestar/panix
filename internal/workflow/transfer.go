@@ -38,7 +38,7 @@ func (w *Workflow) executeTransferPhaseMachine(configuration *config.Configurati
 	}
 
 	if w.state.Conf.Global.Verbose {
-		fmt.Printf("Transferred %s to %s\n", buildOutputPath, machineName.String())
+		log.AddMessageOnly(fmt.Sprintf("Transferred %s to %s\n", buildOutputPath, machineName.String()))
 	}
 
 	return

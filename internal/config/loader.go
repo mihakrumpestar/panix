@@ -60,8 +60,6 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 					key := keyRaw.Prefix("global.")
 
-					//fmt.Println(key)
-
 					val := posflag.FlagVal(flags, f)
 
 					return key, val
