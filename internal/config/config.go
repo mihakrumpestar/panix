@@ -59,9 +59,7 @@ type Configuration struct {
 
 type CommandLog struct {
 	Command     string
-	Stdout      bytes.Buffer
-	Stderr      bytes.Buffer
-	StdCombined bytes.Buffer
+	StdInOutErr bytes.Buffer
 	*TimeAndState
 }
 

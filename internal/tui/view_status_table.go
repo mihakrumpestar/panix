@@ -12,8 +12,10 @@ import (
 )
 
 func (m *model) PrintStatusPhaseMachineTable() string {
-	if m.state.Conf.Global.DryRun {
-		if m.state.Conf.Global.Verbose {
+	state := m.workflow.State()
+
+	if state.Conf.Global.DryRun {
+		if state.Conf.Global.Verbose {
 			fmt.Println("No status table when dry-run option is enabled")
 		}
 		return "No table in dryRun"
@@ -31,8 +33,6 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	usableWidth := m.modelView.width - 4 // Account for borders and padding
 	if usableWidth < 60 {
 		usableWidth = 60 // absolute minimum
-	} else if usableWidth > 200 {
-		usableWidth = 200 // reasonable maximum
 	}
 
 	// Header text lengths including icons
@@ -62,13 +62,13 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 			case 4: // MACHINE
 				return colors.Machine
 			case 5: // Status text
-				return colors.TableRow.Width(10)
+				return colors.TableRow.Width(lipgloss.Width("NOT_BOOTSTRAPPED"))
 			case 6: // Generation
-				return colors.TableRow.Width(8).Align(lipgloss.Center)
+				return colors.TableRow.Width(lipgloss.Width("GENERATION"))
 			case 7: // Last deploy
-				return colors.TableRow.Width(8)
+				return colors.TableRow.Width(lipgloss.Width("2025-07-22 08:12:19"))
 			case 8: // ERROR
-				return colors.TableRow.Width(5).MaxWidth(1000)
+				return colors.TableRow.MaxWidth(1000)
 			default:
 				return colors.TableRow
 			}
@@ -77,7 +77,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	// Track previous values to implement row spanning
 	var prevFlakeName, prevConfigName string
 
-	m.state.ExpandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
+	state.ExpandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
 		xpath := flakeName + configurationName + machineName.String()
 
 		ps := machine.Phases.Status
@@ -135,6 +135,7 @@ func (m *model) getStatusIcon(ps *config.PhaseStatus, xpath string, log *config.
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
+	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
 	if !ps.Reachable {
 		return "🔴"
 	}
@@ -152,6 +153,7 @@ func (m *model) getStatusText(ps *config.PhaseStatus, xpath string, log *config.
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
+	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
 	if !ps.Reachable {
 		return "UNREACHABLE"
 	}

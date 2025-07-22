@@ -53,7 +53,6 @@ func (w *Workflow) ExecuteStatusPhase() error {
 		fmt.Println("Executing finished for status phase with err %w", err)
 	}
 
-	w.state.Error = err
 	w.hook.OnUpdateHook()
 
 	return err
@@ -82,7 +81,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	// SSH connect
 	err = exc.Exec(
 		func(log *config.Log, err error) error {
-			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().StdCombined.String())
+			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().StdInOutErr.String())
 		},
 		func(log *config.Log) error {
 			sm.SSHConnectable = true
@@ -107,7 +106,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	err = exc.Exec(
 		nil,
 		func(log *config.Log) error {
-			sm.CurrentGeneration = strings.TrimSpace(log.LastCommand().StdCombined.String())
+			sm.CurrentGeneration = strings.TrimSpace(log.LastCommand().StdInOutErr.String())
 			return nil
 		}, "sh", "-c", "sleep 5 && nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
 	if err != nil {
@@ -118,7 +117,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	err = exc.Exec(
 		nil,
 		func(log *config.Log) error {
-			sm.LastDeployTime = strings.TrimSpace(log.LastCommand().StdCombined.String())
+			sm.LastDeployTime = strings.TrimSpace(log.LastCommand().StdInOutErr.String())
 			return nil
 		}, "sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
 	if err != nil {

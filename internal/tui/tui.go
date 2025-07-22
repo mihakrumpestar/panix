@@ -1,16 +1,21 @@
 package tui
 
 import (
-	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mihakrumpestar/panix/internal/workflow"
+	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
 type stateUpdateHookMsg struct{}
+
+type errMsg struct{ err error }
+
+func (e errMsg) Error() string { return e.err.Error() }
 
 type TuiViewMode string
 
@@ -21,13 +26,10 @@ var (
 )
 
 type model struct {
-	ctx          context.Context
-	state        *workflow.WorkflowState
-	quitting     bool
-	err          error
-	updateCh     <-chan uint64
-	cancelParent context.CancelFunc
-	modelView    modelView
+	workflow  *workflow.Workflow
+	quitting  bool
+	err       error
+	modelView modelView
 }
 
 type modelView struct {
@@ -40,13 +42,16 @@ type modelView struct {
 	//viewport viewport.Model
 }
 
-func NewTui(ctx context.Context, state *workflow.WorkflowState, updateCh <-chan uint64, cancel context.CancelFunc) error {
+func NewTui(workflow *workflow.Workflow) error {
+
+	defaultModelView := TuiViewModeAll
+	if !slices.Contains(workflow.Phases(), workflow_definition.PhaseStatus) {
+		defaultModelView = TuiViewModeLogs
+	}
+
 	p := tea.NewProgram(model{
-		ctx:          ctx,
-		state:        state,
-		updateCh:     updateCh,
-		cancelParent: cancel,
-		modelView: modelView{mode: TuiViewModeAll,
+		workflow: workflow,
+		modelView: modelView{mode: defaultModelView,
 			spinners: NewSpinners(),
 			width:    120, // Initial dimensions
 			height:   120, // Initial dimensions
@@ -71,18 +76,26 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.WindowSize(),
 		m.stateUpdateHook(),
+		m.startWorkflow(),
 	)
+}
+
+func (m model) startWorkflow() tea.Cmd {
+	return func() tea.Msg {
+		err := m.workflow.Start()
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return errMsg{}
+	}
 }
 
 func (m model) stateUpdateHook() tea.Cmd {
 	return func() tea.Msg {
-		_, ok := <-m.updateCh
+		_, ok := <-m.workflow.GetChannel()
 		if !ok {
 			return tea.Quit()
-		}
-
-		if m.state.Error != nil {
-			return m.state.Error
 		}
 
 		return stateUpdateHookMsg{}
@@ -92,18 +105,28 @@ func (m model) stateUpdateHook() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := make([]tea.Cmd, 0)
 
+	cmds = append(cmds, m.modelView.spinners.SendInitTickIfNotAlready())
+
 	switch msg := msg.(type) {
+	case errMsg:
+		return m, tea.Quit
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.quitting = true
-			m.cancelParent()
+			m.workflow.Cancel()()
 
 			// Block quiting until Workflow finalizes and terminates its tasks
-			<-m.ctx.Done()
+			<-m.workflow.Ctx().Done()
 
 			return m, tea.Quit
 		case "d":
+			// Don't toggle if we don't have PhaseStatus
+			if !slices.Contains(m.workflow.Phases(), workflow_definition.PhaseStatus) {
+				return m, nil
+			}
+
 			// Toggle between status and detailed views
 			switch m.modelView.mode {
 			case TuiViewModeAll:
@@ -155,7 +178,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		cmds = append(cmds, m.modelView.spinners.Update(msg))
 	default:
-		cmds = append(cmds, m.modelView.spinners.SendInitTickIfNotAlready())
 	}
 
 	// Handle keyboard and mouse events in the viewport
@@ -178,9 +200,7 @@ func (m model) View() string {
 	headerAndInstructions := header + instructions
 	builder.WriteString(headerAndInstructions)
 
-	// Create a defensive copy of metadata to avoid concurrent access issues
-
-	if m.state == nil {
+	if m.workflow.State() == nil {
 		builder.WriteString("No state available")
 		return builder.String()
 	}
@@ -212,7 +232,7 @@ func (m model) View() string {
 		builder.WriteString(view)
 	}
 
-	if m.state.Conf.Global.Debug {
+	if m.workflow.State().Conf.Global.Debug {
 		debugHeader := "\n\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
