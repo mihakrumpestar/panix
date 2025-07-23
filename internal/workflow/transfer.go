@@ -25,7 +25,7 @@ func (w *Workflow) executeTransferPhaseMachine(configuration *config.Configurati
 		return
 	}
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, machine.Ssh, log, w.hook.OnUpdateHook)
 
 	err = exc.Exec(true,
 		func(l *config.Log, err error) error {

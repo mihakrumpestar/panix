@@ -168,11 +168,13 @@ type MachinePhases struct {
 }
 
 type PhaseStatus struct {
-	Reachable         bool
-	SSHConnectable    bool
-	Bootstrapped      bool
-	CurrentGeneration string
-	LastDeployTime    string
+	Reachable      bool
+	SSHConnectable bool
+	Bootstrapped   bool
+	Generation     string
+	Date           string
+	Nixos          string
+	Kernel         string
 }
 
 // Configuration and Machine

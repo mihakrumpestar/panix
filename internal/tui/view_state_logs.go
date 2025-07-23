@@ -103,7 +103,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 		// Commands and their output
 		for cmdIdx, cmd := range log.Commands {
 			if cmd.Command != "" {
-				xpath += cmd.Command
+				commandXpath := xpath + cmd.Command
 				cmdTas := cmd.TimeAndState.GetTimeAndState()
 
 				iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
@@ -111,7 +111,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 
 				cmdText := m.MostLeftAndMostRight(
 					12,
-					m.LeftSideIconOrSpinner(xpath, iconOnFinished, cmdLabel, cmdTas),
+					m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel, cmdTas),
 					m.RightSideDuration(cmdTas),
 				)
 
@@ -120,9 +120,11 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 
 				// Command output
 				output := strings.TrimSpace(cmd.StdInOutErr.String())
-				if output != "" {
-					truncate := lastLines(output, 8)
-					cmdTree.Child(truncate)
+				if len(output) != 0 {
+					vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output)
+					cmdTree.Child(vpr)
+				} else {
+					m.modelView.viewports.RemoveIfExistsViewport(commandXpath)
 				}
 
 				// Command error status
@@ -149,7 +151,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 // Helpers
 
 func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
-	termW := m.modelView.width
+	termW := m.modelView.dimensions.width
 	avail := termW - prefixLen
 
 	lw := lipgloss.Width(left)
