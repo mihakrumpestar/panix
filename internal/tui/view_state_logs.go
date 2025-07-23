@@ -121,7 +121,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 				// Command output
 				output := strings.TrimSpace(cmd.StdInOutErr.String())
 				if len(output) != 0 {
-					vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output)
+					vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output, cmd.Pty)
 					cmdTree.Child(vpr)
 				} else {
 					m.modelView.viewports.RemoveIfExistsViewport(commandXpath)

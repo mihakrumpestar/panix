@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"iter"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/elliotchance/orderedmap/v3"
@@ -62,6 +63,7 @@ type CommandLog struct {
 	Command      string
 	StdInOutErr  bytes.Buffer
 	TimeAndState TimeAndState
+	Pty          *os.File
 }
 
 type SshClient struct {

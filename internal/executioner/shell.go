@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -23,7 +24,7 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 		ex.onUpdateHook()
 	}()
 
-	// prepare initial event
+	// Prepare initial event
 	cmd := exec.CommandContext(ex.ctx, name, args...)
 	exm.Command = strings.Join(cmd.Args, " ")
 	ex.onUpdateHook()
@@ -40,14 +41,13 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	}
 
 	// Start the process with PTY
-	var ptyMaster *os.File
-	ptyMaster, err = pty.Start(cmd)
+	exm.Pty, err = pty.Start(cmd)
 	if err != nil {
 		return
 	}
 
 	defer func() {
-		errPty := ptyMaster.Close()
+		errPty := exm.Pty.Close()
 		if err != nil && errPty != nil {
 			err = errors.Wrap(err, errPty.Error())
 		} else if errPty != nil {
@@ -59,9 +59,10 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	buf := make([]byte, 8192)
 	var readErr error
 
+	// Warning: the folowing read sequance applies to pty.stdin too
 	for {
 		var n int
-		n, readErr = ptyMaster.Read(buf)
+		n, readErr = exm.Pty.Read(buf)
 		if readErr != nil {
 			readErr = ptyError(readErr)
 			if readErr != nil && readErr != io.EOF {
@@ -72,8 +73,18 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 		}
 
 		if n > 0 {
+			nonEmptyBuf := buf[:n]
+			moveToStartPositionSequence := []byte("\r")
+
 			// Process the buffer to handle every \r character (some msgs have more than one)
-			processed := bytes.ReplaceAll(buf[:n], []byte("\r"), []byte(""))
+
+			var processed []byte
+			if !(slices.Compare(nonEmptyBuf, moveToStartPositionSequence) == 0) {
+				processed = bytes.Replace(nonEmptyBuf, moveToStartPositionSequence, []byte("\n"), 1)
+				processed = bytes.ReplaceAll(processed, moveToStartPositionSequence, []byte(""))
+			} else {
+				processed = nonEmptyBuf
+			}
 
 			// Check if there's actual content
 			cleanedAndTrimmed := CleanAnsiAndSpace(processed)
@@ -81,11 +92,6 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 			// Only add to log if there is actual content in buffer
 			if len(cleanedAndTrimmed) == 0 {
 				continue
-			}
-
-			// Only add newline if it's not an ANSI escape sequence
-			if !bytes.HasPrefix(processed, []byte{27}) { // 27 is ESC character
-				processed = append(processed, []byte("\n")...)
 			}
 
 			// Debug ANSI
