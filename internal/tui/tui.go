@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -29,10 +30,11 @@ var (
 )
 
 type model struct {
-	workflow  *workflow.Workflow
-	quitting  bool
-	err       error
-	modelView modelView
+	workflow     *workflow.Workflow
+	quitting     bool
+	err          error
+	modelView    modelView
+	rawKeyReader *RawKeyReader
 }
 
 type modelView struct {
@@ -40,7 +42,7 @@ type modelView struct {
 	dimensions  *Dimensions
 	spinners    *Spinners
 	viewports   *Viewports
-	debugOutput strings.Builder
+	debugOutput *strings.Builder
 	colors      ColorScheme
 	//viewport viewport.Model
 }
@@ -64,16 +66,27 @@ func NewTui(workflow *workflow.Workflow) error {
 		height: 120, // Initial dimensions before tea.WindowSizeMsg
 	}
 
+	debugOutput := &strings.Builder{}
+
+	colors := DefaultColorScheme()
+
+	rawKeyReader := NewRawKeyReader(os.Stdin, 1024)
+
+	//stdin := io.TeeReader(os.Stdin, os.Stdout)
+
 	p := tea.NewProgram(model{
 		workflow: workflow,
 		modelView: modelView{
-			mode:       defaultModelView,
-			spinners:   NewSpinners(),
-			viewports:  NewViewports(dimensions),
-			dimensions: dimensions,
-			colors:     DefaultColorScheme(),
+			mode:        defaultModelView,
+			dimensions:  dimensions,
+			spinners:    NewSpinners(),
+			viewports:   NewViewports(dimensions, debugOutput, colors),
+			debugOutput: debugOutput,
+			colors:      colors,
 		},
+		rawKeyReader: rawKeyReader,
 	},
+		tea.WithInput(rawKeyReader),
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
@@ -93,6 +106,7 @@ func (m model) Init() tea.Cmd {
 		tea.WindowSize(),
 		m.stateUpdateHook(),
 		m.startWorkflow(),
+		m.rawKeyReader.Next(),
 	)
 }
 
@@ -151,6 +165,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		return m, tea.Quit
+
+	// Trigger re-render when update is received
+	case stateUpdateHookMsg:
+		cmds = append(cmds, m.stateUpdateHook())
+
+		// re‐arm for the next keystroke
+	case RawKeyReaderMsg:
+		cmds = append(cmds, m.rawKeyReader.Next())
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
@@ -198,42 +221,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dimensions.width = msg.Width
 		dimensions.height = msg.Height
 
-		/*
-			headerHeight := lipgloss.Height(m.modelView.headerView())
-			footerHeight := lipgloss.Height(m.footerView())
-			verticalMarginHeight := headerHeight + footerHeight
-
-			if !m.modelView.ready {
-				// Since this program is using the full size of the viewport we
-				// need to wait until we've received the window dimensions before
-				// we can initialize the viewport. The initial dimensions come in
-				// quickly, though asynchronously, which is why we wait for them
-				// here.
-				m.modelView.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
-				m.modelView.viewport.YPosition = headerHeight
-				m.modelView.viewport.SetContent(m.content)
-				m.modelView.ready = true
-			} else {
-				m.modelView.viewport.Width = msg.Width
-				m.modelView.viewport.Height = msg.Height - verticalMarginHeight
-			}
-		*/
-
-	// Trigger re-render when update is received
-	case stateUpdateHookMsg:
-		cmds = append(cmds,
-			m.stateUpdateHook(),
-		)
-
 	// Update spinners
 	case spinner.TickMsg:
 		cmds = append(cmds, m.modelView.spinners.Update(msg))
-	default:
 	}
-
-	// Handle keyboard and mouse events in the viewport
-	//m.modelView.viewport, cmd = m.modelView.viewport.Update(msg)
-	//cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
