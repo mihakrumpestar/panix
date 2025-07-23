@@ -1,9 +1,10 @@
 package workflow
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
-	"strings"
+	"strconv"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -67,7 +68,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 		func(log *config.Log) error {
 			sm.SSHConnectable = true
 			return nil
-		}, "sh", "-c", "exit 0")
+		}, "echo", "OK")
 	if err != nil {
 		return
 	}
@@ -78,7 +79,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 		func(log *config.Log) error {
 			sm.Bootstrapped = true
 			return nil
-		}, "sh", "-c", "test -e /run/current-system")
+		}, "test", "-e", "/run/current-system")
 	if err != nil {
 		err = nil // just not bootstrapped, not actually an error
 		return
@@ -88,23 +89,41 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	err = exc.Exec(false,
 		nil,
 		func(log *config.Log) error {
-			sm.CurrentGeneration = strings.TrimSpace(log.LastCommand().StdInOutErr.String())
-			return nil
-		}, "sh", "-c", "nixos-rebuild list-generations | tail -1 | awk '{print $1}'")
-	if err != nil {
-		return
-	}
+			output := log.LastCommand().StdInOutErr.Bytes()
 
-	// Get last deploy time
-	err = exc.Exec(false,
-		nil,
-		func(log *config.Log) error {
-			sm.LastDeployTime = strings.TrimSpace(log.LastCommand().StdInOutErr.String())
+			var nixGenerations nixGenerations
+			err = json.Unmarshal(output, &nixGenerations)
+			if err != nil || len(nixGenerations) == 0 {
+				return fmt.Errorf("invalid list-generations output for %s: %s", machineName.String(), strconv.Quote(string(output)))
+			}
+
+			for _, nixGeneration := range nixGenerations {
+				if nixGeneration.Current {
+					sm.Generation = fmt.Sprint(nixGeneration.Generation)
+					sm.Date = nixGeneration.Date
+					sm.Nixos = nixGeneration.NixosVersion
+					sm.Kernel = nixGeneration.KernelVersion
+					break
+				}
+			}
+
 			return nil
-		}, "sh", "-c", "stat -c %Y /run/current-system 2>/dev/null | xargs -I {} date -d @{} '+%Y-%m-%d %H:%M:%S' || echo 'unknown'")
+		}, "nixos-rebuild", "list-generations", "--json")
 	if err != nil {
 		return
 	}
 
 	return
+}
+
+// Helpers
+
+type nixGenerations []struct {
+	Generation            int           `json:"generation"`
+	Date                  string        `json:"date"`
+	NixosVersion          string        `json:"nixosVersion"`
+	KernelVersion         string        `json:"kernelVersion"`
+	ConfigurationRevision string        `json:"configurationRevision"`
+	Specialisations       []interface{} `json:"specialisations"`
+	Current               bool          `json:"current"`
 }

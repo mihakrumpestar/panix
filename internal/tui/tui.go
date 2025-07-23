@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/pkg/errors"
@@ -36,28 +37,41 @@ type model struct {
 
 type modelView struct {
 	mode        TuiViewMode
-	width       int
-	height      int
+	dimensions  *Dimensions
 	spinners    *Spinners
+	viewports   *Viewports
 	debugOutput strings.Builder
 	colors      ColorScheme
 	//viewport viewport.Model
 }
 
+type Dimensions struct {
+	width  int
+	height int
+}
+
 func NewTui(workflow *workflow.Workflow) error {
+	zone.NewGlobal()
+	defer zone.Close()
 
 	defaultModelView := TuiViewModeAll
 	if !slices.Contains(workflow.Phases(), workflow_definition.PhaseStatus) {
 		defaultModelView = TuiViewModeLogs
 	}
 
+	dimensions := &Dimensions{
+		width:  120, // Initial dimensions before tea.WindowSizeMsg
+		height: 120, // Initial dimensions before tea.WindowSizeMsg
+	}
+
 	p := tea.NewProgram(model{
 		workflow: workflow,
-		modelView: modelView{mode: defaultModelView,
-			spinners: NewSpinners(),
-			width:    120, // Initial dimensions
-			height:   120, // Initial dimensions
-			colors:   DefaultColorScheme(),
+		modelView: modelView{
+			mode:       defaultModelView,
+			spinners:   NewSpinners(),
+			viewports:  NewViewports(dimensions),
+			dimensions: dimensions,
+			colors:     DefaultColorScheme(),
 		},
 	},
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
@@ -85,7 +99,7 @@ func (m model) Init() tea.Cmd {
 func (m model) startWorkflow() tea.Cmd {
 	return func() tea.Msg {
 		// Use a closure to handle both panic recovery and error handling
-		var msg tea.Msg = nil
+		msg := tea.Quit()
 
 		func() {
 			defer func() {
@@ -131,12 +145,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := make([]tea.Cmd, 0)
 
 	cmds = append(cmds, m.modelView.spinners.SendInitTickIfNotAlready())
+	cmds = append(cmds, m.modelView.viewports.Update(msg))
 
 	switch msg := msg.(type) {
 	case errMsg:
 		m.err = msg.err
 		return m, tea.Quit
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
@@ -179,8 +193,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		m.modelView.width = msg.Width
-		m.modelView.height = msg.Height
+		dimensions := m.modelView.dimensions
+
+		dimensions.width = msg.Width
+		dimensions.height = msg.Height
 
 		/*
 			headerHeight := lipgloss.Height(m.modelView.headerView())
@@ -274,6 +290,7 @@ func (m model) View() string {
 	if m.workflow.State().Conf.Global.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
+		debugContent += m.modelView.viewports.Debug()
 		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)
 	}
@@ -283,5 +300,5 @@ func (m model) View() string {
 		return builder.String()
 	}
 
-	return builder.String()
+	return zone.Scan(builder.String())
 }

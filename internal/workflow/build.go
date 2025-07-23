@@ -99,7 +99,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 	}
 
 	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
-	fmt.Sprint(ref)
+	//fmt.Sprint(ref)
 
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
 
@@ -109,11 +109,10 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 			return fmt.Errorf("build failed for %s/%s: %w", flakeName, configurationName, err)
 		},
 		func(log *config.Log) error {
-			var parsedOutput []BuidOutputJson
-
 			output := log.LastCommand().StdInOutErr.Bytes()
 			output = lastNonEmptyLineWithoutAnsi(output)
 
+			var parsedOutput []BuidOutputJson
 			err = json.Unmarshal(output, &parsedOutput)
 			if err != nil || len(parsedOutput) == 0 {
 				return fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configurationName, strconv.Quote(string(output)))
@@ -123,8 +122,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 
 			return nil
 		}, // "--print-build-logs"
-		//"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
-		"sh", "-c", "exit 1",
+		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
 	)
 	if err != nil {
 		return

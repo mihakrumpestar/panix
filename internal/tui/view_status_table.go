@@ -27,10 +27,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Use provided width, with reasonable bounds and accounting for borders
-	usableWidth := m.modelView.width - 4 // Account for borders and padding
-	if usableWidth < 60 {
-		usableWidth = 60 // absolute minimum
-	}
+	usableWidth := max(m.modelView.dimensions.width-4, 60)
 
 	// Header text lengths including icons
 	flakeHeader := string(colors.IconFlake) + " FLAKE"
@@ -40,7 +37,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "STATUS", "GENERATION", "DEPLOY", "ERROR").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL", "ERROR").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -62,9 +59,13 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 				return colors.TableRow.Width(lipgloss.Width("NOT_BOOTSTRAPPED"))
 			case 6: // Generation
 				return colors.TableRow.Width(lipgloss.Width("GENERATION"))
-			case 7: // Last deploy
+			case 7: // Date
 				return colors.TableRow.Width(lipgloss.Width("2025-07-22 08:12:19"))
-			case 8: // ERROR
+			case 8: // Nixos
+				return colors.TableRow.Width(lipgloss.Width("25.11.20250624.4b1164c"))
+			case 9: // Kernel
+				return colors.TableRow.Width(lipgloss.Width("KERNEL"))
+			case 10: // ERROR
 				return colors.TableRow.MaxWidth(1000)
 			default:
 				return colors.TableRow
@@ -116,8 +117,10 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 			configDisplay,
 			strings.TrimPrefix(machineName.String(), "ssh://"),
 			m.getStatusText(ps, xpath, log),
-			ps.CurrentGeneration,
-			ps.LastDeployTime,
+			ps.Generation,
+			ps.Date,
+			ps.Nixos,
+			ps.Kernel,
 			err,
 		)
 	})
