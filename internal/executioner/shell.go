@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"slices"
 	"strings"
 	"syscall"
 
@@ -66,41 +65,18 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 		if readErr != nil {
 			readErr = ptyError(readErr)
 			if readErr != nil && readErr != io.EOF {
-				exm.StdInOutErr.WriteString("PTY read error: " + readErr.Error() + "\n")
+				exm.WriteString("PTY read error: " + readErr.Error() + "\n")
 			}
 
 			break
 		}
 
 		if n > 0 {
-			nonEmptyBuf := buf[:n]
-			moveToStartPositionSequence := []byte("\r")
+			rawBuffer := buf[:n]
 
-			// Process the buffer to handle every \r character (some msgs have more than one)
-
-			var processed []byte
-			if !(slices.Compare(nonEmptyBuf, moveToStartPositionSequence) == 0) {
-				processed = bytes.Replace(nonEmptyBuf, moveToStartPositionSequence, []byte("\n"), 1)
-				processed = bytes.ReplaceAll(processed, moveToStartPositionSequence, []byte(""))
-			} else {
-				processed = nonEmptyBuf
-			}
-
-			// Check if there's actual content
-			cleanedAndTrimmed := CleanAnsiAndSpace(processed)
-
-			// Only add to log if there is actual content in buffer
-			if len(cleanedAndTrimmed) == 0 {
-				continue
-			}
-
-			// Debug ANSI
-			//processed = []byte(strconv.Quote(string(processed)))
-
-			_, err = exm.StdInOutErr.Write(processed)
-			if err != nil {
-				break
-			}
+			// Process the buffer to handle terminal control sequences properly
+			// This makes it work like a normal terminal would
+			processTerminalOutput(rawBuffer, exm)
 
 			ex.onUpdateHook()
 		}
@@ -137,6 +113,42 @@ func ptyError(err error) error {
 	}
 
 	return nil
+}
+
+// processTerminalOutput processes terminal output to handle control sequences
+// like a real terminal would, but in a way that's safe for TUI display
+func processTerminalOutput(buf []byte, exm *config.CommandLog) {
+	// Convert the buffer to a string for easier processing
+	str := string(buf)
+
+	// Split by newlines first
+	lines := strings.Split(str, "\n")
+
+	for _, line := range lines {
+		// Process each line to handle carriage returns
+		// Find the last occurrence of \r in the line and keep everything after it
+		// This simulates the terminal behavior where \r moves to beginning of line
+		// and subsequent characters overwrite what was there
+
+		if strings.HasSuffix(line, "\r") {
+			line = strings.TrimSuffix(line, "\r")
+		}
+
+		if strings.HasPrefix(line, "\r") {
+			line = strings.TrimPrefix(line, "\r")
+
+			// exm.WriteLine([]byte("R present: " + strconv.Quote(line)))
+
+			if strings.Contains(line, "\x1b[K") { // clear line
+				line = strings.Replace(line, "\x1b[K", "", 1)
+				exm.ReplaceLastLine([]byte(line))
+			} else {
+				exm.WriteLine([]byte(line))
+			}
+		} else {
+			exm.WriteLine([]byte(line))
+		}
+	}
 }
 
 func CleanAnsiAndSpace(b []byte) []byte {

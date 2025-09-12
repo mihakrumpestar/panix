@@ -9,11 +9,11 @@ flakes:
   infrastructure:
     url: ../infrastructure
     configurations:
-      #server-03:
-      #  machines:
-      #    server-03:
-      #      tags:
-      #        - test
+      server-03:
+        machines:
+          server-03:
+            tags:
+              - test
       #    docker-swarm:
       personal-workstation:
         machines:
