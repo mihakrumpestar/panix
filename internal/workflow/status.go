@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"strconv"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -63,7 +62,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	// SSH connect
 	err = exc.Exec(true,
 		func(log *config.Log, err error) error {
-			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().StdInOutErr.String())
+			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().String())
 		},
 		func(log *config.Log) error {
 			sm.SSHConnectable = true
@@ -89,12 +88,12 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 	err = exc.Exec(false,
 		nil,
 		func(log *config.Log) error {
-			output := log.LastCommand().StdInOutErr.Bytes()
+			output := log.LastCommand().Bytes()
 
 			var nixGenerations nixGenerations
 			err = json.Unmarshal(output, &nixGenerations)
 			if err != nil || len(nixGenerations) == 0 {
-				return fmt.Errorf("invalid list-generations output for %s: %s", machineName.String(), strconv.Quote(string(output)))
+				return fmt.Errorf("invalid list-generations output for %s: %s", machineName.String(), string(output)) // strconv.Quote()
 			}
 
 			for _, nixGeneration := range nixGenerations {

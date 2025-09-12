@@ -109,7 +109,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 			return fmt.Errorf("build failed for %s/%s: %w", flakeName, configurationName, err)
 		},
 		func(log *config.Log) error {
-			output := log.LastCommand().StdInOutErr.Bytes()
+			output := log.LastCommand().Bytes()
 			output = lastNonEmptyLineWithoutAnsi(output)
 
 			var parsedOutput []BuidOutputJson
