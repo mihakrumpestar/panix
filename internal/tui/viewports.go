@@ -20,9 +20,10 @@ type Viewports struct {
 }
 
 type Viewport struct {
-	viewport viewport.Model
-	active   bool
-	pty      *os.File
+	viewport  viewport.Model
+	active    bool
+	pty       *os.File
+	minHeight int
 }
 
 func NewViewports(dimensions *Dimensions, debug *strings.Builder, colors ColorScheme) *Viewports {
@@ -34,11 +35,24 @@ func NewViewports(dimensions *Dimensions, debug *strings.Builder, colors ColorSc
 	}
 }
 
-func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.File) string {
-	availableWidth := 140
-	maxHeight := 8
+func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.File, indentation int) string {
+	// Calculate available width based on terminal width and indentation
+	// Account for tree structure indentation, border, and padding
+	baseIndentation := indentation * 2 // Each tree level typically takes 2 characters
+	borderPadding := 6 + 8             // Border takes ~4 characters + some padding
+	availableWidth := v.dimensions.width - baseIndentation - borderPadding
 
-	vprHeight := min(lipgloss.Height(content), maxHeight)
+	// Ensure minimum width
+	if availableWidth < 40 {
+		availableWidth = 40
+	}
+
+	// Don't exceed reasonable maximum width
+	if availableWidth > 400 {
+		availableWidth = 400
+	}
+
+	maxHeight := 8
 
 	vpr, ok := v.viewports.Get(xpath)
 	if !ok {
@@ -46,17 +60,31 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 		viewport.GotoBottom()
 
 		vpr = &Viewport{
-			viewport: viewport,
-			pty:      pty,
+			viewport:  viewport,
+			pty:       pty,
+			minHeight: 0, // Initialize to 0, will be set on first content update
 		}
 
 		v.viewports.Set(xpath, vpr)
 	}
 
-	//truncatedContent := lipgloss.NewStyle().Width(availableWidth).Render(content)
+	// Wrap content to fit within the available width
+	wrappedContent := lipgloss.NewStyle().Width(availableWidth).MaxWidth(availableWidth).Render(content)
+
+	// Calculate height based on the wrapped content, not the original content
+	wrappedHeight := lipgloss.Height(wrappedContent)
+	calculatedHeight := min(wrappedHeight, maxHeight)
+
+	// Update the maximum height if the calculated height is greater
+	if calculatedHeight > vpr.minHeight {
+		vpr.minHeight = calculatedHeight
+	}
+
+	// Use the maximum height reached so far, but never exceed maxHeight
+	vprHeight := min(vpr.minHeight, maxHeight)
 
 	oldScrollPercent := vpr.viewport.ScrollPercent()
-	vpr.viewport.SetContent(content)
+	vpr.viewport.SetContent(wrappedContent)
 	vpr.viewport.Height = vprHeight
 	vpr.viewport.Width = availableWidth
 
