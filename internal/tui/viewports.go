@@ -25,7 +25,6 @@ type Viewport struct {
 	pty           *os.File
 	minHeight     int
 	scrollbarZone string // Zone ID for scrollbar area
-	isDragging    bool   // Track if scrollbar thumb is being dragged
 }
 
 func NewViewports(dimensions *Dimensions, debug *strings.Builder, colors ColorScheme) *Viewports {
@@ -75,40 +74,6 @@ func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLi
 	return scrollbarStyle.Render(strings.Join(scrollbar, "\n"))
 }
 
-// handleScrollbarClick handles mouse clicks on the scrollbar and updates the viewport position
-func (v *Viewports) handleScrollbarClick(xpath string, clickPosition, viewportHeight int) {
-	vpr, ok := v.viewports.Get(xpath)
-	if !ok {
-		return
-	}
-
-	totalLines := vpr.viewport.TotalLineCount()
-	if totalLines <= viewportHeight {
-		return // No scrolling needed
-	}
-
-	// Calculate scroll percentage based on click position
-	scrollPercent := float64(clickPosition) / float64(viewportHeight-1)
-	if scrollPercent < 0 {
-		scrollPercent = 0
-	}
-	if scrollPercent > 1 {
-		scrollPercent = 1
-	}
-
-	// Calculate line number based on scroll percentage
-	targetLine := int(float64(totalLines-viewportHeight) * scrollPercent)
-	if targetLine < 0 {
-		targetLine = 0
-	}
-
-	// Set the viewport position
-	vpr.viewport.GotoTop()
-	for i := 0; i < targetLine; i++ {
-		vpr.viewport.ScrollDown(1)
-	}
-}
-
 func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.File, indentation int) string {
 	// Calculate available width based on terminal width and indentation
 	// Account for tree structure indentation, border, and padding
@@ -138,7 +103,6 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 			pty:           pty,
 			minHeight:     0, // Initialize to 0, will be set on first content update
 			scrollbarZone: xpath + "-scrollbar",
-			isDragging:    false,
 		}
 
 		v.viewports.Set(xpath, vpr)
@@ -216,44 +180,52 @@ func (v *Viewports) RemoveIfExistsViewport(xpath string) {
 func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, 0)
 
-	for xpath, vpr := range v.viewports.AllFromFront() {
-		switch msg := msg.(type) {
-		case tea.MouseMsg:
-			//v.debug.WriteString(msg.String() + "\n")
-			switch msg.Action {
-			case tea.MouseActionPress:
-				// Check if click is on main viewport area
-				if zone.Get(xpath).InBounds(msg) {
-					vpr.active = true
-					vpr.isDragging = false
-				}
-				// Check if click is on scrollbar area
-				for i := 0; i < vpr.viewport.Height; i++ {
-					scrollbarZoneID := vpr.scrollbarZone + fmt.Sprintf("-%d", i)
-					if zone.Get(scrollbarZoneID).InBounds(msg) {
-						vpr.active = true
-						vpr.isDragging = true
-						// Calculate scroll position based on click
-						v.handleScrollbarClick(xpath, i, vpr.viewport.Height)
-						break
-					}
-				}
-			case tea.MouseActionRelease:
-				vpr.isDragging = false
-			case tea.MouseActionMotion:
-				if vpr.isDragging && vpr.active {
-					// Find which scrollbar zone the mouse is over
-					for i := 0; i < vpr.viewport.Height; i++ {
-						scrollbarZoneID := vpr.scrollbarZone + fmt.Sprintf("-%d", i)
-						if zone.Get(scrollbarZoneID).InBounds(msg) {
-							v.handleScrollbarClick(xpath, i, vpr.viewport.Height)
-							break
-						}
-					}
-				}
+	// Handle viewport selection only on mouse press
+	if mouseMsg, ok := msg.(tea.MouseMsg); ok && mouseMsg.Action == tea.MouseActionRelease {
+		var clickedViewport string
+		var anyViewportClicked bool
+
+		// Check which viewport was clicked
+		for xpath := range v.viewports.AllFromFront() {
+			// Check if click is on main viewport area
+			if zone.Get(xpath).InBounds(mouseMsg) {
+				clickedViewport = xpath
+				anyViewportClicked = true
+				break
 			}
 		}
 
+		// Update viewport selection state
+		for xpath, vpr := range v.viewports.AllFromFront() {
+			if anyViewportClicked {
+				// A viewport was clicked, activate it and deactivate others
+				vpr.active = xpath == clickedViewport
+			} else {
+				// No viewport was clicked, deactivate all
+				vpr.active = false
+			}
+		}
+	}
+
+	// Handle mouse wheel scrolling for all mouse events
+	if mouseMsg, ok := msg.(tea.MouseMsg); ok {
+		for _, vpr := range v.viewports.AllFromFront() {
+			// Handle mouse wheel scrolling - only for active viewports
+			// This is completely separate from selection logic
+			if vpr.active && mouseMsg.Y != 0 && mouseMsg.Action != tea.MouseActionPress {
+				if mouseMsg.Y > 0 {
+					// Scroll down
+					vpr.viewport.ScrollDown(1)
+				} else if mouseMsg.Y < 0 {
+					// Scroll up
+					vpr.viewport.ScrollUp(1)
+				}
+			}
+		}
+	}
+
+	// Handle keyboard input and viewport updates for active viewports
+	for _, vpr := range v.viewports.AllFromFront() {
 		if vpr.active {
 			if vpr.pty != nil {
 				switch msg := msg.(type) {
@@ -281,4 +253,10 @@ func (v *Viewports) Debug() string {
 	}
 
 	return str
+}
+
+func (v *Viewports) ActivateViewport(xpathToActivate string) {
+	for xpath, vpr := range v.viewports.AllFromFront() {
+		vpr.active = xpath == xpathToActivate
+	}
 }

@@ -31,11 +31,11 @@ func (tas *TimeAndState) GetTimeAndState() TimeAndStateOutput {
 	}
 
 	return TimeAndStateOutput{
-		tas.startTime,
-		tas.endTime,
-		tas.started,
-		tas.finished,
-		tas.error,
+		StartTime: tas.startTime,
+		EndTime:   tas.endTime,
+		Started:   tas.started,
+		Finished:  tas.finished,
+		Error:     tas.error,
 	}
 }
 

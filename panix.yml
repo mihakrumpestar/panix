@@ -8,6 +8,8 @@ global:
 flakes:
   infrastructure:
     url: ../infrastructure
+    buildHooks:
+      pre: exit 0
     configurations:
       server-03:
         machines:

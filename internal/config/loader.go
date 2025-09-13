@@ -168,6 +168,8 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 			continue
 		}
 
+		flake.Logs = NewLogs()
+
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
 				flake.Configurations.Delete(configurationName)

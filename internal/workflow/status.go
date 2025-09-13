@@ -14,30 +14,54 @@ import (
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
 func (w *Workflow) ExecuteStatusPhase() error {
-	err := w.forEachFlakeConfiguration(func(flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
-		err := w.forEachConfigurationMachine(configuration, func(machineName url.URL, machine *config.Machine) error {
-			err := w.executeStatusPhaseMachine(machineName, machine)
-			if err != nil {
+	err := poolForEach(w, w.state.Conf.Flakes, func(flakeName string, flake *config.Flake) error {
+		err := poolForEach(w, flake.Configurations, func(configurationName string, configuration *config.Configuration) error {
+			err := poolForEach(w, configuration.Machines, func(machineName url.URL, machine *config.Machine) error {
+
+				err := w.executeStatusPhaseMachine(machineName, machine)
+				if err != nil {
+					return err
+				}
+
 				return err
+			})
+
+			atLeastOneMachineNotDisabled := false
+			for _, machine := range configuration.Machines.AllFromFront() {
+				if !machine.Disabled {
+					atLeastOneMachineNotDisabled = true
+				}
 			}
+
+			configuration.Disabled = !atLeastOneMachineNotDisabled
 
 			return err
 		})
 
+		atLeastOneConfigNotDisabled := false
+		for _, configuration := range flake.Configurations.AllFromFront() {
+			if !configuration.Disabled {
+				atLeastOneConfigNotDisabled = true
+			}
+		}
+
+		flake.Disabled = !atLeastOneConfigNotDisabled
+
 		return err
 	})
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *config.Machine) (err error) {
 	log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
 	log.TimeAndState.StartTimer()
 	defer func() {
+		// Disable machine if status fails
+		if err != nil {
+			machine.Disabled = true
+		}
+
 		log.TimeAndState.EndTimerWithError(err)
 	}()
 
