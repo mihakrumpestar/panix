@@ -138,11 +138,8 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 // Helpers
 
 func lastNonEmptyLineWithoutAnsi(b []byte) []byte {
-
-	cleaned := executioner.CleanAnsiAndSpace(b)
-
 	// Split on newlines
-	lines := bytes.Split(cleaned, []byte("\n"))
+	lines := bytes.Split(b, []byte("\n"))
 
 	// From last
 	slices.Reverse(lines)
