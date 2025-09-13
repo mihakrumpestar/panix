@@ -19,6 +19,7 @@ type decodingFlake struct {
 	Url               string `yaml:"url"`
 	DefaultAttributes `yaml:",inline"`
 	Configurations    map[string]*decodingConfiguration `yaml:"configurations"`
+	BuildHooks        BuildHooks                        `yaml:",buildHooks"` // They only run for builds
 }
 
 type decodingConfiguration struct {
@@ -46,6 +47,7 @@ func (sc *decodingConfig) convertToFinalConfig() (*Config, error) {
 			Url:               simplifiedFlake.Url,
 			DefaultAttributes: simplifiedFlake.DefaultAttributes,
 			Configurations:    orderedmap.NewOrderedMap[string, *Configuration](),
+			BuildHooks:        simplifiedFlake.BuildHooks,
 		}
 
 		final.Flakes.Set(flakeName, flake)

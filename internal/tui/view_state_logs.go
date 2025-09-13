@@ -37,6 +37,14 @@ func (m *model) PrintBuildLogs() string {
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(enumeratorStyle)
 
+		if flake != nil && flake.Logs.Len() > 0 {
+			xpath := flakeName
+			phaseNodes := m.phaseNodes(xpath, flake.Logs, phaseStyle, commandStyle, errorStyle)
+			for _, phaseNode := range phaseNodes {
+				flakeTree.Child(phaseNode)
+			}
+		}
+
 		for configurationName, configuration := range flake.Configurations.AllFromFront() {
 			configNode := tree.New().
 				Root(configStyle.Render(fmt.Sprintf("%c %s", colors.IconConfiguration, configurationName)))

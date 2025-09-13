@@ -9,8 +9,8 @@ import (
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Query last deployment status per host",
-	Long: `Status queries and displays the current deployment status of all configured machines.
+	Short: "Query machine status per host",
+	Long: `Status queries and displays the current machine status of all configured hosts.
 This includes:
 - Current NixOS generation
 - Last deployment time

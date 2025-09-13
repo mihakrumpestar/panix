@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"slices"
 	"strconv"
 
@@ -17,46 +16,80 @@ import (
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
 func (w *Workflow) ExecuteBuildPhase() error {
-	err := w.forEachFlakeConfiguration(
-		func(flakeName string, configurationName string, flake *config.Flake, configuration *config.Configuration) error {
-			log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
+	err := poolForEach(w, w.state.Conf.Flakes,
+		func(flakeName string, flake *config.Flake) error {
+			log := flake.Logs.SafeGet(workflow_definition.PhasePreBuildHook)
 
-			if w.state.Conf.Global.Verbose {
-				log.AddMessageOnly("Executing build phase across " + configurationName)
-			}
-
-			err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
-			if err != nil {
-				return err
+			if flake.Disabled {
+				log.AddMessageOnly("(disabled)")
+				return nil
 			}
 
 			if w.state.Conf.Global.Verbose {
-				log.AddMessageOnly("Executing finished for build phase ", configurationName)
+				log.AddMessageOnly("Executing build phase across " + flakeName)
 			}
 
-			err = w.forEachConfigurationMachine(configuration,
-				func(machineName url.URL, machine *config.Machine) error {
+			if flake.BuildHooks.Pre != "" {
+				exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
 
-					if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {
-						err := w.executeTransferPhaseMachine(configuration, machineName, machine)
-						if err != nil {
-							return err
-						}
+				// Pre build hook
+				err := exc.Exec(false, nil, nil,
+					"bash", "-c", flake.BuildHooks.Pre,
+				)
+				if err != nil {
+					return err
+				}
+			}
+
+			err := poolForEach(w, flake.Configurations,
+				func(configurationName string, configuration *config.Configuration) error {
+
+					log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
+
+					if configuration.Disabled {
+						log.AddMessageOnly("(disabled)")
+						return nil
 					}
 
-					if slices.Contains(w.phases, workflow_definition.PhaseActivate) {
-						err = w.executeActivatePhaseMachine(configuration, machineName, machine)
-						if err != nil {
-							return err
-						}
+					if w.state.Conf.Global.Verbose {
+						log.AddMessageOnly("Executing build phase across " + configurationName)
+					}
+
+					err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
+					if err != nil {
+						return err
+					}
+
+					if w.state.Conf.Global.Verbose {
+						log.AddMessageOnly("Executing finished for build phase ", flakeName)
+					}
+
+					err = poolForEach(w, configuration.Machines,
+						func(machineName url.URL, machine *config.Machine) error {
+
+							if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {
+								err := w.executeTransferPhaseMachine(configuration, machineName, machine)
+								if err != nil {
+									return err
+								}
+							}
+
+							if slices.Contains(w.phases, workflow_definition.PhaseActivate) {
+								err = w.executeActivatePhaseMachine(configuration, machineName, machine)
+								if err != nil {
+									return err
+								}
+							}
+
+							return nil
+						})
+
+					if err != nil {
+						return err
 					}
 
 					return nil
 				})
-
-			if err != nil {
-				return err
-			}
 
 			return err
 		})
@@ -92,13 +125,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 	// Get the flake path from the flake configuration
 	flakePath := flake.Url
 
-	abs, err := filepath.Abs(flakePath)
-	if err != nil {
-		err = fmt.Errorf("failed to get absolute path for flake %s: %w", flakeName, err)
-		return
-	}
-
-	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", abs, configurationName)
+	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flakePath, configurationName)
 	//fmt.Sprint(ref)
 
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
@@ -110,7 +137,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 		},
 		func(log *config.Log) error {
 			output := log.LastCommand().Bytes()
-			output = lastNonEmptyLineWithoutAnsi(output)
+			output = lastNonEmptyLine(output)
 
 			var parsedOutput []BuidOutputJson
 			err = json.Unmarshal(output, &parsedOutput)
@@ -122,7 +149,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 
 			return nil
 		}, // "--print-build-logs"
-		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
+		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "--cores", "0", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
 	)
 	if err != nil {
 		return
@@ -137,7 +164,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 
 // Helpers
 
-func lastNonEmptyLineWithoutAnsi(b []byte) []byte {
+func lastNonEmptyLine(b []byte) []byte {
 	// Split on newlines
 	lines := bytes.Split(b, []byte("\n"))
 

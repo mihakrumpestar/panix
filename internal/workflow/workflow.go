@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/alitto/pond/v2"
+	"github.com/elliotchance/orderedmap/v3"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/hook"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
@@ -116,46 +117,15 @@ func validatePhaseConstraints(phases, slipPhases []workflow_definition.WorkflowP
 	return phases, nil
 }
 
-func (w *Workflow) forEachFlakeConfiguration(function func(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) error) error {
+// poolForEach is a generic helper function to iterate over an ordered map in parallel
+func poolForEach[K comparable, V any](w *Workflow, iterable *orderedmap.OrderedMap[K, V], function func(key K, value V) error) error {
 	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)
 
-	for flakeName, flake := range w.state.Conf.Flakes.AllFromFront() {
-		for configurationName, configuration := range flake.Configurations.AllFromFront() {
-			groupPool.SubmitErr(func() error {
-				err := function(flakeName, configurationName, flake, configuration)
-				errCacher = append(errCacher, err)
-
-				if !w.state.Conf.Global.RequireAllSuccess {
-					return nil
-				}
-
-				return err
-			})
-		}
-	}
-
-	err := groupPool.Wait()
-	if err != nil {
-		return errors.Wrapf(err, "forEachFlakeConfiguration: failed because of 'RequireAllSuccess'")
-	}
-
-	if !slices.Contains(errCacher, nil) {
-		return fmt.Errorf("forEachFlakeConfiguration: failed because of all configurations errored")
-	}
-
-	return nil
-}
-
-func (w *Workflow) forEachConfigurationMachine(configuration *config.Configuration, function func(machineName url.URL, machine *config.Machine) error) error {
-	groupPool := w.state.Pool.NewGroup()
-
-	errCacher := make([]error, 0)
-
-	for machineName, machine := range configuration.Machines.AllFromFront() {
+	for key, value := range iterable.AllFromFront() {
 		groupPool.SubmitErr(func() error {
-			err := function(machineName, machine)
+			err := function(key, value)
 			errCacher = append(errCacher, err)
 
 			if !w.state.Conf.Global.RequireAllSuccess {
@@ -168,11 +138,11 @@ func (w *Workflow) forEachConfigurationMachine(configuration *config.Configurati
 
 	err := groupPool.Wait()
 	if err != nil {
-		return errors.Wrapf(err, "forEachConfigurationMachine: failed because of 'RequireAllSuccess'")
+		return errors.Wrapf(err, "poolForEach: failed because of 'RequireAllSuccess'")
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		return fmt.Errorf("forEachConfigurationMachine: failed because of all machines errored")
+		return fmt.Errorf("poolForEach: failed because of all tasks errored")
 	}
 
 	return nil
