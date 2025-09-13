@@ -93,7 +93,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 			var nixGenerations nixGenerations
 			err = json.Unmarshal(output, &nixGenerations)
 			if err != nil || len(nixGenerations) == 0 {
-				return fmt.Errorf("invalid list-generations output for %s: %s", machineName.String(), string(output)) // strconv.Quote()
+				return errors.Wrapf(err, "invalid list-generations output for %s: %s", machineName.String(), string(output)) // strconv.Quote()
 			}
 
 			for _, nixGeneration := range nixGenerations {
