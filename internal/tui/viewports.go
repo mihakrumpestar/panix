@@ -105,7 +105,7 @@ func (v *Viewports) handleScrollbarClick(xpath string, clickPosition, viewportHe
 	// Set the viewport position
 	vpr.viewport.GotoTop()
 	for i := 0; i < targetLine; i++ {
-		vpr.viewport.LineDown(1)
+		vpr.viewport.ScrollDown(1)
 	}
 }
 
@@ -151,13 +151,8 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 	wrappedHeight := lipgloss.Height(wrappedContent)
 	calculatedHeight := min(wrappedHeight, maxHeight)
 
-	// Update the maximum height if the calculated height is greater
-	if calculatedHeight > vpr.minHeight {
-		vpr.minHeight = calculatedHeight
-	}
-
 	// Use the maximum height reached so far, but never exceed maxHeight
-	vprHeight := min(vpr.minHeight, maxHeight)
+	vprHeight := min(calculatedHeight)
 
 	oldScrollPercent := vpr.viewport.ScrollPercent()
 	vpr.viewport.SetContent(wrappedContent)
@@ -225,8 +220,8 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		switch msg := msg.(type) {
 		case tea.MouseMsg:
 			//v.debug.WriteString(msg.String() + "\n")
-			switch msg.Type {
-			case tea.MouseLeft:
+			switch msg.Action {
+			case tea.MouseActionPress:
 				// Check if click is on main viewport area
 				if zone.Get(xpath).InBounds(msg) {
 					vpr.active = true
@@ -243,9 +238,9 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 						break
 					}
 				}
-			case tea.MouseRelease:
+			case tea.MouseActionRelease:
 				vpr.isDragging = false
-			case tea.MouseMotion:
+			case tea.MouseActionMotion:
 				if vpr.isDragging && vpr.active {
 					// Find which scrollbar zone the mouse is over
 					for i := 0; i < vpr.viewport.Height; i++ {
@@ -263,7 +258,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 			if vpr.pty != nil {
 				switch msg := msg.(type) {
 				case RawKeyReaderMsg:
-					vpr.pty.Write(msg)
+					vpr.pty.Write([]byte(msg))
 				}
 			}
 
