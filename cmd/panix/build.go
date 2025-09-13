@@ -7,11 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildCmd represents the build command
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build all selected closures",
-	Long:  `Build compiles the NixOS configurations for all selected machines without deploying them.`,
+	Long:  `Build compiles the NixOS configurations for all selected machines.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		phases := []workflow_definition.WorkflowPhase{
 			workflow_definition.PhaseBuild,

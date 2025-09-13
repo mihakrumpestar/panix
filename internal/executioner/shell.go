@@ -65,7 +65,8 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 		if readErr != nil {
 			readErr = ptyError(readErr)
 			if readErr != nil && readErr != io.EOF {
-				exm.WriteString("PTY read error: " + readErr.Error() + "\n")
+				exm.WriteLineString("PTY read error: " + readErr.Error())
+				exm.WriteLineString("")
 			}
 
 			break
@@ -76,7 +77,13 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 
 			// Process the buffer to handle terminal control sequences properly
 			// This makes it work like a normal terminal would
-			processTerminalOutput(rawBuffer, exm)
+			readErr = processTerminalOutput(rawBuffer, exm)
+			if readErr != nil {
+				exm.WriteLineString("processTerminalOutput write error: " + readErr.Error())
+				exm.WriteLineString("")
+
+				break
+			}
 
 			ex.onUpdateHook()
 		}
@@ -117,30 +124,31 @@ func ptyError(err error) error {
 
 // processTerminalOutput processes terminal output to handle control sequences
 // like a real terminal would, but in a way that's safe for TUI display
-func processTerminalOutput(buf []byte, exm *config.CommandLog) {
+func processTerminalOutput(buf []byte, exm *config.CommandLog) error {
 	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), []byte{})
 
 	// Split by position markers
 	sequences := bytes.Split(buf, []byte("\r"))
 
 	for index, sequence := range sequences {
-		//if exm.Command == "nix build --no-link --no-update-lock-file --json path:/home/krumpy-miha/repos/personal/infrastructure#nixosConfigurations.personal-workstation.config.system.build.toplevel" {
-		//	exm.WriteLine([]byte("DEBUG: " + strconv.Quote(string(line))))
-		//	continue
-		//}
-
 		if bytes.HasPrefix(sequence, []byte("\n")) {
 			sequence = bytes.TrimPrefix(sequence, []byte("\n"))
 			exm.WriteLine(sequence)
 		} else {
 			if index == 0 { // Stitch together from previous buffer
-				exm.Write(sequence)
+				_, err := exm.Write(sequence)
+				if err != nil {
+					return err
+				}
+
 				continue
 			}
 
 			exm.ReplaceLastLine(sequence)
 		}
 	}
+
+	return nil
 }
 
 func CleanAnsiAndSpace(b []byte) []byte {
@@ -148,11 +156,9 @@ func CleanAnsiAndSpace(b []byte) []byte {
 	// Handles: \x1b[K (erase line), \x1b[...m (colors), \x1b[...A/B/C/D (cursor), etc.
 	// Also handles OSC (Operating System Command) sequences like \x1b]0;...BEL
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07\x1b]*[\x07\x1b\\]`)
-
-	// Remove ANSI escape sequences
 	cleaned := ansiRegex.ReplaceAll(b, []byte{})
 
-	//cleanedAndTrimmed := bytes.TrimSpace(cleaned)
+	cleaned = bytes.TrimSpace(cleaned)
 
 	return cleaned
 }
