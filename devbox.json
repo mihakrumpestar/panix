@@ -4,7 +4,8 @@
     "go@latest",
     "bun@latest",
     "go-task@latest",
-    "uv@latest"
+    "uv@latest",
+    "gopls@latest"
   ],
   "shell": {
     "init_hook": [

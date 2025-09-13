@@ -61,10 +61,11 @@ type Configuration struct {
 }
 
 type CommandLog struct {
-	Command      string
-	StdInOutErr  []*bytes.Buffer // Each line is a separate buffer to allow line replacement
-	TimeAndState TimeAndState
-	Pty          *os.File
+	Command           string
+	StdInOutErr       []*bytes.Buffer // Each line is a separate buffer to allow line replacement
+	TimeAndState      TimeAndState
+	Pty               *os.File
+	PartialLineBuffer string // Buffer to store partial lines between reads
 }
 
 type SshClient struct {

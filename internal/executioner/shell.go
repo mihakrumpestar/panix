@@ -2,10 +2,12 @@ package executioner
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -55,7 +57,7 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	}()
 
 	// Read from PTY and capture to buffer in real-time
-	buf := make([]byte, 8192)
+	buf := make([]byte, 10*8192)
 	var readErr error
 
 	// Warning: the folowing read sequance applies to pty.stdin too
@@ -115,7 +117,7 @@ func ptyError(err error) error {
 	return nil
 }
 
-// processTerminalOutput processes terminal output to handle control sequences
+// processTerminalOutputLine processes a single line of terminal output to handle control sequences
 // like a real terminal would, but in a way that's safe for TUI display
 func processTerminalOutput(buf []byte, exm *config.CommandLog) {
 	// Convert the buffer to a string for easier processing
@@ -124,30 +126,77 @@ func processTerminalOutput(buf []byte, exm *config.CommandLog) {
 	// Split by newlines first
 	lines := strings.Split(str, "\n")
 
-	for _, line := range lines {
-		// Process each line to handle carriage returns
-		// Find the last occurrence of \r in the line and keep everything after it
-		// This simulates the terminal behavior where \r moves to beginning of line
-		// and subsequent characters overwrite what was there
+	// Buffer was cut off, stiching together
+	length := len(lines)
+	if len(lines[length-1]) == 0 {
+		lines = lines[:length-1]
+	}
 
+	for index, line := range lines {
+
+		if len(CleanAnsiAndSpace([]byte(line))) == 0 {
+			continue
+		}
+
+		writeIndex := func() {
+			line = strings.ReplaceAll(line, "\x1b[K", "")
+
+			if index == 0 {
+				exm.WriteString(line)
+			} else {
+				exm.WriteLine([]byte(line))
+			}
+		}
+
+		// Normal line
 		if strings.HasSuffix(line, "\r") {
 			line = strings.TrimSuffix(line, "\r")
+
+			line = strings.ReplaceAll(line, "\x1b[K", "")
+
+			writeIndex()
+			continue
 		}
 
 		if strings.HasPrefix(line, "\r") {
 			line = strings.TrimPrefix(line, "\r")
 
-			// exm.WriteLine([]byte("R present: " + strconv.Quote(line)))
+			line = strings.ReplaceAll(line, "\x1b[K", "")
+
+			exm.WriteLine([]byte("r present: " + strconv.Quote(line)))
+			exm.WriteLine([]byte(""))
+
+			// In case multiple \r in sinble line, take the last sequence
+			if strings.Contains(line, "\r") {
+				rSplitted := strings.Split(line, "\r")
+
+				line = rSplitted[len(rSplitted)-1]
+			}
+
+			//exm.WriteLine([]byte("R present: " + strconv.Quote(line)))
+			//exm.WriteLine([]byte(""))
 
 			if strings.Contains(line, "\x1b[K") { // clear line
-				line = strings.Replace(line, "\x1b[K", "", 1)
+				line = strings.ReplaceAll(line, "\x1b[K", "")
 				exm.ReplaceLastLine([]byte(line))
 			} else {
-				exm.WriteLine([]byte(line))
+				writeIndex()
 			}
-		} else {
-			exm.WriteLine([]byte(line))
+
+			continue
 		}
+
+		if index == 0 {
+			writeIndex()
+			continue
+		}
+
+		if index == len(lines)-1 {
+			writeIndex()
+			continue
+		}
+
+		exm.WriteLine([]byte("UNPROCESSED (" + fmt.Sprintf("%d/%d", index, len(lines)) + "): " + strconv.Quote(line)))
 	}
 }
 
