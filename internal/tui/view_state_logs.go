@@ -31,27 +31,27 @@ func (m *model) PrintBuildLogs() string {
 	errorStyle := colors.Error
 
 	// Build separate trees for each flake
-	for flakeName, flake := range m.workflow.State().Conf.Flakes.AllFromFront() {
+	for _, flake := range m.workflow.State().Conf.Flakes.Range(false) {
 		flakeTree := tree.New().
-			Root(flakeStyle.Render(fmt.Sprintf("%c %s", colors.IconFlake, flakeName))).
+			Root(flakeStyle.Render(fmt.Sprintf("%c %s %s", colors.IconFlake, flake.Name, flake.Message))).
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(enumeratorStyle)
 
 		if flake != nil && flake.Logs.Len() > 0 {
-			xpath := flakeName
+			xpath := flake.Name
 			phaseNodes := m.phaseNodes(xpath, flake.Logs, phaseStyle, commandStyle, errorStyle)
 			for _, phaseNode := range phaseNodes {
 				flakeTree.Child(phaseNode)
 			}
 		}
 
-		for configurationName, configuration := range flake.Configurations.AllFromFront() {
+		for _, configuration := range flake.Configurations.Range(false) {
 			configNode := tree.New().
-				Root(configStyle.Render(fmt.Sprintf("%c %s", colors.IconConfiguration, configurationName)))
+				Root(configStyle.Render(fmt.Sprintf("%c %s %s", colors.IconConfiguration, configuration.Name, configuration.Message)))
 
 			// Add configuration logs directly (no "Logs" intermediate node)
-			if configuration != nil && configuration.Logs.Len() > 0 {
-				xpath := flakeName + configurationName
+			if configuration.Logs.Len() > 0 {
+				xpath := flake.Name + configuration.Name
 				phaseNodes := m.phaseNodes(xpath, configuration.Logs, phaseStyle, commandStyle, errorStyle)
 				for _, phaseNode := range phaseNodes {
 					configNode.Child(phaseNode)
@@ -59,12 +59,12 @@ func (m *model) PrintBuildLogs() string {
 			}
 
 			// Add machines
-			for machineName, machine := range configuration.Machines.AllFromFront() {
+			for _, machine := range configuration.Machines.Range(false) {
 				machineNode := tree.New().
-					Root(machineStyle.Render(fmt.Sprintf("%c %s", colors.IconMachine, strings.TrimPrefix(machineName.String(), "ssh://")))).Offset(0, 4)
+					Root(machineStyle.Render(fmt.Sprintf("%c %s %s", colors.IconMachine, machine.Name, machine.Message))).Offset(0, 4)
 
 				if machine.Logs.Len() > 0 {
-					xpath := flakeName + configurationName + machineName.String()
+					xpath := flake.Name + configuration.Name + machine.Name
 					phaseNodes := m.phaseNodes(xpath, machine.Logs, phaseStyle, commandStyle, errorStyle)
 					for _, phaseNode := range phaseNodes {
 						machineNode.Child(phaseNode)
@@ -218,9 +218,9 @@ func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content stri
 	return final
 }
 
-// lastLines returns the last n lines of s.
+// lastNLines returns the last n lines of s.
 // If s has fewer than n lines, it returns s unchanged.
-func lastLines(s string, n int) string {
+func lastNLines(s string, n int) string {
 	lines := strings.Split(s, "\n")
 	if len(lines) <= n {
 		return s

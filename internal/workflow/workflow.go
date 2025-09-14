@@ -1,13 +1,12 @@
 package workflow
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"net/url"
 	"slices"
 
 	"github.com/alitto/pond/v2"
-	"github.com/elliotchance/orderedmap/v3"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/hook"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
@@ -118,14 +117,14 @@ func validatePhaseConstraints(phases, slipPhases []workflow_definition.WorkflowP
 }
 
 // poolForEach is a generic helper function to iterate over an ordered map in parallel
-func poolForEach[K comparable, V any](w *Workflow, iterable *orderedmap.OrderedMap[K, V], function func(key K, value V) error) error {
+func poolForEach[K cmp.Ordered, V config.FlakeOrConfigurationOrMachine](w *Workflow, iterable config.SortableMap[K, V], skipDisabled bool, function func(value V) error) error {
 	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)
 
-	for key, value := range iterable.AllFromFront() {
+	for _, value := range iterable.Range(skipDisabled) {
 		groupPool.SubmitErr(func() error {
-			err := function(key, value)
+			err := function(value)
 			errCacher = append(errCacher, err)
 
 			if !w.state.Conf.Global.RequireAllSuccess {
@@ -148,13 +147,14 @@ func poolForEach[K comparable, V any](w *Workflow, iterable *orderedmap.OrderedM
 	return nil
 }
 
-func (w *WorkflowState) ExpandFlakeConfigurationMachine(function func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine)) {
+func (w *WorkflowState) ExpandFlakeConfigurationMachine(skipDisabled bool, function func(i int,
+	flake *config.Flake, configuration *config.Configuration, machine *config.Machine)) {
 	i := 0
 
-	for flakeName, flake := range w.Conf.Flakes.AllFromFront() {
-		for configurationName, configuration := range flake.Configurations.AllFromFront() {
-			for machineName, machine := range configuration.Machines.AllFromFront() {
-				function(i, flakeName, configurationName, configuration, machineName, machine)
+	for _, flake := range w.Conf.Flakes.Range(skipDisabled) {
+		for _, configuration := range flake.Configurations.Range(skipDisabled) {
+			for _, machine := range configuration.Machines.Range(skipDisabled) {
+				function(i, flake, configuration, machine)
 				i++
 			}
 		}

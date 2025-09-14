@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -75,55 +74,57 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	// Track previous values to implement row spanning
 	var prevFlakeName, prevConfigName string
 
-	state.ExpandFlakeConfigurationMachine(func(i int, flakeName, configurationName string, configuration *config.Configuration, machineName url.URL, machine *config.Machine) {
-		xpath := flakeName + configurationName + machineName.String()
+	state.ExpandFlakeConfigurationMachine(false,
+		func(i int, flake *config.Flake, configuration *config.Configuration, machine *config.Machine) {
 
-		ps := machine.Phases.Status
-		log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
+			xpath := flake.Name + configuration.Name + machine.Name
 
-		err := ""
-		errPtr := log.TimeAndState.GetTimeAndState().Error
-		if errPtr != nil {
-			err = errPtr.Error()
-		}
+			ps := machine.Phases.Status
+			log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
 
-		// Determine if we should show flake name (only on first occurrence)
-		showFlake := flakeName != prevFlakeName
-		if showFlake {
-			prevFlakeName = flakeName
-		}
+			err := ""
+			errPtr := log.TimeAndState.GetTimeAndState().Error
+			if errPtr != nil {
+				err = errPtr.Error()
+			}
 
-		// Determine if we should show config name (only on first occurrence of each config within a flake)
-		showConfig := configurationName != prevConfigName || flakeName != prevFlakeName
-		if showConfig {
-			prevConfigName = configurationName
-		}
+			// Determine if we should show flake name (only on first occurrence)
+			showFlake := flake.Name != prevFlakeName
+			if showFlake {
+				prevFlakeName = flake.Name
+			}
 
-		// Get display values (empty for spanning)
-		flakeDisplay := ""
-		if showFlake {
-			flakeDisplay = flakeName
-		}
+			// Determine if we should show config name (only on first occurrence of each config within a flake)
+			showConfig := configuration.Name != prevConfigName || flake.Name != prevFlakeName
+			if showConfig {
+				prevConfigName = configuration.Name
+			}
 
-		configDisplay := ""
-		if showConfig {
-			configDisplay = configurationName
-		}
+			// Get display values (empty for spanning)
+			flakeDisplay := ""
+			if showFlake {
+				flakeDisplay = flake.Name
+			}
 
-		t.Row(
-			fmt.Sprintf("%d", i),
-			m.getStatusIcon(ps, xpath, log),
-			flakeDisplay,
-			configDisplay,
-			strings.TrimPrefix(machineName.String(), "ssh://"),
-			m.getStatusText(ps, xpath, log),
-			ps.Generation,
-			ps.Date,
-			ps.Nixos,
-			ps.Kernel,
-			err,
-		)
-	})
+			configDisplay := ""
+			if showConfig {
+				configDisplay = configuration.Name
+			}
+
+			t.Row(
+				fmt.Sprintf("%d", i),
+				m.getStatusIcon(ps, xpath, log),
+				flakeDisplay,
+				configDisplay,
+				machine.Name,
+				m.getStatusText(ps, xpath, log),
+				ps.Generation,
+				ps.Date,
+				ps.Nixos,
+				ps.Kernel,
+				err,
+			)
+		})
 
 	builder.WriteString("\n" + t.String() + "\n")
 

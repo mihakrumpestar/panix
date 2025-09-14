@@ -3,7 +3,6 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -14,38 +13,41 @@ import (
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
 func (w *Workflow) ExecuteStatusPhase() error {
-	err := poolForEach(w, w.state.Conf.Flakes, func(flakeName string, flake *config.Flake) error {
-		err := poolForEach(w, flake.Configurations, func(configurationName string, configuration *config.Configuration) error {
-			err := poolForEach(w, configuration.Machines, func(machineName url.URL, machine *config.Machine) error {
+	err := poolForEach(w, w.state.Conf.Flakes, true, func(flake *config.Flake) error {
+		err := poolForEach(w, flake.Configurations, true, func(configuration *config.Configuration) error {
+			err := poolForEach(w, configuration.Machines, true, func(machine *config.Machine) error {
 
-				err := w.executeStatusPhaseMachine(machineName, machine)
+				err := w.executeStatusPhaseMachine(machine)
 				if err != nil {
-					return err
+					machine.Disabled = true
+					machine.Message = fmt.Sprintf("(disabled) %v", err)
 				}
 
 				return err
 			})
 
 			atLeastOneMachineNotDisabled := false
-			for _, machine := range configuration.Machines.AllFromFront() {
-				if !machine.Disabled {
-					atLeastOneMachineNotDisabled = true
-				}
+			for _, _ = range configuration.Machines.Range(true) {
+				atLeastOneMachineNotDisabled = true
 			}
 
 			configuration.Disabled = !atLeastOneMachineNotDisabled
+			if configuration.Disabled {
+				configuration.Message = fmt.Sprintf("(disabled) %v", err)
+			}
 
 			return err
 		})
 
 		atLeastOneConfigNotDisabled := false
-		for _, configuration := range flake.Configurations.AllFromFront() {
-			if !configuration.Disabled {
-				atLeastOneConfigNotDisabled = true
-			}
+		for _, _ = range flake.Configurations.Range(true) {
+			atLeastOneConfigNotDisabled = true
 		}
 
 		flake.Disabled = !atLeastOneConfigNotDisabled
+		if flake.Disabled {
+			flake.Message = fmt.Sprintf("(disabled) %v", err)
+		}
 
 		return err
 	})
@@ -53,7 +55,7 @@ func (w *Workflow) ExecuteStatusPhase() error {
 	return err
 }
 
-func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *config.Machine) (err error) {
+func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error) {
 	log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
 	log.TimeAndState.StartTimer()
 	defer func() {
@@ -65,7 +67,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 		log.TimeAndState.EndTimerWithError(err)
 	}()
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, log, w.hook.OnUpdateHook)
 
 	sm := machine.Phases.Status
 
@@ -78,7 +80,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 			sm.Reachable = true
 			return nil
 		},
-		"nc", "-zvw1", machine.Ssh.Url.Hostname(), machine.Ssh.Url.Port())
+		"nc", "-zvw1", machine.Ssh.Hostname, string(machine.Ssh.Port))
 	if err != nil {
 		return
 	}
@@ -117,7 +119,7 @@ func (w *Workflow) executeStatusPhaseMachine(machineName url.URL, machine *confi
 			var nixGenerations nixGenerations
 			err = json.Unmarshal(output, &nixGenerations)
 			if err != nil || len(nixGenerations) == 0 {
-				return errors.Wrapf(err, "invalid list-generations output for %s: %s", machineName.String(), string(output)) // strconv.Quote()
+				return errors.Wrapf(err, "invalid list-generations output for %s: %s", machine.Name, string(output)) // strconv.Quote()
 			}
 
 			for _, nixGeneration := range nixGenerations {

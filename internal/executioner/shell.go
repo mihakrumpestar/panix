@@ -15,7 +15,7 @@ import (
 )
 
 func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) (err error) {
-	exm := ex.log.NewCommand()
+	exm := ex.phaseLog.NewCommand()
 
 	exm.TimeAndState.StartTimer()
 	defer func() {
@@ -31,7 +31,7 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	// dry-run short-circuit
 	if ex.dryRun {
 		if onSuccess != nil {
-			err := onSuccess(ex.log)
+			err := onSuccess(ex.phaseLog)
 			if err != nil {
 				return err
 			}
@@ -98,10 +98,10 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 	}
 	if err != nil {
 		if onFailure != nil {
-			err = onFailure(ex.log, err)
+			err = onFailure(ex.phaseLog, err)
 		}
 	} else if onSuccess != nil {
-		err = onSuccess(ex.log)
+		err = onSuccess(ex.phaseLog)
 	}
 
 	return
