@@ -6,10 +6,11 @@ func (ex *Executioner) sshStream(onFailure func(*config.Log, error) error, onSuc
 
 	sshArgs := []string{"-q"} // Silance banners
 
-	if ex.usesAlias {
-		sshArgs = append(sshArgs, ex.machineName.Hostname())
+	if ex.machine.Ssh.HostnameIsAlias {
+		sshArgs = append(sshArgs, ex.machine.Ssh.Hostname)
 	} else {
 		// TODO: implement more than alias
+		panic("not implemented")
 	}
 
 	sshArgs = append(sshArgs, name)

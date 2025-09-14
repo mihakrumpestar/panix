@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"fmt"
-	"net/url"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -10,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machineName url.URL, machine *config.Machine) (err error) {
+func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machine *config.Machine) (err error) {
 	log := machine.Logs.SafeGet(workflow_definition.PhaseActivate)
 	log.TimeAndState.StartTimer()
 	defer func() {
@@ -18,7 +17,7 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 	}()
 
 	if w.state.Conf.Global.Verbose {
-		log.AddMessageOnly(fmt.Sprintf("Starting activation of %s", machineName.String()))
+		log.AddMessageOnly(fmt.Sprintf("Starting activation of %s", machine.Name))
 	}
 
 	buildOutputPath := configuration.Phases.Build.BuildOutputPath
@@ -27,12 +26,12 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 		return
 	}
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, &machineName, machine.Ssh, log, w.hook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, log, w.hook.OnUpdateHook)
 
 	// Build a configuration
 	err = exc.Exec(false,
 		func(log *config.Log, err error) error {
-			return errors.Wrapf(err, "activation failed for %s", machineName.String())
+			return errors.Wrapf(err, "activation failed for %s", machine.Name)
 		},
 		nil,
 		"sudo", buildOutputPath+"/bin/switch-to-configuration", "switch",
@@ -42,7 +41,7 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 	}
 
 	if w.state.Conf.Global.Verbose {
-		log.AddMessageOnly(fmt.Sprintf("Activated %s successfully", machineName.String()))
+		log.AddMessageOnly(fmt.Sprintf("Activated %s successfully", machine.Name))
 	}
 
 	return

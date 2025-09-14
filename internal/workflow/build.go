@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"slices"
 	"strconv"
 
@@ -16,66 +15,56 @@ import (
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
 func (w *Workflow) ExecuteBuildPhase() error {
-	err := poolForEach(w, w.state.Conf.Flakes,
-		func(flakeName string, flake *config.Flake) error {
-			log := flake.Logs.SafeGet(workflow_definition.PhasePreBuildHook)
-
-			if flake.Disabled {
-				log.AddMessageOnly("(disabled)")
-				return nil
-			}
+	err := poolForEach(w, w.state.Conf.Flakes, true,
+		func(flake *config.Flake) error {
+			log := flake.Logs.SafeGet(workflow_definition.PhasePreFlakeHook)
 
 			if w.state.Conf.Global.Verbose {
-				log.AddMessageOnly("Executing build phase across " + flakeName)
+				log.AddMessageOnly("Executing build phase across " + flake.Name)
 			}
 
-			if flake.BuildHooks.Pre != "" {
-				exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
+			if flake.Hooks.Pre != "" {
+				exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
 
 				// Pre build hook
 				err := exc.Exec(false, nil, nil,
-					"bash", "-c", flake.BuildHooks.Pre,
+					"bash", "-c", flake.Hooks.Pre,
 				)
 				if err != nil {
 					return err
 				}
 			}
 
-			err := poolForEach(w, flake.Configurations,
-				func(configurationName string, configuration *config.Configuration) error {
+			err := poolForEach(w, flake.Configurations, true,
+				func(configuration *config.Configuration) error {
 
 					log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
 
-					if configuration.Disabled {
-						log.AddMessageOnly("(disabled)")
-						return nil
-					}
-
 					if w.state.Conf.Global.Verbose {
-						log.AddMessageOnly("Executing build phase across " + configurationName)
+						log.AddMessageOnly("Executing build phase across " + configuration.Name)
 					}
 
-					err := w.executeBuildPhaseConfiguration(flakeName, configurationName, flake, configuration)
+					err := w.executeBuildPhaseConfiguration(flake.Name, configuration.Name, flake, configuration)
 					if err != nil {
 						return err
 					}
 
 					if w.state.Conf.Global.Verbose {
-						log.AddMessageOnly("Executing finished for build phase ", flakeName)
+						log.AddMessageOnly("Executing finished for build phase ", flake.Name)
 					}
 
-					err = poolForEach(w, configuration.Machines,
-						func(machineName url.URL, machine *config.Machine) error {
+					err = poolForEach(w, configuration.Machines, true,
+						func(machine *config.Machine) error {
 
 							if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {
-								err := w.executeTransferPhaseMachine(configuration, machineName, machine)
+								err := w.executeTransferPhaseMachine(configuration, machine.Name, machine)
 								if err != nil {
 									return err
 								}
 							}
 
 							if slices.Contains(w.phases, workflow_definition.PhaseActivate) {
-								err = w.executeActivatePhaseMachine(configuration, machineName, machine)
+								err = w.executeActivatePhaseMachine(configuration, machine)
 								if err != nil {
 									return err
 								}
@@ -128,7 +117,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flakePath, configurationName)
 	//fmt.Sprint(ref)
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, nil, log, w.hook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
 
 	// Build a configuration
 	err = exc.Exec(false,

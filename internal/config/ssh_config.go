@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -32,28 +31,29 @@ func LoadSshConfig() (*SshConfig, error) {
 	return &SshConfig{sshCfg}, nil
 }
 
-func (sc *SshConfig) RetriveFullParamsFromSshConfig(machineName url.URL) (*url.URL, error) {
-	host, err := sc.sc.Get(machineName.Hostname(), "HostName")
+func (sc *SshConfig) RetriveFullParamsFromSshConfig(sshClient *SshClient) error {
+	alias := sshClient.Hostname
+	var err error
+
+	sshClient.Hostname, err = sc.sc.Get(alias, "HostName")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	user, err := sc.sc.Get(machineName.Host, "User")
-	if err != nil {
-		return nil, err
+	portRaw, err := sc.sc.Get(alias, "Port") // Not required
+	if err == nil {
+		var port64 uint64
+		port64, err = strconv.ParseUint(portRaw, 10, 16)
+		if err != nil {
+			return err
+		}
+
+		sshClient.Port = uint16(port64)
 	}
 
-	portRaw, err := sc.sc.Get(machineName.Host, "Port")
-	if err != nil {
-		return nil, err
-	}
+	sshClient.Username, _ = sc.sc.Get(alias, "User") // Not required
 
-	port, err := strconv.Atoi(portRaw)
-	if err != nil {
-		return nil, err
-	}
+	sshClient.Password, _ = sc.sc.Get(alias, "Password") // Not required
 
-	urlString := fmt.Sprintf("ssh://%s@%s:%d", user, host, port)
-
-	return url.Parse(urlString)
+	return nil
 }

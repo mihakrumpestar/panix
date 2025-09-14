@@ -2,11 +2,11 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/elliotchance/orderedmap/v3"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/gobeam/stringy"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -72,13 +72,13 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		}
 	}
 
-	// First, unmarshal into simplifiedConfig structure with regular maps
-	simplifiedConfig := &decodingConfig{}
-	err = k.UnmarshalWithConf("", &simplifiedConfig, koanf.UnmarshalConf{
+	// First, unmarshal into conf structure with regular maps
+	conf := &Config{}
+	err = k.UnmarshalWithConf("", &conf, koanf.UnmarshalConf{
 		Tag: "yaml",
 		DecoderConfig: &mapstructure.DecoderConfig{
 			WeaklyTypedInput: true,
-			Result:           &simplifiedConfig,
+			Result:           &conf,
 		},
 	})
 	if err != nil {
@@ -86,20 +86,14 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	}
 
 	// Convert timeout from miliseconds to seconds for duration
-	simplifiedConfig.Global.Timeout *= time.Second
-
-	// Convert simplified structure to final structure with ordered maps
-	conf, err := simplifiedConfig.convertToFinalConfig()
-	if err != nil {
-		return nil, fmt.Errorf("unable to convert config: %w", err)
-	}
+	conf.Global.Timeout *= time.Second
 
 	err = conf.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	conf.Flakes, err = conf.filterAndExpandConfigEntrys()
+	err = conf.filterAndExpandConfigEntrys()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
@@ -118,27 +112,32 @@ func (c *Config) validateConfig() error {
 	if c.Flakes == nil {
 		return fmt.Errorf("flakes is nil")
 	}
-	if c.Flakes.Len() == 0 {
+	if len(c.Flakes) == 0 {
 		return fmt.Errorf("flakes is required")
 	}
 
-	for flakeName, flake := range c.Flakes.AllFromFront() {
+	for flakeName, flake := range c.Flakes.Range(true) {
 		if flake.Url == "" {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
 
-		if flake.Configurations == nil || flake.Configurations.Len() == 0 {
+		if flake.Configurations == nil || len(flake.Configurations) == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		for configurationName, configuration := range flake.Configurations.AllFromFront() {
-			if configuration.Machines == nil || configuration.Machines.Len() == 0 {
+		for configurationName, configuration := range flake.Configurations.Range(true) {
+			if configuration.Machines == nil || len(configuration.Machines) == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			for machineName := range configuration.Machines.AllFromFront() {
-				if machineName.Host == "" {
-					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s].ssh host is empty", flakeName, configurationName, machineName.String())
+			for machineName, _ := range configuration.Machines.Range(true) {
+				parsedMachineName, err := url.Parse("ssh://" + machineName)
+				if err != nil {
+					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s] has invalid machine name, it has to be formatted as URL: %w", flakeName, configurationName, machineName, err)
+				}
+
+				if parsedMachineName.Host == "" {
+					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s] has empty parsed host field", flakeName, configurationName, machineName)
 				}
 			}
 		}
@@ -150,29 +149,28 @@ func (c *Config) validateConfig() error {
 // FilterConfigEntrys filters the configuration based on command-line or global selections.
 // An entry is kept if it matches all provided filters (flakes, configurations, machines, tags) and is not disabled.
 // If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
-func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *Flake], error) {
-	cC := *c // Copy
+func (c *Config) filterAndExpandConfigEntrys() error {
 
-	sc, err := LoadSshConfig()
+	sshConfig, err := LoadSshConfig()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	flakesFilter := cC.Global.Filters.Flakes
-	configurationsFilter := cC.Global.Filters.Configurations
-	machinesFilter := cC.Global.Filters.Machines
+	flakesFilter := c.Global.Filters.Flakes
+	configurationsFilter := c.Global.Filters.Configurations
+	machinesFilter := c.Global.Filters.Machines
 
-	for flakeName, flake := range cC.Flakes.AllFromFront() {
+	for flakeName, flake := range c.Flakes.Range(false) {
 		if (len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName)) || flake.Disabled {
-			cC.Flakes.Delete(flakeName)
+			delete(c.Flakes, flakeName)
 			continue
 		}
 
-		flake.Logs = NewLogs()
+		flake.Init(flakeName)
 
-		for configurationName, configuration := range flake.Configurations.AllFromFront() {
+		for configurationName, configuration := range flake.Configurations.Range(false) {
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
-				flake.Configurations.Delete(configurationName)
+				delete(flake.Configurations, configurationName)
 				continue
 			}
 
@@ -180,64 +178,65 @@ func (c *Config) filterAndExpandConfigEntrys() (*orderedmap.OrderedMap[string, *
 				Build: &PhaseBuild{},
 			}
 
-			configuration.Logs = NewLogs()
+			configuration.Init(configurationName)
 
-			for machineName, machine := range configuration.Machines.AllFromFront() {
+			for machineName, machine := range configuration.Machines.Range(false) {
 				if machine == nil {
 					machine = &Machine{}
-					configuration.Machines.Set(machineName, machine)
+					configuration.Machines[machineName] = machine
+				}
+
+				if machine.Ssh == nil {
+					machine.Ssh = &SshClient{}
 				}
 
 				machine.Phases = &MachinePhases{
 					Status: &PhaseStatus{},
 				}
 
-				machine.Logs = NewLogs()
+				machine.Init(machineName)
 
-				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName.String())) || machine.Disabled {
-					configuration.Machines.Delete(machineName)
+				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName)) || machine.Disabled {
+					delete(configuration.Machines, machineName)
 					continue
 				}
 
 				// A machine must match the tag filters if they are provided.
-				if len(cC.Global.Filters.Tags) > 0 {
+				if len(c.Global.Filters.Tags) > 0 {
 					allMachineTags := flake.Tags
 					allMachineTags = append(allMachineTags, configuration.Tags...)
 					allMachineTags = append(allMachineTags, machine.Tags...)
 
-					if !matchesTags(allMachineTags, cC.Global.Filters.Tags) {
-						configuration.Machines.Delete(machineName)
+					if !matchesTags(allMachineTags, c.Global.Filters.Tags) {
+						delete(configuration.Machines, machineName)
 						continue
 					}
 				}
 
-				if machineName.User.Username() == "" { // If using alias, we need to retrive ssh config values
-					if machine.Ssh == nil {
-						machine.Ssh = &SshClient{}
-					}
-					machine.Ssh.Url, err = sc.RetriveFullParamsFromSshConfig(machineName)
-					if err != nil {
-						return nil, err
-					}
+				err := machine.Ssh.Validate(sshConfig, machineName)
+				if err != nil {
+					return err
 				}
 			}
 
-			if configuration.Machines.Len() == 0 {
-				flake.Configurations.Delete(configurationName)
+			if len(configuration.Machines) == 0 {
+				delete(flake.Configurations, configurationName)
 			}
 		}
 
-		if flake.Configurations.Len() == 0 {
-			cC.Flakes.Delete(flakeName)
+		if len(flake.Configurations) == 0 {
+			delete(c.Flakes, flakeName)
 		}
 	}
 
-	if cC.Flakes.Len() == 0 {
-		return nil, fmt.Errorf("flakes configuration empty after filtering")
+	if len(c.Flakes) == 0 {
+		return fmt.Errorf("flakes configuration empty after filtering")
 	}
 
-	return cC.Flakes, nil
+	return nil
 }
+
+// Helpers
 
 func matchesTags(tags, filterTags []string) bool {
 	if len(filterTags) == 0 {
