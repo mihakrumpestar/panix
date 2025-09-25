@@ -15,7 +15,7 @@ import (
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
 func (w *Workflow) ExecuteBuildPhase() error {
-	err := poolForEach(w, w.state.Conf.Flakes, true,
+	err := poolChildren(w, w.state.Conf.Root, true,
 		func(flake *config.Flake) error {
 			log := flake.Logs.SafeGet(workflow_definition.PhasePreFlakeHook)
 
@@ -35,7 +35,7 @@ func (w *Workflow) ExecuteBuildPhase() error {
 				}
 			}
 
-			err := poolForEach(w, flake.Configurations, true,
+			err := poolChildren(w, flake, true,
 				func(configuration *config.Configuration) error {
 
 					log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
@@ -53,7 +53,7 @@ func (w *Workflow) ExecuteBuildPhase() error {
 						log.AddMessageOnly("Executing finished for build phase ", flake.Name)
 					}
 
-					err = poolForEach(w, configuration.Machines, true,
+					err = poolChildren(w, configuration, true,
 						func(machine *config.Machine) error {
 
 							if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {

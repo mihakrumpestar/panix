@@ -35,7 +35,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL", "ERROR").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL", "STATUS").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -63,7 +63,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 				return colors.TableRow.Width(lipgloss.Width("25.11.20250624.4b1164c"))
 			case 9: // Kernel
 				return colors.TableRow.Width(lipgloss.Width("KERNEL"))
-			case 10: // ERROR
+			case 10: // STATUS
 				return colors.TableRow.MaxWidth(1000)
 			default:
 				return colors.TableRow
@@ -81,10 +81,10 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 			ps := machine.Phases.Status
 			log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
 
-			err := ""
-			errPtr := log.TimeAndState.GetTimeAndState().Error
-			if errPtr != nil {
-				err = errPtr.Error()
+			status := ""
+			lastErr := log.TimeAndState.GetTimeAndState().Error
+			if lastErr != nil {
+				status = lastErr.Error()
 			}
 
 			// Determine if we should show flake name (only on first occurrence)
@@ -121,7 +121,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 				ps.Date,
 				ps.Nixos,
 				ps.Kernel,
-				err,
+				status,
 			)
 		})
 

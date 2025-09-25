@@ -18,7 +18,7 @@ func (m *model) PrintBuildLogs() string {
 	builder.WriteString("\n" + config.DefaultColorScheme().HeaderTitle.Render("=== Build Logs ===\n"))
 
 	// Build separate trees for each flake
-	for _, flake := range m.workflow.State().Conf.Flakes.Range(false) {
+	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap(false, false) {
 		flakeTree := tree.New().
 			Root(config.DefaultColorScheme().Flake.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconFlake, flake.Name, flake.Message))).
 			Enumerator(tree.RoundedEnumerator).
@@ -32,7 +32,7 @@ func (m *model) PrintBuildLogs() string {
 			}
 		}
 
-		for _, configuration := range flake.Configurations.Range(false) {
+		for _, configuration := range flake.Configurations.SortedMap(false, false) {
 			configNode := tree.New().
 				Root(config.DefaultColorScheme().Configuration.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconConfiguration, configuration.Name, configuration.Message)))
 
@@ -46,7 +46,7 @@ func (m *model) PrintBuildLogs() string {
 			}
 
 			// Add machines
-			for _, machine := range configuration.Machines.Range(false) {
+			for _, machine := range configuration.Machines.SortedMap(false, false) {
 				machineNode := tree.New().
 					Root(config.DefaultColorScheme().Machine.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconMachine, machine.Name, machine.Message))).Offset(0, 4)
 
