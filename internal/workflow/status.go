@@ -13,46 +13,13 @@ import (
 // executeStatusPhase runs status checks in parallel across all machines
 // and must complete fully before proceeding to next phase
 func (w *Workflow) ExecuteStatusPhase() error {
-	err := poolForEach(w, w.state.Conf.Flakes, true, func(flake *config.Flake) error {
-		err := poolForEach(w, flake.Configurations, true, func(configuration *config.Configuration) error {
-			err := poolForEach(w, configuration.Machines, true, func(machine *config.Machine) error {
-
-				err := w.executeStatusPhaseMachine(machine)
-				if err != nil {
-					machine.Disabled = true
-					machine.Message = fmt.Sprintf("(disabled) %v", err)
-				}
-
-				return err
+	return poolChildren(w, w.state.Conf.Root, true, func(flake *config.Flake) error {
+		return poolChildren(w, flake, true, func(configuration *config.Configuration) error {
+			return poolChildren(w, configuration, true, func(machine *config.Machine) error {
+				return w.executeStatusPhaseMachine(machine)
 			})
-
-			atLeastOneMachineNotDisabled := false
-			for _, _ = range configuration.Machines.Range(true) {
-				atLeastOneMachineNotDisabled = true
-			}
-
-			configuration.Disabled = !atLeastOneMachineNotDisabled
-			if configuration.Disabled {
-				configuration.Message = fmt.Sprintf("(disabled) %v", err)
-			}
-
-			return err
 		})
-
-		atLeastOneConfigNotDisabled := false
-		for _, _ = range flake.Configurations.Range(true) {
-			atLeastOneConfigNotDisabled = true
-		}
-
-		flake.Disabled = !atLeastOneConfigNotDisabled
-		if flake.Disabled {
-			flake.Message = fmt.Sprintf("(disabled) %v", err)
-		}
-
-		return err
 	})
-
-	return err
 }
 
 func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error) {

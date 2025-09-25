@@ -10,7 +10,7 @@ func (ex *Executioner) sshStream(onFailure func(*config.Log, error) error, onSuc
 		sshArgs = append(sshArgs, ex.machine.Ssh.Hostname)
 	} else {
 		// TODO: implement more than alias
-		panic("not implemented")
+		panic("not implemented: more than alias")
 	}
 
 	sshArgs = append(sshArgs, name)

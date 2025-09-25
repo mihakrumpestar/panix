@@ -98,39 +98,42 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	err = conf.validateConfig()
-	if err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	// Config won't be changing after this point
-
 	return conf, nil
 }
 
 func (c *Config) validateConfig() error {
-	if c.Flakes == nil {
+	if c.Root == nil {
+		return fmt.Errorf("root is nil")
+	}
+
+	c.Root.Init("")
+
+	if c.Root.Flakes == nil {
 		return fmt.Errorf("flakes is nil")
 	}
-	if len(c.Flakes) == 0 {
+	if len(c.Root.Flakes) == 0 {
 		return fmt.Errorf("flakes is required")
 	}
 
-	for flakeName, flake := range c.Flakes.Range(true) {
+	for flakeName, flake := range c.Root.Flakes.SortedMap(true, true) {
 		if flake.Url == "" {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
+
+		flake.Init(flakeName)
 
 		if flake.Configurations == nil || len(flake.Configurations) == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		for configurationName, configuration := range flake.Configurations.Range(true) {
+		for configurationName, configuration := range flake.Configurations.SortedMap(true, true) {
 			if configuration.Machines == nil || len(configuration.Machines) == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			for machineName, _ := range configuration.Machines.Range(true) {
+			configuration.Init(configurationName)
+
+			for machineName, machine := range configuration.Machines.SortedMap(true, true) {
 				parsedMachineName, err := url.Parse("ssh://" + machineName)
 				if err != nil {
 					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s] has invalid machine name, it has to be formatted as URL: %w", flakeName, configurationName, machineName, err)
@@ -139,6 +142,13 @@ func (c *Config) validateConfig() error {
 				if parsedMachineName.Host == "" {
 					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s] has empty parsed host field", flakeName, configurationName, machineName)
 				}
+
+				if machine == nil {
+					machine = &Machine{}
+					configuration.Machines[machineName] = machine
+				}
+
+				machine.Init(machineName)
 			}
 		}
 	}
@@ -160,42 +170,19 @@ func (c *Config) filterAndExpandConfigEntrys() error {
 	configurationsFilter := c.Global.Filters.Configurations
 	machinesFilter := c.Global.Filters.Machines
 
-	for flakeName, flake := range c.Flakes.Range(false) {
+	for flakeName, flake := range c.Root.Flakes.SortedMap(false, false) {
 		if (len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName)) || flake.Disabled {
-			delete(c.Flakes, flakeName)
+			delete(c.Root.Flakes, flakeName)
 			continue
 		}
 
-		flake.Init(flakeName)
-
-		for configurationName, configuration := range flake.Configurations.Range(false) {
+		for configurationName, configuration := range flake.Configurations.SortedMap(false, false) {
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
 				delete(flake.Configurations, configurationName)
 				continue
 			}
 
-			configuration.Phases = &ConfigurationPhases{
-				Build: &PhaseBuild{},
-			}
-
-			configuration.Init(configurationName)
-
-			for machineName, machine := range configuration.Machines.Range(false) {
-				if machine == nil {
-					machine = &Machine{}
-					configuration.Machines[machineName] = machine
-				}
-
-				if machine.Ssh == nil {
-					machine.Ssh = &SshClient{}
-				}
-
-				machine.Phases = &MachinePhases{
-					Status: &PhaseStatus{},
-				}
-
-				machine.Init(machineName)
-
+			for machineName, machine := range configuration.Machines.SortedMap(false, false) {
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName)) || machine.Disabled {
 					delete(configuration.Machines, machineName)
 					continue
@@ -225,11 +212,11 @@ func (c *Config) filterAndExpandConfigEntrys() error {
 		}
 
 		if len(flake.Configurations) == 0 {
-			delete(c.Flakes, flakeName)
+			delete(c.Root.Flakes, flakeName)
 		}
 	}
 
-	if len(c.Flakes) == 0 {
+	if len(c.Root.Flakes) == 0 {
 		return fmt.Errorf("flakes configuration empty after filtering")
 	}
 

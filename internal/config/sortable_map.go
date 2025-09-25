@@ -7,20 +7,21 @@ import (
 	"slices"
 )
 
-type FlakeOrConfigurationOrMachine interface {
+// FoCoM
+type FoCoM interface {
+	Init(name string)
+
+	Disable(msg string)
 	IsDisabled() bool
+	Msg(msg string)
+
+	Children(skipDisabled bool) []FoCoM
 }
 
-type SortableMap[K cmp.Ordered, V FlakeOrConfigurationOrMachine] map[K]V
+type SortableFoCoM[K cmp.Ordered, V FoCoM] map[K]V
 
-// KeyValuePair holds a key-value pair for sorted iteration.
-type KeyValuePair[K cmp.Ordered, V FlakeOrConfigurationOrMachine] struct {
-	Key   K
-	Value V
-}
-
-// Range provides a method that allows for key, value := range SortableMap.Range() syntax.
-func (m *SortableMap[K, V]) Range(skipDisabled bool) func(yield func(K, V) bool) {
+// Sorted map
+func (m *SortableFoCoM[K, V]) SortedMap(skipChecks, skipDisabled bool) func(yield func(K, V) bool) {
 	return func(yield func(K, V) bool) {
 		if m == nil {
 			return
@@ -33,10 +34,12 @@ func (m *SortableMap[K, V]) Range(skipDisabled bool) func(yield func(K, V) bool)
 
 			v := (*m)[k]
 
-			// Skip disabled flakes, configurations, machines
-			valueIsDisabled := !isNil(v) && v.IsDisabled()
-			if valueIsDisabled && skipDisabled {
-				continue
+			if !skipChecks {
+				// Skip disabled flakes, configurations, machines
+				valueIsDisabled := !isNil(v) && v.IsDisabled()
+				if valueIsDisabled && skipDisabled {
+					continue
+				}
 			}
 
 			if !yield(k, v) {
