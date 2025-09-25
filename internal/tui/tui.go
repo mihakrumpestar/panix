@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 	"github.com/pkg/errors"
@@ -43,7 +44,6 @@ type modelView struct {
 	spinners    *Spinners
 	viewports   *Viewports
 	debugOutput *strings.Builder
-	colors      ColorScheme
 	//viewport viewport.Model
 }
 
@@ -68,8 +68,6 @@ func NewTui(workflow *workflow.Workflow) error {
 
 	debugOutput := &strings.Builder{}
 
-	colors := DefaultColorScheme()
-
 	rawKeyReader := NewRawKeyReader(os.Stdin, 1024)
 
 	//stdin := io.TeeReader(os.Stdin, os.Stdout)
@@ -80,9 +78,8 @@ func NewTui(workflow *workflow.Workflow) error {
 			mode:        defaultModelView,
 			dimensions:  dimensions,
 			spinners:    NewSpinners(),
-			viewports:   NewViewports(dimensions, debugOutput, colors),
+			viewports:   NewViewports(dimensions, debugOutput),
 			debugOutput: debugOutput,
-			colors:      colors,
 		},
 		rawKeyReader: rawKeyReader,
 	},
@@ -232,8 +229,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var builder strings.Builder
 
-	colors := m.modelView.colors
-
 	// Header with instructions
 	header := "\n=== Panix TUI ===\n"
 	instructions := "Press 'q' to quit, 'd' to switch modes\n\n"
@@ -275,7 +270,7 @@ func (m model) View() string {
 	if m.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
-		builder.WriteString(colors.Error.Render(errorHeader + errorContent))
+		builder.WriteString(config.DefaultColorScheme().Error.Render(errorHeader + errorContent))
 	}
 
 	if m.workflow.State().Conf.Global.Debug {

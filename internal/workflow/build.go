@@ -120,10 +120,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
 
 	// Build a configuration
-	err = exc.Exec(false,
-		func(log *config.Log, err error) error {
-			return fmt.Errorf("build failed for %s/%s: %w", flakeName, configurationName, err)
-		},
+	err = exc.Exec(false, nil,
 		func(log *config.Log) error {
 			output := log.LastCommand().Bytes()
 			output = lastNonEmptyLine(output)

@@ -10,13 +10,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elliotchance/orderedmap/v3"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/mihakrumpestar/panix/internal/config"
 )
 
 type Viewports struct {
 	viewports  *orderedmap.OrderedMap[string, *Viewport]
 	dimensions *Dimensions
 	debug      *strings.Builder
-	colors     ColorScheme
 }
 
 type Viewport struct {
@@ -27,12 +27,11 @@ type Viewport struct {
 	scrollbarZone string // Zone ID for scrollbar area
 }
 
-func NewViewports(dimensions *Dimensions, debug *strings.Builder, colors ColorScheme) *Viewports {
+func NewViewports(dimensions *Dimensions, debug *strings.Builder) *Viewports {
 	return &Viewports{
 		viewports:  orderedmap.NewOrderedMap[string, *Viewport](),
 		dimensions: dimensions,
 		debug:      debug,
-		colors:     colors,
 	}
 }
 
@@ -68,7 +67,7 @@ func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLi
 
 	// Style the scrollbar
 	scrollbarStyle := lipgloss.NewStyle().
-		Foreground(v.colors.TableBorder.GetForeground())
+		Foreground(config.DefaultColorScheme().TableBorder.GetForeground())
 
 	// Join all lines with newlines
 	return scrollbarStyle.Render(strings.Join(scrollbar, "\n"))
@@ -158,9 +157,9 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 		combinedView = viewportView
 	}
 
-	borderColor := v.colors.TableBorder.GetForeground()
+	borderColor := config.DefaultColorScheme().TableBorder.GetForeground()
 	if vpr.active {
-		borderColor = v.colors.Error.GetBackground()
+		borderColor = config.DefaultColorScheme().Error.GetBackground()
 	}
 
 	final := lipgloss.NewStyle().
