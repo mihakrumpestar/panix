@@ -14,32 +14,19 @@ import (
 func (m *model) PrintBuildLogs() string {
 	var builder strings.Builder
 
-	// Use color scheme from model
-	colors := m.modelView.colors
-
 	// Header for the log view
-	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Build Logs ===\n"))
-
-	enumeratorStyle := colors.TreeEnumerator
-
-	// Use color scheme styles for different tree elements
-	flakeStyle := colors.Flake
-	configStyle := colors.Configuration
-	machineStyle := colors.Machine
-	phaseStyle := colors.Phase
-	commandStyle := colors.Command
-	errorStyle := colors.Error
+	builder.WriteString("\n" + config.DefaultColorScheme().HeaderTitle.Render("=== Build Logs ===\n"))
 
 	// Build separate trees for each flake
 	for _, flake := range m.workflow.State().Conf.Flakes.Range(false) {
 		flakeTree := tree.New().
-			Root(flakeStyle.Render(fmt.Sprintf("%c %s %s", colors.IconFlake, flake.Name, flake.Message))).
+			Root(config.DefaultColorScheme().Flake.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconFlake, flake.Name, flake.Message))).
 			Enumerator(tree.RoundedEnumerator).
-			EnumeratorStyle(enumeratorStyle)
+			EnumeratorStyle(config.DefaultColorScheme().TreeEnumerator)
 
 		if flake != nil && flake.Logs.Len() > 0 {
 			xpath := flake.Name
-			phaseNodes := m.phaseNodes(xpath, flake.Logs, phaseStyle, commandStyle, errorStyle)
+			phaseNodes := m.phaseNodes(xpath, flake.Logs)
 			for _, phaseNode := range phaseNodes {
 				flakeTree.Child(phaseNode)
 			}
@@ -47,12 +34,12 @@ func (m *model) PrintBuildLogs() string {
 
 		for _, configuration := range flake.Configurations.Range(false) {
 			configNode := tree.New().
-				Root(configStyle.Render(fmt.Sprintf("%c %s %s", colors.IconConfiguration, configuration.Name, configuration.Message)))
+				Root(config.DefaultColorScheme().Configuration.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconConfiguration, configuration.Name, configuration.Message)))
 
 			// Add configuration logs directly (no "Logs" intermediate node)
 			if configuration.Logs.Len() > 0 {
 				xpath := flake.Name + configuration.Name
-				phaseNodes := m.phaseNodes(xpath, configuration.Logs, phaseStyle, commandStyle, errorStyle)
+				phaseNodes := m.phaseNodes(xpath, configuration.Logs)
 				for _, phaseNode := range phaseNodes {
 					configNode.Child(phaseNode)
 				}
@@ -61,11 +48,11 @@ func (m *model) PrintBuildLogs() string {
 			// Add machines
 			for _, machine := range configuration.Machines.Range(false) {
 				machineNode := tree.New().
-					Root(machineStyle.Render(fmt.Sprintf("%c %s %s", colors.IconMachine, machine.Name, machine.Message))).Offset(0, 4)
+					Root(config.DefaultColorScheme().Machine.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconMachine, machine.Name, machine.Message))).Offset(0, 4)
 
 				if machine.Logs.Len() > 0 {
 					xpath := flake.Name + configuration.Name + machine.Name
-					phaseNodes := m.phaseNodes(xpath, machine.Logs, phaseStyle, commandStyle, errorStyle)
+					phaseNodes := m.phaseNodes(xpath, machine.Logs)
 					for _, phaseNode := range phaseNodes {
 						machineNode.Child(phaseNode)
 					}
@@ -84,7 +71,7 @@ func (m *model) PrintBuildLogs() string {
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandStyle, errorStyle lipgloss.Style) []*tree.Tree {
+func (m *model) phaseNodes(xpath string, logs *config.Logs) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
 	if logs.Len() == 0 {
@@ -105,7 +92,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 			m.RightSideDuration(tas),
 		)
 
-		phaseHeader := phaseStyle.Render(phaseText)
+		phaseHeader := config.DefaultColorScheme().Phase.Render(phaseText)
 		phaseTree := tree.New().Root(phaseHeader)
 
 		// Commands and their output
@@ -123,7 +110,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 					m.RightSideDuration(cmdTas),
 				)
 
-				cmdHeader := commandStyle.Render(cmdText)
+				cmdHeader := config.DefaultColorScheme().Command.Render(cmdText)
 				cmdTree := tree.New().Root(cmdHeader)
 
 				// Command output
@@ -137,7 +124,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 
 				// Command error status
 				if cmdTas.Error != nil {
-					cmdTree.Child(errorStyle.Render(fmt.Sprintf("✗ Command failed: %v", cmdTas.Error)))
+					cmdTree.Child(config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Command failed: %v", cmdTas.Error)))
 				}
 
 				phaseTree.Child(cmdTree)
@@ -146,7 +133,7 @@ func (m *model) phaseNodes(xpath string, logs *config.Logs, phaseStyle, commandS
 
 		// Show error details if failed
 		if tas.Error != nil {
-			errorMsg := errorStyle.Render(fmt.Sprintf("✗ Phase failed: %v", tas.Error))
+			errorMsg := config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Phase failed: %v", tas.Error))
 			phaseTree.Child(errorMsg)
 		}
 

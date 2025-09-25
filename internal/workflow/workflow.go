@@ -137,11 +137,11 @@ func poolForEach[K cmp.Ordered, V config.FlakeOrConfigurationOrMachine](w *Workf
 
 	err := groupPool.Wait()
 	if err != nil {
-		return errors.Wrapf(err, "poolForEach: failed because of 'RequireAllSuccess'")
+		return errors.Wrapf(err, "'RequireAllSuccess' condition not met")
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		return fmt.Errorf("poolForEach: failed because of all tasks errored")
+		return fmt.Errorf("all sub-tasks failed")
 	}
 
 	return nil
