@@ -22,6 +22,11 @@ require (
 )
 
 require (
+	github.com/gookit/goutil v0.7.1 // indirect
+	golang.org/x/term v0.29.0 // indirect
+)
+
+require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect

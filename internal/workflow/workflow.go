@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -116,17 +115,34 @@ func validatePhaseConstraints(phases, slipPhases []workflow_definition.WorkflowP
 	return phases, nil
 }
 
-// poolForEach is a generic helper function to iterate over an ordered map in parallel
-func poolForEach[K cmp.Ordered, V config.FlakeOrConfigurationOrMachine](w *Workflow, iterable config.SortableMap[K, V], skipDisabled bool, function func(value V) error) error {
+// poolChildren is a generic helper function to iterate over children in parallel
+func poolChildren[V config.FoCoM](w *Workflow, parent config.FoCoM, skipDisabled bool, function func(value V) error) (err error) {
+
 	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)
 
-	for _, value := range iterable.Range(skipDisabled) {
-		groupPool.SubmitErr(func() error {
-			err := function(value)
-			errCacher = append(errCacher, err)
+	defer func() {
+		if err != nil {
+			parent.Disable(config.DefaultColorScheme().Error.Render(fmt.Sprintf("(disabled) %v", err)))
+		}
+	}()
 
+	for _, value := range parent.Children(skipDisabled) {
+		// Type assertion to ensure the value is of type V
+		typedValue, ok := value.(V)
+		if !ok {
+			panic(fmt.Sprintf("type assertion failed: expected %T, got %T", typedValue, value))
+		}
+
+		groupPool.SubmitErr(func() error {
+			err := function(typedValue)
+
+			if err != nil {
+				typedValue.Disable(config.DefaultColorScheme().Error.Render(fmt.Sprintf("(disabled) %v", err)))
+			}
+
+			errCacher = append(errCacher, err)
 			if !w.state.Conf.Global.RequireAllSuccess {
 				return nil
 			}
@@ -135,25 +151,27 @@ func poolForEach[K cmp.Ordered, V config.FlakeOrConfigurationOrMachine](w *Workf
 		})
 	}
 
-	err := groupPool.Wait()
+	err = groupPool.Wait()
 	if err != nil {
-		return errors.Wrapf(err, "'RequireAllSuccess' condition not met")
+		err = errors.Wrapf(err, "'RequireAllSuccess' condition not met")
+		return
 	}
 
 	if !slices.Contains(errCacher, nil) {
-		return fmt.Errorf("all sub-tasks failed")
+		err = fmt.Errorf("all sub-tasks failed")
+		return
 	}
 
-	return nil
+	return
 }
 
 func (w *WorkflowState) ExpandFlakeConfigurationMachine(skipDisabled bool, function func(i int,
 	flake *config.Flake, configuration *config.Configuration, machine *config.Machine)) {
 	i := 0
 
-	for _, flake := range w.Conf.Flakes.Range(skipDisabled) {
-		for _, configuration := range flake.Configurations.Range(skipDisabled) {
-			for _, machine := range configuration.Machines.Range(skipDisabled) {
+	for _, flake := range w.Conf.Root.Flakes.SortedMap(false, skipDisabled) {
+		for _, configuration := range flake.Configurations.SortedMap(false, skipDisabled) {
+			for _, machine := range configuration.Machines.SortedMap(false, skipDisabled) {
 				function(i, flake, configuration, machine)
 				i++
 			}

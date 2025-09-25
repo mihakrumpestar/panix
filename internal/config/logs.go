@@ -7,13 +7,16 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
 )
 
+// Logs
+
 type Logs struct {
 	logs *orderedmap.OrderedMap[workflow_definition.WorkflowPhase, *Log]
 }
 
 func NewLogs() *Logs {
-	om := orderedmap.NewOrderedMap[workflow_definition.WorkflowPhase, *Log]()
-	return &Logs{om}
+	return &Logs{
+		logs: orderedmap.NewOrderedMap[workflow_definition.WorkflowPhase, *Log](),
+	}
 }
 
 func (l *Logs) SafeGet(wp workflow_definition.WorkflowPhase) *Log {
@@ -38,6 +41,8 @@ func (l *Logs) All() iter.Seq2[workflow_definition.WorkflowPhase, *Log] {
 func (l *Logs) Len() int {
 	return l.logs.Len()
 }
+
+// Log
 
 type Log struct {
 	Commands     []*CommandLog
