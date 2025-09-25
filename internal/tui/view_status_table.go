@@ -13,14 +13,13 @@ import (
 func (m *model) PrintStatusPhaseMachineTable() string {
 	state := m.workflow.State()
 
+	colors := config.DefaultColorScheme()
+
 	if state.Conf.Global.DryRun {
 		return "No table in dryRun"
 	}
 
 	var builder strings.Builder
-
-	// Use color scheme from model
-	colors := m.modelView.colors
 
 	// Header for the log view
 	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Stats table ===\n"))
