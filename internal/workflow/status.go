@@ -39,7 +39,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 	sm := machine.Phases.Status
 
 	// TCP check
-	err = exc.Exec(true,
+	err = exc.Exec(true, true,
 		func(log *config.Log, err error) error {
 			return fmt.Errorf("machine unreachable: %w", err)
 		},
@@ -47,13 +47,13 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			sm.Reachable = true
 			return nil
 		},
-		"nc", "-zvw1", machine.Ssh.Hostname, string(machine.Ssh.Port))
+		"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port))
 	if err != nil {
 		return
 	}
 
 	// SSH connect
-	err = exc.Exec(true,
+	err = exc.Exec(true, true,
 		func(log *config.Log, err error) error {
 			return errors.Wrapf(err, "ssh test failed: %s", log.LastCommand().String())
 		},
@@ -66,7 +66,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 	}
 
 	// Run bootstrap detection
-	err = exc.Exec(false,
+	err = exc.Exec(false, true,
 		nil,
 		func(log *config.Log) error {
 			sm.Bootstrapped = true
@@ -78,7 +78,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 	}
 
 	// Get current generation
-	err = exc.Exec(false,
+	err = exc.Exec(false, true,
 		nil,
 		func(log *config.Log) error {
 			output := log.LastCommand().Bytes()

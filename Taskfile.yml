@@ -34,12 +34,6 @@ tasks:
     cmds:
       - go run cmd/main.go {{.CLI_ARGS}}
 
-  watch:
-    desc: Watch for changes and rebuild
-    deps: [install-tools]
-    cmds:
-      - air
-
   # Build tasks
   build:
     desc: Build the binary for current platform
@@ -227,18 +221,6 @@ tasks:
       - task: clean
       - go clean -modcache
 
-  # Docker tasks
-  docker-build:
-    desc: Build Docker image
-    cmds:
-      - docker build -t {{.BINARY_NAME}}:{{.VERSION}} .
-      - docker build -t {{.BINARY_NAME}}:latest .
-
-  docker-run:
-    desc: Run Docker container
-    cmds:
-      - docker run --rm -it {{.BINARY_NAME}}:latest {{.CLI_ARGS}}
-
   # Nix tasks
   nix-build:
     desc: Build with Nix
@@ -262,26 +244,6 @@ tasks:
     cmds:
       - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} plan --dry-run
 
-  # Example/demo tasks
-  demo:
-    desc: Run demo deployment
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} plan --verbose
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --dry-run --verbose
-
-  demo-bootstrap:
-    desc: Demo bootstrap process
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} bootstrap --dry-run --verbose
-
-  demo-rollback:
-    desc: Demo rollback process
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} rollback --dry-run --verbose
-
   # CI/CD tasks
   ci:
     desc: Run CI pipeline
@@ -300,39 +262,3 @@ tasks:
       - task: vet
       - task: test
       - task: lint
-
-  # Performance tasks
-  profile:
-    desc: Run with CPU profiling
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --dry-run -cpuprofile=cpu.prof
-      - go tool pprof cpu.prof
-
-  trace:
-    desc: Run with execution tracing
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --dry-run -trace=trace.out
-      - go tool trace trace.out
-
-  # Development environment setup
-  setup:
-    desc: Setup development environment
-    cmds:
-      - task: install-tools
-      - task: deps
-      - echo "Development environment setup complete"
-
-  # Help tasks
-  help:
-    desc: Show help for the application
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} --help
-
-  help-deploy:
-    desc: Show help for deploy command
-    deps: [build]
-    cmds:
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} deploy --help

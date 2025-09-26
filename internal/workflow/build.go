@@ -23,12 +23,12 @@ func (w *Workflow) ExecuteBuildPhase() error {
 				log.AddMessageOnly("Executing build phase across " + flake.Name)
 			}
 
-			if flake.Hooks.Pre != "" {
+			if flake.BuildHooks.Pre != "" {
 				exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
 
 				// Pre build hook
-				err := exc.Exec(false, nil, nil,
-					"bash", "-c", flake.Hooks.Pre,
+				err := exc.Exec(false, true, nil, nil,
+					"sh", "-c", flake.BuildHooks.Pre,
 				)
 				if err != nil {
 					return err
@@ -57,7 +57,14 @@ func (w *Workflow) ExecuteBuildPhase() error {
 						func(machine *config.Machine) error {
 
 							if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {
-								err := w.executeTransferPhaseMachine(configuration, machine.Name, machine)
+								err := w.executeTransferPhaseMachine(configuration, machine)
+								if err != nil {
+									return err
+								}
+							}
+
+							if slices.Contains(w.phases, workflow_definition.PhaseSecrets) {
+								err := w.executeSecretsPhaseMachine(machine)
 								if err != nil {
 									return err
 								}
@@ -73,11 +80,7 @@ func (w *Workflow) ExecuteBuildPhase() error {
 							return nil
 						})
 
-					if err != nil {
-						return err
-					}
-
-					return nil
+					return err
 				})
 
 			return err
@@ -120,7 +123,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName s
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
 
 	// Build a configuration
-	err = exc.Exec(false, nil,
+	err = exc.Exec(false, true, nil,
 		func(log *config.Log) error {
 			output := log.LastCommand().Bytes()
 			output = lastNonEmptyLine(output)

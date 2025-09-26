@@ -9,7 +9,7 @@ import (
 
 // FoCoM
 type FoCoM interface {
-	Init(name string)
+	Init(name string) error
 
 	Disable(msg string)
 	IsDisabled() bool

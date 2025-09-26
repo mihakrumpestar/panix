@@ -24,6 +24,7 @@ This is the main command for deploying NixOS configurations.`,
 			workflow_definition.PhaseStatus,
 			workflow_definition.PhaseBuild,
 			workflow_definition.PhaseTransfer,
+			workflow_definition.PhaseSecrets,
 			workflow_definition.PhaseActivate,
 		}
 
