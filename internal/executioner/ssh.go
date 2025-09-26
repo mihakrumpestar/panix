@@ -2,7 +2,7 @@ package executioner
 
 import "github.com/mihakrumpestar/panix/internal/config"
 
-func (ex *Executioner) sshStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
+func (ex *Executioner) sshStream(log bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
 
 	sshArgs := []string{"-q"} // Silance banners
 
@@ -16,5 +16,5 @@ func (ex *Executioner) sshStream(onFailure func(*config.Log, error) error, onSuc
 	sshArgs = append(sshArgs, name)
 	sshArgs = append(sshArgs, args...)
 
-	return ex.shellStream(onFailure, onSuccess, "ssh", sshArgs...)
+	return ex.shellStream(log, onFailure, onSuccess, "ssh", sshArgs...)
 }

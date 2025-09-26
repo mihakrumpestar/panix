@@ -15,7 +15,7 @@ type Executioner struct {
 	onUpdateHook func()
 }
 
-// NewExecutioner: if machineName == nil, machineSshConfig won't be used
+// NewExecutioner: if machine == nil it indicates that the command will be executred locally
 func NewExecutioner(ctx context.Context, conf *config.Global, machine *config.Machine, phaseLog *config.Log, onUpdateHook func()) *Executioner {
 
 	return &Executioner{
@@ -27,7 +27,7 @@ func NewExecutioner(ctx context.Context, conf *config.Global, machine *config.Ma
 	}
 }
 
-func (ex *Executioner) Exec(skipIfLocal bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
+func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
 	defer ex.onUpdateHook()
 
 	noMachineOrLocal := ex.machine == nil || ex.machine.Ssh.IsLocal
@@ -46,8 +46,8 @@ func (ex *Executioner) Exec(skipIfLocal bool, onFailure func(*config.Log, error)
 	}
 
 	if noMachineOrLocal {
-		return ex.shellStream(onFailure, onSuccess, name, args...)
+		return ex.shellStream(log, onFailure, onSuccess, name, args...)
 	} else {
-		return ex.sshStream(onFailure, onSuccess, name, args...)
+		return ex.sshStream(log, onFailure, onSuccess, name, args...)
 	}
 }

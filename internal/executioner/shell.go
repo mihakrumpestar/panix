@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) (err error) {
+func (ex *Executioner) shellStream(log bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) (err error) {
 	exm := ex.phaseLog.NewCommand()
 
 	exm.TimeAndState.StartTimer()
@@ -72,7 +72,7 @@ func (ex *Executioner) shellStream(onFailure func(*config.Log, error) error, onS
 			break
 		}
 
-		if n > 0 {
+		if n > 0 && log {
 			rawBuffer := buf[:n]
 
 			// Process the buffer to handle terminal control sequences properly

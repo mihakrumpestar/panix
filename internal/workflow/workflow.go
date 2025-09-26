@@ -90,6 +90,17 @@ func (w *Workflow) Start() error {
 		if err != nil {
 			return err
 		}
+
+		return nil
+	}
+
+	if slices.Contains(w.phases, workflow_definition.PhaseSecrets) {
+		err := w.ExecuteSecretsPhase()
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	return nil

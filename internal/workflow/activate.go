@@ -28,13 +28,24 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, log, w.hook.OnUpdateHook)
 
+	binPath := buildOutputPath + "/bin/switch-to-configuration"
+
+	command := *machine.SudoProgram
+	args := []string{}
+	if command == "" {
+		command = binPath
+	} else {
+		args = append(args, binPath)
+	}
+	args = append(args, "switch")
+
 	// Build a configuration
-	err = exc.Exec(false,
+	err = exc.Exec(false, true,
 		func(log *config.Log, err error) error {
 			return errors.Wrapf(err, "activation failed for %s", machine.Name)
 		},
 		nil,
-		"sudo", buildOutputPath+"/bin/switch-to-configuration", "switch",
+		command, args...,
 	)
 	if err != nil {
 		return
