@@ -7,13 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-viper/mapstructure/v2"
+	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/gobeam/stringy"
+	"github.com/gookit/goutil/dump"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
-	"github.com/knadh/koanf/v2"
+	koanf "github.com/knadh/koanf/v2"
 	"github.com/spf13/pflag"
 )
 
@@ -45,22 +46,32 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 	// Load command line flags if provided
 	if flags != nil {
+		// Debug: Print all flags before processing
+		//fmt.Printf("DEBUG: Processing flags:\n")
+		//flags.VisitAll(func(f *pflag.Flag) {
+		//	fmt.Printf("DEBUG: Flag name: %s, value: %s\n", f.Name, f.Value.String())
+		//})
+
 		err := k.Load(
 			posflag.ProviderWithFlag(
 				flags,
 				".",
 				k,
 				func(f *pflag.Flag) (string, any) {
-					// Transform the key in whatever manner.
-					keyRaw := stringy.New(f.Name).CamelCase()
-					// If special nested "filters"
-					if slices.Contains([]string{"flakes", "configurations", "machines"}, keyRaw.Get()) {
-						keyRaw.Prefix("filters.")
+					// Skip non-configuration flags
+					if slices.Contains([]string{"config", "help"}, f.Name) {
+						return "", nil // Skip this flag
 					}
+
+					// Transform the key in whatever manner.
+					keyRaw := stringy.New(f.Name) //.CamelCase()
 
 					key := keyRaw.Prefix("global.")
 
 					val := posflag.FlagVal(flags, f)
+
+					// Debug: Print the transformation
+					//fmt.Printf("DEBUG: Transforming flag '%s' to key '%s' with value '%v'\n", f.Name, key, val)
 
 					return key, val
 				},
@@ -77,8 +88,10 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	err = k.UnmarshalWithConf("", &conf, koanf.UnmarshalConf{
 		Tag: "yaml",
 		DecoderConfig: &mapstructure.DecoderConfig{
-			WeaklyTypedInput: true,
-			Result:           &conf,
+			ErrorUnused:          true,
+			WeaklyTypedInput:     true,
+			Squash:               true,
+			IgnoreUntaggedFields: true,
 		},
 	})
 	if err != nil {
@@ -87,6 +100,10 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 	// Convert timeout from miliseconds to seconds for duration
 	conf.Global.Timeout *= time.Second
+
+	if conf.Global.Debug {
+		dump.P(conf)
+	}
 
 	err = conf.validateConfig()
 	if err != nil {
@@ -120,7 +137,10 @@ func (c *Config) validateConfig() error {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
 
-		flake.Init(flakeName)
+		err := flake.Init(flakeName)
+		if err != nil {
+			return err
+		}
 
 		if flake.Configurations == nil || len(flake.Configurations) == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
@@ -131,7 +151,10 @@ func (c *Config) validateConfig() error {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			configuration.Init(configurationName)
+			err := configuration.Init(configurationName)
+			if err != nil {
+				return err
+			}
 
 			for machineName, machine := range configuration.Machines.SortedMap(true, true) {
 				parsedMachineName, err := url.Parse("ssh://" + machineName)
@@ -148,7 +171,10 @@ func (c *Config) validateConfig() error {
 					configuration.Machines[machineName] = machine
 				}
 
-				machine.Init(machineName)
+				err = machine.Init(machineName)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

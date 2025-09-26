@@ -44,19 +44,19 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "panix.yml", "config file")
 
 	// Filter flags
-	rootCmd.PersistentFlags().StringSlice("flakes", nil, "a list of flakes to deploy")
-	rootCmd.PersistentFlags().StringSlice("configurations", nil, "a list of configurations to deploy")
-	rootCmd.PersistentFlags().StringSlice("machines", nil, "a list of machines to deploy")
-	rootCmd.PersistentFlags().StringSlice("tags", nil, "filter machines by tags")
+	rootCmd.PersistentFlags().StringSlice("filters.flakes", nil, "a list of flakes to deploy")
+	rootCmd.PersistentFlags().StringSlice("filters.configurations", nil, "a list of configurations to deploy")
+	rootCmd.PersistentFlags().StringSlice("filters.machines", nil, "a list of machines to deploy")
+	rootCmd.PersistentFlags().StringSlice("filters.tags", nil, "filter machines by tags")
 
 	// Global flags
 	hostname, _ := os.Hostname()
 	concurrency := runtime.GOMAXPROCS(0)
 
-	rootCmd.PersistentFlags().Bool("require-all", false, "abort & rollback if any host fails")
-	rootCmd.PersistentFlags().Bool("auto-bootstrap", false, "automatically bootstrap uninitialized hosts")
-	rootCmd.PersistentFlags().String("local-machine", hostname, "machine name that is local (won't use ssh to connect to it)")
-	rootCmd.PersistentFlags().Bool("dry-run", false, "show what would be done without executing")
+	rootCmd.PersistentFlags().Bool("requireAllSuccess", false, "abort & rollback if any host fails")
+	rootCmd.PersistentFlags().Bool("autoBootstrap", false, "automatically bootstrap uninitialized hosts")
+	rootCmd.PersistentFlags().String("localMachine", hostname, "machine name that is local (won't use ssh to connect to it)")
+	rootCmd.PersistentFlags().Bool("dryRun", false, "show what would be done without executing")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
 	rootCmd.PersistentFlags().Int("concurrency", concurrency, "number of concurrent operations")

@@ -21,3 +21,12 @@ root:
         personal-workstation:
           machines:
             personal-workstation: 
+              secrets:
+                - local:
+                    path: ./README.md
+                  remote:
+                    path: /tmp/README.md
+                - local:
+                    commandOutput: echo OK
+                  remote:
+                    path: /tmp/README2.md
