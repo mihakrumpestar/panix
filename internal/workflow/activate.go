@@ -5,55 +5,36 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machine *config.Machine) (err error) {
-	log := machine.Logs.SafeGet(workflow_definition.PhaseActivate)
-	log.TimeAndState.StartTimer()
-	defer func() {
-		log.TimeAndState.EndTimerWithError(err)
-	}()
+func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machine *config.Machine) error {
+	return w.Phase(machine.Logs.SafeGet(phases.Activate),
+		fmt.Sprintf("Started activation of %s", machine.Name),
+		fmt.Sprintf("Finished activation of %s", machine.Name),
+		machine,
+		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
+			binPath := configuration.MetaBuild.OutputPath + "/bin/switch-to-configuration"
 
-	if w.state.Conf.Global.Verbose {
-		log.AddMessageOnly(fmt.Sprintf("Starting activation of %s", machine.Name))
-	}
+			commandWithArgs := []string{*machine.SudoProgram}
+			if commandWithArgs[0] == "" {
+				commandWithArgs[0] = binPath
+			} else {
+				commandWithArgs = append(commandWithArgs, binPath)
+			}
+			commandWithArgs = append(commandWithArgs, "switch")
 
-	buildOutputPath := configuration.Phases.Build.BuildOutputPath
+			// Build a configuration
+			err := exc.Exec(false, true,
+				func(log *config.CommandLog, err error) error {
+					return errors.Wrapf(err, "activation failed for %s", machine.Name)
+				},
+				nil,
+				commandWithArgs...,
+			)
 
-	if w.state.Conf.Global.DryRun {
-		return
-	}
-
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, log, w.hook.OnUpdateHook)
-
-	binPath := buildOutputPath + "/bin/switch-to-configuration"
-
-	command := *machine.SudoProgram
-	args := []string{}
-	if command == "" {
-		command = binPath
-	} else {
-		args = append(args, binPath)
-	}
-	args = append(args, "switch")
-
-	// Build a configuration
-	err = exc.Exec(false, true,
-		func(log *config.Log, err error) error {
-			return errors.Wrapf(err, "activation failed for %s", machine.Name)
+			return err
 		},
-		nil,
-		command, args...,
 	)
-	if err != nil {
-		return
-	}
-
-	if w.state.Conf.Global.Verbose {
-		log.AddMessageOnly(fmt.Sprintf("Activated %s successfully", machine.Name))
-	}
-
-	return
 }

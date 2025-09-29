@@ -71,7 +71,7 @@ func (m *model) PrintBuildLogs() string {
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath string, logs *config.Logs) []*tree.Tree {
+func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
 	if logs.Len() == 0 {

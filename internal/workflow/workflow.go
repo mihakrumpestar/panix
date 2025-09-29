@@ -7,8 +7,9 @@ import (
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/hook"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +18,7 @@ type Workflow struct {
 	cancel context.CancelFunc
 	state  *WorkflowState
 	hook   *hook.Hook
-	phases []workflow_definition.WorkflowPhase
+	phases []phases.Phase
 }
 
 type WorkflowState struct {
@@ -25,7 +26,7 @@ type WorkflowState struct {
 	Pool pond.Pool
 }
 
-func NewWorkflow(ctx context.Context, phases []workflow_definition.WorkflowPhase) (*Workflow, error) {
+func NewWorkflow(ctx context.Context, phases []phases.Phase) (*Workflow, error) {
 	conf := ctx.Value(config.ContextConfigKey).(*config.Config)
 
 	if conf == nil {
@@ -73,19 +74,19 @@ func (w *Workflow) Cancel() context.CancelFunc {
 	return w.cancel
 }
 
-func (w *Workflow) Phases() []workflow_definition.WorkflowPhase {
+func (w *Workflow) Phases() []phases.Phase {
 	return w.phases
 }
 
 func (w *Workflow) Start() error {
-	if slices.Contains(w.phases, workflow_definition.PhaseStatus) {
+	if slices.Contains(w.phases, phases.Status) {
 		err := w.ExecuteStatusPhase()
 		if err != nil {
 			return err
 		}
 	}
 
-	if slices.Contains(w.phases, workflow_definition.PhaseBuild) {
+	if slices.Contains(w.phases, phases.Build) {
 		err := w.ExecuteBuildPhase()
 		if err != nil {
 			return err
@@ -94,7 +95,7 @@ func (w *Workflow) Start() error {
 		return nil
 	}
 
-	if slices.Contains(w.phases, workflow_definition.PhaseSecrets) {
+	if slices.Contains(w.phases, phases.Secrets) {
 		err := w.ExecuteSecretsPhase()
 		if err != nil {
 			return err
@@ -106,29 +107,48 @@ func (w *Workflow) Start() error {
 	return nil
 }
 
+func (w *Workflow) Phase(phaseLog *config.PhaseLog, startDebugMsg, endDebugMsg string, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error) (err error) {
+	phaseLog.TimeAndState.StartTimer()
+	defer func() {
+		phaseLog.TimeAndState.EndTimerWithError(err)
+	}()
+
+	if w.state.Conf.Global.Verbose {
+		phaseLog.AddMessageOnly(startDebugMsg)
+	}
+
+	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, phaseLog, w.hook.OnUpdateHook)
+	err = phaseCode(exc, phaseLog)
+
+	if w.state.Conf.Global.Verbose {
+		phaseLog.AddMessageOnly(endDebugMsg)
+	}
+
+	return err
+}
+
 // Helpers
 
-func validatePhaseConstraints(phases, slipPhases []workflow_definition.WorkflowPhase) ([]workflow_definition.WorkflowPhase, error) {
-	phases = slices.DeleteFunc(phases, func(phase workflow_definition.WorkflowPhase) bool {
-		return slices.Contains(slipPhases, phase)
+func validatePhaseConstraints(phasesI, skipPhases []phases.Phase) ([]phases.Phase, error) {
+	phasesI = slices.DeleteFunc(phasesI, func(phase phases.Phase) bool {
+		return slices.Contains(skipPhases, phase)
 	})
 
-	if len(phases) == 0 {
+	if len(phasesI) == 0 {
 		return nil, fmt.Errorf("all phases skipped")
 	}
 
-	phase := phases[0]
-	validFirstPhases := []workflow_definition.WorkflowPhase{workflow_definition.PhaseStatus, workflow_definition.PhaseBuild, workflow_definition.PhaseSecrets}
+	phase := phasesI[0]
+	validFirstPhases := []phases.Phase{phases.Status, phases.Build, phases.Secrets}
 	if !slices.Contains(validFirstPhases, phase) {
 		return nil, fmt.Errorf("phase %s is can't be the first phase, allowed are %s", phase, validFirstPhases)
 	}
 
-	return phases, nil
+	return phasesI, nil
 }
 
 // poolChildren is a generic helper function to iterate over children in parallel
-func poolChildren[V config.FoCoM](w *Workflow, parent config.FoCoM, skipDisabled bool, function func(value V) error) (err error) {
-
+func poolChildren[V config.FCM](w *Workflow, parent config.FCM, skipDisabled bool, function func(value V) error) (err error) {
 	groupPool := w.state.Pool.NewGroup()
 
 	errCacher := make([]error, 0)

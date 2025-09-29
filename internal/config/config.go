@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 const (
@@ -17,16 +17,16 @@ type Config struct {
 }
 
 type Global struct {
-	Filters           Filters                             `yaml:"filters"`
-	RequireAllSuccess bool                                `yaml:"requireAllSuccess"`
-	AutoBootstrap     bool                                `yaml:"autoBootstrap"`
-	LocalMachine      string                              `yaml:"localMachine"`
-	DryRun            bool                                `yaml:"dryRun"`
-	Timeout           time.Duration                       `yaml:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
-	Concurrency       int                                 `yaml:"concurrency"`
-	SkipPhases        []workflow_definition.WorkflowPhase `yaml:"skipPhases"`
-	Verbose           bool                                `yaml:"verbose"`
-	Debug             bool                                `yaml:"debug"`
+	Filters           Filters        `yaml:"filters"`
+	RequireAllSuccess bool           `yaml:"requireAllSuccess"`
+	AutoBootstrap     bool           `yaml:"autoBootstrap"`
+	LocalMachine      string         `yaml:"localMachine"`
+	DryRun            bool           `yaml:"dryRun"`
+	Timeout           time.Duration  `yaml:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
+	Concurrency       int            `yaml:"concurrency"`
+	SkipPhases        []phases.Phase `yaml:"skipPhases"`
+	Verbose           bool           `yaml:"verbose"`
+	Debug             bool           `yaml:"debug"`
 	//Json              bool                                `yaml:"json"` // Maybe later
 }
 
@@ -37,8 +37,10 @@ type Filters struct {
 	Tags           []string `yaml:"tags"`
 }
 
+// Root
+
 type Root struct {
-	Flakes     SortableFoCoM[string, *Flake] `yaml:"flakes"`
+	Flakes     SortableFCM[string, *Flake] `yaml:"flakes"`
 	Attributes `yaml:",squash"`
 }
 
@@ -51,19 +53,21 @@ func (r *Root) Init(name string) error {
 	return nil
 }
 
-func (r *Root) Children(skipDisabled bool) []FoCoM {
-	result := make([]FoCoM, 0)
+func (r *Root) Children(skipDisabled bool) []FCM {
+	result := make([]FCM, 0)
 	for _, config := range r.Flakes.SortedMap(false, skipDisabled) {
 		result = append(result, config)
 	}
 	return result
 }
 
+// Flake
+
 type Flake struct {
 	Url            string `yaml:"url"` // Flake path or url
 	Attributes     `yaml:",squash"`
-	Configurations SortableFoCoM[string, *Configuration] `yaml:"configurations"`
-	BuildHooks     BuildHooks                            `yaml:"buildHooks"` // They only run for builds
+	Configurations SortableFCM[string, *Configuration] `yaml:"configurations"`
+	BuildHooks     BuildHooks                          `yaml:"buildHooks"` // They only run for builds
 }
 
 func (f *Flake) Init(name string) error {
@@ -75,8 +79,8 @@ func (f *Flake) Init(name string) error {
 	return nil
 }
 
-func (f *Flake) Children(skipDisabled bool) []FoCoM {
-	result := make([]FoCoM, 0)
+func (f *Flake) Children(skipDisabled bool) []FCM {
+	result := make([]FCM, 0)
 	for _, config := range f.Configurations.SortedMap(false, skipDisabled) {
 		result = append(result, config)
 	}
@@ -93,9 +97,13 @@ type BuildHooks struct {
 type Configuration struct {
 	FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
 	Attributes  `yaml:",squash"`
-	Machines    SortableFoCoM[string, *Machine] `yaml:"machines"`
-	// Meta
-	Phases *ConfigurationPhases
+	Machines    SortableFCM[string, *Machine] `yaml:"machines"`
+	// Internal
+	MetaBuild MetaBuild
+}
+
+type MetaBuild struct {
+	OutputPath string
 }
 
 func (c *Configuration) Init(name string) error {
@@ -104,45 +112,39 @@ func (c *Configuration) Init(name string) error {
 		return err
 	}
 
-	c.Phases = &ConfigurationPhases{
-		Build: &PhaseBuild{},
-	}
-
 	return nil
 }
 
-func (r *Configuration) Children(skipDisabled bool) []FoCoM {
-	result := make([]FoCoM, 0)
+func (r *Configuration) Children(skipDisabled bool) []FCM {
+	result := make([]FCM, 0)
 	for _, config := range r.Machines.SortedMap(false, skipDisabled) {
 		result = append(result, config)
 	}
 	return result
 }
 
-type ConfigurationPhases struct {
-	Build *PhaseBuild
-}
-
-type PhaseBuild struct {
-	BuildOutputPath string
-}
-
 // Machine
 
 type Machine struct {
 	Attributes `yaml:",squash"`
-	// Meta
-	Phases *MachinePhases
+	// Internal
+	MetaStatus MetaStatus
+}
+
+type MetaStatus struct {
+	Reachable      bool
+	SSHConnectable bool
+	Bootstrapped   bool
+	Generation     string
+	Date           string
+	Nixos          string
+	Kernel         string
 }
 
 func (m *Machine) Init(name string) error {
 	err := m.Attributes.InitAttributes(name)
 	if err != nil {
 		return err
-	}
-
-	m.Phases = &MachinePhases{
-		Status: &PhaseStatus{},
 	}
 
 	// Only machine has them always initialized (root, flake, configurations do not)
@@ -159,25 +161,8 @@ func (m *Machine) Init(name string) error {
 	return nil
 }
 
-func (m *Machine) Children(skipDisabled bool) []FoCoM {
-	panic("This should not be called as machine has not children")
-}
-
-type MachinePhases struct {
-	Status *PhaseStatus
-	//Transfer
-	//Secrets
-	//Activation
-}
-
-type PhaseStatus struct {
-	Reachable      bool
-	SSHConnectable bool
-	Bootstrapped   bool
-	Generation     string
-	Date           string
-	Nixos          string
-	Kernel         string
+func (m *Machine) Children(skipDisabled bool) []FCM {
+	panic("internal error: this should not be called as machine has no children")
 }
 
 // Flake, Configuration and Machine Attributes
@@ -189,15 +174,15 @@ type Attributes struct {
 	Disabled    bool            `yaml:"disabled"`
 	SudoProgram *string         `yaml:"sudo_program"` // Default it is "sudo", if specified (but empty string), it will disable privilidge escalation altogether
 
-	// Metadata attributes (not provided by the user, by by runtime)
+	// Internal
 	Name    string
 	Message string
-	Logs    *Logs
+	Logs    *PhaseLogs
 }
 
 func (a *Attributes) InitAttributes(name string) error {
 	a.Name = name
-	a.Logs = NewLogs()
+	a.Logs = NewPhaseLogs()
 
 	for _, secret := range a.Secrets {
 		err := secret.Validate()

@@ -2,19 +2,18 @@ package executioner
 
 import "github.com/mihakrumpestar/panix/internal/config"
 
-func (ex *Executioner) sshStream(log bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
+func (ex *Executioner) sshStream(log bool, onFailure func(*config.CommandLog, error) error, onSuccess func(*config.CommandLog) error, commandWithArgs ...string) error {
 
-	sshArgs := []string{"-q"} // Silance banners
+	sshCommandWithArgs := []string{"ssh", "-q"} // Silance banners
 
 	if ex.machine.Ssh.HostnameIsAlias {
-		sshArgs = append(sshArgs, ex.machine.Ssh.Hostname)
+		sshCommandWithArgs = append(sshCommandWithArgs, ex.machine.Ssh.Hostname)
 	} else {
 		// TODO: implement more than alias
-		panic("not implemented: more than alias")
+		panic("not implemented: support more than alias for SSH")
 	}
 
-	sshArgs = append(sshArgs, name)
-	sshArgs = append(sshArgs, args...)
+	sshCommandWithArgs = append(sshCommandWithArgs, commandWithArgs...)
 
-	return ex.shellStream(log, onFailure, onSuccess, "ssh", sshArgs...)
+	return ex.shellStream(log, onFailure, onSuccess, sshCommandWithArgs...)
 }
