@@ -3,7 +3,7 @@ package panix
 import (
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/spf13/cobra"
 )
 
@@ -17,8 +17,8 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{
-			workflow_definition.PhaseStatus,
+		phases := []phases.Phase{
+			phases.Status,
 		}
 
 		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)

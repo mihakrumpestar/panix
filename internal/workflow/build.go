@@ -9,88 +9,72 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 // executeBuildPhase runs builds in parallel across configurations
 // As soon as a configuration succeeds, applicable machines proceed with bootstrap/transfer/secrets
 func (w *Workflow) ExecuteBuildPhase() error {
-	err := poolChildren(w, w.state.Conf.Root, true,
-		func(flake *config.Flake) error {
-			log := flake.Logs.SafeGet(workflow_definition.PhasePreFlakeHook)
+	return poolChildren(w, w.state.Conf.Root, true, func(flake *config.Flake) error {
+		return w.Phase(flake.Logs.SafeGet(phases.PreFlakeHook),
+			fmt.Sprintf("Started build across %s configurations", flake.Name),
+			fmt.Sprintf("Finished build across %s configurations", flake.Name),
+			nil,
+			func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
 
-			if w.state.Conf.Global.Verbose {
-				log.AddMessageOnly("Executing build phase across " + flake.Name)
-			}
-
-			if flake.BuildHooks.Pre != "" {
-				exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
-
-				// Pre build hook
-				err := exc.Exec(false, true, nil, nil,
-					"sh", "-c", flake.BuildHooks.Pre,
-				)
-				if err != nil {
-					return err
-				}
-			}
-
-			err := poolChildren(w, flake, true,
-				func(configuration *config.Configuration) error {
-
-					log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
-
-					if w.state.Conf.Global.Verbose {
-						log.AddMessageOnly("Executing build phase across " + configuration.Name)
-					}
-
-					err := w.executeBuildPhaseConfiguration(flake.Name, configuration.Name, flake, configuration)
+				if flake.BuildHooks.Pre != "" {
+					// Pre build hook
+					err := exc.Exec(false, true, nil, nil,
+						"sh", "-c", flake.BuildHooks.Pre,
+					)
 					if err != nil {
 						return err
 					}
+				}
 
-					if w.state.Conf.Global.Verbose {
-						log.AddMessageOnly("Executing finished for build phase ", flake.Name)
-					}
-
-					err = poolChildren(w, configuration, true,
-						func(machine *config.Machine) error {
-
-							if slices.Contains(w.phases, workflow_definition.PhaseTransfer) {
-								err := w.executeTransferPhaseMachine(configuration, machine)
-								if err != nil {
-									return err
-								}
+				return poolChildren(w, flake, true, func(configuration *config.Configuration) error {
+					return w.Phase(flake.Logs.SafeGet(phases.Build),
+						fmt.Sprintf("Started build on %s configuration", configuration.Name),
+						fmt.Sprintf("Finished build on %s configuration", configuration.Name),
+						nil,
+						func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
+							err := w.executeBuildPhaseConfiguration(flake, configuration)
+							if err != nil {
+								return err
 							}
 
-							if slices.Contains(w.phases, workflow_definition.PhaseSecrets) {
-								err := w.executeSecretsPhaseMachine(machine)
-								if err != nil {
-									return err
-								}
+							if w.state.Conf.Global.Verbose {
+								phaseLog.AddMessageOnly("Executing finished for build phase ", flake.Name)
 							}
 
-							if slices.Contains(w.phases, workflow_definition.PhaseActivate) {
-								err = w.executeActivatePhaseMachine(configuration, machine)
-								if err != nil {
-									return err
+							return poolChildren(w, configuration, true, func(machine *config.Machine) error {
+								if slices.Contains(w.phases, phases.Transfer) {
+									err := w.executeTransferPhaseMachine(configuration, machine)
+									if err != nil {
+										return err
+									}
 								}
-							}
 
-							return nil
+								if slices.Contains(w.phases, phases.Secrets) {
+									err := w.executeSecretsPhaseMachine(machine)
+									if err != nil {
+										return err
+									}
+								}
+
+								if slices.Contains(w.phases, phases.Activate) {
+									err = w.executeActivatePhaseMachine(configuration, machine)
+									if err != nil {
+										return err
+									}
+								}
+
+								return nil
+							})
 						})
-
-					return err
 				})
-
-			return err
-		})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+			})
+	})
 }
 
 type BuidOutputJson struct {
@@ -100,55 +84,52 @@ type BuidOutputJson struct {
 }
 
 // This function is called by executeMachineBuild for individual machine builds
-func (w *Workflow) executeBuildPhaseConfiguration(flakeName, configurationName string, flake *config.Flake, configuration *config.Configuration) (err error) {
-	log := configuration.Logs.SafeGet(workflow_definition.PhaseBuild)
-	log.TimeAndState.StartTimer()
-	defer func() {
-		log.TimeAndState.EndTimerWithError(err)
-	}()
+func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
+	return w.Phase(configuration.Logs.SafeGet(phases.Build),
+		fmt.Sprintf("Started build of %s", configuration.Name),
+		fmt.Sprintf("Built %s/%s -> %s\n", flake.Name, configuration.Name),
+		nil,
+		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
 
-	bm := configuration.Phases.Build
+			bm := configuration.MetaBuild
 
-	if w.state.Conf.Global.DryRun {
-		bm.BuildOutputPath = "BUILD_OUTPUT_PATH_PLACEHOLDER"
-		return
-	}
-
-	// Get the flake path from the flake configuration
-	flakePath := flake.Url
-
-	ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flakePath, configurationName)
-	//fmt.Sprint(ref)
-
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, nil, log, w.hook.OnUpdateHook)
-
-	// Build a configuration
-	err = exc.Exec(false, true, nil,
-		func(log *config.Log) error {
-			output := log.LastCommand().Bytes()
-			output = lastNonEmptyLine(output)
-
-			var parsedOutput []BuidOutputJson
-			err = json.Unmarshal(output, &parsedOutput)
-			if err != nil || len(parsedOutput) == 0 {
-				return fmt.Errorf("invalid build output for %s/%s: %s", flakeName, configurationName, strconv.Quote(string(output)))
+			if w.state.Conf.Global.DryRun {
+				bm.OutputPath = "BUILD_OUTPUT_PATH_PLACEHOLDER"
 			}
 
-			configuration.Phases.Build.BuildOutputPath = parsedOutput[0].Outputs.Out
+			// Get the flake path from the flake configuration
+			flakePath := flake.Url
+
+			ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flakePath, configuration.Name)
+
+			// Build a configuration
+			err := exc.Exec(false, true, nil,
+				func(log *config.CommandLog) error {
+					output := log.Bytes()
+					output = lastNonEmptyLine(output)
+
+					var parsedOutput []BuidOutputJson
+					err := json.Unmarshal(output, &parsedOutput)
+					if err != nil || len(parsedOutput) == 0 {
+						return fmt.Errorf("invalid build output for %s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
+					}
+
+					configuration.MetaBuild.OutputPath = parsedOutput[0].Outputs.Out
+
+					return nil
+				}, // "--print-build-logs"
+				"nix", "build", "--no-link", "--no-update-lock-file", "--json", "--cores", "0", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
+			)
+			if err != nil {
+				return err
+			}
+
+			if w.state.Conf.Global.Verbose {
+				phaseLog.AddMessageOnly(fmt.Sprintf("Built %s/%s -> %s\n", flake.Name, configuration.Name, bm.OutputPath))
+			}
 
 			return nil
-		}, // "--print-build-logs"
-		"nix", "build", "--no-link", "--no-update-lock-file", "--json", "--cores", "0", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
-	)
-	if err != nil {
-		return
-	}
-
-	if w.state.Conf.Global.Verbose {
-		log.AddMessageOnly(fmt.Sprintf("Built %s/%s -> %s\n", flakeName, configurationName, bm.BuildOutputPath))
-	}
-
-	return
+		})
 }
 
 // Helpers

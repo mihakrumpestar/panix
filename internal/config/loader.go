@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -83,7 +82,7 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		}
 	}
 
-	// First, unmarshal into conf structure with regular maps
+	// Unmarshal conf
 	conf := &Config{}
 	err = k.UnmarshalWithConf("", &conf, koanf.UnmarshalConf{
 		Tag: "yaml",
@@ -117,6 +116,8 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 	return conf, nil
 }
+
+// Helper functions
 
 func (c *Config) validateConfig() error {
 	if c.Root == nil {
@@ -157,15 +158,6 @@ func (c *Config) validateConfig() error {
 			}
 
 			for machineName, machine := range configuration.Machines.SortedMap(true, true) {
-				parsedMachineName, err := url.Parse("ssh://" + machineName)
-				if err != nil {
-					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s] has invalid machine name, it has to be formatted as URL: %w", flakeName, configurationName, machineName, err)
-				}
-
-				if parsedMachineName.Host == "" {
-					return fmt.Errorf("flakes[%s]configurations[%s]machines[%s] has empty parsed host field", flakeName, configurationName, machineName)
-				}
-
 				if machine == nil {
 					machine = &Machine{}
 					configuration.Machines[machineName] = machine

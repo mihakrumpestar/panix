@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 func (m *model) PrintStatusPhaseMachineTable() string {
@@ -78,8 +78,8 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 
 			xpath := flake.Name + configuration.Name + machine.Name
 
-			ps := machine.Phases.Status
-			log := machine.Logs.SafeGet(workflow_definition.PhaseStatus)
+			ps := machine.MetaStatus
+			log := machine.Logs.SafeGet(phases.Status)
 
 			status := ""
 			lastErr := log.TimeAndState.GetTimeAndState().Error
@@ -130,7 +130,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(ps *config.PhaseStatus, xpath string, log *config.Log) string {
+func (m *model) getStatusIcon(ps config.MetaStatus, xpath string, log *config.PhaseLog) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
@@ -148,7 +148,7 @@ func (m *model) getStatusIcon(ps *config.PhaseStatus, xpath string, log *config.
 	return "✅"
 }
 
-func (m *model) getStatusText(ps *config.PhaseStatus, xpath string, log *config.Log) string {
+func (m *model) getStatusText(ps config.MetaStatus, xpath string, log *config.PhaseLog) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()

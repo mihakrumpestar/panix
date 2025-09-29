@@ -11,12 +11,12 @@ type Executioner struct {
 	ctx          context.Context
 	dryRun       bool
 	machine      *config.Machine
-	phaseLog     *config.Log
+	phaseLog     *config.PhaseLog
 	onUpdateHook func()
 }
 
-// NewExecutioner: if machine == nil it indicates that the command will be executred locally
-func NewExecutioner(ctx context.Context, conf *config.Global, machine *config.Machine, phaseLog *config.Log, onUpdateHook func()) *Executioner {
+// NewExecutioner: if machine == nil it indicates that the command will be executed locally
+func NewExecutioner(ctx context.Context, conf *config.Global, machine *config.Machine, phaseLog *config.PhaseLog, onUpdateHook func()) *Executioner {
 
 	return &Executioner{
 		ctx:          ctx,
@@ -27,16 +27,16 @@ func NewExecutioner(ctx context.Context, conf *config.Global, machine *config.Ma
 	}
 }
 
-func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) error {
+func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*config.CommandLog, error) error, onSuccess func(*config.CommandLog) error, commandWithArgs ...string) error {
 	defer ex.onUpdateHook()
 
 	noMachineOrLocal := ex.machine == nil || ex.machine.Ssh.IsLocal
 
 	// 1) local short‐circuit
 	if noMachineOrLocal && skipIfLocal {
-		ex.phaseLog.AddMessageOnly("(skipped) ", name, " ", strings.Join(args, " "))
+		comLog := ex.phaseLog.AddMessageOnly("(skipped) ", strings.Join(commandWithArgs, " "))
 		if onSuccess != nil {
-			err := onSuccess(ex.phaseLog)
+			err := onSuccess(comLog)
 			if err != nil {
 				return err
 			}
@@ -46,8 +46,8 @@ func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*config.Log, e
 	}
 
 	if noMachineOrLocal {
-		return ex.shellStream(log, onFailure, onSuccess, name, args...)
+		return ex.shellStream(log, onFailure, onSuccess, commandWithArgs...)
 	} else {
-		return ex.sshStream(log, onFailure, onSuccess, name, args...)
+		return ex.sshStream(log, onFailure, onSuccess, commandWithArgs...)
 	}
 }
