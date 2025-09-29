@@ -14,24 +14,27 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(log bool, onFailure func(*config.Log, error) error, onSuccess func(*config.Log) error, name string, args ...string) (err error) {
-	exm := ex.phaseLog.NewCommand()
+func (ex *Executioner) shellStream(log bool, onFailure func(*config.CommandLog, error) error, onSuccess func(*config.CommandLog) error, commandWithArgs ...string) (err error) {
+	commandLog := ex.phaseLog.NewCommand()
 
-	exm.TimeAndState.StartTimer()
+	commandLog.TimeAndState.StartTimer()
 	defer func() {
-		exm.TimeAndState.EndTimerWithError(err)
+		commandLog.TimeAndState.EndTimerWithError(err)
 		ex.onUpdateHook()
 	}()
 
+	command := commandWithArgs[0]
+	args := commandWithArgs[1:]
+
 	// Prepare initial event
-	cmd := exec.CommandContext(ex.ctx, name, args...)
-	exm.Command = strings.Join(cmd.Args, " ")
+	cmd := exec.CommandContext(ex.ctx, command, args...)
+	commandLog.Command = strings.Join(cmd.Args, " ")
 	ex.onUpdateHook()
 
 	// dry-run short-circuit
 	if ex.dryRun {
 		if onSuccess != nil {
-			err := onSuccess(ex.phaseLog)
+			err := onSuccess(commandLog)
 			if err != nil {
 				return err
 			}
@@ -40,13 +43,13 @@ func (ex *Executioner) shellStream(log bool, onFailure func(*config.Log, error) 
 	}
 
 	// Start the process with PTY
-	exm.Pty, err = pty.Start(cmd)
+	commandLog.Pty, err = pty.Start(cmd)
 	if err != nil {
 		return
 	}
 
 	defer func() {
-		errPty := exm.Pty.Close()
+		errPty := commandLog.Pty.Close()
 		if err != nil && errPty != nil {
 			err = errors.Wrap(err, errPty.Error())
 		} else if errPty != nil {
@@ -61,12 +64,12 @@ func (ex *Executioner) shellStream(log bool, onFailure func(*config.Log, error) 
 	// Warning: the folowing read sequance applies to pty.stdin too
 	for {
 		var n int
-		n, readErr = exm.Pty.Read(buf)
+		n, readErr = commandLog.Pty.Read(buf)
 		if readErr != nil {
 			readErr = ptyError(readErr)
 			if readErr != nil && readErr != io.EOF {
-				exm.WriteLineString("PTY read error: " + readErr.Error())
-				exm.WriteLineString("")
+				commandLog.WriteLineString("PTY read error: " + readErr.Error())
+				commandLog.WriteLineString("")
 			}
 
 			break
@@ -77,10 +80,10 @@ func (ex *Executioner) shellStream(log bool, onFailure func(*config.Log, error) 
 
 			// Process the buffer to handle terminal control sequences properly
 			// This makes it work like a normal terminal would
-			readErr = processTerminalOutput(rawBuffer, exm)
+			readErr = processTerminalOutput(rawBuffer, commandLog)
 			if readErr != nil {
-				exm.WriteLineString("processTerminalOutput write error: " + readErr.Error())
-				exm.WriteLineString("")
+				commandLog.WriteLineString("processTerminalOutput write error: " + readErr.Error())
+				commandLog.WriteLineString("")
 
 				break
 			}
@@ -98,10 +101,10 @@ func (ex *Executioner) shellStream(log bool, onFailure func(*config.Log, error) 
 	}
 	if err != nil {
 		if onFailure != nil {
-			err = onFailure(ex.phaseLog, err)
+			err = onFailure(commandLog, err)
 		}
 	} else if onSuccess != nil {
-		err = onSuccess(ex.phaseLog)
+		err = onSuccess(commandLog)
 	}
 
 	return

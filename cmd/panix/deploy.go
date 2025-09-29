@@ -3,7 +3,7 @@ package panix
 import (
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/spf13/cobra"
 )
 
@@ -20,12 +20,12 @@ var deployCmd = &cobra.Command{
 
 This is the main command for deploying NixOS configurations.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		phases := []workflow_definition.WorkflowPhase{
-			workflow_definition.PhaseStatus,
-			workflow_definition.PhaseBuild,
-			workflow_definition.PhaseTransfer,
-			workflow_definition.PhaseSecrets,
-			workflow_definition.PhaseActivate,
+		phases := []phases.Phase{
+			phases.Status,
+			phases.Build,
+			phases.Transfer,
+			phases.Secrets,
+			phases.Activate,
 		}
 
 		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)

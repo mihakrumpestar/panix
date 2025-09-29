@@ -23,6 +23,7 @@ require (
 
 require (
 	github.com/gookit/goutil v0.7.1 // indirect
+	github.com/noneback/go-taskflow v1.1.3 // indirect
 	golang.org/x/term v0.29.0 // indirect
 )
 

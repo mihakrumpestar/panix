@@ -12,7 +12,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/mihakrumpestar/panix/internal/workflow/workflow_definition"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
@@ -57,7 +57,7 @@ func NewTui(workflow *workflow.Workflow) error {
 	defer zone.Close()
 
 	defaultModelView := TuiViewModeAll
-	if !slices.Contains(workflow.Phases(), workflow_definition.PhaseStatus) {
+	if !slices.Contains(workflow.Phases(), phases.Status) {
 		defaultModelView = TuiViewModeLogs
 	}
 
@@ -192,7 +192,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "d":
 			// Don't toggle if we don't have PhaseStatus
-			if !slices.Contains(m.workflow.Phases(), workflow_definition.PhaseStatus) {
+			if !slices.Contains(m.workflow.Phases(), phases.Status) {
 				return m, nil
 			}
 

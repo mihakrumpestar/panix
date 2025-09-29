@@ -3,7 +3,6 @@ package config
 import (
 	"bytes"
 	"os"
-	"strings"
 )
 
 type CommandLog struct {
@@ -13,16 +12,9 @@ type CommandLog struct {
 	Pty          *os.File
 }
 
-// String returns the string representation of all lines in StdInOutErr
+// Bytes wrapper
 func (cl *CommandLog) String() string {
-	var result strings.Builder
-	for i, buf := range cl.StdInOutErr {
-		if i > 0 {
-			result.WriteString("\n")
-		}
-		result.Write(buf.Bytes())
-	}
-	return result.String()
+	return string(cl.Bytes())
 }
 
 // Bytes returns the byte representation of all lines in StdInOutErr
@@ -37,13 +29,9 @@ func (cl *CommandLog) Bytes() []byte {
 	return result.Bytes()
 }
 
-// WriteString writes a string to the last line in StdInOutErr
+// Write wrapper
 func (cl *CommandLog) WriteString(s string) (int, error) {
-	// If there are no lines, create the first one
-	if len(cl.StdInOutErr) == 0 {
-		cl.StdInOutErr = append(cl.StdInOutErr, bytes.NewBuffer(nil))
-	}
-	return cl.StdInOutErr[len(cl.StdInOutErr)-1].WriteString(s)
+	return cl.Write([]byte(s))
 }
 
 // Write writes bytes to the last line in StdInOutErr
@@ -55,13 +43,14 @@ func (cl *CommandLog) Write(p []byte) (int, error) {
 	return cl.StdInOutErr[len(cl.StdInOutErr)-1].Write(p)
 }
 
+// WriteLine wrapper
+func (cl *CommandLog) WriteLineString(s string) {
+	cl.WriteLine([]byte(s))
+}
+
 // WriteLine writes a new line to StdInOutErr
 func (cl *CommandLog) WriteLine(p []byte) {
 	cl.StdInOutErr = append(cl.StdInOutErr, bytes.NewBuffer(p))
-}
-
-func (cl *CommandLog) WriteLineString(s string) {
-	cl.WriteLine([]byte(s))
 }
 
 // ReplaceLastLine replaces the content of the last line in StdInOutErr

@@ -7,21 +7,21 @@ import (
 	"slices"
 )
 
-// FoCoM
-type FoCoM interface {
+// FCM: Flake or Configuration or Machine
+type FCM interface {
 	Init(name string) error
 
 	Disable(msg string)
 	IsDisabled() bool
 	Msg(msg string)
 
-	Children(skipDisabled bool) []FoCoM
+	Children(skipDisabled bool) []FCM
 }
 
-type SortableFoCoM[K cmp.Ordered, V FoCoM] map[K]V
+type SortableFCM[K cmp.Ordered, V FCM] map[K]V
 
 // Sorted map
-func (m *SortableFoCoM[K, V]) SortedMap(skipChecks, skipDisabled bool) func(yield func(K, V) bool) {
+func (m *SortableFCM[K, V]) SortedMap(skipChecks, skipDisabled bool) func(yield func(K, V) bool) {
 	return func(yield func(K, V) bool) {
 		if m == nil {
 			return
@@ -63,7 +63,7 @@ func isNil[V any](v V) bool {
 
 	// If the value is a pointer, interface, map, slice, function, or channel, check if it's nil
 	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
 		return rv.IsNil()
 	}
 
