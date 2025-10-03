@@ -41,7 +41,7 @@ func (sc *SshConfig) RetriveFullParamsFromSshConfig(sshClient *SshClient) error 
 	}
 
 	portRaw, err := sc.sc.Get(alias, "Port") // Not required
-	if err == nil {
+	if err == nil && portRaw != "" {
 		var port64 uint64
 		port64, err = strconv.ParseUint(portRaw, 10, 16)
 		if err != nil {

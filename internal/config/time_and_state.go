@@ -1,8 +1,12 @@
 package config
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 type TimeAndState struct {
+	mutex     sync.Mutex
 	startTime time.Time
 	endTime   time.Time
 	started   bool
@@ -10,27 +14,40 @@ type TimeAndState struct {
 	error     error
 }
 
+func NewTimeAndState() *TimeAndState {
+	return &TimeAndState{}
+}
+
 func (tas *TimeAndState) StartTimer() {
+	tas.mutex.Lock()
+	defer tas.mutex.Unlock()
+
 	tas.startTime = time.Now()
 	tas.started = true
 }
 
 func (tas *TimeAndState) EndTimer() {
+	tas.mutex.Lock()
+	defer tas.mutex.Unlock()
+
 	tas.endTime = time.Now()
 	tas.finished = true
 }
 
 func (tas *TimeAndState) EndTimerWithError(err error) {
 	tas.EndTimer()
+
+	tas.mutex.Lock()
+	defer tas.mutex.Unlock()
+
 	tas.error = err
 }
 
-func (tas *TimeAndState) GetTimeAndState() TimeAndStateOutput {
-	if tas == nil {
-		return TimeAndStateOutput{}
-	}
+func (tas *TimeAndState) GetTimeAndState() TimeAndStateCopy {
+	tas.mutex.Lock()
+	defer tas.mutex.Unlock()
 
-	return TimeAndStateOutput{
+	return TimeAndStateCopy{
 		StartTime: tas.startTime,
 		EndTime:   tas.endTime,
 		Started:   tas.started,
@@ -39,7 +56,7 @@ func (tas *TimeAndState) GetTimeAndState() TimeAndStateOutput {
 	}
 }
 
-type TimeAndStateOutput struct {
+type TimeAndStateCopy struct {
 	StartTime time.Time
 	EndTime   time.Time
 	Started   bool

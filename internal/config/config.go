@@ -40,7 +40,7 @@ type Filters struct {
 // Root
 
 type Root struct {
-	Flakes     SortableFCM[string, *Flake] `yaml:"flakes"`
+	Flakes     SortedMap[string, *Flake] `yaml:"flakes"`
 	Attributes `yaml:",squash"`
 }
 
@@ -53,21 +53,13 @@ func (r *Root) Init(name string) error {
 	return nil
 }
 
-func (r *Root) Children(skipDisabled bool) []FCM {
-	result := make([]FCM, 0)
-	for _, config := range r.Flakes.SortedMap(false, skipDisabled) {
-		result = append(result, config)
-	}
-	return result
-}
-
 // Flake
 
 type Flake struct {
 	Url            string `yaml:"url"` // Flake path or url
 	Attributes     `yaml:",squash"`
-	Configurations SortableFCM[string, *Configuration] `yaml:"configurations"`
-	BuildHooks     BuildHooks                          `yaml:"buildHooks"` // They only run for builds
+	Configurations SortedMap[string, *Configuration] `yaml:"configurations"`
+	BuildHooks     BuildHooks                        `yaml:"buildHooks"` // They only run for builds
 }
 
 func (f *Flake) Init(name string) error {
@@ -77,14 +69,6 @@ func (f *Flake) Init(name string) error {
 	}
 
 	return nil
-}
-
-func (f *Flake) Children(skipDisabled bool) []FCM {
-	result := make([]FCM, 0)
-	for _, config := range f.Configurations.SortedMap(false, skipDisabled) {
-		result = append(result, config)
-	}
-	return result
 }
 
 type BuildHooks struct {
@@ -97,7 +81,7 @@ type BuildHooks struct {
 type Configuration struct {
 	FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
 	Attributes  `yaml:",squash"`
-	Machines    SortableFCM[string, *Machine] `yaml:"machines"`
+	Machines    SortedMap[string, *Machine] `yaml:"machines"`
 	// Internal
 	MetaBuild MetaBuild
 }
@@ -115,20 +99,12 @@ func (c *Configuration) Init(name string) error {
 	return nil
 }
 
-func (r *Configuration) Children(skipDisabled bool) []FCM {
-	result := make([]FCM, 0)
-	for _, config := range r.Machines.SortedMap(false, skipDisabled) {
-		result = append(result, config)
-	}
-	return result
-}
-
 // Machine
 
 type Machine struct {
 	Attributes `yaml:",squash"`
 	// Internal
-	MetaStatus MetaStatus
+	MetaStatus *MetaStatus
 }
 
 type MetaStatus struct {
@@ -158,11 +134,11 @@ func (m *Machine) Init(name string) error {
 		m.Attributes.SudoProgram = &sudoProgram
 	}
 
-	return nil
-}
+	if m.MetaStatus == nil {
+		m.MetaStatus = &MetaStatus{}
+	}
 
-func (m *Machine) Children(skipDisabled bool) []FCM {
-	panic("internal error: this should not be called as machine has no children")
+	return nil
 }
 
 // Flake, Configuration and Machine Attributes
@@ -192,19 +168,6 @@ func (a *Attributes) InitAttributes(name string) error {
 	}
 
 	return nil
-}
-
-func (a *Attributes) Disable(msg string) {
-	a.Disabled = true
-	a.Message = msg
-}
-
-func (a *Attributes) IsDisabled() bool {
-	return a.Disabled
-}
-
-func (a *Attributes) Msg(msg string) {
-	a.Message = msg
 }
 
 type SecretConfig struct {

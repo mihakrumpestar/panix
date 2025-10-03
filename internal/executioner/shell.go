@@ -28,7 +28,7 @@ func (ex *Executioner) shellStream(log bool, onFailure func(*config.CommandLog, 
 
 	// Prepare initial event
 	cmd := exec.CommandContext(ex.ctx, command, args...)
-	commandLog.Command = strings.Join(cmd.Args, " ")
+	commandLog.Command.Store(strings.Join(cmd.Args, " "))
 	ex.onUpdateHook()
 
 	// dry-run short-circuit
