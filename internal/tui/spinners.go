@@ -76,7 +76,7 @@ func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 func (s *Spinners) Debug() string {
 	str := fmt.Sprintf("\nSpinners: %d\n", s.spinners.Len())
 
-	for pathx, _ := range s.spinners.AllFromFront() {
+	for pathx := range s.spinners.Keys() {
 		str += fmt.Sprintf("  '%s'\n", pathx)
 	}
 

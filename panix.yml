@@ -1,6 +1,6 @@
 global:
   timeout: 7200 # 2h
-  concurrency: 100
+  concurrency: 0
   requireAllSuccess: false
   autoBootstrap: false
   #dryRun: false
