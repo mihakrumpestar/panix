@@ -1,18 +1,20 @@
 package hook
 
+import "sync/atomic"
+
 type Hook struct {
 	channel   chan uint64
-	iteration uint64
+	iteration atomic.Uint64
 }
 
 func NewHook() *Hook {
 	return &Hook{
 		make(chan uint64),
-		0,
+		atomic.Uint64{},
 	}
 }
 
-func (h *Hook) GetChannel() <-chan uint64 {
+func (h *Hook) WaitForUpdate() <-chan uint64 {
 	return h.channel
 }
 
@@ -21,9 +23,8 @@ func (h *Hook) Close() {
 }
 
 func (h *Hook) OnUpdateHook() {
-	h.iteration++
 	select {
-	case h.channel <- h.iteration:
+	case h.channel <- h.iteration.Add(1):
 		// Successfully sent update
 	default:
 		// Channel is full or no receiver, skip without blocking

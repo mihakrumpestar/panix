@@ -32,7 +32,7 @@ tasks:
   run:
     desc: Run the application with go run
     cmds:
-      - go run cmd/main.go {{.CLI_ARGS}}
+      - GORACE="log_path=race.log" go run --race cmd/main.go {{.CLI_ARGS}}
 
   # Build tasks
   build:

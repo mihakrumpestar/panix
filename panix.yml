@@ -1,6 +1,6 @@
 global:
   timeout: 7200 # 2h
-  concurrency: 5
+  concurrency: 100
   requireAllSuccess: false
   autoBootstrap: false
   #dryRun: false
@@ -30,3 +30,4 @@ root:
                     commandOutput: echo OK
                   remote:
                     path: /tmp/README2.md
+            fake:

@@ -3,70 +3,27 @@ package config
 import (
 	"cmp"
 	"maps"
-	"reflect"
 	"slices"
 )
 
-// FCM: Flake or Configuration or Machine
-type FCM interface {
-	Init(name string) error
-
-	Disable(msg string)
-	IsDisabled() bool
-	Msg(msg string)
-
-	Children(skipDisabled bool) []FCM
-}
-
-type SortableFCM[K cmp.Ordered, V FCM] map[K]V
+type SortedMap[K cmp.Ordered, V any] map[K]V
 
 // Sorted map
-func (m *SortableFCM[K, V]) SortedMap(skipChecks, skipDisabled bool) func(yield func(K, V) bool) {
+func (sm *SortedMap[K, V]) SortedMap() func(yield func(K, V) bool) {
 	return func(yield func(K, V) bool) {
-		if m == nil {
+		if sm == nil {
 			return
 		}
 
-		keys := slices.Collect(maps.Keys(*m))
+		keys := slices.Collect(maps.Keys(*sm))
 		slices.Sort(keys)
 
 		for _, k := range keys {
-
-			v := (*m)[k]
-
-			if !skipChecks {
-				// Skip disabled flakes, configurations, machines
-				valueIsDisabled := !isNil(v) && v.IsDisabled()
-				if valueIsDisabled && skipDisabled {
-					continue
-				}
-			}
+			v := (*sm)[k]
 
 			if !yield(k, v) {
 				break
 			}
 		}
 	}
-}
-
-// Helpers
-
-// isNil checks if the given value is nil using reflection
-func isNil[V any](v V) bool {
-	// Get the reflect.Value of the input
-	rv := reflect.ValueOf(v)
-
-	// If the value is invalid (zero value), it's nil
-	if !rv.IsValid() {
-		return true
-	}
-
-	// If the value is a pointer, interface, map, slice, function, or channel, check if it's nil
-	switch rv.Kind() {
-	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
-		return rv.IsNil()
-	}
-
-	// For other types, they can't be nil
-	return false
 }

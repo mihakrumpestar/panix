@@ -100,10 +100,6 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	// Convert timeout from miliseconds to seconds for duration
 	conf.Global.Timeout *= time.Second
 
-	if conf.Global.Debug {
-		dump.P(conf)
-	}
-
 	err = conf.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
@@ -112,6 +108,16 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	err = conf.filterAndExpandConfigEntrys()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
+	}
+
+	if conf.Global.Debug {
+		dump.Config(func(d *dump.Options) {
+			d.BytesAsString = true
+			d.SkipNilField = true
+			d.MaxDepth = 99
+		})
+
+		dump.P(conf)
 	}
 
 	return conf, nil
@@ -124,7 +130,10 @@ func (c *Config) validateConfig() error {
 		return fmt.Errorf("root is nil")
 	}
 
-	c.Root.Init("")
+	err := c.Root.Init("")
+	if err != nil {
+		return err
+	}
 
 	if c.Root.Flakes == nil {
 		return fmt.Errorf("flakes is nil")
@@ -133,7 +142,7 @@ func (c *Config) validateConfig() error {
 		return fmt.Errorf("flakes is required")
 	}
 
-	for flakeName, flake := range c.Root.Flakes.SortedMap(true, true) {
+	for flakeName, flake := range c.Root.Flakes.SortedMap() {
 		if flake.Url == "" {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
@@ -143,12 +152,12 @@ func (c *Config) validateConfig() error {
 			return err
 		}
 
-		if flake.Configurations == nil || len(flake.Configurations) == 0 {
+		if len(flake.Configurations) == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		for configurationName, configuration := range flake.Configurations.SortedMap(true, true) {
-			if configuration.Machines == nil || len(configuration.Machines) == 0 {
+		for configurationName, configuration := range flake.Configurations.SortedMap() {
+			if len(configuration.Machines) == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
@@ -157,7 +166,7 @@ func (c *Config) validateConfig() error {
 				return err
 			}
 
-			for machineName, machine := range configuration.Machines.SortedMap(true, true) {
+			for machineName, machine := range configuration.Machines.SortedMap() {
 				if machine == nil {
 					machine = &Machine{}
 					configuration.Machines[machineName] = machine
@@ -188,19 +197,19 @@ func (c *Config) filterAndExpandConfigEntrys() error {
 	configurationsFilter := c.Global.Filters.Configurations
 	machinesFilter := c.Global.Filters.Machines
 
-	for flakeName, flake := range c.Root.Flakes.SortedMap(false, false) {
+	for flakeName, flake := range c.Root.Flakes.SortedMap() {
 		if (len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName)) || flake.Disabled {
 			delete(c.Root.Flakes, flakeName)
 			continue
 		}
 
-		for configurationName, configuration := range flake.Configurations.SortedMap(false, false) {
+		for configurationName, configuration := range flake.Configurations.SortedMap() {
 			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
 				delete(flake.Configurations, configurationName)
 				continue
 			}
 
-			for machineName, machine := range configuration.Machines.SortedMap(false, false) {
+			for machineName, machine := range configuration.Machines.SortedMap() {
 				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName)) || machine.Disabled {
 					delete(configuration.Machines, machineName)
 					continue

@@ -22,6 +22,7 @@ This is the main command for deploying NixOS configurations.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		phases := []phases.Phase{
 			phases.Status,
+			phases.PreFlakeHook,
 			phases.Build,
 			phases.Transfer,
 			phases.Secrets,

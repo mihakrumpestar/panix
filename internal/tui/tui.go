@@ -44,7 +44,6 @@ type modelView struct {
 	spinners    *Spinners
 	viewports   *Viewports
 	debugOutput *strings.Builder
-	//viewport viewport.Model
 }
 
 type Dimensions struct {
@@ -57,7 +56,7 @@ func NewTui(workflow *workflow.Workflow) error {
 	defer zone.Close()
 
 	defaultModelView := TuiViewModeAll
-	if !slices.Contains(workflow.Phases(), phases.Status) {
+	if !slices.Contains(workflow.State().Phases.Keys(), phases.Status) {
 		defaultModelView = TuiViewModeLogs
 	}
 
@@ -126,7 +125,7 @@ func (m model) startWorkflow() tea.Cmd {
 				}
 			}()
 
-			err := m.workflow.Start()
+			err := m.workflow.CreateWorkflow()
 			if err != nil {
 				m.modelView.debugOutput.WriteString("Error: " + err.Error())
 				m.err = err
@@ -143,7 +142,7 @@ func (m model) startWorkflow() tea.Cmd {
 
 func (m model) stateUpdateHook() tea.Cmd {
 	return func() tea.Msg {
-		_, ok := <-m.workflow.GetChannel()
+		_, ok := <-m.workflow.WaitForUpdate()
 		if !ok {
 			return tea.Quit()
 		}
@@ -192,7 +191,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "d":
 			// Don't toggle if we don't have PhaseStatus
-			if !slices.Contains(m.workflow.Phases(), phases.Status) {
+			if !slices.Contains(m.workflow.State().Phases.Keys(), phases.Status) {
 				return m, nil
 			}
 
@@ -235,7 +234,11 @@ func (m model) View() string {
 	headerAndInstructions := header + instructions
 	builder.WriteString(headerAndInstructions)
 
-	builder.WriteString(fmt.Sprintf("%v\n", m.workflow.Phases()))
+	for phase, value := range m.workflow.State().Phases.Range() {
+		builder.WriteString(fmt.Sprintf("%s %v\n", phase, value))
+	}
+
+	builder.WriteString("\n")
 
 	if m.workflow.State() == nil {
 		builder.WriteString("No state available")

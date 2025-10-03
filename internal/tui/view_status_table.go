@@ -130,7 +130,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(ps config.MetaStatus, xpath string, log *config.PhaseLog) string {
+func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *config.PhaseLog) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
@@ -148,7 +148,7 @@ func (m *model) getStatusIcon(ps config.MetaStatus, xpath string, log *config.Ph
 	return "✅"
 }
 
-func (m *model) getStatusText(ps config.MetaStatus, xpath string, log *config.PhaseLog) string {
+func (m *model) getStatusText(ps *config.MetaStatus, xpath string, log *config.PhaseLog) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()

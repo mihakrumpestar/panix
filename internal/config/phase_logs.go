@@ -3,6 +3,9 @@ package config
 import (
 	"errors"
 	"iter"
+	"slices"
+	"strings"
+	"sync"
 
 	"github.com/elliotchance/orderedmap/v3"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -11,7 +14,8 @@ import (
 // PhaseLogs
 
 type PhaseLogs struct {
-	logs *orderedmap.OrderedMap[phases.Phase, *PhaseLog]
+	mutex sync.Mutex
+	logs  *orderedmap.OrderedMap[phases.Phase, *PhaseLog]
 }
 
 func NewPhaseLogs() *PhaseLogs {
@@ -21,67 +25,92 @@ func NewPhaseLogs() *PhaseLogs {
 }
 
 func (l *PhaseLogs) SafeGet(phase phases.Phase) *PhaseLog {
-	log, ok := l.logs.Get(phase)
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
+	phaselog, ok := l.logs.Get(phase)
 	if !ok {
-		log = &PhaseLog{
-			Commands:     make([]*CommandLog, 0),
-			TimeAndState: &TimeAndState{},
-		}
-
-		l.logs.Set(phase, log)
+		phaselog = NewPhaseLog()
+		l.logs.Set(phase, phaselog)
 	}
 
-	return log
+	return phaselog
 }
 
 func (l *PhaseLogs) All() iter.Seq2[phases.Phase, *PhaseLog] {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	tmp := orderedmap.NewOrderedMap[phases.Phase, *PhaseLog]()
+	for phase, phaseLog := range l.logs.AllFromFront() {
+		tmp.Set(phase, phaseLog)
+	}
+
 	return l.logs.AllFromFront()
 }
 
 func (l *PhaseLogs) Len() int {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
 	return l.logs.Len()
 }
 
 // PhaseLog
 
 type PhaseLog struct {
-	Commands     []*CommandLog
+	mutex        sync.Mutex
+	commandLogs  []*CommandLog
 	TimeAndState *TimeAndState
 }
 
-func (log *PhaseLog) LastCommand() (*CommandLog, error) {
-	if len(log.Commands) == 0 {
+func NewPhaseLog() *PhaseLog {
+	return &PhaseLog{
+		commandLogs:  make([]*CommandLog, 0),
+		TimeAndState: NewTimeAndState(),
+	}
+}
+
+func (pLog *PhaseLog) LastCommand() (*CommandLog, error) {
+	pLog.mutex.Lock()
+	defer pLog.mutex.Unlock()
+
+	if len(pLog.commandLogs) == 0 {
 		return nil, errors.New("commands log empty")
 	}
 
-	return log.Commands[len(log.Commands)-1], nil
+	return pLog.commandLogs[len(pLog.commandLogs)-1], nil
 }
 
-func (log *PhaseLog) NewCommand() *CommandLog {
-	cmd := &CommandLog{}
-	log.Commands = append(log.Commands, cmd)
+func (pLog *PhaseLog) NewCommand() *CommandLog {
+	pLog.mutex.Lock()
+	defer pLog.mutex.Unlock()
 
-	return cmd
+	commandLog := NewCommandLog()
+	pLog.commandLogs = append(pLog.commandLogs, commandLog)
+
+	return commandLog
 }
 
-func (log *PhaseLog) AddMessageOnly(msg ...string) *CommandLog {
-	commandLog := &CommandLog{
-		Command: "-> ",
-	}
+func (pLog *PhaseLog) AddMessageOnly(msg ...string) *CommandLog {
+	commandLog := pLog.NewCommand()
 
-	for _, msgInstance := range msg {
-		commandLog.Command += msgInstance
-	}
+	pLog.mutex.Lock()
+	defer pLog.mutex.Unlock()
+
+	commandLog.Command.Store("-> " + strings.Join(msg, ""))
 
 	commandLog.TimeAndState.StartTimer()
 	commandLog.TimeAndState.EndTimer()
 
-	if log.Commands == nil {
-		log.Commands = make([]*CommandLog, 0)
-	}
-
-	log.Commands = append(log.Commands, commandLog)
-
 	return commandLog
+}
+
+func (pLog *PhaseLog) CommandLogs() []*CommandLog {
+	pLog.mutex.Lock()
+	defer pLog.mutex.Unlock()
+
+	tmp := slices.Clone(pLog.commandLogs)
+
+	return tmp
 }

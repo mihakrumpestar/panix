@@ -3,13 +3,24 @@ package config
 import (
 	"bytes"
 	"os"
+	"sync"
+
+	"go.uber.org/atomic"
 )
 
 type CommandLog struct {
-	Command      string
-	StdInOutErr  []*bytes.Buffer // Each line is a separate buffer to allow line replacement
-	TimeAndState TimeAndState
+	Command      atomic.String
+	mutex        sync.Mutex
+	stdInOutErr  []*bytes.Buffer // Each line is a separate buffer to allow line replacement
+	TimeAndState *TimeAndState
 	Pty          *os.File
+}
+
+func NewCommandLog() *CommandLog {
+	return &CommandLog{
+		stdInOutErr:  make([]*bytes.Buffer, 0),
+		TimeAndState: NewTimeAndState(),
+	}
 }
 
 // Bytes wrapper
@@ -19,8 +30,11 @@ func (cl *CommandLog) String() string {
 
 // Bytes returns the byte representation of all lines in StdInOutErr
 func (cl *CommandLog) Bytes() []byte {
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
 	var result bytes.Buffer
-	for i, buf := range cl.StdInOutErr {
+	for i, buf := range cl.stdInOutErr {
 		if i > 0 {
 			result.WriteByte('\n')
 		}
@@ -36,11 +50,15 @@ func (cl *CommandLog) WriteString(s string) (int, error) {
 
 // Write writes bytes to the last line in StdInOutErr
 func (cl *CommandLog) Write(p []byte) (int, error) {
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
 	// If there are no lines, create the first one
-	if len(cl.StdInOutErr) == 0 {
-		cl.StdInOutErr = append(cl.StdInOutErr, bytes.NewBuffer(nil))
+	if len(cl.stdInOutErr) == 0 {
+		cl.stdInOutErr = append(cl.stdInOutErr, bytes.NewBuffer(nil))
 	}
-	return cl.StdInOutErr[len(cl.StdInOutErr)-1].Write(p)
+
+	return cl.stdInOutErr[len(cl.stdInOutErr)-1].Write(p)
 }
 
 // WriteLine wrapper
@@ -50,14 +68,20 @@ func (cl *CommandLog) WriteLineString(s string) {
 
 // WriteLine writes a new line to StdInOutErr
 func (cl *CommandLog) WriteLine(p []byte) {
-	cl.StdInOutErr = append(cl.StdInOutErr, bytes.NewBuffer(p))
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	cl.stdInOutErr = append(cl.stdInOutErr, bytes.NewBuffer(p))
 }
 
 // ReplaceLastLine replaces the content of the last line in StdInOutErr
 func (cl *CommandLog) ReplaceLastLine(p []byte) {
-	if len(cl.StdInOutErr) == 0 {
-		cl.StdInOutErr = append(cl.StdInOutErr, bytes.NewBuffer(p))
+	cl.mutex.Lock()
+	defer cl.mutex.Unlock()
+
+	if len(cl.stdInOutErr) == 0 {
+		cl.stdInOutErr = append(cl.stdInOutErr, bytes.NewBuffer(p))
 	} else {
-		cl.StdInOutErr[len(cl.StdInOutErr)-1] = bytes.NewBuffer(p)
+		cl.stdInOutErr[len(cl.stdInOutErr)-1] = bytes.NewBuffer(p)
 	}
 }
