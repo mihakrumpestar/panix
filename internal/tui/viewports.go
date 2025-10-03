@@ -247,7 +247,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 func (v *Viewports) Debug() string {
 	str := fmt.Sprintf("\nViewports: %d\n", v.viewports.Len())
 
-	for pathx, _ := range v.viewports.AllFromFront() {
+	for pathx := range v.viewports.AllFromFront() {
 		str += fmt.Sprintf("  '%s'\n", pathx)
 	}
 

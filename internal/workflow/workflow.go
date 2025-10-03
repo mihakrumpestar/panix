@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -49,6 +48,7 @@ func NewWorkflow(ctx context.Context, phasesI []phases.Phase) (*Workflow, error)
 
 	phases, err := phases.NewPhaseStates(phasesI, conf.Global.SkipPhases)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
@@ -101,6 +101,8 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, identifier string, f fun
 }
 
 func (w *Workflow) CreateWorkflow() error {
+	groupPool := w.state.Pool.NewGroup()
+
 	for _, flake := range w.state.Conf.Root.Flakes.SortedMap() {
 		flakeIdentifier := flake.Name
 		preFlakeHook := shared_deps.NewOnceAsync()
@@ -109,55 +111,53 @@ func (w *Workflow) CreateWorkflow() error {
 			configurationIdentifier := fmt.Sprintf("%s/%s", flake.Name, configuration.Name)
 			build := shared_deps.NewOnceAsync()
 
-			err := poolSortedMap(w, configuration.Machines, func(machine *config.Machine) error {
+			for _, machine := range configuration.Machines.SortedMap() {
+
 				machineIdentifier := fmt.Sprintf("%s/%s/%s", flake.Name, configuration.Name, machine.Name)
 
-				// Status
-				if slices.Contains(w.state.Phases.Keys(), phases.Status) {
-					err := w.NewTaskWithRetry(phases.Status, machineIdentifier, func() error {
-						return w.executeStatusPhaseMachine(machine)
-					})
-					if err != nil {
-						return err
-					}
-				}
+				groupPool.SubmitErr(func() error {
 
-				// Pre flake hook
-				if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
-					err := preFlakeHook.Do(func() error {
-						return w.NewTaskWithRetry(phases.PreFlakeHook, flakeIdentifier, func() error {
-							return w.executePreFlakeHokPhaseFlake(flake)
+					// Status
+					if slices.Contains(w.state.Phases.Keys(), phases.Status) {
+						err := w.NewTaskWithRetry(phases.Status, machineIdentifier, func() error {
+							return w.executeStatusPhaseMachine(machine)
 						})
-					})
-					if err != nil {
-						return err
+						if err != nil {
+							return err
+						}
 					}
-				}
 
-				// Build
-				if slices.Contains(w.state.Phases.Keys(), phases.Build) {
-					err := build.Do(func() error {
-						return w.NewTaskWithRetry(phases.Build, configurationIdentifier, func() error {
-							return w.executeBuildPhaseConfiguration(flake, configuration)
+					// Pre flake hook
+					if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
+						err := preFlakeHook.Do(func() error {
+							return w.NewTaskWithRetry(phases.PreFlakeHook, flakeIdentifier, func() error {
+								return w.executePreFlakeHokPhaseFlake(flake)
+							})
 						})
-					})
-					if err != nil {
-						return err
+						if err != nil {
+							return err
+						}
 					}
-				}
 
-				return nil
-			})
+					// Build
+					if slices.Contains(w.state.Phases.Keys(), phases.Build) {
+						err := build.Do(func() error {
+							return w.NewTaskWithRetry(phases.Build, configurationIdentifier, func() error {
+								return w.executeBuildPhaseConfiguration(flake, configuration)
+							})
+						})
+						if err != nil {
+							return err
+						}
+					}
 
-			if err != nil {
-				return err
+					return nil
+				})
 			}
-
-			return nil
 		}
 	}
 
-	return nil
+	return groupPool.Wait()
 }
 
 func (w *Workflow) Phase(phaseLog *config.PhaseLog, startDebugMsg, endDebugMsg string, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error) (err error) {
@@ -167,33 +167,20 @@ func (w *Workflow) Phase(phaseLog *config.PhaseLog, startDebugMsg, endDebugMsg s
 	}()
 
 	if w.state.Conf.Global.Verbose {
-		phaseLog.AddMessageOnly(startDebugMsg)
+		phaseLog.AddMessageOnly("VERBOSE " + startDebugMsg)
 	}
 
 	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, phaseLog, w.updateHook.OnUpdateHook)
 	err = phaseCode(exc, phaseLog)
 
 	if w.state.Conf.Global.Verbose {
-		phaseLog.AddMessageOnly(endDebugMsg)
+		phaseLog.AddMessageOnly("VERBOSE " + endDebugMsg)
 	}
 
 	return err
 }
 
 // Helpers
-
-// poolSortedMap is a generic helper function to iterate over children in parallel
-func poolSortedMap[K cmp.Ordered, V any](w *Workflow, parent config.SortedMap[K, V], function func(value V) error) (err error) {
-	groupPool := w.state.Pool.NewGroup()
-
-	for _, value := range parent.SortedMap() {
-		groupPool.SubmitErr(func() error {
-			return function(value)
-		})
-	}
-
-	return groupPool.Wait()
-}
 
 func (w *WorkflowState) ExpandFlakeConfigurationMachine(skipDisabled bool, function func(i int,
 	flake *config.Flake, configuration *config.Configuration, machine *config.Machine)) {

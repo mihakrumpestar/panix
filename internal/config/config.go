@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -91,7 +92,7 @@ type MetaBuild struct {
 }
 
 func (c *Configuration) Init(name string) error {
-	err := c.Attributes.InitAttributes(name)
+	err := c.InitAttributes(name)
 	if err != nil {
 		return err
 	}
@@ -108,30 +109,30 @@ type Machine struct {
 }
 
 type MetaStatus struct {
-	Reachable      bool
-	SSHConnectable bool
-	Bootstrapped   bool
-	Generation     string
-	Date           string
-	Nixos          string
-	Kernel         string
+	Reachable      atomic.Bool
+	SSHConnectable atomic.Bool
+	Bootstrapped   atomic.Bool
+	Generation     atomic.Uint32
+	Date           atomic.String
+	Nixos          atomic.String
+	Kernel         atomic.String
 }
 
 func (m *Machine) Init(name string) error {
-	err := m.Attributes.InitAttributes(name)
+	err := m.InitAttributes(name)
 	if err != nil {
 		return err
 	}
 
 	// Only machine has them always initialized (root, flake, configurations do not)
 
-	if m.Attributes.Ssh == nil {
-		m.Attributes.Ssh = &SshClient{}
+	if m.Ssh == nil {
+		m.Ssh = &SshClient{}
 	}
 
-	if m.Attributes.SudoProgram == nil {
+	if m.SudoProgram == nil {
 		sudoProgram := "sudo" // Default sudo program
-		m.Attributes.SudoProgram = &sudoProgram
+		m.SudoProgram = &sudoProgram
 	}
 
 	if m.MetaStatus == nil {

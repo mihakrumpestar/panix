@@ -17,7 +17,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 		nil,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
 
-			secrets := machine.Attributes.Secrets
+			secrets := machine.Secrets
 
 			for _, secret := range secrets {
 
@@ -42,16 +42,16 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 							var n int
 							n, err = f.Write(output)
 							if err != nil {
-								return errors.Wrapf(err, "writing secrets command output for '%s' failed", log.Command)
+								return errors.Wrapf(err, "writing secrets command output for '%s' failed", log.Command.Load())
 							}
 
 							if n == 0 {
-								return errors.Wrapf(err, "secrets command output was empty for '%s'", log.Command)
+								return errors.Wrapf(err, "secrets command output was empty for '%s'", log.Command.Load())
 							}
 
 							err = f.Close()
 							if err != nil {
-								return errors.Wrapf(err, "closing temporary local secrets file for '%s' failed", log.Command)
+								return errors.Wrapf(err, "closing temporary local secrets file for '%s' failed", log.Command.Load())
 							}
 
 							return err
@@ -66,7 +66,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 				commandWithArgs := []string{"rsync", fmt.Sprintf("--rsync-path=%s rsync", *machine.SudoProgram), "-rcPEx"}
 
 				if secret.Remote.UID != nil && secret.Remote.GID != nil {
-					commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=%s:%s", secret.Remote.UID, secret.Remote.GID))
+					commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=%d:%d", secret.Remote.UID, secret.Remote.GID))
 				}
 
 				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secret.Remote.Path))

@@ -117,10 +117,10 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 				configDisplay,
 				machine.Name,
 				m.getStatusText(ps, xpath, log),
-				ps.Generation,
-				ps.Date,
-				ps.Nixos,
-				ps.Kernel,
+				fmt.Sprintf("%d", ps.Generation.Load()),
+				ps.Date.Load(),
+				ps.Nixos.Load(),
+				ps.Kernel.Load(),
 				status,
 			)
 		})
@@ -136,13 +136,13 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *config.P
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
-	if !ps.Reachable {
+	if !ps.Reachable.Load() {
 		return "🔴"
 	}
-	if !ps.SSHConnectable {
+	if !ps.SSHConnectable.Load() {
 		return "🟡"
 	}
-	if !ps.Bootstrapped {
+	if !ps.Bootstrapped.Load() {
 		return "🟠"
 	}
 	return "✅"
@@ -154,13 +154,13 @@ func (m *model) getStatusText(ps *config.MetaStatus, xpath string, log *config.P
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
-	if !ps.Reachable {
+	if !ps.Reachable.Load() {
 		return "UNREACHABLE"
 	}
-	if !ps.SSHConnectable {
+	if !ps.SSHConnectable.Load() {
 		return "SSH_FAILED"
 	}
-	if !ps.Bootstrapped {
+	if !ps.Bootstrapped.Load() {
 		return "NOT_BOOTSTRAPPED"
 	}
 	return "OK"

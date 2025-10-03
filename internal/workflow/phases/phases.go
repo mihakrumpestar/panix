@@ -44,14 +44,14 @@ func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, e
 	phaseStates.states.Set(PostFlakeHook, make([]string, 0))
 
 	// Keep only required phases
-	for phase, _ := range phaseStates.states.AllFromFront() {
+	for phase := range phaseStates.states.Keys() {
 		if !slices.Contains(requiredPhases, phase) {
 			phaseStates.states.Delete(phase)
 		}
 	}
 
 	// Remove skipped phases
-	for phase, _ := range phaseStates.states.AllFromFront() {
+	for phase := range phaseStates.states.Keys() {
 		if slices.Contains(skipPhases, phase) {
 			phaseStates.states.Delete(phase)
 		}
