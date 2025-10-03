@@ -18,7 +18,7 @@ func (m *model) PrintBuildLogs() string {
 	builder.WriteString("\n" + config.DefaultColorScheme().HeaderTitle.Render("=== Build Logs ===\n"))
 
 	// Build separate trees for each flake
-	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap(false, false) {
+	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
 		flakeTree := tree.New().
 			Root(config.DefaultColorScheme().Flake.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconFlake, flake.Name, flake.Message))).
 			Enumerator(tree.RoundedEnumerator).
@@ -32,7 +32,7 @@ func (m *model) PrintBuildLogs() string {
 			}
 		}
 
-		for _, configuration := range flake.Configurations.SortedMap(false, false) {
+		for _, configuration := range flake.Configurations.SortedMap() {
 			configNode := tree.New().
 				Root(config.DefaultColorScheme().Configuration.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconConfiguration, configuration.Name, configuration.Message)))
 
@@ -46,7 +46,7 @@ func (m *model) PrintBuildLogs() string {
 			}
 
 			// Add machines
-			for _, machine := range configuration.Machines.SortedMap(false, false) {
+			for _, machine := range configuration.Machines.SortedMap() {
 				machineNode := tree.New().
 					Root(config.DefaultColorScheme().Machine.Render(fmt.Sprintf("%c %s %s", config.DefaultColorScheme().IconMachine, machine.Name, machine.Message))).Offset(0, 4)
 
@@ -96,9 +96,9 @@ func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 		phaseTree := tree.New().Root(phaseHeader)
 
 		// Commands and their output
-		for cmdIdx, cmd := range log.Commands {
-			if cmd.Command != "" {
-				commandXpath := xpath + cmd.Command
+		for cmdIdx, cmd := range log.CommandLogs() {
+			if cmd.Command.Load() != "" {
+				commandXpath := xpath + cmd.Command.Load()
 				cmdTas := cmd.TimeAndState.GetTimeAndState()
 
 				iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
@@ -106,7 +106,7 @@ func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 
 				cmdText := m.MostLeftAndMostRight(
 					12,
-					m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel, cmdTas),
+					m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel.Load(), cmdTas),
 					m.RightSideDuration(cmdTas),
 				)
 
@@ -123,8 +123,12 @@ func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 				}
 
 				// Command error status
-				if cmdTas.Error != nil {
-					cmdTree.Child(config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Command failed: %v", cmdTas.Error)))
+				err := cmdTas.Error
+				if err != nil {
+					cmdTree.Child(
+						config.DefaultColorScheme().Error.Render(
+							fmt.Sprintf(
+								"✗ Command failed: %s", err.Error())))
 				}
 
 				phaseTree.Child(cmdTree)
@@ -132,8 +136,9 @@ func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 		}
 
 		// Show error details if failed
-		if tas.Error != nil {
-			errorMsg := config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Phase failed: %v", tas.Error))
+		err := tas.Error
+		if err != nil {
+			errorMsg := config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Phase failed: %s", err.Error()))
 			phaseTree.Child(errorMsg)
 		}
 
@@ -174,7 +179,7 @@ func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
 	return lipgloss.JoinHorizontal(0, leftBlock, rightBlock)
 }
 
-func (m *model) RightSideDuration(tas config.TimeAndStateOutput) string {
+func (m *model) RightSideDuration(tas config.TimeAndStateCopy) string {
 	var durationStr string
 
 	if tas.Started && tas.Finished {
@@ -189,7 +194,7 @@ func (m *model) RightSideDuration(tas config.TimeAndStateOutput) string {
 	return durationStr
 }
 
-func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content string, tas config.TimeAndStateOutput) string {
+func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content string, tas config.TimeAndStateCopy) string {
 	var iconOrSpinner string
 
 	if tas.Started && tas.Finished {

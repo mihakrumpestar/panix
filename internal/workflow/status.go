@@ -10,33 +10,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// executeStatusPhase runs status checks in parallel across all machines
-// and must complete fully before proceeding to next phase
-func (w *Workflow) ExecuteStatusPhase() error {
-	return poolChildren(w, w.state.Conf.Root, true, func(flake *config.Flake) error {
-		return poolChildren(w, flake, true, func(configuration *config.Configuration) error {
-			return poolChildren(w, configuration, true, func(machine *config.Machine) error {
-				return w.executeStatusPhaseMachine(machine)
-			})
-		})
-	})
-}
-
 func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error) {
 	return w.Phase(machine.Logs.SafeGet(phases.Status),
 		fmt.Sprintf("Started stats of %s", machine.Name),
 		fmt.Sprintf("Finished stats of %s", machine.Name),
 		machine,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
-
-			defer func() {
-				// Disable machine if status fails
-				if err != nil {
-					machine.Disabled = true
-				}
-			}()
-
-			sm := machine.MetaStatus
+			mms := machine.MetaStatus
 
 			// TCP check
 			err = exc.Exec(true, true,
@@ -44,7 +24,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					return fmt.Errorf("machine unreachable: %w", err)
 				},
 				func(log *config.CommandLog) error {
-					sm.Reachable = true
+					mms.Reachable = true
 					return nil
 				},
 				"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port))
@@ -58,7 +38,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					return errors.Wrapf(err, "ssh test failed: %s", log.String())
 				},
 				func(log *config.CommandLog) error {
-					sm.SSHConnectable = true
+					mms.SSHConnectable = true
 					return nil
 				}, "echo", "OK")
 			if err != nil {
@@ -69,7 +49,13 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			err = exc.Exec(false, true,
 				nil,
 				func(log *config.CommandLog) error {
-					sm.Bootstrapped = true
+					bootstrapped := true
+
+					if w.state.Conf.Global.DryRun {
+						bootstrapped = false
+					}
+
+					mms.Bootstrapped = bootstrapped
 					return nil
 				}, "test", "-e", "/run/current-system")
 			if err != nil {
@@ -78,10 +64,26 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			}
 
 			// Get current generation
-			return exc.Exec(false, true,
+			err = exc.Exec(false, true,
 				nil,
 				func(log *config.CommandLog) error {
 					output := log.Bytes()
+
+					if w.state.Conf.Global.DryRun {
+						output = []byte(`
+						[
+							{
+								"generation": 5,
+								"date": "DRY_RUN",
+								"nixosVersion": "DRY_RUN",
+								"kernelVersion": "DRY_RUN",
+								"configurationRevision": "DRY_RUN",
+								"specialisations": [],
+								"current": true
+							}
+						]
+						`)
+					}
 
 					var nixGenerations nixGenerations
 					err = json.Unmarshal(output, &nixGenerations)
@@ -91,16 +93,21 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 					for _, nixGeneration := range nixGenerations {
 						if nixGeneration.Current {
-							sm.Generation = fmt.Sprint(nixGeneration.Generation)
-							sm.Date = nixGeneration.Date
-							sm.Nixos = nixGeneration.NixosVersion
-							sm.Kernel = nixGeneration.KernelVersion
+							mms.Generation = fmt.Sprint(nixGeneration.Generation)
+							mms.Date = nixGeneration.Date
+							mms.Nixos = nixGeneration.NixosVersion
+							mms.Kernel = nixGeneration.KernelVersion
 							break
 						}
 					}
 
 					return nil
 				}, "nixos-rebuild", "list-generations", "--json")
+			if err != nil {
+				return err
+			}
+
+			return nil
 		})
 }
 
