@@ -20,9 +20,8 @@ require (
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
+	go.uber.org/atomic v1.11.0
 )
-
-require go.uber.org/atomic v1.11.0 // indirect
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

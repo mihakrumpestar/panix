@@ -24,7 +24,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					return fmt.Errorf("machine unreachable: %w", err)
 				},
 				func(log *config.CommandLog) error {
-					mms.Reachable = true
+					mms.Reachable.Store(true)
 					return nil
 				},
 				"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port))
@@ -38,7 +38,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					return errors.Wrapf(err, "ssh test failed: %s", log.String())
 				},
 				func(log *config.CommandLog) error {
-					mms.SSHConnectable = true
+					mms.SSHConnectable.Store(true)
 					return nil
 				}, "echo", "OK")
 			if err != nil {
@@ -55,7 +55,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 						bootstrapped = false
 					}
 
-					mms.Bootstrapped = bootstrapped
+					mms.Bootstrapped.Store(bootstrapped)
 					return nil
 				}, "test", "-e", "/run/current-system")
 			if err != nil {
@@ -93,10 +93,10 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 					for _, nixGeneration := range nixGenerations {
 						if nixGeneration.Current {
-							mms.Generation = fmt.Sprint(nixGeneration.Generation)
-							mms.Date = nixGeneration.Date
-							mms.Nixos = nixGeneration.NixosVersion
-							mms.Kernel = nixGeneration.KernelVersion
+							mms.Generation.Store(nixGeneration.Generation)
+							mms.Date.Store(nixGeneration.Date)
+							mms.Nixos.Store(nixGeneration.NixosVersion)
+							mms.Kernel.Store(nixGeneration.KernelVersion)
 							break
 						}
 					}
@@ -113,7 +113,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 // Unmarshall struct
 type nixGenerations []struct {
-	Generation            int           `json:"generation"`
+	Generation            uint32        `json:"generation"`
 	Date                  string        `json:"date"`
 	NixosVersion          string        `json:"nixosVersion"`
 	KernelVersion         string        `json:"kernelVersion"`

@@ -24,7 +24,7 @@ func (m *model) PrintBuildLogs() string {
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(config.DefaultColorScheme().TreeEnumerator)
 
-		if flake != nil && flake.Logs.Len() > 0 {
+		if flake.Logs.Len() > 0 {
 			xpath := flake.Name
 			phaseNodes := m.phaseNodes(xpath, flake.Logs)
 			for _, phaseNode := range phaseNodes {
@@ -125,10 +125,7 @@ func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 				// Command error status
 				err := cmdTas.Error
 				if err != nil {
-					cmdTree.Child(
-						config.DefaultColorScheme().Error.Render(
-							fmt.Sprintf(
-								"✗ Command failed: %s", err.Error())))
+					cmdTree.Child(config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
 				}
 
 				phaseTree.Child(cmdTree)
@@ -208,14 +205,4 @@ func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content stri
 	final := iconOrSpinner + content
 
 	return final
-}
-
-// lastNLines returns the last n lines of s.
-// If s has fewer than n lines, it returns s unchanged.
-func lastNLines(s string, n int) string {
-	lines := strings.Split(s, "\n")
-	if len(lines) <= n {
-		return s
-	}
-	return strings.Join(lines[len(lines)-n:], "\n")
 }
