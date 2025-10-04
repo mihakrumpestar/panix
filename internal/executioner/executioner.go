@@ -2,7 +2,6 @@ package executioner
 
 import (
 	"context"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 )
@@ -34,7 +33,7 @@ func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*config.Comman
 
 	// 1) local short‐circuit
 	if noMachineOrLocal && skipIfLocal {
-		comLog := ex.phaseLog.AddMessageOnly("(skipped) ", strings.Join(commandWithArgs, " "))
+		comLog := ex.phaseLog.AddMessageOnly("(skipped)")
 		if onSuccess != nil {
 			err := onSuccess(comLog)
 			if err != nil {

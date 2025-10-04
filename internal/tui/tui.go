@@ -240,6 +240,10 @@ func (m model) View() string {
 	builder.WriteString(headerAndInstructions)
 
 	for phase, value := range m.workflow.State().Phases.Range() {
+		if strings.Contains(string(phase), "hook") {
+			continue
+		}
+
 		builder.WriteString(fmt.Sprintf("%s %v\n", phase, value.Length()))
 	}
 
