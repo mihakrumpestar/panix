@@ -35,7 +35,7 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL", "STATUS").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCHITECTURE", "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL", "STATUS").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -53,17 +53,19 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 				return colors.Configuration
 			case 4: // MACHINE
 				return colors.Machine
-			case 5: // Status text
+			case 5: // Architecture
+				return colors.TableRow.Width(lipgloss.Width("ARCHITECTURE"))
+			case 6: // Bootstrap status
 				return colors.TableRow.Width(lipgloss.Width("NOT_BOOTSTRAPPED"))
-			case 6: // Generation
+			case 7: // Generation
 				return colors.TableRow.Width(lipgloss.Width("GENERATION"))
-			case 7: // Date
+			case 8: // Date
 				return colors.TableRow.Width(lipgloss.Width("2025-07-22 08:12:19"))
-			case 8: // Nixos
+			case 9: // Nixos
 				return colors.TableRow.Width(lipgloss.Width("25.11.20250624.4b1164c"))
-			case 9: // Kernel
+			case 10: // Kernel
 				return colors.TableRow.Width(lipgloss.Width("KERNEL"))
-			case 10: // STATUS
+			case 11: // STATUS
 				return colors.TableRow.MaxWidth(1000)
 			default:
 				return colors.TableRow
@@ -73,57 +75,57 @@ func (m *model) PrintStatusPhaseMachineTable() string {
 	// Track previous values to implement row spanning
 	var prevFlakeName, prevConfigName string
 
-	state.ExpandFlakeConfigurationMachine(false,
-		func(i int, flake *config.Flake, configuration *config.Configuration, machine *config.Machine) {
+	state.ExpandFlakeConfigurationMachine(func(i int, flake *config.Flake, configuration *config.Configuration, machine *config.Machine) {
 
-			xpath := flake.Name + configuration.Name + machine.Name
+		xpath := flake.Name + configuration.Name + machine.Name
 
-			ps := machine.MetaStatus
-			log := machine.Logs.SafeGet(phases.Status)
+		ps := machine.MetaStatus
+		log := machine.Logs.SafeGet(phases.Status)
 
-			status := ""
-			lastErr := log.TimeAndState.GetTimeAndState().Error
-			if lastErr != nil {
-				status = lastErr.Error()
-			}
+		status := ""
+		lastErr := log.TimeAndState.GetTimeAndState().Error
+		if lastErr != nil {
+			status = lastErr.Error()
+		}
 
-			// Determine if we should show flake name (only on first occurrence)
-			showFlake := flake.Name != prevFlakeName
-			if showFlake {
-				prevFlakeName = flake.Name
-			}
+		// Determine if we should show flake name (only on first occurrence)
+		showFlake := flake.Name != prevFlakeName
+		if showFlake {
+			prevFlakeName = flake.Name
+		}
 
-			// Determine if we should show config name (only on first occurrence of each config within a flake)
-			showConfig := configuration.Name != prevConfigName || flake.Name != prevFlakeName
-			if showConfig {
-				prevConfigName = configuration.Name
-			}
+		// Determine if we should show config name (only on first occurrence of each config within a flake)
+		showConfig := configuration.Name != prevConfigName || flake.Name != prevFlakeName
+		if showConfig {
+			prevConfigName = configuration.Name
+		}
 
-			// Get display values (empty for spanning)
-			flakeDisplay := ""
-			if showFlake {
-				flakeDisplay = flake.Name
-			}
+		// Get display values (empty for spanning)
+		flakeDisplay := ""
+		if showFlake {
+			flakeDisplay = flake.Name
+		}
 
-			configDisplay := ""
-			if showConfig {
-				configDisplay = configuration.Name
-			}
+		configDisplay := ""
+		if showConfig {
+			configDisplay = configuration.Name
+		}
 
-			t.Row(
-				fmt.Sprintf("%d", i),
-				m.getStatusIcon(ps, xpath, log),
-				flakeDisplay,
-				configDisplay,
-				machine.Name,
-				m.getStatusText(ps, xpath, log),
-				fmt.Sprintf("%d", ps.Generation.Load()),
-				ps.Date.Load(),
-				ps.Nixos.Load(),
-				ps.Kernel.Load(),
-				status,
-			)
-		})
+		t.Row(
+			fmt.Sprintf("%d", i),
+			m.getStatusIcon(ps, xpath, log),
+			flakeDisplay,
+			configDisplay,
+			machine.Name,
+			ps.Architecture.Load(),
+			m.getStatusText(ps, xpath, log),
+			fmt.Sprintf("%d", ps.Generation.Load()),
+			ps.Date.Load(),
+			ps.Nixos.Load(),
+			ps.Kernel.Load(),
+			status,
+		)
+	})
 
 	builder.WriteString("\n" + t.String() + "\n")
 

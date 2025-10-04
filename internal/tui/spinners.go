@@ -5,11 +5,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/elliotchance/orderedmap/v3"
+	"github.com/kirill-scherba/omap"
 )
 
 type Spinners struct {
-	spinners *orderedmap.OrderedMap[string, *Spinner]
+	spinners *omap.Omap[string, *Spinner]
 }
 
 type Spinner struct {
@@ -18,8 +18,13 @@ type Spinner struct {
 }
 
 func NewSpinners() *Spinners {
+	spinners, err := omap.New[string, *Spinner]()
+	if err != nil {
+		panic(err)
+	}
+
 	return &Spinners{
-		spinners: orderedmap.NewOrderedMap[string, *Spinner](),
+		spinners: spinners,
 	}
 }
 
@@ -42,13 +47,13 @@ func (s *Spinners) GetOrCreateSpinner(xpath string) *spinner.Model {
 }
 
 func (s *Spinners) RemoveIfExistsSpinner(xpath string) {
-	s.spinners.Delete(xpath)
+	s.spinners.Del(xpath)
 }
 
 func (s *Spinners) SendInitTickIfNotAlready() tea.Cmd {
 	cmds := make([]tea.Cmd, 0)
 
-	for _, spnr := range s.spinners.AllFromFront() {
+	for _, spnr := range s.spinners.Records() {
 		if !spnr.initTickSend {
 			cmds = append(cmds, spnr.model.Tick)
 			spnr.initTickSend = true
@@ -61,7 +66,7 @@ func (s *Spinners) SendInitTickIfNotAlready() tea.Cmd {
 func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, 0)
 
-	for _, spnr := range s.spinners.AllFromFront() {
+	for _, spnr := range s.spinners.Records() {
 		// msg only works on spinner it was ment to, so we don't have to filter or anything
 		spinnerModel, cmd := spnr.model.Update(msg)
 		if cmd != nil {
@@ -76,7 +81,7 @@ func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 func (s *Spinners) Debug() string {
 	str := fmt.Sprintf("\nSpinners: %d\n", s.spinners.Len())
 
-	for pathx := range s.spinners.Keys() {
+	for pathx := range s.spinners.Records() {
 		str += fmt.Sprintf("  '%s'\n", pathx)
 	}
 

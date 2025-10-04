@@ -69,7 +69,13 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 					commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=%d:%d", secret.Remote.UID, secret.Remote.GID))
 				}
 
-				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secret.Remote.Path))
+				secretRemotePath := secret.Remote.Path
+
+				if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Global.Bootstrap.DisableAuto {
+					secretRemotePath = `\mnt` + secretRemotePath
+				}
+
+				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname))
 
 				err = exc.Exec(false, true,
 					func(log *config.CommandLog, err error) error {

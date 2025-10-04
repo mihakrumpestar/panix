@@ -20,15 +20,22 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		nil,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
 			if w.state.Conf.Global.DryRun {
-				configuration.MetaBuild.OutputPath = "BUILD_OUTPUT_PATH_PLACEHOLDER"
+				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
+				configuration.MetaBuild.DiskoScript = "BUILD_OUTPUT_PATH_PLACEHOLDER"
 			}
 
-			// Get the flake path from the flake configuration
-			flakePath := flake.Url
+			mb := configuration.MetaBuild
 
-			ref := fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flakePath, configuration.Name)
+			// System closure
+			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.Url, configuration.Name)}
 
-			// Build a configuration
+			// DiskoScript
+			if !w.state.Conf.Global.Bootstrap.DisableAuto {
+				installables = append(installables, fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.Url, configuration.Name))
+			}
+
+			commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
+
 			err := exc.Exec(false, true, nil,
 				func(log *config.CommandLog) error {
 					output := log.Bytes()
@@ -37,6 +44,11 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 					if w.state.Conf.Global.DryRun {
 						output = []byte(`
 						[
+							{
+								"outputs": {
+									"out": "DRY_RUN"
+								}
+							},
 							{
 								"outputs": {
 									"out": "DRY_RUN"
@@ -52,18 +64,22 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 						return fmt.Errorf("invalid build output for %s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
 					}
 
-					configuration.MetaBuild.OutputPath = parsedOutput[0].Outputs.Out
+					mb.SystemClosure = parsedOutput[0].Outputs.Out
+
+					if !w.state.Conf.Global.Bootstrap.DisableAuto {
+						mb.DiskoScript = parsedOutput[1].Outputs.Out
+					}
 
 					return nil
 				}, // "--print-build-logs"
-				"nix", "build", "--no-link", "--no-update-lock-file", "--json", "--cores", "0", "path:"+ref, // The following options don't seem to do anything: "--log-format", "bar-with-logs"
+				commandWithArgs...,
 			)
 			if err != nil {
 				return err
 			}
 
 			if w.state.Conf.Global.Verbose {
-				phaseLog.AddMessageOnly(fmt.Sprintf("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.OutputPath))
+				phaseLog.AddMessageOnly(fmt.Sprintf("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure))
 			}
 
 			return nil

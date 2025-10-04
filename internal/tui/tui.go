@@ -86,6 +86,11 @@ func NewTui(workflow *workflow.Workflow) error {
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
+
+	if workflow.State().Conf.Global.Verbose {
+		fmt.Println("TUI initialized")
+	}
+
 	m, err := p.Run()
 
 	// Print the final view to stdout after exiting alt-screen
@@ -235,7 +240,7 @@ func (m model) View() string {
 	builder.WriteString(headerAndInstructions)
 
 	for phase, value := range m.workflow.State().Phases.Range() {
-		builder.WriteString(fmt.Sprintf("%s %v\n", phase, value))
+		builder.WriteString(fmt.Sprintf("%s %v\n", phase, value.Length()))
 	}
 
 	builder.WriteString("\n")

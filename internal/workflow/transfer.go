@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// This function is called by executeMachineTransfer for individual configurations -> machine transfers
 func (w *Workflow) executeTransferPhaseMachine(configuration *config.Configuration, machine *config.Machine) error {
 	return w.Phase(machine.Logs.SafeGet(phases.Transfer),
 		fmt.Sprintf("Started transfer of %s", machine.Name),
@@ -17,24 +16,28 @@ func (w *Workflow) executeTransferPhaseMachine(configuration *config.Configurati
 		nil,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
 
-			buildOutputPath := configuration.MetaBuild.OutputPath
+			systemClosure := configuration.MetaBuild.SystemClosure
+			diskoScript := configuration.MetaBuild.DiskoScript
+			toTransfer := []string{systemClosure}
 
-			if buildOutputPath == "" {
-				return fmt.Errorf("machine %s has no build output path", machine.Name)
+			if diskoScript != "" {
+				toTransfer = append(toTransfer, diskoScript)
 			}
+			commandWithArgs := append([]string{"nix", "copy", "--to", machine.Name}, toTransfer...)
 
 			err := exc.Exec(true, true,
 				func(l *config.CommandLog, err error) error {
 					return errors.Wrap(err, "nix copy failed")
 				},
 				nil,
-				"nix", "copy", "--to", machine.Name, buildOutputPath)
+				commandWithArgs...,
+			)
 			if err != nil {
 				return err
 			}
 
 			if w.state.Conf.Global.Verbose {
-				phaseLog.AddMessageOnly(fmt.Sprintf("Transferred %s to %s\n", buildOutputPath, machine.Name))
+				phaseLog.AddMessageOnly(fmt.Sprintf("Transferred %s to %s\n", toTransfer, machine.Name))
 			}
 
 			return nil
