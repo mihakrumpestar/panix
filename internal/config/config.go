@@ -2,6 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -18,17 +21,17 @@ type Config struct {
 }
 
 type Global struct {
-	Filters           Filters        `yaml:"filters"`
-	RequireAllSuccess bool           `yaml:"requireAllSuccess"`
-	AutoBootstrap     bool           `yaml:"autoBootstrap"`
-	LocalMachine      string         `yaml:"localMachine"`
-	DryRun            bool           `yaml:"dryRun"`
-	Timeout           time.Duration  `yaml:"timeout"` // Time in seconds (int initialy, but we multiply by seconds later)
-	Concurrency       int            `yaml:"concurrency"`
-	SkipPhases        []phases.Phase `yaml:"skipPhases"`
-	Verbose           bool           `yaml:"verbose"`
-	Debug             bool           `yaml:"debug"`
-	//Json              bool                                `yaml:"json"` // Maybe later
+	Filters              Filters        `yaml:"filters"`
+	Bootstrap            Bootstrap      `yaml:"bootstrap"`
+	RequireAllSuccess    bool           `yaml:"requireAllSuccess"`
+	OverrideLocalMachine string         `yaml:"overrideLocalMachine"`
+	DryRun               bool           `yaml:"dryRun"`
+	Timeout              time.Duration  `yaml:"timeout"`
+	Concurrency          int            `yaml:"concurrency"`
+	SkipPhases           []phases.Phase `yaml:"skipPhases"`
+	Verbose              bool           `yaml:"verbose"`
+	Debug                bool           `yaml:"debug"`
+	//Json              bool         `yaml:"json"` // Maybe later
 }
 
 type Filters struct {
@@ -36,6 +39,11 @@ type Filters struct {
 	Configurations []string `yaml:"configurations"`
 	Machines       []string `yaml:"machines"`
 	Tags           []string `yaml:"tags"`
+}
+
+type Bootstrap struct {
+	DisableAuto  bool `yaml:"disableAuto"`
+	DisableDisko bool `yaml:"disableDisko"`
 }
 
 // Root
@@ -46,7 +54,7 @@ type Root struct {
 }
 
 func (r *Root) Init(name string) error {
-	err := r.Attributes.InitAttributes("")
+	err := r.InitAttributes("")
 	if err != nil {
 		return err
 	}
@@ -57,14 +65,14 @@ func (r *Root) Init(name string) error {
 // Flake
 
 type Flake struct {
-	Url            string `yaml:"url"` // Flake path or url
+	Url            string `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
 	Attributes     `yaml:",squash"`
 	Configurations SortedMap[string, *Configuration] `yaml:"configurations"`
-	BuildHooks     BuildHooks                        `yaml:"buildHooks"` // They only run for builds
+	FlakeHooks     FlakeHooks                        `yaml:"flakeHooks"`
 }
 
 func (f *Flake) Init(name string) error {
-	err := f.Attributes.InitAttributes(name)
+	err := f.InitAttributes(name)
 	if err != nil {
 		return err
 	}
@@ -72,7 +80,7 @@ func (f *Flake) Init(name string) error {
 	return nil
 }
 
-type BuildHooks struct {
+type FlakeHooks struct {
 	Pre  string `yaml:",pre"`
 	Post string `yaml:",post"`
 }
@@ -88,7 +96,8 @@ type Configuration struct {
 }
 
 type MetaBuild struct {
-	OutputPath string
+	SystemClosure string
+	DiskoScript   string // Only on bootstrap
 }
 
 func (c *Configuration) Init(name string) error {
@@ -111,6 +120,7 @@ type Machine struct {
 type MetaStatus struct {
 	Reachable      atomic.Bool
 	SSHConnectable atomic.Bool
+	Architecture   atomic.String
 	Bootstrapped   atomic.Bool
 	Generation     atomic.Uint32
 	Date           atomic.String
@@ -145,11 +155,12 @@ func (m *Machine) Init(name string) error {
 // Flake, Configuration and Machine Attributes
 
 type Attributes struct {
-	Ssh         *SshClient      `yaml:"ssh,omitempty"`
-	Tags        []string        `yaml:"tags"`
-	Secrets     []*SecretConfig `yaml:"secrets,omitempty"`
-	Disabled    bool            `yaml:"disabled"`
-	SudoProgram *string         `yaml:"sudo_program"` // Default it is "sudo", if specified (but empty string), it will disable privilidge escalation altogether
+	Ssh                *SshClient      `yaml:"ssh,omitempty"`
+	Tags               []string        `yaml:"tags"`
+	Secrets            []*SecretConfig `yaml:"secrets,omitempty"`
+	Disabled           bool            `yaml:"disabled"`
+	SudoProgram        *string         `yaml:"sudo_program,omitempty"` // Default it is "sudo", if specified (but empty string), it will disable privilidge escalation altogether
+	HardwareConfigPath string          `yaml:"hardware_config_path"`
 
 	// Internal
 	Name    string
@@ -197,7 +208,11 @@ func (sc *SecretConfig) Validate() error {
 	}
 
 	if sc.Remote.Path == "" {
-		return errors.New("remote socrets path is empty")
+		return errors.New("remote secrets path is empty")
+	}
+
+	if !strings.HasPrefix(sc.Remote.Path, "/") {
+		return fmt.Errorf("remote secrets path must be absolute for %s", strconv.Quote(sc.Remote.Path))
 	}
 
 	return nil

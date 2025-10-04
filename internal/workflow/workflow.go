@@ -52,6 +52,8 @@ func NewWorkflow(ctx context.Context, phasesI []phases.Phase) (*Workflow, error)
 		return nil, err
 	}
 
+	fmt.Println("!!!!!SAFE!!!!!")
+
 	return &Workflow{
 		ctx:    ctxWithTimeout,
 		cancel: cancel,
@@ -112,7 +114,6 @@ func (w *Workflow) CreateWorkflow() error {
 			build := shared_deps.NewOnceAsync()
 
 			for _, machine := range configuration.Machines.SortedMap() {
-
 				machineIdentifier := fmt.Sprintf("%s/%s/%s", flake.Name, configuration.Name, machine.Name)
 
 				groupPool.SubmitErr(func() error {
@@ -151,6 +152,46 @@ func (w *Workflow) CreateWorkflow() error {
 						}
 					}
 
+					// Transfer
+					if slices.Contains(w.state.Phases.Keys(), phases.Transfer) {
+						err := w.NewTaskWithRetry(phases.Transfer, machineIdentifier, func() error {
+							return w.executeTransferPhaseMachine(configuration, machine)
+						})
+						if err != nil {
+							return err
+						}
+					}
+
+					// Bootstrap
+					if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
+						err := w.NewTaskWithRetry(phases.Bootstrap, machineIdentifier, func() error {
+							return w.executeBootstrapPhaseMachine(configuration, machine)
+						})
+						if err != nil {
+							return err
+						}
+					}
+
+					// Secrets
+					if slices.Contains(w.state.Phases.Keys(), phases.Secrets) {
+						err := w.NewTaskWithRetry(phases.Secrets, machineIdentifier, func() error {
+							return w.executeSecretsPhaseMachine(machine)
+						})
+						if err != nil {
+							return err
+						}
+					}
+
+					// Activate
+					if slices.Contains(w.state.Phases.Keys(), phases.Activate) {
+						err := w.NewTaskWithRetry(phases.Activate, machineIdentifier, func() error {
+							return w.executeActivatePhaseMachine(configuration, machine)
+						})
+						if err != nil {
+							return err
+						}
+					}
+
 					return nil
 				})
 			}
@@ -182,8 +223,7 @@ func (w *Workflow) Phase(phaseLog *config.PhaseLog, startDebugMsg, endDebugMsg s
 
 // Helpers
 
-func (w *WorkflowState) ExpandFlakeConfigurationMachine(skipDisabled bool, function func(i int,
-	flake *config.Flake, configuration *config.Configuration, machine *config.Machine)) {
+func (w *WorkflowState) ExpandFlakeConfigurationMachine(function func(i int, flake *config.Flake, configuration *config.Configuration, machine *config.Machine)) {
 	i := 0
 
 	for _, flake := range w.Conf.Root.Flakes.SortedMap() {
@@ -195,87 +235,3 @@ func (w *WorkflowState) ExpandFlakeConfigurationMachine(skipDisabled bool, funct
 		}
 	}
 }
-
-/*
-		for machineName, statusTask := range statusTasks {
-			sharedBuild := w.NewConditionWithRetry(
-				tf.NewCondition,
-				fmt.Sprintf("%s/%s/%s shared build", flake.Name, configuration.Name, machineName),
-				func() (uint, error) {
-					// Wait for build to start (first successful status triggers it)
-					select {
-					case <-buildStarted:
-						// Build has started, wait for completion
-						select {
-						case err := <-buildCompleted:
-							if err != nil {
-								return 1, err // Build failed
-							}
-							return 0, nil // Build succeeded
-						case <-w.ctx.Done():
-							return 1, w.ctx.Err()
-						}
-					case <-w.ctx.Done():
-						return 1, w.ctx.Err()
-					}
-				})
-			sharedBuilds[machineName] = sharedBuild
-
-			// Status task must succeed before shared build can proceed
-			sharedBuild.Succeed(statusTask)
-			// Shared build must complete before dependent tasks can proceed
-			buildTask.Precede(sharedBuild)
-		}
-	}
-
-	for _, machine := range configuration.Machines.SortedMap(false, true) {
-
-		// Transfer
-		var transferTask *gtf.Task
-		if slices.Contains(w.phases, phases.Transfer) && sharedBuilds[machine.Name] != nil {
-			transferTask = w.NewTaskWithRetry(
-				tf.NewTask,
-				fmt.Sprintf("%s/%s/%s transfer", flake.Name, configuration.Name, machine.Name),
-				func() error {
-					return w.executeTransferPhaseMachine(configuration, machine)
-				})
-
-			transferTask.Succeed(sharedBuilds[machine.Name])
-		}
-
-		// Secrets
-		var secretsTask *gtf.Task
-		if slices.Contains(w.phases, phases.Secrets) {
-			secretsTask = w.NewTaskWithRetry(
-				tf.NewTask,
-				fmt.Sprintf("%s/%s/%s secrets", flake.Name, configuration.Name, machine.Name),
-				func() error {
-					return w.executeSecretsPhaseMachine(machine)
-				},
-			)
-
-			if transferTask != nil { // secretsTask may be standalone
-				secretsTask.Succeed(transferTask)
-			}
-		}
-
-		// Activate
-		var activateTask *gtf.Task
-		if slices.Contains(w.phases, phases.Activate) && transferTask != nil {
-			activateTask = w.NewTaskWithRetry(
-				tf.NewTask,
-				fmt.Sprintf("%s/%s/%s activate", flake.Name, configuration.Name, machine.Name),
-				func() error {
-					return w.executeActivatePhaseMachine(configuration, machine)
-				},
-			)
-
-			depTask := secretsTask
-			if depTask == nil {
-				depTask = transferTask
-			}
-
-			activateTask.Succeed(depTask)
-		}
-	}
-*/

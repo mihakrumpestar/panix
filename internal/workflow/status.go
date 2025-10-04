@@ -3,11 +3,18 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
+)
+
+var (
+	KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 )
 
 func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error) {
@@ -45,6 +52,33 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 				return err
 			}
 
+			// Architecture
+			err = exc.Exec(false, true,
+				nil,
+				func(log *config.CommandLog) error {
+					architecture := log.String()
+
+					if w.state.Conf.Global.DryRun {
+						architecture = "DRY_RUN"
+					}
+
+					architecture = strings.Trim(architecture, "\n")
+
+					if architecture == "" {
+						return fmt.Errorf("architecture output was empty")
+					}
+
+					if !slices.Contains(KexecSupportedPlatforms, architecture) && !w.state.Conf.Global.DryRun {
+						return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
+					}
+
+					mms.Architecture.Store(architecture)
+					return nil
+				}, "uname", "-m")
+			if err != nil {
+				return err
+			}
+
 			// Run bootstrap detection
 			err = exc.Exec(false, true,
 				nil,
@@ -60,6 +94,32 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 				}, "test", "-e", "/run/current-system")
 			if err != nil {
 				err = nil // just not bootstrapped, not actually an error
+
+				// Bootstrap part
+
+				/*
+
+					"x86_64 | aarch64)  kexecUrl="https://github.com/nix-community/nixos-images/releases/download/nixos-25.05/nixos-kexec-installer-noninteractive-${isArch}-linux.tar.gz"
+					"TMPDIR=/root/kexec setsid --wait ${maybeSudo} /root/kexec/kexec/run"
+					 ssh into kexec
+
+				*/
+
+				if !mms.Bootstrapped.Load() && machine.HardwareConfigPath != "" {
+					commandWithArgs := []string{"sh", "-c", *machine.SudoProgram, "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath}
+
+					err := exc.Exec(false, true,
+						func(log *config.CommandLog, err error) error {
+							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Name)
+						},
+						nil,
+						commandWithArgs...,
+					)
+					if err != nil {
+						return nil
+					}
+				}
+
 				return err
 			}
 

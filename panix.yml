@@ -1,15 +1,16 @@
 global:
-  timeout: 7200 # 2h
+  #bootstrap:
+  #  autoBootstrap: false
   concurrency: 0
+  timeout: 7200 # 2h
   requireAllSuccess: false
-  autoBootstrap: false
   #dryRun: false
 
 root:
   flakes:
     infrastructure:
-      url: ../infrastructure
-      buildHooks:
+      url: path:../infrastructure
+      flakeHooks:
         pre: exit 0
       configurations:
         server-03:

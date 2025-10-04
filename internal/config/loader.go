@@ -85,7 +85,8 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 	// Unmarshal conf
 	conf := &Config{}
 	err = k.UnmarshalWithConf("", &conf, koanf.UnmarshalConf{
-		Tag: "yaml",
+		Tag:       "yaml",
+		FlatPaths: false,
 		DecoderConfig: &mapstructure.DecoderConfig{
 			ErrorUnused:          true,
 			WeaklyTypedInput:     true,
@@ -135,9 +136,6 @@ func (c *Config) validateConfig() error {
 		return err
 	}
 
-	if c.Root.Flakes == nil {
-		return fmt.Errorf("flakes is nil")
-	}
 	if len(c.Root.Flakes) == 0 {
 		return fmt.Errorf("flakes is required")
 	}
