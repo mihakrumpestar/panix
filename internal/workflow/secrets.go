@@ -11,13 +11,17 @@ import (
 )
 
 func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err error) {
+	secrets := machine.Secrets
+
+	if len(secrets) == 0 {
+		return nil
+	}
+
 	return w.Phase(machine.Logs.SafeGet(phases.Secrets),
 		fmt.Sprintf("Started secrets of %s", machine.Name),
 		fmt.Sprintf("Finished secrets of %s", machine.Name),
 		nil,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
-
-			secrets := machine.Secrets
 
 			for _, secret := range secrets {
 
@@ -75,7 +79,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 					secretRemotePath = `\mnt` + secretRemotePath
 				}
 
-				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname))
+				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
 
 				err = exc.Exec(false, true,
 					func(log *config.CommandLog, err error) error {

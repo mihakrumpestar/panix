@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/hook"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/mihakrumpestar/panix/internal/workflow/shared_deps"
+	"github.com/pkg/errors"
 )
 
 type Workflow struct {
@@ -51,8 +52,6 @@ func NewWorkflow(ctx context.Context, phasesI []phases.Phase) (*Workflow, error)
 		cancel()
 		return nil, err
 	}
-
-	fmt.Println("!!!!!SAFE!!!!!")
 
 	return &Workflow{
 		ctx:    ctxWithTimeout,
@@ -103,102 +102,129 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, identifier string, f fun
 }
 
 func (w *Workflow) CreateWorkflow() error {
-	groupPool := w.state.Pool.NewGroup()
+	subPool := w.state.Pool.NewGroup()
 
 	for _, flake := range w.state.Conf.Root.Flakes.SortedMap() {
-		flakeIdentifier := flake.Name
-		preFlakeHook := shared_deps.NewOnceAsync()
 
-		for _, configuration := range flake.Configurations.SortedMap() {
-			configurationIdentifier := fmt.Sprintf("%s/%s", flake.Name, configuration.Name)
-			build := shared_deps.NewOnceAsync()
+		subPool.SubmitErr(func() error {
 
-			for _, machine := range configuration.Machines.SortedMap() {
-				machineIdentifier := fmt.Sprintf("%s/%s/%s", flake.Name, configuration.Name, machine.Name)
+			flakePool := w.state.Pool.NewGroup()
 
-				groupPool.SubmitErr(func() error {
+			flakeIdentifier := flake.Name
+			preFlakeHook := shared_deps.NewOnceAsync()
+			postFlakeHook := shared_deps.NewOnceAsync()
 
-					// Status
-					if slices.Contains(w.state.Phases.Keys(), phases.Status) {
-						err := w.NewTaskWithRetry(phases.Status, machineIdentifier, func() error {
-							return w.executeStatusPhaseMachine(machine)
-						})
-						if err != nil {
-							return err
-						}
-					}
+			for _, configuration := range flake.Configurations.SortedMap() {
+				configurationIdentifier := fmt.Sprintf("%s/%s", flake.Name, configuration.Name)
+				build := shared_deps.NewOnceAsync()
 
-					// Pre flake hook
-					if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
-						err := preFlakeHook.Do(func() error {
-							return w.NewTaskWithRetry(phases.PreFlakeHook, flakeIdentifier, func() error {
-								return w.executePreFlakeHokPhaseFlake(flake)
+				for _, machine := range configuration.Machines.SortedMap() {
+					machineIdentifier := fmt.Sprintf("%s/%s/%s", flake.Name, configuration.Name, machine.Name)
+
+					flakePool.SubmitErr(func() error {
+
+						// Status
+						if slices.Contains(w.state.Phases.Keys(), phases.Status) {
+							err := w.NewTaskWithRetry(phases.Status, machineIdentifier, func() error {
+								return w.executeStatusPhaseMachine(machine)
 							})
-						})
-						if err != nil {
-							return err
+							if err != nil {
+								return err
+							}
 						}
-					}
 
-					// Build
-					if slices.Contains(w.state.Phases.Keys(), phases.Build) {
-						err := build.Do(func() error {
-							return w.NewTaskWithRetry(phases.Build, configurationIdentifier, func() error {
-								return w.executeBuildPhaseConfiguration(flake, configuration)
+						// Pre flake hook
+						if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
+							err := preFlakeHook.Do(func() error {
+								return w.NewTaskWithRetry(phases.PreFlakeHook, flakeIdentifier, func() error {
+									return w.executePreFlakeHookPhaseFlake(flake)
+								})
 							})
-						})
-						if err != nil {
-							return err
+							if err != nil {
+								return err
+							}
 						}
-					}
 
-					// Transfer
-					if slices.Contains(w.state.Phases.Keys(), phases.Transfer) {
-						err := w.NewTaskWithRetry(phases.Transfer, machineIdentifier, func() error {
-							return w.executeTransferPhaseMachine(configuration, machine)
-						})
-						if err != nil {
-							return err
+						// Build
+						if slices.Contains(w.state.Phases.Keys(), phases.Build) {
+							err := build.Do(func() error {
+								return w.NewTaskWithRetry(phases.Build, configurationIdentifier, func() error {
+									return w.executeBuildPhaseConfiguration(flake, configuration)
+								})
+							})
+							if err != nil {
+								return err
+							}
 						}
-					}
 
-					// Bootstrap
-					if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
-						err := w.NewTaskWithRetry(phases.Bootstrap, machineIdentifier, func() error {
-							return w.executeBootstrapPhaseMachine(configuration, machine)
-						})
-						if err != nil {
-							return err
+						// Transfer
+						if slices.Contains(w.state.Phases.Keys(), phases.Transfer) {
+							err := w.NewTaskWithRetry(phases.Transfer, machineIdentifier, func() error {
+								return w.executeTransferPhaseMachine(configuration, machine)
+							})
+							if err != nil {
+								return err
+							}
 						}
-					}
 
-					// Secrets
-					if slices.Contains(w.state.Phases.Keys(), phases.Secrets) {
-						err := w.NewTaskWithRetry(phases.Secrets, machineIdentifier, func() error {
-							return w.executeSecretsPhaseMachine(machine)
-						})
-						if err != nil {
-							return err
+						// Bootstrap
+						if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
+							err := w.NewTaskWithRetry(phases.Bootstrap, machineIdentifier, func() error {
+								return w.executeBootstrapPhaseMachine(configuration, machine)
+							})
+							if err != nil {
+								return err
+							}
 						}
-					}
 
-					// Activate
-					if slices.Contains(w.state.Phases.Keys(), phases.Activate) {
-						err := w.NewTaskWithRetry(phases.Activate, machineIdentifier, func() error {
-							return w.executeActivatePhaseMachine(configuration, machine)
-						})
-						if err != nil {
-							return err
+						// Secrets
+						if slices.Contains(w.state.Phases.Keys(), phases.Secrets) {
+							err := w.NewTaskWithRetry(phases.Secrets, machineIdentifier, func() error {
+								return w.executeSecretsPhaseMachine(machine)
+							})
+							if err != nil {
+								return err
+							}
 						}
-					}
 
-					return nil
-				})
+						// Activate
+						if slices.Contains(w.state.Phases.Keys(), phases.Activate) {
+							err := w.NewTaskWithRetry(phases.Activate, machineIdentifier, func() error {
+								return w.executeActivatePhaseMachine(configuration, machine)
+							})
+							if err != nil {
+								return err
+							}
+						}
+
+						w.state.Phases.AddKeyToValue(phases.Done, machineIdentifier)
+
+						return nil
+					})
+				}
 			}
-		}
+
+			err := flakePool.Wait()
+
+			// Post flake hook
+			if slices.Contains(w.state.Phases.Keys(), phases.PostFlakeHook) {
+				errH := postFlakeHook.Do(func() error {
+					return w.NewTaskWithRetry(phases.PostFlakeHook, flakeIdentifier, func() error {
+						return w.executePostFlakeHookPhaseFlake(flake)
+					})
+				})
+				if errH != nil && err != nil {
+					err = errors.Wrap(err, errH.Error())
+				} else if errH != nil {
+					err = errH
+				}
+			}
+
+			return err
+		})
 	}
 
-	return groupPool.Wait()
+	return subPool.Wait()
 }
 
 func (w *Workflow) Phase(phaseLog *config.PhaseLog, startDebugMsg, endDebugMsg string, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error) (err error) {

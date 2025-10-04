@@ -36,7 +36,7 @@ func (l *PhaseLogs) SafeGet(phase phases.Phase) *PhaseLog {
 }
 
 func (l *PhaseLogs) All() []omap.Pair[phases.Phase, *PhaseLog] {
-	return l.logs.Pairs()
+	return l.logs.Pairs() // Any other ranging method locks the dict until it traverses it
 }
 
 func (l *PhaseLogs) Len() int {

@@ -12,6 +12,7 @@ root:
       url: path:../infrastructure
       flakeHooks:
         pre: exit 0
+        post: exit 0
       configurations:
         server-03:
           machines:
