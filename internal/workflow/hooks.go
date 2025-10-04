@@ -15,9 +15,9 @@ func (w *Workflow) executePreFlakeHokPhaseFlake(flake *config.Flake) error {
 		fmt.Sprintf("Finished preFlakeHook of %s", flake.Name),
 		nil,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
-			commandWithArgs := []string{"sh", "-c", flake.BuildHooks.Pre}
+			commandWithArgs := []string{"sh", "-c", flake.FlakeHooks.Pre}
 
-			if flake.BuildHooks.Pre == "" {
+			if flake.FlakeHooks.Pre == "" {
 				phaseLog.AddMessageOnly("(skipped) ", strings.Join(commandWithArgs, " "))
 			}
 
@@ -34,9 +34,9 @@ func (w *Workflow) executePostFlakeHokPhaseFlake(flake *config.Flake) error {
 		fmt.Sprintf("Finished postFlakeHook of %s", flake.Name),
 		nil,
 		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
-			commandWithArgs := []string{"sh", "-c", flake.BuildHooks.Post}
+			commandWithArgs := []string{"sh", "-c", flake.FlakeHooks.Post}
 
-			if flake.BuildHooks.Pre == "" {
+			if flake.FlakeHooks.Pre == "" {
 				phaseLog.AddMessageOnly("(skipped) ", strings.Join(commandWithArgs, " "))
 			}
 

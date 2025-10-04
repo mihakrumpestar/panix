@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"iter"
 	"slices"
-	"sync"
 
-	"github.com/elliotchance/orderedmap/v3"
+	"github.com/hayageek/threadsafe"
+	"github.com/kirill-scherba/omap"
 )
 
 type Phase string
@@ -23,95 +23,117 @@ const (
 	PostFlakeHook Phase = "post-flake-hook"
 )
 
+func PhasesInOrder() []Phase {
+	return []Phase{
+		Status,
+		PreFlakeHook,
+		Build,
+		Bootstrap,
+		Transfer,
+		Secrets,
+		Activate,
+		Rollback,
+		PostFlakeHook,
+	}
+}
+
 type PhaseStates struct {
-	mutex  sync.Mutex
-	states *orderedmap.OrderedMap[Phase, []string]
+	states *omap.Omap[Phase, *threadsafe.Slice[string]]
 }
 
 func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, error) {
-	phaseStates := &PhaseStates{
-		states: orderedmap.NewOrderedMap[Phase, []string](),
+	states, err := omap.New[Phase, *threadsafe.Slice[string]]()
+	if err != nil {
+		panic(err)
 	}
 
-	phaseStates.states.Set(Status, make([]string, 0))
-	phaseStates.states.Set(PreFlakeHook, make([]string, 0))
-	phaseStates.states.Set(Build, make([]string, 0))
-	phaseStates.states.Set(Bootstrap, make([]string, 0))
-	phaseStates.states.Set(Transfer, make([]string, 0))
-	phaseStates.states.Set(Secrets, make([]string, 0))
-	phaseStates.states.Set(Activate, make([]string, 0))
-	phaseStates.states.Set(Rollback, make([]string, 0))
-	phaseStates.states.Set(PostFlakeHook, make([]string, 0))
+	phasesInOrder := PhasesInOrder()
 
 	// Keep only required phases
-	for phase := range phaseStates.states.Keys() {
-		if !slices.Contains(requiredPhases, phase) {
-			phaseStates.states.Delete(phase)
-		}
-	}
+	phasesInOrder = slices.DeleteFunc(phasesInOrder, func(phase Phase) bool {
+		return !slices.Contains(requiredPhases, phase)
+	})
 
 	// Remove skipped phases
-	for phase := range phaseStates.states.Keys() {
-		if slices.Contains(skipPhases, phase) {
-			phaseStates.states.Delete(phase)
-		}
-	}
+	phasesInOrder = slices.DeleteFunc(phasesInOrder, func(phase Phase) bool {
+		return slices.Contains(skipPhases, phase)
+	})
 
 	// Checks
 
-	if phaseStates.states.Len() == 0 {
+	if len(phasesInOrder) == 0 {
 		return nil, fmt.Errorf("all phases skipped")
 	}
 
-	phase := phaseStates.states.Front().Key
+	firstPhase := phasesInOrder[0]
 	validFirstPhases := []Phase{Status, Build, Secrets}
-	if !slices.Contains(validFirstPhases, phase) {
-		return nil, fmt.Errorf("phase %s is can't be the first phase, allowed are %s", phase, validFirstPhases)
+	if !slices.Contains(validFirstPhases, firstPhase) {
+		return nil, fmt.Errorf("phase %s is can't be the first phase, allowed are %s", firstPhase, validFirstPhases)
+	}
+
+	for _, phase := range phasesInOrder {
+		err := states.Set(phase, threadsafe.NewSlice[string]())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	phaseStates := &PhaseStates{
+		states: states,
 	}
 
 	return phaseStates, nil
 }
 
 func (ps *PhaseStates) Keys() []Phase {
-	return slices.Collect(ps.states.Keys())
+	phases := make([]Phase, 0)
+
+	ps.states.ForEach(func(key Phase, data *threadsafe.Slice[string]) {
+		phases = append(phases, key)
+	})
+
+	return phases
 }
 
-func (ps *PhaseStates) Value(phase Phase) []string {
-	value, _ := ps.states.Get(phase)
+func (ps *PhaseStates) Value(phase Phase) *threadsafe.Slice[string] {
+	value, ok := ps.states.Get(phase)
+	if !ok {
+		panic("phaseState with given key does not exist")
+	}
 
 	return value
 }
 
-func (ps *PhaseStates) Range() iter.Seq2[Phase, []string] {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
-
-	// Temporary data structure to prevent data races
-	tmp := orderedmap.NewOrderedMap[Phase, []string]()
-	for key, value := range ps.states.AllFromFront() {
-		tmp.Set(key, value)
-	}
-
-	return tmp.AllFromFront()
+func (ps *PhaseStates) Range() iter.Seq2[Phase, *threadsafe.Slice[string]] {
+	return ps.states.Records()
 }
 
 func (ps *PhaseStates) AddKeyToValue(phase Phase, key string) {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
+	value, ok := ps.states.Get(phase)
+	if !ok {
+		panic("phaseState with given key does not exist")
+	}
 
-	value, _ := ps.states.Get(phase)
-	value = append(value, key)
-
-	ps.states.Set(phase, value)
+	value.Append(key)
 }
 
 func (ps *PhaseStates) RemoveKeyFromValue(phase Phase, key string) {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
+	value, ok := ps.states.Get(phase)
+	if !ok {
+		panic("phaseState with given key does not exist")
+	}
 
-	value, _ := ps.states.Get(phase)
-	value = slices.DeleteFunc(value, func(cmp string) bool {
-		return cmp == key
-	})
-	ps.states.Set(phase, value)
+	index := -1
+	for i, valueKey := range value.Values() {
+		if valueKey == key {
+			index = i
+			break
+		}
+	}
+
+	if index == -1 {
+		panic("key was not found in valueKeys")
+	}
+
+	value.Remove(index)
 }

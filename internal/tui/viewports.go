@@ -8,13 +8,13 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/elliotchance/orderedmap/v3"
+	"github.com/kirill-scherba/omap"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/config"
 )
 
 type Viewports struct {
-	viewports  *orderedmap.OrderedMap[string, *Viewport]
+	viewports  *omap.Omap[string, *Viewport]
 	dimensions *Dimensions
 	debug      *strings.Builder
 }
@@ -28,8 +28,13 @@ type Viewport struct {
 }
 
 func NewViewports(dimensions *Dimensions, debug *strings.Builder) *Viewports {
+	viewports, err := omap.New[string, *Viewport]()
+	if err != nil {
+		panic(err)
+	}
+
 	return &Viewports{
-		viewports:  orderedmap.NewOrderedMap[string, *Viewport](),
+		viewports:  viewports,
 		dimensions: dimensions,
 		debug:      debug,
 	}
@@ -173,7 +178,7 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xpath string) {
-	v.viewports.Delete(xpath)
+	v.viewports.Del(xpath)
 }
 
 func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
@@ -185,7 +190,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		var anyViewportClicked bool
 
 		// Check which viewport was clicked
-		for xpath := range v.viewports.AllFromFront() {
+		for xpath := range v.viewports.Records() {
 			// Check if click is on main viewport area
 			if zone.Get(xpath).InBounds(mouseMsg) {
 				clickedViewport = xpath
@@ -195,7 +200,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		}
 
 		// Update viewport selection state
-		for xpath, vpr := range v.viewports.AllFromFront() {
+		for xpath, vpr := range v.viewports.Records() {
 			if anyViewportClicked {
 				// A viewport was clicked, activate it and deactivate others
 				vpr.active = xpath == clickedViewport
@@ -208,7 +213,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 
 	// Handle mouse wheel scrolling for all mouse events
 	if mouseMsg, ok := msg.(tea.MouseMsg); ok {
-		for _, vpr := range v.viewports.AllFromFront() {
+		for _, vpr := range v.viewports.Records() {
 			// Handle mouse wheel scrolling - only for active viewports
 			// This is completely separate from selection logic
 			if vpr.active && mouseMsg.Y != 0 && mouseMsg.Action != tea.MouseActionPress {
@@ -224,7 +229,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	}
 
 	// Handle keyboard input and viewport updates for active viewports
-	for _, vpr := range v.viewports.AllFromFront() {
+	for _, vpr := range v.viewports.Records() {
 		if vpr.active {
 			if vpr.pty != nil {
 				switch msg := msg.(type) {
@@ -247,7 +252,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 func (v *Viewports) Debug() string {
 	str := fmt.Sprintf("\nViewports: %d\n", v.viewports.Len())
 
-	for pathx := range v.viewports.AllFromFront() {
+	for pathx := range v.viewports.Records() {
 		str += fmt.Sprintf("  '%s'\n", pathx)
 	}
 
@@ -255,7 +260,7 @@ func (v *Viewports) Debug() string {
 }
 
 func (v *Viewports) ActivateViewport(xpathToActivate string) {
-	for xpath, vpr := range v.viewports.AllFromFront() {
+	for xpath, vpr := range v.viewports.Records() {
 		vpr.active = xpath == xpathToActivate
 	}
 }

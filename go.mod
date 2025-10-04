@@ -8,10 +8,11 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.9
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/creack/pty v1.1.24
-	github.com/elliotchance/orderedmap/v3 v3.1.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gookit/goutil v0.7.1
+	github.com/hayageek/threadsafe v1.0.1
 	github.com/kevinburke/ssh_config v1.4.0
+	github.com/kirill-scherba/omap v0.0.14
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.0
@@ -24,6 +25,8 @@ require (
 )
 
 require (
+	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 // indirect
+	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect

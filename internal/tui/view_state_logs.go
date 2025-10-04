@@ -71,20 +71,20 @@ func (m *model) PrintBuildLogs() string {
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
+func (m *model) phaseNodes(xpath string, phaseLogs *config.PhaseLogs) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
-	if logs.Len() == 0 {
+	if phaseLogs.Len() == 0 {
 		return phaseNodes
 	}
 
-	for phase, log := range logs.All() {
-		xpath += string(phase)
-		tas := log.TimeAndState.GetTimeAndState()
+	for _, phaseLog := range phaseLogs.All() {
+		xpath += string(phaseLog.Key)
+		tas := phaseLog.Value.TimeAndState.GetTimeAndState()
 
 		// Phase header with spinner and right-aligned timing
 		iconOnFinished := "📋 "
-		phaseLabel := strings.ToUpper(string(phase))
+		phaseLabel := strings.ToUpper(string(phaseLog.Key))
 
 		phaseText := m.MostLeftAndMostRight(
 			12,
@@ -96,7 +96,7 @@ func (m *model) phaseNodes(xpath string, logs *config.PhaseLogs) []*tree.Tree {
 		phaseTree := tree.New().Root(phaseHeader)
 
 		// Commands and their output
-		for cmdIdx, cmd := range log.CommandLogs() {
+		for cmdIdx, cmd := range phaseLog.Value.CommandLogs() {
 			if cmd.Command.Load() != "" {
 				commandXpath := xpath + cmd.Command.Load()
 				cmdTas := cmd.TimeAndState.GetTimeAndState()

@@ -3,22 +3,21 @@ package config
 import (
 	"bytes"
 	"os"
-	"sync"
 
+	"github.com/hayageek/threadsafe"
 	"go.uber.org/atomic"
 )
 
 type CommandLog struct {
 	Command      atomic.String
-	mutex        sync.Mutex
-	stdInOutErr  []*bytes.Buffer // Each line is a separate buffer to allow line replacement
+	stdInOutErr  *threadsafe.Slice[*bytes.Buffer] // Each line is a separate buffer to allow line replacement
 	TimeAndState *TimeAndState
 	Pty          *os.File
 }
 
 func NewCommandLog() *CommandLog {
 	return &CommandLog{
-		stdInOutErr:  make([]*bytes.Buffer, 0),
+		stdInOutErr:  threadsafe.NewSlice[*bytes.Buffer](),
 		TimeAndState: NewTimeAndState(),
 	}
 }
@@ -30,11 +29,8 @@ func (cl *CommandLog) String() string {
 
 // Bytes returns the byte representation of all lines in StdInOutErr
 func (cl *CommandLog) Bytes() []byte {
-	cl.mutex.Lock()
-	defer cl.mutex.Unlock()
-
 	var result bytes.Buffer
-	for i, buf := range cl.stdInOutErr {
+	for i, buf := range cl.stdInOutErr.Values() {
 		if i > 0 {
 			result.WriteByte('\n')
 		}
@@ -50,15 +46,17 @@ func (cl *CommandLog) WriteString(s string) (int, error) {
 
 // Write writes bytes to the last line in StdInOutErr
 func (cl *CommandLog) Write(p []byte) (int, error) {
-	cl.mutex.Lock()
-	defer cl.mutex.Unlock()
-
 	// If there are no lines, create the first one
-	if len(cl.stdInOutErr) == 0 {
-		cl.stdInOutErr = append(cl.stdInOutErr, bytes.NewBuffer(nil))
+	if cl.stdInOutErr.Length() == 0 {
+		cl.stdInOutErr.Append(bytes.NewBuffer(nil))
 	}
 
-	return cl.stdInOutErr[len(cl.stdInOutErr)-1].Write(p)
+	stdInOutErr, ok := cl.stdInOutErr.Get(cl.stdInOutErr.Length() - 1)
+	if !ok {
+		panic("stdInOutErr does not have element on specified index")
+	}
+
+	return stdInOutErr.Write(p)
 }
 
 // WriteLine wrapper
@@ -68,20 +66,17 @@ func (cl *CommandLog) WriteLineString(s string) {
 
 // WriteLine writes a new line to StdInOutErr
 func (cl *CommandLog) WriteLine(p []byte) {
-	cl.mutex.Lock()
-	defer cl.mutex.Unlock()
-
-	cl.stdInOutErr = append(cl.stdInOutErr, bytes.NewBuffer(p))
+	cl.stdInOutErr.Append(bytes.NewBuffer(p))
 }
 
 // ReplaceLastLine replaces the content of the last line in StdInOutErr
 func (cl *CommandLog) ReplaceLastLine(p []byte) {
-	cl.mutex.Lock()
-	defer cl.mutex.Unlock()
-
-	if len(cl.stdInOutErr) == 0 {
-		cl.stdInOutErr = append(cl.stdInOutErr, bytes.NewBuffer(p))
+	if cl.stdInOutErr.Length() == 0 {
+		cl.WriteLine(p)
 	} else {
-		cl.stdInOutErr[len(cl.stdInOutErr)-1] = bytes.NewBuffer(p)
+		ok := cl.stdInOutErr.Set(cl.stdInOutErr.Length()-1, bytes.NewBuffer(p))
+		if !ok {
+			panic("stdInOutErr does not have element on specified index")
+		}
 	}
 }
