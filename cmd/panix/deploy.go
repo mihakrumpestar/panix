@@ -27,6 +27,7 @@ This is the main command for deploying NixOS configurations.`,
 			phases.Transfer,
 			phases.Secrets,
 			phases.Activate,
+			phases.PostFlakeHook,
 		}
 
 		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)

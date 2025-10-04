@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 // Render generates the Docker-style build log view with tree structure
@@ -78,13 +79,16 @@ func (m *model) phaseNodes(xpath string, phaseLogs *config.PhaseLogs) []*tree.Tr
 		return phaseNodes
 	}
 
-	for _, phaseLog := range phaseLogs.All() {
-		xpath += string(phaseLog.Key)
-		tas := phaseLog.Value.TimeAndState.GetTimeAndState()
+	for _, entry := range phaseLogs.All() {
+		phase := entry.Key
+		phaseLog := entry.Value
+
+		xpath += string(phase)
+		tas := phaseLog.TimeAndState.GetTimeAndState()
 
 		// Phase header with spinner and right-aligned timing
 		iconOnFinished := "📋 "
-		phaseLabel := strings.ToUpper(string(phaseLog.Key))
+		phaseLabel := strings.ToUpper(string(phase))
 
 		phaseText := m.MostLeftAndMostRight(
 			12,
@@ -96,40 +100,46 @@ func (m *model) phaseNodes(xpath string, phaseLogs *config.PhaseLogs) []*tree.Tr
 		phaseTree := tree.New().Root(phaseHeader)
 
 		// Commands and their output
-		for cmdIdx, cmd := range phaseLog.Value.CommandLogs() {
-			if cmd.Command.Load() != "" {
-				commandXpath := xpath + cmd.Command.Load()
-				cmdTas := cmd.TimeAndState.GetTimeAndState()
+		for cmdIdx, cmd := range phaseLog.CommandLogs() {
+			cmdLabel := cmd.Command.Load()
+			cmdTas := cmd.TimeAndState.GetTimeAndState()
 
-				iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
-				cmdLabel := cmd.Command
-
-				cmdText := m.MostLeftAndMostRight(
-					12,
-					m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel.Load(), cmdTas),
-					m.RightSideDuration(cmdTas),
-				)
-
-				cmdHeader := config.DefaultColorScheme().Command.Render(cmdText)
-				cmdTree := tree.New().Root(cmdHeader)
-
-				// Command output
-				output := strings.TrimSpace(cmd.String())
-				if len(output) != 0 {
-					vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output, cmd.Pty, 4)
-					cmdTree.Child(vpr)
+			if phase == phases.Status && cmdTas.Error == nil {
+				if cmdIdx == len(phaseLog.CommandLogs())-1 {
+					cmdLabel = "(hidden)"
 				} else {
-					m.modelView.viewports.RemoveIfExistsViewport(commandXpath)
+					continue
 				}
-
-				// Command error status
-				err := cmdTas.Error
-				if err != nil {
-					cmdTree.Child(config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
-				}
-
-				phaseTree.Child(cmdTree)
 			}
+
+			iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
+			commandXpath := xpath + cmdLabel
+
+			cmdText := m.MostLeftAndMostRight(
+				12,
+				m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel, cmdTas),
+				m.RightSideDuration(cmdTas),
+			)
+
+			cmdHeader := config.DefaultColorScheme().Command.Render(cmdText)
+			cmdTree := tree.New().Root(cmdHeader)
+
+			// Command output
+			output := strings.TrimSpace(cmd.String())
+			if len(output) != 0 {
+				vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output, cmd.Pty, 4)
+				cmdTree.Child(vpr)
+			} else {
+				m.modelView.viewports.RemoveIfExistsViewport(commandXpath)
+			}
+
+			// Command error status
+			err := cmdTas.Error
+			if err != nil {
+				cmdTree.Child(config.DefaultColorScheme().Error.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
+			}
+
+			phaseTree.Child(cmdTree)
 		}
 
 		// Show error details if failed

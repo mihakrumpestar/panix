@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"iter"
 	"slices"
+	"strconv"
 
 	"github.com/hayageek/threadsafe"
 	"github.com/kirill-scherba/omap"
@@ -19,7 +20,7 @@ const (
 	Transfer      Phase = "transfer"
 	Secrets       Phase = "secrets"
 	Activate      Phase = "activate"
-	Rollback      Phase = "rollback"
+	Done          Phase = "done"
 	PostFlakeHook Phase = "post-flake-hook"
 )
 
@@ -32,7 +33,7 @@ func PhasesInOrder() []Phase {
 		Transfer,
 		Secrets,
 		Activate,
-		Rollback,
+		Done,
 		PostFlakeHook,
 	}
 }
@@ -51,10 +52,14 @@ func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, e
 
 	// Keep only required phases
 	phasesInOrder = slices.DeleteFunc(phasesInOrder, func(phase Phase) bool {
-		return !slices.Contains(requiredPhases, phase)
+		return !slices.Contains(requiredPhases, phase) && phase != Done
 	})
 
 	// Remove skipped phases
+	if slices.Contains(skipPhases, Done) {
+		return nil, fmt.Errorf("%s phase can't be skipped", strconv.Quote(string(Done)))
+	}
+
 	phasesInOrder = slices.DeleteFunc(phasesInOrder, func(phase Phase) bool {
 		return slices.Contains(skipPhases, phase)
 	})
