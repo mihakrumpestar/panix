@@ -35,7 +35,7 @@ func (m *model) ViewStatusTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCHITECTURE", "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL", "STATUS").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCHITECTURE", "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -65,8 +65,6 @@ func (m *model) ViewStatusTable() string {
 				return colors.TableRow.Width(lipgloss.Width("25.11.20250624.4b1164c"))
 			case 10: // Kernel
 				return colors.TableRow.Width(lipgloss.Width("KERNEL"))
-			case 11: // STATUS
-				return colors.TableRow.MaxWidth(1000)
 			default:
 				return colors.TableRow
 			}
@@ -81,12 +79,6 @@ func (m *model) ViewStatusTable() string {
 
 		ps := machine.MetaStatus
 		log := machine.Logs.SafeGet(phases.Status)
-
-		status := ""
-		lastErr := log.TimeAndState.GetTimeAndState().Error
-		if lastErr != nil {
-			status = lastErr.Error()
-		}
 
 		// Determine if we should show flake name (only on first occurrence)
 		showFlake := flake.Name != prevFlakeName
@@ -123,7 +115,6 @@ func (m *model) ViewStatusTable() string {
 			ps.Date.Load(),
 			ps.Nixos.Load(),
 			ps.Kernel.Load(),
-			status,
 		)
 	})
 

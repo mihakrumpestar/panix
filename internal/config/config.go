@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/pkg/sorted_map"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"go.uber.org/atomic"
 )
@@ -49,7 +50,7 @@ type Bootstrap struct {
 // Root
 
 type Root struct {
-	Flakes     SortedMap[string, *Flake] `yaml:"flakes"`
+	Flakes     sorted_map.SortedMap[string, *Flake] `yaml:"flakes"`
 	Attributes `yaml:",squash"`
 }
 
@@ -67,8 +68,8 @@ func (r *Root) Init(name string) error {
 type Flake struct {
 	Url            string `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
 	Attributes     `yaml:",squash"`
-	Configurations SortedMap[string, *Configuration] `yaml:"configurations"`
-	FlakeHooks     FlakeHooks                        `yaml:"flakeHooks"`
+	Configurations sorted_map.SortedMap[string, *Configuration] `yaml:"configurations"`
+	FlakeHooks     FlakeHooks                                   `yaml:"flakeHooks"`
 }
 
 func (f *Flake) Init(name string) error {
@@ -90,9 +91,9 @@ type FlakeHooks struct {
 type Configuration struct {
 	FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
 	Attributes  `yaml:",squash"`
-	Machines    SortedMap[string, *Machine] `yaml:"machines"`
+	Machines    sorted_map.SortedMap[string, *Machine] `yaml:"machines"`
 	// Internal
-	MetaBuild MetaBuild
+	MetaBuild *MetaBuild
 }
 
 type MetaBuild struct {
@@ -104,6 +105,11 @@ func (c *Configuration) Init(name string) error {
 	err := c.InitAttributes(name)
 	if err != nil {
 		return err
+	}
+
+	// Internal
+	if c.MetaBuild == nil {
+		c.MetaBuild = &MetaBuild{}
 	}
 
 	return nil
@@ -144,6 +150,8 @@ func (m *Machine) Init(name string) error {
 		sudoProgram := "sudo" // Default sudo program
 		m.SudoProgram = &sudoProgram
 	}
+
+	// Internal
 
 	if m.MetaStatus == nil {
 		m.MetaStatus = &MetaStatus{}
