@@ -5,6 +5,7 @@ import (
 
 	"github.com/hayageek/threadsafe"
 	"github.com/kirill-scherba/omap"
+	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -54,13 +55,13 @@ func (l *PhaseLogs) Del(phase phases.Phase) {
 
 type PhaseLog struct {
 	commandLogs  *threadsafe.Slice[*CommandLog]
-	TimeAndState *TimeAndState
+	TimeAndState *time_and_state.TimeAndState
 }
 
 func NewPhaseLog() *PhaseLog {
 	return &PhaseLog{
 		commandLogs:  threadsafe.NewSlice[*CommandLog](),
-		TimeAndState: NewTimeAndState(),
+		TimeAndState: time_and_state.NewTimeAndState(),
 	}
 }
 
@@ -82,7 +83,7 @@ func (pLog *PhaseLog) NewCommand() *CommandLog {
 func (pLog *PhaseLog) AddMessageOnly(msg ...string) *CommandLog {
 	commandLog := pLog.NewCommand()
 
-	commandLog.Command.Store("-> " + strings.Join(msg, ""))
+	commandLog.Command.Store(strings.Join(msg, ""))
 
 	commandLog.TimeAndState.StartTimer()
 	commandLog.TimeAndState.EndTimer()

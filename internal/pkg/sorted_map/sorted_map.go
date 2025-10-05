@@ -1,4 +1,4 @@
-package config
+package sorted_map
 
 import (
 	"cmp"

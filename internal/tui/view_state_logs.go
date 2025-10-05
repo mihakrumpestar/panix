@@ -2,12 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -105,7 +107,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *config.PhaseLogs) []*tree.Tr
 			cmdOutput := cmd.String()
 			cmdTas := cmd.TimeAndState.GetTimeAndState()
 
-			if phase == phases.Status && cmdTas.Error == nil {
+			if slices.Contains([]phases.Phase{phases.Status, phases.Secrets}, phase) && cmdTas.Error == nil {
 				if cmdIdx == len(phaseLog.CommandLogs())-1 {
 					cmdLabel = "(hidden)"
 					cmdOutput = ""
@@ -188,7 +190,7 @@ func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
 	return lipgloss.JoinHorizontal(0, leftBlock, rightBlock)
 }
 
-func (m *model) RightSideDuration(tas config.TimeAndStateCopy) string {
+func (m *model) RightSideDuration(tas time_and_state.TimeAndStateInternal) string {
 	var durationStr string
 
 	if tas.Started && tas.Finished {
@@ -203,7 +205,7 @@ func (m *model) RightSideDuration(tas config.TimeAndStateCopy) string {
 	return durationStr
 }
 
-func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content string, tas config.TimeAndStateCopy) string {
+func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content string, tas time_and_state.TimeAndStateInternal) string {
 	var iconOrSpinner string
 
 	if tas.Started && tas.Finished {
