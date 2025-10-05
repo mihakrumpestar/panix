@@ -38,12 +38,56 @@ func PhasesInOrder() []Phase {
 	}
 }
 
+type PhaseState struct {
+	Running *Tasks
+	Failed  *Tasks
+	Done    *Tasks // Only for the "done" phase
+}
+
+type Tasks struct {
+	tasks *threadsafe.Slice[string]
+}
+
+func NewTasks() *Tasks {
+	return &Tasks{
+		threadsafe.NewSlice[string](),
+	}
+}
+
+func (t *Tasks) List() []string {
+	return t.tasks.Values()
+}
+
+func (t *Tasks) Len() int {
+	return t.tasks.Length()
+}
+
+func (t *Tasks) Add(task string) {
+	t.tasks.Append(task)
+}
+
+func (t *Tasks) Rem(task string) {
+	index := -1
+	for i, value := range t.tasks.Values() {
+		if value == task {
+			index = i
+			break
+		}
+	}
+
+	if index == -1 {
+		panic("key was not found in valueKeys")
+	}
+
+	t.tasks.Remove(index)
+}
+
 type PhaseStates struct {
-	states *omap.Omap[Phase, *threadsafe.Slice[string]]
+	states *omap.Omap[Phase, *PhaseState]
 }
 
 func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, error) {
-	states, err := omap.New[Phase, *threadsafe.Slice[string]]()
+	states, err := omap.New[Phase, *PhaseState]()
 	if err != nil {
 		panic(err)
 	}
@@ -76,8 +120,13 @@ func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, e
 		return nil, fmt.Errorf("phase %s is can't be the first phase, allowed are %s", firstPhase, validFirstPhases)
 	}
 
+	// Initialize task status for each phase
 	for _, phase := range phasesInOrder {
-		err := states.Set(phase, threadsafe.NewSlice[string]())
+		err := states.Set(phase, &PhaseState{
+			Running: NewTasks(),
+			Failed:  NewTasks(),
+			Done:    NewTasks(),
+		})
 		if err != nil {
 			panic(err)
 		}
@@ -93,14 +142,14 @@ func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, e
 func (ps *PhaseStates) Keys() []Phase {
 	phases := make([]Phase, 0)
 
-	ps.states.ForEach(func(key Phase, data *threadsafe.Slice[string]) {
+	ps.states.ForEach(func(key Phase, data *PhaseState) {
 		phases = append(phases, key)
 	})
 
 	return phases
 }
 
-func (ps *PhaseStates) Value(phase Phase) *threadsafe.Slice[string] {
+func (ps *PhaseStates) Value(phase Phase) *PhaseState {
 	value, ok := ps.states.Get(phase)
 	if !ok {
 		panic("phaseState with given key does not exist")
@@ -109,36 +158,6 @@ func (ps *PhaseStates) Value(phase Phase) *threadsafe.Slice[string] {
 	return value
 }
 
-func (ps *PhaseStates) Range() iter.Seq2[Phase, *threadsafe.Slice[string]] {
+func (ps *PhaseStates) Range() iter.Seq2[Phase, *PhaseState] {
 	return ps.states.Records()
-}
-
-func (ps *PhaseStates) AddKeyToValue(phase Phase, key string) {
-	value, ok := ps.states.Get(phase)
-	if !ok {
-		panic("phaseState with given key does not exist")
-	}
-
-	value.Append(key)
-}
-
-func (ps *PhaseStates) RemoveKeyFromValue(phase Phase, key string) {
-	value, ok := ps.states.Get(phase)
-	if !ok {
-		panic("phaseState with given key does not exist")
-	}
-
-	index := -1
-	for i, valueKey := range value.Values() {
-		if valueKey == key {
-			index = i
-			break
-		}
-	}
-
-	if index == -1 {
-		panic("key was not found in valueKeys")
-	}
-
-	value.Remove(index)
 }
