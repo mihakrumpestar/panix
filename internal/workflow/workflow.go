@@ -9,8 +9,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/hook"
+	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/mihakrumpestar/panix/internal/workflow/shared_deps"
 	"github.com/pkg/errors"
 )
 
@@ -119,12 +119,12 @@ func (w *Workflow) CreateWorkflow() error {
 			flakePool := w.state.Pool.NewGroup()
 
 			flakeIdentifier := flake.Name
-			preFlakeHook := shared_deps.NewOnceAsync()
-			postFlakeHook := shared_deps.NewOnceAsync()
+			preFlakeHook := once_async.NewOnceAsync()
+			postFlakeHook := once_async.NewOnceAsync()
 
 			for _, configuration := range flake.Configurations.SortedMap() {
 				configurationIdentifier := fmt.Sprintf("%s/%s", flake.Name, configuration.Name)
-				build := shared_deps.NewOnceAsync()
+				build := once_async.NewOnceAsync()
 
 				for _, machine := range configuration.Machines.SortedMap() {
 					machineIdentifier := fmt.Sprintf("%s/%s/%s", flake.Name, configuration.Name, machine.Name)

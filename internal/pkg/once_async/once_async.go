@@ -1,4 +1,4 @@
-package shared_deps
+package once_async
 
 import (
 	"sync"
