@@ -12,7 +12,7 @@ import (
 )
 
 // Render generates the Docker-style build log view with tree structure
-func (m *model) PrintBuildLogs() string {
+func (m *model) ViewStateLogs() string {
 	var builder strings.Builder
 
 	// Header for the log view
@@ -102,11 +102,13 @@ func (m *model) phaseNodes(xpath string, phaseLogs *config.PhaseLogs) []*tree.Tr
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
 			cmdLabel := cmd.Command.Load()
+			cmdOutput := cmd.String()
 			cmdTas := cmd.TimeAndState.GetTimeAndState()
 
 			if phase == phases.Status && cmdTas.Error == nil {
 				if cmdIdx == len(phaseLog.CommandLogs())-1 {
 					cmdLabel = "(hidden)"
+					cmdOutput = ""
 				} else {
 					continue
 				}
@@ -125,7 +127,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *config.PhaseLogs) []*tree.Tr
 			cmdTree := tree.New().Root(cmdHeader)
 
 			// Command output
-			output := strings.TrimSpace(cmd.String())
+			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
 				vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output, cmd.Pty, 4)
 				cmdTree.Child(vpr)

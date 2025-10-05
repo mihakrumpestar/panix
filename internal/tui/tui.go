@@ -239,16 +239,6 @@ func (m model) View() string {
 	headerAndInstructions := header + instructions
 	builder.WriteString(headerAndInstructions)
 
-	for phase, value := range m.workflow.State().Phases.Range() {
-		if strings.Contains(string(phase), "hook") {
-			continue
-		}
-
-		builder.WriteString(fmt.Sprintf("%s %v\n", phase, value.Length()))
-	}
-
-	builder.WriteString("\n")
-
 	if m.workflow.State() == nil {
 		builder.WriteString("No state available")
 	}
@@ -257,7 +247,7 @@ func (m model) View() string {
 	case TuiViewModeAll:
 		fallthrough
 	case TuiViewModeStatus:
-		view := m.PrintStatusPhaseMachineTable()
+		view := m.ViewStatusTable()
 		if view == "" {
 			builder.WriteString("No data available")
 		} else {
@@ -271,7 +261,14 @@ func (m model) View() string {
 
 		fallthrough
 	case TuiViewModeLogs:
-		view := m.PrintBuildLogs()
+		view := m.ViewPhaseStatus()
+		if view == "" {
+			builder.WriteString("No data available")
+		} else {
+			builder.WriteString(view)
+		}
+
+		view = m.ViewStateLogs()
 		if view == "" {
 			builder.WriteString("No data available")
 		} else {

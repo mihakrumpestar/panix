@@ -10,7 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-func (m *model) PrintStatusPhaseMachineTable() string {
+func (m *model) ViewStatusTable() string {
 	state := m.workflow.State()
 
 	colors := config.DefaultColorScheme()

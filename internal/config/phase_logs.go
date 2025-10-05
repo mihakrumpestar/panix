@@ -43,6 +43,13 @@ func (l *PhaseLogs) Len() int {
 	return l.logs.Len()
 }
 
+func (l *PhaseLogs) Del(phase phases.Phase) {
+	_, ok := l.logs.Del(phase)
+	if !ok {
+		panic("key for del does not exist")
+	}
+}
+
 // PhaseLog
 
 type PhaseLog struct {

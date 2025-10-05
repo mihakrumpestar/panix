@@ -83,18 +83,26 @@ func (w *Workflow) Cancel() context.CancelFunc {
 }
 
 func (w *Workflow) NewTaskWithRetry(phase phases.Phase, identifier string, f func() error) error {
-	w.state.Phases.AddKeyToValue(phase, identifier)
-	defer w.state.Phases.RemoveKeyFromValue(phase, identifier)
+	phaseTaskStatus := w.state.Phases.Value(phase)
 
 	for {
+		phaseTaskStatus.Running.Add(identifier)
 		err := f()
+		phaseTaskStatus.Running.Rem(identifier)
+
 		if err != nil {
+			phaseTaskStatus.Failed.Add(identifier)
+
 			if w.state.Conf.Global.RequireAllSuccess {
 				w.cancel()
 				return err
 			}
 
 			<-w.state.Retry.retry // Pauses execution
+
+			// Task is being retried, so it is not failed
+			phaseTaskStatus.Failed.Rem(identifier)
+			// TODO: logs.Del(phase)
 		} else {
 			return nil
 		}
@@ -197,7 +205,7 @@ func (w *Workflow) CreateWorkflow() error {
 							}
 						}
 
-						w.state.Phases.AddKeyToValue(phases.Done, machineIdentifier)
+						w.state.Phases.Value(phases.Done).Done.Add(machineIdentifier)
 
 						return nil
 					})
