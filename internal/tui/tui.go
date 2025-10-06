@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -77,7 +76,7 @@ func NewTui(workflow *workflow.Workflow) error {
 			mode:        defaultModelView,
 			dimensions:  dimensions,
 			spinners:    NewSpinners(),
-			viewports:   NewViewports(dimensions, debugOutput),
+			viewports:   NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput),
 			debugOutput: debugOutput,
 		},
 		rawKeyReader: rawKeyReader,
@@ -87,7 +86,7 @@ func NewTui(workflow *workflow.Workflow) error {
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
 
-	if workflow.State().Conf.Global.Verbose {
+	if workflow.State().Conf.Flags.Verbose {
 		fmt.Println("TUI initialized")
 	}
 
@@ -279,10 +278,10 @@ func (m model) View() string {
 	if m.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
-		builder.WriteString(config.DefaultColorScheme().Error.Render(errorHeader + errorContent))
+		builder.WriteString(m.workflow.State().Conf.Tui.ColorScheme.Error.Render(errorHeader + errorContent))
 	}
 
-	if m.workflow.State().Conf.Global.Debug {
+	if m.workflow.State().Conf.Flags.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += m.modelView.viewports.Debug()

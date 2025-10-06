@@ -50,8 +50,8 @@ type ColorScheme struct {
 }
 
 // DefaultColorScheme returns the default color scheme
-func DefaultColorScheme() ColorScheme {
-	return ColorScheme{
+func defaultColorScheme() *ColorScheme {
+	return &ColorScheme{
 		// Header colors
 		HeaderTitle: lipgloss.NewStyle().
 			Bold(true).
@@ -142,14 +142,4 @@ func DefaultColorScheme() ColorScheme {
 		IconCommand:       '⚙',
 		IconError:         '✗',
 	}
-}
-
-// DarkColorScheme returns a dark theme color scheme
-func DarkColorScheme() ColorScheme {
-	return DefaultColorScheme() // For now, use the same as default
-}
-
-// LightColorScheme returns a light theme color scheme (deprecated - use DefaultColorScheme)
-func LightColorScheme() ColorScheme {
-	return DefaultColorScheme()
 }

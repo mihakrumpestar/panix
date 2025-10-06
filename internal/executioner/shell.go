@@ -10,11 +10,11 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
-	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(log bool, onFailure func(*config.CommandLog, error) error, onSuccess func(*config.CommandLog) error, commandWithArgs ...string) (err error) {
+func (ex *Executioner) shellStream(log bool, onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) (err error) {
 	commandLog := ex.phaseLog.NewCommand()
 
 	commandLog.TimeAndState.StartTimer()
@@ -127,7 +127,7 @@ func ptyError(err error) error {
 
 // processTerminalOutput processes terminal output to handle control sequences
 // like a real terminal would, but in a way that's safe for TUI display
-func processTerminalOutput(buf []byte, exm *config.CommandLog) error {
+func processTerminalOutput(buf []byte, exm *logs.CommandLog) error {
 	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), []byte{})
 
 	// Split by position markers

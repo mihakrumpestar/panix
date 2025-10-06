@@ -8,7 +8,7 @@ import (
 
 func (w *Workflow) executeMachineRollback(flakeName, configName, machineName string, machine *config.Machine) error {
 	// TODO: Implement rollback functionality
-	if w.state.Conf.Global.Verbose {
+	if w.state.Conf.Flags.Verbose {
 		fmt.Printf("Rollback for machine %s/%s/%s: TODO - implement rollback\n", flakeName, configName, machineName)
 	}
 

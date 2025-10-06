@@ -1,14 +1,10 @@
 package config
 
 import (
-	"errors"
-	"fmt"
-	"strconv"
-	"strings"
-	"time"
-
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
+	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/sorted_map"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"go.uber.org/atomic"
 )
 
@@ -17,45 +13,20 @@ const (
 )
 
 type Config struct {
-	Global Global `yaml:"global"`
-	Root   *Root  `yaml:"root"`
-}
-
-type Global struct {
-	Filters              Filters        `yaml:"filters"`
-	Bootstrap            Bootstrap      `yaml:"bootstrap"`
-	RequireAllSuccess    bool           `yaml:"requireAllSuccess"`
-	OverrideLocalMachine string         `yaml:"overrideLocalMachine"`
-	DryRun               bool           `yaml:"dryRun"`
-	Timeout              time.Duration  `yaml:"timeout"`
-	Concurrency          int            `yaml:"concurrency"`
-	SkipPhases           []phases.Phase `yaml:"skipPhases"`
-	Verbose              bool           `yaml:"verbose"`
-	Debug                bool           `yaml:"debug"`
-	//Json              bool         `yaml:"json"` // Maybe later
-}
-
-type Filters struct {
-	Flakes         []string `yaml:"flakes"`
-	Configurations []string `yaml:"configurations"`
-	Machines       []string `yaml:"machines"`
-	Tags           []string `yaml:"tags"`
-}
-
-type Bootstrap struct {
-	DisableAuto  bool `yaml:"disableAuto"`
-	DisableDisko bool `yaml:"disableDisko"`
+	Flags *config_flags.Flags `yaml:"flags"`
+	Root  *Root               `yaml:"root"`
+	Tui   *Tui                `yaml:"tui"`
 }
 
 // Root
 
 type Root struct {
-	Flakes     sorted_map.SortedMap[string, *Flake] `yaml:"flakes"`
-	Attributes `yaml:",squash"`
+	Flakes                       sorted_map.SortedMap[string, *Flake] `yaml:"flakes"`
+	config_attributes.Attributes `yaml:",squash"`
 }
 
-func (r *Root) Init(name string) error {
-	err := r.InitAttributes("")
+func (r *Root) Init() error {
+	err := r.Attributes.Init("", &config_attributes.Attributes{}, &config_flags.Flags{})
 	if err != nil {
 		return err
 	}
@@ -66,19 +37,10 @@ func (r *Root) Init(name string) error {
 // Flake
 
 type Flake struct {
-	Url            string `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
-	Attributes     `yaml:",squash"`
-	Configurations sorted_map.SortedMap[string, *Configuration] `yaml:"configurations"`
-	FlakeHooks     FlakeHooks                                   `yaml:"flakeHooks"`
-}
-
-func (f *Flake) Init(name string) error {
-	err := f.InitAttributes(name)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	Configurations               sorted_map.SortedMap[string, *Configuration] `yaml:"configurations"`
+	config_attributes.Attributes `yaml:",squash"`
+	Url                          string     `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
+	FlakeHooks                   FlakeHooks `yaml:"flakeHooks"`
 }
 
 type FlakeHooks struct {
@@ -86,13 +48,23 @@ type FlakeHooks struct {
 	Post string `yaml:",post"`
 }
 
+func (f *Flake) Init(name string, passAttr *config_attributes.Attributes, flags *config_flags.Flags) error {
+	err := f.Attributes.Init(name, passAttr, flags)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Configuration
 
 type Configuration struct {
-	FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
-	Attributes  `yaml:",squash"`
-	Machines    sorted_map.SortedMap[string, *Machine] `yaml:"machines"`
+	Machines                     sorted_map.SortedMap[string, *Machine] `yaml:"machines"`
+	config_attributes.Attributes `yaml:",squash"`
+	// TODO: FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
 	// Internal
+	Flake     *Flake
 	MetaBuild *MetaBuild
 }
 
@@ -101,13 +73,16 @@ type MetaBuild struct {
 	DiskoScript   string // Only on bootstrap
 }
 
-func (c *Configuration) Init(name string) error {
-	err := c.InitAttributes(name)
+func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Flags) error {
+	err := c.Attributes.Init(name, &parent.Attributes, flags)
 	if err != nil {
 		return err
 	}
 
 	// Internal
+
+	c.Flake = parent
+
 	if c.MetaBuild == nil {
 		c.MetaBuild = &MetaBuild{}
 	}
@@ -118,12 +93,13 @@ func (c *Configuration) Init(name string) error {
 // Machine
 
 type Machine struct {
-	Attributes `yaml:",squash"`
+	config_attributes.Attributes `yaml:",squash"`
 	// Internal
-	MetaStatus *MetaStatus
+	Configuration *Configuration
+	MetaStatus    *MetaStatus
 }
 
-type MetaStatus struct {
+type MetaStatus struct { // Atomic due to being read and write at the same time
 	Reachable      atomic.Bool
 	SSHConnectable atomic.Bool
 	Architecture   atomic.String
@@ -134,16 +110,11 @@ type MetaStatus struct {
 	Kernel         atomic.String
 }
 
-func (m *Machine) Init(name string) error {
-	err := m.InitAttributes(name)
-	if err != nil {
-		return err
-	}
-
+func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.Flags) error {
 	// Only machine has them always initialized (root, flake, configurations do not)
 
-	if m.Ssh == nil {
-		m.Ssh = &SshClient{}
+	if m.Ssh == nil { // Has to be initialized before InitAttributes
+		m.Ssh = &ssh.SshClient{}
 	}
 
 	if m.SudoProgram == nil {
@@ -151,7 +122,16 @@ func (m *Machine) Init(name string) error {
 		m.SudoProgram = &sudoProgram
 	}
 
+	// Regular
+
+	err := m.Attributes.Init(name, &parent.Attributes, flags)
+	if err != nil {
+		return err
+	}
+
 	// Internal
+
+	m.Configuration = parent
 
 	if m.MetaStatus == nil {
 		m.MetaStatus = &MetaStatus{}
@@ -160,68 +140,9 @@ func (m *Machine) Init(name string) error {
 	return nil
 }
 
-// Flake, Configuration and Machine Attributes
+// Tui
 
-type Attributes struct {
-	Ssh                *SshClient      `yaml:"ssh,omitempty"`
-	Tags               []string        `yaml:"tags"`
-	Secrets            []*SecretConfig `yaml:"secrets,omitempty"`
-	Disabled           bool            `yaml:"disabled"`
-	SudoProgram        *string         `yaml:"sudo_program,omitempty"` // Default it is "sudo", if specified (but empty string), it will disable privilidge escalation altogether
-	HardwareConfigPath string          `yaml:"hardware_config_path"`
-
-	// Internal
-	Name    string
-	Message string
-	Logs    *PhaseLogs
-}
-
-func (a *Attributes) InitAttributes(name string) error {
-	a.Name = name
-	a.Logs = NewPhaseLogs()
-
-	for _, secret := range a.Secrets {
-		err := secret.Validate()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-type SecretConfig struct {
-	Local  Local  `yaml:"local"`
-	Remote Remote `yaml:"remote"`
-}
-
-type Local struct {
-	Path          *string `yaml:"path"`
-	CommandOutput *string `yaml:"commandOutput"`
-}
-
-type Remote struct {
-	Path string `yaml:"path"`
-	UID  *uint  `yaml:"uid,omitempty"`
-	GID  *uint  `yaml:"gid,omitempty"`
-}
-
-func (sc *SecretConfig) Validate() error {
-	if sc.Local.Path == nil && sc.Local.CommandOutput == nil {
-		return errors.New("both local input socrets options are empty")
-	}
-
-	if sc.Local.Path != nil && sc.Local.CommandOutput != nil {
-		return errors.New("can't use both local input socrets options")
-	}
-
-	if sc.Remote.Path == "" {
-		return errors.New("remote secrets path is empty")
-	}
-
-	if !strings.HasPrefix(sc.Remote.Path, "/") {
-		return fmt.Errorf("remote secrets path must be absolute for %s", strconv.Quote(sc.Remote.Path))
-	}
-
-	return nil
+type Tui struct {
+	ShowAllBuildLogs bool `yaml:"showAllBuildLogs"`
+	ColorScheme      *ColorScheme
 }

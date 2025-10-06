@@ -1,7 +1,6 @@
-global:
+flags:
   #bootstrap:
   #  autoBootstrap: false
-  concurrency: 0
   timeout: 7200 # 2h
   requireAllSuccess: false
   #dryRun: false
@@ -33,3 +32,7 @@ root:
                   remote:
                     path: /tmp/README2.md
             fake:
+              ssh:
+                hostname: fake
+                username: root
+                port: 22

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/gobeam/stringy"
@@ -65,7 +64,7 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 					// Transform the key in whatever manner.
 					keyRaw := stringy.New(f.Name) //.CamelCase()
 
-					key := keyRaw.Prefix("global.")
+					key := keyRaw.Prefix("flags.")
 
 					val := posflag.FlagVal(flags, f)
 
@@ -98,20 +97,26 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		return nil, fmt.Errorf("unable to decode into struct: %w", err)
 	}
 
-	// Convert timeout from miliseconds to seconds for duration
-	conf.Global.Timeout *= time.Second
+	conf.Flags.Setup()
+
+	// TODO: implement file loader than can parse custom configs
+	if conf.Tui == nil {
+		conf.Tui = &Tui{}
+	}
+
+	conf.Tui.ColorScheme = defaultColorScheme()
 
 	err = conf.validateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	err = conf.filterAndExpandConfigEntrys()
+	err = conf.filterRootTree()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	if conf.Global.Debug {
+	if conf.Flags.Debug {
 		dump.Config(func(d *dump.Options) {
 			d.BytesAsString = true
 			d.SkipNilField = true
@@ -131,7 +136,7 @@ func (c *Config) validateConfig() error {
 		return fmt.Errorf("root is nil")
 	}
 
-	err := c.Root.Init("")
+	err := c.Root.Init()
 	if err != nil {
 		return err
 	}
@@ -145,7 +150,7 @@ func (c *Config) validateConfig() error {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
 
-		err := flake.Init(flakeName)
+		err := flake.Init(flakeName, &c.Root.Attributes, c.Flags)
 		if err != nil {
 			return err
 		}
@@ -159,7 +164,7 @@ func (c *Config) validateConfig() error {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			err := configuration.Init(configurationName)
+			err := configuration.Init(configurationName, flake, c.Flags)
 			if err != nil {
 				return err
 			}
@@ -170,7 +175,7 @@ func (c *Config) validateConfig() error {
 					configuration.Machines[machineName] = machine
 				}
 
-				err = machine.Init(machineName)
+				err = machine.Init(machineName, configuration, c.Flags)
 				if err != nil {
 					return err
 				}
@@ -181,53 +186,29 @@ func (c *Config) validateConfig() error {
 	return nil
 }
 
-// FilterConfigEntrys filters the configuration based on command-line or global selections.
-// An entry is kept if it matches all provided filters (flakes, configurations, machines, tags) and is not disabled.
-// If a filter type is not provided (e.g., the 'machines' slice is empty), it is not used for filtering.
-func (c *Config) filterAndExpandConfigEntrys() error {
-
-	sshConfig, err := LoadSshConfig()
-	if err != nil {
-		return err
-	}
-
-	flakesFilter := c.Global.Filters.Flakes
-	configurationsFilter := c.Global.Filters.Configurations
-	machinesFilter := c.Global.Filters.Machines
-
+// FilterConfigEntrys filters the configuration based on command-line or global selections
+func (c *Config) filterRootTree() error {
 	for flakeName, flake := range c.Root.Flakes.SortedMap() {
-		if (len(flakesFilter) > 0 && !slices.Contains(flakesFilter, flakeName)) || flake.Disabled {
+		if flake.Attributes.Disabled {
 			delete(c.Root.Flakes, flakeName)
 			continue
 		}
 
 		for configurationName, configuration := range flake.Configurations.SortedMap() {
-			if (len(configurationsFilter) > 0 && !slices.Contains(configurationsFilter, configurationName)) || configuration.Disabled {
+			if configuration.Attributes.Disabled {
 				delete(flake.Configurations, configurationName)
 				continue
 			}
 
 			for machineName, machine := range configuration.Machines.SortedMap() {
-				if (len(machinesFilter) > 0 && !slices.Contains(machinesFilter, machineName)) || machine.Disabled {
+				if machine.Attributes.Disabled {
 					delete(configuration.Machines, machineName)
 					continue
 				}
 
-				// A machine must match the tag filters if they are provided.
-				if len(c.Global.Filters.Tags) > 0 {
-					allMachineTags := flake.Tags
-					allMachineTags = append(allMachineTags, configuration.Tags...)
-					allMachineTags = append(allMachineTags, machine.Tags...)
-
-					if !matchesTags(allMachineTags, c.Global.Filters.Tags) {
-						delete(configuration.Machines, machineName)
-						continue
-					}
-				}
-
-				err := machine.Ssh.Validate(sshConfig, machineName)
-				if err != nil {
-					return err
+				if !machineContainesAllTags(machine.Attributes.Tags, c.Flags.Tags) {
+					delete(configuration.Machines, machineName)
+					continue
 				}
 			}
 
@@ -242,7 +223,7 @@ func (c *Config) filterAndExpandConfigEntrys() error {
 	}
 
 	if len(c.Root.Flakes) == 0 {
-		return fmt.Errorf("flakes configuration empty after filtering")
+		return fmt.Errorf("no flakes left after filtering")
 	}
 
 	return nil
@@ -250,7 +231,7 @@ func (c *Config) filterAndExpandConfigEntrys() error {
 
 // Helpers
 
-func matchesTags(tags, filterTags []string) bool {
+func machineContainesAllTags(tags, filterTags []string) bool {
 	if len(filterTags) == 0 {
 		return true
 	}

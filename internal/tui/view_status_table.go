@@ -7,15 +7,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 func (m *model) ViewStatusTable() string {
 	state := m.workflow.State()
 
-	colors := config.DefaultColorScheme()
+	colors := m.workflow.State().Conf.Tui.ColorScheme
 
-	if state.Conf.Global.DryRun {
+	if state.Conf.Flags.DryRun {
 		return "No table in dryRun"
 	}
 
@@ -73,34 +74,36 @@ func (m *model) ViewStatusTable() string {
 	// Track previous values to implement row spanning
 	var prevFlakeName, prevConfigName string
 
-	state.ExpandFlakeConfigurationMachine(func(i int, flake *config.Flake, configuration *config.Configuration, machine *config.Machine) {
+	state.RootTree(func(i int, machine *config.Machine) {
+		configuration := machine.Configuration
+		flake := configuration.Flake
 
-		xpath := flake.Name + configuration.Name + machine.Name
+		xpath := machine.Attributes.Xpath
 
 		ps := machine.MetaStatus
-		log := machine.Logs.SafeGet(phases.Status)
+		log := machine.Attributes.Logs.SafeGet(phases.Status)
 
 		// Determine if we should show flake name (only on first occurrence)
-		showFlake := flake.Name != prevFlakeName
+		showFlake := flake.Attributes.Name != prevFlakeName
 		if showFlake {
-			prevFlakeName = flake.Name
+			prevFlakeName = flake.Attributes.Name
 		}
 
 		// Determine if we should show config name (only on first occurrence of each config within a flake)
-		showConfig := configuration.Name != prevConfigName || flake.Name != prevFlakeName
+		showConfig := configuration.Attributes.Name != prevConfigName || flake.Attributes.Name != prevFlakeName
 		if showConfig {
-			prevConfigName = configuration.Name
+			prevConfigName = configuration.Attributes.Name
 		}
 
 		// Get display values (empty for spanning)
 		flakeDisplay := ""
 		if showFlake {
-			flakeDisplay = flake.Name
+			flakeDisplay = flake.Attributes.Name
 		}
 
 		configDisplay := ""
 		if showConfig {
-			configDisplay = configuration.Name
+			configDisplay = configuration.Attributes.Name
 		}
 
 		t.Row(
@@ -108,7 +111,7 @@ func (m *model) ViewStatusTable() string {
 			m.getStatusIcon(ps, xpath, log),
 			flakeDisplay,
 			configDisplay,
-			machine.Name,
+			machine.Attributes.Name,
 			ps.Architecture.Load(),
 			m.getStatusText(ps, xpath, log),
 			fmt.Sprintf("%d", ps.Generation.Load()),
@@ -123,7 +126,7 @@ func (m *model) ViewStatusTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *config.PhaseLog) string {
+func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *logs.PhaseLog) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
@@ -141,7 +144,7 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *config.P
 	return "✅"
 }
 
-func (m *model) getStatusText(ps *config.MetaStatus, xpath string, log *config.PhaseLog) string {
+func (m *model) getStatusText(ps *config.MetaStatus, xpath string, log *logs.PhaseLog) string {
 	tas := log.TimeAndState.GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
