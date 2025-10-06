@@ -2,13 +2,14 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/hook"
+	"github.com/mihakrumpestar/panix/internal/pkg/hook"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -38,16 +39,10 @@ func NewTaskRetry() *TaskRetry {
 	}
 }
 
-func NewWorkflow(ctx context.Context, phasesI []phases.Phase) (*Workflow, error) {
-	conf := ctx.Value(config.ContextConfigKey).(*config.Config)
+func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phase) (*Workflow, error) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Flags.Timeout)
 
-	if conf == nil {
-		return nil, fmt.Errorf("%s key is nil/empty in workflow context", config.ContextConfigKey)
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Global.Timeout)
-
-	phases, err := phases.NewPhaseStates(phasesI, conf.Global.SkipPhases)
+	phases, err := phases.NewPhaseStates(phasesI, conf.Flags.SkipPhases)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -59,7 +54,7 @@ func NewWorkflow(ctx context.Context, phasesI []phases.Phase) (*Workflow, error)
 		state: &WorkflowState{
 			Conf:   conf,
 			Phases: phases,
-			Pool:   pond.NewPool(conf.Global.Concurrency, pond.WithContext(ctxWithTimeout)),
+			Pool:   pond.NewPool(0, pond.WithContext(ctxWithTimeout)),
 			Retry:  NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),
@@ -82,27 +77,27 @@ func (w *Workflow) Cancel() context.CancelFunc {
 	return w.cancel
 }
 
-func (w *Workflow) NewTaskWithRetry(phase phases.Phase, identifier string, f func() error) error {
+func (w *Workflow) NewTaskWithRetry(phase phases.Phase, attr *config_attributes.Attributes, f func() error) error {
 	phaseTaskStatus := w.state.Phases.Value(phase)
 
 	for {
-		phaseTaskStatus.Running.Add(identifier)
+		phaseTaskStatus.Running.Add(attr.Xpath)
 		err := f()
-		phaseTaskStatus.Running.Rem(identifier)
+		phaseTaskStatus.Running.Rem(attr.Xpath)
 
 		if err != nil {
-			phaseTaskStatus.Failed.Add(identifier)
+			phaseTaskStatus.Failed.Add(attr.Xpath)
 
-			if w.state.Conf.Global.RequireAllSuccess {
+			if w.state.Conf.Flags.RequireAllSuccess {
 				w.cancel()
 				return err
 			}
 
 			<-w.state.Retry.retry // Pauses execution
 
-			// Task is being retried, so it is not failed
-			phaseTaskStatus.Failed.Rem(identifier)
-			// TODO: logs.Del(phase)
+			// Task is being retried, so it is not failed and logs are cleared
+			phaseTaskStatus.Failed.Rem(attr.Xpath)
+			attr.Logs.SafeGet(phase).Clear()
 		} else {
 			return nil
 		}
@@ -118,22 +113,19 @@ func (w *Workflow) CreateWorkflow() error {
 
 			flakePool := w.state.Pool.NewGroup()
 
-			flakeIdentifier := flake.Name
 			preFlakeHook := once_async.NewOnceAsync()
 			postFlakeHook := once_async.NewOnceAsync()
 
 			for _, configuration := range flake.Configurations.SortedMap() {
-				configurationIdentifier := fmt.Sprintf("%s/%s", flake.Name, configuration.Name)
 				build := once_async.NewOnceAsync()
 
 				for _, machine := range configuration.Machines.SortedMap() {
-					machineIdentifier := fmt.Sprintf("%s/%s/%s", flake.Name, configuration.Name, machine.Name)
 
 					flakePool.SubmitErr(func() error {
 
 						// Status
 						if slices.Contains(w.state.Phases.Keys(), phases.Status) {
-							err := w.NewTaskWithRetry(phases.Status, machineIdentifier, func() error {
+							err := w.NewTaskWithRetry(phases.Status, &machine.Attributes, func() error {
 								return w.executeStatusPhaseMachine(machine)
 							})
 							if err != nil {
@@ -144,7 +136,7 @@ func (w *Workflow) CreateWorkflow() error {
 						// Pre flake hook
 						if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
 							err := preFlakeHook.Do(func() error {
-								return w.NewTaskWithRetry(phases.PreFlakeHook, flakeIdentifier, func() error {
+								return w.NewTaskWithRetry(phases.PreFlakeHook, &flake.Attributes, func() error {
 									return w.executePreFlakeHookPhaseFlake(flake)
 								})
 							})
@@ -156,7 +148,7 @@ func (w *Workflow) CreateWorkflow() error {
 						// Build
 						if slices.Contains(w.state.Phases.Keys(), phases.Build) {
 							err := build.Do(func() error {
-								return w.NewTaskWithRetry(phases.Build, configurationIdentifier, func() error {
+								return w.NewTaskWithRetry(phases.Build, &configuration.Attributes, func() error {
 									return w.executeBuildPhaseConfiguration(flake, configuration)
 								})
 							})
@@ -167,8 +159,8 @@ func (w *Workflow) CreateWorkflow() error {
 
 						// Transfer
 						if slices.Contains(w.state.Phases.Keys(), phases.Transfer) {
-							err := w.NewTaskWithRetry(phases.Transfer, machineIdentifier, func() error {
-								return w.executeTransferPhaseMachine(configuration, machine)
+							err := w.NewTaskWithRetry(phases.Transfer, &machine.Attributes, func() error {
+								return w.executeTransferPhaseMachine(machine)
 							})
 							if err != nil {
 								return err
@@ -177,8 +169,8 @@ func (w *Workflow) CreateWorkflow() error {
 
 						// Bootstrap
 						if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
-							err := w.NewTaskWithRetry(phases.Bootstrap, machineIdentifier, func() error {
-								return w.executeBootstrapPhaseMachine(configuration, machine)
+							err := w.NewTaskWithRetry(phases.Bootstrap, &machine.Attributes, func() error {
+								return w.executeBootstrapPhaseMachine(machine)
 							})
 							if err != nil {
 								return err
@@ -187,7 +179,7 @@ func (w *Workflow) CreateWorkflow() error {
 
 						// Secrets
 						if slices.Contains(w.state.Phases.Keys(), phases.Secrets) {
-							err := w.NewTaskWithRetry(phases.Secrets, machineIdentifier, func() error {
+							err := w.NewTaskWithRetry(phases.Secrets, &machine.Attributes, func() error {
 								return w.executeSecretsPhaseMachine(machine)
 							})
 							if err != nil {
@@ -197,15 +189,15 @@ func (w *Workflow) CreateWorkflow() error {
 
 						// Activate
 						if slices.Contains(w.state.Phases.Keys(), phases.Activate) {
-							err := w.NewTaskWithRetry(phases.Activate, machineIdentifier, func() error {
-								return w.executeActivatePhaseMachine(configuration, machine)
+							err := w.NewTaskWithRetry(phases.Activate, &machine.Attributes, func() error {
+								return w.executeActivatePhaseMachine(machine)
 							})
 							if err != nil {
 								return err
 							}
 						}
 
-						w.state.Phases.Value(phases.Done).Done.Add(machineIdentifier)
+						w.state.Phases.Value(phases.Done).Done.Add(machine.Xpath)
 
 						return nil
 					})
@@ -217,7 +209,7 @@ func (w *Workflow) CreateWorkflow() error {
 			// Post flake hook
 			if slices.Contains(w.state.Phases.Keys(), phases.PostFlakeHook) {
 				errH := postFlakeHook.Do(func() error {
-					return w.NewTaskWithRetry(phases.PostFlakeHook, flakeIdentifier, func() error {
+					return w.NewTaskWithRetry(phases.PostFlakeHook, &flake.Attributes, func() error {
 						return w.executePostFlakeHookPhaseFlake(flake)
 					})
 				})
@@ -235,35 +227,33 @@ func (w *Workflow) CreateWorkflow() error {
 	return subPool.Wait()
 }
 
-func (w *Workflow) Phase(phaseLog *config.PhaseLog, startDebugMsg, endDebugMsg string, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error) (err error) {
+// Helpers
+
+func (w *Workflow) Phase(attr *config_attributes.Attributes, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error) (err error) {
+	phaseLog := attr.Logs.SafeGet(phase)
+
 	phaseLog.TimeAndState.StartTimer()
 	defer func() {
 		phaseLog.TimeAndState.EndTimerWithError(err)
 	}()
 
-	if w.state.Conf.Global.Verbose {
-		phaseLog.AddMessageOnly("VERBOSE " + startDebugMsg)
-	}
+	phaseLog.Verbose("Started %s of %s", phaseLog.Phase(), attr.Xpath)
 
-	exc := executioner.NewExecutioner(w.ctx, &w.state.Conf.Global, machine, phaseLog, w.updateHook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, w.state.Conf.Flags, machine, phaseLog, w.updateHook.OnUpdateHook)
 	err = phaseCode(exc, phaseLog)
 
-	if w.state.Conf.Global.Verbose {
-		phaseLog.AddMessageOnly("VERBOSE " + endDebugMsg)
-	}
+	phaseLog.Verbose("Finished %s of %s", phaseLog.Phase(), attr.Xpath)
 
 	return err
 }
 
-// Helpers
-
-func (w *WorkflowState) ExpandFlakeConfigurationMachine(function func(i int, flake *config.Flake, configuration *config.Configuration, machine *config.Machine)) {
+func (w *WorkflowState) RootTree(function func(i int, machine *config.Machine)) {
 	i := 0
 
 	for _, flake := range w.Conf.Root.Flakes.SortedMap() {
 		for _, configuration := range flake.Configurations.SortedMap() {
 			for _, machine := range configuration.Machines.SortedMap() {
-				function(i, flake, configuration, machine)
+				function(i, machine)
 				i++
 			}
 		}

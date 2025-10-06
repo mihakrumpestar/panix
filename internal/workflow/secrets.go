@@ -6,6 +6,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -17,11 +18,8 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 		return nil
 	}
 
-	return w.Phase(machine.Logs.SafeGet(phases.Secrets),
-		fmt.Sprintf("Started secrets of %s", machine.Name),
-		fmt.Sprintf("Finished secrets of %s", machine.Name),
-		nil,
-		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
+	return w.Phase(&machine.Attributes, phases.Secrets, nil,
+		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
 			for _, secret := range secrets {
 
@@ -37,10 +35,10 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 					secret.Local.Path = &fileName
 
 					err = exc.Exec(false, false,
-						func(log *config.CommandLog, err error) error {
+						func(log *logs.CommandLog, err error) error {
 							return errors.Wrapf(err, "secrets command failed for %s", machine.Name)
 						},
-						func(log *config.CommandLog) error {
+						func(log *logs.CommandLog) error {
 							output := log.Bytes()
 
 							var n int
@@ -75,14 +73,14 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 
 				secretRemotePath := secret.Remote.Path
 
-				if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Global.Bootstrap.DisableAuto {
+				if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
 					secretRemotePath = `\mnt` + secretRemotePath
 				}
 
 				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
 
 				err = exc.Exec(false, true,
-					func(log *config.CommandLog, err error) error {
+					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "secrets failed for %s", machine.Name)
 					},
 					nil,

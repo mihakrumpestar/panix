@@ -9,17 +9,15 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 // This function is called by executeMachineBuild for individual machine builds
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
-	return w.Phase(configuration.Logs.SafeGet(phases.Build),
-		fmt.Sprintf("Started build of %s/%s", flake.Name, configuration.Name),
-		fmt.Sprintf("Finished build of %s/%s", flake.Name, configuration.Name),
-		nil,
-		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
-			if w.state.Conf.Global.DryRun {
+	return w.Phase(&configuration.Attributes, phases.Build, nil,
+		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+			if w.state.Conf.Flags.DryRun {
 				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
 				configuration.MetaBuild.DiskoScript = "BUILD_OUTPUT_PATH_PLACEHOLDER"
 			}
@@ -30,18 +28,18 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.Url, configuration.Name)}
 
 			// DiskoScript
-			if !w.state.Conf.Global.Bootstrap.DisableAuto {
+			if !w.state.Conf.Flags.Bootstrap.DisableAuto {
 				installables = append(installables, fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.Url, configuration.Name))
 			}
 
 			commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
 			err := exc.Exec(false, true, nil,
-				func(log *config.CommandLog) error {
+				func(log *logs.CommandLog) error {
 					output := log.Bytes()
 					output = lastNonEmptyLine(output)
 
-					if w.state.Conf.Global.DryRun {
+					if w.state.Conf.Flags.DryRun {
 						output = []byte(`
 						[
 							{
@@ -66,7 +64,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 
 					mb.SystemClosure = parsedOutput[0].Outputs.Out
 
-					if !w.state.Conf.Global.Bootstrap.DisableAuto {
+					if !w.state.Conf.Flags.Bootstrap.DisableAuto {
 						mb.DiskoScript = parsedOutput[1].Outputs.Out
 					}
 
@@ -78,9 +76,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 				return err
 			}
 
-			if w.state.Conf.Global.Verbose {
-				phaseLog.AddMessageOnly(fmt.Sprintf("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure))
-			}
+			phaseLog.Verbose("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure)
 
 			return nil
 		})

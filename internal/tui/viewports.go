@@ -16,6 +16,7 @@ import (
 type Viewports struct {
 	viewports  *omap.Omap[string, *Viewport]
 	dimensions *Dimensions
+	colors     *config.ColorScheme
 	debug      *strings.Builder
 }
 
@@ -27,7 +28,7 @@ type Viewport struct {
 	scrollbarZone string // Zone ID for scrollbar area
 }
 
-func NewViewports(dimensions *Dimensions, debug *strings.Builder) *Viewports {
+func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, debug *strings.Builder) *Viewports {
 	viewports, err := omap.New[string, *Viewport]()
 	if err != nil {
 		panic(err)
@@ -36,6 +37,7 @@ func NewViewports(dimensions *Dimensions, debug *strings.Builder) *Viewports {
 	return &Viewports{
 		viewports:  viewports,
 		dimensions: dimensions,
+		colors:     colors,
 		debug:      debug,
 	}
 }
@@ -72,7 +74,7 @@ func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLi
 
 	// Style the scrollbar
 	scrollbarStyle := lipgloss.NewStyle().
-		Foreground(config.DefaultColorScheme().TableBorder.GetForeground())
+		Foreground(v.colors.TableBorder.GetForeground())
 
 	// Join all lines with newlines
 	return scrollbarStyle.Render(strings.Join(scrollbar, "\n"))
@@ -162,9 +164,9 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 		combinedView = viewportView
 	}
 
-	borderColor := config.DefaultColorScheme().TableBorder.GetForeground()
+	borderColor := v.colors.TableBorder.GetForeground()
 	if vpr.active {
-		borderColor = config.DefaultColorScheme().Error.GetBackground()
+		borderColor = v.colors.Error.GetBackground()
 	}
 
 	final := lipgloss.NewStyle().
