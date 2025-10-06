@@ -20,6 +20,9 @@ var deployCmd = &cobra.Command{
 
 This is the main command for deploying NixOS configurations.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		conf := ConfFromContext(ctx)
+
 		phases := []phases.Phase{
 			phases.Status,
 			phases.PreFlakeHook,
@@ -30,7 +33,7 @@ This is the main command for deploying NixOS configurations.`,
 			phases.PostFlakeHook,
 		}
 
-		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)
+		workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
 		if err != nil {
 			return err
 		}

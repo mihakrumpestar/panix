@@ -1,27 +1,23 @@
 package workflow
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configuration, machine *config.Machine) error {
-	return w.Phase(machine.Logs.SafeGet(phases.Activate),
-		fmt.Sprintf("Started activation of %s", machine.Name),
-		fmt.Sprintf("Finished activation of %s", machine.Name),
-		machine,
-		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
+func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
+	return w.Phase(&machine.Attributes, phases.Activate, machine,
+		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
-			systemClosure := configuration.MetaBuild.SystemClosure
+			systemClosure := machine.Configuration.MetaBuild.SystemClosure
 
-			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Global.Bootstrap.DisableAuto {
+			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
 
 				err := exc.Exec(false, true,
-					func(log *config.CommandLog, err error) error {
+					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running nixos-install failed for %s", machine.Name)
 					},
 					nil,
@@ -32,7 +28,7 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 				}
 
 				err = exc.Exec(false, true,
-					func(log *config.CommandLog, err error) error {
+					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running reboot failed for %s", machine.Name)
 					},
 					nil,
@@ -55,7 +51,7 @@ func (w *Workflow) executeActivatePhaseMachine(configuration *config.Configurati
 				commandWithArgs = append(commandWithArgs, "switch")
 
 				err := exc.Exec(false, true,
-					func(log *config.CommandLog, err error) error {
+					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "activation failed for %s", machine.Name)
 					},
 					nil,

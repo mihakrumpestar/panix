@@ -9,6 +9,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -18,19 +19,16 @@ var (
 )
 
 func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error) {
-	return w.Phase(machine.Logs.SafeGet(phases.Status),
-		fmt.Sprintf("Started stats of %s", machine.Name),
-		fmt.Sprintf("Finished stats of %s", machine.Name),
-		machine,
-		func(exc *executioner.Executioner, phaseLog *config.PhaseLog) error {
+	return w.Phase(&machine.Attributes, phases.Status, machine,
+		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 			mms := machine.MetaStatus
 
 			// TCP check
 			err = exc.Exec(true, true,
-				func(log *config.CommandLog, err error) error {
+				func(log *logs.CommandLog, err error) error {
 					return fmt.Errorf("machine unreachable: %w", err)
 				},
-				func(log *config.CommandLog) error {
+				func(log *logs.CommandLog) error {
 					mms.Reachable.Store(true)
 					return nil
 				},
@@ -41,10 +39,10 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			// SSH connect
 			err = exc.Exec(true, true,
-				func(log *config.CommandLog, err error) error {
+				func(log *logs.CommandLog, err error) error {
 					return errors.Wrapf(err, "ssh test failed: %s", log.String())
 				},
-				func(log *config.CommandLog) error {
+				func(log *logs.CommandLog) error {
 					mms.SSHConnectable.Store(true)
 					return nil
 				}, "echo", "OK")
@@ -55,10 +53,10 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			// Architecture
 			err = exc.Exec(false, true,
 				nil,
-				func(log *config.CommandLog) error {
+				func(log *logs.CommandLog) error {
 					architecture := log.String()
 
-					if w.state.Conf.Global.DryRun {
+					if w.state.Conf.Flags.DryRun {
 						architecture = "DRY_RUN"
 					}
 
@@ -68,7 +66,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 						return fmt.Errorf("architecture output was empty")
 					}
 
-					if !slices.Contains(KexecSupportedPlatforms, architecture) && !w.state.Conf.Global.DryRun {
+					if !slices.Contains(KexecSupportedPlatforms, architecture) && !w.state.Conf.Flags.DryRun {
 						return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
 					}
 
@@ -82,10 +80,10 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			// Run bootstrap detection
 			err = exc.Exec(false, true,
 				nil,
-				func(log *config.CommandLog) error {
+				func(log *logs.CommandLog) error {
 					bootstrapped := true
 
-					if w.state.Conf.Global.DryRun {
+					if w.state.Conf.Flags.DryRun {
 						bootstrapped = false
 					}
 
@@ -105,12 +103,12 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 				*/
 
-				if !mms.Bootstrapped.Load() && machine.HardwareConfigPath != "" {
-					commandWithArgs := []string{"sh", "-c", *machine.SudoProgram, "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath}
+				if !mms.Bootstrapped.Load() && machine.Attributes.HardwareConfigPath != "" {
+					commandWithArgs := []string{"sh", "-c", *machine.Attributes.SudoProgram, "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.Attributes.HardwareConfigPath}
 
 					err := exc.Exec(false, true,
-						func(log *config.CommandLog, err error) error {
-							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Name)
+						func(log *logs.CommandLog, err error) error {
+							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Attributes.Name)
 						},
 						nil,
 						commandWithArgs...,
@@ -126,10 +124,10 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			// Get current generation
 			err = exc.Exec(false, true,
 				nil,
-				func(log *config.CommandLog) error {
+				func(log *logs.CommandLog) error {
 					output := log.Bytes()
 
-					if w.state.Conf.Global.DryRun {
+					if w.state.Conf.Flags.DryRun {
 						output = []byte(`
 						[
 							{
@@ -148,7 +146,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					var nixGenerations nixGenerations
 					err = json.Unmarshal(output, &nixGenerations)
 					if err != nil || len(nixGenerations) == 0 {
-						return errors.Wrapf(err, "invalid list-generations output for %s: %s", machine.Name, string(output)) // strconv.Quote()
+						return errors.Wrapf(err, "invalid list-generations output for %s: %s", machine.Attributes.Name, string(output)) // strconv.Quote()
 					}
 
 					for _, nixGeneration := range nixGenerations {

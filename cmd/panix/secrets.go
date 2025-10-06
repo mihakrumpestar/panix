@@ -13,11 +13,14 @@ var secretsCmd = &cobra.Command{
 	Short: "Deploy secrets to all machines",
 	Long:  `Secrets deploys encrypted secrets and credentials to all selected machines.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		conf := ConfFromContext(ctx)
+
 		phases := []phases.Phase{
 			phases.Secrets,
 		}
 
-		workflowExec, err := workflow.NewWorkflow(cmd.Context(), phases)
+		workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
 		if err != nil {
 			return err
 		}

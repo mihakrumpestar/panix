@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/spf13/cobra"
@@ -43,27 +42,31 @@ func init() {
 	// Config file flag
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "panix.yml", "config file")
 
-	// Global flags
-
-	// Filter flags
-	rootCmd.PersistentFlags().StringSlice("filters.flakes", nil, "a list of flakes to deploy")
-	rootCmd.PersistentFlags().StringSlice("filters.configurations", nil, "a list of configurations to deploy")
-	rootCmd.PersistentFlags().StringSlice("filters.machines", nil, "a list of machines to deploy")
-	rootCmd.PersistentFlags().StringSlice("filters.tags", nil, "filter machines by tags")
-
-	hostname, _ := os.Hostname()
-	concurrency := runtime.GOMAXPROCS(0)
-
 	// Bootstrap
 	rootCmd.PersistentFlags().Bool("bootstrap.disableAuto", false, "disable automatic bootstrap (even if target machine does not have NixOS installed)")
-	rootCmd.PersistentFlags().Bool("bootstrap.disableDisko", false, "disables building, transfer and bootstrap with disko tool")
+	rootCmd.PersistentFlags().Bool("bootstrap.disableDisko", false, "disables building, transfer and bootstrap of disko tool")
+	rootCmd.PersistentFlags().Bool("bootstrap.only", false, "only initializes uninitialized machines")
 
 	// Others
-	rootCmd.PersistentFlags().Bool("requireAllSuccess", false, "abort & rollback if any host fails")
+	rootCmd.PersistentFlags().StringSlice("tags", nil, "filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)")
+	rootCmd.PersistentFlags().Bool("requireAllSuccess", false, "abort & rollback if any task fails, primarily for CI/CD")
+	hostname, _ := os.Hostname()
 	rootCmd.PersistentFlags().String("overrideLocalMachine", hostname, "hostname of the machine that is local (won't use ssh to connect to it)")
 	rootCmd.PersistentFlags().Bool("dryRun", false, "show what would be done without executing")
+	rootCmd.PersistentFlags().Bool("dryRunWithStatus", false, "show what would be done without executing, but with real status query")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
-	rootCmd.PersistentFlags().Int("concurrency", concurrency, "number of concurrent operations")
 	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for TUI in seconds, default is 1 hour")
+}
+
+// Helpers
+
+func ConfFromContext(ctx context.Context) *config.Config {
+	conf := ctx.Value(config.ContextConfigKey).(*config.Config)
+
+	if conf == nil {
+		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", config.ContextConfigKey))
+	}
+
+	return conf
 }
