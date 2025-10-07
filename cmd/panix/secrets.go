@@ -17,6 +17,7 @@ var secretsCmd = &cobra.Command{
 		conf := ConfFromContext(ctx)
 
 		phases := []phases.Phase{
+			phases.Status,
 			phases.Secrets,
 		}
 
