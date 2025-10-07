@@ -84,16 +84,5 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ViewKeybindings returns the help view with key bindings positioned at the bottom
 func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
-	keys := newKeymap()
-	helpView := "\n" + help.New().View(keys)
-	helpLines := 2
-
-	// Calculate how many newlines to add to push help to the bottom
-	currentContent := builderAbove.String()
-	contentLines := strings.Count(currentContent, "\n")
-
-	paddingNeeded := m.modelView.dimensions.height - contentLines - helpLines - 1
-	helpView = strings.Repeat("\n", paddingNeeded) + helpView
-
-	return helpView
+	return "\n" + help.New().View(newKeymap())
 }
