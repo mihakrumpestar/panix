@@ -38,7 +38,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			}
 
 			// SSH connect
-			err = exc.Exec(true, true,
+			err = exc.Exec(true, false,
 				func(log *logs.CommandLog, err error) error {
 					return errors.Wrapf(err, "ssh test failed: %s", log.String())
 				},
@@ -51,7 +51,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			}
 
 			// Architecture
-			err = exc.Exec(false, true,
+			err = exc.Exec(false, false,
 				nil,
 				func(log *logs.CommandLog) error {
 					architecture := log.String()
@@ -78,8 +78,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			}
 
 			// Run bootstrap detection
-			err = exc.Exec(false, true,
-				nil,
+			err = exc.Exec(false, false, nil,
 				func(log *logs.CommandLog) error {
 					bootstrapped := true
 
@@ -106,7 +105,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 				if !mms.Bootstrapped.Load() && machine.Attributes.HardwareConfigPath != "" {
 					commandWithArgs := []string{"sh", "-c", *machine.Attributes.SudoProgram, "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.Attributes.HardwareConfigPath}
 
-					err := exc.Exec(false, true,
+					err := exc.Exec(false, false,
 						func(log *logs.CommandLog, err error) error {
 							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Attributes.Name)
 						},
@@ -122,8 +121,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			}
 
 			// Get current generation
-			err = exc.Exec(false, true,
-				nil,
+			err = exc.Exec(false, false, nil,
 				func(log *logs.CommandLog) error {
 					output := log.Bytes()
 

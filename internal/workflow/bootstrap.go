@@ -13,7 +13,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(machine *config.Machine) error {
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
 			if !w.state.Conf.Flags.Bootstrap.DisableDisko {
-				err := exc.Exec(false, true,
+				err := exc.Exec(false, false,
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running diskoScript failed for %s", machine.Name)
 					},

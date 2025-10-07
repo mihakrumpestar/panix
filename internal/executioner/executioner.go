@@ -27,8 +27,8 @@ func NewExecutioner(ctx context.Context, conf *config_flags.Flags, machine *conf
 	}
 }
 
-func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) error {
-	noMachineOrLocal := ex.machine == nil || ex.machine.Attributes.Ssh.IsLocal
+func (ex *Executioner) Exec(skipIfLocal bool, disableSsh bool, onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) error {
+	noMachineOrLocal := ex.machine == nil || ex.machine.Ssh.IsLocal
 
 	// 1) local short‐circuit
 	if noMachineOrLocal && skipIfLocal {
@@ -45,9 +45,9 @@ func (ex *Executioner) Exec(skipIfLocal, log bool, onFailure func(*logs.CommandL
 		return nil
 	}
 
-	if noMachineOrLocal {
-		return ex.shellStream(log, onFailure, onSuccess, commandWithArgs...)
+	if noMachineOrLocal || disableSsh {
+		return ex.shellStream(onFailure, onSuccess, commandWithArgs...)
 	}
 
-	return ex.sshStream(log, onFailure, onSuccess, commandWithArgs...)
+	return ex.sshStream(onFailure, onSuccess, commandWithArgs...)
 }

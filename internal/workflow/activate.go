@@ -16,7 +16,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
 
-				err := exc.Exec(false, true,
+				err := exc.Exec(false, false,
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running nixos-install failed for %s", machine.Name)
 					},
@@ -27,7 +27,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 					return err
 				}
 
-				err = exc.Exec(false, true,
+				err = exc.Exec(false, false,
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running reboot failed for %s", machine.Name)
 					},
@@ -50,7 +50,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 				}
 				commandWithArgs = append(commandWithArgs, "switch")
 
-				err := exc.Exec(false, true,
+				err := exc.Exec(false, false,
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "activation failed for %s", machine.Name)
 					},

@@ -4,7 +4,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 )
 
-func (ex *Executioner) sshStream(log bool, onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) error {
+func (ex *Executioner) sshStream(onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) error {
 	ssh := ex.machine.Attributes.Ssh
 
 	sshCommandWithArgs := []string{"ssh", "-q"} // Silance banners
@@ -21,5 +21,5 @@ func (ex *Executioner) sshStream(log bool, onFailure func(*logs.CommandLog, erro
 
 	sshCommandWithArgs = append(sshCommandWithArgs, commandWithArgs...)
 
-	return ex.shellStream(log, onFailure, onSuccess, sshCommandWithArgs...)
+	return ex.shellStream(onFailure, onSuccess, sshCommandWithArgs...)
 }
