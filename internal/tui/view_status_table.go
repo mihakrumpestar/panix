@@ -23,7 +23,7 @@ func (m *model) ViewStatusTable() string {
 	var builder strings.Builder
 
 	// Header for the log view
-	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Stats table ===\n"))
+	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Use provided width, with reasonable bounds and accounting for borders
 	usableWidth := max(m.modelView.dimensions.width-4, 60)
@@ -36,7 +36,7 @@ func (m *model) ViewStatusTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCHITECTURE", "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -55,17 +55,17 @@ func (m *model) ViewStatusTable() string {
 			case 4: // MACHINE
 				return colors.Machine
 			case 5: // Architecture
-				return colors.TableRow.Width(lipgloss.Width("ARCHITECTURE"))
+				return colors.TableRow
 			case 6: // Bootstrap status
-				return colors.TableRow.Width(lipgloss.Width("NOT_BOOTSTRAPPED"))
+				return colors.TableRow
 			case 7: // Generation
-				return colors.TableRow.Width(lipgloss.Width("GENERATION"))
+				return colors.TableRow
 			case 8: // Date
-				return colors.TableRow.Width(lipgloss.Width("2025-07-22 08:12:19"))
+				return colors.TableRow
 			case 9: // Nixos
-				return colors.TableRow.Width(lipgloss.Width("25.11.20250624.4b1164c"))
+				return colors.TableRow
 			case 10: // Kernel
-				return colors.TableRow.Width(lipgloss.Width("KERNEL"))
+				return colors.TableRow
 			default:
 				return colors.TableRow
 			}
