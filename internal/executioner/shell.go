@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(log bool, onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) (err error) {
+func (ex *Executioner) shellStream(onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) (err error) {
 	commandLog := ex.phaseLog.NewCommand()
 
 	commandLog.TimeAndState.StartTimer()
@@ -75,7 +75,7 @@ func (ex *Executioner) shellStream(log bool, onFailure func(*logs.CommandLog, er
 			break
 		}
 
-		if n > 0 && log {
+		if n > 0 {
 			rawBuffer := buf[:n]
 
 			// Process the buffer to handle terminal control sequences properly

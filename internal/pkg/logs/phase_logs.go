@@ -3,6 +3,7 @@ package logs
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hayageek/threadsafe"
 	"github.com/kirill-scherba/omap"
@@ -59,8 +60,9 @@ func (pl *PhaseLogs) Del(phase phases.Phase) {
 // PhaseLog
 
 type PhaseLog struct {
+	mutex        sync.Mutex
 	commandLogs  *threadsafe.Slice[*CommandLog]
-	TimeAndState *time_and_state.TimeAndState
+	timeAndState *time_and_state.TimeAndState
 	// Internal
 	phase phases.Phase
 	flags *config_flags.Flags
@@ -69,7 +71,7 @@ type PhaseLog struct {
 func NewPhaseLog(phase phases.Phase, flags *config_flags.Flags) *PhaseLog {
 	return &PhaseLog{
 		commandLogs:  threadsafe.NewSlice[*CommandLog](),
-		TimeAndState: time_and_state.NewTimeAndState(),
+		timeAndState: time_and_state.NewTimeAndState(),
 		phase:        phase,
 		flags:        flags,
 	}
@@ -134,8 +136,18 @@ func (pLog *PhaseLog) CommandLogs() []*CommandLog {
 }
 
 func (pLog *PhaseLog) Clear() {
+	pLog.mutex.Lock()
+	defer pLog.mutex.Unlock()
+
 	pLog.commandLogs.Clear()
-	pLog.TimeAndState = time_and_state.NewTimeAndState()
+	pLog.timeAndState = time_and_state.NewTimeAndState()
+}
+
+func (pLog *PhaseLog) TimeAndState() *time_and_state.TimeAndState {
+	pLog.mutex.Lock()
+	defer pLog.mutex.Unlock()
+
+	return pLog.timeAndState
 }
 
 func (pLog *PhaseLog) Phase() phases.Phase {

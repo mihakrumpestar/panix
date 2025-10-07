@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
+	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -26,17 +27,7 @@ type WorkflowState struct {
 	Conf   *config.Config
 	Phases *phases.PhaseStates
 	Pool   pond.Pool
-	Retry  *TaskRetry
-}
-
-type TaskRetry struct {
-	retry chan uint64
-}
-
-func NewTaskRetry() *TaskRetry {
-	return &TaskRetry{
-		retry: make(chan uint64),
-	}
+	Retry  *retry.Retry
 }
 
 func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phase) (*Workflow, error) {
@@ -55,7 +46,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phas
 			Conf:   conf,
 			Phases: phases,
 			Pool:   pond.NewPool(0, pond.WithContext(ctxWithTimeout)),
-			Retry:  NewTaskRetry(),
+			Retry:  retry.NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),
 	}, nil
@@ -93,7 +84,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, attr *config_attributes.
 				return err
 			}
 
-			<-w.state.Retry.retry // Pauses execution
+			w.state.Retry.Wait()
 
 			// Task is being retried, so it is not failed and logs are cleared
 			phaseTaskStatus.Failed.Rem(attr.Xpath)
@@ -232,9 +223,9 @@ func (w *Workflow) CreateWorkflow() error {
 func (w *Workflow) Phase(attr *config_attributes.Attributes, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error) (err error) {
 	phaseLog := attr.Logs.SafeGet(phase)
 
-	phaseLog.TimeAndState.StartTimer()
+	phaseLog.TimeAndState().StartTimer()
 	defer func() {
-		phaseLog.TimeAndState.EndTimerWithError(err)
+		phaseLog.TimeAndState().EndTimerWithError(err)
 	}()
 
 	phaseLog.Verbose("Started %s of %s", phaseLog.Phase(), attr.Xpath)

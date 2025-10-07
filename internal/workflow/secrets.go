@@ -79,7 +79,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 
 				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
 
-				err = exc.Exec(false, true,
+				err = exc.Exec(false, false,
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "secrets failed for %s", machine.Name)
 					},

@@ -127,7 +127,7 @@ func (m *model) ViewStatusTable() string {
 }
 
 func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *logs.PhaseLog) string {
-	tas := log.TimeAndState.GetTimeAndState()
+	tas := log.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
@@ -145,7 +145,7 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *logs.Pha
 }
 
 func (m *model) getStatusText(ps *config.MetaStatus, xpath string, log *logs.PhaseLog) string {
-	tas := log.TimeAndState.GetTimeAndState()
+	tas := log.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
