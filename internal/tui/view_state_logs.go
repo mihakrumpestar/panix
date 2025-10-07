@@ -89,7 +89,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 		phaseLog := entry.Value
 
 		xpath += string(phase)
-		tas := phaseLog.TimeAndState.GetTimeAndState()
+		tas := phaseLog.TimeAndState().GetTimeAndState()
 
 		// Phase header with spinner and right-aligned timing
 		iconOnFinished := "📋 "
@@ -110,7 +110,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 			cmdOutput := cmd.String()
 			cmdTas := cmd.TimeAndState.GetTimeAndState()
 
-			if slices.Contains([]phases.Phase{phases.Status, phases.Secrets}, phase) && cmdTas.Error == nil {
+			if !m.workflow.State().Conf.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Status, phases.Secrets}, phase) && cmdTas.Error == nil {
 				if cmdIdx == len(phaseLog.CommandLogs())-1 {
 					cmdLabel = "(hidden)"
 					cmdOutput = ""

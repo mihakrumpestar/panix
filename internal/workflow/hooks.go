@@ -14,7 +14,7 @@ func (w *Workflow) executePreFlakeHookPhaseFlake(flake *config.Flake) error {
 
 	return w.Phase(&flake.Attributes, phases.PreFlakeHook, nil,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
-			err := exc.Exec(false, true, nil, nil,
+			err := exc.Exec(false, false, nil, nil,
 				"sh", "-c", flake.FlakeHooks.Pre)
 
 			return err
@@ -29,7 +29,7 @@ func (w *Workflow) executePostFlakeHookPhaseFlake(flake *config.Flake) error {
 
 	return w.Phase(&flake.Attributes, phases.PostFlakeHook, nil,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
-			err := exc.Exec(false, true, nil, nil,
+			err := exc.Exec(false, false, nil, nil,
 				"sh", "-c", flake.FlakeHooks.Post)
 
 			return err

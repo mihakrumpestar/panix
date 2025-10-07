@@ -211,6 +211,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.modelView.mode = TuiViewModeAll
 			}
 			return m, nil
+		case "h":
+			m.workflow.State().Conf.Tui.ShowAllBuildLogs = !m.workflow.State().Conf.Tui.ShowAllBuildLogs
+			return m, nil
+		case "r":
+			m.workflow.State().Retry.Trigger()
+			return m, nil
 		default:
 			return m, nil
 		}

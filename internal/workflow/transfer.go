@@ -21,7 +21,7 @@ func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 			}
 			commandWithArgs := append([]string{"nix", "copy", "--to", machine.Name}, toTransfer...)
 
-			err := exc.Exec(true, true,
+			err := exc.Exec(true, false,
 				func(l *logs.CommandLog, err error) error {
 					return errors.Wrap(err, "nix copy failed")
 				},
