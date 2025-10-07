@@ -4,15 +4,12 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/pkg/errors"
 )
 
 type stateUpdateHookMsg struct{}
@@ -20,14 +17,6 @@ type stateUpdateHookMsg struct{}
 type errMsg struct{ err error }
 
 func (e errMsg) Error() string { return e.err.Error() }
-
-type TuiViewMode string
-
-var (
-	TuiViewModeAll    TuiViewMode = "all"
-	TuiViewModeStatus TuiViewMode = "status"
-	TuiViewModeLogs   TuiViewMode = "logs"
-)
 
 type model struct {
 	workflow     *workflow.Workflow
@@ -38,7 +27,6 @@ type model struct {
 }
 
 type modelView struct {
-	mode        TuiViewMode
 	dimensions  *Dimensions
 	spinners    *Spinners
 	viewports   *Viewports
@@ -54,11 +42,6 @@ func NewTui(workflow *workflow.Workflow) error {
 	zone.NewGlobal()
 	defer zone.Close()
 
-	defaultModelView := TuiViewModeAll
-	if !slices.Contains(workflow.State().Phases.Keys(), phases.Status) {
-		defaultModelView = TuiViewModeLogs
-	}
-
 	dimensions := &Dimensions{
 		width:  120, // Initial dimensions before tea.WindowSizeMsg
 		height: 120, // Initial dimensions before tea.WindowSizeMsg
@@ -73,7 +56,6 @@ func NewTui(workflow *workflow.Workflow) error {
 	p := tea.NewProgram(model{
 		workflow: workflow,
 		modelView: modelView{
-			mode:        defaultModelView,
 			dimensions:  dimensions,
 			spinners:    NewSpinners(),
 			viewports:   NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput),
@@ -86,9 +68,7 @@ func NewTui(workflow *workflow.Workflow) error {
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
 
-	if workflow.State().Conf.Flags.Verbose {
-		fmt.Println("TUI initialized")
-	}
+	debugOutput.WriteString("TUI initialized")
 
 	m, err := p.Run()
 
@@ -175,51 +155,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.rawKeyReader.Next())
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			m.quitting = true
-			m.workflow.Cancel()()
-
-			// Block quiting until Workflow finalizes and terminates its tasks
-			ctx := m.workflow.Ctx()
-			<-ctx.Done()
-
-			if m.err != nil && ctx.Err() != nil {
-				m.err = errors.Wrap(m.err, ctx.Err().Error())
-			} else if ctx.Err() != nil {
-				m.err = ctx.Err()
-			}
-
-			m.modelView.debugOutput.WriteString("CTX done")
-
-			return m, tea.Quit
-		case "d":
-			// Don't toggle if we don't have PhaseStatus
-			if !slices.Contains(m.workflow.State().Phases.Keys(), phases.Status) {
-				return m, nil
-			}
-
-			// Toggle between status and detailed views
-			switch m.modelView.mode {
-			case TuiViewModeAll:
-				m.modelView.mode = TuiViewModeLogs
-			case TuiViewModeLogs:
-				m.modelView.mode = TuiViewModeStatus
-			case TuiViewModeStatus:
-				fallthrough
-			default:
-				m.modelView.mode = TuiViewModeAll
-			}
-			return m, nil
-		case "h":
-			m.workflow.State().Conf.Tui.ShowAllBuildLogs = !m.workflow.State().Conf.Tui.ShowAllBuildLogs
-			return m, nil
-		case "r":
-			m.workflow.State().Retry.Trigger()
-			return m, nil
-		default:
-			return m, nil
-		}
+		return m.HandleKeyInput(msg)
 
 	case tea.WindowSizeMsg:
 		dimensions := m.modelView.dimensions
@@ -238,48 +174,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var builder strings.Builder
 
-	// Header with instructions
-	header := "\n=== Panix TUI ===\n"
-	instructions := "Press 'q' to quit, 'd' to switch modes\n\n"
-	headerAndInstructions := header + instructions
-	builder.WriteString(headerAndInstructions)
-
-	if m.workflow.State() == nil {
-		builder.WriteString("No state available")
-	}
-
-	switch m.modelView.mode {
-	case TuiViewModeAll:
-		fallthrough
-	case TuiViewModeStatus:
-		view := m.ViewStatusTable()
-		if view == "" {
-			builder.WriteString("No data available")
-		} else {
-			builder.WriteString(view)
-
-		}
-
-		if m.modelView.mode != TuiViewModeAll {
-			break
-		}
-
-		fallthrough
-	case TuiViewModeLogs:
-		view := m.ViewPhaseStatus()
-		if view == "" {
-			builder.WriteString("No data available")
-		} else {
-			builder.WriteString(view)
-		}
-
-		view = m.ViewStateLogs()
-		if view == "" {
-			builder.WriteString("No data available")
-		} else {
-			builder.WriteString(view)
-		}
-	}
+	builder.WriteString(m.ViewStatusTable())
+	builder.WriteString(m.ViewPhaseStatus())
+	builder.WriteString(m.ViewStateLogs())
 
 	if m.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
@@ -296,9 +193,10 @@ func (m model) View() string {
 	}
 
 	if m.quitting {
-		builder.WriteString("\n")
-		return builder.String()
+		return zone.Scan(builder.String())
 	}
+
+	builder.WriteString(m.ViewKeybindings(builder))
 
 	return zone.Scan(builder.String())
 }
