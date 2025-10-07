@@ -171,7 +171,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+// ViewMainContent generates the main content that should be scrollable
+func (m model) ViewMainContent() string {
 	var builder strings.Builder
 
 	builder.WriteString(m.ViewStatusTable())
@@ -192,10 +193,24 @@ func (m model) View() string {
 		builder.WriteString(debugHeader + debugContent)
 	}
 
+	return builder.String()
+}
+
+func (m model) View() string {
+	mainContent := m.ViewMainContent()
+
 	if m.quitting {
-		return zone.Scan(builder.String())
+		// When quitting, return the full content without viewport
+		return zone.Scan(mainContent)
 	}
 
+	// Use the special main viewport method
+	mainViewport := m.modelView.viewports.GetOrCreateMainViewport(mainContent)
+
+	var builder strings.Builder
+	builder.WriteString(mainViewport)
+
+	// Add keybindings at the bottom
 	builder.WriteString(m.ViewKeybindings(builder))
 
 	return zone.Scan(builder.String())

@@ -34,7 +34,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 					defer os.Remove(fileName)
 					secret.Local.Path = &fileName
 
-					err = exc.Exec(false, false,
+					err = exc.Exec(false, true,
 						func(log *logs.CommandLog, err error) error {
 							return errors.Wrapf(err, "secrets command failed for %s", machine.Name)
 						},
@@ -72,12 +72,29 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 				}
 
 				secretRemotePath := secret.Remote.Path
-
 				if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
-					secretRemotePath = `\mnt` + secretRemotePath
+					secretRemotePath = `/mnt` + secretRemotePath
 				}
 
-				commandWithArgs = append(commandWithArgs, *secret.Local.Path, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
+				commandWithArgs = append(commandWithArgs, *secret.Local.Path)
+
+				if machine.Ssh.IsLocal {
+					commandWithArgs = append(commandWithArgs, secretRemotePath)
+				} else {
+					if machine.Ssh.HostnameIsAlias {
+						commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
+					} else {
+
+						maybeIdentityFile := ""
+						if machine.Ssh.IdentityFile != "" {
+							maybeIdentityFile = " -i " + machine.Ssh.IdentityFile
+						}
+
+						commandWithArgs = append(commandWithArgs, "-e", fmt.Sprintf("'ssh -p %d%s'", machine.Ssh.Port, maybeIdentityFile))
+
+						commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s@%s:%s", machine.Ssh.Username, machine.Ssh.Hostname, secretRemotePath))
+					}
+				}
 
 				err = exc.Exec(false, false,
 					func(log *logs.CommandLog, err error) error {
