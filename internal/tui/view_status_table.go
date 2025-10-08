@@ -26,7 +26,7 @@ func (m *model) ViewStatusTable() string {
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Use provided width, with reasonable bounds and accounting for borders
-	usableWidth := max(m.modelView.dimensions.width-4, 60)
+	usableWidth := max(m.modelView.dimensions.Width-4, 60)
 
 	// Header text lengths including icons
 	flakeHeader := string(colors.IconFlake) + " FLAKE"
@@ -78,32 +78,32 @@ func (m *model) ViewStatusTable() string {
 		configuration := machine.Configuration
 		flake := configuration.Flake
 
-		xpath := machine.Attributes.Xpath
+		xpath := machine.Xpath
 
 		ps := machine.MetaStatus
-		log := machine.Attributes.Logs.SafeGet(phases.Status)
+		log := machine.Logs.SafeGet(phases.Status)
 
 		// Determine if we should show flake name (only on first occurrence)
-		showFlake := flake.Attributes.Name != prevFlakeName
+		showFlake := flake.Name != prevFlakeName
 		if showFlake {
-			prevFlakeName = flake.Attributes.Name
+			prevFlakeName = flake.Name
 		}
 
 		// Determine if we should show config name (only on first occurrence of each config within a flake)
-		showConfig := configuration.Attributes.Name != prevConfigName || flake.Attributes.Name != prevFlakeName
+		showConfig := configuration.Name != prevConfigName || flake.Name != prevFlakeName
 		if showConfig {
-			prevConfigName = configuration.Attributes.Name
+			prevConfigName = configuration.Name
 		}
 
 		// Get display values (empty for spanning)
 		flakeDisplay := ""
 		if showFlake {
-			flakeDisplay = flake.Attributes.Name
+			flakeDisplay = flake.Name
 		}
 
 		configDisplay := ""
 		if showConfig {
-			configDisplay = configuration.Attributes.Name
+			configDisplay = configuration.Name
 		}
 
 		t.Row(
@@ -111,7 +111,7 @@ func (m *model) ViewStatusTable() string {
 			m.getStatusIcon(ps, xpath, log),
 			flakeDisplay,
 			configDisplay,
-			machine.Attributes.Name,
+			machine.Name,
 			ps.Architecture.Load(),
 			m.getStatusText(ps, xpath, log),
 			fmt.Sprintf("%d", ps.Generation.Load()),
@@ -121,7 +121,7 @@ func (m *model) ViewStatusTable() string {
 		)
 	})
 
-	builder.WriteString("\n" + t.String() + "\n")
+	builder.WriteString("\n" + t.String() + "\n\n")
 
 	return builder.String()
 }

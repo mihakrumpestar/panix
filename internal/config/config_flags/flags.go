@@ -16,7 +16,9 @@ type Flags struct {
 	Timeout              time.Duration  `yaml:"timeout"`
 	SkipPhases           []phases.Phase `yaml:"skipPhases"`
 	Verbose              bool           `yaml:"verbose"`
-	Debug                bool           `yaml:"debug"`
+	// Developers only
+	Debug      bool   `yaml:"debug"`
+	Cpuprofile string `yaml:"cpuprofile"`
 }
 
 type Bootstrap struct {

@@ -54,9 +54,10 @@ func init() {
 	rootCmd.PersistentFlags().String("overrideLocalMachine", hostname, "hostname of the machine that is local (won't use ssh to connect to it)")
 	rootCmd.PersistentFlags().Bool("dryRun", false, "show what would be done without executing")
 	rootCmd.PersistentFlags().Bool("dryRunWithStatus", false, "show what would be done without executing, but with real status query")
+	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for TUI in seconds, default is 1 hour")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
-	rootCmd.PersistentFlags().Int("timeout", 7200, "timeout for TUI in seconds, default is 1 hour")
+	rootCmd.PersistentFlags().String("cpuprofile", "", "cpu profiling to file")
 }
 
 // Helpers

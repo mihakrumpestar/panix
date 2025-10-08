@@ -26,3 +26,5 @@ go.work.sum
 
 .task
 build
+dist
+debug
