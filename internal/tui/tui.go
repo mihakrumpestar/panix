@@ -2,13 +2,18 @@ package tui
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"runtime/debug"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_raw_key_reader"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 )
 
@@ -23,33 +28,28 @@ type model struct {
 	quitting     bool
 	err          error
 	modelView    modelView
-	rawKeyReader *RawKeyReader
+	rawKeyReader *tui_raw_key_reader.RawKeyReader
 }
 
 type modelView struct {
-	dimensions  *Dimensions
-	spinners    *Spinners
-	viewports   *Viewports
+	dimensions  *tui_viewports.Dimensions
+	spinners    *tui_spinners.Spinners
+	viewports   *tui_viewports.Viewports
 	debugOutput *strings.Builder
-}
-
-type Dimensions struct {
-	width  int
-	height int
 }
 
 func NewTui(workflow *workflow.Workflow) error {
 	zone.NewGlobal()
 	defer zone.Close()
 
-	dimensions := &Dimensions{
-		width:  120, // Initial dimensions before tea.WindowSizeMsg
-		height: 120, // Initial dimensions before tea.WindowSizeMsg
+	dimensions := &tui_viewports.Dimensions{
+		Width:  120, // Initial dimensions before tea.WindowSizeMsg
+		Height: 120, // Initial dimensions before tea.WindowSizeMsg
 	}
 
 	debugOutput := &strings.Builder{}
 
-	rawKeyReader := NewRawKeyReader(os.Stdin, 1024)
+	rawKeyReader := tui_raw_key_reader.NewRawKeyReader(os.Stdin, 1024)
 
 	//stdin := io.TeeReader(os.Stdin, os.Stdout)
 
@@ -57,8 +57,8 @@ func NewTui(workflow *workflow.Workflow) error {
 		workflow: workflow,
 		modelView: modelView{
 			dimensions:  dimensions,
-			spinners:    NewSpinners(),
-			viewports:   NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput),
+			spinners:    tui_spinners.NewSpinners(),
+			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput),
 			debugOutput: debugOutput,
 		},
 		rawKeyReader: rawKeyReader,
@@ -70,7 +70,17 @@ func NewTui(workflow *workflow.Workflow) error {
 
 	debugOutput.WriteString("TUI initialized")
 
-	m, err := p.Run()
+	cpuprofile := workflow.State().Conf.Flags.Cpuprofile
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	m, err := p.Run() // Blocking
 
 	// Print the final view to stdout after exiting alt-screen
 	finalModel, ok := m.(model)
@@ -151,7 +161,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.stateUpdateHook())
 
 		// re‐arm for the next keystroke
-	case RawKeyReaderMsg:
+	case tui_raw_key_reader.RawKeyReaderMsg:
 		cmds = append(cmds, m.rawKeyReader.Next())
 
 	case tea.KeyMsg:
@@ -160,8 +170,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		dimensions := m.modelView.dimensions
 
-		dimensions.width = msg.Width
-		dimensions.height = msg.Height
+		dimensions.Width = msg.Width
+		dimensions.Height = msg.Height
 
 	// Update spinners
 	case spinner.TickMsg:
@@ -171,16 +181,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// ViewMainContent generates the main content that should be scrollable
+func (m model) View() string {
+	mainContent := m.ViewMainContent()
+
+	if m.quitting {
+		// When quitting, return the full content without viewport
+		return zone.Scan(mainContent)
+	}
+
+	// Use the special main viewport method
+	mainViewport := m.modelView.viewports.GetOrCreateMainViewport(mainContent)
+	//mainViewport := mainContent
+
+	var builder strings.Builder
+	builder.WriteString(mainViewport)
+
+	// Add keybindings at the bottom
+	builder.WriteString(m.ViewKeybindings(builder))
+
+	return zone.Scan(builder.String())
+}
+
+// Helpers
+
+// ViewMainContent generates the main content that is in a viewport
 func (m model) ViewMainContent() string {
 	var builder strings.Builder
 
 	builder.WriteString(m.ViewStatusTable())
 	builder.WriteString(m.ViewPhaseStatus())
-	builder.WriteString(m.ViewStateLogs())
+	builder.WriteString(m.ViewBuildLogs())
 
 	if m.err != nil {
-		errorHeader := "\n\n=== Error ===\n"
+		errorHeader := "=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
 		builder.WriteString(m.workflow.State().Conf.Tui.ColorScheme.Error.Render(errorHeader + errorContent))
 	}
@@ -194,24 +227,4 @@ func (m model) ViewMainContent() string {
 	}
 
 	return builder.String()
-}
-
-func (m model) View() string {
-	mainContent := m.ViewMainContent()
-
-	if m.quitting {
-		// When quitting, return the full content without viewport
-		return zone.Scan(mainContent)
-	}
-
-	// Use the special main viewport method
-	mainViewport := m.modelView.viewports.GetOrCreateMainViewport(mainContent)
-
-	var builder strings.Builder
-	builder.WriteString(mainViewport)
-
-	// Add keybindings at the bottom
-	builder.WriteString(m.ViewKeybindings(builder))
-
-	return zone.Scan(builder.String())
 }

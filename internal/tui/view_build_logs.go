@@ -15,13 +15,13 @@ import (
 )
 
 // Render generates the Docker-style build log view with tree structure
-func (m *model) ViewStateLogs() string {
+func (m *model) ViewBuildLogs() string {
 	var builder strings.Builder
 
 	colors := m.workflow.State().Conf.Tui.ColorScheme
 
 	// Header for the log view
-	builder.WriteString("\n" + colors.HeaderTitle.Render("=== Build Logs ===\n"))
+	builder.WriteString(colors.HeaderTitle.Render("=== Build Logs ===\n"))
 
 	// Build separate trees for each flake
 	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
@@ -30,9 +30,9 @@ func (m *model) ViewStateLogs() string {
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(colors.TreeEnumerator)
 
-		if flake.Attributes.Logs.Len() > 0 {
-			xpath := flake.Attributes.Name
-			phaseNodes := m.phaseNodes(xpath, flake.Attributes.Logs, colors)
+		if flake.Logs.Len() > 0 {
+			xpath := flake.Name
+			phaseNodes := m.phaseNodes(xpath, flake.Logs, colors)
 			for _, phaseNode := range phaseNodes {
 				flakeTree.Child(phaseNode)
 			}
@@ -40,12 +40,12 @@ func (m *model) ViewStateLogs() string {
 
 		for _, configuration := range flake.Configurations.SortedMap() {
 			configNode := tree.New().
-				Root(colors.Configuration.Render(fmt.Sprintf("%c %s %s", colors.IconConfiguration, configuration.Attributes.Name, configuration.Attributes.Message)))
+				Root(colors.Configuration.Render(fmt.Sprintf("%c %s %s", colors.IconConfiguration, configuration.Name, configuration.Message)))
 
 			// Add configuration logs directly (no "Logs" intermediate node)
-			if configuration.Attributes.Logs.Len() > 0 {
-				xpath := flake.Attributes.Name + configuration.Attributes.Name
-				phaseNodes := m.phaseNodes(xpath, configuration.Attributes.Logs, colors)
+			if configuration.Logs.Len() > 0 {
+				xpath := flake.Name + configuration.Name
+				phaseNodes := m.phaseNodes(xpath, configuration.Logs, colors)
 				for _, phaseNode := range phaseNodes {
 					configNode.Child(phaseNode)
 				}
@@ -54,11 +54,11 @@ func (m *model) ViewStateLogs() string {
 			// Add machines
 			for _, machine := range configuration.Machines.SortedMap() {
 				machineNode := tree.New().
-					Root(colors.Machine.Render(fmt.Sprintf("%c %s %s", colors.IconMachine, machine.Attributes.Name, machine.Attributes.Message))).Offset(0, 4)
+					Root(colors.Machine.Render(fmt.Sprintf("%c %s %s", colors.IconMachine, machine.Name, machine.Message))).Offset(0, 4)
 
-				if machine.Attributes.Logs.Len() > 0 {
-					xpath := flake.Attributes.Name + configuration.Attributes.Name + machine.Attributes.Name
-					phaseNodes := m.phaseNodes(xpath, machine.Attributes.Logs, colors)
+				if machine.Logs.Len() > 0 {
+					xpath := flake.Name + configuration.Name + machine.Name
+					phaseNodes := m.phaseNodes(xpath, machine.Logs, colors)
 					for _, phaseNode := range phaseNodes {
 						machineNode.Child(phaseNode)
 					}
@@ -72,6 +72,8 @@ func (m *model) ViewStateLogs() string {
 
 		builder.WriteString("\n" + flakeTree.String())
 	}
+
+	builder.WriteString("\n\n")
 
 	return builder.String()
 }
@@ -92,12 +94,11 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 		tas := phaseLog.TimeAndState().GetTimeAndState()
 
 		// Phase header with spinner and right-aligned timing
-		iconOnFinished := "📋 "
 		phaseLabel := strings.ToUpper(string(phase))
 
 		phaseText := m.MostLeftAndMostRight(
 			12,
-			m.LeftSideIconOrSpinner(xpath, iconOnFinished, phaseLabel, tas),
+			m.LeftSideIconOrSpinner(xpath, string(colors.IconPhase), phaseLabel, tas),
 			m.RightSideDuration(tas),
 		)
 
@@ -119,7 +120,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 				}
 			}
 
-			iconOnFinished = fmt.Sprintf("%d ", cmdIdx+1)
+			iconOnFinished := fmt.Sprintf("%d ", cmdIdx+1)
 			commandXpath := xpath + cmdLabel
 
 			cmdText := m.MostLeftAndMostRight(
@@ -165,7 +166,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 // Helpers
 
 func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
-	termW := m.modelView.dimensions.width
+	termW := m.modelView.dimensions.Width
 	avail := termW - prefixLen
 
 	lw := lipgloss.Width(left)

@@ -4,17 +4,7 @@ vars:
   BINARY_NAME: panix
   BUILD_DIR: ./build
   DIST_DIR: ./dist
-  VERSION:
-    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
-  COMMIT:
-    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
-  BUILD_TIME:
-    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
-  LDFLAGS: >-
-    -s -w
-    -X main.version={{.VERSION}}
-    -X main.commit={{.COMMIT}}
-    -X main.buildTime={{.BUILD_TIME}}
+  DEBUG_DIR: ./debug
 
 tasks:
   default:
@@ -22,17 +12,30 @@ tasks:
     cmds:
       - task --list
 
+  run-race:
+    desc: Run the application with go run
+    env:
+      GORACE: log_path={{.DEBUG_DIR}}/race.log
+    cmds:
+      -  go run --race cmd/main.go
+
+
+  run-profile:
+    desc: Run the application with go run
+    cmds:
+      -  go run cmd/main.go --cpuprofile={{.DEBUG_DIR}}/profile.prof {{.CLI_ARGS}}
+
+  profile:
+    cmds:
+      # https://ksysoev.github.io/posts/go-cpu-profile/
+      - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/profile.prof
+
   # Development tasks
   dev:
     desc: Run the application in development mode
     deps: [build]
     cmds:
       - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} {{.CLI_ARGS}}
-
-  run:
-    desc: Run the application with go run
-    cmds:
-      - GORACE="log_path=race.log" go run --race cmd/main.go {{.CLI_ARGS}}
 
   # Build tasks
   build:

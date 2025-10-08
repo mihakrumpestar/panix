@@ -9,6 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	keymapHelp = help.New()
+)
+
 // keymap defines all the key bindings for the TUI
 type keymap struct {
 	quit   key.Binding
@@ -84,5 +88,5 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ViewKeybindings returns the help view with key bindings positioned at the bottom
 func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
-	return "\n" + help.New().View(newKeymap())
+	return "\n" + keymapHelp.View(newKeymap())
 }
