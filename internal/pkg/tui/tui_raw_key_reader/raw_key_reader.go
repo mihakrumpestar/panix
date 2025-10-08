@@ -1,4 +1,4 @@
-package tui
+package tui_raw_key_reader
 
 import (
 	"os"

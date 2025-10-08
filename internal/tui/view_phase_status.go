@@ -36,14 +36,23 @@ var phaseColorPairs = map[PhaseState][2]colorful.Color{
 	PhaseStateDefault:   {mustColorfullHex("#6B7280"), mustColorfullHex("#6B7280")}, // Dark gray solid
 }
 
+var phaseGroupStyle = lipgloss.NewStyle().
+	Align(lipgloss.Center).
+	Width(phaseGroupWidth)
+
+var arrow = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#6272A4")). // Same as table color
+	Bold(true).
+	Padding(0, 1).
+	Align(lipgloss.Center).Render(("󰜴"))
+
 func (m *model) ViewPhaseStatus() string {
 	var builder strings.Builder
 
 	colors := m.workflow.State().Conf.Tui.ColorScheme
 	statePhases := m.workflow.State().Phases
 
-	builder.WriteString(colors.HeaderTitle.Render("\n=== Phase Status ===\n"))
-
+	builder.WriteString(colors.HeaderTitle.Render("=== Phase Status ===\n"))
 	builder.WriteString(renderPhaseFlow(statePhases, colors))
 
 	return builder.String()
@@ -62,21 +71,20 @@ func renderPhaseFlow(statePhases *phases.PhaseStates, colors *config.ColorScheme
 		return colors.TableRow.Render("No phases to display")
 	}
 
-	phaseGroups := make([]string, 0)
+	phaseGroups := make([]string, len(phases))
 
 	for i, phase := range phases {
 		phaseGroup := createPhaseGroup(phase, statePhases.Value(phase), colors)
 
 		// Add large arrow except for last phase
 		if i < len(phases)-1 {
-			arrow := createLargeArrow(colors)
 			phaseGroup = lipgloss.JoinHorizontal(lipgloss.Left, phaseGroup, arrow)
 		}
 
-		phaseGroups = append(phaseGroups, phaseGroup)
+		phaseGroups[i] = phaseGroup
 	}
 
-	return fmt.Sprintf("\n%s\n", lipgloss.JoinHorizontal(lipgloss.Left, phaseGroups...))
+	return fmt.Sprintf("\n%s\n\n", lipgloss.JoinHorizontal(lipgloss.Left, phaseGroups...))
 }
 
 func createPhaseGroup(phase phases.Phase, data *phases.PhaseState, colors *config.ColorScheme) string {
@@ -86,23 +94,10 @@ func createPhaseGroup(phase phases.Phase, data *phases.PhaseState, colors *confi
 	failed := data.Failed.Len()
 	done := data.Done.Len()
 
-	phaseGroupStyle := lipgloss.NewStyle().
-		Align(lipgloss.Center).
-		Width(phaseGroupWidth)
-
 	centeredPhaseName := phaseGroupStyle.Render(createAnimatedGradient(displayName, running, failed, done))
 	centeredStats := phaseGroupStyle.Render(buildStatusLine(running, failed, done, colors))
 
 	return lipgloss.JoinVertical(lipgloss.Left, centeredPhaseName, centeredStats)
-}
-
-func createLargeArrow(colors *config.ColorScheme) string {
-	arrowStyle := colors.TableBorder.
-		Bold(true).
-		Padding(0, 1).
-		Align(lipgloss.Center)
-
-	return arrowStyle.Render("󰜴")
 }
 
 func createAnimatedGradient(text string, running, failed, done int) string {
@@ -148,9 +143,7 @@ func buildStatusLine(running, failed, done int, colors *config.ColorScheme) stri
 
 	statusText := strings.Join(indicators, colors.TableBorder.Render("/"))
 
-	return lipgloss.NewStyle().
-		Padding(0, 1).
-		Render(statusText)
+	return statusText
 }
 
 // Helpers
@@ -174,5 +167,6 @@ func determinePhaseState(running, failed, done int) PhaseState {
 	if done > 0 && running == 0 && failed == 0 {
 		return PhaseStateCompleted
 	}
+
 	return PhaseStateDefault
 }
