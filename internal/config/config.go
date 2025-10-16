@@ -103,6 +103,7 @@ type MetaStatus struct { // Atomic due to being read and write at the same time
 	Reachable      atomic.Bool
 	SSHConnectable atomic.Bool
 	Architecture   atomic.String
+	IsRoot         atomic.Bool
 	Bootstrapped   atomic.Bool
 	Generation     atomic.Uint32
 	Date           atomic.String
@@ -115,11 +116,6 @@ func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.F
 
 	if m.Ssh == nil { // Has to be initialized before InitAttributes
 		m.Ssh = &ssh.SshClient{}
-	}
-
-	if m.SudoProgram == nil {
-		sudoProgram := "sudo" // Default sudo program
-		m.SudoProgram = &sudoProgram
 	}
 
 	// Regular
@@ -138,6 +134,26 @@ func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.F
 	}
 
 	return nil
+}
+
+func (m *Machine) MaybeSudo() []string {
+	if m.MetaStatus.IsRoot.Load() {
+		return make([]string, 0) // Return zero slice (instead of nil), since this might be the starting slice
+	}
+
+	if m.OverrideSudoProgram == "" {
+		return []string{"sudo"}
+	}
+
+	return []string{m.OverrideSudoProgram}
+}
+
+func (m *Machine) MaybeBootstrapingPath(restOfPath string) string {
+	if m.Flags.Bootstrap.DisableAuto || !m.MetaStatus.Bootstrapped.Load() {
+		return restOfPath
+	}
+
+	return "/mnt" + restOfPath
 }
 
 // Tui

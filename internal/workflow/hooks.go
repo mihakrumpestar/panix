@@ -14,8 +14,12 @@ func (w *Workflow) executePreFlakeHookPhaseFlake(flake *config.Flake) error {
 
 	return w.Phase(&flake.Attributes, phases.PreFlakeHook, nil,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
-			err := exc.Exec(false, true, nil, nil,
-				"sh", "-c", flake.FlakeHooks.Pre)
+
+			commandWithArgs := []string{"sh", "-c", flake.FlakeHooks.Pre}
+
+			err := exc.Exec(commandWithArgs,
+				executioner.DisableAutoSshCommand(),
+			)
 
 			return err
 		},
@@ -29,8 +33,12 @@ func (w *Workflow) executePostFlakeHookPhaseFlake(flake *config.Flake) error {
 
 	return w.Phase(&flake.Attributes, phases.PostFlakeHook, nil,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
-			err := exc.Exec(false, true, nil, nil,
-				"sh", "-c", flake.FlakeHooks.Post)
+
+			commandWithArgs := []string{"sh", "-c", flake.FlakeHooks.Post}
+
+			err := exc.Exec(commandWithArgs,
+				executioner.DisableAutoSshCommand(),
+			)
 
 			return err
 		},

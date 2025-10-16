@@ -13,26 +13,29 @@ root:
         pre: exit 0
         post: exit 0
       configurations:
-        server-03:
-          machines:
-            server-03:
-              tags:
-                - test
+        #server-03:
+        #  machines:
+        #    server-03:
+        #      tags:
+        #        - test
         #    docker-swarm:
         personal-workstation:
           machines:
             personal-workstation: 
-              secrets:
-                - local:
-                    path: ./README.md
-                  remote:
-                    path: /tmp/README.md
-                - local:
-                    commandOutput: echo OK
-                  remote:
-                    path: /tmp/README2.md
+              #secrets:
+              #  - local:
+              #      path: ./README.md
+              #    remote:
+              #      path: /tmp/README.md
+              #  - local:
+              #      commandOutput: echo OK
+              #    remote:
+              #      path: /tmp/README2.md
             fake:
               ssh:
                 hostname: fake
                 username: root
                 port: 22
+        personal-laptop:
+          machines:
+            personal-laptop:

@@ -16,23 +16,23 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
 
-				err := exc.Exec(false, false,
-					func(log *logs.CommandLog, err error) error {
+				commandWithArgs := []string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure}
+
+				err := exc.Exec(commandWithArgs,
+					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running nixos-install failed for %s", machine.Name)
-					},
-					nil,
-					"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure,
+					}),
 				)
 				if err != nil {
 					return err
 				}
 
-				err = exc.Exec(false, false,
-					func(log *logs.CommandLog, err error) error {
+				commandWithArgs = []string{"reboot"}
+
+				err = exc.Exec(commandWithArgs,
+					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "running reboot failed for %s", machine.Name)
-					},
-					nil,
-					"reboot",
+					}),
 				)
 				if err != nil {
 					return err
@@ -42,20 +42,12 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 				binPath := systemClosure + "/bin/switch-to-configuration"
 
-				commandWithArgs := []string{*machine.SudoProgram}
-				if commandWithArgs[0] == "" {
-					commandWithArgs[0] = binPath
-				} else {
-					commandWithArgs = append(commandWithArgs, binPath)
-				}
-				commandWithArgs = append(commandWithArgs, "switch")
+				commandWithArgs := append(machine.MaybeSudo(), binPath, "switch")
 
-				err := exc.Exec(false, false,
-					func(log *logs.CommandLog, err error) error {
+				err := exc.Exec(commandWithArgs,
+					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "activation failed for %s", machine.Name)
-					},
-					nil,
-					commandWithArgs...,
+					}),
 				)
 				if err != nil {
 					return err
