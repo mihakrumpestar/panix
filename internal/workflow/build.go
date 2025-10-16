@@ -34,8 +34,8 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 
 			commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
-			err := exc.Exec(false, false, nil,
-				func(log *logs.CommandLog) error {
+			err := exc.Exec(commandWithArgs,
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					output := log.Bytes()
 					output = lastNonEmptyLine(output)
 
@@ -69,8 +69,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 					}
 
 					return nil
-				}, // "--print-build-logs"
-				commandWithArgs...,
+				}), // "--print-build-logs"
 			)
 			if err != nil {
 				return err

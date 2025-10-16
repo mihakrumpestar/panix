@@ -27,16 +27,64 @@ func NewExecutioner(ctx context.Context, conf *config_flags.Flags, machine *conf
 	}
 }
 
-func (ex *Executioner) Exec(skipIfLocal bool, disableSsh bool, onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) error {
+// Exec
+
+type ExecOptions struct {
+	skipIfLocal           bool
+	disableAutoSshCommand bool
+	onFailure             func(*logs.CommandLog, error) error
+	onSuccess             func(*logs.CommandLog) error
+	env                   []string
+}
+
+type ExecOption func(*ExecOptions)
+
+func SkipIfLocal() ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.skipIfLocal = true
+	}
+}
+
+func DisableAutoSshCommand() ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.disableAutoSshCommand = true
+	}
+}
+
+func OnFailure(f func(*logs.CommandLog, error) error) ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.onFailure = f
+	}
+}
+
+func OnSuccess(f func(*logs.CommandLog) error) ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.onSuccess = f
+	}
+}
+
+// Slice of "key=value" entrys
+func Env(env []string) ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.env = env
+	}
+}
+
+func (ex *Executioner) Exec(commandWithArgs []string, opts ...ExecOption) error {
+	excOpt := &ExecOptions{}
+	for _, opt := range opts {
+		opt(excOpt)
+	}
+
 	noMachineOrLocal := ex.machine == nil || ex.machine.Ssh.IsLocal
 
 	// 1) local short‐circuit
-	if noMachineOrLocal && skipIfLocal {
+	if noMachineOrLocal && excOpt.skipIfLocal {
 		defer ex.onUpdateHook()
 
 		comLog := ex.phaseLog.AddMessageOnly("(skipped)")
-		if onSuccess != nil {
-			err := onSuccess(comLog)
+		if excOpt.onSuccess != nil {
+			err := excOpt.onSuccess(comLog)
 			if err != nil {
 				return err
 			}
@@ -45,9 +93,9 @@ func (ex *Executioner) Exec(skipIfLocal bool, disableSsh bool, onFailure func(*l
 		return nil
 	}
 
-	if noMachineOrLocal || disableSsh {
-		return ex.shellStream(onFailure, onSuccess, commandWithArgs...)
+	if noMachineOrLocal || excOpt.disableAutoSshCommand {
+		return ex.shellStream(commandWithArgs, excOpt)
 	}
 
-	return ex.sshStream(onFailure, onSuccess, commandWithArgs...)
+	return ex.sshStream(commandWithArgs, excOpt)
 }
