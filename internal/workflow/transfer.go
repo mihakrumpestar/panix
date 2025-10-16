@@ -9,24 +9,27 @@ import (
 )
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
-	return w.Phase(&machine.Attributes, phases.Transfer, nil,
+	return w.Phase(&machine.Attributes, phases.Transfer, machine,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
 			systemClosure := machine.Configuration.MetaBuild.SystemClosure
 			diskoScript := machine.Configuration.MetaBuild.DiskoScript
+
 			toTransfer := []string{systemClosure}
 
-			if diskoScript != "" {
+			if diskoScript != "" && !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableDisko {
 				toTransfer = append(toTransfer, diskoScript)
 			}
-			commandWithArgs := append([]string{"nix", "copy", "--to", machine.Name}, toTransfer...)
+			commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + machine.Ssh.Hostname}, toTransfer...)
 
-			err := exc.Exec(true, false,
-				func(l *logs.CommandLog, err error) error {
-					return errors.Wrap(err, "nix copy failed")
-				},
-				nil,
-				commandWithArgs...,
+			err := exc.Exec(commandWithArgs,
+				executioner.SkipIfLocal(),
+				executioner.DisableAutoSshCommand(),
+				executioner.Env(machine.Ssh.MaybeSshEnvOpts()),
+				executioner.OnFailure(
+					func(l *logs.CommandLog, err error) error {
+						return errors.Wrapf(err, "nix copy failed for %s", machine.Name)
+					}),
 			)
 			if err != nil {
 				return err

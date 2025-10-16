@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(onFailure func(*logs.CommandLog, error) error, onSuccess func(*logs.CommandLog) error, commandWithArgs ...string) (err error) {
+func (ex *Executioner) shellStream(commandWithArgs []string, excOpt *ExecOptions) (err error) {
 	commandLog := ex.phaseLog.NewCommand()
 
 	commandLog.TimeAndState.StartTimer()
@@ -28,13 +28,14 @@ func (ex *Executioner) shellStream(onFailure func(*logs.CommandLog, error) error
 
 	// Prepare initial event
 	cmd := exec.CommandContext(ex.ctx, command, args...)
+	cmd.Env = excOpt.env
 	commandLog.Command.Store(strings.Join(cmd.Args, " "))
 	ex.onUpdateHook()
 
 	// dry-run short-circuit
 	if ex.dryRun {
-		if onSuccess != nil {
-			err := onSuccess(commandLog)
+		if excOpt.onSuccess != nil {
+			err := excOpt.onSuccess(commandLog)
 			if err != nil {
 				return err
 			}
@@ -100,11 +101,11 @@ func (ex *Executioner) shellStream(onFailure func(*logs.CommandLog, error) error
 		err = readErr
 	}
 	if err != nil {
-		if onFailure != nil {
-			err = onFailure(commandLog, err)
+		if excOpt.onFailure != nil {
+			err = excOpt.onFailure(commandLog, err)
 		}
-	} else if onSuccess != nil {
-		err = onSuccess(commandLog)
+	} else if excOpt.onSuccess != nil {
+		err = excOpt.onSuccess(commandLog)
 	}
 
 	return

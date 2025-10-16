@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -34,11 +35,14 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 					defer os.Remove(fileName)
 					secret.Local.Path = &fileName
 
-					err = exc.Exec(false, true,
-						func(log *logs.CommandLog, err error) error {
+					commandWithArgs := []string{"sh", "-c", *secret.Local.CommandOutput}
+
+					err = exc.Exec(commandWithArgs,
+						executioner.DisableAutoSshCommand(),
+						executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 							return errors.Wrapf(err, "secrets command failed for %s", machine.Name)
-						},
-						func(log *logs.CommandLog) error {
+						}),
+						executioner.OnSuccess(func(log *logs.CommandLog) error {
 							output := log.Bytes()
 
 							var n int
@@ -57,51 +61,42 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 							}
 
 							return err
-						},
-						"sh", "-c", *secret.Local.CommandOutput,
+						}),
 					)
 					if err != nil {
 						return err
 					}
 				}
 
-				commandWithArgs := []string{"rsync", fmt.Sprintf("--rsync-path=%s rsync", *machine.SudoProgram), "-rcPEx"}
+				commandWithArgs := []string{"rsync", "-rcPEx"}
+
+				maybeSudo := machine.MaybeSudo()
+				if len(maybeSudo) == 1 {
+					commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", maybeSudo[0]))
+				}
 
 				if secret.Remote.UID != nil && secret.Remote.GID != nil {
 					commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=%d:%d", secret.Remote.UID, secret.Remote.GID))
 				}
 
-				secretRemotePath := secret.Remote.Path
-				if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
-					secretRemotePath = `/mnt` + secretRemotePath
-				}
-
 				commandWithArgs = append(commandWithArgs, *secret.Local.Path)
 
+				secretRemotePath := machine.MaybeBootstrapingPath(secret.Remote.Path)
 				if machine.Ssh.IsLocal {
 					commandWithArgs = append(commandWithArgs, secretRemotePath)
 				} else {
-					if machine.Ssh.HostnameIsAlias {
-						commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
-					} else {
-
-						maybeIdentityFile := ""
-						if machine.Ssh.IdentityFile != "" {
-							maybeIdentityFile = " -i " + machine.Ssh.IdentityFile
-						}
-
-						commandWithArgs = append(commandWithArgs, "-e", fmt.Sprintf("'ssh -p %d%s'", machine.Ssh.Port, maybeIdentityFile))
-
-						commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s@%s:%s", machine.Ssh.Username, machine.Ssh.Hostname, secretRemotePath))
+					sshArgs := machine.Ssh.MaybeSshCommandArguments()
+					if len(sshArgs) != 0 {
+						commandWithArgs = append(commandWithArgs, "-e=ssh "+strings.Join(sshArgs, " "))
 					}
+
+					commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
 				}
 
-				err = exc.Exec(false, false,
-					func(log *logs.CommandLog, err error) error {
+				err = exc.Exec(commandWithArgs,
+					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "secrets failed for %s", machine.Name)
-					},
-					nil,
-					commandWithArgs...,
+					}),
 				)
 				if err != nil {
 					return err

@@ -24,36 +24,48 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			mms := machine.MetaStatus
 
 			// TCP check
-			err = exc.Exec(true, true,
-				func(log *logs.CommandLog, err error) error {
+
+			commandWithArgs := []string{"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port)}
+
+			err = exc.Exec(commandWithArgs,
+				executioner.SkipIfLocal(),
+				executioner.DisableAutoSshCommand(),
+				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 					return fmt.Errorf("machine unreachable: %w", err)
-				},
-				func(log *logs.CommandLog) error {
+				}),
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					mms.Reachable.Store(true)
 					return nil
-				},
-				"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port))
+				}),
+			)
 			if err != nil {
 				return err
 			}
 
 			// SSH connect
-			err = exc.Exec(true, false,
-				func(log *logs.CommandLog, err error) error {
+
+			commandWithArgs = []string{"echo", "OK"}
+
+			err = exc.Exec(commandWithArgs,
+				executioner.SkipIfLocal(),
+				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 					return errors.Wrapf(err, "ssh test failed: %s", log.String())
-				},
-				func(log *logs.CommandLog) error {
+				}),
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					mms.SSHConnectable.Store(true)
 					return nil
-				}, "echo", "OK")
+				}),
+			)
 			if err != nil {
 				return err
 			}
 
 			// Architecture
-			err = exc.Exec(false, false,
-				nil,
-				func(log *logs.CommandLog) error {
+
+			commandWithArgs = []string{"uname", "-m"}
+
+			err = exc.Exec(commandWithArgs,
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					architecture := log.String()
 
 					if w.state.Conf.Flags.DryRun {
@@ -72,14 +84,45 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 					mms.Architecture.Store(architecture)
 					return nil
-				}, "uname", "-m")
+				}),
+			)
 			if err != nil {
 				return err
 			}
 
+			// IsSudo
+
+			commandWithArgs = []string{"id", "-u"}
+
+			err = exc.Exec(commandWithArgs,
+				executioner.OnFailure(
+					func(log *logs.CommandLog, err error) error {
+						return errors.Wrapf(err, "failed to check sudo: %s", log.String())
+					}),
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
+					output := strings.Trim(log.String(), "\n ")
+
+					parsedOutput, err := strconv.ParseUint(output, 10, 64)
+					if err != nil {
+						return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
+					}
+
+					mms.IsRoot.Store(parsedOutput == 0)
+					return nil
+				}),
+			)
+			if err != nil {
+				return err
+			}
+
+			// TODO: "/etc/os-release"
+
 			// Run bootstrap detection
-			err = exc.Exec(false, false, nil,
-				func(log *logs.CommandLog) error {
+
+			commandWithArgs = []string{"test", "-e", "/run/current-system"}
+
+			err = exc.Exec(commandWithArgs,
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					bootstrapped := true
 
 					if w.state.Conf.Flags.DryRun {
@@ -88,7 +131,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 					mms.Bootstrapped.Store(bootstrapped)
 					return nil
-				}, "test", "-e", "/run/current-system")
+				}))
 			if err != nil {
 				err = nil // just not bootstrapped, not actually an error
 
@@ -102,15 +145,13 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 				*/
 
-				if !mms.Bootstrapped.Load() && machine.Attributes.HardwareConfigPath != "" {
-					commandWithArgs := []string{"sh", "-c", *machine.Attributes.SudoProgram, "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.Attributes.HardwareConfigPath}
+				if !mms.Bootstrapped.Load() && machine.HardwareConfigPath != "" {
+					commandWithArgs := append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.Attributes.HardwareConfigPath)
 
-					err := exc.Exec(false, false,
-						func(log *logs.CommandLog, err error) error {
-							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Attributes.Name)
-						},
-						nil,
-						commandWithArgs...,
+					err := exc.Exec(commandWithArgs,
+						executioner.OnFailure(func(log *logs.CommandLog, err error) error {
+							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Name)
+						}),
 					)
 					if err != nil {
 						return nil
@@ -121,8 +162,11 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			}
 
 			// Get current generation
-			err = exc.Exec(false, false, nil,
-				func(log *logs.CommandLog) error {
+
+			commandWithArgs = []string{"nixos-rebuild", "list-generations", "--json"}
+
+			err = exc.Exec(commandWithArgs,
+				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					output := log.Bytes()
 
 					if w.state.Conf.Flags.DryRun {
@@ -158,7 +202,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					}
 
 					return nil
-				}, "nixos-rebuild", "list-generations", "--json")
+				}),
+			)
 			if err != nil {
 				return err
 			}

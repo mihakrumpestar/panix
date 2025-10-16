@@ -2,13 +2,15 @@ package ssh
 
 import (
 	"fmt"
+	"strings"
 )
 
 type SshClient struct {
-	Hostname     string `yaml:"hostname"` // Hostname is alias if all other fileds are empty
-	Port         uint16 `yaml:"port"`
-	Username     string `yaml:"username"`
-	IdentityFile string `yaml:"identityFile"` // Path to private/public key
+	Hostname                 string `yaml:"hostname"` // Hostname is alias if all other fileds are empty
+	Port                     uint16 `yaml:"port"`
+	Username                 string `yaml:"username"`
+	IdentityFile             string `yaml:"identityFile"` // Path to private/public key
+	DisableStrictKeyChecking bool   `yaml:"disableStrictKeyChecking"`
 	// Internal
 	IsLocal         bool
 	HostnameIsAlias bool
@@ -44,14 +46,37 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 	case sC.Hostname == "":
 		return fmt.Errorf("hostname can't be empty")
 	case sC.Port == 0:
-		return fmt.Errorf("port can't be empty")
+		sC.Port = 22 // Default
 	case sC.Username == "":
-		return fmt.Errorf("username can't be empty")
+		sC.Username = "root" // Default
 	}
 
 	return nil
 }
 
-func (sC *SshClient) Url() string {
-	return fmt.Sprintf("ssh//%s@%s:%d", sC.Username, sC.Hostname, sC.Port)
+func (sC *SshClient) MaybeSshCommandArguments() []string {
+	if sC.HostnameIsAlias {
+		return make([]string, 0)
+	}
+
+	sshArgs := []string{"-p", fmt.Sprintf("%d", sC.Port), "-l", sC.Username}
+
+	if sC.IdentityFile != "" {
+		sshArgs = append(sshArgs, "-i", sC.IdentityFile, "-o", "IdentitiesOnly=yes")
+	}
+
+	if sC.DisableStrictKeyChecking {
+		sshArgs = append(sshArgs, "-o", "UserKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no")
+	}
+
+	return sshArgs
+}
+
+func (sC *SshClient) MaybeSshEnvOpts() []string {
+	sshArgs := sC.MaybeSshCommandArguments()
+	if len(sshArgs) == 0 {
+		return nil
+	}
+
+	return []string{"NIX_SSHOPTS=" + strings.Join(sshArgs, " ")}
 }

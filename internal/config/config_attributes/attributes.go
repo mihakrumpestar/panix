@@ -15,12 +15,12 @@ import (
 // Flake, Configuration and Machine Attributes
 
 type Attributes struct {
-	Ssh                *ssh.SshClient  `yaml:"ssh,omitempty"`
-	Tags               []string        `yaml:"tags"`
-	Secrets            []*SecretConfig `yaml:"secrets,omitempty"`
-	Disabled           bool            `yaml:"disabled"`
-	SudoProgram        *string         `yaml:"sudo_program,omitempty"` // Default is "sudo", if specified (but empty string) it will disable privilidge escalation altogether
-	HardwareConfigPath string          `yaml:"hardware_config_path"`
+	Ssh                 *ssh.SshClient  `yaml:"ssh,omitempty"`
+	Tags                []string        `yaml:"tags"`
+	Secrets             []*SecretConfig `yaml:"secrets,omitempty"`
+	Disabled            bool            `yaml:"disabled"`
+	OverrideSudoProgram string          `yaml:"override_sudo_program"`
+	HardwareConfigPath  string          `yaml:"hardware_config_path"`
 
 	// Internal
 	Name    string
@@ -38,6 +38,8 @@ func (a *Attributes) Init(name string, passAttr *Attributes, flags *config_flags
 	a.Name = name
 	a.Logs = logs.NewPhaseLogs(flags)
 	a.Flags = flags
+
+	a.Tags = append(a.Tags, name)
 
 	a.PassAttributesInto(passAttr)
 
@@ -76,8 +78,8 @@ func (a *Attributes) PassAttributesInto(attr *Attributes) {
 		a.Disabled = true
 	}
 
-	if a.SudoProgram == nil {
-		a.SudoProgram = attr.SudoProgram
+	if a.OverrideSudoProgram == "" {
+		a.OverrideSudoProgram = attr.OverrideSudoProgram
 	}
 
 	if a.HardwareConfigPath == "" {

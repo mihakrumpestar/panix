@@ -12,13 +12,17 @@ tasks:
     cmds:
       - task --list
 
+  run:
+    desc: Run the application with go run
+    cmds:
+      -  go run cmd/main.go {{.CLI_ARGS}}
+
   run-race:
     desc: Run the application with go run
     env:
       GORACE: log_path={{.DEBUG_DIR}}/race.log
     cmds:
-      -  go run --race cmd/main.go
-
+      -  go run --race cmd/main.go {{.CLI_ARGS}}
 
   run-profile:
     desc: Run the application with go run

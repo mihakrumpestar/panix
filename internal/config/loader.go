@@ -189,24 +189,24 @@ func (c *Config) validateConfig() error {
 // FilterConfigEntrys filters the configuration based on command-line or global selections
 func (c *Config) filterRootTree() error {
 	for flakeName, flake := range c.Root.Flakes.SortedMap() {
-		if flake.Attributes.Disabled {
+		if flake.Disabled {
 			delete(c.Root.Flakes, flakeName)
 			continue
 		}
 
 		for configurationName, configuration := range flake.Configurations.SortedMap() {
-			if configuration.Attributes.Disabled {
+			if configuration.Disabled {
 				delete(flake.Configurations, configurationName)
 				continue
 			}
 
 			for machineName, machine := range configuration.Machines.SortedMap() {
-				if machine.Attributes.Disabled {
+				if machine.Disabled {
 					delete(configuration.Machines, machineName)
 					continue
 				}
 
-				if !machineContainesAllTags(machine.Attributes.Tags, c.Flags.Tags) {
+				if !machineContainesAllTags(machine.Tags, c.Flags.Tags) {
 					delete(configuration.Machines, machineName)
 					continue
 				}
