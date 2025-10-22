@@ -25,6 +25,11 @@ require (
 )
 
 require (
+	github.com/acobaugh/osrelease v0.1.0 // indirect
+	github.com/cobaugh/osrelease v0.0.0-20211111170140-20e410975bc3 // indirect
+)
+
+require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect

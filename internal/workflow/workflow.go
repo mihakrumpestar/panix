@@ -136,6 +136,21 @@ func (w *Workflow) CreateWorkflow() error {
 							}
 						}
 
+						// Bootstrap
+						if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
+
+							if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableDisko {
+
+								err := w.NewTaskWithRetry(phases.Bootstrap, &machine.Attributes, func() error {
+									return w.executeBootstrapPhaseMachine(flake, configuration, machine)
+								})
+								if err != nil {
+									return err
+								}
+
+							}
+						}
+
 						// Build
 						if slices.Contains(w.state.Phases.Keys(), phases.Build) {
 							err := build.Do(func() error {
@@ -152,16 +167,6 @@ func (w *Workflow) CreateWorkflow() error {
 						if slices.Contains(w.state.Phases.Keys(), phases.Transfer) {
 							err := w.NewTaskWithRetry(phases.Transfer, &machine.Attributes, func() error {
 								return w.executeTransferPhaseMachine(machine)
-							})
-							if err != nil {
-								return err
-							}
-						}
-
-						// Bootstrap
-						if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
-							err := w.NewTaskWithRetry(phases.Bootstrap, &machine.Attributes, func() error {
-								return w.executeBootstrapPhaseMachine(machine)
 							})
 							if err != nil {
 								return err

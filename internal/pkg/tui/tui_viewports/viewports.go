@@ -27,6 +27,7 @@ type Viewport struct {
 	pty           *os.File
 	minHeight     int
 	scrollbarZone string // Zone ID for scrollbar area
+	content       string // Store the content for double-click copying
 }
 
 type Dimensions struct {
@@ -136,6 +137,7 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 			minHeight:     config.viewportHeight,
 			scrollbarZone: config.xpath + "-scrollbar",
 			active:        false, // Will be set appropriately based on context
+			content:       config.content,
 		}
 
 		v.viewports.Set(config.xpath, vpr)
@@ -155,7 +157,12 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 		finalHeight = config.viewportHeight
 	} else {
 		// Calculate height based on the wrapped content
-		finalHeight = min(lipgloss.Height(processedContent), config.maxHeight)
+		if config.maxHeight > 0 {
+			finalHeight = min(lipgloss.Height(processedContent), config.maxHeight)
+		} else {
+			// No height limit specified, use full content height
+			finalHeight = lipgloss.Height(processedContent)
+		}
 	}
 
 	// Update viewport
@@ -221,6 +228,36 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 		maxHeight:      maxHeight,
 		wrapContent:    true,
 		useBorder:      true,
+		isMain:         false,
+	}
+
+	return v.getOrCreateViewportShared(config)
+}
+
+// GetOrCreateLabelViewport creates or updates a viewport specifically for labels
+func (v *Viewports) GetOrCreateLabelViewport(xpath string, content string, indentation int) string {
+	// Calculate available width based on terminal width and indentation
+	// Account for tree structure indentation, border, and padding
+	baseIndentation := indentation * 2 // Each tree level typically takes 2 characters
+	borderPadding := 2                 // Minimal padding for labels
+	availableWidth := v.dimensions.Width - baseIndentation - borderPadding
+
+	// Ensure minimum width
+	if availableWidth < 40 {
+		availableWidth = 40
+	}
+
+	// For labels, we want to show all lines without a height limit
+	// The height will be calculated based on the actual content
+	config := ViewportConfig{
+		xpath:          xpath,
+		content:        content,
+		pty:            nil,
+		availableWidth: availableWidth,
+		viewportHeight: 0, // Will be calculated based on content
+		maxHeight:      0, // No height limit for labels
+		wrapContent:    true,
+		useBorder:      false, // No border for labels
 		isMain:         false,
 	}
 

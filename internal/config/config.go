@@ -70,7 +70,6 @@ type Configuration struct {
 
 type MetaBuild struct {
 	SystemClosure string
-	DiskoScript   string // Only on bootstrap
 }
 
 func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Flags) error {

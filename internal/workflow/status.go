@@ -3,10 +3,12 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
@@ -115,38 +117,65 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 				return err
 			}
 
-			// TODO: "/etc/os-release"
-
 			// Run bootstrap detection
 
-			commandWithArgs = []string{"test", "-e", "/run/current-system"}
+			requiresKexec := false
+			commandWithArgs = []string{"cat", "/etc/os-release"}
 
 			err = exc.Exec(commandWithArgs,
+				executioner.OnFailure(
+					func(log *logs.CommandLog, err error) error {
+						return errors.Wrapf(err, "failed read /etc/os-release: %s", log.String())
+					}),
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
-					bootstrapped := true
 
 					if w.state.Conf.Flags.DryRun {
-						bootstrapped = false
+						mms.Bootstrapped.Store(false)
+						return nil
 					}
 
-					mms.Bootstrapped.Store(bootstrapped)
+					output := log.String()
+
+					osrelease, err := osrelease.ReadString(output)
+					if err != nil {
+						return errors.Wrap(err, "error parsing /etc/os-release")
+					}
+
+					if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
+						mms.Bootstrapped.Store(false)
+						return nil
+					}
+
+					if osrelease["ID"] != "nixos" {
+						requiresKexec = true
+						mms.Bootstrapped.Store(false)
+						return nil
+					}
+
+					mms.Bootstrapped.Store(true)
 					return nil
 				}))
 			if err != nil {
-				err = nil // just not bootstrapped, not actually an error
+				return err
+			}
 
-				// Bootstrap part
+			// Bootstrap part
 
-				/*
+			if !mms.Bootstrapped.Load() {
 
-					"x86_64 | aarch64)  kexecUrl="https://github.com/nix-community/nixos-images/releases/download/nixos-25.05/nixos-kexec-installer-noninteractive-${isArch}-linux.tar.gz"
-					"TMPDIR=/root/kexec setsid --wait ${maybeSudo} /root/kexec/kexec/run"
-					 ssh into kexec
+				// Kexec
+				if requiresKexec {
+					log.Fatal("TODO:")
+					/*
+						"x86_64 | aarch64)  kexecUrl="https://github.com/nix-community/nixos-images/releases/download/nixos-25.05/nixos-kexec-installer-noninteractive-${isArch}-linux.tar.gz"
+						"TMPDIR=/root/kexec setsid --wait ${maybeSudo} /root/kexec/kexec/run"
+						 ssh into kexec
+					*/
+				}
 
-				*/
-
+				// Generate-config
 				if !mms.Bootstrapped.Load() && machine.HardwareConfigPath != "" {
-					commandWithArgs := append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.Attributes.HardwareConfigPath)
+					commandWithArgs := append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath)
 
 					err := exc.Exec(commandWithArgs,
 						executioner.OnFailure(func(log *logs.CommandLog, err error) error {
@@ -154,15 +183,16 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 						}),
 					)
 					if err != nil {
-						return nil
+						return err
 					}
 				}
 
-				return err
+				return nil
 			}
 
-			// Get current generation
+			// Regular (non-bootstrap) part
 
+			// Get current generation
 			commandWithArgs = []string{"nixos-rebuild", "list-generations", "--json"}
 
 			err = exc.Exec(commandWithArgs,
@@ -188,7 +218,7 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 					var nixGenerations nixGenerations
 					err = json.Unmarshal(output, &nixGenerations)
 					if err != nil || len(nixGenerations) == 0 {
-						return errors.Wrapf(err, "invalid list-generations output for %s: %s", machine.Attributes.Name, string(output)) // strconv.Quote()
+						return errors.Wrapf(err, "invalid list-generations output for %s: %s", machine.Name, string(output))
 					}
 
 					for _, nixGeneration := range nixGenerations {
