@@ -16,7 +16,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
 
-				commandWithArgs := []string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure}
+				commandWithArgs := []string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"}
 
 				err := exc.Exec(commandWithArgs,
 					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
@@ -40,11 +40,22 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 			} else {
 
-				binPath := systemClosure + "/bin/switch-to-configuration"
-
-				commandWithArgs := append(machine.MaybeSudo(), binPath, "switch")
+				commandWithArgs := append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure)
 
 				err := exc.Exec(commandWithArgs,
+					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
+						return errors.Wrapf(err, "adding new system closure to profiles failed for %s", machine.Name)
+					}),
+				)
+				if err != nil {
+					return err
+				}
+
+				binPath := systemClosure + "/bin/switch-to-configuration"
+
+				commandWithArgs = append(machine.MaybeSudo(), binPath, "switch")
+
+				err = exc.Exec(commandWithArgs,
 					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "activation failed for %s", machine.Name)
 					}),
@@ -52,6 +63,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 				if err != nil {
 					return err
 				}
+
 			}
 
 			return nil

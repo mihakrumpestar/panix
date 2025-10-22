@@ -26,6 +26,7 @@ This is the main command for deploying NixOS configurations.`,
 		phases := []phases.Phase{
 			phases.Status,
 			phases.PreFlakeHook,
+			phases.Bootstrap,
 			phases.Build,
 			phases.Transfer,
 			phases.Secrets,
