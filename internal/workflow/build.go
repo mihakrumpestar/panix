@@ -19,7 +19,6 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 			if w.state.Conf.Flags.DryRun {
 				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
-				configuration.MetaBuild.DiskoScript = "BUILD_OUTPUT_PATH_PLACEHOLDER"
 			}
 
 			mb := configuration.MetaBuild
@@ -27,26 +26,31 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 			// System closure
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.Url, configuration.Name)}
 
-			// DiskoScript
-			if !w.state.Conf.Flags.Bootstrap.DisableAuto {
-				installables = append(installables, fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.Url, configuration.Name))
+			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
+			if err != nil {
+				return err
 			}
 
-			commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
+			mb.SystemClosure = parsedOutput[0].Outputs.Out
 
-			err := exc.Exec(commandWithArgs,
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
-					output := log.Bytes()
-					output = lastNonEmptyLine(output)
+			return nil
+		})
+}
 
-					if w.state.Conf.Flags.DryRun {
-						output = []byte(`
+func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string) (BuidOutputJson, error) {
+	var parsedOutput BuidOutputJson
+
+	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
+
+	err := exc.Exec(commandWithArgs,
+		executioner.DisableAutoSshCommand(),
+		executioner.OnSuccess(func(log *logs.CommandLog) error {
+			output := log.Bytes()
+			output = lastNonEmptyLine(output)
+
+			if w.state.Conf.Flags.DryRun {
+				output = []byte(`
 						[
-							{
-								"outputs": {
-									"out": "DRY_RUN"
-								}
-							},
 							{
 								"outputs": {
 									"out": "DRY_RUN"
@@ -54,31 +58,23 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 							}
 						]
 						`)
-					}
-
-					var parsedOutput BuidOutputJson
-					err := json.Unmarshal(output, &parsedOutput)
-					if err != nil || len(parsedOutput) == 0 {
-						return fmt.Errorf("invalid build output for %s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
-					}
-
-					mb.SystemClosure = parsedOutput[0].Outputs.Out
-
-					if !w.state.Conf.Flags.Bootstrap.DisableAuto {
-						mb.DiskoScript = parsedOutput[1].Outputs.Out
-					}
-
-					return nil
-				}), // "--print-build-logs"
-			)
-			if err != nil {
-				return err
 			}
 
-			phaseLog.Verbose("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure)
+			err := json.Unmarshal(output, &parsedOutput)
+			if err != nil || len(parsedOutput) == 0 {
+				return fmt.Errorf("invalid build output for %s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
+			}
 
 			return nil
-		})
+		}), // "--print-build-logs"
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	phaseLog.Verbose("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure)
+
+	return parsedOutput, nil
 }
 
 // Unmarshall

@@ -122,23 +122,67 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 
 			iconOnFinished := fmt.Sprintf("%d ", cmdIdx+1)
 			commandXpath := xpath + cmdLabel
+			labelXpath := commandXpath + "-label"
 
-			cmdText := m.MostLeftAndMostRight(
-				12,
-				m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel, cmdTas),
-				m.RightSideDuration(cmdTas),
-			)
+			var cmdHeader string
 
-			cmdHeader := colors.Command.Render(cmdText)
+			// Create a viewport for the command label instead of truncating it
+			if cmdLabel != "(hidden)" {
+				// Get just the icon/spinner without the command label (to avoid truncation)
+				leftIcon := m.LeftSideIconOrSpinnerNoLabel(commandXpath, iconOnFinished, cmdTas)
+
+				// Get the duration for the right side
+				duration := m.RightSideDuration(cmdTas)
+
+				// Create viewport for just the command label content
+				cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, 2)
+
+				// Build the command header with proper layout
+				// We need to ensure the timer is on the right side of the first line
+
+				// Split the viewport content to get the lines
+				viewportLines := strings.Split(cmdLabelViewport, "\n")
+
+				if len(viewportLines) > 0 {
+					// Build the first line with left icon, first line of viewport, and duration
+					firstLineWithTimer := m.MostLeftAndMostRight(
+						12,
+						leftIcon+viewportLines[0],
+						duration,
+					)
+
+					// If there are additional lines, append them with proper padding
+					if len(viewportLines) > 1 {
+						// Create padding for additional lines to match the left icon width
+						padding := strings.Repeat(" ", lipgloss.Width(leftIcon))
+						additionalLines := strings.Join(viewportLines[1:], "\n"+padding)
+						cmdHeader = colors.Command.Render(firstLineWithTimer + "\n" + padding + additionalLines)
+					} else {
+						cmdHeader = colors.Command.Render(firstLineWithTimer)
+					}
+				} else {
+					// Fallback if viewport is empty
+					cmdHeader = colors.Command.Render(leftIcon + " " + duration)
+				}
+			} else {
+				// For hidden commands, still use the old method
+				cmdText := m.MostLeftAndMostRight(
+					12,
+					m.LeftSideIconOrSpinner(commandXpath, iconOnFinished, cmdLabel, cmdTas),
+					m.RightSideDuration(cmdTas),
+				)
+				cmdHeader = colors.Command.Render(cmdText)
+			}
+
 			cmdTree := tree.New().Root(cmdHeader)
 
 			// Command output
 			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
-				vpr := m.modelView.viewports.GetOrCreateViewport(commandXpath, output, cmd.Pty, 4)
-				cmdTree.Child(vpr)
+				outputViewport := m.modelView.viewports.GetOrCreateViewport(commandXpath+"-output", output, cmd.Pty, 4)
+				cmdTree.Child(outputViewport)
 			} else {
-				m.modelView.viewports.RemoveIfExistsViewport(commandXpath)
+				m.modelView.viewports.RemoveIfExistsViewport(commandXpath + "-output")
 			}
 
 			// Command error status
@@ -223,4 +267,18 @@ func (m *model) LeftSideIconOrSpinner(spinnerXpath, iconOnFinished, content stri
 	final := iconOrSpinner + content
 
 	return final
+}
+
+func (m *model) LeftSideIconOrSpinnerNoLabel(spinnerXpath, iconOnFinished string, tas time_and_state.TimeAndStateInternal) string {
+	var iconOrSpinner string
+
+	if tas.Started && tas.Finished {
+		iconOrSpinner = iconOnFinished
+		m.modelView.spinners.RemoveIfExistsSpinner(spinnerXpath)
+	} else if tas.Started && !tas.Finished {
+		// Spinner
+		iconOrSpinner = m.modelView.spinners.GetOrCreateSpinner(spinnerXpath).View()
+	}
+
+	return iconOrSpinner
 }

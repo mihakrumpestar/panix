@@ -28,8 +28,15 @@ func (ex *Executioner) shellStream(commandWithArgs []string, excOpt *ExecOptions
 
 	// Prepare initial event
 	cmd := exec.CommandContext(ex.ctx, command, args...)
-	cmd.Env = excOpt.env
-	commandLog.Command.Store(strings.Join(cmd.Args, " "))
+	cmd.Env = append(os.Environ(), excOpt.env...)
+
+	command = strings.Join(excOpt.env, " ")
+	if command != "" {
+		command += "\n"
+	}
+	command += strings.Join(cmd.Args, " ")
+
+	commandLog.Command.Store(command)
 	ex.onUpdateHook()
 
 	// dry-run short-circuit

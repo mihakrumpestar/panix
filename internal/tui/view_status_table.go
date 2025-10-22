@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,6 +16,10 @@ func (m *model) ViewStatusTable() string {
 	state := m.workflow.State()
 
 	colors := m.workflow.State().Conf.Tui.ColorScheme
+
+	if !slices.Contains(state.Phases.Keys(), phases.Status) {
+		return ""
+	}
 
 	if state.Conf.Flags.DryRun {
 		return "No table in dryRun"
@@ -106,6 +111,12 @@ func (m *model) ViewStatusTable() string {
 			configDisplay = configuration.Name
 		}
 
+		generationString := ""
+		generation := ps.Generation.Load()
+		if generation != 0 {
+			generationString = fmt.Sprintf("%d", generation)
+		}
+
 		t.Row(
 			fmt.Sprintf("%d", i),
 			m.getStatusIcon(ps, xpath, log),
@@ -114,7 +125,7 @@ func (m *model) ViewStatusTable() string {
 			machine.Name,
 			ps.Architecture.Load(),
 			m.getStatusText(ps, xpath, log),
-			fmt.Sprintf("%d", ps.Generation.Load()),
+			generationString,
 			ps.Date.Load(),
 			ps.Nixos.Load(),
 			ps.Kernel.Load(),
