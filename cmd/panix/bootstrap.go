@@ -24,15 +24,7 @@ Same as "deploy --bootstrap.only".`,
 
 		conf.Flags.Bootstrap.Only = true
 
-		phases := []phases.Phase{
-			phases.Status,
-			phases.PreFlakeHook,
-			phases.Build,
-			phases.Transfer,
-			phases.Secrets,
-			phases.Activate,
-			phases.PostFlakeHook,
-		}
+		phases := phases.PhasesInOrder()
 
 		workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
 		if err != nil {

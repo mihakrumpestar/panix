@@ -43,6 +43,6 @@ root:
           machines:
             kiosk:
               ssh:
-                hostname: 10.0.200.33
+                hostname: 10.0.200.74
                 port: 22222
                 username: root

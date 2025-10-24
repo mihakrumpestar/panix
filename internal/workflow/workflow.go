@@ -124,6 +124,10 @@ func (w *Workflow) CreateWorkflow() error {
 							}
 						}
 
+						if w.state.Conf.Flags.Bootstrap.Only && machine.MetaStatus.Bootstrapped.Load() {
+							return nil
+						}
+
 						// Pre flake hook
 						if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
 							err := preFlakeHook.Do(func() error {
@@ -137,9 +141,10 @@ func (w *Workflow) CreateWorkflow() error {
 						}
 
 						// Bootstrap
-						if slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
+						if !machine.MetaStatus.Bootstrapped.Load() {
 
-							if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableDisko {
+							if !w.state.Conf.Flags.Bootstrap.DisableDisko &&
+								slices.Contains(w.state.Phases.Keys(), phases.Bootstrap) {
 
 								err := w.NewTaskWithRetry(phases.Bootstrap, &machine.Attributes, func() error {
 									return w.executeBootstrapPhaseMachine(flake, configuration, machine)
@@ -147,7 +152,15 @@ func (w *Workflow) CreateWorkflow() error {
 								if err != nil {
 									return err
 								}
+							}
 
+							if slices.Contains(w.state.Phases.Keys(), phases.PostBootstrapHook) {
+								err := w.NewTaskWithRetry(phases.PostBootstrapHook, &machine.Attributes, func() error {
+									return w.executePostmachineHookPhaseBootsrap(machine)
+								})
+								if err != nil {
+									return err
+								}
 							}
 						}
 
