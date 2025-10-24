@@ -22,6 +22,8 @@ type Attributes struct {
 	OverrideSudoProgram string          `yaml:"override_sudo_program"`
 	HardwareConfigPath  string          `yaml:"hardware_config_path"`
 
+	PostBootstrapHook string `yaml:"postBootstrapHook"`
+
 	// Internal
 	Name    string
 	Xpath   string

@@ -208,7 +208,7 @@ func (m model) View() string {
 func (m model) ViewMainContent() string {
 	var builder strings.Builder
 
-	builder.WriteString(m.ViewStatusTable())
+	builder.WriteString(m.ViewStatsTable())
 	builder.WriteString(m.ViewPhaseStatus())
 	builder.WriteString(m.ViewBuildLogs())
 

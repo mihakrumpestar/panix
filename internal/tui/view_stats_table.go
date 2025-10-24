@@ -12,17 +12,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-func (m *model) ViewStatusTable() string {
+func (m *model) ViewStatsTable() string {
 	state := m.workflow.State()
 
 	colors := m.workflow.State().Conf.Tui.ColorScheme
 
-	if !slices.Contains(state.Phases.Keys(), phases.Status) {
+	if state.Conf.Flags.DryRun || !slices.Contains(state.Phases.Keys(), phases.Status) {
 		return ""
-	}
-
-	if state.Conf.Flags.DryRun {
-		return "No table in dryRun"
 	}
 
 	var builder strings.Builder
@@ -31,7 +27,7 @@ func (m *model) ViewStatusTable() string {
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Use provided width, with reasonable bounds and accounting for borders
-	usableWidth := max(m.modelView.dimensions.Width-4, 60)
+	usableWidth := max(m.modelView.dimensions.Width-2, 60)
 
 	// Header text lengths including icons
 	flakeHeader := string(colors.IconFlake) + " FLAKE"

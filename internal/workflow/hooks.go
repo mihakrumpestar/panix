@@ -44,3 +44,20 @@ func (w *Workflow) executePostFlakeHookPhaseFlake(flake *config.Flake) error {
 		},
 	)
 }
+
+func (w *Workflow) executePostmachineHookPhaseBootsrap(machine *config.Machine) error {
+	if machine.PostBootstrapHook == "" {
+		return nil
+	}
+
+	return w.Phase(&machine.Attributes, phases.PostBootstrapHook, machine,
+		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+
+			commandWithArgs := []string{"sh", "-c", machine.PostBootstrapHook}
+
+			err := exc.Exec(commandWithArgs)
+
+			return err
+		},
+	)
+}
