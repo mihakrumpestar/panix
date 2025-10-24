@@ -23,16 +23,7 @@ This is the main command for deploying NixOS configurations.`,
 		ctx := cmd.Context()
 		conf := ConfFromContext(ctx)
 
-		phases := []phases.Phase{
-			phases.Status,
-			phases.PreFlakeHook,
-			phases.Bootstrap,
-			phases.Build,
-			phases.Transfer,
-			phases.Secrets,
-			phases.Activate,
-			phases.PostFlakeHook,
-		}
+		phases := phases.PhasesInOrder()
 
 		workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
 		if err != nil {

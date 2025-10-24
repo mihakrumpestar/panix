@@ -97,7 +97,7 @@ type ViewportConfig struct {
 	maxHeight      int
 	wrapContent    bool
 	useBorder      bool
-	isMain         bool
+	isFullScrean   bool
 }
 
 // combineViewportWithScrollbar combines viewport content with scrollbar
@@ -146,14 +146,14 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 	// Process content based on configuration
 	var processedContent string
 	if config.wrapContent {
-		processedContent = lipgloss.NewStyle().Width(config.availableWidth).MaxWidth(config.availableWidth).Render(config.content)
+		processedContent = lipgloss.NewStyle().Width(config.availableWidth).Render(config.content)
 	} else {
 		processedContent = config.content
 	}
 
 	// Calculate height if needed
 	var finalHeight int
-	if config.isMain {
+	if config.isFullScrean {
 		finalHeight = config.viewportHeight
 	} else {
 		// Calculate height based on the wrapped content
@@ -201,7 +201,10 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 
 		return zone.Mark(config.xpath, final)
 	} else {
-		return zone.Mark(config.xpath, combinedView)
+		final := lipgloss.NewStyle().UnsetBorderStyle().
+			Render(combinedView)
+
+		return zone.Mark(config.xpath, final)
 	}
 }
 
@@ -228,7 +231,7 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 		maxHeight:      maxHeight,
 		wrapContent:    true,
 		useBorder:      true,
-		isMain:         false,
+		isFullScrean:   false,
 	}
 
 	return v.getOrCreateViewportShared(config)
@@ -239,8 +242,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath string, content string, inden
 	// Calculate available width based on terminal width and indentation
 	// Account for tree structure indentation, border, and padding
 	baseIndentation := indentation * 2 // Each tree level typically takes 2 characters
-	borderPadding := 2                 // Minimal padding for labels
-	availableWidth := v.dimensions.Width - baseIndentation - borderPadding
+	availableWidth := v.dimensions.Width - baseIndentation
 
 	// Ensure minimum width
 	if availableWidth < 40 {
@@ -258,7 +260,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath string, content string, inden
 		maxHeight:      0, // No height limit for labels
 		wrapContent:    true,
 		useBorder:      false, // No border for labels
-		isMain:         false,
+		isFullScrean:   false,
 	}
 
 	return v.getOrCreateViewportShared(config)
@@ -284,7 +286,7 @@ func (v *Viewports) GetOrCreateMainViewport(content string) string {
 		maxHeight:      viewportHeight,
 		wrapContent:    false,
 		useBorder:      false,
-		isMain:         true,
+		isFullScrean:   true,
 	}
 
 	return v.getOrCreateViewportShared(config)

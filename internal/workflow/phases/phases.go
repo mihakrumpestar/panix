@@ -13,15 +13,16 @@ import (
 type Phase string
 
 const (
-	Status        Phase = "status"
-	PreFlakeHook  Phase = "pre-flake-hook"
-	Build         Phase = "build"
-	Bootstrap     Phase = "bootstrap"
-	Transfer      Phase = "transfer"
-	Secrets       Phase = "secrets"
-	Activate      Phase = "activate"
-	Done          Phase = "done"
-	PostFlakeHook Phase = "post-flake-hook"
+	Status            Phase = "status"
+	PreFlakeHook      Phase = "pre-flake-hook"
+	Build             Phase = "build"
+	Bootstrap         Phase = "bootstrap"
+	PostBootstrapHook Phase = "post-bootstrap-hook"
+	Transfer          Phase = "transfer"
+	Secrets           Phase = "secrets"
+	Activate          Phase = "activate"
+	Done              Phase = "done"
+	PostFlakeHook     Phase = "post-flake-hook"
 )
 
 func PhasesInOrder() []Phase {
@@ -30,6 +31,7 @@ func PhasesInOrder() []Phase {
 		PreFlakeHook,
 		Build,
 		Bootstrap,
+		PostBootstrapHook,
 		Transfer,
 		Secrets,
 		Activate,
