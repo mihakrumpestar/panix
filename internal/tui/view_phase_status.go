@@ -31,7 +31,7 @@ const (
 var phaseColorPairs = map[PhaseState][2]colorful.Color{
 	PhaseStateActive:    {mustColorfullHex("#2952c3"), mustColorfullHex("#3b6bec")}, // Dark blue variations
 	PhaseStateFailed:    {mustColorfullHex("#5f1414"), mustColorfullHex("#DC2626")}, // Dark red variations
-	PhaseStateCompleted: {mustColorfullHex("#14532D"), mustColorfullHex("#16A34A")}, // Dark green variations
+	PhaseStateCompleted: {mustColorfullHex("#14532D"), mustColorfullHex("#11883d")}, // Dark green variations
 	PhaseStateDefault:   {mustColorfullHex("#535862"), mustColorfullHex("#6B7280")}, // Dark gray solid
 }
 
