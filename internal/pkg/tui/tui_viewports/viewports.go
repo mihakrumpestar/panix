@@ -50,29 +50,35 @@ func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, debug *str
 }
 
 // renderScrollbar creates a visual scrollbar representation
-func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLines int) string {
+func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLines int) (string, int) {
 	if totalLines <= visibleLines {
-		return "" // No scrollbar needed if all content is visible
+		return "", 0 // No scrollbar needed if all content is visible
 	}
 
-	scrollbarHeight := visibleLines
-	if scrollbarHeight <= 0 {
-		return ""
+	// Calculate thumb size proportional to visible content
+	// Like in browsers: thumb_size = viewport_height * (viewport_height / content_height)
+	thumbRatio := float64(visibleLines) / float64(totalLines)
+	thumbSize := int(float64(visibleLines) * thumbRatio)
+
+	if thumbSize < 1 { // Keep minimum
+		thumbSize = 1
 	}
 
 	// Calculate the position of the scrollbar thumb
-	thumbPosition := int(float64(scrollbarHeight-1) * scrollPercent)
+	// The thumb should move within the available space (visibleLines - thumbSize)
+	maxThumbPosition := visibleLines - thumbSize
+	thumbPosition := int(float64(maxThumbPosition) * scrollPercent)
 	if thumbPosition < 0 {
 		thumbPosition = 0
 	}
-	if thumbPosition >= scrollbarHeight {
-		thumbPosition = scrollbarHeight - 1
+	if thumbPosition > maxThumbPosition {
+		thumbPosition = maxThumbPosition
 	}
 
 	// Build the scrollbar
-	scrollbar := make([]string, scrollbarHeight)
+	scrollbar := make([]string, visibleLines)
 	for i := range scrollbar {
-		if i == thumbPosition {
+		if i >= thumbPosition && i < thumbPosition+thumbSize {
 			scrollbar[i] = "█" // Thumb
 		} else {
 			scrollbar[i] = "│" // Track
@@ -84,7 +90,7 @@ func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLi
 		Foreground(v.colors.TableBorder.GetForeground())
 
 	// Join all lines with newlines
-	return scrollbarStyle.Render(strings.Join(scrollbar, "\n"))
+	return scrollbarStyle.Render(strings.Join(scrollbar, "\n")), 2
 }
 
 // ViewportConfig holds configuration options for creating or updating a viewport
@@ -136,11 +142,23 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 			pty:           config.pty,
 			minHeight:     config.viewportHeight,
 			scrollbarZone: config.xpath + "-scrollbar",
-			active:        false, // Will be set appropriately based on context
 			content:       config.content,
 		}
 
 		v.viewports.Set(config.xpath, vpr)
+	}
+
+	viewportView := vpr.viewport.View()
+	scrollPercent := vpr.viewport.ScrollPercent()
+	totalLines := vpr.viewport.TotalLineCount()
+	visibleLines := vpr.viewport.Height
+
+	// Create scrollbar
+	scrollbar, scrollbarWidth := v.renderScrollbar(scrollPercent, totalLines, visibleLines)
+	// When scrollbar is present, we need to account for the 1 character space it takes
+	if !config.isFullScrean {
+		config.availableWidth -= scrollbarWidth
+
 	}
 
 	// Process content based on configuration
@@ -176,36 +194,25 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 		vpr.viewport.GotoBottom()
 	}
 
-	viewportView := vpr.viewport.View()
-	scrollPercent := vpr.viewport.ScrollPercent()
-	totalLines := vpr.viewport.TotalLineCount()
-	visibleLines := vpr.viewport.Height
-
-	// Create scrollbar
-	scrollbar := v.renderScrollbar(scrollPercent, totalLines, visibleLines)
-
 	// Combine viewport content with scrollbar
 	combinedView := v.combineViewportWithScrollbar(viewportView, scrollbar, vpr.scrollbarZone)
+
+	style := lipgloss.NewStyle()
 
 	// Apply border if needed
 	if config.useBorder {
 		borderColor := v.colors.TableBorder.GetForeground()
 		if vpr.active {
-			borderColor = v.colors.Error.GetBackground()
+			// Create a lighter version of the border color for active viewports
+			borderColor = v.colors.TableBorder.GetBackground()
 		}
-
-		final := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor).
-			Render(combinedView)
-
-		return zone.Mark(config.xpath, final)
+		style = style.Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderColor)
 	} else {
-		final := lipgloss.NewStyle().UnsetBorderStyle().
-			Render(combinedView)
-
-		return zone.Mark(config.xpath, final)
+		style = style.UnsetBorderStyle()
 	}
+
+	return zone.Mark(config.xpath, style.Render(combinedView))
 }
 
 func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.File, indentation int) string {
