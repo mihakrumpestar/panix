@@ -171,6 +171,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dimensions := m.modelView.dimensions
 
 		dimensions.Width = msg.Width
+		if dimensions.Width < 40 { // Ensure minimum width
+			dimensions.Width = 40
+		}
+
 		dimensions.Height = msg.Height
 
 	// Update spinners

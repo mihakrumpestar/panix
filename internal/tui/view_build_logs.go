@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
@@ -75,6 +76,8 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 		phase := entry.Key
 		phaseLog := entry.Value
 
+		xpath += "-" + string(phase)
+
 		phaseTree, phaseError := m.phaseLogs(phaseLog, colors, xpath)
 
 		// Commands and their output
@@ -102,7 +105,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 			duration := m.Duration(cmdTas)
 
 			// Create viewport for just the command label content
-			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, 3)
+			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, 23)
 
 			// Build the first line with left icon, first line of viewport, and duration
 			entry := leftIcon + cmdLabelViewport +
@@ -114,7 +117,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 			// Command output
 			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
-				outputViewport := m.modelView.viewports.GetOrCreateViewport(commandXpath+"-output", output, cmd.Pty, 4)
+				outputViewport := m.modelView.viewports.GetOrCreateViewport(commandXpath+"-output", output, cmd.Pty, 19)
 				cmdTree.Child(outputViewport)
 			} else {
 				m.modelView.viewports.RemoveIfExistsViewport(commandXpath + "-output")
@@ -147,8 +150,10 @@ func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, x
 	// Phase header with spinner and right-aligned timing
 	phaseLabel := strings.ToUpper(string(phaseLog.Phase()))
 
-	phaseText := m.IconOrSpinner(xpath, string(colors.IconPhase), tas) + " " + phaseLabel +
-		m.Duration(tas)
+	phaseText := m.MostLeftAndMostRight(12,
+		m.IconOrSpinner(xpath, string(colors.IconPhase), tas)+" "+phaseLabel,
+		m.Duration(tas),
+	)
 
 	phaseHeader := colors.Phase.Render(phaseText)
 	phaseTree := tree.New().Root(phaseHeader)
@@ -157,6 +162,33 @@ func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, x
 }
 
 // Helpers
+
+func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
+	terminalWidth := m.modelView.dimensions.Width
+	available := terminalWidth - prefixLen
+
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(right)
+	originalContentWidth := leftWidth + rightWidth
+
+	// Ensure we don't exceed available width
+	if originalContentWidth > available {
+		// Left side too big, truncate it
+		truncatingIndicator := "... "
+		truncatingIndicatorWidth := lipgloss.Width(truncatingIndicator)
+		leftWidth = available - rightWidth - truncatingIndicatorWidth
+
+		left = lipgloss.NewStyle().MaxWidth(leftWidth).Render(right) + truncatingIndicator
+	} else if originalContentWidth < available {
+		leftWidth = available - rightWidth
+	}
+
+	// Create layout with lipgloss
+	leftBlock := lipgloss.NewStyle().Width(leftWidth).Render(left)
+	rightBlock := lipgloss.NewStyle().Width(rightWidth).Render(right)
+
+	return lipgloss.JoinHorizontal(lipgloss.Left, leftBlock, rightBlock)
+}
 
 func (m *model) IconOrSpinner(spinnerXpath, iconOnFinished string, tas time_and_state.TimeAndStateInternal) string {
 	var iconOrSpinner string
@@ -179,6 +211,7 @@ func (m *model) Duration(tas time_and_state.TimeAndStateInternal) string {
 	var durationStr string
 
 	if tas.Started && tas.Finished {
+		// Finished timer
 		duration := tas.EndTime.Sub(tas.StartTime)
 		durationStr = fmt.Sprintf("(%.2fs)", duration.Seconds())
 	} else if tas.Started && !tas.Finished {

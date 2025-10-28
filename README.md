@@ -9,17 +9,25 @@ Remote requires to have ssh key authentication (kay file has to be without passw
 If you have only password auth, create and add a temporary key to remote with the following commands:
 
 ```sh
+export HOST=<host>
+
 ssh-keygen -t ed25519 -f ./temp_key -C "temporary_deployment_key" -N ""
-SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub nixos@<host>
+SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub nixos@$HOST
 
 # Installation requires root user
-ssh -i ./temp_key -o IdentitiesOnly=yes nixos@<host> "sudo mkdir -p /root/.ssh; sudo cp ~/.ssh/authorized_keys /root/.ssh"
+ssh -i ./temp_key -o IdentitiesOnly=yes nixos@$HOST "sudo mkdir -p /root/.ssh; sudo cp ~/.ssh/authorized_keys /root/.ssh"
 ```
 
 You now may test the login with:
 
 ```sh
-ssh -i ./temp_key -o IdentitiesOnly=yes root@<host>
+ssh -i ./temp_key -o IdentitiesOnly=yes root@$HOST
+```
+
+Now you can get the hardware config:
+
+```sh
+nixos-generate-config --no-filesystems --show-hardware-config
 ```
 
 ## Notes

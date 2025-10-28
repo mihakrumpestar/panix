@@ -209,16 +209,7 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 }
 
 func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.File, indentation int) string {
-	// Calculate available width based on terminal width and indentation
-	// Account for tree structure indentation, border, and padding
-	baseIndentation := indentation * 2 // Each tree level typically takes 2 characters
-	borderPadding := 6 + 8             // Border takes ~4 characters + some padding
-	availableWidth := v.dimensions.Width - baseIndentation - borderPadding
-
-	// Ensure minimum width
-	if availableWidth < 40 {
-		availableWidth = 40
-	}
+	availableWidth := v.dimensions.Width - indentation
 
 	maxHeight := 8
 
@@ -239,15 +230,7 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 
 // GetOrCreateLabelViewport creates or updates a viewport specifically for labels
 func (v *Viewports) GetOrCreateLabelViewport(xpath string, content string, indentation int) string {
-	// Calculate available width based on terminal width and indentation
-	// Account for tree structure indentation, border, and padding
-	baseIndentation := indentation * 2 // Each tree level typically takes 2 characters
-	availableWidth := v.dimensions.Width - baseIndentation
-
-	// Ensure minimum width
-	if availableWidth < 40 {
-		availableWidth = 40
-	}
+	availableWidth := v.dimensions.Width - indentation
 
 	// For labels, we want to show all lines without a height limit
 	// The height will be calculated based on the actual content
@@ -269,11 +252,6 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath string, content string, inden
 // GetOrCreateMainViewport creates or updates the main viewport with full screen dimensions
 func (v *Viewports) GetOrCreateMainViewport(content string) string {
 	availableWidth := v.dimensions.Width - 2 // Account for scrollbar
-
-	// Ensure minimum width
-	if availableWidth < 40 {
-		availableWidth = 40
-	}
 
 	viewportHeight := v.dimensions.Height - 3 // Reserve space for keybindings
 

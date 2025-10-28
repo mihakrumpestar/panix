@@ -53,7 +53,7 @@ func (w *Workflow) executePostmachineHookPhaseBootsrap(machine *config.Machine) 
 	return w.Phase(&machine.Attributes, phases.PostBootstrapHook, machine,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
-			commandWithArgs := []string{"sh", "-c", machine.PostBootstrapHook}
+			commandWithArgs := []string{machine.PostBootstrapHook}
 
 			err := exc.Exec(commandWithArgs)
 
