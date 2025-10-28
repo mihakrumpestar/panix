@@ -28,3 +28,6 @@ go.work.sum
 build
 dist
 debug
+
+temp_key
+temp_key.pub

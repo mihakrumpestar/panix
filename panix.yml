@@ -43,6 +43,9 @@ root:
           machines:
             kiosk:
               ssh:
-                hostname: 10.0.200.74
+                #hostname: 10.0.200.198
+                hostname: 10.0.60.2
                 port: 22222
                 username: root
+                #identityFile: temp_key
+              #postBootstrapHook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all /dev/nvme0n1p2
