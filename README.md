@@ -12,6 +12,7 @@ If you have only password auth, create and add a temporary key to remote with th
 export HOST=<host>
 
 ssh-keygen -t ed25519 -f ./temp_key -C "temporary_deployment_key" -N ""
+
 SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub nixos@$HOST
 
 # Installation requires root user
