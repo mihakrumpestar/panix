@@ -66,7 +66,7 @@ func (ex *Executioner) shellStream(commandWithArgs []string, excOpt *ExecOptions
 	}()
 
 	// Read from PTY and capture to buffer in real-time
-	buf := make([]byte, 8192)
+	buf := make([]byte, 8192*10) // Note: this is important when listing generations, since there is a lot of text at the same time
 	var readErr error
 
 	// Warning: the folowing read sequance applies to pty.stdin too

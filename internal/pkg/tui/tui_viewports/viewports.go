@@ -2,6 +2,7 @@ package tui_viewports
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -145,7 +146,7 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 			content:       config.content,
 		}
 
-		v.viewports.Set(config.xpath, vpr)
+		_ = v.viewports.Set(config.xpath, vpr)
 	}
 
 	viewportView := vpr.viewport.View()
@@ -336,20 +337,18 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		scrolledViewports := v.getViewportsUnderMouse(mouseMsg)
 		mostSpecificViewport := v.getMostSpecificViewport(scrolledViewports)
 
-		if mostSpecificViewport != "" {
-			// Scroll the most specific viewport under the cursor without activating it
-			if vpr, ok := v.viewports.Get(mostSpecificViewport); ok {
-				if mouseMsg.Y > 0 {
-					// Scroll down - use larger steps for better precision
-					for i := 0; i < 3; i++ {
-						vpr.viewport.ScrollDown(1)
-					}
-				} else if mouseMsg.Y < 0 {
-					// Scroll up - use larger steps for better precision
-					for i := 0; i < 3; i++ {
-						vpr.viewport.ScrollUp(1)
-					}
-				}
+		// Scroll the most specific viewport under the cursor without activating it
+		vpr, ok := v.viewports.Get(mostSpecificViewport)
+		if ok {
+			mouseY := int(math.Abs(float64(mouseMsg.Y) / 3)) // Use larger steps for better precision
+
+			v.debug.WriteString(fmt.Sprintf("%s: mouseY %d", mostSpecificViewport, mouseMsg.Y))
+
+			if mouseMsg.Y > 0 {
+				// Scroll down -
+				vpr.viewport.ScrollDown(mouseY)
+			} else if mouseMsg.Y < 0 {
+				vpr.viewport.ScrollUp(mouseY)
 			}
 		}
 	}
@@ -360,7 +359,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 			if vpr.pty != nil {
 				switch msg := msg.(type) {
 				case tui_raw_key_reader.RawKeyReaderMsg:
-					vpr.pty.Write([]byte(msg))
+					_, _ = vpr.pty.Write([]byte(msg)) // TODO: handle properly the DELETE keyboard events
 				}
 			}
 
