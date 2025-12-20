@@ -9,6 +9,11 @@ Remote requires to have ssh key authentication (kay file has to be without passw
 If you have only password auth, create and add a temporary key to remote with the following commands:
 
 ```sh
+# On remote
+passwd
+```
+
+```sh
 export HOST=<host>
 
 ssh-keygen -t ed25519 -f ./temp_key -C "temporary_deployment_key" -N ""
