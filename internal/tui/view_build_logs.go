@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -25,33 +26,32 @@ func (m *model) ViewBuildLogs() string {
 
 	// Build separate trees for each flake
 	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
-		flakeTree := tree.New().
-			Root(colors.Flake.Render(fmt.Sprintf("%c %s %s", colors.IconFlake, flake.Attributes.Name, flake.Attributes.Message))).
+		flakeNode := tree.New().
+			Root(nodeTitle(colors.Flake, flake.Attributes)).
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(colors.TreeEnumerator)
 
-		m.addChildLogs(flake.Logs, flakeTree, flake.Xpath, colors)
+		m.addChildLogs(flake.Logs, flakeNode, flake.Xpath, colors)
 
+		// Add configurations
 		for _, configuration := range flake.Configurations.SortedMap() {
-			configurationNode := tree.New().
-				Root(colors.Configuration.Render(fmt.Sprintf("%c %s %s", colors.IconConfiguration, configuration.Name, configuration.Message)))
+			configurationNode := tree.New().Root(nodeTitle(colors.Configuration, configuration.Attributes))
 
 			m.addChildLogs(configuration.Logs, configurationNode, configuration.Xpath, colors)
 
 			// Add machines
 			for _, machine := range configuration.Machines.SortedMap() {
-				machineNode := tree.New().
-					Root(colors.Machine.Render(fmt.Sprintf("%c %s %s", colors.IconMachine, machine.Name, machine.Message))).Offset(0, 4)
+				machineNode := tree.New().Root(nodeTitle(colors.Machine, machine.Attributes)).Offset(0, 4)
 
 				m.addChildLogs(machine.Logs, machineNode, machine.Xpath, colors)
 
 				configurationNode.Child(machineNode)
 			}
 
-			flakeTree.Child(configurationNode)
+			flakeNode.Child(configurationNode)
 		}
 
-		builder.WriteString("\n" + flakeTree.String())
+		builder.WriteString("\n" + flakeNode.String())
 	}
 
 	builder.WriteString("\n\n")
@@ -59,11 +59,15 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
+func nodeTitle(logStyle config.ColorSchemeLogEntity, attr config_attributes.Attributes) string {
+	return logStyle.Color.Render(fmt.Sprintf("%c %s %s", logStyle.Icon, attr.Name, attr.Message))
+}
+
 func (m *model) addChildLogs(logs *logs.PhaseLogs, treeRoot *tree.Tree, xpath string, colors *config.ColorScheme) {
 	if logs.Len() > 0 {
 		phaseNodes := m.phaseNodes(xpath, logs, colors)
 		for _, phaseNode := range phaseNodes {
-			treeRoot.Child(phaseNode)
+			treeRoot.Child(phaseNode) // Passing "phaseNodes" directly does not produce the same result as adding them seperately
 		}
 	}
 }
@@ -82,7 +86,13 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
-			cmdLabel := cmd.Command.Load()
+			cmdLabel := ""
+			if false {
+				cmdLabel = cmd.Command.Load()
+			} else {
+				cmdLabel = cmd.Description
+			}
+
 			cmdOutput := cmd.String()
 			cmdTas := cmd.TimeAndState.GetTimeAndState()
 
@@ -108,10 +118,9 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, 23)
 
 			// Build the first line with left icon, first line of viewport, and duration
-			entry := leftIcon + cmdLabelViewport +
-				duration
+			entry := leftIcon + cmdLabelViewport + duration
 
-			cmdHeader = colors.Command.Render(entry)
+			cmdHeader = colors.Command.Color.Render(entry)
 			cmdTree := tree.New().Root(cmdHeader)
 
 			// Command output
@@ -126,7 +135,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 			// Command error status
 			err := cmdTas.Error
 			if err != nil {
-				cmdTree.Child(colors.Error.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
+				cmdTree.Child(colors.Error.Color.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
 			}
 
 			phaseTree.Child(cmdTree)
@@ -134,7 +143,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 
 		// Show error details if failed
 		if phaseError != nil {
-			errorMsg := colors.Error.Render(fmt.Sprintf("✗ Phase failed: %s", phaseError.Error()))
+			errorMsg := colors.Error.Color.Render(fmt.Sprintf("✗ Phase failed: %s", phaseError.Error()))
 			phaseTree.Child(errorMsg)
 		}
 
@@ -151,11 +160,11 @@ func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, x
 	phaseLabel := strings.ToUpper(string(phaseLog.Phase()))
 
 	phaseText := m.MostLeftAndMostRight(12,
-		m.IconOrSpinner(xpath, string(colors.IconPhase), tas)+" "+phaseLabel,
+		m.IconOrSpinner(xpath, string(colors.Phase.Icon), tas)+" "+phaseLabel,
 		m.Duration(tas),
 	)
 
-	phaseHeader := colors.Phase.Render(phaseText)
+	phaseHeader := colors.Phase.Color.Render(phaseText)
 	phaseTree := tree.New().Root(phaseHeader)
 
 	return phaseTree, tas.Error

@@ -6,90 +6,40 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/hayageek/threadsafe"
 	"github.com/kirill-scherba/omap"
+	"github.com/mihakrumpestar/panix/internal/workflow/tasks"
 )
 
 type Phase string
 
 const (
-	Status            Phase = "status"
-	PreFlakeHook      Phase = "pre-flake-hook"
-	Build             Phase = "build"
-	Bootstrap         Phase = "bootstrap"
-	PostBootstrapHook Phase = "post-bootstrap-hook"
-	Transfer          Phase = "transfer"
-	Secrets           Phase = "secrets"
-	Activate          Phase = "activate"
-	Done              Phase = "done"
-	PostFlakeHook     Phase = "post-flake-hook"
+	Status    Phase = "status"
+	Build     Phase = "build"
+	Bootstrap Phase = "bootstrap"
+	Transfer  Phase = "transfer"
+	Secrets   Phase = "secrets"
+	Activate  Phase = "activate"
+	Done      Phase = "done"
 )
 
 func PhasesInOrder() []Phase {
 	return []Phase{
 		Status,
-		PreFlakeHook,
 		Build,
 		Bootstrap,
-		PostBootstrapHook,
 		Transfer,
 		Secrets,
 		Activate,
 		Done,
-		PostFlakeHook,
 	}
-}
-
-type PhaseState struct {
-	Running *Tasks
-	Failed  *Tasks
-	Done    *Tasks // Only for the "done" phase
-}
-
-type Tasks struct {
-	tasks *threadsafe.Slice[string]
-}
-
-func NewTasks() *Tasks {
-	return &Tasks{
-		threadsafe.NewSlice[string](),
-	}
-}
-
-func (t *Tasks) List() []string {
-	return t.tasks.Values()
-}
-
-func (t *Tasks) Len() int {
-	return t.tasks.Length()
-}
-
-func (t *Tasks) Add(task string) {
-	t.tasks.Append(task)
-}
-
-func (t *Tasks) Rem(task string) {
-	index := -1
-	for i, value := range t.tasks.Values() {
-		if value == task {
-			index = i
-			break
-		}
-	}
-
-	if index == -1 {
-		panic("key was not found in valueKeys")
-	}
-
-	t.tasks.Remove(index)
 }
 
 type PhaseStates struct {
-	states *omap.Omap[Phase, *PhaseState]
+	states *omap.Omap[Phase, *tasks.PhaseTasksStates]
 }
 
 func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, error) {
-	states, err := omap.New[Phase, *PhaseState]()
+	states, err := omap.New[Phase, *tasks.PhaseTasksStates]()
 	if err != nil {
 		panic(err)
 	}
@@ -124,11 +74,7 @@ func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, e
 
 	// Initialize task status for each phase
 	for _, phase := range phasesInOrder {
-		err := states.Set(phase, &PhaseState{
-			Running: NewTasks(),
-			Failed:  NewTasks(),
-			Done:    NewTasks(),
-		})
+		err := states.Set(phase, tasks.NewPhaseTasksStates())
 		if err != nil {
 			panic(err)
 		}
@@ -144,14 +90,14 @@ func NewPhaseStates(requiredPhases []Phase, skipPhases []Phase) (*PhaseStates, e
 func (ps *PhaseStates) Keys() []Phase {
 	phases := make([]Phase, 0)
 
-	ps.states.ForEach(func(key Phase, data *PhaseState) {
+	ps.states.ForEach(func(key Phase, data *tasks.PhaseTasksStates) {
 		phases = append(phases, key)
 	})
 
 	return phases
 }
 
-func (ps *PhaseStates) Value(phase Phase) *PhaseState {
+func (ps *PhaseStates) Value(phase Phase) *tasks.PhaseTasksStates {
 	value, ok := ps.states.Get(phase)
 	if !ok {
 		panic("phaseState with given key does not exist")
@@ -160,6 +106,6 @@ func (ps *PhaseStates) Value(phase Phase) *PhaseState {
 	return value
 }
 
-func (ps *PhaseStates) Range() iter.Seq2[Phase, *PhaseState] {
+func (ps *PhaseStates) Range() iter.Seq2[Phase, *tasks.PhaseTasksStates] {
 	return ps.states.Records()
 }

@@ -219,7 +219,7 @@ func (m model) ViewMainContent() string {
 	if m.err != nil {
 		errorHeader := "=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
-		builder.WriteString(m.workflow.State().Conf.Tui.ColorScheme.Error.Render(errorHeader + errorContent))
+		builder.WriteString(m.workflow.State().Conf.Tui.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
 	if m.workflow.State().Conf.Flags.Debug {

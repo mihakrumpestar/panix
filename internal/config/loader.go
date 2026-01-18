@@ -206,7 +206,7 @@ func (c *Config) filterRootTree() error {
 					continue
 				}
 
-				if !machineContainesAllTags(machine.Tags, c.Flags.Tags) {
+				if !machineContainesTags(machine.Tags, c.Flags.Tags) {
 					delete(configuration.Machines, machineName)
 					continue
 				}
@@ -231,16 +231,16 @@ func (c *Config) filterRootTree() error {
 
 // Helpers
 
-func machineContainesAllTags(tags, filterTags []string) bool {
+func machineContainesTags(tags, filterTags []string) bool {
 	if len(filterTags) == 0 {
 		return true
 	}
 
 	for _, filterTag := range filterTags {
-		if !slices.Contains(tags, filterTag) {
-			return false
+		if slices.Contains(tags, filterTag) {
+			return true
 		}
 	}
 
-	return true
+	return false
 }

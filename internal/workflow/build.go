@@ -42,7 +42,8 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
-	err := exc.Exec(commandWithArgs,
+	err := exc.Exec("build",
+		commandWithArgs,
 		executioner.DisableAutoSshCommand(),
 		executioner.OnSuccess(func(log *logs.CommandLog) error {
 			output := log.Bytes()

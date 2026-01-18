@@ -11,6 +11,7 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/tasks"
 )
 
 const (
@@ -89,15 +90,15 @@ func renderPhaseFlow(statePhases *phases.PhaseStates, colors *config.ColorScheme
 	// Set the table row
 	t.Row(row...)
 
-	return fmt.Sprintf("\n%s\n\n", t.String())
+	return fmt.Sprintf("%s\n", t.String())
 }
 
-func createPhaseGroup(phase phases.Phase, data *phases.PhaseState, colors *config.ColorScheme, termWidth int) string {
+func createPhaseGroup(phase phases.Phase, data *tasks.PhaseTasksStates, colors *config.ColorScheme, termWidth int) string {
 	phaseName := string(phase)
 	displayName := strings.Title(phaseName)
-	running := data.Running.Len()
-	failed := data.Failed.Len()
-	done := data.Done.Len()
+	running := data.LenByState(tasks.Running)
+	failed := data.LenByState(tasks.Failed)
+	done := data.LenByState(tasks.Done)
 
 	// Create phase name with gradient
 	phaseNameText := createAnimatedGradient(displayName, running, failed, done)
