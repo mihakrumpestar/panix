@@ -13,7 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/pkg/errors"
+	"github.com/mihakrumpestar/panix/internal/workflow/tasks"
 )
 
 type Workflow struct {
@@ -72,12 +72,10 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, attr *config_attributes.
 	phaseTaskStatus := w.state.Phases.Value(phase)
 
 	for {
-		phaseTaskStatus.Running.Add(attr.Xpath)
+		phaseTaskStatus.Set(attr.Xpath, tasks.Running)
 		err := f()
-		phaseTaskStatus.Running.Rem(attr.Xpath)
-
 		if err != nil {
-			phaseTaskStatus.Failed.Add(attr.Xpath)
+			phaseTaskStatus.Set(attr.Xpath, tasks.Failed)
 
 			if w.state.Conf.Flags.RequireAllSuccess {
 				w.cancel()
@@ -87,9 +85,10 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, attr *config_attributes.
 			w.state.Retry.Wait()
 
 			// Task is being retried, so it is not failed and logs are cleared
-			phaseTaskStatus.Failed.Rem(attr.Xpath)
+			phaseTaskStatus.Remove(attr.Xpath)
 			attr.Logs.SafeGet(phase).Clear()
 		} else {
+			phaseTaskStatus.Remove(attr.Xpath)
 			return nil
 		}
 	}
@@ -103,9 +102,6 @@ func (w *Workflow) CreateWorkflow() error {
 		subPool.SubmitErr(func() error {
 
 			flakePool := w.state.Pool.NewGroup()
-
-			preFlakeHook := once_async.NewOnceAsync()
-			postFlakeHook := once_async.NewOnceAsync()
 
 			for _, configuration := range flake.Configurations.SortedMap() {
 				build := once_async.NewOnceAsync()
@@ -128,18 +124,6 @@ func (w *Workflow) CreateWorkflow() error {
 							return nil
 						}
 
-						// Pre flake hook
-						if slices.Contains(w.state.Phases.Keys(), phases.PreFlakeHook) {
-							err := preFlakeHook.Do(func() error {
-								return w.NewTaskWithRetry(phases.PreFlakeHook, &flake.Attributes, func() error {
-									return w.executePreFlakeHookPhaseFlake(flake)
-								})
-							})
-							if err != nil {
-								return err
-							}
-						}
-
 						// Bootstrap
 						if !machine.MetaStatus.Bootstrapped.Load() {
 
@@ -148,15 +132,6 @@ func (w *Workflow) CreateWorkflow() error {
 
 								err := w.NewTaskWithRetry(phases.Bootstrap, &machine.Attributes, func() error {
 									return w.executeBootstrapPhaseMachine(flake, configuration, machine)
-								})
-								if err != nil {
-									return err
-								}
-							}
-
-							if slices.Contains(w.state.Phases.Keys(), phases.PostBootstrapHook) {
-								err := w.NewTaskWithRetry(phases.PostBootstrapHook, &machine.Attributes, func() error {
-									return w.executePostmachineHookPhaseBootsrap(machine)
 								})
 								if err != nil {
 									return err
@@ -206,7 +181,7 @@ func (w *Workflow) CreateWorkflow() error {
 							}
 						}
 
-						w.state.Phases.Value(phases.Done).Done.Add(machine.Xpath)
+						w.state.Phases.Value(phases.Done).Set(machine.Xpath, tasks.Done)
 
 						return nil
 					})
@@ -214,20 +189,6 @@ func (w *Workflow) CreateWorkflow() error {
 			}
 
 			err := flakePool.Wait()
-
-			// Post flake hook
-			if slices.Contains(w.state.Phases.Keys(), phases.PostFlakeHook) {
-				errH := postFlakeHook.Do(func() error {
-					return w.NewTaskWithRetry(phases.PostFlakeHook, &flake.Attributes, func() error {
-						return w.executePostFlakeHookPhaseFlake(flake)
-					})
-				})
-				if errH != nil && err != nil {
-					err = errors.Wrap(err, errH.Error())
-				} else if errH != nil {
-					err = errH
-				}
-			}
 
 			return err
 		})

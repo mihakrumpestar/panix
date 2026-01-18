@@ -30,9 +30,9 @@ func (m *model) ViewStatsTable() string {
 	usableWidth := max(m.modelView.dimensions.Width-2, 60)
 
 	// Header text lengths including icons
-	flakeHeader := string(colors.IconFlake) + " FLAKE"
-	configurationHeader := string(colors.IconConfiguration) + " CONFIGURATION"
-	machineHeader := string(colors.IconMachine) + " MACHINE"
+	flakeHeader := string(colors.Flake.Icon) + " FLAKE"
+	configurationHeader := string(colors.Configuration.Icon) + " CONFIGURATION"
+	machineHeader := string(colors.Machine.Icon) + " MACHINE"
 
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
@@ -50,11 +50,11 @@ func (m *model) ViewStatsTable() string {
 			case 1: // Status icon
 				return colors.TableRow.Width(3).Align(lipgloss.Center)
 			case 2: // FLAKE
-				return colors.Flake
+				return colors.Flake.Color
 			case 3: // CONFIG
-				return colors.Configuration
+				return colors.Configuration.Color
 			case 4: // MACHINE
-				return colors.Machine
+				return colors.Machine.Color
 			case 5: // Architecture
 				return colors.TableRow
 			case 6: // Bootstrap status

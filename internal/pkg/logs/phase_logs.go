@@ -2,7 +2,6 @@ package logs
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/hayageek/threadsafe"
@@ -85,17 +84,17 @@ func (pLog *PhaseLog) LastCommand() *CommandLog {
 	return commandLog
 }
 
-func (pLog *PhaseLog) NewCommand() *CommandLog {
-	commandLog := NewCommandLog()
+func (pLog *PhaseLog) NewCommand(description string) *CommandLog {
+	commandLog := NewCommandLog(description)
 	pLog.commandLogs.Append(commandLog)
 
 	return commandLog
 }
 
-func (pLog *PhaseLog) AddMessageOnly(msg ...string) *CommandLog {
-	commandLog := pLog.NewCommand()
+func (pLog *PhaseLog) AddMessageOnly(msg string) *CommandLog {
+	commandLog := pLog.NewCommand(msg)
 
-	commandLog.Command.Store(strings.Join(msg, ""))
+	commandLog.Command.Store(msg)
 
 	commandLog.TimeAndState.StartTimer()
 	commandLog.TimeAndState.EndTimer()
@@ -108,8 +107,10 @@ func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
 		return nil
 	}
 
-	commandLog := pLog.NewCommand()
-	commandLog.Command.Store(fmt.Sprintf("VERBOSE "+format, a...))
+	msg := fmt.Sprintf("VERBOSE "+format, a...)
+
+	commandLog := pLog.NewCommand(msg)
+	commandLog.Command.Store(msg)
 
 	commandLog.TimeAndState.StartTimer()
 	commandLog.TimeAndState.EndTimer()
@@ -117,13 +118,13 @@ func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
 	return commandLog
 }
 
-func (pLog *PhaseLog) Debug(msg ...string) *CommandLog {
+func (pLog *PhaseLog) Debug(msg string) *CommandLog {
 	if !pLog.flags.Debug {
 		return nil
 	}
 
-	commandLog := pLog.NewCommand()
-	commandLog.Command.Store("DEBUG " + strings.Join(msg, ""))
+	commandLog := pLog.NewCommand(msg)
+	commandLog.Command.Store("DEBUG " + msg)
 
 	commandLog.TimeAndState.StartTimer()
 	commandLog.TimeAndState.EndTimer()

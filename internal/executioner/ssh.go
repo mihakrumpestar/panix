@@ -1,6 +1,6 @@
 package executioner
 
-func (ex *Executioner) sshStream(commandWithArgs []string, excOpt *ExecOptions) error {
+func (ex *Executioner) sshStream(description string, commandWithArgs []string, excOpt *ExecOptions) error {
 	ssh := ex.machine.Ssh
 
 	sshCommandWithArgs := []string{"ssh", "-q", "-t"} // Silance banners, make interactive
@@ -9,5 +9,5 @@ func (ex *Executioner) sshStream(commandWithArgs []string, excOpt *ExecOptions) 
 
 	sshCommandWithArgs = append(sshCommandWithArgs, commandWithArgs...)
 
-	return ex.shellStream(sshCommandWithArgs, excOpt)
+	return ex.shellStream(description, sshCommandWithArgs, excOpt)
 }

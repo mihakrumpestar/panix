@@ -14,8 +14,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(commandWithArgs []string, excOpt *ExecOptions) (err error) {
-	commandLog := ex.phaseLog.NewCommand()
+func (ex *Executioner) shellStream(description string, commandWithArgs []string, excOpt *ExecOptions) (err error) {
+	commandLog := ex.phaseLog.NewCommand(description)
 
 	commandLog.TimeAndState.StartTimer()
 	defer func() {
