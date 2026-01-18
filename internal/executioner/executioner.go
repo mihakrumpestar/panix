@@ -70,7 +70,7 @@ func Env(env []string) ExecOption {
 	}
 }
 
-func (ex *Executioner) Exec(commandWithArgs []string, opts ...ExecOption) error {
+func (ex *Executioner) Exec(description string, commandWithArgs []string, opts ...ExecOption) error {
 	excOpt := &ExecOptions{}
 	for _, opt := range opts {
 		opt(excOpt)
@@ -94,8 +94,8 @@ func (ex *Executioner) Exec(commandWithArgs []string, opts ...ExecOption) error 
 	}
 
 	if noMachineOrLocal || excOpt.disableAutoSshCommand {
-		return ex.shellStream(commandWithArgs, excOpt)
+		return ex.shellStream(description, commandWithArgs, excOpt)
 	}
 
-	return ex.sshStream(commandWithArgs, excOpt)
+	return ex.sshStream(description, commandWithArgs, excOpt)
 }

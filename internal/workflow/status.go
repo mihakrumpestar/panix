@@ -29,7 +29,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs := []string{"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port)}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("TCP check",
+				commandWithArgs,
 				executioner.SkipIfLocal(),
 				executioner.DisableAutoSshCommand(),
 				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
@@ -48,7 +49,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs = []string{"echo", "OK"}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("SSH connect",
+				commandWithArgs,
 				executioner.SkipIfLocal(),
 				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 					return errors.Wrapf(err, "ssh test failed: %s", log.String())
@@ -66,7 +68,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs = []string{"uname", "-m"}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("architecture",
+				commandWithArgs,
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					architecture := log.String()
 
@@ -96,7 +99,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs = []string{"id", "-u"}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("superuser check",
+				commandWithArgs,
 				executioner.OnFailure(
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "failed to check sudo: %s", log.String())
@@ -122,7 +126,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			requiresKexec := false
 			commandWithArgs = []string{"cat", "/etc/os-release"}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("bootstrap detection",
+				commandWithArgs,
 				executioner.OnFailure(
 					func(log *logs.CommandLog, err error) error {
 						return errors.Wrapf(err, "failed read /etc/os-release: %s", log.String())
@@ -177,7 +182,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 				if !mms.Bootstrapped.Load() && machine.HardwareConfigPath != "" {
 					commandWithArgs := append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath)
 
-					err := exc.Exec(commandWithArgs,
+					err := exc.Exec("generate config",
+						commandWithArgs,
 						executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Name)
 						}),
@@ -195,7 +201,8 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			// Get current generation
 			commandWithArgs = []string{"nixos-rebuild", "list-generations", "--json"}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("get generations",
+				commandWithArgs,
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					output := log.Bytes()
 

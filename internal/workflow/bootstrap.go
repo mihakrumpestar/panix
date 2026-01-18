@@ -31,11 +31,22 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 
 			commandWithArgs := []string{diskoScript}
 
-			err = exc.Exec(commandWithArgs,
+			err = exc.Exec("disko",
+				commandWithArgs,
 				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
 					return errors.Wrapf(err, "running diskoScript failed for %s", machine.Name)
 				}),
 			)
+			if err != nil {
+				return err
+			}
+
+			if machine.PostBootstrapHook == "" {
+				return nil
+			}
+
+			commandWithArgs = []string{machine.PostBootstrapHook}
+			err = exc.Exec("post bootstrap hook", commandWithArgs)
 			if err != nil {
 				return err
 			}
