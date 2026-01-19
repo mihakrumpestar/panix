@@ -21,7 +21,7 @@ This includes:
 		conf := ConfFromContext(ctx)
 
 		phases := []phases.Phase{
-			phases.Status,
+			phases.Inspect,
 		}
 
 		workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)

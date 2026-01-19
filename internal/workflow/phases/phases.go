@@ -8,7 +8,7 @@ import (
 type Phase string
 
 const (
-	Status    Phase = "status"
+	Inspect   Phase = "inspect"
 	Build     Phase = "build"
 	Bootstrap Phase = "bootstrap"
 	Transfer  Phase = "transfer"
@@ -18,7 +18,7 @@ const (
 
 func PhasesInOrder() []Phase {
 	return []Phase{
-		Status,
+		Inspect,
 		Build,
 		Bootstrap,
 		Transfer,
@@ -47,7 +47,7 @@ func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error)
 	}
 
 	firstPhase := phases[0]
-	validFirstPhases := []Phase{Status, Build, Secrets}
+	validFirstPhases := []Phase{Inspect, Build, Secrets}
 	if !slices.Contains(validFirstPhases, firstPhase) {
 		return nil, fmt.Errorf("phase %s is can't be the first phase, allowed are %s", firstPhase, validFirstPhases)
 	}

@@ -5,7 +5,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
@@ -18,11 +17,10 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 				commandWithArgs := []string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"}
 
-				err := exc.Exec("nixos-install",
+				err := exc.Exec(
+					"nixos-install",
+					"nixos-install failed",
 					commandWithArgs,
-					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "running nixos-install failed for %s", machine.Name)
-					}),
 				)
 				if err != nil {
 					return err
@@ -30,11 +28,10 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 				commandWithArgs = []string{"reboot"}
 
-				err = exc.Exec("reboot",
+				err = exc.Exec(
+					"reboot",
+					"reboot failed",
 					commandWithArgs,
-					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "running reboot failed for %s", machine.Name)
-					}),
 				)
 				if err != nil {
 					return err
@@ -44,11 +41,10 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 				commandWithArgs := append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure)
 
-				err := exc.Exec("add system closure to profiles",
+				err := exc.Exec(
+					"add system closure to profiles",
+					"setting system closure to profiles failed",
 					commandWithArgs,
-					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "adding new system closure to profiles failed for %s", machine.Name)
-					}),
 				)
 				if err != nil {
 					return err
@@ -58,11 +54,10 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 				commandWithArgs = append(machine.MaybeSudo(), binPath, "switch")
 
-				err = exc.Exec("activate",
+				err = exc.Exec(
+					"activate",
+					"activation failed",
 					commandWithArgs,
-					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "activation failed for %s", machine.Name)
-					}),
 				)
 				if err != nil {
 					return err

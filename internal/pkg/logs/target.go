@@ -73,10 +73,19 @@ func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *PhaseLogs {
 	return logs.PhaseLogs
 }
 
-func (ts *TargetsLogs) GetLastLog(xpath config_attributes.Xpath) *PhaseLog {
+func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) *PhaseLog {
 	logs, ok := ts.logs.Get(xpath)
 	if !ok {
 		return nil
+	}
+
+	// Return first log that has error
+	for _, phaseLogPair := range logs.All() {
+		phaseLog := phaseLogPair.Value
+		tas := phaseLog.TimeAndState().GetTimeAndState()
+		if tas.Error != nil {
+			return phaseLog
+		}
 	}
 
 	return logs.Last()
@@ -104,16 +113,16 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
 
 		timeAndState := lastCommand.TimeAndState.GetTimeAndState()
 		if !timeAndState.Finished {
-			stats.Increment(log.phase, Running)
+			stats.Add(log.phase, Running, pair.Key)
 			continue
 		}
 
 		if timeAndState.Error != nil {
-			stats.Increment(log.phase, Failed)
+			stats.Add(log.phase, Failed, pair.Key)
 			continue
 		}
 
-		stats.Increment(log.phase, Done)
+		stats.Add(log.phase, Done, pair.Key)
 	}
 
 	return stats
@@ -121,6 +130,8 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
 
 func (ts *TargetsLogs) Debug() string {
 	str := fmt.Sprintf("\nLogs: %d\n", ts.logs.Len())
+
+	str += fmt.Sprintf("\n  Stats: %v\n\n", ts.ComputeStatisticsPerPhase())
 
 	for _, pair := range ts.logs.Pairs() {
 		str += fmt.Sprintf("  '%s' primary:%v, len:%d\n", pair.Key, pair.Value.primary, pair.Value.Len())

@@ -18,7 +18,7 @@ func (m *model) ViewStatsTable() string {
 	phasesList := state.Phases
 	colors := state.Conf.Tui.ColorScheme
 
-	if state.Conf.Flags.DryRun || !slices.Contains(phasesList, phases.Status) {
+	if state.Conf.Flags.DryRun || !slices.Contains(phasesList, phases.Inspect) {
 		return ""
 	}
 
@@ -38,7 +38,7 @@ func (m *model) ViewStatsTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GEN", "GEN DATE", "NIXOS", "KERNEL").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GENERATIONS", "LAST GENERATION DATE", "NIXOS", "KERNEL").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -84,7 +84,7 @@ func (m *model) ViewStatsTable() string {
 
 		ps := machine.MetaStatus
 
-		log := state.Logs.GetLastLog(machine.Xpath)
+		phaseLog := state.Logs.GetFirstLogErrorOrLastLog(machine.Xpath)
 
 		// Determine if we should show flake name (only on first occurrence)
 		showFlake := flake.Name != prevFlakeName
@@ -117,12 +117,12 @@ func (m *model) ViewStatsTable() string {
 
 		t.Row(
 			fmt.Sprintf("%d", i),
-			m.getStatusIcon(ps, xpath, log),
+			m.getStatusIcon(ps, xpath, phaseLog),
 			flakeDisplay,
 			configDisplay,
 			machine.Name,
 			ps.Architecture.Load(),
-			m.getStatusText(ps, xpath, log),
+			m.getStatusText(ps, xpath, phaseLog),
 			generationString,
 			ps.Date.Load(),
 			ps.Nixos.Load(),
@@ -135,46 +135,38 @@ func (m *model) ViewStatsTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpath, log *logs.PhaseLog) string {
-	if log == nil {
+func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpath, phaseLog *logs.PhaseLog) string {
+	if phaseLog == nil {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
-	tas := log.TimeAndState().GetTimeAndState()
+	tas := phaseLog.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
+
 	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
-	if !ps.Reachable.Load() {
+
+	if tas.Error != nil {
 		return "🔴"
 	}
-	if !ps.SSHConnectable.Load() {
-		return "🟡"
-	}
-	if !ps.Bootstrapped.Load() {
-		return "🟠"
-	}
+
 	return "✅"
 }
 
-func (m *model) getStatusText(ps *config.MetaStatus, xpath config_attributes.Xpath, log *logs.PhaseLog) string {
-	if log == nil {
-		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
+func (m *model) getStatusText(ps *config.MetaStatus, xpath config_attributes.Xpath, phaseLog *logs.PhaseLog) string {
+	if phaseLog == nil {
+		return ""
 	}
 
-	tas := log.TimeAndState().GetTimeAndState()
+	tas := phaseLog.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
-		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
+		return phaseLog.LastNonMsgOnlyCommand().Description + "-ing"
 	}
-	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
-	if !ps.Reachable.Load() {
-		return "UNREACHABLE"
+
+	if tas.Error != nil {
+		return phaseLog.LastNonMsgOnlyCommand().StatusIfFailed
 	}
-	if !ps.SSHConnectable.Load() {
-		return "SSH_FAILED"
-	}
-	if !ps.Bootstrapped.Load() {
-		return "NOT_BOOTSTRAPPED"
-	}
-	return "OK"
+
+	return "DONE"
 }

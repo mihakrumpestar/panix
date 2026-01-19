@@ -37,12 +37,11 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 
 					commandWithArgs := []string{"sh", "-c", *secret.Local.CommandOutput}
 
-					err = exc.Exec("secrets command",
+					err = exc.Exec(
+						"secrets command",
+						"secrets command failed",
 						commandWithArgs,
 						executioner.DisableAutoSshCommand(),
-						executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-							return errors.Wrapf(err, "secrets command failed for %s", machine.Name)
-						}),
 						executioner.OnSuccess(func(log *logs.CommandLog) error {
 							output := log.Bytes()
 
@@ -94,11 +93,10 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 					commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", machine.Ssh.Hostname, secretRemotePath))
 				}
 
-				err = exc.Exec("transfer of secrets",
+				err = exc.Exec(
+					"transfer of secrets",
+					"secrets transfer failed",
 					commandWithArgs,
-					executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "secrets failed for %s", machine.Name)
-					}),
 				)
 				if err != nil {
 					return err
