@@ -12,11 +12,12 @@ import (
 	"github.com/kirill-scherba/omap"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_raw_key_reader"
 )
 
 type Viewports struct {
-	viewports  *omap.Omap[string, *Viewport]
+	viewports  *omap.Omap[config_attributes.Xpath, *Viewport]
 	dimensions *Dimensions
 	colors     *config.ColorScheme
 	debug      *strings.Builder
@@ -27,8 +28,8 @@ type Viewport struct {
 	active        bool
 	pty           *os.File
 	minHeight     int
-	scrollbarZone string // Zone ID for scrollbar area
-	content       string // Store the content for double-click copying
+	scrollbarZone config_attributes.Xpath // Zone ID for scrollbar area
+	content       string                  // Store the content for double-click copying
 }
 
 type Dimensions struct {
@@ -37,7 +38,7 @@ type Dimensions struct {
 }
 
 func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, debug *strings.Builder) *Viewports {
-	viewports, err := omap.New[string, *Viewport]()
+	viewports, err := omap.New[config_attributes.Xpath, *Viewport]()
 	if err != nil {
 		panic(err)
 	}
@@ -96,7 +97,7 @@ func (v *Viewports) renderScrollbar(scrollPercent float64, totalLines, visibleLi
 
 // ViewportConfig holds configuration options for creating or updating a viewport
 type ViewportConfig struct {
-	xpath          string
+	xpath          config_attributes.Xpath
 	content        string
 	pty            *os.File
 	availableWidth int
@@ -108,7 +109,7 @@ type ViewportConfig struct {
 }
 
 // combineViewportWithScrollbar combines viewport content with scrollbar
-func (v *Viewports) combineViewportWithScrollbar(viewportView, scrollbar string, scrollbarZone string) string {
+func (v *Viewports) combineViewportWithScrollbar(viewportView, scrollbar string, scrollbarZone config_attributes.Xpath) string {
 	if scrollbar == "" {
 		return viewportView
 	}
@@ -121,7 +122,7 @@ func (v *Viewports) combineViewportWithScrollbar(viewportView, scrollbar string,
 	for i, line := range viewportLines {
 		if i < len(scrollbarLines) {
 			// Add spacing and zone the scrollbar
-			scrollbarLine := zone.Mark(scrollbarZone+fmt.Sprintf("-%d", i), scrollbarLines[i])
+			scrollbarLine := zone.Mark(string(scrollbarZone)+fmt.Sprintf("-%d", i), scrollbarLines[i])
 			combinedLines[i] = line + " " + scrollbarLine
 		} else {
 			combinedLines[i] = line
@@ -213,10 +214,10 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 		style = style.UnsetBorderStyle()
 	}
 
-	return zone.Mark(config.xpath, style.Render(combinedView))
+	return zone.Mark(string(config.xpath), style.Render(combinedView))
 }
 
-func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.File, indentation int) string {
+func (v *Viewports) GetOrCreateViewport(xpath config_attributes.Xpath, content string, pty *os.File, indentation int) string {
 	availableWidth := v.dimensions.Width - indentation
 
 	maxHeight := 8
@@ -237,7 +238,7 @@ func (v *Viewports) GetOrCreateViewport(xpath string, content string, pty *os.Fi
 }
 
 // GetOrCreateLabelViewport creates or updates a viewport specifically for labels
-func (v *Viewports) GetOrCreateLabelViewport(xpath string, content string, indentation int) string {
+func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, content string, indentation int) string {
 	availableWidth := v.dimensions.Width - indentation
 
 	// For labels, we want to show all lines without a height limit
@@ -278,12 +279,12 @@ func (v *Viewports) GetOrCreateMainViewport(content string) string {
 	return v.getOrCreateViewportShared(config)
 }
 
-func (v *Viewports) RemoveIfExistsViewport(xpath string) {
+func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) {
 	v.viewports.Del(xpath)
 }
 
 // getMostSpecificViewport returns the most specific viewport (longest xpath) from a list of viewports
-func (v *Viewports) getMostSpecificViewport(viewports []string) string {
+func (v *Viewports) getMostSpecificViewport(viewports []config_attributes.Xpath) config_attributes.Xpath {
 	if len(viewports) == 0 {
 		return ""
 	}
@@ -301,10 +302,10 @@ func (v *Viewports) getMostSpecificViewport(viewports []string) string {
 }
 
 // getViewportsUnderMouse returns all viewports that are under the mouse cursor
-func (v *Viewports) getViewportsUnderMouse(mouseMsg tea.MouseMsg) []string {
-	var viewportsUnderMouse []string
+func (v *Viewports) getViewportsUnderMouse(mouseMsg tea.MouseMsg) []config_attributes.Xpath {
+	var viewportsUnderMouse []config_attributes.Xpath
 	for xpath := range v.viewports.Records() {
-		if zone.Get(xpath).InBounds(mouseMsg) {
+		if zone.Get(string(xpath)).InBounds(mouseMsg) {
 			viewportsUnderMouse = append(viewportsUnderMouse, xpath)
 		}
 	}

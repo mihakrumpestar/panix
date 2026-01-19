@@ -27,23 +27,23 @@ func (m *model) ViewBuildLogs() string {
 	// Build separate trees for each flake
 	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
 		flakeNode := tree.New().
-			Root(nodeTitle(colors.Flake, flake.Attributes)).
+			Root(nodeTitle(colors.Flake, &flake.Attributes)).
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(colors.TreeEnumerator)
 
-		m.addChildLogs(flake.Logs, flakeNode, flake.Xpath, colors)
+		m.addChildLogs(&flake.Attributes, flakeNode, colors)
 
 		// Add configurations
 		for _, configuration := range flake.Configurations.SortedMap() {
-			configurationNode := tree.New().Root(nodeTitle(colors.Configuration, configuration.Attributes))
+			configurationNode := tree.New().Root(nodeTitle(colors.Configuration, &configuration.Attributes))
 
-			m.addChildLogs(configuration.Logs, configurationNode, configuration.Xpath, colors)
+			m.addChildLogs(&configuration.Attributes, configurationNode, colors)
 
 			// Add machines
 			for _, machine := range configuration.Machines.SortedMap() {
-				machineNode := tree.New().Root(nodeTitle(colors.Machine, machine.Attributes)).Offset(0, 4)
+				machineNode := tree.New().Root(nodeTitle(colors.Machine, &machine.Attributes)).Offset(0, 4)
 
-				m.addChildLogs(machine.Logs, machineNode, machine.Xpath, colors)
+				m.addChildLogs(&machine.Attributes, machineNode, colors)
 
 				configurationNode.Child(machineNode)
 			}
@@ -59,13 +59,15 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
-func nodeTitle(logStyle config.ColorSchemeLogEntity, attr config_attributes.Attributes) string {
+func nodeTitle(logStyle config.ColorSchemeLogEntity, attr *config_attributes.Attributes) string {
 	return logStyle.Color.Render(fmt.Sprintf("%c %s %s", logStyle.Icon, attr.Name, attr.Message))
 }
 
-func (m *model) addChildLogs(logs *logs.PhaseLogs, treeRoot *tree.Tree, xpath string, colors *config.ColorScheme) {
+func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme) {
+	logs := m.workflow.State().Logs.GetLogs(attr.Xpath)
+
 	if logs.Len() > 0 {
-		phaseNodes := m.phaseNodes(xpath, logs, colors)
+		phaseNodes := m.phaseNodes(attr.Xpath, logs, colors)
 		for _, phaseNode := range phaseNodes {
 			treeRoot.Child(phaseNode) // Passing "phaseNodes" directly does not produce the same result as adding them seperately
 		}
@@ -73,14 +75,14 @@ func (m *model) addChildLogs(logs *logs.PhaseLogs, treeRoot *tree.Tree, xpath st
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *config.ColorScheme) []*tree.Tree {
+func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseLogs, colors *config.ColorScheme) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
 	for _, entry := range phaseLogs.All() {
 		phase := entry.Key
 		phaseLog := entry.Value
 
-		xpath += "-" + string(phase)
+		xpath += config_attributes.Xpath(string(xpath) + "-" + string(phase))
 
 		phaseTree, phaseError := m.phaseLogs(phaseLog, colors, xpath)
 
@@ -106,8 +108,8 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 			}
 
 			iconOnFinished := fmt.Sprintf("%d ", cmdIdx+1)
-			commandXpath := xpath + cmdLabel
-			labelXpath := commandXpath + "-label"
+			commandXpath := config_attributes.Xpath(string(xpath) + cmdLabel)
+			labelXpath := config_attributes.Xpath(commandXpath + "-label")
 
 			var cmdHeader string
 
@@ -153,7 +155,7 @@ func (m *model) phaseNodes(xpath string, phaseLogs *logs.PhaseLogs, colors *conf
 	return phaseNodes
 }
 
-func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, xpath string) (*tree.Tree, error) {
+func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, xpath config_attributes.Xpath) (*tree.Tree, error) {
 	tas := phaseLog.TimeAndState().GetTimeAndState()
 
 	// Phase header with spinner and right-aligned timing
@@ -199,7 +201,7 @@ func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Left, leftBlock, rightBlock)
 }
 
-func (m *model) IconOrSpinner(spinnerXpath, iconOnFinished string, tas time_and_state.TimeAndStateInternal) string {
+func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinished string, tas time_and_state.TimeAndStateInternal) string {
 	var iconOrSpinner string
 
 	if tas.Started && tas.Finished {

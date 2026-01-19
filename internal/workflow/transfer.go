@@ -9,7 +9,7 @@ import (
 )
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
-	return w.Phase(&machine.Attributes, phases.Transfer, machine,
+	return w.Phase(machine.Attributes, phases.Transfer, machine,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 			systemClosure := machine.Configuration.MetaBuild.SystemClosure
 

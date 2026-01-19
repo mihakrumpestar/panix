@@ -15,10 +15,8 @@ type Flags struct {
 	DryRunWithStatus     bool           `yaml:"dryRunWithStatus"`
 	Timeout              time.Duration  `yaml:"timeout"`
 	SkipPhases           []phases.Phase `yaml:"skipPhases"`
-	Verbose              bool           `yaml:"verbose"`
-	// Developers only
-	Debug      bool   `yaml:"debug"`
-	Cpuprofile string `yaml:"cpuprofile"`
+
+	Logging Logging `yaml:",squash"`
 }
 
 type Bootstrap struct {
@@ -27,11 +25,18 @@ type Bootstrap struct {
 	DisableDisko bool `yaml:"disableDisko"`
 }
 
+type Logging struct {
+	Verbose bool `yaml:"verbose"`
+	// Developers only
+	Debug      bool   `yaml:"debug"`
+	Cpuprofile string `yaml:"cpuprofile"`
+}
+
 func (f *Flags) Setup() {
 	// Convert timeout from miliseconds to seconds for duration
 	f.Timeout *= time.Second
 
-	if f.Debug {
-		f.Verbose = true
+	if f.Logging.Debug {
+		f.Logging.Verbose = true
 	}
 }

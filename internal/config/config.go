@@ -48,8 +48,8 @@ type FlakeHooks struct {
 	Post string `yaml:",post"`
 }
 
-func (f *Flake) Init(name string, passAttr *config_attributes.Attributes, flags *config_flags.Flags) error {
-	err := f.Attributes.Init(name, passAttr, flags)
+func (f *Flake) Init(name string, attr *config_attributes.Attributes, flags *config_flags.Flags) error {
+	err := f.Attributes.Init(name, attr, flags)
 	if err != nil {
 		return err
 	}

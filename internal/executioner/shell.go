@@ -15,7 +15,7 @@ import (
 )
 
 func (ex *Executioner) shellStream(description string, commandWithArgs []string, excOpt *ExecOptions) (err error) {
-	commandLog := ex.phaseLog.NewCommand(description)
+	commandLog := ex.phaseLog.NewCommand(description, false)
 
 	commandLog.TimeAndState.StartTimer()
 	defer func() {

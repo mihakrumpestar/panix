@@ -70,7 +70,7 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = ctx.Err()
 		}
 
-		m.modelView.debugOutput.WriteString("CTX done")
+		m.modelView.debugOutput.WriteString("CTX done\n")
 
 		return m, tea.Quit
 	case key.Matches(msg, keys.toggle):

@@ -6,10 +6,11 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/kirill-scherba/omap"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 )
 
 type Spinners struct {
-	spinners *omap.Omap[string, *Spinner]
+	spinners *omap.Omap[config_attributes.Xpath, *Spinner]
 }
 
 type Spinner struct {
@@ -18,7 +19,7 @@ type Spinner struct {
 }
 
 func NewSpinners() *Spinners {
-	spinners, err := omap.New[string, *Spinner]()
+	spinners, err := omap.New[config_attributes.Xpath, *Spinner]()
 	if err != nil {
 		panic(err)
 	}
@@ -28,7 +29,7 @@ func NewSpinners() *Spinners {
 	}
 }
 
-func (s *Spinners) GetOrCreateSpinner(xpath string) *spinner.Model {
+func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Model {
 	// Existing spinner
 	spnr, ok := s.spinners.Get(xpath)
 	if ok {
@@ -46,7 +47,7 @@ func (s *Spinners) GetOrCreateSpinner(xpath string) *spinner.Model {
 	return spnr.model
 }
 
-func (s *Spinners) RemoveIfExistsSpinner(xpath string) {
+func (s *Spinners) RemoveIfExistsSpinner(xpath config_attributes.Xpath) {
 	s.spinners.Del(xpath)
 }
 
