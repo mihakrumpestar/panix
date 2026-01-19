@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 )
 
@@ -55,7 +56,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 
 	for _, phase := range phasesList {
 		statsPhase := stats.GetPack(phase)
-		//statsPhase.Done = 0
+		statsPhase.Done = []config_attributes.Xpath{}
 
 		// Create phase group
 		phaseGroup := createPhaseGroup(string(phase), statsPhase, colors, termWidth)
@@ -68,8 +69,8 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 	// Add "Done" phase group
 
 	statsDone := stats.GetPack(phasesList[len(phasesList)-1])
-	//statsDone.Running = 0
-	//statsDone.Failed = 0
+	statsDone.Running = []config_attributes.Xpath{}
+	statsDone.Failed = []config_attributes.Xpath{}
 	phaseGroup := createPhaseGroup("Done", statsDone, colors, termWidth)
 	row = append(row, phaseGroup)
 
@@ -125,16 +126,16 @@ func createAnimatedGradient(text string, stats *logs.StatsPack, colors *config.C
 func buildStatusLine(stats *logs.StatsPack, colors *config.ColorScheme) string {
 	indicators := make([]string, 0)
 
-	if stats.Running > 0 {
-		indicators = append(indicators, colors.StatusRunning.Render(fmt.Sprintf("%d", stats.Running)))
+	if len(stats.Running) > 0 {
+		indicators = append(indicators, colors.StatusRunning.Render(fmt.Sprintf("%d", len(stats.Running))))
 	}
 
-	if stats.Failed > 0 {
-		indicators = append(indicators, colors.StatusError.Render(fmt.Sprintf("%d", stats.Failed)))
+	if len(stats.Failed) > 0 {
+		indicators = append(indicators, colors.StatusError.Render(fmt.Sprintf("%d", len(stats.Failed))))
 	}
 
-	if stats.Done > 0 {
-		indicators = append(indicators, colors.StatusOK.Render(fmt.Sprintf("%d", stats.Done)))
+	if len(stats.Done) > 0 {
+		indicators = append(indicators, colors.StatusOK.Render(fmt.Sprintf("%d", len(stats.Done))))
 	}
 
 	statusText := strings.Join(indicators, colors.TableBorder.Render("/"))
@@ -146,13 +147,13 @@ func buildStatusLine(stats *logs.StatsPack, colors *config.ColorScheme) string {
 
 // determinePhaseState determines the visual state of a phase based on its counts
 func determinePhaseState(stats *logs.StatsPack) config.PhaseState {
-	if stats.Running > 0 {
+	if len(stats.Running) > 0 {
 		return config.PhaseStateActive
 	}
-	if stats.Failed > 0 && stats.Running == 0 && stats.Done == 0 {
+	if len(stats.Failed) > 0 && len(stats.Running) == 0 && len(stats.Done) == 0 {
 		return config.PhaseStateFailed
 	}
-	if stats.Done > 0 && stats.Running == 0 && stats.Failed == 0 {
+	if len(stats.Done) > 0 && len(stats.Running) == 0 && len(stats.Failed) == 0 {
 		return config.PhaseStateCompleted
 	}
 

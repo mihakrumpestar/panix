@@ -5,7 +5,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
@@ -30,15 +29,12 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 
 	commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + machine.Ssh.Hostname + storeArgs}, toTransfer...)
 
-	err := exc.Exec("copy",
+	err := exc.Exec("nix copy",
+		"closure copy failed",
 		commandWithArgs,
 		executioner.SkipIfLocal(),
 		executioner.DisableAutoSshCommand(),
 		executioner.Env(machine.Ssh.MaybeSshEnvOpts()),
-		executioner.OnFailure(
-			func(l *logs.CommandLog, err error) error {
-				return errors.Wrapf(err, "nix copy failed for %s", machine.Name)
-			}),
 	)
 	if err != nil {
 		return err

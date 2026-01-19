@@ -14,8 +14,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(description string, commandWithArgs []string, excOpt *ExecOptions) (err error) {
-	commandLog := ex.phaseLog.NewCommand(description, false)
+func (ex *Executioner) shellStream(description, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) (err error) {
+	commandLog := ex.phaseLog.NewCommand(description, statusIfFailed, false)
 
 	commandLog.TimeAndState.StartTimer()
 	defer func() {
@@ -113,6 +113,10 @@ func (ex *Executioner) shellStream(description string, commandWithArgs []string,
 		}
 	} else if excOpt.onSuccess != nil {
 		err = excOpt.onSuccess(commandLog)
+	}
+
+	if err != nil {
+		err = errors.Wrap(err, statusIfFailed)
 	}
 
 	return
