@@ -111,9 +111,9 @@ func (w *Workflow) CreateWorkflow() error {
 					flakePool.SubmitErr(func() error {
 
 						// Status
-						if slices.Contains(w.state.Phases, phases.Status) {
-							err := w.NewTaskWithRetry(phases.Status, machine.Attributes, func() error {
-								return w.executeStatusPhaseMachine(machine)
+						if slices.Contains(w.state.Phases, phases.Inspect) {
+							err := w.NewTaskWithRetry(phases.Inspect, machine.Attributes, func() error {
+								return w.executeInspectPhaseMachine(machine)
 							})
 							if err != nil {
 								return err

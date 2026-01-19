@@ -84,7 +84,7 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 
 		xpath += config_attributes.Xpath(string(xpath) + "-" + string(phase))
 
-		phaseTree, phaseError := m.phaseLogs(phaseLog, colors, xpath)
+		phaseTree, _ := m.phaseLogs(phaseLog, colors, xpath)
 
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
@@ -98,7 +98,7 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 			cmdOutput := cmd.String()
 			cmdTas := cmd.TimeAndState.GetTimeAndState()
 
-			if !m.workflow.State().Conf.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Status, phases.Secrets}, phase) && cmdTas.Error == nil {
+			if !m.workflow.State().Conf.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) && cmdTas.Error == nil {
 				if cmdIdx == len(phaseLog.CommandLogs())-1 {
 					cmdLabel = "(hidden)"
 					cmdOutput = ""
@@ -141,12 +141,6 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 			}
 
 			phaseTree.Child(cmdTree)
-		}
-
-		// Show error details if failed
-		if phaseError != nil {
-			errorMsg := colors.Error.Color.Render(fmt.Sprintf("✗ Phase failed: %s", phaseError.Error()))
-			phaseTree.Child(errorMsg)
 		}
 
 		phaseNodes = append(phaseNodes, phaseTree)

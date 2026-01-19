@@ -7,7 +7,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
@@ -31,11 +30,10 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 
 			commandWithArgs := []string{diskoScript}
 
-			err = exc.Exec("disko",
+			err = exc.Exec(
+				"disko",
+				"diskoScript failed",
 				commandWithArgs,
-				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-					return errors.Wrapf(err, "running diskoScript failed for %s", machine.Name)
-				}),
 			)
 			if err != nil {
 				return err
@@ -46,7 +44,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 			}
 
 			commandWithArgs = []string{machine.PostBootstrapHook}
-			err = exc.Exec("post bootstrap hook", commandWithArgs)
+			err = exc.Exec("post bootstrap hook", "post bootstrap hook failed", commandWithArgs)
 			if err != nil {
 				return err
 			}

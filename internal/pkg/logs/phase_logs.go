@@ -69,13 +69,15 @@ func (pl *PhaseLogs) All() []omap.Pair[phases.Phase, *PhaseLog] {
 	return pl.logs.Pairs() // Any other ranging method locks the dict until it traverses it
 }
 
-// Gets the last PhaseLog in PhaseLogs
+// Gets the last inserted PhaseLog from PhaseLogs
 func (pl *PhaseLogs) Last() *PhaseLog {
 	if pl.logs.Len() == 0 {
 		return nil
 	}
 
-	return pl.logs.Pairs()[pl.logs.Len()-1].Value
+	lastIndex := pl.logs.Len() - 1
+
+	return pl.logs.Pairs()[lastIndex].Value
 }
 
 func (pl *PhaseLogs) Len() int {
@@ -131,8 +133,8 @@ func (pLog *PhaseLog) LastNonMsgOnlyCommand() *CommandLog {
 	return nil
 }
 
-func (pLog *PhaseLog) NewCommand(description string, msgOnly bool) *CommandLog {
-	commandLog := NewCommandLog(description, msgOnly)
+func (pLog *PhaseLog) NewCommand(description, statusIfFailed string, msgOnly bool) *CommandLog {
+	commandLog := NewCommandLog(description, statusIfFailed, msgOnly)
 	pLog.commandLogs.Append(commandLog)
 
 	return commandLog
@@ -145,7 +147,7 @@ func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
 
 	msg := fmt.Sprintf("VERBOSE "+format, a...)
 
-	return pLog.NewCommand(msg, true)
+	return pLog.NewCommand(msg, "", true)
 }
 
 func (pLog *PhaseLog) Debug(format string, a ...any) *CommandLog {
@@ -155,7 +157,7 @@ func (pLog *PhaseLog) Debug(format string, a ...any) *CommandLog {
 
 	msg := fmt.Sprintf("DEBUG "+format, a...)
 
-	return pLog.NewCommand(msg, true)
+	return pLog.NewCommand(msg, "", true)
 }
 
 func (pLog *PhaseLog) CommandLogs() []*CommandLog {

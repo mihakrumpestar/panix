@@ -11,20 +11,22 @@ import (
 )
 
 type CommandLog struct {
-	Description  string
-	Command      atomic.String
-	MsgOnly      bool
-	stdInOutErr  *threadsafe.Slice[*safe_buffer.Buffer] // Each line is a separate buffer to allow line replacement
-	TimeAndState *time_and_state.TimeAndState
-	Pty          *os.File
+	Description    string
+	StatusIfFailed string
+	Command        atomic.String
+	MsgOnly        bool
+	stdInOutErr    *threadsafe.Slice[*safe_buffer.Buffer] // Each line is a separate buffer to allow line replacement
+	TimeAndState   *time_and_state.TimeAndState
+	Pty            *os.File
 }
 
-func NewCommandLog(description string, msgOnly bool) *CommandLog {
+func NewCommandLog(description, statusIfFailed string, msgOnly bool) *CommandLog {
 	commandLog := &CommandLog{
-		Description:  description,
-		MsgOnly:      msgOnly,
-		stdInOutErr:  threadsafe.NewSlice[*safe_buffer.Buffer](),
-		TimeAndState: time_and_state.NewTimeAndState(),
+		Description:    description,
+		StatusIfFailed: statusIfFailed,
+		MsgOnly:        msgOnly,
+		stdInOutErr:    threadsafe.NewSlice[*safe_buffer.Buffer](),
+		TimeAndState:   time_and_state.NewTimeAndState(),
 	}
 
 	if msgOnly {

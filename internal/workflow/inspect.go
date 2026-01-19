@@ -20,8 +20,8 @@ var (
 	KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 )
 
-func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error) {
-	return w.Phase(machine.Attributes, phases.Status, machine,
+func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err error) {
+	return w.Phase(machine.Attributes, phases.Inspect, machine,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 			mms := machine.MetaStatus
 
@@ -29,13 +29,12 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs := []string{"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port)}
 
-			err = exc.Exec("TCP check",
+			err = exc.Exec(
+				"TCP check",
+				"unreachable",
 				commandWithArgs,
 				executioner.SkipIfLocal(),
 				executioner.DisableAutoSshCommand(),
-				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-					return fmt.Errorf("machine unreachable: %w", err)
-				}),
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					mms.Reachable.Store(true)
 					return nil
@@ -49,11 +48,13 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs = []string{"echo", "OK"}
 
-			err = exc.Exec("SSH connect",
+			err = exc.Exec(
+				"SSH connect",
+				"SSH auth failed",
 				commandWithArgs,
 				executioner.SkipIfLocal(),
 				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-					return errors.Wrapf(err, "ssh test failed: %s", log.String())
+					return errors.Wrap(err, log.String())
 				}),
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					mms.SSHConnectable.Store(true)
@@ -68,7 +69,9 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs = []string{"uname", "-m"}
 
-			err = exc.Exec("architecture",
+			err = exc.Exec(
+				"architecture",
+				"uname failed",
 				commandWithArgs,
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					architecture := log.String()
@@ -99,11 +102,13 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 
 			commandWithArgs = []string{"id", "-u"}
 
-			err = exc.Exec("superuser check",
+			err = exc.Exec(
+				"superuser check",
+				"checking superuser failed",
 				commandWithArgs,
 				executioner.OnFailure(
 					func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "failed to check sudo: %s", log.String())
+						return errors.Wrap(err, log.String())
 					}),
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					output := strings.Trim(log.String(), "\n ")
@@ -126,11 +131,13 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			requiresKexec := false
 			commandWithArgs = []string{"cat", "/etc/os-release"}
 
-			err = exc.Exec("bootstrap detection",
+			err = exc.Exec(
+				"bootstrap detection",
+				"reading /etc/os-release failed",
 				commandWithArgs,
 				executioner.OnFailure(
 					func(log *logs.CommandLog, err error) error {
-						return errors.Wrapf(err, "failed read /etc/os-release: %s", log.String())
+						return errors.Wrap(err, log.String())
 					}),
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 
@@ -182,11 +189,10 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 				if !mms.Bootstrapped.Load() && machine.HardwareConfigPath != "" {
 					commandWithArgs := append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath)
 
-					err := exc.Exec("generate config",
+					err := exc.Exec(
+						"generate config",
+						"nixos-generate-config failed",
 						commandWithArgs,
-						executioner.OnFailure(func(log *logs.CommandLog, err error) error {
-							return errors.Wrapf(err, "nixos-generate-config failed for %s", machine.Name)
-						}),
 					)
 					if err != nil {
 						return err
@@ -201,7 +207,9 @@ func (w *Workflow) executeStatusPhaseMachine(machine *config.Machine) (err error
 			// Get current generation
 			commandWithArgs = []string{"nixos-rebuild", "list-generations", "--json"}
 
-			err = exc.Exec("get generations",
+			err = exc.Exec(
+				"get generations",
+				"list generations failed",
 				commandWithArgs,
 				executioner.OnSuccess(func(log *logs.CommandLog) error {
 					output := log.Bytes()
