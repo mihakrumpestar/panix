@@ -68,9 +68,9 @@ func NewTui(workflow *workflow.Workflow) error {
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
 
-	debugOutput.WriteString("TUI initialized")
+	debugOutput.WriteString("TUI initialized\n")
 
-	cpuprofile := workflow.State().Conf.Flags.Cpuprofile
+	cpuprofile := workflow.State().Conf.Flags.Logging.Cpuprofile
 	if cpuprofile != "" {
 		f, err := os.Create(cpuprofile)
 		if err != nil {
@@ -121,13 +121,13 @@ func (m model) startWorkflow() tea.Cmd {
 
 			err := m.workflow.CreateWorkflow()
 			if err != nil {
-				m.modelView.debugOutput.WriteString("Error: " + err.Error())
+				m.modelView.debugOutput.WriteString("Error: " + err.Error() + "\n")
 				m.err = err
 				msg = errMsg{err}
 				return
 			}
 
-			m.modelView.debugOutput.WriteString("All ok")
+			m.modelView.debugOutput.WriteString("All ok\n")
 		}()
 
 		return msg
@@ -222,10 +222,11 @@ func (m model) ViewMainContent() string {
 		builder.WriteString(m.workflow.State().Conf.Tui.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
-	if m.workflow.State().Conf.Flags.Debug {
+	if m.workflow.State().Conf.Flags.Logging.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += m.modelView.viewports.Debug()
+		debugContent += m.workflow.State().Logs.Debug()
 		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)
 	}

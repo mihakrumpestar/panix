@@ -7,12 +7,13 @@ import (
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
 
 // Flake, Configuration and Machine Attributes
+
+type Xpath string
 
 type Attributes struct {
 	Ssh                 *ssh.SshClient  `yaml:"ssh,omitempty"`
@@ -26,24 +27,23 @@ type Attributes struct {
 
 	// Internal
 	Name    string
-	Xpath   string
+	Xpath   Xpath
+	Related []Attributes // Next related Xpaths (one layer lower)
 	Message string
-	Logs    *logs.PhaseLogs
 	Flags   *config_flags.Flags
 }
 
-func (a *Attributes) Init(name string, passAttr *Attributes, flags *config_flags.Flags) (err error) {
+func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) (err error) {
 	defer func() {
-		err = errors.Wrapf(err, "%s", strconv.Quote(a.Xpath))
+		err = errors.Wrapf(err, "%s", strconv.Quote(string(a.Xpath)))
 	}()
 
 	a.Name = name
-	a.Logs = logs.NewPhaseLogs(flags)
 	a.Flags = flags
 
 	a.Tags = append(a.Tags, name)
 
-	a.PassAttributesInto(passAttr)
+	a.PassAttributesInto(attr)
 
 	sshConfig, err := ssh.GetCachedSshConfig()
 	if err != nil {
@@ -88,9 +88,9 @@ func (a *Attributes) PassAttributesInto(attr *Attributes) {
 		a.HardwareConfigPath = attr.HardwareConfigPath
 	}
 
-	a.Xpath = a.Name
+	a.Xpath = Xpath(a.Name)
 	if attr.Xpath != "" {
-		a.Xpath = attr.Xpath + "/" + a.Name
+		a.Xpath = Xpath(fmt.Sprintf("%s/%s", attr.Xpath, a.Name))
 	}
 }
 
