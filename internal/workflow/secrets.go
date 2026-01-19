@@ -19,7 +19,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 		return nil
 	}
 
-	return w.Phase(&machine.Attributes, phases.Secrets, nil,
+	return w.Phase(machine.Attributes, phases.Secrets, nil,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
 			for _, secret := range secrets {

@@ -82,7 +82,7 @@ func (ex *Executioner) Exec(description string, commandWithArgs []string, opts .
 	if noMachineOrLocal && excOpt.skipIfLocal {
 		defer ex.onUpdateHook()
 
-		comLog := ex.phaseLog.AddMessageOnly("(skipped)")
+		comLog := ex.phaseLog.NewCommand("(skipped)", true)
 		if excOpt.onSuccess != nil {
 			err := excOpt.onSuccess(comLog)
 			if err != nil {

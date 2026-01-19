@@ -116,7 +116,7 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	if conf.Flags.Debug {
+	if conf.Flags.Logging.Debug {
 		dump.Config(func(d *dump.Options) {
 			d.BytesAsString = true
 			d.SkipNilField = true
@@ -169,6 +169,8 @@ func (c *Config) validateConfig() error {
 				return err
 			}
 
+			flake.Attributes.Related = append(flake.Attributes.Related, configuration.Attributes)
+
 			for machineName, machine := range configuration.Machines.SortedMap() {
 				if machine == nil {
 					machine = &Machine{}
@@ -179,6 +181,8 @@ func (c *Config) validateConfig() error {
 				if err != nil {
 					return err
 				}
+
+				configuration.Attributes.Related = append(configuration.Attributes.Related, machine.Attributes)
 			}
 		}
 	}

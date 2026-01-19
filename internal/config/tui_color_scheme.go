@@ -1,6 +1,11 @@
 package config
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"fmt"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/lucasb-eyer/go-colorful"
+)
 
 type ColorSchemeLogEntity struct {
 	Color lipgloss.Style
@@ -44,7 +49,19 @@ type ColorScheme struct {
 
 	// Spinner colors
 	Spinner lipgloss.Style
+
+	PhaseColorPairs map[PhaseState][2]colorful.Color
 }
+
+// PhaseState represents the visual state of a phase
+type PhaseState int
+
+const (
+	PhaseStateDefault PhaseState = iota
+	PhaseStateActive
+	PhaseStateFailed
+	PhaseStateCompleted
+)
 
 // DefaultColorScheme returns the default color scheme
 func defaultColorScheme() *ColorScheme {
@@ -148,5 +165,23 @@ func defaultColorScheme() *ColorScheme {
 		// Spinner colors
 		Spinner: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#8BE9FD")), // Cyan
+
+		// Pre-defined and pre-parsed color pairs for different phase states
+		PhaseColorPairs: map[PhaseState][2]colorful.Color{
+			PhaseStateActive:    {mustColorfullHex("#2952c3"), mustColorfullHex("#3b6bec")}, // Dark blue variations
+			PhaseStateFailed:    {mustColorfullHex("#5f1414"), mustColorfullHex("#DC2626")}, // Dark red variations
+			PhaseStateCompleted: {mustColorfullHex("#14532D"), mustColorfullHex("#11883d")}, // Dark green variations
+			PhaseStateDefault:   {mustColorfullHex("#535862"), mustColorfullHex("#6B7280")}, // Dark gray solid
+		},
 	}
+}
+
+// Helpers
+
+func mustColorfullHex(hex string) colorful.Color {
+	c, err := colorful.Hex(hex)
+	if err != nil {
+		panic(fmt.Sprintf("Invalid color hex %s: %v", hex, err))
+	}
+	return c
 }

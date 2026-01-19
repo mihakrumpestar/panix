@@ -8,16 +8,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 func (m *model) ViewStatsTable() string {
 	state := m.workflow.State()
+	phasesList := state.Phases
+	colors := state.Conf.Tui.ColorScheme
 
-	colors := m.workflow.State().Conf.Tui.ColorScheme
-
-	if state.Conf.Flags.DryRun || !slices.Contains(state.Phases.Keys(), phases.Status) {
+	if state.Conf.Flags.DryRun || !slices.Contains(phasesList, phases.Status) {
 		return ""
 	}
 
@@ -37,7 +38,7 @@ func (m *model) ViewStatsTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GENERATION", "DATE", "NIXOS", "KERNEL").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GEN", "GEN DATE", "NIXOS", "KERNEL").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -82,7 +83,8 @@ func (m *model) ViewStatsTable() string {
 		xpath := machine.Xpath
 
 		ps := machine.MetaStatus
-		log := machine.Logs.SafeGet(phases.Status)
+
+		log := state.Logs.GetLastLog(machine.Xpath)
 
 		// Determine if we should show flake name (only on first occurrence)
 		showFlake := flake.Name != prevFlakeName
@@ -133,7 +135,11 @@ func (m *model) ViewStatsTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *logs.PhaseLog) string {
+func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpath, log *logs.PhaseLog) string {
+	if log == nil {
+		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
+	}
+
 	tas := log.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
@@ -151,7 +157,11 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath string, log *logs.Pha
 	return "✅"
 }
 
-func (m *model) getStatusText(ps *config.MetaStatus, xpath string, log *logs.PhaseLog) string {
+func (m *model) getStatusText(ps *config.MetaStatus, xpath config_attributes.Xpath, log *logs.PhaseLog) string {
+	if log == nil {
+		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
+	}
+
 	tas := log.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()

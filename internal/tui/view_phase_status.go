@@ -8,58 +8,33 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
-	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/mihakrumpestar/panix/internal/workflow/tasks"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 )
 
 const (
 	gradientAnimationCycleTime = 4 * time.Second
 )
 
-// PhaseState represents the visual state of a phase
-type PhaseState int
-
-const (
-	PhaseStateDefault PhaseState = iota
-	PhaseStateActive
-	PhaseStateFailed
-	PhaseStateCompleted
-)
-
-// Pre-defined and pre-parsed color pairs for different phase states
-var phaseColorPairs = map[PhaseState][2]colorful.Color{
-	PhaseStateActive:    {mustColorfullHex("#2952c3"), mustColorfullHex("#3b6bec")}, // Dark blue variations
-	PhaseStateFailed:    {mustColorfullHex("#5f1414"), mustColorfullHex("#DC2626")}, // Dark red variations
-	PhaseStateCompleted: {mustColorfullHex("#14532D"), mustColorfullHex("#11883d")}, // Dark green variations
-	PhaseStateDefault:   {mustColorfullHex("#535862"), mustColorfullHex("#6B7280")}, // Dark gray solid
-}
-
 func (m *model) ViewPhaseStatus() string {
 	var builder strings.Builder
 
 	colors := m.workflow.State().Conf.Tui.ColorScheme
-	statePhases := m.workflow.State().Phases
 
 	builder.WriteString(colors.HeaderTitle.Render("=== Phase Status ===\n"))
-	builder.WriteString(renderPhaseFlow(statePhases, colors, m.modelView.dimensions.Width))
+	builder.WriteString(m.renderPhaseFlow(colors))
 
 	return builder.String()
 }
 
-func renderPhaseFlow(statePhases *phases.PhaseStates, colors *config.ColorScheme, termWidth int) string {
-	// Collect phases first to determine count
-	phases := make([]phases.Phase, 0)
-	for phase := range statePhases.Range() {
-		if !strings.Contains(string(phase), "hook") {
-			phases = append(phases, phase)
-		}
-	}
+func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
+	phasesList := m.workflow.State().Phases
 
-	if len(phases) == 0 {
+	if len(phasesList) == 0 {
 		return colors.TableRow.Render("No phases to display")
 	}
+
+	termWidth := m.modelView.dimensions.Width
 
 	// Create table for phase flow
 	t := table.New().
@@ -73,19 +48,30 @@ func renderPhaseFlow(statePhases *phases.PhaseStates, colors *config.ColorScheme
 			return lipgloss.NewStyle().Align(lipgloss.Center)
 		})
 
+	stats := m.workflow.State().Logs.ComputeStatisticsPerPhase()
+
 	// Build table row with phase groups and arrows
 	var row []string
 
-	for i, phase := range phases {
+	for _, phase := range phasesList {
+		statsPhase := stats.GetPack(phase)
+		//statsPhase.Done = 0
+
 		// Create phase group
-		phaseGroup := createPhaseGroup(phase, statePhases.Value(phase), colors, termWidth)
+		phaseGroup := createPhaseGroup(string(phase), statsPhase, colors, termWidth)
 		row = append(row, phaseGroup)
 
-		// Add arrow except for last phase
-		if i < len(phases)-1 {
-			row = append(row, "󰜴")
-		}
+		// Add arrow
+		row = append(row, "󰜴")
 	}
+
+	// Add "Done" phase group
+
+	statsDone := stats.GetPack(phasesList[len(phasesList)-1])
+	//statsDone.Running = 0
+	//statsDone.Failed = 0
+	phaseGroup := createPhaseGroup("Done", statsDone, colors, termWidth)
+	row = append(row, phaseGroup)
 
 	// Set the table row
 	t.Row(row...)
@@ -93,20 +79,16 @@ func renderPhaseFlow(statePhases *phases.PhaseStates, colors *config.ColorScheme
 	return fmt.Sprintf("%s\n", t.String())
 }
 
-func createPhaseGroup(phase phases.Phase, data *tasks.PhaseTasksStates, colors *config.ColorScheme, termWidth int) string {
-	phaseName := string(phase)
-	displayName := strings.Title(phaseName)
-	running := data.LenByState(tasks.Running)
-	failed := data.LenByState(tasks.Failed)
-	done := data.LenByState(tasks.Done)
+func createPhaseGroup(phase string, stats *logs.StatsPack, colors *config.ColorScheme, termWidth int) string {
+	displayName := strings.Title(phase)
 
 	// Create phase name with gradient
-	phaseNameText := createAnimatedGradient(displayName, running, failed, done)
+	phaseNameText := createAnimatedGradient(displayName, stats, colors)
 	columnStyle := lipgloss.NewStyle().Width(lipgloss.Width(phaseNameText)).Margin(int(float64(termWidth) * 0.005)).Align(lipgloss.Center)
 	phaseNameText = columnStyle.Render(phaseNameText)
 
 	// Create status line
-	statusLine := buildStatusLine(running, failed, done, colors)
+	statusLine := buildStatusLine(stats, colors)
 	statusLine = columnStyle.Render(statusLine)
 	// Both name and stats should be centered within their container
 	phaseGroupContent := lipgloss.JoinVertical(lipgloss.Center, phaseNameText, statusLine)
@@ -114,8 +96,8 @@ func createPhaseGroup(phase phases.Phase, data *tasks.PhaseTasksStates, colors *
 	return phaseGroupContent
 }
 
-func createAnimatedGradient(text string, running, failed, done int) string {
-	phaseState := determinePhaseState(running, failed, done)
+func createAnimatedGradient(text string, stats *logs.StatsPack, colors *config.ColorScheme) string {
+	phaseState := determinePhaseState(stats)
 
 	now := time.Now()
 	progress := float64(now.UnixNano()%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
@@ -124,7 +106,7 @@ func createAnimatedGradient(text string, running, failed, done int) string {
 	// This goes from 0 to 1 and back to 0 smoothly
 	blendFactor := math.Sin(progress*2*math.Pi)*0.5 + 0.5
 
-	colorPair := phaseColorPairs[phaseState]
+	colorPair := colors.PhaseColorPairs[phaseState]
 	c1 := colorPair[0]
 	c2 := colorPair[1]
 	finalColor := c1.BlendLuv(c2, blendFactor)
@@ -140,19 +122,19 @@ func createAnimatedGradient(text string, running, failed, done int) string {
 }
 
 // buildStatusLine creates compact status indicators for horizontal layout
-func buildStatusLine(running, failed, done int, colors *config.ColorScheme) string {
+func buildStatusLine(stats *logs.StatsPack, colors *config.ColorScheme) string {
 	indicators := make([]string, 0)
 
-	if running > 0 {
-		indicators = append(indicators, colors.StatusRunning.Render(fmt.Sprintf("%d", running)))
+	if stats.Running > 0 {
+		indicators = append(indicators, colors.StatusRunning.Render(fmt.Sprintf("%d", stats.Running)))
 	}
 
-	if failed > 0 {
-		indicators = append(indicators, colors.StatusError.Render(fmt.Sprintf("%d", failed)))
+	if stats.Failed > 0 {
+		indicators = append(indicators, colors.StatusError.Render(fmt.Sprintf("%d", stats.Failed)))
 	}
 
-	if done > 0 {
-		indicators = append(indicators, colors.StatusOK.Render(fmt.Sprintf("%d", done)))
+	if stats.Done > 0 {
+		indicators = append(indicators, colors.StatusOK.Render(fmt.Sprintf("%d", stats.Done)))
 	}
 
 	statusText := strings.Join(indicators, colors.TableBorder.Render("/"))
@@ -162,25 +144,17 @@ func buildStatusLine(running, failed, done int, colors *config.ColorScheme) stri
 
 // Helpers
 
-func mustColorfullHex(hex string) colorful.Color {
-	c, err := colorful.Hex(hex)
-	if err != nil {
-		panic(fmt.Sprintf("Invalid color hex %s: %v", hex, err))
-	}
-	return c
-}
-
 // determinePhaseState determines the visual state of a phase based on its counts
-func determinePhaseState(running, failed, done int) PhaseState {
-	if running > 0 {
-		return PhaseStateActive
+func determinePhaseState(stats *logs.StatsPack) config.PhaseState {
+	if stats.Running > 0 {
+		return config.PhaseStateActive
 	}
-	if failed > 0 && running == 0 && done == 0 {
-		return PhaseStateFailed
+	if stats.Failed > 0 && stats.Running == 0 && stats.Done == 0 {
+		return config.PhaseStateFailed
 	}
-	if done > 0 && running == 0 && failed == 0 {
-		return PhaseStateCompleted
+	if stats.Done > 0 && stats.Running == 0 && stats.Failed == 0 {
+		return config.PhaseStateCompleted
 	}
 
-	return PhaseStateDefault
+	return config.PhaseStateDefault
 }

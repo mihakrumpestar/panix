@@ -16,10 +16,10 @@ import (
 type PhaseLogs struct {
 	logs *omap.Omap[phases.Phase, *PhaseLog]
 	// Internal
-	flags *config_flags.Flags
+	flags config_flags.Logging
 }
 
-func NewPhaseLogs(flags *config_flags.Flags) *PhaseLogs {
+func NewPhaseLogs(flags config_flags.Logging) *PhaseLogs {
 	phaseLogs, err := omap.New[phases.Phase, *PhaseLog]()
 	if err != nil {
 		panic(err)
@@ -31,9 +31,18 @@ func NewPhaseLogs(flags *config_flags.Flags) *PhaseLogs {
 	}
 }
 
-func (pl *PhaseLogs) SafeGet(phase phases.Phase) *PhaseLog {
+func (pl *PhaseLogs) Get(phase phases.Phase) *PhaseLog {
 	phaselog, ok := pl.logs.Get(phase)
 	if !ok {
+		return nil
+	}
+
+	return phaselog
+}
+
+func (pl *PhaseLogs) GetOrCreate(phase phases.Phase) *PhaseLog {
+	phaselog := pl.Get(phase)
+	if phaselog == nil {
 		phaselog = NewPhaseLog(phase, pl.flags)
 		pl.logs.Set(phase, phaselog)
 	}
@@ -41,11 +50,39 @@ func (pl *PhaseLogs) SafeGet(phase phases.Phase) *PhaseLog {
 	return phaselog
 }
 
+func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *PhaseLog {
+	pLog, ok := pl.logs.Get(phase)
+	if ok {
+		return pLog
+	}
+
+	if phaseLog == nil {
+		phaseLog = NewPhaseLog(phase, pl.flags)
+	}
+
+	pl.logs.Set(phase, phaseLog)
+
+	return phaseLog
+}
+
 func (pl *PhaseLogs) All() []omap.Pair[phases.Phase, *PhaseLog] {
 	return pl.logs.Pairs() // Any other ranging method locks the dict until it traverses it
 }
 
+// Gets the last PhaseLog in PhaseLogs
+func (pl *PhaseLogs) Last() *PhaseLog {
+	if pl.logs.Len() == 0 {
+		return nil
+	}
+
+	return pl.logs.Pairs()[pl.logs.Len()-1].Value
+}
+
 func (pl *PhaseLogs) Len() int {
+	if pl == nil {
+		return 0
+	}
+
 	return pl.logs.Len()
 }
 
@@ -64,10 +101,10 @@ type PhaseLog struct {
 	timeAndState *time_and_state.TimeAndState
 	// Internal
 	phase phases.Phase
-	flags *config_flags.Flags
+	flags config_flags.Logging
 }
 
-func NewPhaseLog(phase phases.Phase, flags *config_flags.Flags) *PhaseLog {
+func NewPhaseLog(phase phases.Phase, flags config_flags.Logging) *PhaseLog {
 	return &PhaseLog{
 		commandLogs:  threadsafe.NewSlice[*CommandLog](),
 		timeAndState: time_and_state.NewTimeAndState(),
@@ -76,28 +113,27 @@ func NewPhaseLog(phase phases.Phase, flags *config_flags.Flags) *PhaseLog {
 	}
 }
 
-func (pLog *PhaseLog) LastCommand() *CommandLog {
-	commandLog, ok := pLog.commandLogs.Get(pLog.commandLogs.Length() - 1)
-	if !ok {
-		panic("commandLogs does not have element on specified index")
+func (pLog *PhaseLog) LastNonMsgOnlyCommand() *CommandLog {
+	var commandLog *CommandLog
+
+	// Iterate backwards to find the last command that is not just a message
+	for i := pLog.commandLogs.Length() - 1; i >= 0; i-- {
+		var ok bool
+		commandLog, ok = pLog.commandLogs.Get(i)
+		if !ok {
+			panic("commandLogs does not have element on specified index")
+		}
+		if !commandLog.MsgOnly {
+			return commandLog
+		}
 	}
-	return commandLog
+
+	return nil
 }
 
-func (pLog *PhaseLog) NewCommand(description string) *CommandLog {
-	commandLog := NewCommandLog(description)
+func (pLog *PhaseLog) NewCommand(description string, msgOnly bool) *CommandLog {
+	commandLog := NewCommandLog(description, msgOnly)
 	pLog.commandLogs.Append(commandLog)
-
-	return commandLog
-}
-
-func (pLog *PhaseLog) AddMessageOnly(msg string) *CommandLog {
-	commandLog := pLog.NewCommand(msg)
-
-	commandLog.Command.Store(msg)
-
-	commandLog.TimeAndState.StartTimer()
-	commandLog.TimeAndState.EndTimer()
 
 	return commandLog
 }
@@ -109,27 +145,17 @@ func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
 
 	msg := fmt.Sprintf("VERBOSE "+format, a...)
 
-	commandLog := pLog.NewCommand(msg)
-	commandLog.Command.Store(msg)
-
-	commandLog.TimeAndState.StartTimer()
-	commandLog.TimeAndState.EndTimer()
-
-	return commandLog
+	return pLog.NewCommand(msg, true)
 }
 
-func (pLog *PhaseLog) Debug(msg string) *CommandLog {
+func (pLog *PhaseLog) Debug(format string, a ...any) *CommandLog {
 	if !pLog.flags.Debug {
 		return nil
 	}
 
-	commandLog := pLog.NewCommand(msg)
-	commandLog.Command.Store("DEBUG " + msg)
+	msg := fmt.Sprintf("DEBUG "+format, a...)
 
-	commandLog.TimeAndState.StartTimer()
-	commandLog.TimeAndState.EndTimer()
-
-	return commandLog
+	return pLog.NewCommand(msg, true)
 }
 
 func (pLog *PhaseLog) CommandLogs() []*CommandLog {
@@ -137,6 +163,10 @@ func (pLog *PhaseLog) CommandLogs() []*CommandLog {
 }
 
 func (pLog *PhaseLog) Clear() {
+	if pLog == nil {
+		return
+	}
+
 	pLog.mutex.Lock()
 	defer pLog.mutex.Unlock()
 

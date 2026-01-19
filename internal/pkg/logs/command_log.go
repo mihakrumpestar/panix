@@ -13,17 +13,28 @@ import (
 type CommandLog struct {
 	Description  string
 	Command      atomic.String
+	MsgOnly      bool
 	stdInOutErr  *threadsafe.Slice[*safe_buffer.Buffer] // Each line is a separate buffer to allow line replacement
 	TimeAndState *time_and_state.TimeAndState
 	Pty          *os.File
 }
 
-func NewCommandLog(description string) *CommandLog {
-	return &CommandLog{
+func NewCommandLog(description string, msgOnly bool) *CommandLog {
+	commandLog := &CommandLog{
 		Description:  description,
+		MsgOnly:      msgOnly,
 		stdInOutErr:  threadsafe.NewSlice[*safe_buffer.Buffer](),
 		TimeAndState: time_and_state.NewTimeAndState(),
 	}
+
+	if msgOnly {
+		commandLog.Command.Store(description)
+
+		commandLog.TimeAndState.StartTimer()
+		commandLog.TimeAndState.EndTimer()
+	}
+
+	return commandLog
 }
 
 // Bytes wrapper
