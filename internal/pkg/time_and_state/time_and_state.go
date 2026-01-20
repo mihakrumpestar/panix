@@ -1,57 +1,100 @@
 package time_and_state
 
 import (
-	"sync"
+	"errors"
 	"time"
+
+	"go.uber.org/atomic"
 )
 
 type TimeAndState struct {
-	mutex    sync.Mutex
-	internal *TimeAndStateInternal
-}
-
-type TimeAndStateInternal struct {
-	StartTime time.Time
-	EndTime   time.Time
-	Started   bool
-	Finished  bool
-	Error     error
+	startTime *atomic.Time
+	endTime   *atomic.Time
+	endError  *atomic.Error
 }
 
 func NewTimeAndState() *TimeAndState {
-	return &TimeAndState{internal: &TimeAndStateInternal{}}
+	return &TimeAndState{
+		startTime: &atomic.Time{},
+		endTime:   &atomic.Time{},
+		endError:  &atomic.Error{},
+	}
 }
 
 func (tas *TimeAndState) StartTimer() {
-	tas.mutex.Lock()
-	defer tas.mutex.Unlock()
-
-	tas.internal.StartTime = time.Now()
-	tas.internal.Started = true
+	tas.startTime.Store(time.Now())
 }
 
 func (tas *TimeAndState) EndTimer() {
-	tas.mutex.Lock()
-	defer tas.mutex.Unlock()
-
-	tas.internal.EndTime = time.Now()
-	tas.internal.Finished = true
+	tas.endTime.Store(time.Now())
 }
 
 func (tas *TimeAndState) EndTimerWithError(err error) {
 	tas.EndTimer()
-
-	tas.mutex.Lock()
-	defer tas.mutex.Unlock()
-
-	tas.internal.Error = err
+	tas.endError.Store(err)
 }
 
-// Returns a copy
-func (tas *TimeAndState) GetTimeAndState() TimeAndStateInternal {
-	tas.mutex.Lock()
-	defer tas.mutex.Unlock()
+// WithEnd returns current start with endTas end
+func (tas *TimeAndState) WithEnd(endTas *TimeAndState) *TimeAndState {
+	return &TimeAndState{
+		startTime: tas.startTime,
+		endTime:   endTas.endTime,
+		endError:  endTas.endError,
+	}
+}
 
-	copy := *tas.internal
-	return copy
+// Getters
+
+func (tas *TimeAndState) GetStartTime() time.Time {
+	return tas.startTime.Load()
+}
+
+func (tas *TimeAndState) HasStarted() bool {
+	return !tas.startTime.Load().IsZero()
+}
+
+func (tas *TimeAndState) GetEndTime() time.Time {
+	return tas.endTime.Load()
+}
+
+func (tas *TimeAndState) IsFinished() bool {
+	return !tas.endTime.Load().IsZero()
+}
+
+func (tas *TimeAndState) GetEndError() error {
+	return tas.endError.Load()
+}
+
+func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {
+	duration, err := tas.Duration()
+	if err == nil {
+		return duration, nil
+	}
+
+	duration, err = tas.ElapsedTime()
+	if err == nil {
+		return duration, nil
+	}
+
+	return time.Duration(0), err
+}
+
+func (tas *TimeAndState) Duration() (time.Duration, error) {
+	if !tas.HasStarted() {
+		return time.Duration(0), errors.New("timer has not started yet")
+	}
+
+	if !tas.IsFinished() {
+		return time.Duration(0), errors.New("timer has ended yet")
+	}
+
+	return tas.GetEndTime().Sub(tas.GetStartTime()), nil
+}
+
+func (tas *TimeAndState) ElapsedTime() (time.Duration, error) {
+	if !tas.HasStarted() {
+		return time.Duration(0), errors.New("timer has not started yet")
+	}
+
+	return time.Since(tas.GetStartTime()), nil
 }
