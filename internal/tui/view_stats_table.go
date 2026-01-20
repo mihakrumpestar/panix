@@ -140,14 +140,14 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpa
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
-	tas := phaseLog.TimeAndState().GetTimeAndState()
-	if !tas.Finished {
+	tas := phaseLog.TimeAndState()
+	if !tas.IsFinished() {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
 	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
 
-	if tas.Error != nil {
+	if tas.GetEndError() != nil {
 		return "🔴"
 	}
 
@@ -159,12 +159,12 @@ func (m *model) getStatusText(phaseLog *logs.PhaseLog, colors *config.ColorSchem
 		return ""
 	}
 
-	tas := phaseLog.TimeAndState().GetTimeAndState()
-	if !tas.Finished {
+	tas := phaseLog.TimeAndState()
+	if !tas.IsFinished() {
 		return colors.StatusRunning.Render(phaseLog.LastNonMsgOnlyCommand().Description + "-ing")
 	}
 
-	if tas.Error != nil {
+	if tas.GetEndError() != nil {
 		return colors.StatusError.Render(phaseLog.LastNonMsgOnlyCommand().StatusIfFailed)
 	}
 

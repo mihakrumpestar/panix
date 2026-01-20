@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
@@ -115,9 +114,9 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 			}
 
 			cmdOutput := cmd.String()
-			cmdTas := cmd.TimeAndState.GetTimeAndState()
+			cmdTas := cmd.TimeAndState
 
-			if !m.workflow.State().Conf.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) && cmdTas.Error == nil {
+			if !m.workflow.State().Conf.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) && cmdTas.GetEndError() == nil {
 				if cmdIdx == len(phaseLog.CommandLogs())-1 {
 					cmdLabel = "(hidden)"
 					cmdOutput = ""
@@ -155,7 +154,7 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 			}
 
 			// Command error status
-			err := cmdTas.Error
+			err := cmdTas.GetEndError()
 			if err != nil {
 				cmdTree.Child(colors.Error.Color.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
 			}
@@ -170,7 +169,7 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 }
 
 func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, xpath config_attributes.Xpath) (*tree.Tree, error) {
-	tas := phaseLog.TimeAndState().GetTimeAndState()
+	tas := phaseLog.TimeAndState()
 
 	// Phase header with spinner and right-aligned timing
 	phaseLabel := strings.ToUpper(string(phaseLog.Phase()))
@@ -183,7 +182,7 @@ func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, x
 	phaseHeader := colors.Phase.Color.Render(phaseText)
 	phaseTree := tree.New().Root(phaseHeader)
 
-	return phaseTree, tas.Error
+	return phaseTree, tas.GetEndError()
 }
 
 // Helpers
@@ -215,14 +214,14 @@ func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Left, leftBlock, rightBlock)
 }
 
-func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinished string, tas time_and_state.TimeAndStateInternal) string {
+func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinished string, tas *time_and_state.TimeAndState) string {
 	var iconOrSpinner string
 
-	if tas.Started && tas.Finished {
+	if tas.HasStarted() && tas.IsFinished() {
 		// Icon
 		iconOrSpinner = iconOnFinished
 		m.modelView.spinners.RemoveIfExistsSpinner(spinnerXpath)
-	} else if tas.Started && !tas.Finished {
+	} else if tas.HasStarted() && !tas.IsFinished() {
 		// Spinner
 		iconOrSpinner = m.modelView.spinners.GetOrCreateSpinner(spinnerXpath).View()
 	}
@@ -232,20 +231,13 @@ func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinish
 	return final
 }
 
-func (m *model) Duration(tas time_and_state.TimeAndStateInternal) string {
-	var durationStr string
-
-	if tas.Started && tas.Finished {
-		// Finished timer
-		duration := tas.EndTime.Sub(tas.StartTime)
-		durationStr = fmt.Sprintf("(%.2fs)", duration.Seconds())
-	} else if tas.Started && !tas.Finished {
-		// Live elapsed time
-		elapsed := time.Since(tas.StartTime)
-		durationStr = fmt.Sprintf("(%.2fs)", elapsed.Seconds())
+func (m *model) Duration(tas *time_and_state.TimeAndState) string {
+	duration, err := tas.DurationOrElapsedTime()
+	if err == nil {
+		return fmt.Sprintf("(%.2fs)", duration.Seconds())
 	}
 
-	return durationStr
+	return ""
 }
 
 // Helpers

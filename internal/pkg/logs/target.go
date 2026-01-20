@@ -18,8 +18,21 @@ func (ts *TargetLogs) GetFirstLogErrorOrLastLog() *PhaseLog {
 	// Return first log that has error
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
 		phaseLog := phaseLogPair.Value
-		tas := phaseLog.TimeAndState().GetTimeAndState()
-		if tas.Error != nil {
+		err := phaseLog.TimeAndState().GetEndError()
+		if err != nil {
+			return phaseLog
+		}
+	}
+
+	return ts.PhaseLogs.Last()
+}
+
+func (ts *TargetLogs) GetTimeAndState() *PhaseLog {
+	// Return first log that has error
+	for _, phaseLogPair := range ts.PhaseLogs.All() {
+		phaseLog := phaseLogPair.Value
+		err := phaseLog.TimeAndState().GetEndError()
+		if err != nil {
 			return phaseLog
 		}
 	}
@@ -115,13 +128,12 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
 			continue
 		}
 
-		timeAndState := lastCommand.TimeAndState.GetTimeAndState()
-		if !timeAndState.Finished {
+		if !lastCommand.TimeAndState.IsFinished() {
 			stats.Add(log.phase, Running, pair.Key)
 			continue
 		}
 
-		if timeAndState.Error != nil {
+		if lastCommand.TimeAndState.GetEndError() != nil {
 			stats.Add(log.phase, Failed, pair.Key)
 			continue
 		}
@@ -144,9 +156,7 @@ func (ts *TargetsLogs) Debug() string {
 			str += fmt.Sprintf("    %s len:%d\n", logPair.Key, logPair.Value.commandLogs.Length())
 
 			for _, log := range logPair.Value.commandLogs.Values() {
-				tas := log.TimeAndState.GetTimeAndState()
-
-				str += fmt.Sprintf("      '%s' msgOnly:%v finished:%v, err:%v\n", log.Description, log.MsgOnly, tas.Finished, tas.Error)
+				str += fmt.Sprintf("      '%s' msgOnly:%v finished:%v, err:%v\n", log.Description, log.MsgOnly, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())
 			}
 		}
 	}
