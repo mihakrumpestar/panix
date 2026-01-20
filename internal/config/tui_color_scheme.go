@@ -19,13 +19,10 @@ type ColorScheme struct {
 	HeaderBorder lipgloss.Style
 
 	// Status colors
-	StatusOK              lipgloss.Style
-	StatusWarning         lipgloss.Style
-	StatusError           lipgloss.Style
-	StatusRunning         lipgloss.Style
-	StatusUnreachable     lipgloss.Style
-	StatusSSHFailed       lipgloss.Style
-	StatusNotBootstrapped lipgloss.Style
+	StatusOK      lipgloss.Style
+	StatusWarning lipgloss.Style
+	StatusError   lipgloss.Style
+	StatusRunning lipgloss.Style
 
 	// Entity colors
 	Flake         ColorSchemeLogEntity
@@ -85,16 +82,7 @@ func defaultColorScheme() *ColorScheme {
 			Foreground(lipgloss.Color("#FF5555")), // Red
 
 		StatusRunning: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8BE9FD")), // Cyan
-
-		StatusUnreachable: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF5555")), // Red
-
-		StatusSSHFailed: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFB86C")), // Orange
-
-		StatusNotBootstrapped: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFB86C")), // Orange
+			Foreground(lipgloss.Color("#ff7bfb")), // Cyan
 
 		// Entitys
 		Flake: ColorSchemeLogEntity{

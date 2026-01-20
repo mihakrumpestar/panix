@@ -14,6 +14,19 @@ type TargetLogs struct {
 	primary bool // Indicates that this entry is not a relation
 }
 
+func (ts *TargetLogs) GetFirstLogErrorOrLastLog() *PhaseLog {
+	// Return first log that has error
+	for _, phaseLogPair := range ts.PhaseLogs.All() {
+		phaseLog := phaseLogPair.Value
+		tas := phaseLog.TimeAndState().GetTimeAndState()
+		if tas.Error != nil {
+			return phaseLog
+		}
+	}
+
+	return ts.PhaseLogs.Last()
+}
+
 type TargetsLogs struct {
 	logs  *omap.Omap[config_attributes.Xpath, *TargetLogs]
 	flags config_flags.Logging
@@ -79,16 +92,7 @@ func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) 
 		return nil
 	}
 
-	// Return first log that has error
-	for _, phaseLogPair := range logs.All() {
-		phaseLog := phaseLogPair.Value
-		tas := phaseLog.TimeAndState().GetTimeAndState()
-		if tas.Error != nil {
-			return phaseLog
-		}
-	}
-
-	return logs.Last()
+	return logs.GetFirstLogErrorOrLastLog()
 }
 
 func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
@@ -101,7 +105,7 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
 			continue
 		}
 
-		log := targetLogs.PhaseLogs.Last()
+		log := targetLogs.GetFirstLogErrorOrLastLog()
 		if log == nil {
 			continue
 		}

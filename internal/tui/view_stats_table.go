@@ -38,7 +38,7 @@ func (m *model) ViewStatsTable() string {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GENERATIONS", "LAST GENERATION DATE", "NIXOS", "KERNEL").
+		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GEN", "LAST GEN DATE", "NIXOS", "KERNEL").
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
@@ -98,13 +98,13 @@ func (m *model) ViewStatsTable() string {
 			prevConfigName = configuration.Name
 		}
 
-		// Get display values (empty for spanning)
-		flakeDisplay := ""
+		// Get display values (default values are for spanning)
+		flakeDisplay := " 󱞩"
 		if showFlake {
 			flakeDisplay = flake.Name
 		}
 
-		configDisplay := ""
+		configDisplay := " 󱞩"
 		if showConfig {
 			configDisplay = configuration.Name
 		}
@@ -116,13 +116,13 @@ func (m *model) ViewStatsTable() string {
 		}
 
 		t.Row(
-			fmt.Sprintf("%d", i),
+			fmt.Sprintf("%d", i+1),
 			m.getStatusIcon(ps, xpath, phaseLog),
 			flakeDisplay,
 			configDisplay,
 			machine.Name,
 			ps.Architecture.Load(),
-			m.getStatusText(ps, xpath, phaseLog),
+			m.getStatusText(phaseLog, colors),
 			generationString,
 			ps.Date.Load(),
 			ps.Nixos.Load(),
@@ -154,19 +154,19 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpa
 	return "✅"
 }
 
-func (m *model) getStatusText(ps *config.MetaStatus, xpath config_attributes.Xpath, phaseLog *logs.PhaseLog) string {
+func (m *model) getStatusText(phaseLog *logs.PhaseLog, colors *config.ColorScheme) string {
 	if phaseLog == nil {
 		return ""
 	}
 
 	tas := phaseLog.TimeAndState().GetTimeAndState()
 	if !tas.Finished {
-		return phaseLog.LastNonMsgOnlyCommand().Description + "-ing"
+		return colors.StatusRunning.Render(phaseLog.LastNonMsgOnlyCommand().Description + "-ing")
 	}
 
 	if tas.Error != nil {
-		return phaseLog.LastNonMsgOnlyCommand().StatusIfFailed
+		return colors.StatusError.Render(phaseLog.LastNonMsgOnlyCommand().StatusIfFailed)
 	}
 
-	return "DONE"
+	return colors.StatusOK.Render("done")
 }

@@ -15,6 +15,14 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
+type BuildLogHierarchy int
+
+const (
+	PhaseFirstMachineSecond BuildLogHierarchy = iota
+	MachineFirstPhaseSecond
+	PhaseOnly
+)
+
 // Render generates the Docker-style build log view with tree structure
 func (m *model) ViewBuildLogs() string {
 	var builder strings.Builder
@@ -31,22 +39,19 @@ func (m *model) ViewBuildLogs() string {
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(colors.TreeEnumerator)
 
-		m.addChildLogs(&flake.Attributes, flakeNode, colors)
-
 		// Add configurations
 		for _, configuration := range flake.Configurations.SortedMap() {
 			configurationNode := tree.New().Root(nodeTitle(colors.Configuration, &configuration.Attributes))
 
-			m.addChildLogs(&configuration.Attributes, configurationNode, colors)
+			m.forMachines(configurationNode, configuration, func(machine *config.Machine, machineNode *tree.Tree) {
+				m.addChildLogs(&machine.Attributes, machineNode, colors, PhaseFirstMachineSecond, phases.Inspect)
+			})
 
-			// Add machines
-			for _, machine := range configuration.Machines.SortedMap() {
-				machineNode := tree.New().Root(nodeTitle(colors.Machine, &machine.Attributes)).Offset(0, 4)
+			m.addChildLogs(&configuration.Machines.First().Attributes, configurationNode, colors, PhaseOnly, phases.Build)
 
-				m.addChildLogs(&machine.Attributes, machineNode, colors)
-
-				configurationNode.Child(machineNode)
-			}
+			m.forMachines(configurationNode, configuration, func(machine *config.Machine, machineNode *tree.Tree) {
+				m.addChildLogs(&machine.Attributes, machineNode, colors, MachineFirstPhaseSecond, phases.PhasesInOrder()[2:]...)
+			})
 
 			flakeNode.Child(configurationNode)
 		}
@@ -59,15 +64,25 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
-func nodeTitle(logStyle config.ColorSchemeLogEntity, attr *config_attributes.Attributes) string {
-	return logStyle.Color.Render(fmt.Sprintf("%c %s %s", logStyle.Icon, attr.Name, attr.Message))
+func (m *model) forMachines(configurationNode *tree.Tree, configuration *config.Configuration, f func(machine *config.Machine, machineNode *tree.Tree)) {
+	colors := m.workflow.State().Conf.Tui.ColorScheme
+
+	for _, machine := range configuration.Machines.SortedMap() {
+		machineNode := tree.New().Root(nodeTitle(colors.Machine, &machine.Attributes)).Offset(0, 4)
+
+		f(machine, machineNode)
+
+		if machineNode.Children().Length() != 0 {
+			configurationNode.Child(machineNode)
+		}
+	}
 }
 
-func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme) {
+func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) {
 	logs := m.workflow.State().Logs.GetLogs(attr.Xpath)
 
 	if logs.Len() > 0 {
-		phaseNodes := m.phaseNodes(attr.Xpath, logs, colors)
+		phaseNodes := m.phaseNodes(attr.Xpath, logs, colors, hierarchy, limitToPhases...)
 		for _, phaseNode := range phaseNodes {
 			treeRoot.Child(phaseNode) // Passing "phaseNodes" directly does not produce the same result as adding them seperately
 		}
@@ -75,16 +90,20 @@ func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseLogs, colors *config.ColorScheme) []*tree.Tree {
+func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseLogs, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
 	for _, entry := range phaseLogs.All() {
 		phase := entry.Key
 		phaseLog := entry.Value
 
-		xpath += config_attributes.Xpath(string(xpath) + "-" + string(phase))
+		if !slices.Contains(limitToPhases, phase) {
+			continue
+		}
 
-		phaseTree, _ := m.phaseLogs(phaseLog, colors, xpath)
+		phaseXpath := xpath.NewXpathWithAppend(string(phase))
+
+		phaseTree, _ := m.phaseLogs(phaseLog, colors, phaseXpath)
 
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
@@ -108,8 +127,8 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 			}
 
 			iconOnFinished := fmt.Sprintf("%d ", cmdIdx+1)
-			commandXpath := config_attributes.Xpath(string(xpath) + cmdLabel)
-			labelXpath := config_attributes.Xpath(commandXpath + "-label")
+			commandXpath := phaseXpath.NewXpathWithAppend(cmdLabel)
+			labelXpath := commandXpath.NewXpathWithAppend("label")
 
 			var cmdHeader string
 
@@ -126,12 +145,13 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 			cmdTree := tree.New().Root(cmdHeader)
 
 			// Command output
+			viewportXpath := commandXpath.NewXpathWithAppend("output")
 			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
-				outputViewport := m.modelView.viewports.GetOrCreateViewport(commandXpath+"-output", output, cmd.Pty, 19)
+				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, 19)
 				cmdTree.Child(outputViewport)
 			} else {
-				m.modelView.viewports.RemoveIfExistsViewport(commandXpath + "-output")
+				m.modelView.viewports.RemoveIfExistsViewport(viewportXpath)
 			}
 
 			// Command error status
@@ -226,4 +246,10 @@ func (m *model) Duration(tas time_and_state.TimeAndStateInternal) string {
 	}
 
 	return durationStr
+}
+
+// Helpers
+
+func nodeTitle(logStyle config.ColorSchemeLogEntity, attr *config_attributes.Attributes) string {
+	return logStyle.Color.Render(fmt.Sprintf("%c %s %s", logStyle.Icon, attr.Name, attr.Message))
 }
