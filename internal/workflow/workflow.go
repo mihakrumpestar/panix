@@ -41,6 +41,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phas
 
 	targetsLogs, err := logs.NewTargetsLogs(conf.Flags.Logging)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 

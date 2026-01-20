@@ -1,10 +1,8 @@
 package config_attributes
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
@@ -12,8 +10,6 @@ import (
 )
 
 // Flake, Configuration and Machine Attributes
-
-type Xpath string
 
 type Attributes struct {
 	Ssh                 *ssh.SshClient  `yaml:"ssh,omitempty"`
@@ -28,14 +24,14 @@ type Attributes struct {
 	// Internal
 	Name    string
 	Xpath   Xpath
-	Related []Attributes // Next related Xpaths (one layer lower)
+	Related []Attributes // Children
 	Message string
 	Flags   *config_flags.Flags
 }
 
 func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) (err error) {
 	defer func() {
-		err = errors.Wrapf(err, "%s", strconv.Quote(string(a.Xpath)))
+		err = errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 	}()
 
 	a.Name = name
@@ -66,66 +62,27 @@ func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Fla
 }
 
 // PassAttributesInto has to be run before rest of the Init
-func (a *Attributes) PassAttributesInto(attr *Attributes) {
+func (a *Attributes) PassAttributesInto(parentAttr *Attributes) {
 	if a.Ssh == nil {
-		a.Ssh = attr.Ssh
+		a.Ssh = parentAttr.Ssh
 	}
 
-	a.Tags = append(a.Tags, attr.Tags...)
+	a.Tags = append(a.Tags, parentAttr.Tags...)
 	a.Tags = slices.Compact(a.Tags)
 
-	a.Secrets = append(a.Secrets, attr.Secrets...)
+	a.Secrets = append(a.Secrets, parentAttr.Secrets...)
 
-	if attr.Disabled {
+	if parentAttr.Disabled {
 		a.Disabled = true
 	}
 
 	if a.OverrideSudoProgram == "" {
-		a.OverrideSudoProgram = attr.OverrideSudoProgram
+		a.OverrideSudoProgram = parentAttr.OverrideSudoProgram
 	}
 
 	if a.HardwareConfigPath == "" {
-		a.HardwareConfigPath = attr.HardwareConfigPath
+		a.HardwareConfigPath = parentAttr.HardwareConfigPath
 	}
 
-	a.Xpath = Xpath(a.Name)
-	if attr.Xpath != "" {
-		a.Xpath = Xpath(fmt.Sprintf("%s/%s", attr.Xpath, a.Name))
-	}
-}
-
-type SecretConfig struct {
-	Local  Local  `yaml:"local"`
-	Remote Remote `yaml:"remote"`
-}
-
-type Local struct {
-	Path          *string `yaml:"path"`
-	CommandOutput *string `yaml:"commandOutput"`
-}
-
-type Remote struct {
-	Path string `yaml:"path"`
-	UID  *uint  `yaml:"uid,omitempty"`
-	GID  *uint  `yaml:"gid,omitempty"`
-}
-
-func (sc *SecretConfig) Validate() error {
-	if sc.Local.Path == nil && sc.Local.CommandOutput == nil {
-		return errors.New("both local input socrets options are empty")
-	}
-
-	if sc.Local.Path != nil && sc.Local.CommandOutput != nil {
-		return errors.New("can't use both local input socrets options")
-	}
-
-	if sc.Remote.Path == "" {
-		return errors.New("remote secrets path is empty")
-	}
-
-	if !strings.HasPrefix(sc.Remote.Path, "/") {
-		return fmt.Errorf("remote secrets path must be absolute for %s", strconv.Quote(sc.Remote.Path))
-	}
-
-	return nil
+	a.Xpath = parentAttr.Xpath.NewXpathWithAppend(a.Name)
 }
