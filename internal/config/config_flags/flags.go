@@ -29,7 +29,7 @@ type Logging struct {
 	Verbose bool `yaml:"verbose"`
 	// Developers only
 	Debug      bool   `yaml:"debug"`
-	Cpuprofile string `yaml:"cpuprofile"`
+	Cpuprofile string `yaml:"cpuprofile"` // Path to cpuprofile file
 }
 
 func (f *Flags) Setup() {

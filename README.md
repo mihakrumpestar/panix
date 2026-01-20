@@ -45,3 +45,5 @@ Problematic:
 Not using:
 
 - [Viper](https://github.com/spf13/viper/issues/819)
+
+Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).

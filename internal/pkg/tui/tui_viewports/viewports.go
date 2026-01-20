@@ -122,7 +122,7 @@ func (v *Viewports) combineViewportWithScrollbar(viewportView, scrollbar string,
 	for i, line := range viewportLines {
 		if i < len(scrollbarLines) {
 			// Add spacing and zone the scrollbar
-			scrollbarLine := zone.Mark(string(scrollbarZone)+fmt.Sprintf("-%d", i), scrollbarLines[i])
+			scrollbarLine := zone.Mark(scrollbarZone.NewXpathWithAppend(fmt.Sprintf("%d", i)).String(), scrollbarLines[i])
 			combinedLines[i] = line + " " + scrollbarLine
 		} else {
 			combinedLines[i] = line
@@ -143,7 +143,7 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 			viewport:      viewport,
 			pty:           config.pty,
 			minHeight:     config.viewportHeight,
-			scrollbarZone: config.xpath + "-scrollbar",
+			scrollbarZone: config.xpath.NewXpathWithAppend("scrollbar"),
 			content:       config.content,
 		}
 
@@ -214,7 +214,7 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 		style = style.UnsetBorderStyle()
 	}
 
-	return zone.Mark(string(config.xpath), style.Render(combinedView))
+	return zone.Mark(config.xpath.String(), style.Render(combinedView))
 }
 
 func (v *Viewports) GetOrCreateViewport(xpath config_attributes.Xpath, content string, pty *os.File, indentation int) string {
@@ -265,7 +265,7 @@ func (v *Viewports) GetOrCreateMainViewport(content string) string {
 	viewportHeight := v.dimensions.Height - 3 // Reserve space for keybindings
 
 	config := ViewportConfig{
-		xpath:          "main",
+		xpath:          config_attributes.NewXpath("main"),
 		content:        content,
 		pty:            nil,
 		availableWidth: availableWidth,
@@ -286,13 +286,13 @@ func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) {
 // getMostSpecificViewport returns the most specific viewport (longest xpath) from a list of viewports
 func (v *Viewports) getMostSpecificViewport(viewports []config_attributes.Xpath) config_attributes.Xpath {
 	if len(viewports) == 0 {
-		return ""
+		return config_attributes.Xpath{}
 	}
 
 	// Sort by length descending to get the most specific viewport
 	for i := 0; i < len(viewports)-1; i++ {
 		for j := i + 1; j < len(viewports); j++ {
-			if len(viewports[i]) < len(viewports[j]) {
+			if viewports[i].Depth() < viewports[j].Depth() {
 				viewports[i], viewports[j] = viewports[j], viewports[i]
 			}
 		}
@@ -305,7 +305,7 @@ func (v *Viewports) getMostSpecificViewport(viewports []config_attributes.Xpath)
 func (v *Viewports) getViewportsUnderMouse(mouseMsg tea.MouseMsg) []config_attributes.Xpath {
 	var viewportsUnderMouse []config_attributes.Xpath
 	for xpath := range v.viewports.Records() {
-		if zone.Get(string(xpath)).InBounds(mouseMsg) {
+		if zone.Get(xpath.String()).InBounds(mouseMsg) {
 			viewportsUnderMouse = append(viewportsUnderMouse, xpath)
 		}
 	}
@@ -319,7 +319,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	if mouseMsg, ok := msg.(tea.MouseMsg); ok && mouseMsg.Action == tea.MouseActionRelease {
 		clickedViewports := v.getViewportsUnderMouse(mouseMsg)
 		clickedViewport := v.getMostSpecificViewport(clickedViewports)
-		anyViewportClicked := clickedViewport != ""
+		anyViewportClicked := clickedViewport.Depth() > 0
 
 		// Update viewport selection state
 		for xpath, vpr := range v.viewports.Records() {
@@ -375,13 +375,13 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	// Special handling for main viewport - only allow keyboard scrolling when no other viewport is active
 	hasActiveInnerViewport := false
 	for xpath, vpr := range v.viewports.Records() {
-		if xpath != "main" && vpr.active {
+		if xpath != config_attributes.NewXpath("main") && vpr.active {
 			hasActiveInnerViewport = true
 			break
 		}
 	}
 
-	if mainVpr, ok := v.viewports.Get("main"); ok && !hasActiveInnerViewport {
+	if mainVpr, ok := v.viewports.Get(config_attributes.NewXpath("main")); ok && !hasActiveInnerViewport {
 		var cmd tea.Cmd
 		mainVpr.viewport, cmd = mainVpr.viewport.Update(msg)
 		if cmd != nil {

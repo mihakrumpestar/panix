@@ -27,3 +27,22 @@ func (sm *SortedMap[K, V]) SortedMap() func(yield func(K, V) bool) {
 		}
 	}
 }
+
+// First
+func (sm *SortedMap[K, V]) First() V {
+	if sm == nil {
+		return *new(V)
+	}
+
+	keys := slices.Collect(maps.Keys(*sm))
+	slices.Sort(keys)
+
+	if len(keys) == 0 {
+		return *new(V)
+	}
+
+	k := keys[0]
+	v := (*sm)[k]
+
+	return v
+}
