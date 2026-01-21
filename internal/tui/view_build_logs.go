@@ -78,7 +78,7 @@ func (m *model) forMachines(configurationNode *tree.Tree, configuration *config.
 }
 
 func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) {
-	logs := m.workflow.State().Logs.GetLogs(attr.Xpath)
+	logs := m.workflow.State().Conf.TargetsLogs.GetLogs(attr.Xpath)
 
 	if logs.Len() > 0 {
 		phaseNodes := m.phaseNodes(attr.Xpath, logs, colors, hierarchy, limitToPhases...)
@@ -220,7 +220,7 @@ func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinish
 	if tas.HasStarted() && tas.IsFinished() {
 		// Icon
 		iconOrSpinner = iconOnFinished
-		m.modelView.spinners.RemoveIfExistsSpinner(spinnerXpath)
+		m.modelView.spinners.RemoveIfExists(spinnerXpath)
 	} else if tas.HasStarted() && !tas.IsFinished() {
 		// Spinner
 		iconOrSpinner = m.modelView.spinners.GetOrCreateSpinner(spinnerXpath).View()

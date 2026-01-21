@@ -84,7 +84,7 @@ func (m *model) ViewStatsTable() string {
 
 		ps := machine.MetaStatus
 
-		phaseLog := state.Logs.GetFirstLogErrorOrLastLog(machine.Xpath)
+		phaseLog := state.Conf.TargetsLogs.GetFirstLogErrorOrLastLog(machine.Xpath)
 
 		// Determine if we should show flake name (only on first occurrence)
 		showFlake := flake.Name != prevFlakeName
@@ -117,7 +117,7 @@ func (m *model) ViewStatsTable() string {
 
 		t.Row(
 			fmt.Sprintf("%d", i+1),
-			m.getStatusIcon(ps, xpath, phaseLog),
+			m.getStatusIcon(xpath, phaseLog),
 			flakeDisplay,
 			configDisplay,
 			machine.Name,
@@ -135,7 +135,7 @@ func (m *model) ViewStatsTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpath, phaseLog *logs.PhaseLog) string {
+func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs.PhaseLog) string {
 	if phaseLog == nil {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
@@ -145,7 +145,7 @@ func (m *model) getStatusIcon(ps *config.MetaStatus, xpath config_attributes.Xpa
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
-	m.modelView.spinners.RemoveIfExistsSpinner(xpath)
+	m.modelView.spinners.RemoveIfExists(xpath)
 
 	if tas.GetEndError() != nil {
 		return "🔴"
@@ -161,7 +161,12 @@ func (m *model) getStatusText(phaseLog *logs.PhaseLog, colors *config.ColorSchem
 
 	tas := phaseLog.TimeAndState()
 	if !tas.IsFinished() {
-		return colors.StatusRunning.Render(phaseLog.LastNonMsgOnlyCommand().Description + "-ing")
+		lastCommand := phaseLog.LastNonMsgOnlyCommand()
+		if lastCommand == nil {
+			return "" // TODO: fix this bug
+		}
+
+		return colors.StatusRunning.Render(lastCommand.Description + "-ing")
 	}
 
 	if tas.GetEndError() != nil {

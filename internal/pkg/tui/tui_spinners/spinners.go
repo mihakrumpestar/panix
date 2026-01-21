@@ -47,7 +47,7 @@ func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Mo
 	return spnr.model
 }
 
-func (s *Spinners) RemoveIfExistsSpinner(xpath config_attributes.Xpath) {
+func (s *Spinners) RemoveIfExists(xpath config_attributes.Xpath) {
 	s.spinners.Del(xpath)
 }
 

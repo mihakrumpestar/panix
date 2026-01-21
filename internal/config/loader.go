@@ -13,6 +13,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
 	koanf "github.com/knadh/koanf/v2"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/spf13/pflag"
 )
 
@@ -106,7 +107,7 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 	conf.Tui.ColorScheme = defaultColorScheme()
 
-	err = conf.validateConfig()
+	err = conf.initAndValidateConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -131,7 +132,7 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 // Helper functions
 
-func (c *Config) validateConfig() error {
+func (c *Config) initAndValidateConfig() error {
 	if c.Root == nil {
 		return fmt.Errorf("root is nil")
 	}
@@ -144,6 +145,13 @@ func (c *Config) validateConfig() error {
 	if len(c.Root.Flakes) == 0 {
 		return fmt.Errorf("flakes is required")
 	}
+
+	targetsLogs, err := logs.NewTargetsLogs(c.Flags.Logging)
+	if err != nil {
+		return err
+	}
+
+	c.TargetsLogs = targetsLogs
 
 	for flakeName, flake := range c.Root.Flakes.SortedMap() {
 		if flake.Url == "" {
@@ -159,6 +167,11 @@ func (c *Config) validateConfig() error {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
+		flakeLogs, err := targetsLogs.Add(flake.Xpath)
+		if err != nil {
+			return err
+		}
+
 		for configurationName, configuration := range flake.Configurations.SortedMap() {
 			if len(configuration.Machines) == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
@@ -169,7 +182,15 @@ func (c *Config) validateConfig() error {
 				return err
 			}
 
-			flake.Attributes.Related = append(flake.Attributes.Related, configuration.Attributes)
+			configurationLogs, err := targetsLogs.Add(configuration.Xpath)
+			if err != nil {
+				return err
+			}
+
+			err = configurationLogs.AddParent(flakeLogs)
+			if err != nil {
+				return err
+			}
 
 			for machineName, machine := range configuration.Machines.SortedMap() {
 				if machine == nil {
@@ -182,7 +203,15 @@ func (c *Config) validateConfig() error {
 					return err
 				}
 
-				configuration.Attributes.Related = append(configuration.Attributes.Related, machine.Attributes)
+				machineLogs, err := targetsLogs.Add(machine.Xpath)
+				if err != nil {
+					return err
+				}
+
+				err = machineLogs.AddParent(configurationLogs)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

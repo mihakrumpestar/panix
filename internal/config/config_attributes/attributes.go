@@ -24,7 +24,6 @@ type Attributes struct {
 	// Internal
 	Name    string
 	Xpath   Xpath
-	Related []Attributes // Children
 	Message string
 	Flags   *config_flags.Flags
 }
