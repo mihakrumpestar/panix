@@ -9,37 +9,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-type TargetLogs struct {
-	*PhaseLogs
-	primary bool // Indicates that this entry is not a relation
-}
-
-func (ts *TargetLogs) GetFirstLogErrorOrLastLog() *PhaseLog {
-	// Return first log that has error
-	for _, phaseLogPair := range ts.PhaseLogs.All() {
-		phaseLog := phaseLogPair.Value
-		err := phaseLog.TimeAndState().GetEndError()
-		if err != nil {
-			return phaseLog
-		}
-	}
-
-	return ts.PhaseLogs.Last()
-}
-
-func (ts *TargetLogs) GetTimeAndState() *PhaseLog {
-	// Return first log that has error
-	for _, phaseLogPair := range ts.PhaseLogs.All() {
-		phaseLog := phaseLogPair.Value
-		err := phaseLog.TimeAndState().GetEndError()
-		if err != nil {
-			return phaseLog
-		}
-	}
-
-	return ts.PhaseLogs.Last()
-}
-
 type TargetsLogs struct {
 	logs  *omap.Omap[config_attributes.Xpath, *TargetLogs]
 	flags config_flags.Logging
@@ -57,34 +26,44 @@ func NewTargetsLogs(flags config_flags.Logging) (*TargetsLogs, error) {
 	}, nil
 }
 
-func (ts *TargetsLogs) GetLog(xpath config_attributes.Xpath, phase phases.Phase) *PhaseLog {
-	logs, ok := ts.logs.Get(xpath)
-	if !ok {
-		return nil
+func (ts *TargetsLogs) Add(xpath config_attributes.Xpath) (*TargetLogs, error) {
+	targetLogs := NewTargetLogs(xpath, ts.flags)
+
+	err := ts.logs.Set(xpath, targetLogs)
+	if err != nil {
+		return nil, err
 	}
 
-	return logs.Get(phase)
+	return targetLogs, nil
 }
 
-func (ts *TargetsLogs) GetOrCreateLog(attr config_attributes.Attributes, phase phases.Phase) *PhaseLog {
-	return ts.getOrCreateLog(attr, phase, nil)
-}
-
-func (ts *TargetsLogs) getOrCreateLog(attr config_attributes.Attributes, phase phases.Phase, log *PhaseLog) *PhaseLog {
-	logs, ok := ts.logs.Get(attr.Xpath)
+func (ts *TargetsLogs) Get(xpath config_attributes.Xpath) *TargetLogs {
+	targetLogs, ok := ts.logs.Get(xpath)
 	if !ok {
-		logs = &TargetLogs{
-			NewPhaseLogs(ts.flags),
-			len(attr.Related) == 0,
-		}
-		ts.logs.Set(attr.Xpath, logs)
+		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
 
-	log = logs.SetIfNotExists(phase, log)
+	return targetLogs
+}
 
-	// Releted Xpaths should have same log pointer in phase
-	for _, relation := range attr.Related {
-		ts.getOrCreateLog(relation, phase, log)
+func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phases.Phase) *PhaseLog {
+	targetLogs, ok := ts.logs.Get(xpath)
+	if !ok {
+		panic("xpath key not present in TargetsLogs, this should never happen")
+	}
+
+	return ts.getOrCreateLog(targetLogs, phase, nil)
+}
+
+func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase, log *PhaseLog) *PhaseLog {
+	// Create it on nil log or if last child
+	if log == nil || len(targetLogs.children) == 0 {
+		log = targetLogs.SetIfNotExists(phase, log)
+	}
+
+	// Children should have same log pointer in phase
+	for _, child := range targetLogs.children {
+		ts.getOrCreateLog(child, phase, log)
 	}
 
 	return log
@@ -93,7 +72,7 @@ func (ts *TargetsLogs) getOrCreateLog(attr config_attributes.Attributes, phase p
 func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *PhaseLogs {
 	logs, ok := ts.logs.Get(xpath)
 	if !ok {
-		return nil
+		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
 
 	return logs.PhaseLogs
@@ -102,10 +81,17 @@ func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *PhaseLogs {
 func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) *PhaseLog {
 	logs, ok := ts.logs.Get(xpath)
 	if !ok {
-		return nil
+		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
 
-	return logs.GetFirstLogErrorOrLastLog()
+	return logs.GetCurrentTargetLog()
+}
+
+// Emptys target logs but does not delete them
+func (ts *TargetsLogs) Clear() {
+	for _, pair := range ts.logs.Pairs() {
+		pair.Value.Clear()
+	}
 }
 
 func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
@@ -114,11 +100,11 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *StatisticsPerPhase {
 	for _, pair := range ts.logs.Pairs() {
 		targetLogs := pair.Value
 
-		if !targetLogs.primary {
+		if len(targetLogs.children) != 0 {
 			continue
 		}
 
-		log := targetLogs.GetFirstLogErrorOrLastLog()
+		log := targetLogs.GetCurrentTargetLog()
 		if log == nil {
 			continue
 		}
@@ -150,7 +136,12 @@ func (ts *TargetsLogs) Debug() string {
 	str += fmt.Sprintf("\n  Stats: %v\n\n", ts.ComputeStatisticsPerPhase())
 
 	for _, pair := range ts.logs.Pairs() {
-		str += fmt.Sprintf("  '%s' primary:%v, len:%d\n", pair.Key, pair.Value.primary, pair.Value.Len())
+		var parent config_attributes.Xpath
+		if pair.Value.parent != nil {
+			parent = pair.Value.parent.xpath
+		}
+
+		str += fmt.Sprintf("  '%s' parent:%s children:%d, len:%d\n", pair.Key, parent, len(pair.Value.children), pair.Value.Len())
 
 		for _, logPair := range pair.Value.All() {
 			str += fmt.Sprintf("    %s len:%d\n", logPair.Key, logPair.Value.commandLogs.Length())

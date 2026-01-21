@@ -1,33 +1,30 @@
 package logs
 
 import (
-	"fmt"
-	"sync"
-
-	"github.com/hayageek/threadsafe"
 	"github.com/kirill-scherba/omap"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 // PhaseLogs
 
 type PhaseLogs struct {
-	logs *omap.Omap[phases.Phase, *PhaseLog]
-	// Internal
+	logs  *omap.Omap[phases.Phase, *PhaseLog]
+	xpath config_attributes.Xpath
 	flags config_flags.Logging
 }
 
-func NewPhaseLogs(flags config_flags.Logging) *PhaseLogs {
+func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *PhaseLogs {
 	phaseLogs, err := omap.New[phases.Phase, *PhaseLog]()
 	if err != nil {
 		panic(err)
 	}
 
 	return &PhaseLogs{
-		logs:  phaseLogs,
-		flags: flags,
+		phaseLogs,
+		xpath,
+		flags,
 	}
 }
 
@@ -43,13 +40,16 @@ func (pl *PhaseLogs) Get(phase phases.Phase) *PhaseLog {
 func (pl *PhaseLogs) GetOrCreate(phase phases.Phase) *PhaseLog {
 	phaselog := pl.Get(phase)
 	if phaselog == nil {
-		phaselog = NewPhaseLog(phase, pl.flags)
+		phaselog = NewPhaseLog(pl.xpath, phase, pl.flags)
 		pl.logs.Set(phase, phaselog)
 	}
 
 	return phaselog
 }
 
+// SetIfNotExists sets provided phaseLog to phase,
+// or creates a new one and sets it if phaseLog is nil,
+// both only if phase does not already exist
 func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *PhaseLog {
 	pLog, ok := pl.logs.Get(phase)
 	if ok {
@@ -57,7 +57,7 @@ func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *Pha
 	}
 
 	if phaseLog == nil {
-		phaseLog = NewPhaseLog(phase, pl.flags)
+		phaseLog = NewPhaseLog(pl.xpath, phase, pl.flags)
 	}
 
 	pl.logs.Set(phase, phaseLog)
@@ -67,6 +67,15 @@ func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *Pha
 
 func (pl *PhaseLogs) All() []omap.Pair[phases.Phase, *PhaseLog] {
 	return pl.logs.Pairs() // Any other ranging method locks the dict until it traverses it
+}
+
+// Gets the first inserted PhaseLog from PhaseLogs
+func (pl *PhaseLogs) First() *PhaseLog {
+	if pl.logs.Len() == 0 {
+		return nil
+	}
+
+	return pl.logs.Pairs()[0].Value
 }
 
 // Gets the last inserted PhaseLog from PhaseLogs
@@ -95,94 +104,6 @@ func (pl *PhaseLogs) Del(phase phases.Phase) {
 	}
 }
 
-// PhaseLog
-
-type PhaseLog struct {
-	mutex        sync.Mutex
-	commandLogs  *threadsafe.Slice[*CommandLog]
-	timeAndState *time_and_state.TimeAndState
-	// Internal
-	phase phases.Phase
-	flags config_flags.Logging
-}
-
-func NewPhaseLog(phase phases.Phase, flags config_flags.Logging) *PhaseLog {
-	return &PhaseLog{
-		commandLogs:  threadsafe.NewSlice[*CommandLog](),
-		timeAndState: time_and_state.NewTimeAndState(),
-		phase:        phase,
-		flags:        flags,
-	}
-}
-
-func (pLog *PhaseLog) LastNonMsgOnlyCommand() *CommandLog {
-	var commandLog *CommandLog
-
-	// Iterate backwards to find the last command that is not just a message
-	for i := pLog.commandLogs.Length() - 1; i >= 0; i-- {
-		var ok bool
-		commandLog, ok = pLog.commandLogs.Get(i)
-		if !ok {
-			panic("commandLogs does not have element on specified index")
-		}
-		if !commandLog.MsgOnly {
-			return commandLog
-		}
-	}
-
-	return nil
-}
-
-func (pLog *PhaseLog) NewCommand(description, statusIfFailed string, msgOnly bool) *CommandLog {
-	commandLog := NewCommandLog(description, statusIfFailed, msgOnly)
-	pLog.commandLogs.Append(commandLog)
-
-	return commandLog
-}
-
-func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
-	if !pLog.flags.Verbose {
-		return nil
-	}
-
-	msg := fmt.Sprintf("VERBOSE "+format, a...)
-
-	return pLog.NewCommand(msg, "", true)
-}
-
-func (pLog *PhaseLog) Debug(format string, a ...any) *CommandLog {
-	if !pLog.flags.Debug {
-		return nil
-	}
-
-	msg := fmt.Sprintf("DEBUG "+format, a...)
-
-	return pLog.NewCommand(msg, "", true)
-}
-
-func (pLog *PhaseLog) CommandLogs() []*CommandLog {
-	return pLog.commandLogs.Values()
-}
-
-func (pLog *PhaseLog) Clear() {
-	if pLog == nil {
-		return
-	}
-
-	pLog.mutex.Lock()
-	defer pLog.mutex.Unlock()
-
-	pLog.commandLogs.Clear()
-	pLog.timeAndState = time_and_state.NewTimeAndState()
-}
-
-func (pLog *PhaseLog) TimeAndState() *time_and_state.TimeAndState {
-	pLog.mutex.Lock()
-	defer pLog.mutex.Unlock()
-
-	return pLog.timeAndState
-}
-
-func (pLog *PhaseLog) Phase() phases.Phase {
-	return pLog.phase
+func (pl *PhaseLogs) Clear() {
+	pl.logs.Clear()
 }

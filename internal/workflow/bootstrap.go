@@ -10,7 +10,7 @@ import (
 )
 
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
-	return w.Phase(machine.Attributes, phases.Bootstrap, machine,
+	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 
 			// DiskoScript

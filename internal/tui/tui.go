@@ -226,7 +226,7 @@ func (m model) ViewMainContent() string {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += m.modelView.viewports.Debug()
-		debugContent += m.workflow.State().Logs.Debug()
+		debugContent += m.workflow.State().Conf.TargetsLogs.Debug()
 		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)
 	}

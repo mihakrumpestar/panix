@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/sorted_map"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"go.uber.org/atomic"
@@ -16,6 +17,9 @@ type Config struct {
 	Flags *config_flags.Flags `yaml:"flags"`
 	Root  *Root               `yaml:"root"`
 	Tui   *Tui                `yaml:"tui"`
+
+	// Internal
+	*logs.TargetsLogs
 }
 
 // Root
