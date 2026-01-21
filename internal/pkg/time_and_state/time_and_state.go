@@ -36,11 +36,21 @@ func (tas *TimeAndState) EndTimerWithError(err error) {
 
 // WithEnd returns current start with endTas end
 func (tas *TimeAndState) WithEnd(endTas *TimeAndState) *TimeAndState {
+	if endTas == nil {
+		return tas
+	}
+
 	return &TimeAndState{
 		startTime: tas.startTime,
 		endTime:   endTas.endTime,
 		endError:  endTas.endError,
 	}
+}
+
+func (tas *TimeAndState) Clear() {
+	tas.startTime.Store(time.Time{})
+	tas.endTime.Store(time.Time{})
+	tas.endError.Store(nil)
 }
 
 // Getters

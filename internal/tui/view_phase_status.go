@@ -49,7 +49,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 			return lipgloss.NewStyle().Align(lipgloss.Center)
 		})
 
-	stats := m.workflow.State().Logs.ComputeStatisticsPerPhase()
+	stats := m.workflow.State().Conf.TargetsLogs.ComputeStatisticsPerPhase()
 
 	// Build table row with phase groups and arrows
 	var row []string

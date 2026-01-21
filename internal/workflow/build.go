@@ -15,7 +15,7 @@ import (
 
 // This function is called by executeMachineBuild for individual machine builds
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
-	return w.Phase(configuration.Attributes, phases.Build, nil,
+	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 			if w.state.Conf.Flags.DryRun {
 				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"

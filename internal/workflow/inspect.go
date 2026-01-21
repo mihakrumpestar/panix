@@ -21,7 +21,7 @@ var (
 )
 
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err error) {
-	return w.Phase(machine.Attributes, phases.Inspect, machine,
+	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
 		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
 			mms := machine.MetaStatus
 
