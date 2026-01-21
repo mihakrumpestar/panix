@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -135,7 +135,7 @@ func (m *model) ViewStatsTable() string {
 	return builder.String()
 }
 
-func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs.PhaseLog) string {
+func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phase.PhaseLog) string {
 	if phaseLog == nil {
 		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
 	}
@@ -154,7 +154,7 @@ func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs.Phas
 	return "✅"
 }
 
-func (m *model) getStatusText(phaseLog *logs.PhaseLog, colors *config.ColorScheme) string {
+func (m *model) getStatusText(phaseLog *logs_phase.PhaseLog, colors *config.ColorScheme) string {
 	if phaseLog == nil {
 		return ""
 	}

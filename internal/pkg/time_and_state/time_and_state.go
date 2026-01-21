@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"go.uber.org/atomic"
 )
 
@@ -11,18 +12,25 @@ type TimeAndState struct {
 	startTime *atomic.Time
 	endTime   *atomic.Time
 	endError  *atomic.Error
+
+	target *logs.TargetLogs
 }
 
-func NewTimeAndState() *TimeAndState {
+func NewTimeAndState(target *logs.TargetLogs) *TimeAndState {
 	return &TimeAndState{
-		startTime: &atomic.Time{},
-		endTime:   &atomic.Time{},
-		endError:  &atomic.Error{},
+		&atomic.Time{},
+		&atomic.Time{},
+		&atomic.Error{},
+		target,
 	}
 }
 
 func (tas *TimeAndState) StartTimer() {
 	tas.startTime.Store(time.Now())
+
+	if tas.target != nil {
+		tas.target.
+	}
 }
 
 func (tas *TimeAndState) EndTimer() {

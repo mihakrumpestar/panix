@@ -7,7 +7,8 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -20,7 +21,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 	}
 
 	return w.Phase(machine.Attributes.Xpath, phases.Secrets, nil,
-		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 
 			for _, secret := range secrets {
 
@@ -42,7 +43,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 						"secrets command failed",
 						commandWithArgs,
 						executioner.DisableAutoSshCommand(),
-						executioner.OnSuccess(func(log *logs.CommandLog) error {
+						executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 							output := log.Bytes()
 
 							var n int
