@@ -5,13 +5,13 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
-		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 
 			// DiskoScript
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.Url, configuration.Name)}

@@ -9,14 +9,15 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 // This function is called by executeMachineBuild for individual machine builds
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
 	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
-		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			if w.state.Conf.Flags.DryRun {
 				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
 			}
@@ -37,7 +38,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		})
 }
 
-func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string) (BuidOutputJson, error) {
+func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string) (BuidOutputJson, error) {
 	var parsedOutput BuidOutputJson
 
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
@@ -47,7 +48,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		"build failed",
 		commandWithArgs,
 		executioner.DisableAutoSshCommand(),
-		executioner.OnSuccess(func(log *logs.CommandLog) error {
+		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 			output := log.Bytes()
 			output = lastNonEmptyLine(output)
 

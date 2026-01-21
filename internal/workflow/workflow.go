@@ -9,7 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -80,7 +80,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 			w.state.Retry.Wait()
 
 			// Task is being retried, so logs are cleared
-			w.state.Conf.TargetsLogs.Get(xpath).Get(phase).Clear()
+			w.state.Conf.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
 		} else {
 			return nil
 		}
@@ -191,7 +191,7 @@ func (w *Workflow) CreateWorkflow() error {
 
 // Helpers
 
-func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error) (err error) {
+func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error) (err error) {
 	phaseLog := w.state.Conf.TargetsLogs.GetOrCreateLog(xpath, phase)
 
 	phaseLog.TimeAndState().StartTimer()

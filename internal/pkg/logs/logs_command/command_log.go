@@ -1,4 +1,4 @@
-package logs
+package logs_command
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ func NewCommandLog(description, statusIfFailed string, msgOnly bool) *CommandLog
 		StatusIfFailed: statusIfFailed,
 		MsgOnly:        msgOnly,
 		stdInOutErr:    threadsafe.NewSlice[*safe_buffer.Buffer](),
-		TimeAndState:   time_and_state.NewTimeAndState(),
+		TimeAndState:   time_and_state.NewTimeAndState(nil),
 	}
 
 	if msgOnly {

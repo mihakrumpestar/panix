@@ -3,13 +3,13 @@ package workflow
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Transfer, machine,
-		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			systemClosure := machine.Configuration.MetaBuild.SystemClosure
 
 			err := executeTransferPhaseMachineWrapper(exc, phaseLog, machine, []string{systemClosure}, true)
@@ -21,7 +21,7 @@ func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 		})
 }
 
-func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *logs.PhaseLog, machine *config.Machine, toTransfer []string, transferClosure bool) error {
+func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, machine *config.Machine, toTransfer []string, transferClosure bool) error {
 	storeArgs := ""
 	if !machine.MetaStatus.Bootstrapped.Load() && transferClosure {
 		storeArgs += "?remote-store=local?root=/mnt"

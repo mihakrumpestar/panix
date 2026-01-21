@@ -1,4 +1,4 @@
-package logs
+package logs_phase
 
 import (
 	"fmt"
@@ -6,30 +6,39 @@ import (
 	"github.com/hayageek/threadsafe"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 type PhaseLog struct {
-	commandLogs  *threadsafe.Slice[*CommandLog]
+	commandLogs  *threadsafe.Slice[*logs_command.CommandLog]
 	timeAndState *time_and_state.TimeAndState
 	creatorXpath config_attributes.Xpath
 	phase        phases.Phase
 	flags        config_flags.Logging
+
+	target *logs.TargetLogs
 }
 
-func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging) *PhaseLog {
+func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging, target *logs.TargetLogs) *PhaseLog {
 	return &PhaseLog{
-		threadsafe.NewSlice[*CommandLog](),
-		time_and_state.NewTimeAndState(),
+		threadsafe.NewSlice[*logs_command.CommandLog](),
+		time_and_state.NewTimeAndState(target),
 		creatorXpath,
 		phase,
 		flags,
+		target,
 	}
 }
 
-func (pLog *PhaseLog) LastNonMsgOnlyCommand() *CommandLog {
-	var commandLog *CommandLog
+func (pLog *PhaseLog) Phase() phases.Phase {
+	return pLog.phase
+}
+
+func (pLog *PhaseLog) LastNonMsgOnlyCommand() *logs_command.CommandLog {
+	var commandLog *logs_command.CommandLog
 
 	// Iterate backwards to find the last command that is not just a message
 	for i := pLog.commandLogs.Length() - 1; i >= 0; i-- {
@@ -46,14 +55,14 @@ func (pLog *PhaseLog) LastNonMsgOnlyCommand() *CommandLog {
 	return nil
 }
 
-func (pLog *PhaseLog) NewCommand(description, statusIfFailed string, msgOnly bool) *CommandLog {
-	commandLog := NewCommandLog(description, statusIfFailed, msgOnly)
+func (pLog *PhaseLog) NewCommand(description, statusIfFailed string, msgOnly bool) *logs_command.CommandLog {
+	commandLog := logs_command.NewCommandLog(description, statusIfFailed, msgOnly)
 	pLog.commandLogs.Append(commandLog)
 
 	return commandLog
 }
 
-func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
+func (pLog *PhaseLog) Verbose(format string, a ...any) *logs_command.CommandLog {
 	if !pLog.flags.Verbose {
 		return nil
 	}
@@ -63,7 +72,7 @@ func (pLog *PhaseLog) Verbose(format string, a ...any) *CommandLog {
 	return pLog.NewCommand(msg, "", true)
 }
 
-func (pLog *PhaseLog) Debug(format string, a ...any) *CommandLog {
+func (pLog *PhaseLog) Debug(format string, a ...any) *logs_command.CommandLog {
 	if !pLog.flags.Debug {
 		return nil
 	}
@@ -73,7 +82,7 @@ func (pLog *PhaseLog) Debug(format string, a ...any) *CommandLog {
 	return pLog.NewCommand(msg, "", true)
 }
 
-func (pLog *PhaseLog) CommandLogs() []*CommandLog {
+func (pLog *PhaseLog) CommandLogs() []*logs_command.CommandLog {
 	return pLog.commandLogs.Values()
 }
 
@@ -84,8 +93,4 @@ func (pLog *PhaseLog) Clear() {
 
 func (pLog *PhaseLog) TimeAndState() *time_and_state.TimeAndState {
 	return pLog.timeAndState
-}
-
-func (pLog *PhaseLog) Phase() phases.Phase {
-	return pLog.phase
 }
