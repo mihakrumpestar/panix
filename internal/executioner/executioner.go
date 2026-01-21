@@ -5,19 +5,20 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 )
 
 type Executioner struct {
 	ctx          context.Context
 	dryRun       bool
 	machine      *config.Machine
-	phaseLog     *logs.PhaseLog
+	phaseLog     *logs_phase.PhaseLog
 	onUpdateHook func()
 }
 
 // NewExecutioner: if machine == nil it indicates that the command will be executed locally
-func NewExecutioner(ctx context.Context, conf *config_flags.Flags, machine *config.Machine, phaseLog *logs.PhaseLog, onUpdateHook func()) *Executioner {
+func NewExecutioner(ctx context.Context, conf *config_flags.Flags, machine *config.Machine, phaseLog *logs_phase.PhaseLog, onUpdateHook func()) *Executioner {
 	return &Executioner{
 		ctx:          ctx,
 		dryRun:       conf.DryRun,
@@ -32,8 +33,8 @@ func NewExecutioner(ctx context.Context, conf *config_flags.Flags, machine *conf
 type ExecOptions struct {
 	skipIfLocal           bool
 	disableAutoSshCommand bool
-	onFailure             func(*logs.CommandLog, error) error
-	onSuccess             func(*logs.CommandLog) error
+	onFailure             func(*logs_command.CommandLog, error) error
+	onSuccess             func(*logs_command.CommandLog) error
 	env                   []string
 }
 
@@ -51,13 +52,13 @@ func DisableAutoSshCommand() ExecOption {
 	}
 }
 
-func OnFailure(f func(*logs.CommandLog, error) error) ExecOption {
+func OnFailure(f func(*logs_command.CommandLog, error) error) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.onFailure = f
 	}
 }
 
-func OnSuccess(f func(*logs.CommandLog) error) ExecOption {
+func OnSuccess(f func(*logs_command.CommandLog) error) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.onSuccess = f
 	}

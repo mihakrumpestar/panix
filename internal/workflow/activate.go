@@ -3,13 +3,13 @@ package workflow
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Activate, machine,
-		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 
 			systemClosure := machine.Configuration.MetaBuild.SystemClosure
 

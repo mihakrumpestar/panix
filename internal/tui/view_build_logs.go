@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -89,7 +89,7 @@ func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseLogs, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) []*tree.Tree {
+func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs_phase.PhaseLogs, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
 
 	for _, entry := range phaseLogs.All() {
@@ -168,7 +168,7 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs.PhaseL
 	return phaseNodes
 }
 
-func (m *model) phaseLogs(phaseLog *logs.PhaseLog, colors *config.ColorScheme, xpath config_attributes.Xpath) (*tree.Tree, error) {
+func (m *model) phaseLogs(phaseLog *logs_phase.PhaseLog, colors *config.ColorScheme, xpath config_attributes.Xpath) (*tree.Tree, error) {
 	tas := phaseLog.TimeAndState()
 
 	// Phase header with spinner and right-aligned timing

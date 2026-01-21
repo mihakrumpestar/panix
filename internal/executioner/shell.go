@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/pkg/errors"
 )
 
@@ -139,7 +139,7 @@ func ptyError(err error) error {
 
 // processTerminalOutput processes terminal output to handle control sequences
 // like a real terminal would, but in a way that's safe for TUI display
-func processTerminalOutput(buf []byte, exm *logs.CommandLog) error {
+func processTerminalOutput(buf []byte, exm *logs_command.CommandLog) error {
 	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), []byte{})
 
 	// Split by position markers

@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_stats"
 )
 
 const (
@@ -80,7 +80,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 	return fmt.Sprintf("%s\n", t.String())
 }
 
-func createPhaseGroup(phase string, stats *logs.StatsPack, colors *config.ColorScheme, termWidth int) string {
+func createPhaseGroup(phase string, stats *logs_stats.StatsPack, colors *config.ColorScheme, termWidth int) string {
 	displayName := strings.Title(phase)
 
 	// Create phase name with gradient
@@ -97,7 +97,7 @@ func createPhaseGroup(phase string, stats *logs.StatsPack, colors *config.ColorS
 	return phaseGroupContent
 }
 
-func createAnimatedGradient(text string, stats *logs.StatsPack, colors *config.ColorScheme) string {
+func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *config.ColorScheme) string {
 	phaseState := determinePhaseState(stats)
 
 	now := time.Now()
@@ -123,7 +123,7 @@ func createAnimatedGradient(text string, stats *logs.StatsPack, colors *config.C
 }
 
 // buildStatusLine creates compact status indicators for horizontal layout
-func buildStatusLine(stats *logs.StatsPack, colors *config.ColorScheme) string {
+func buildStatusLine(stats *logs_stats.StatsPack, colors *config.ColorScheme) string {
 	indicators := make([]string, 0)
 
 	if len(stats.Running) > 0 {
@@ -146,7 +146,7 @@ func buildStatusLine(stats *logs.StatsPack, colors *config.ColorScheme) string {
 // Helpers
 
 // determinePhaseState determines the visual state of a phase based on its counts
-func determinePhaseState(stats *logs.StatsPack) config.PhaseState {
+func determinePhaseState(stats *logs_stats.StatsPack) config.PhaseState {
 	if len(stats.Running) > 0 {
 		return config.PhaseStateActive
 	}

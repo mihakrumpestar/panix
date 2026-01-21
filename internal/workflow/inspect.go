@@ -11,7 +11,8 @@ import (
 	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -22,7 +23,7 @@ var (
 
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err error) {
 	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
-		func(exc *executioner.Executioner, phaseLog *logs.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			mms := machine.MetaStatus
 
 			// TCP check
@@ -35,7 +36,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				commandWithArgs,
 				executioner.SkipIfLocal(),
 				executioner.DisableAutoSshCommand(),
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					mms.Reachable.Store(true)
 					return nil
 				}),
@@ -53,10 +54,10 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				"SSH auth failed",
 				commandWithArgs,
 				executioner.SkipIfLocal(),
-				executioner.OnFailure(func(log *logs.CommandLog, err error) error {
+				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
 					return errors.Wrap(err, log.String())
 				}),
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					mms.SSHConnectable.Store(true)
 					return nil
 				}),
@@ -73,7 +74,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				"architecture",
 				"uname failed",
 				commandWithArgs,
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					architecture := log.String()
 
 					if w.state.Conf.Flags.DryRun {
@@ -107,10 +108,10 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				"checking superuser failed",
 				commandWithArgs,
 				executioner.OnFailure(
-					func(log *logs.CommandLog, err error) error {
+					func(log *logs_command.CommandLog, err error) error {
 						return errors.Wrap(err, log.String())
 					}),
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					output := strings.Trim(log.String(), "\n ")
 
 					parsedOutput, err := strconv.ParseUint(output, 10, 64)
@@ -136,10 +137,10 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				"reading /etc/os-release failed",
 				commandWithArgs,
 				executioner.OnFailure(
-					func(log *logs.CommandLog, err error) error {
+					func(log *logs_command.CommandLog, err error) error {
 						return errors.Wrap(err, log.String())
 					}),
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 
 					if w.state.Conf.Flags.DryRun {
 						mms.Bootstrapped.Store(false)
@@ -211,7 +212,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				"get generations",
 				"list generations failed",
 				commandWithArgs,
-				executioner.OnSuccess(func(log *logs.CommandLog) error {
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					output := log.Bytes()
 
 					if w.state.Conf.Flags.DryRun {

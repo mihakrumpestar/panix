@@ -1,4 +1,4 @@
-package logs
+package logs_stats
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"

@@ -5,25 +5,31 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 )
 
 type TargetLogs struct {
 	xpath config_attributes.Xpath
-	*PhaseLogs
+	*logs_phase.PhaseLogs
 	timeAndState *time_and_state.TimeAndState // This never finishes, we take end times from children
 	parent       *TargetLogs
 	children     []*TargetLogs
 }
 
 func NewTargetLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *TargetLogs {
-	return &TargetLogs{
+	targetLogs := &TargetLogs{
 		xpath,
-		NewPhaseLogs(xpath, flags),
-		time_and_state.NewTimeAndState(),
+		nil,
+		nil,
 		nil,
 		[]*TargetLogs{},
 	}
+
+	targetLogs.timeAndState = time_and_state.NewTimeAndState(targetLogs)
+	targetLogs.PhaseLogs = logs_phase.NewPhaseLogs(xpath, flags, targetLogs)
+
+	return targetLogs
 }
 
 func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
@@ -37,7 +43,15 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 	return nil
 }
 
-func (ts *TargetLogs) GetCurrentTargetLog() *PhaseLog {
+func (ts *TargetLogs) Parent(parent *TargetLogs) *TargetLogs {
+	return ts.parent
+}
+
+func (ts *TargetLogs) Children(parent *TargetLogs) []*TargetLogs {
+	return ts.children
+}
+
+func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
 	// Return first log that has error
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
 		phaseLog := phaseLogPair.Value
