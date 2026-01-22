@@ -170,11 +170,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		dimensions := m.modelView.dimensions
 
-		dimensions.Width = msg.Width
-		if dimensions.Width < 40 { // Ensure minimum width
-			dimensions.Width = 40
-		}
-
+		// Ensure minimum width
+		dimensions.Width = max(msg.Width-2, 40) // Account for scrollbar (-2)
 		dimensions.Height = msg.Height
 
 	// Update spinners

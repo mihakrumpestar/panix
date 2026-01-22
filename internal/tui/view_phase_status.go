@@ -39,7 +39,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 
 	// Create table for phase flow
 	t := table.New().
-		Width(termWidth - 2).
+		Width(termWidth).
 		Border(lipgloss.HiddenBorder()). // Debug: lipgloss.NormalBorder()
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if (col+1)%2 == 0 {

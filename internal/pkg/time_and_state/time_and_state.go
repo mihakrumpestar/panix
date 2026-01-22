@@ -20,6 +20,7 @@ type TimeAndState struct {
 type TimeAndStateNode interface {
 	// Note: target.GetTimeAndState() and tas.(TimeAndState) are the same,
 	// except for phaseLogs (tas is there for phase, target is there for machine)
+	// and except for commandLog (this one does not have target)
 	GetTimeAndState() *TimeAndState
 	GetParent() TimeAndStateNode
 	GetChildren() []TimeAndStateNode
