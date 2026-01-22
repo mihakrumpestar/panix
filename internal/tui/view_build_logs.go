@@ -20,6 +20,8 @@ const (
 	PhaseFirstMachineSecond BuildLogHierarchy = iota
 	MachineFirstPhaseSecond
 	PhaseOnly
+
+	treeStep int = 3
 )
 
 // Render generates the Docker-style build log view with tree structure
@@ -31,25 +33,38 @@ func (m *model) ViewBuildLogs() string {
 	// Header for the log view
 	builder.WriteString(colors.HeaderTitle.Render("=== Build Logs ===\n"))
 
+	prefixLen := 0
+
 	// Build separate trees for each flake
 	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
+		title := m.MostLeftAndMostRight(prefixLen,
+			nodeTitle(colors.Flake, &flake.Attributes),
+			m.Duration(colors.Flake, m.workflow.State().Conf.TargetsLogs.Get(flake.Xpath).GetTimeAndState()),
+		)
+
 		flakeNode := tree.New().
-			Root(nodeTitle(colors.Flake, &flake.Attributes)).
+			Root(title).
 			Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(colors.TreeEnumerator)
 
-		// Add configurations
+			// Add configurations
+		prefixLen += treeStep
 		for _, configuration := range flake.Configurations.SortedMap() {
-			configurationNode := tree.New().Root(nodeTitle(colors.Configuration, &configuration.Attributes))
+			title = m.MostLeftAndMostRight(prefixLen,
+				nodeTitle(colors.Configuration, &configuration.Attributes),
+				m.Duration(colors.Configuration, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).GetTimeAndState()),
+			)
 
-			m.forMachines(configurationNode, configuration, func(machine *config.Machine, machineNode *tree.Tree) {
-				m.addChildLogs(&machine.Attributes, machineNode, colors, PhaseFirstMachineSecond, phases.Inspect)
+			configurationNode := tree.New().Root(title)
+
+			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLen int, machine *config.Machine, machineNode *tree.Tree) {
+				m.addChildLogs(prefixLen, &machine.Attributes, machineNode, colors, PhaseFirstMachineSecond, phases.Inspect)
 			})
 
-			m.addChildLogs(&configuration.Machines.First().Attributes, configurationNode, colors, PhaseOnly, phases.Build)
+			m.addChildLogs(prefixLen, &configuration.Machines.First().Attributes, configurationNode, colors, PhaseOnly, phases.Build)
 
-			m.forMachines(configurationNode, configuration, func(machine *config.Machine, machineNode *tree.Tree) {
-				m.addChildLogs(&machine.Attributes, machineNode, colors, MachineFirstPhaseSecond, phases.PhasesInOrder()[2:]...)
+			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLen int, machine *config.Machine, machineNode *tree.Tree) {
+				m.addChildLogs(prefixLen, &machine.Attributes, machineNode, colors, MachineFirstPhaseSecond, phases.PhasesInOrder()[2:]...)
 			})
 
 			flakeNode.Child(configurationNode)
@@ -63,13 +78,19 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
-func (m *model) forMachines(configurationNode *tree.Tree, configuration *config.Configuration, f func(machine *config.Machine, machineNode *tree.Tree)) {
+func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configuration *config.Configuration, f func(prefixLen int, machine *config.Machine, machineNode *tree.Tree)) {
 	colors := m.workflow.State().Conf.Tui.ColorScheme
 
+	prefixLen += treeStep
 	for _, machine := range configuration.Machines.SortedMap() {
-		machineNode := tree.New().Root(nodeTitle(colors.Machine, &machine.Attributes)).Offset(0, 4)
+		title := m.MostLeftAndMostRight(6,
+			nodeTitle(colors.Machine, &machine.Attributes),
+			m.Duration(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).GetTimeAndState()),
+		)
 
-		f(machine, machineNode)
+		machineNode := tree.New().Root(title)
+
+		f(prefixLen, machine, machineNode)
 
 		if machineNode.Children().Length() != 0 {
 			configurationNode.Child(machineNode)
@@ -77,11 +98,11 @@ func (m *model) forMachines(configurationNode *tree.Tree, configuration *config.
 	}
 }
 
-func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) {
+func (m *model) addChildLogs(prefixLen int, attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) {
 	logs := m.workflow.State().Conf.TargetsLogs.GetLogs(attr.Xpath)
 
 	if logs.Len() > 0 {
-		phaseNodes := m.phaseNodes(attr.Xpath, logs, colors, hierarchy, limitToPhases...)
+		phaseNodes := m.phaseNodes(prefixLen, attr.Xpath, logs, colors, hierarchy, limitToPhases...)
 		for _, phaseNode := range phaseNodes {
 			treeRoot.Child(phaseNode) // Passing "phaseNodes" directly does not produce the same result as adding them seperately
 		}
@@ -89,8 +110,10 @@ func (m *model) addChildLogs(attr *config_attributes.Attributes, treeRoot *tree.
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
-func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs_phase.PhaseLogs, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) []*tree.Tree {
+func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLogs *logs_phase.PhaseLogs, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
+
+	prefixLen += treeStep
 
 	for _, entry := range phaseLogs.All() {
 		phase := entry.Key
@@ -102,7 +125,8 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs_phase.
 
 		phaseXpath := xpath.NewXpathWithAppend(string(phase))
 
-		phaseTree, _ := m.phaseLogs(phaseLog, colors, phaseXpath)
+		phaseTree, _ := m.phaseLogs(prefixLen, phaseLog, colors, phaseXpath)
+		prefixLen += treeStep * 4
 
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
@@ -132,10 +156,10 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs_phase.
 			var cmdHeader string
 
 			leftIcon := m.IconOrSpinner(commandXpath, iconOnFinished, cmdTas)
-			duration := m.Duration(cmdTas)
+			duration := m.Duration(colors.Command, cmdTas)
 
 			// Create viewport for just the command label content
-			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, 23)
+			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, prefixLen)
 
 			// Build the first line with left icon, first line of viewport, and duration
 			entry := leftIcon + cmdLabelViewport + duration
@@ -147,7 +171,7 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs_phase.
 			viewportXpath := commandXpath.NewXpathWithAppend("output")
 			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
-				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, 19)
+				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, prefixLen)
 				cmdTree.Child(outputViewport)
 			} else {
 				m.modelView.viewports.RemoveIfExistsViewport(viewportXpath)
@@ -168,15 +192,15 @@ func (m *model) phaseNodes(xpath config_attributes.Xpath, phaseLogs *logs_phase.
 	return phaseNodes
 }
 
-func (m *model) phaseLogs(phaseLog *logs_phase.PhaseLog, colors *config.ColorScheme, xpath config_attributes.Xpath) (*tree.Tree, error) {
+func (m *model) phaseLogs(prefixLen int, phaseLog *logs_phase.PhaseLog, colors *config.ColorScheme, xpath config_attributes.Xpath) (*tree.Tree, error) {
 	tas := phaseLog.TimeAndState()
 
 	// Phase header with spinner and right-aligned timing
 	phaseLabel := strings.ToUpper(string(phaseLog.Phase()))
 
-	phaseText := m.MostLeftAndMostRight(12,
+	phaseText := m.MostLeftAndMostRight(prefixLen,
 		m.IconOrSpinner(xpath, string(colors.Phase.Icon), tas)+" "+phaseLabel,
-		m.Duration(tas),
+		m.Duration(colors.Phase, tas),
 	)
 
 	phaseHeader := colors.Phase.Color.Render(phaseText)
@@ -188,28 +212,14 @@ func (m *model) phaseLogs(phaseLog *logs_phase.PhaseLog, colors *config.ColorSch
 // Helpers
 
 func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
-	terminalWidth := m.modelView.dimensions.Width
-	available := terminalWidth - prefixLen
+	availableWidth := m.modelView.dimensions.Width - prefixLen
 
-	leftWidth := lipgloss.Width(left)
-	rightWidth := lipgloss.Width(right)
-	originalContentWidth := leftWidth + rightWidth
-
-	// Ensure we don't exceed available width
-	if originalContentWidth > available {
-		// Left side too big, truncate it
-		truncatingIndicator := "... "
-		truncatingIndicatorWidth := lipgloss.Width(truncatingIndicator)
-		leftWidth = available - rightWidth - truncatingIndicatorWidth
-
-		left = lipgloss.NewStyle().MaxWidth(leftWidth).Render(right) + truncatingIndicator
-	} else if originalContentWidth < available {
-		leftWidth = available - rightWidth
-	}
+	contentRightWidth := lipgloss.Width(right)
+	contentLeftWidth := max(availableWidth-contentRightWidth, lipgloss.Width(left))
 
 	// Create layout with lipgloss
-	leftBlock := lipgloss.NewStyle().Width(leftWidth).Render(left)
-	rightBlock := lipgloss.NewStyle().Width(rightWidth).Render(right)
+	leftBlock := lipgloss.NewStyle().Width(contentLeftWidth).Render(left)
+	rightBlock := lipgloss.NewStyle().Width(contentRightWidth).Render(right)
 
 	return lipgloss.JoinHorizontal(lipgloss.Left, leftBlock, rightBlock)
 }
@@ -231,10 +241,10 @@ func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinish
 	return final
 }
 
-func (m *model) Duration(tas *time_and_state.TimeAndState) string {
+func (m *model) Duration(logStyle config.ColorSchemeLogEntity, tas *time_and_state.TimeAndState) string {
 	duration, err := tas.DurationOrElapsedTime()
 	if err == nil {
-		return fmt.Sprintf("(%.2fs)", duration.Seconds())
+		return logStyle.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds()))
 	}
 
 	return ""

@@ -28,7 +28,7 @@ func (m *model) ViewStatsTable() string {
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Use provided width, with reasonable bounds and accounting for borders
-	usableWidth := max(m.modelView.dimensions.Width-2, 60)
+	usableWidth := max(m.modelView.dimensions.Width, 60)
 
 	// Header text lengths including icons
 	flakeHeader := string(colors.Flake.Icon) + " FLAKE"

@@ -260,7 +260,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, cont
 
 // GetOrCreateMainViewport creates or updates the main viewport with full screen dimensions
 func (v *Viewports) GetOrCreateMainViewport(content string) string {
-	availableWidth := v.dimensions.Width - 2 // Account for scrollbar
+	availableWidth := v.dimensions.Width + 2 // Account for scrollbar
 
 	viewportHeight := v.dimensions.Height - 3 // Reserve space for keybindings
 
