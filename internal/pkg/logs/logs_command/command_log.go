@@ -33,7 +33,7 @@ func NewCommandLog(description, statusIfFailed string, msgOnly bool) *CommandLog
 		commandLog.Command.Store(description)
 
 		commandLog.TimeAndState.StartTimer()
-		commandLog.TimeAndState.EndTimer()
+		commandLog.TimeAndState.EndTimerWithError(nil)
 	}
 
 	return commandLog
