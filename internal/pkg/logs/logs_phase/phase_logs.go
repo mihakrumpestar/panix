@@ -4,7 +4,7 @@ import (
 	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -15,10 +15,10 @@ type PhaseLogs struct {
 	xpath config_attributes.Xpath
 	flags config_flags.Logging
 
-	target *logs.TargetLogs
+	target time_and_state.TimeAndStateNode
 }
 
-func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging, target *logs.TargetLogs) *PhaseLogs {
+func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging, target time_and_state.TimeAndStateNode) *PhaseLogs {
 	phaseLogs, err := omap.New[phases.Phase, *PhaseLog]()
 	if err != nil {
 		panic(err)

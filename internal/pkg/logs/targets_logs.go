@@ -60,7 +60,7 @@ func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phase
 func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase, log *logs_phase.PhaseLog) *logs_phase.PhaseLog {
 	// Create it on nil log or if last child
 	if log == nil || len(targetLogs.children) == 0 {
-		log = targetLogs.SetIfNotExists(phase, log)
+		log = targetLogs.PhaseLogs.SetIfNotExists(phase, log)
 	}
 
 	// Children should have same log pointer in phase
