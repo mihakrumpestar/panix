@@ -51,6 +51,25 @@ func (ts *TargetLogs) Children(parent *TargetLogs) []*TargetLogs {
 	return ts.children
 }
 
+func (ts *TargetLogs) GetTimeAndState() *time_and_state.TimeAndState {
+	return ts.timeAndState
+}
+
+func (ts *TargetLogs) GetParent() time_and_state.TimeAndStateNode {
+	if ts.parent == nil {
+		return nil
+	}
+	return ts.parent
+}
+
+func (ts *TargetLogs) GetChildren() []time_and_state.TimeAndStateNode {
+	children := make([]time_and_state.TimeAndStateNode, len(ts.children))
+	for i, child := range ts.children {
+		children[i] = child
+	}
+	return children
+}
+
 func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
 	// Return first log that has error
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
@@ -63,35 +82,6 @@ func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
 
 	// Or last log
 	return ts.PhaseLogs.Last()
-}
-
-func (ts *TargetLogs) GetNestedTimeAndState() *time_and_state.TimeAndState {
-	var lastTas *time_and_state.TimeAndState
-
-	for _, child := range ts.children {
-		var tas *time_and_state.TimeAndState
-
-		// If child errored, the child children definitely did not progress more,
-		// so we don't need to go deeper
-		childTas := child.GetCurrentTargetLog().TimeAndState()
-		if childTas.GetEndError() != nil {
-			tas = childTas
-		} else {
-			tas = child.GetNestedTimeAndState()
-		}
-
-		if lastTas == nil {
-			lastTas = tas
-			continue
-		}
-
-		// tas > lastTas
-		if tas.GetEndTime().After(lastTas.GetEndTime()) {
-			lastTas = tas
-		}
-	}
-
-	return ts.timeAndState.WithEnd(lastTas)
 }
 
 // Deletes/resets phases logs and timer

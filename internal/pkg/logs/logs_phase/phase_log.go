@@ -6,7 +6,6 @@ import (
 	"github.com/hayageek/threadsafe"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -19,10 +18,10 @@ type PhaseLog struct {
 	phase        phases.Phase
 	flags        config_flags.Logging
 
-	target *logs.TargetLogs
+	target time_and_state.TimeAndStateNode
 }
 
-func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging, target *logs.TargetLogs) *PhaseLog {
+func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging, target time_and_state.TimeAndStateNode) *PhaseLog {
 	return &PhaseLog{
 		threadsafe.NewSlice[*logs_command.CommandLog](),
 		time_and_state.NewTimeAndState(target),
