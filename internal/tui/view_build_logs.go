@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -21,7 +22,8 @@ const (
 	MachineFirstPhaseSecond
 	PhaseOnly
 
-	treeStep int = 3
+	treeInitIndent int = 0
+	treeStep       int = 3 // Real is 3
 )
 
 // Render generates the Docker-style build log view with tree structure
@@ -33,13 +35,13 @@ func (m *model) ViewBuildLogs() string {
 	// Header for the log view
 	builder.WriteString(colors.HeaderTitle.Render("=== Build Logs ===\n"))
 
-	prefixLen := 0
+	prefixLen := treeInitIndent
 
 	// Build separate trees for each flake
 	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
 		title := m.MostLeftAndMostRight(prefixLen,
 			nodeTitle(colors.Flake, &flake.Attributes),
-			m.Duration(colors.Flake, m.workflow.State().Conf.TargetsLogs.Get(flake.Xpath).GetTimeAndState()),
+			m.DurationDas(colors.Flake, m.workflow.State().Conf.TargetsLogs.Get(flake.Xpath).CalculateDurationAndError()),
 		)
 
 		flakeNode := tree.New().
@@ -52,7 +54,7 @@ func (m *model) ViewBuildLogs() string {
 		for _, configuration := range flake.Configurations.SortedMap() {
 			title = m.MostLeftAndMostRight(prefixLen,
 				nodeTitle(colors.Configuration, &configuration.Attributes),
-				m.Duration(colors.Configuration, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).GetTimeAndState()),
+				m.DurationDas(colors.Configuration, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).CalculateDurationAndError()),
 			)
 
 			configurationNode := tree.New().Root(title)
@@ -85,7 +87,7 @@ func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configu
 	for _, machine := range configuration.Machines.SortedMap() {
 		title := m.MostLeftAndMostRight(6,
 			nodeTitle(colors.Machine, &machine.Attributes),
-			m.Duration(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).GetTimeAndState()),
+			m.DurationDas(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).CalculateDurationAndError()),
 		)
 
 		machineNode := tree.New().Root(title)
@@ -156,7 +158,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			var cmdHeader string
 
 			leftIcon := m.IconOrSpinner(commandXpath, iconOnFinished, cmdTas)
-			duration := m.Duration(colors.Command, cmdTas)
+			duration := m.DurationTas(colors.Command, cmdTas)
 
 			// Create viewport for just the command label content
 			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, prefixLen)
@@ -200,7 +202,7 @@ func (m *model) phaseLogs(prefixLen int, phaseLog *logs_phase.PhaseLog, colors *
 
 	phaseText := m.MostLeftAndMostRight(prefixLen,
 		m.IconOrSpinner(xpath, string(colors.Phase.Icon), tas)+" "+phaseLabel,
-		m.Duration(colors.Phase, tas),
+		m.DurationTas(colors.Phase, tas),
 	)
 
 	phaseHeader := colors.Phase.Color.Render(phaseText)
@@ -241,13 +243,17 @@ func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinish
 	return final
 }
 
-func (m *model) Duration(logStyle config.ColorSchemeLogEntity, tas *time_and_state.TimeAndState) string {
+func (m *model) DurationTas(logStyle config.ColorSchemeLogEntity, tas *time_and_state.TimeAndState) string {
 	duration, err := tas.DurationOrElapsedTime()
 	if err == nil {
-		return logStyle.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds()))
+		return m.DurationDas(logStyle, logs.DurationAndError{Duration: duration, Err: err})
 	}
 
 	return ""
+}
+
+func (m *model) DurationDas(logStyle config.ColorSchemeLogEntity, das logs.DurationAndError) string {
+	return logStyle.Color.Render(fmt.Sprintf("(%.2fs)", das.Duration.Seconds()))
 }
 
 // Helpers

@@ -4,7 +4,6 @@ import (
 	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -14,11 +13,9 @@ type PhaseLogs struct {
 	logs  *omap.Omap[phases.Phase, *PhaseLog]
 	xpath config_attributes.Xpath
 	flags config_flags.Logging
-
-	target time_and_state.TimeAndStateNode
 }
 
-func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging, target time_and_state.TimeAndStateNode) *PhaseLogs {
+func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *PhaseLogs {
 	phaseLogs, err := omap.New[phases.Phase, *PhaseLog]()
 	if err != nil {
 		panic(err)
@@ -28,7 +25,6 @@ func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging, tar
 		phaseLogs,
 		xpath,
 		flags,
-		target,
 	}
 }
 
@@ -44,7 +40,7 @@ func (pl *PhaseLogs) Get(phase phases.Phase) *PhaseLog {
 func (pl *PhaseLogs) GetOrCreate(phase phases.Phase) *PhaseLog {
 	phaselog := pl.Get(phase)
 	if phaselog == nil {
-		phaselog = NewPhaseLog(pl.xpath, phase, pl.flags, pl.target)
+		phaselog = NewPhaseLog(pl.xpath, phase, pl.flags)
 		pl.logs.Set(phase, phaselog)
 	}
 
@@ -61,7 +57,7 @@ func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *Pha
 	}
 
 	if phaseLog == nil {
-		phaseLog = NewPhaseLog(pl.xpath, phase, pl.flags, pl.target)
+		phaseLog = NewPhaseLog(pl.xpath, phase, pl.flags)
 	}
 
 	pl.logs.Set(phase, phaseLog)

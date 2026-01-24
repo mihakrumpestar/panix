@@ -35,8 +35,4 @@ type Logging struct {
 func (f *Flags) Setup() {
 	// Convert timeout from miliseconds to seconds for duration
 	f.Timeout *= time.Second
-
-	if f.Logging.Debug {
-		f.Logging.Verbose = true
-	}
 }

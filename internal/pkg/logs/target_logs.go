@@ -2,34 +2,32 @@ package logs
 
 import (
 	"errors"
+	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
-	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
 )
 
 type TargetLogs struct {
 	xpath config_attributes.Xpath
 	*logs_phase.PhaseLogs
-	timeAndState *time_and_state.TimeAndState // This never finishes, we take end times from children
-	parent       *TargetLogs
-	children     []*TargetLogs
+	parent   *TargetLogs
+	children []*TargetLogs
+}
+
+type DurationAndError struct {
+	Duration time.Duration
+	Err      error
 }
 
 func NewTargetLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *TargetLogs {
-	targetLogs := &TargetLogs{
+	return &TargetLogs{
 		xpath,
+		logs_phase.NewPhaseLogs(xpath, flags),
 		nil,
 		nil,
-		nil,
-		[]*TargetLogs{},
 	}
-
-	targetLogs.timeAndState = time_and_state.NewTimeAndState(targetLogs)
-	targetLogs.PhaseLogs = logs_phase.NewPhaseLogs(xpath, flags, targetLogs)
-
-	return targetLogs
 }
 
 func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
@@ -43,31 +41,41 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 	return nil
 }
 
-func (ts *TargetLogs) Parent(parent *TargetLogs) *TargetLogs {
-	return ts.parent
-}
-
-func (ts *TargetLogs) Children(parent *TargetLogs) []*TargetLogs {
-	return ts.children
-}
-
-func (ts *TargetLogs) GetTimeAndState() *time_and_state.TimeAndState {
-	return ts.timeAndState
-}
-
-func (ts *TargetLogs) GetParent() time_and_state.TimeAndStateNode {
-	if ts.parent == nil {
-		return nil
+func (ts *TargetLogs) CalculateDurationAndError() DurationAndError {
+	dae := DurationAndError{
+		time.Duration(0),
+		nil,
 	}
-	return ts.parent
-}
 
-func (ts *TargetLogs) GetChildren() []time_and_state.TimeAndStateNode {
-	children := make([]time_and_state.TimeAndStateNode, len(ts.children))
-	for i, child := range ts.children {
-		children[i] = child
+	// If there are children, we take the one with the longest duration,
+	// else we sum all phase durations
+	if len(ts.children) != 0 {
+		for _, child := range ts.children {
+			childDae := child.CalculateDurationAndError()
+			if childDae.Duration > dae.Duration {
+				dae = childDae
+			}
+		}
+	} else {
+		for _, phaseLog := range ts.PhaseLogs.All() {
+			tas := phaseLog.Value.TimeAndState()
+
+			duration, err := tas.DurationOrElapsedTime()
+			if err != nil {
+				break
+			}
+
+			dae.Duration += duration
+
+			endErr := tas.GetEndError()
+			if endErr != nil {
+				dae.Err = endErr
+				break
+			}
+		}
 	}
-	return children
+
+	return dae
 }
 
 func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
@@ -87,5 +95,4 @@ func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
 // Deletes/resets phases logs and timer
 func (ts *TargetLogs) Clear() {
 	ts.PhaseLogs.Clear()
-	ts.timeAndState.Clear()
 }
