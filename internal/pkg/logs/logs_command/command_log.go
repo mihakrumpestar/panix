@@ -26,7 +26,7 @@ func NewCommandLog(description, statusIfFailed string, msgOnly bool) *CommandLog
 		StatusIfFailed: statusIfFailed,
 		MsgOnly:        msgOnly,
 		stdInOutErr:    threadsafe.NewSlice[*safe_buffer.Buffer](),
-		TimeAndState:   time_and_state.NewTimeAndState(nil),
+		TimeAndState:   time_and_state.NewTimeAndState(),
 	}
 
 	if msgOnly {

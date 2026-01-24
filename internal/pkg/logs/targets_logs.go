@@ -28,6 +28,15 @@ func NewTargetsLogs(flags config_flags.Logging) (*TargetsLogs, error) {
 	}, nil
 }
 
+func (ts *TargetsLogs) AddWithParent(xpath config_attributes.Xpath, parent *TargetLogs) (*TargetLogs, error) {
+	targetLogs, err := ts.Add(xpath)
+	if err != nil {
+		return nil, err
+	}
+
+	return targetLogs, targetLogs.AddParent(parent)
+}
+
 func (ts *TargetsLogs) Add(xpath config_attributes.Xpath) (*TargetLogs, error) {
 	targetLogs := NewTargetLogs(xpath, ts.flags)
 
@@ -143,10 +152,15 @@ func (ts *TargetsLogs) Debug() string {
 			parent = pair.Value.parent.xpath
 		}
 
-		str += fmt.Sprintf("  '%s' parent:%s children:%d, len:%d\n", pair.Key, parent, len(pair.Value.children), pair.Value.PhaseLogs.Len())
+		children := ""
+		for _, child := range pair.Value.children {
+			children += child.xpath.String() + ","
+		}
+
+		str += fmt.Sprintf("  '%s' parent:%s children:%v, len:%d\n", pair.Key, parent, children, pair.Value.PhaseLogs.Len())
 
 		for _, logPair := range pair.Value.PhaseLogs.All() {
-			str += fmt.Sprintf("    %s len:%d\n", logPair.Key, len(logPair.Value.CommandLogs()))
+			str += fmt.Sprintf("    %s finished:%v err:%v len:%d\n", logPair.Key, logPair.Value.TimeAndState().IsFinished(), logPair.Value.TimeAndState().GetEndError(), len(logPair.Value.CommandLogs()))
 
 			for _, log := range logPair.Value.CommandLogs() {
 				str += fmt.Sprintf("      '%s' msgOnly:%v finished:%v, err:%v\n", log.Description, log.MsgOnly, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())
