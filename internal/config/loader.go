@@ -117,6 +117,11 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
+	err = conf.initLogs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to init logs: %w", err)
+	}
+
 	if conf.Flags.Logging.Debug {
 		dump.Config(func(d *dump.Options) {
 			d.BytesAsString = true
@@ -146,13 +151,6 @@ func (c *Config) initAndValidateConfig() error {
 		return fmt.Errorf("flakes is required")
 	}
 
-	targetsLogs, err := logs.NewTargetsLogs(c.Flags.Logging)
-	if err != nil {
-		return err
-	}
-
-	c.TargetsLogs = targetsLogs
-
 	for flakeName, flake := range c.Root.Flakes.SortedMap() {
 		if flake.Url == "" {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
@@ -167,27 +165,12 @@ func (c *Config) initAndValidateConfig() error {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		flakeLogs, err := targetsLogs.Add(flake.Xpath)
-		if err != nil {
-			return err
-		}
-
 		for configurationName, configuration := range flake.Configurations.SortedMap() {
 			if len(configuration.Machines) == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
 			err := configuration.Init(configurationName, flake, c.Flags)
-			if err != nil {
-				return err
-			}
-
-			configurationLogs, err := targetsLogs.Add(configuration.Xpath)
-			if err != nil {
-				return err
-			}
-
-			err = configurationLogs.AddParent(flakeLogs)
 			if err != nil {
 				return err
 			}
@@ -199,16 +182,6 @@ func (c *Config) initAndValidateConfig() error {
 				}
 
 				err = machine.Init(machineName, configuration, c.Flags)
-				if err != nil {
-					return err
-				}
-
-				machineLogs, err := targetsLogs.Add(machine.Xpath)
-				if err != nil {
-					return err
-				}
-
-				err = machineLogs.AddParent(configurationLogs)
 				if err != nil {
 					return err
 				}
@@ -257,6 +230,38 @@ func (c *Config) filterRootTree() error {
 
 	if len(c.Root.Flakes) == 0 {
 		return fmt.Errorf("no flakes left after filtering")
+	}
+
+	return nil
+}
+
+func (c *Config) initLogs() error {
+	targetsLogs, err := logs.NewTargetsLogs(c.Flags.Logging)
+	if err != nil {
+		return err
+	}
+
+	c.TargetsLogs = targetsLogs
+
+	for _, flake := range c.Root.Flakes.SortedMap() {
+		flakeLogs, err := targetsLogs.Add(flake.Xpath)
+		if err != nil {
+			return err
+		}
+
+		for _, configuration := range flake.Configurations.SortedMap() {
+			configurationLogs, err := targetsLogs.AddWithParent(configuration.Xpath, flakeLogs)
+			if err != nil {
+				return err
+			}
+
+			for _, machine := range configuration.Machines.SortedMap() {
+				_, err := targetsLogs.AddWithParent(machine.Xpath, configurationLogs)
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	return nil

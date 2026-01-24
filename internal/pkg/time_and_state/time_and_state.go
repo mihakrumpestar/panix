@@ -10,73 +10,34 @@ import (
 type TimeAndState struct {
 	startTime *atomic.Time
 	endTime   *atomic.Time
-	endError  *atomic.Error
-
-	target TimeAndStateNode
+	endErr    *atomic.Error
 }
 
-// TimeAndStateNode is an interface for objects that contain a TimeAndState
-// in a tree-like structure
-type TimeAndStateNode interface {
-	// Note: target.GetTimeAndState() and tas.(TimeAndState) are the same,
-	// except for phaseLogs (tas is there for phase, target is there for machine)
-	// and except for commandLog (this one does not have target)
-	GetTimeAndState() *TimeAndState
-	GetParent() TimeAndStateNode
-	GetChildren() []TimeAndStateNode
-}
-
-func NewTimeAndState(target TimeAndStateNode) *TimeAndState {
+func NewTimeAndState() *TimeAndState {
 	return &TimeAndState{
 		&atomic.Time{},
 		&atomic.Time{},
 		&atomic.Error{},
-		target,
 	}
 }
 
-func (tas *TimeAndState) StartTimer() {
+func NewTimeAndStateCustom(startTime, endTime time.Time, endErr error) *TimeAndState {
+	return &TimeAndState{
+		atomic.NewTime(startTime),
+		atomic.NewTime(endTime),
+		atomic.NewError(endErr),
+	}
+}
+
+func (tas *TimeAndState) StartTimer() time.Time {
 	if tas.HasStarted() {
-		return
+		return tas.startTime.Load()
 	}
 
 	timeNow := time.Now()
-
-	// Here we set the phase TimeAndState, while the recursive works on targets
 	tas.startTime.Store(timeNow)
 
-	if tas.target == nil {
-		return
-	}
-
-	tas.target.GetTimeAndState().startTimerRecursively(timeNow)
-}
-
-func (tas *TimeAndState) startTimerRecursively(timeNow time.Time) {
-	if tas.HasStarted() {
-		return
-	}
-
-	tas.startTime.Store(timeNow)
-
-	if tas.IsFinished() {
-		// If timeNow is newer than target endTime, we need to reset it,
-		// since a new phase was started
-		if timeNow.After(tas.GetEndTime()) {
-			tas.endTime.Store(time.Time{})
-			tas.endError.Store(nil)
-		}
-	}
-
-	if tas.target == nil {
-		return
-	}
-
-	// Propagate timer start to parent recursively
-	parent := tas.target.GetParent()
-	if parent != nil {
-		parent.GetTimeAndState().startTimerRecursively(timeNow)
-	}
+	return timeNow
 }
 
 func (tas *TimeAndState) EndTimerWithError(err error) {
@@ -85,67 +46,14 @@ func (tas *TimeAndState) EndTimerWithError(err error) {
 	}
 
 	timeNow := time.Now()
-
 	tas.endTime.Store(timeNow)
-	tas.endError.Store(err)
-
-	if tas.target == nil {
-		return
-	}
-
-	tas.target.GetTimeAndState().endTimerWithErrorRecursively(timeNow, err)
-}
-
-func (tas *TimeAndState) endTimerWithErrorRecursively(timeNow time.Time, err error) {
-	if tas.IsFinished() {
-		return
-	}
-
-	// At least one of the children did not finish, which means
-	// we should not stop this one
-	if !tas.DidChildrenFinish() {
-		return
-	}
-
-	tas.endTime.Store(timeNow)
-	tas.endError.Store(err)
-
-	// Propagate timer end to parent recursively
-	parent := tas.target.GetParent()
-	if parent != nil {
-		parent.GetTimeAndState().endTimerWithErrorRecursively(timeNow, err)
-	}
-}
-
-func (tas *TimeAndState) DidChildrenFinish() bool {
-	for _, child := range tas.target.GetChildren() {
-		if !child.GetTimeAndState().IsFinished() {
-			return false
-		}
-	}
-
-	return true
+	tas.endErr.Store(err)
 }
 
 func (tas *TimeAndState) Clear() {
 	tas.startTime.Store(time.Time{})
 	tas.endTime.Store(time.Time{})
-	tas.endError.Store(nil)
-
-	if tas.target == nil {
-		return
-	}
-
-	tas.target.GetTimeAndState().clearRecursive()
-}
-
-// clearRecursive should clear endTimer and endError, but not startTime,
-// since that one does not reset when re restart the phase
-func (tas *TimeAndState) clearRecursive() {
-	tas.endTime.Store(time.Time{})
-	tas.endError.Store(nil)
-
-	tas.target.GetParent().GetTimeAndState().clearRecursive()
+	tas.endErr.Store(nil)
 }
 
 // Getters
@@ -167,7 +75,7 @@ func (tas *TimeAndState) IsFinished() bool {
 }
 
 func (tas *TimeAndState) GetEndError() error {
-	return tas.endError.Load()
+	return tas.endErr.Load()
 }
 
 func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {

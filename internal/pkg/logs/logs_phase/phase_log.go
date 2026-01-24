@@ -17,18 +17,15 @@ type PhaseLog struct {
 	creatorXpath config_attributes.Xpath
 	phase        phases.Phase
 	flags        config_flags.Logging
-
-	target time_and_state.TimeAndStateNode
 }
 
-func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging, target time_and_state.TimeAndStateNode) *PhaseLog {
+func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging) *PhaseLog {
 	return &PhaseLog{
 		threadsafe.NewSlice[*logs_command.CommandLog](),
-		time_and_state.NewTimeAndState(target),
+		time_and_state.NewTimeAndState(),
 		creatorXpath,
 		phase,
 		flags,
-		target,
 	}
 }
 
