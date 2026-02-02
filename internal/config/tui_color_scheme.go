@@ -82,7 +82,7 @@ func defaultColorScheme() *ColorScheme {
 			Foreground(lipgloss.Color("#FF5555")), // Red
 
 		StatusRunning: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#2952c3")), // Blue
+			Foreground(lipgloss.Color("#3b6bec")), // Blue
 
 		// Entitys
 		Flake: ColorSchemeLogEntity{

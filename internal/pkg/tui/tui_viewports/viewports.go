@@ -108,6 +108,38 @@ type ViewportConfig struct {
 	isFullScrean   bool
 }
 
+// calculateAvailableWidth determines the final width available for content,
+// accounting for scrollbar space if needed.
+func (v *Viewports) calculateAvailableWidth(vpr *Viewport, config ViewportConfig, totalLines int) int {
+	// Calculate what width will be available after accounting for scrollbar
+	scrollbarWidth := 0
+
+	// For fullscreen viewport, the scrollbar is added to the right without taking content space
+	// So the content width remains the same
+	if config.isFullScrean {
+		return config.availableWidth
+	}
+
+	// For normal viewports, we need to check if scrollbar will be present
+	visibleLines := config.viewportHeight
+	if visibleLines <= 0 {
+		// Calculate based on content height if viewportHeight is 0
+		if config.wrapContent {
+			wrappedHeight := lipgloss.Height(lipgloss.NewStyle().Width(config.availableWidth).Render(config.content))
+			visibleLines = wrappedHeight
+		} else {
+			visibleLines = lipgloss.Height(config.content)
+		}
+	}
+
+	// Check if scrollbar is needed (content exceeds visible lines)
+	if totalLines > visibleLines {
+		scrollbarWidth = 2 // 1 space + 1 scrollbar column
+	}
+
+	return config.availableWidth - scrollbarWidth
+}
+
 // combineViewportWithScrollbar combines viewport content with scrollbar
 func (v *Viewports) combineViewportWithScrollbar(viewportView, scrollbar string, scrollbarZone config_attributes.Xpath) string {
 	if scrollbar == "" {
@@ -150,26 +182,25 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 		_ = v.viewports.Set(config.xpath, vpr)
 	}
 
-	viewportView := vpr.viewport.View()
-	scrollPercent := vpr.viewport.ScrollPercent()
-	totalLines := vpr.viewport.TotalLineCount()
-	visibleLines := vpr.viewport.Height
+	// Calculate total lines in the current content to determine if scrollbar is needed
+	totalLines := lipgloss.Height(config.content)
 
-	// Create scrollbar
-	scrollbar, scrollbarWidth := v.renderScrollbar(scrollPercent, totalLines, visibleLines)
-	// When scrollbar is present, we need to account for the 1 character space it takes
-	if !config.isFullScrean {
-		config.availableWidth -= scrollbarWidth
+	// Calculate the final width available for content, accounting for scrollbar
+	availableWidthForContent := v.calculateAvailableWidth(vpr, config, totalLines)
 
-	}
+	// Update viewport dimensions BEFORE processing content
+	vpr.viewport.Width = availableWidthForContent
 
 	// Process content based on configuration
 	var processedContent string
 	if config.wrapContent {
-		processedContent = lipgloss.NewStyle().Width(config.availableWidth).Render(config.content)
+		processedContent = lipgloss.NewStyle().Width(availableWidthForContent).Render(config.content)
 	} else {
 		processedContent = config.content
 	}
+
+	// Recalculate total lines based on processed content
+	totalLines = lipgloss.Height(processedContent)
 
 	// Calculate height if needed
 	var finalHeight int
@@ -178,23 +209,36 @@ func (v *Viewports) getOrCreateViewportShared(config ViewportConfig) string {
 	} else {
 		// Calculate height based on the wrapped content
 		if config.maxHeight > 0 {
-			finalHeight = min(lipgloss.Height(processedContent), config.maxHeight)
+			finalHeight = min(totalLines, config.maxHeight)
 		} else {
 			// No height limit specified, use full content height
-			finalHeight = lipgloss.Height(processedContent)
+			finalHeight = totalLines
 		}
 	}
 
-	// Update viewport
-	oldScrollPercent := vpr.viewport.ScrollPercent()
-	vpr.viewport.SetContent(processedContent)
+	// Update viewport height
 	vpr.viewport.Height = finalHeight
-	vpr.viewport.Width = config.availableWidth
+
+	// Preserve scroll position before updating content
+	oldScrollPercent := vpr.viewport.ScrollPercent()
+
+	// Set the processed content
+	vpr.viewport.SetContent(processedContent)
 
 	// Follow bottom if we are stuck at the bottom, and not if we have scrolled higher
 	if oldScrollPercent == 1 {
 		vpr.viewport.GotoBottom()
 	}
+
+	// Get the viewport view AFTER content is updated
+	viewportView := vpr.viewport.View()
+
+	// Get scroll percentage and line counts for scrollbar calculation
+	scrollPercent := vpr.viewport.ScrollPercent()
+	visibleLines := vpr.viewport.Height
+
+	// Create scrollbar
+	scrollbar, _ := v.renderScrollbar(scrollPercent, totalLines, visibleLines)
 
 	// Combine viewport content with scrollbar
 	combinedView := v.combineViewportWithScrollbar(viewportView, scrollbar, vpr.scrollbarZone)
@@ -260,7 +304,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, cont
 
 // GetOrCreateMainViewport creates or updates the main viewport with full screen dimensions
 func (v *Viewports) GetOrCreateMainViewport(content string) string {
-	availableWidth := v.dimensions.Width + 2 // Account for scrollbar
+	availableWidth := v.dimensions.Width
 
 	viewportHeight := v.dimensions.Height - 3 // Reserve space for keybindings
 
@@ -346,9 +390,10 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 			v.debug.WriteString(fmt.Sprintf("%s: mouseY %d", mostSpecificViewport, mouseMsg.Y))
 
 			if mouseMsg.Y > 0 {
-				// Scroll down -
+				// Scroll down
 				vpr.viewport.ScrollDown(mouseY)
 			} else if mouseMsg.Y < 0 {
+				// Scroll up
 				vpr.viewport.ScrollUp(mouseY)
 			}
 		}
