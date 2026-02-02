@@ -58,18 +58,17 @@ func (m *model) ViewBuildLogs() string {
 			)
 
 			configurationNode := tree.New().Root(title)
+			flakeNode.Child(configurationNode)
 
-			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLen int, machine *config.Machine, machineNode *tree.Tree) {
-				m.addChildLogs(prefixLen, &machine.Attributes, machineNode, colors, PhaseFirstMachineSecond, phases.Inspect)
+			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLenScoped int, machine *config.Machine, machineNode *tree.Tree) {
+				m.addChildLogs(prefixLenScoped, &machine.Attributes, machineNode, colors, PhaseFirstMachineSecond, phases.Inspect)
 			})
 
 			m.addChildLogs(prefixLen, &configuration.Machines.First().Attributes, configurationNode, colors, PhaseOnly, phases.Build)
 
-			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLen int, machine *config.Machine, machineNode *tree.Tree) {
-				m.addChildLogs(prefixLen, &machine.Attributes, machineNode, colors, MachineFirstPhaseSecond, phases.PhasesInOrder()[2:]...)
+			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLenScoped int, machine *config.Machine, machineNode *tree.Tree) {
+				m.addChildLogs(prefixLenScoped, &machine.Attributes, machineNode, colors, MachineFirstPhaseSecond, phases.PhasesInOrder()[2:]...)
 			})
-
-			flakeNode.Child(configurationNode)
 		}
 
 		builder.WriteString("\n" + flakeNode.String())
@@ -80,14 +79,14 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
-func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configuration *config.Configuration, f func(prefixLen int, machine *config.Machine, machineNode *tree.Tree)) {
+func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configuration *config.Configuration, f func(prefixLenScoped int, machine *config.Machine, machineNode *tree.Tree)) {
 	colors := m.workflow.State().Conf.Tui.ColorScheme
 
 	prefixLen += treeStep
 	for _, machine := range configuration.Machines.SortedMap() {
-		title := m.MostLeftAndMostRight(6,
+		title := m.MostLeftAndMostRight(prefixLen,
 			nodeTitle(colors.Machine, &machine.Attributes),
-			m.DurationDas(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).CalculateDurationAndError()),
+			m.DurationDas(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(machine.Xpath).CalculateDurationAndError()),
 		)
 
 		machineNode := tree.New().Root(title)
@@ -103,19 +102,21 @@ func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configu
 func (m *model) addChildLogs(prefixLen int, attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) {
 	logs := m.workflow.State().Conf.TargetsLogs.GetLogs(attr.Xpath)
 
-	if logs.Len() > 0 {
-		phaseNodes := m.phaseNodes(prefixLen, attr.Xpath, logs, colors, hierarchy, limitToPhases...)
-		for _, phaseNode := range phaseNodes {
-			treeRoot.Child(phaseNode) // Passing "phaseNodes" directly does not produce the same result as adding them seperately
-		}
+	if logs.Len() == 0 {
+		return
+	}
+
+	prefixLen += treeStep
+
+	phaseNodes := m.phaseNodes(prefixLen, attr.Xpath, logs, colors, hierarchy, limitToPhases...)
+	for _, phaseNode := range phaseNodes {
+		treeRoot.Child(phaseNode) // Passing "phaseNodes" directly does not produce the same result as adding them seperately
 	}
 }
 
 // phaseNodes builds individual phase nodes for direct inclusion in the tree
 func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLogs *logs_phase.PhaseLogs, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) []*tree.Tree {
 	phaseNodes := make([]*tree.Tree, 0)
-
-	prefixLen += treeStep
 
 	for _, entry := range phaseLogs.All() {
 		phase := entry.Key
@@ -126,12 +127,12 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 		}
 
 		phaseXpath := xpath.NewXpathWithAppend(string(phase))
-
 		phaseTree, _ := m.phaseLogs(prefixLen, phaseLog, colors, phaseXpath)
-		prefixLen += treeStep * 4
 
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
+			prefixLenCmd := prefixLen + treeStep*4
+
 			cmdLabel := ""
 			if false {
 				cmdLabel = cmd.Command.Load()
@@ -161,7 +162,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			duration := m.DurationTas(colors.Command, cmdTas)
 
 			// Create viewport for just the command label content
-			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, prefixLen)
+			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, prefixLenCmd)
 
 			// Build the first line with left icon, first line of viewport, and duration
 			entry := leftIcon + cmdLabelViewport + duration
@@ -173,7 +174,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			viewportXpath := commandXpath.NewXpathWithAppend("output")
 			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
-				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, prefixLen)
+				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, prefixLenCmd)
 				cmdTree.Child(outputViewport)
 			} else {
 				m.modelView.viewports.RemoveIfExistsViewport(viewportXpath)
