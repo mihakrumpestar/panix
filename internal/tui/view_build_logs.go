@@ -131,7 +131,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 
 		// Commands and their output
 		for cmdIdx, cmd := range phaseLog.CommandLogs() {
-			prefixLenCmd := prefixLen + treeStep*4
+			prefixLenCmd := prefixLen + treeStep
 
 			cmdLabel := ""
 			if false {
@@ -161,12 +161,21 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			leftIcon := m.IconOrSpinner(commandXpath, iconOnFinished, cmdTas)
 			duration := m.DurationTas(colors.Command, cmdTas)
 
+			// Calculate actual current width of icon and duration
+			iconWidth := lipgloss.Width(leftIcon)
+			durationWidth := lipgloss.Width(duration)
+			// Reserve space for icon + space + actual current duration
+			// The viewport width will be recalculated on each render as duration changes
+			reservedWidth := iconWidth + durationWidth
+			// Use adjusted prefixLen that accounts for actual current widths
+			adjustedPrefixLenCmd := prefixLenCmd + reservedWidth
+
 			// Create viewport for just the command label content
-			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, prefixLenCmd)
+			// The viewport width will be recalculated on each call as duration changes
+			cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, adjustedPrefixLenCmd)
 
 			// Build the first line with left icon, first line of viewport, and duration
 			entry := leftIcon + cmdLabelViewport + duration
-
 			cmdHeader = colors.Command.Color.Render(entry)
 			cmdTree := tree.New().Root(cmdHeader)
 

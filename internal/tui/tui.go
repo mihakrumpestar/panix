@@ -171,7 +171,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dimensions := m.modelView.dimensions
 
 		// Ensure minimum width
-		dimensions.Width = max(msg.Width-2, 40) // Account for scrollbar (-2)
+		dimensions.Width = max(msg.Width, 40)
 		dimensions.Height = msg.Height
 
 	// Update spinners
