@@ -164,7 +164,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			// Calculate actual current width of icon and duration
 			iconWidth := lipgloss.Width(leftIcon)
 			durationWidth := lipgloss.Width(duration)
-			// Reserve space for icon + space + actual current duration
+			// Reserve space for icon + actual current duration
 			// The viewport width will be recalculated on each render as duration changes
 			reservedWidth := iconWidth + durationWidth
 			// Use adjusted prefixLen that accounts for actual current widths
@@ -183,7 +183,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			viewportXpath := commandXpath.NewXpathWithAppend("output")
 			output := strings.TrimSpace(cmdOutput)
 			if len(output) != 0 {
-				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, prefixLenCmd)
+				outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, cmd.Pty, prefixLenCmd+treeStep*2-1)
 				cmdTree.Child(outputViewport)
 			} else {
 				m.modelView.viewports.RemoveIfExistsViewport(viewportXpath)
