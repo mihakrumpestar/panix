@@ -4,7 +4,8 @@
     "go@latest",
     "go-task@latest",
     "sshping@latest",
-    "graphviz@latest"
+    "graphviz@latest",
+    "github:anomalyco/opencode"
   ],
   "shell": {
     "init_hook": [],

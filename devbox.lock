@@ -5,6 +5,10 @@
       "last_modified": "2025-07-20T07:42:04Z",
       "resolved": "github:NixOS/nixpkgs/7c688a0875df5a8c28a53fb55ae45e94eae0dddb?lastModified=1752997324&narHash=sha256-vtTM4oDke3SeDj%2B1ey6DjmzXdq8ZZSCLWSaApADDvIE%3D"
     },
+    "github:anomalyco/opencode": {
+      "last_modified": "2026-02-03T16:27:53Z",
+      "resolved": "github:anomalyco/opencode/017ad2c7f71463c4c98348f9010393e79a8a54cc?lastModified=1770136073&narHash=sha256-gUfXdMpYt8lVSU7mT8QADTM8stJiTFnuphrPWCvO2Ks%3D"
+    },
     "go-task@latest": {
       "last_modified": "2025-07-13T22:45:35Z",
       "resolved": "github:NixOS/nixpkgs/a421ac6595024edcfbb1ef950a3712b89161c359#go-task",
