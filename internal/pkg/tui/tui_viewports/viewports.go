@@ -80,10 +80,6 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 		Render(strings.Join(lines, "\n")), 1
 }
 
-func (v *Viewports) needsScrollbar(allowedHeight, contentHeight int) bool {
-	return contentHeight > allowedHeight
-}
-
 func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attributes.Xpath) string {
 	if bar == "" {
 		return view
@@ -116,23 +112,34 @@ func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
 
 	width := cfg.availableWidth
 
-	proc := cfg.content
-	if cfg.wrapContent {
-		proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
-	}
-	contentHeight := lipgloss.Height(proc)
-
 	allowedHeight := cfg.viewportHeight
 	if allowedHeight <= 0 {
 		allowedHeight = commandOutputMaxHeight
 	}
 
-	// If we need scrollbar
-	if contentHeight > allowedHeight {
-		width -= 2 // Adjust for scrollbar width
-		if cfg.wrapContent {
-			proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
+	// Check if scrollbar needed and render content
+	var contentHeight int
+	var needsBar bool
+	if cfg.wrapContent {
+		// With wrapping: measure height at reduced width
+		proc := lipgloss.NewStyle().Width(width - 2).Render(cfg.content)
+		contentHeight = lipgloss.Height(proc)
+		needsBar = contentHeight > allowedHeight
+		if needsBar {
+			width -= 2
 		}
+	} else {
+		// Without wrapping: check raw content height
+		contentHeight = lipgloss.Height(cfg.content)
+		needsBar = contentHeight > allowedHeight
+	}
+	proc := cfg.content
+	if cfg.wrapContent {
+		proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
+		contentHeight = lipgloss.Height(proc)
+	} else if needsBar {
+		// Truncate lines to fit beside scrollbar
+		proc = lipgloss.NewStyle().MaxWidth(width).Render(cfg.content)
 		contentHeight = lipgloss.Height(proc)
 	}
 
