@@ -224,7 +224,7 @@ func (m *model) phaseLogs(prefixLen int, phaseLog *logs_phase.PhaseLog, colors *
 // Helpers
 
 func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
-	availableWidth := m.modelView.dimensions.Width - prefixLen
+	availableWidth := m.modelView.viewports.ContentWidth() - prefixLen
 
 	contentRightWidth := lipgloss.Width(right)
 	contentLeftWidth := max(availableWidth-contentRightWidth, lipgloss.Width(left))

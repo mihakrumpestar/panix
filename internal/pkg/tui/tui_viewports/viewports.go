@@ -2,7 +2,6 @@ package tui_viewports
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
@@ -51,6 +50,29 @@ type ViewportConfig struct {
 func NewViewports(d *Dimensions, c *config.ColorScheme, dbg *strings.Builder) *Viewports {
 	v, _ := omap.New[config_attributes.Xpath, *Viewport]()
 	return &Viewports{viewports: v, dimensions: d, colors: c, debug: dbg}
+}
+
+// ContentWidth returns the width available for content inside the main viewport,
+// accounting for the scrollbar (2 characters: space + scrollbar)
+func (v *Viewports) ContentWidth() int {
+	return v.dimensions.Width - 2
+}
+
+// truncateLines truncates each line of content to maxWidth characters
+func truncateLines(content string, maxWidth int) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lineWidth := lipgloss.Width(line)
+		if lineWidth > maxWidth {
+			// Find the byte position to truncate at
+			truncated := line
+			for lipgloss.Width(truncated) > maxWidth {
+				truncated = truncated[:len(truncated)-1]
+			}
+			lines[i] = truncated
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, int) {
@@ -106,6 +128,8 @@ func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
 			minHeight:     cfg.viewportHeight,
 			scrollbarZone: cfg.xpath.NewXpathWithAppend("scrollbar"),
 			content:       cfg.content,
+			// Main viewport is active by default
+			active: cfg.xpath.String() == "main",
 		}
 		v.viewports.Set(cfg.xpath, vpr)
 	}
@@ -118,28 +142,29 @@ func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
 	}
 
 	// Check if scrollbar needed and render content
-	var contentHeight int
-	var needsBar bool
-	if cfg.wrapContent {
-		// With wrapping: measure height at reduced width
-		proc := lipgloss.NewStyle().Width(width - 2).Render(cfg.content)
-		contentHeight = lipgloss.Height(proc)
-		needsBar = contentHeight > allowedHeight
-		if needsBar {
-			width -= 2
-		}
-	} else {
-		// Without wrapping: check raw content height
-		contentHeight = lipgloss.Height(cfg.content)
-		needsBar = contentHeight > allowedHeight
-	}
-	proc := cfg.content
+	// First check at reduced width (accounting for potential scrollbar)
+	procAtReducedWidth := lipgloss.NewStyle().Width(width - 2).Render(cfg.content)
+	contentHeight := lipgloss.Height(procAtReducedWidth)
+	needsBar := contentHeight > allowedHeight
+
+	var proc string
+	// Apply width constraint to prevent overflow
 	if cfg.wrapContent {
 		proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
-		contentHeight = lipgloss.Height(proc)
-	} else if needsBar {
-		// Truncate lines to fit beside scrollbar
-		proc = lipgloss.NewStyle().MaxWidth(width).Render(cfg.content)
+	} else {
+		// Truncate long lines instead of wrapping
+		proc = truncateLines(cfg.content, width)
+	}
+	contentHeight = lipgloss.Height(proc)
+
+	if needsBar {
+		// Reduce width for scrollbar and re-process content
+		width -= 2
+		if cfg.wrapContent {
+			proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
+		} else {
+			proc = truncateLines(cfg.content, width)
+		}
 		contentHeight = lipgloss.Height(proc)
 	}
 
@@ -154,9 +179,13 @@ func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
 	vpr.viewport.Height = height
 
 	pct := vpr.viewport.ScrollPercent()
+	yOffset := vpr.viewport.YOffset
 	vpr.viewport.SetContent(proc)
+	// Restore scroll position (stay at bottom if we were there, to show new content)
 	if pct == 1 {
 		vpr.viewport.GotoBottom()
+	} else {
+		vpr.viewport.YOffset = yOffset
 	}
 
 	scrollbar, _ := v.renderScrollbar(vpr.viewport.ScrollPercent(), contentHeight, height)
@@ -177,10 +206,17 @@ func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
 func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string, indent int,
 	h, maxHeight int, wrap, border, full bool) string {
 
+	width := v.dimensions.Width - indent
+	// Inner viewports need width-2 to account for main viewport's scrollbar
+	// (1 for scrollbar + 1 for space before it)
+	if xpath.String() != "main" {
+		width -= 2
+	}
+
 	return v.getOrCreateViewport(ViewportConfig{
 		xpath:          xpath,
 		content:        content,
-		availableWidth: v.dimensions.Width - indent,
+		availableWidth: width,
 		viewportHeight: h,
 		maxHeight:      maxHeight,
 		wrapContent:    wrap,
@@ -241,21 +277,77 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 			for xpath, vp := range v.viewports.Records() {
 				vp.active = hasClick && xpath == clicked
 			}
+			// If clicked outside all viewports, reactivate main
+			if !hasClick {
+				if mainVpr, ok := v.viewports.Get(mainXpath); ok {
+					mainVpr.active = true
+				}
+			}
 		}
-		if m.Y != 0 {
-			if vp, ok := v.viewports.Get(v.mostSpecific(v.underMouse(m))); ok {
-				v.debug.WriteString(fmt.Sprintf("%s: mouseY %d", v.mostSpecific(v.underMouse(m)), m.Y))
-				n := int(math.Abs(float64(m.Y) / 3))
-				if m.Y > 0 {
-					vp.viewport.ScrollDown(n)
+		// Handle mouse wheel scrolling - only scroll the active viewport
+		if m.Button == tea.MouseButtonWheelUp || m.Button == tea.MouseButtonWheelDown {
+			// Find the active viewport (inner first, fall back to main)
+			var activeVp *Viewport
+			for xpath, vp := range v.viewports.Records() {
+				if vp.active && xpath != mainXpath {
+					activeVp = vp
+					break
+				}
+			}
+			if activeVp == nil {
+				if mainVpr, ok := v.viewports.Get(mainXpath); ok {
+					activeVp = mainVpr
+				}
+			}
+
+			if activeVp != nil {
+				lines := 3
+				if m.Button == tea.MouseButtonWheelUp {
+					activeVp.viewport.ScrollUp(lines)
 				} else {
-					vp.viewport.ScrollUp(n)
+					activeVp.viewport.ScrollDown(lines)
 				}
 			}
 		}
 	}
 
 	hasActiveInner := v.hasActiveInner(mainXpath)
+
+	// Handle keyboard scrolling for active viewport
+	if m, ok := msg.(tea.KeyMsg); ok {
+		// Find the active viewport (inner first, fall back to main)
+		var activeVp *Viewport
+		for xpath, vp := range v.viewports.Records() {
+			if vp.active && xpath != mainXpath {
+				activeVp = vp
+				break
+			}
+		}
+		if activeVp == nil {
+			if mainVpr, ok := v.viewports.Get(mainXpath); ok {
+				activeVp = mainVpr
+			}
+		}
+
+		if activeVp != nil {
+			switch m.String() {
+			case "up", "k":
+				activeVp.viewport.LineUp(1)
+			case "down", "j":
+				activeVp.viewport.LineDown(1)
+			case "pgup":
+				activeVp.viewport.HalfViewUp()
+			case "pgdown", " ":
+				activeVp.viewport.HalfViewDown()
+			case "home", "g":
+				activeVp.viewport.GotoTop()
+			case "end", "G":
+				activeVp.viewport.GotoBottom()
+			}
+		}
+		// Don't pass KeyMsg to viewports - we handle scrolling manually
+		return tea.Batch(cmds...)
+	}
 
 	for _, vp := range v.viewports.Records() {
 		if !vp.active {
