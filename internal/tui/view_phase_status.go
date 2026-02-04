@@ -35,7 +35,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 		return colors.TableRow.Render("No phases to display")
 	}
 
-	termWidth := m.modelView.dimensions.Width
+	termWidth := m.modelView.viewports.ContentWidth()
 
 	// Create table for phase flow
 	t := table.New().
