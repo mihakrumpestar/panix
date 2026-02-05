@@ -76,7 +76,7 @@ func NewTui(workflow *workflow.Workflow) error {
 		modelView: modelView{
 			dimensions:  dimensions,
 			spinners:    tui_spinners.NewSpinners(),
-			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput, workflow.State().Conf.Tui.CommandOutputMaxHeight),
+			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.ColorScheme, debugOutput, workflow.State().Conf.Flags.Tui.CommandOutputMaxHeight),
 			debugOutput: debugOutput,
 		},
 		rawKeyReader: rawKeyReader,
@@ -268,7 +268,7 @@ func (m model) ViewMainContent() string {
 	if m.err != nil {
 		errorHeader := "=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
-		builder.WriteString(m.workflow.State().Conf.Tui.ColorScheme.Error.Color.Render(errorHeader + errorContent))
+		builder.WriteString(m.workflow.State().Conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
 	if m.workflow.State().Conf.Flags.Logging.Debug {

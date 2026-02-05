@@ -2,90 +2,43 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"slices"
-	"strings"
 
 	mapstructure "github.com/go-viper/mapstructure/v2"
-	"github.com/gobeam/stringy"
 	"github.com/gookit/goutil/dump"
 	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/providers/cliflagv3"
 	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/providers/posflag"
 	koanf "github.com/knadh/koanf/v2"
+	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
-	"github.com/spf13/pflag"
+	"github.com/urfave/cli/v3"
 )
 
-// LoadConfig reads and parses the config file.
-func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
+// LoadConfig reads configuration from multiple sources in priority order:
+// 1. Config file (YAML) - lowest priority
+// 2. Environment variables (PANIX_*) - via urfave/cli v3 flag sources
+// 3. CLI flags - highest priority (passed via cmd parameter)
+func LoadConfig(flags *config_flags.Flags, cmd *cli.Command) (*Config, error) {
 	k := koanf.New(".")
 
-	// Load YAML config file
-	err := k.Load(file.Provider(configFile), yaml.Parser())
-	if err != nil {
-		return nil, fmt.Errorf("fatal error config file: %w", err)
-	}
-
-	// Load environment variables with PANIX_ prefix
-	err = k.Load(
-		env.Provider(
-			"PANIX_",
-			".",
-			func(s string) string {
-				// Convert PANIX_SOME_KEY to some.key
-				return strings.ToLower(strings.TrimPrefix(s, "PANIX_"))
-			},
-		),
-		nil,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error loading environment variables: %w", err)
-	}
-
-	// Load command line flags if provided
-	if flags != nil {
-		// Debug: Print all flags before processing
-		//fmt.Printf("DEBUG: Processing flags:\n")
-		//flags.VisitAll(func(f *pflag.Flag) {
-		//	fmt.Printf("DEBUG: Flag name: %s, value: %s\n", f.Name, f.Value.String())
-		//})
-
-		err := k.Load(
-			posflag.ProviderWithFlag(
-				flags,
-				".",
-				k,
-				func(f *pflag.Flag) (string, any) {
-					// Skip non-configuration flags
-					if slices.Contains([]string{"config", "help"}, f.Name) {
-						return "", nil // Skip this flag
-					}
-
-					// Transform the key in whatever manner.
-					keyRaw := stringy.New(f.Name) //.CamelCase()
-
-					key := keyRaw.Get()
-					if !strings.HasPrefix(key, "tui.") {
-						key = keyRaw.Prefix("flags.")
-					}
-
-					val := posflag.FlagVal(flags, f)
-
-					// Debug: Print the transformation
-					//fmt.Printf("DEBUG: Transforming flag '%s' to key '%s' with value '%v'\n", f.Name, key, val)
-
-					return key, val
-				},
-			),
-			nil,
-		)
+	_, err := os.Stat(flags.Config)
+	if err == nil {
+		err = k.Load(file.Provider(flags.Config), yaml.Parser())
 		if err != nil {
-			return nil, fmt.Errorf("error loading command line flags: %w", err)
+			return nil, fmt.Errorf("fatal error config file: %w", err)
 		}
 	}
 
-	// Unmarshal conf
+	if cmd != nil {
+		err = k.Load(cliflagv3.Provider(cmd, "."), nil)
+		if err != nil {
+			return nil, fmt.Errorf("error loading CLI flags: %w", err)
+		}
+	}
+
+	// Unmarshal into a Config struct
 	conf := &Config{}
 	err = k.UnmarshalWithConf("", &conf, koanf.UnmarshalConf{
 		Tag:       "yaml",
@@ -103,12 +56,9 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 
 	conf.Flags.Setup()
 
-	// TODO: implement file loader than can parse custom configs
-	if conf.Tui == nil {
-		conf.Tui = &Tui{}
+	if conf.ColorScheme == nil {
+		conf.ColorScheme = defaultColorScheme()
 	}
-
-	conf.Tui.ColorScheme = defaultColorScheme()
 
 	err = conf.initAndValidateConfig()
 	if err != nil {

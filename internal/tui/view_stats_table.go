@@ -16,7 +16,7 @@ import (
 func (m *model) ViewStatsTable() string {
 	state := m.workflow.State()
 	phasesList := state.Phases
-	colors := state.Conf.Tui.ColorScheme
+	colors := state.Conf.ColorScheme
 
 	if state.Conf.Flags.DryRun || !slices.Contains(phasesList, phases.Inspect) {
 		return ""

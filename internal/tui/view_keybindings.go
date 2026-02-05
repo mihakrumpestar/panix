@@ -85,7 +85,7 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		content, isInner := m.modelView.viewports.GetActiveInnerViewportContent()
 		if !isInner {
 			m.notification = "Select an inner viewport to copy"
-			m.notificationColor = m.workflow.State().Conf.Tui.ColorScheme.StatusWarning
+			m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusWarning
 			m.notificationTime = time.Now()
 			return m, m.notificationTimer()
 		}
@@ -93,16 +93,16 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			err := tui_clipboard.CopyToClipboard(content)
 			if err != nil {
 				m.notification = "Copy failed: " + err.Error()
-				m.notificationColor = m.workflow.State().Conf.Tui.ColorScheme.StatusError
+				m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusError
 			} else {
 				m.notification = "Copied to clipboard"
-				m.notificationColor = m.workflow.State().Conf.Tui.ColorScheme.StatusOK
+				m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusOK
 			}
 			m.notificationTime = time.Now()
 			return m, m.notificationTimer()
 		}
 		m.notification = "No content to copy"
-		m.notificationColor = m.workflow.State().Conf.Tui.ColorScheme.StatusWarning
+		m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusWarning
 		m.notificationTime = time.Now()
 		return m, m.notificationTimer()
 	case key.Matches(msg, keys.quit):
@@ -129,7 +129,7 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, tea.Quit
 	case key.Matches(msg, keys.toggle):
-		m.workflow.State().Conf.Tui.ShowAllBuildLogs = !m.workflow.State().Conf.Tui.ShowAllBuildLogs
+		m.workflow.State().Conf.Flags.Tui.ShowAllBuildLogs = !m.workflow.State().Conf.Flags.Tui.ShowAllBuildLogs
 
 		return m, nil
 	case key.Matches(msg, keys.retry):
@@ -148,7 +148,7 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.modelView.viewports.SetFullscreen(activeInnerXpath)
 			} else {
 				m.notification = "Select a viewport first"
-				m.notificationColor = m.workflow.State().Conf.Tui.ColorScheme.StatusWarning
+				m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusWarning
 				m.notificationTime = time.Now()
 				return m, m.notificationTimer()
 			}
@@ -210,7 +210,7 @@ func renderScrollPercent(m *model) string {
 	pct := m.modelView.viewports.GetActiveViewportScrollPercent()
 	pctInt := int(pct * 100)
 	return lipgloss.NewStyle().
-		Foreground(m.workflow.State().Conf.Tui.ColorScheme.TableBorder.GetForeground()).
+		Foreground(m.workflow.State().Conf.ColorScheme.TableBorder.GetForeground()).
 		Render(fmt.Sprintf("%d%%", pctInt))
 }
 

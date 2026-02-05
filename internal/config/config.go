@@ -14,9 +14,9 @@ const (
 )
 
 type Config struct {
-	Flags *config_flags.Flags `yaml:"flags"`
-	Root  *Root               `yaml:"root"`
-	Tui   *Tui                `yaml:"tui"`
+	Flags       *config_flags.Flags `yaml:"flags"`
+	Root        *Root               `yaml:"root"`
+	ColorScheme *ColorScheme        `yaml:"colorScheme"`
 
 	// Internal
 	*logs.TargetsLogs
@@ -157,12 +157,4 @@ func (m *Machine) MaybeBootstrapingPath(restOfPath string) string {
 	}
 
 	return "/mnt" + restOfPath
-}
-
-// Tui
-
-type Tui struct {
-	ShowAllBuildLogs       bool `yaml:"showAllBuildLogs"`
-	CommandOutputMaxHeight int  `yaml:"commandOutputMaxHeight"`
-	ColorScheme            *ColorScheme
 }

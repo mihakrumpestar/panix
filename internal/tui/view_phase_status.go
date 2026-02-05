@@ -20,7 +20,7 @@ const (
 func (m *model) ViewPhaseStatus() string {
 	var builder strings.Builder
 
-	colors := m.workflow.State().Conf.Tui.ColorScheme
+	colors := m.workflow.State().Conf.ColorScheme
 
 	builder.WriteString(colors.HeaderTitle.Render("=== Phase Status ===\n"))
 	builder.WriteString(m.renderPhaseFlow(colors))
