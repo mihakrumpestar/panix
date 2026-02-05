@@ -162,6 +162,7 @@ func (m *Machine) MaybeBootstrapingPath(restOfPath string) string {
 // Tui
 
 type Tui struct {
-	ShowAllBuildLogs bool `yaml:"showAllBuildLogs"`
-	ColorScheme      *ColorScheme
+	ShowAllBuildLogs       bool `yaml:"showAllBuildLogs"`
+	CommandOutputMaxHeight int  `yaml:"commandOutputMaxHeight"`
+	ColorScheme            *ColorScheme
 }

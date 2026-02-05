@@ -15,103 +15,305 @@ import (
 )
 
 const (
-	commandOutputMaxHeight, footerHeight = 8, 3
-	scrollThumb, scrollTrack             = "█", "│"
+	footerHeight   = 3
+	scrollThumb    = "█"
+	scrollTrack    = "│"
+	scrollbarWidth = 2
+	borderHeight   = 2
+	borderWidth    = 2
 )
 
-type Viewports struct {
-	viewports       *omap.Omap[config_attributes.Xpath, *Viewport]
-	dimensions      *Dimensions
-	colors          *config.ColorScheme
-	debug           *strings.Builder
-	fullscreenXpath config_attributes.Xpath // Tracks which viewport is in fullscreen mode
-}
-
-type Viewport struct {
-	viewport      viewport.Model
-	active        bool
-	minHeight     int
-	scrollbarZone config_attributes.Xpath
-	content       string
-}
-
+// Dimensions represents terminal size
 type Dimensions struct{ Width, Height int }
 
-type ViewportConfig struct {
-	xpath          config_attributes.Xpath
-	content        string
+// Viewports manages all viewport instances
+type Viewports struct {
+	viewports              *omap.Omap[config_attributes.Xpath, *Viewport]
+	dimensions             *Dimensions
+	colors                 *config.ColorScheme
+	debug                  *strings.Builder
+	fullscreenXpath        config_attributes.Xpath
+	commandOutputMaxHeight int
+}
+
+// Viewport wraps a bubbletea viewport with additional state
+type Viewport struct {
+	model         viewport.Model
+	active        bool
+	content       string
+	scrollbarZone config_attributes.Xpath
+}
+
+// NewViewports creates a new viewport manager
+func NewViewports(d *Dimensions, c *config.ColorScheme, dbg *strings.Builder, maxHeight int) *Viewports {
+	v, _ := omap.New[config_attributes.Xpath, *Viewport]()
+	// Ensure minimum height of 1
+	if maxHeight < 1 {
+		maxHeight = 1
+	}
+	return &Viewports{
+		viewports:              v,
+		dimensions:             d,
+		colors:                 c,
+		debug:                  dbg,
+		commandOutputMaxHeight: maxHeight,
+	}
+}
+
+// Fullscreen management
+func (v *Viewports) IsFullscreen() bool                          { return v.fullscreenXpath.Depth() > 0 }
+func (v *Viewports) GetFullscreenXpath() config_attributes.Xpath { return v.fullscreenXpath }
+func (v *Viewports) SetFullscreen(xpath config_attributes.Xpath) { v.fullscreenXpath = xpath }
+func (v *Viewports) ExitFullscreen()                             { v.fullscreenXpath = config_attributes.Xpath{} }
+
+// ContentWidth returns available width accounting for scrollbar
+func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWidth }
+
+// Viewport factory methods
+
+func (v *Viewports) GetOrCreateViewport(xpath config_attributes.Xpath, content string, indent int) string {
+	return v.createViewport(xpath, content, indent, viewportOptions{
+		maxHeight:   v.commandOutputMaxHeight,
+		wrapContent: true,
+		useBorder:   true,
+	})
+}
+
+func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, content string, indent int) string {
+	return v.createViewport(xpath, content, indent, viewportOptions{})
+}
+
+func (v *Viewports) GetOrCreateMainViewport(content string) string {
+	h := v.dimensions.Height - footerHeight
+	return v.createViewport(config_attributes.NewXpath("main"), content, 0, viewportOptions{
+		height:    h,
+		maxHeight: h,
+		full:      true,
+	})
+}
+
+func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, content string) string {
+	h := max(1, v.dimensions.Height-footerHeight-borderHeight)
+	w := max(1, v.dimensions.Width-scrollbarWidth-borderWidth)
+
+	vp, exists := v.viewports.Get(xpath)
+	if !exists {
+		return v.createViewport(xpath, content, 0, viewportOptions{
+			availableWidth: w, height: h, maxHeight: h,
+			wrapContent: true, useBorder: true, full: true,
+		})
+	}
+
+	yOffset := vp.model.YOffset
+	vp.model.Width, vp.model.Height = w, h
+	vp.content = content
+	proc := lipgloss.NewStyle().Width(w).Render(content)
+	vp.model.SetContent(proc)
+	vp.model.YOffset = min(yOffset, max(0, lipgloss.Height(proc)-h))
+
+	return v.renderViewport(vp, h, true)
+}
+
+func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) { v.viewports.Del(xpath) }
+
+// Active viewport queries
+
+func (v *Viewports) GetActiveViewportContent() string {
+	if vp := v.getActiveViewport(); vp != nil {
+		return vp.content
+	}
+	return ""
+}
+
+func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
+	mainXpath := config_attributes.NewXpath("main")
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			return vp.model.View(), true
+		}
+	}
+	return "", false
+}
+
+func (v *Viewports) GetActiveInnerViewportXpath() config_attributes.Xpath {
+	mainXpath := config_attributes.NewXpath("main")
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			return xpath
+		}
+	}
+	return config_attributes.Xpath{}
+}
+
+func (v *Viewports) GetViewportContent(xpath config_attributes.Xpath) string {
+	if vp, ok := v.viewports.Get(xpath); ok {
+		return vp.content
+	}
+	return ""
+}
+
+func (v *Viewports) GetActiveViewportScrollPercent() float64 {
+	if v.IsFullscreen() {
+		if vp, ok := v.viewports.Get(v.fullscreenXpath); ok {
+			return vp.model.ScrollPercent()
+		}
+	}
+	if vp := v.getActiveViewport(); vp != nil {
+		return vp.model.ScrollPercent()
+	}
+	return 0.0
+}
+
+// Update handles messages for all viewports
+func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
+	var cmds []tea.Cmd
+	mainXpath := config_attributes.NewXpath("main")
+
+	switch m := msg.(type) {
+	case tea.MouseMsg:
+		v.handleMouse(m, mainXpath)
+	case tea.KeyMsg:
+		v.handleKey(m, mainXpath)
+		return tea.Batch(cmds...)
+	}
+
+	hasActiveInner := v.hasActiveInner(mainXpath)
+	for _, vp := range v.viewports.Records() {
+		if vp.active {
+			if updated, cmd := vp.model.Update(msg); cmd != nil {
+				vp.model = updated
+				cmds = append(cmds, cmd)
+			}
+		}
+	}
+
+	if mainVpr, ok := v.viewports.Get(mainXpath); ok && !hasActiveInner {
+		if updated, cmd := mainVpr.model.Update(msg); cmd != nil {
+			mainVpr.model = updated
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// Debug returns debug info about all viewports
+func (v *Viewports) Debug() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height))
+	for xpath, vp := range v.viewports.Records() {
+		sb.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, vp.model.Width, vp.model.Height, lipgloss.Height(vp.content)))
+		if vp.active {
+			sb.WriteString(" [A]")
+		}
+		if vp.model.ScrollPercent() == 1 {
+			sb.WriteString(" @btm")
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// Internal types and helpers
+
+type viewportOptions struct {
 	availableWidth int
-	viewportHeight int
+	height         int
 	maxHeight      int
 	wrapContent    bool
 	useBorder      bool
-	isFullscreen   bool
+	full           bool
 }
 
-func NewViewports(d *Dimensions, c *config.ColorScheme, dbg *strings.Builder) *Viewports {
-	v, _ := omap.New[config_attributes.Xpath, *Viewport]()
-	return &Viewports{viewports: v, dimensions: d, colors: c, debug: dbg, fullscreenXpath: config_attributes.Xpath{}}
-}
-
-// IsFullscreen returns true if any viewport is currently in fullscreen mode
-func (v *Viewports) IsFullscreen() bool {
-	return v.fullscreenXpath.Depth() > 0
-}
-
-// GetFullscreenXpath returns the xpath of the viewport currently in fullscreen mode
-func (v *Viewports) GetFullscreenXpath() config_attributes.Xpath {
-	return v.fullscreenXpath
-}
-
-// SetFullscreen sets the fullscreen mode for a viewport
-// Pass an empty xpath to exit fullscreen
-func (v *Viewports) SetFullscreen(xpath config_attributes.Xpath) {
-	v.fullscreenXpath = xpath
-}
-
-// ExitFullscreen exits fullscreen mode
-func (v *Viewports) ExitFullscreen() {
-	v.fullscreenXpath = config_attributes.Xpath{}
-}
-
-// ContentWidth returns the width available for content inside the main viewport,
-// accounting for the scrollbar (2 characters: space + scrollbar)
-func (v *Viewports) ContentWidth() int {
-	return v.dimensions.Width - 2
-}
-
-// truncateLines truncates each line of content to maxWidth characters
-func truncateLines(content string, maxWidth int) string {
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		lineWidth := lipgloss.Width(line)
-		if lineWidth > maxWidth {
-			// Find the byte position to truncate at
-			truncated := line
-			for lipgloss.Width(truncated) > maxWidth {
-				truncated = truncated[:len(truncated)-1]
-			}
-			lines[i] = truncated
-		}
+func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string, indent int, opts viewportOptions) string {
+	w := opts.availableWidth
+	if w == 0 {
+		w = max(10, v.dimensions.Width-indent-scrollbarWidth)
 	}
-	return strings.Join(lines, "\n")
+	h := max(1, opts.height)
+
+	vp, exists := v.viewports.Get(xpath)
+	if !exists {
+		vp = &Viewport{
+			model:         viewport.New(w, h),
+			scrollbarZone: xpath.NewXpathWithAppend("scrollbar"),
+			content:       content,
+			active:        xpath.String() == "main",
+		}
+		vp.model.GotoBottom()
+		v.viewports.Set(xpath, vp)
+	} else {
+		vp.content = content
+	}
+
+	proc := v.processContent(content, w, opts.wrapContent)
+	contentHeight := lipgloss.Height(proc)
+
+	if contentHeight > opts.maxHeight && opts.maxHeight > 0 && !opts.full {
+		w = max(1, w-scrollbarWidth)
+		proc = v.processContent(content, w, opts.wrapContent)
+		contentHeight = lipgloss.Height(proc)
+	}
+
+	finalHeight := contentHeight
+	if !opts.full && opts.maxHeight > 0 && contentHeight > opts.maxHeight {
+		finalHeight = opts.maxHeight
+	} else if opts.full {
+		finalHeight = h
+	}
+
+	vp.model.Width, vp.model.Height = w, finalHeight
+
+	yOffset, pct := vp.model.YOffset, vp.model.ScrollPercent()
+	vp.model.SetContent(proc)
+
+	if pct == 1 {
+		vp.model.GotoBottom()
+	} else {
+		// Clamp YOffset to valid range for new content
+		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
+		vp.model.YOffset = min(yOffset, maxOffset)
+	}
+
+	return zone.Mark(xpath.String(), v.renderViewport(vp, finalHeight, opts.useBorder))
+}
+
+func (v *Viewports) processContent(content string, width int, wrap bool) string {
+	if wrap {
+		return lipgloss.NewStyle().Width(width).Render(content)
+	}
+	return truncateLines(content, width)
+}
+
+func (v *Viewports) renderViewport(vp *Viewport, height int, useBorder bool) string {
+	contentHeight := lipgloss.Height(vp.content)
+	scrollbar, _ := v.renderScrollbar(vp.model.ScrollPercent(), contentHeight, height)
+	combined := v.combineWithScrollbar(vp.model.View(), scrollbar, vp.scrollbarZone)
+
+	if !useBorder {
+		return combined
+	}
+
+	borderColor := v.colors.TableBorder.GetForeground()
+	if vp.active {
+		borderColor = v.colors.TableBorder.GetBackground()
+	}
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Render(combined)
 }
 
 func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, int) {
 	if total <= visible {
 		return "", 0
 	}
-	thumb := int(float64(visible) * float64(visible) / float64(total))
-	if thumb < 1 {
-		thumb = 1
-	}
+
+	thumb := max(1, int(float64(visible)*float64(visible)/float64(total)))
 	maxPos := visible - thumb
-	if pct < 0 {
-		pct = 0
-	} else if pct > 1 {
-		pct = 1
-	}
-	pos := int(float64(maxPos) * pct)
+	pos := int(float64(maxPos) * clamp(pct, 0, 1))
+
 	lines := make([]string, visible)
 	for i := range lines {
 		if i >= pos && i < pos+thumb {
@@ -120,7 +322,9 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 			lines[i] = scrollTrack
 		}
 	}
-	return lipgloss.NewStyle().Foreground(v.colors.TableBorder.GetForeground()).
+
+	return lipgloss.NewStyle().
+		Foreground(v.colors.TableBorder.GetForeground()).
 		Render(strings.Join(lines, "\n")), 1
 }
 
@@ -128,230 +332,86 @@ func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attrib
 	if bar == "" {
 		return view
 	}
+
 	vLines, bLines := strings.Split(view, "\n"), strings.Split(bar, "\n")
-	cb := make([]string, len(vLines))
-	for i, l := range vLines {
+	result := make([]string, len(vLines))
+
+	for i, line := range vLines {
 		if i < len(bLines) {
-			cb[i] = l + " " + zone.Mark(barZone.NewXpathWithAppend(fmt.Sprintf("%d", i)).String(), bLines[i])
+			result[i] = line + " " + zone.Mark(barZone.NewXpathWithAppend(fmt.Sprintf("%d", i)).String(), bLines[i])
 		} else {
-			cb[i] = l
+			result[i] = line
 		}
 	}
-	return strings.Join(cb, "\n")
+
+	return strings.Join(result, "\n")
 }
 
-func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
-	vpr, ok := v.viewports.Get(cfg.xpath)
-	if !ok {
-		nv := viewport.New(cfg.availableWidth, cfg.viewportHeight)
-		nv.GotoBottom()
-		vpr = &Viewport{
-			viewport:      nv,
-			minHeight:     cfg.viewportHeight,
-			scrollbarZone: cfg.xpath.NewXpathWithAppend("scrollbar"),
-			content:       cfg.content,
-			// Main viewport is active by default
-			active: cfg.xpath.String() == "main",
+func (v *Viewports) handleMouse(m tea.MouseMsg, mainXpath config_attributes.Xpath) {
+	// Handle mouse wheel scrolling first (doesn't require release action)
+	if m.Button == tea.MouseButtonWheelUp || m.Button == tea.MouseButtonWheelDown {
+		if vp := v.getActiveViewport(); vp != nil {
+			if m.Button == tea.MouseButtonWheelUp {
+				vp.model.ScrollUp(3)
+			} else {
+				vp.model.ScrollDown(3)
+			}
 		}
-		v.viewports.Set(cfg.xpath, vpr)
-	} else {
-		// Update content for existing viewport
-		vpr.content = cfg.content
+		return
 	}
 
-	width := cfg.availableWidth
-
-	allowedHeight := cfg.viewportHeight
-	if allowedHeight <= 0 {
-		allowedHeight = commandOutputMaxHeight
+	// Handle click-to-activate (only on release)
+	if m.Action != tea.MouseActionRelease {
+		return
 	}
 
-	// Check if scrollbar needed and render content
-	// First check at reduced width (accounting for potential scrollbar)
-	procAtReducedWidth := lipgloss.NewStyle().Width(width - 2).Render(cfg.content)
-	contentHeight := lipgloss.Height(procAtReducedWidth)
-	needsBar := contentHeight > allowedHeight
+	clicked := v.mostSpecific(v.underMouse(m))
+	hasClick := clicked.Depth() > 0
 
-	var proc string
-	// Apply width constraint to prevent overflow
-	if cfg.wrapContent {
-		proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
-	} else {
-		// Truncate long lines instead of wrapping
-		proc = truncateLines(cfg.content, width)
-	}
-	contentHeight = lipgloss.Height(proc)
-
-	if needsBar {
-		// Reduce width for scrollbar and re-process content
-		width -= 2
-		if cfg.wrapContent {
-			proc = lipgloss.NewStyle().Width(width).Render(cfg.content)
-		} else {
-			proc = truncateLines(cfg.content, width)
-		}
-		contentHeight = lipgloss.Height(proc)
+	for xpath, vp := range v.viewports.Records() {
+		vp.active = hasClick && xpath == clicked
 	}
 
-	height := contentHeight
-	if !cfg.isFullscreen && cfg.maxHeight > 0 && contentHeight > cfg.maxHeight {
-		height = cfg.maxHeight
-	} else if cfg.isFullscreen {
-		height = cfg.viewportHeight
-	}
-
-	vpr.viewport.Width = width
-	vpr.viewport.Height = height
-
-	pct := vpr.viewport.ScrollPercent()
-	yOffset := vpr.viewport.YOffset
-	vpr.viewport.SetContent(proc)
-	// Restore scroll position (stay at bottom if we were there, to show new content)
-	if pct == 1 {
-		vpr.viewport.GotoBottom()
-	} else {
-		vpr.viewport.YOffset = yOffset
-	}
-
-	scrollbar, _ := v.renderScrollbar(vpr.viewport.ScrollPercent(), contentHeight, height)
-	combined := v.combineWithScrollbar(vpr.viewport.View(), scrollbar, vpr.scrollbarZone)
-
-	style := lipgloss.NewStyle()
-	borderColor := v.colors.TableBorder.GetForeground()
-	if cfg.useBorder {
-		if vpr.active {
-			borderColor = v.colors.TableBorder.GetBackground()
-		}
-		style = style.Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
-	}
-
-	return zone.Mark(cfg.xpath.String(), style.Render(combined))
-}
-
-func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string, indent int,
-	h, maxHeight int, wrap, border, full bool) string {
-
-	width := v.dimensions.Width - indent
-	// Inner viewports need width-2 to account for main viewport's scrollbar
-	// (1 for scrollbar + 1 for space before it)
-	if xpath.String() != "main" {
-		width -= 2
-	}
-
-	// Ensure minimum dimensions to prevent panics
-	if width < 1 {
-		width = 1
-	}
-	if h < 1 {
-		h = 1
-	}
-
-	return v.getOrCreateViewport(ViewportConfig{
-		xpath:          xpath,
-		content:        content,
-		availableWidth: width,
-		viewportHeight: h,
-		maxHeight:      maxHeight,
-		wrapContent:    wrap,
-		useBorder:      border,
-		isFullscreen:   full,
-	})
-}
-
-func (v *Viewports) GetOrCreateViewport(xpath config_attributes.Xpath, content string, indent int) string {
-	return v.createViewport(xpath, content, indent, 0, commandOutputMaxHeight, true, true, false)
-}
-
-func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, content string, indent int) string {
-	return v.createViewport(xpath, content, indent, 0, 0, true, false, false)
-}
-
-func (v *Viewports) GetOrCreateMainViewport(content string) string {
-	h := v.dimensions.Height - footerHeight
-	return v.createViewport(config_attributes.NewXpath("main"), content, 0, h, h, false, false, true)
-}
-
-// RenderFullscreenViewport renders the fullscreen viewport
-// This takes the existing viewport and renders it in fullscreen mode
-func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, content string) string {
-	// Account for footer (3 lines) and border (2 lines: top + bottom)
-	h := v.dimensions.Height - footerHeight - 2
-	if h < 1 {
-		h = 1
-	}
-	// Account for main viewport's scrollbar (2) and border (2: left + right)
-	width := v.dimensions.Width - 4
-	if width < 1 {
-		width = 1
-	}
-
-	// Check if viewport exists
-	if vp, ok := v.viewports.Get(xpath); ok {
-		// Store scroll position before modifying
-		yOffset := vp.viewport.YOffset
-
-		// Update the viewport dimensions for fullscreen
-		vp.viewport.Width = width
-		vp.viewport.Height = h
-		vp.content = content
-
-		// Process content with proper wrapping for fullscreen
-		proc := lipgloss.NewStyle().Width(width).Render(content)
-		vp.viewport.SetContent(proc)
-
-		// Restore scroll position (but ensure it's valid)
-		maxOffset := max(0, lipgloss.Height(proc)-h)
-		if yOffset > maxOffset {
-			yOffset = maxOffset
-		}
-		vp.viewport.YOffset = yOffset
-
-		// Render scrollbar
-		contentHeight := lipgloss.Height(proc)
-		scrollbar, _ := v.renderScrollbar(vp.viewport.ScrollPercent(), contentHeight, h)
-		combined := v.combineWithScrollbar(vp.viewport.View(), scrollbar, vp.scrollbarZone)
-
-		// Apply border style
-		style := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(v.colors.TableBorder.GetBackground())
-
-		return zone.Mark(xpath.String(), style.Render(combined))
-	}
-
-	// If viewport doesn't exist, create it normally
-	cfg := ViewportConfig{
-		xpath:          xpath,
-		content:        content,
-		availableWidth: width,
-		viewportHeight: h,
-		maxHeight:      h,
-		wrapContent:    true,
-		useBorder:      true,
-		isFullscreen:   true,
-	}
-
-	return v.getOrCreateViewport(cfg)
-}
-
-func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) { v.viewports.Del(xpath) }
-
-func (v *Viewports) mostSpecific(viewports []config_attributes.Xpath) config_attributes.Xpath {
-	if len(viewports) == 0 {
-		return config_attributes.Xpath{}
-	}
-	sort.Slice(viewports, func(i, j int) bool { return viewports[i].Depth() > viewports[j].Depth() })
-	return viewports[0]
-}
-
-func (v *Viewports) underMouse(msg tea.MouseMsg) []config_attributes.Xpath {
-	var r []config_attributes.Xpath
-	for xpath := range v.viewports.Records() {
-		if zone.Get(xpath.String()).InBounds(msg) {
-			r = append(r, xpath)
+	if !hasClick {
+		if mainVp, ok := v.viewports.Get(mainXpath); ok {
+			mainVp.active = true
 		}
 	}
-	return r
+}
+
+func (v *Viewports) handleKey(m tea.KeyMsg, mainXpath config_attributes.Xpath) {
+	if vp := v.getActiveViewport(); vp != nil {
+		switch m.String() {
+		case "up", "k":
+			vp.model.ScrollUp(1)
+		case "down", "j":
+			vp.model.ScrollDown(1)
+		case "pgup":
+			vp.model.HalfPageUp()
+		case "pgdown", " ":
+			vp.model.HalfPageDown()
+		case "home", "g":
+			vp.model.GotoTop()
+		case "end", "G":
+			vp.model.GotoBottom()
+		}
+	}
+}
+
+func (v *Viewports) getActiveViewport() *Viewport {
+	mainXpath := config_attributes.NewXpath("main")
+
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			return vp
+		}
+	}
+
+	if mainVp, ok := v.viewports.Get(mainXpath); ok {
+		return mainVp
+	}
+
+	return nil
 }
 
 func (v *Viewports) hasActiveInner(mainXpath config_attributes.Xpath) bool {
@@ -363,218 +423,52 @@ func (v *Viewports) hasActiveInner(mainXpath config_attributes.Xpath) bool {
 	return false
 }
 
-func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
-	cmds, mainXpath := make([]tea.Cmd, 0), config_attributes.NewXpath("main")
-
-	if m, ok := msg.(tea.MouseMsg); ok {
-		if m.Action == tea.MouseActionRelease {
-			clicked := v.mostSpecific(v.underMouse(m))
-			hasClick := clicked.Depth() > 0
-			for xpath, vp := range v.viewports.Records() {
-				vp.active = hasClick && xpath == clicked
-			}
-			// If clicked outside all viewports, reactivate main
-			if !hasClick {
-				if mainVpr, ok := v.viewports.Get(mainXpath); ok {
-					mainVpr.active = true
-				}
-			}
-		}
-		// Handle mouse wheel scrolling - only scroll the active viewport
-		if m.Button == tea.MouseButtonWheelUp || m.Button == tea.MouseButtonWheelDown {
-			// Find the active viewport (inner first, fall back to main)
-			var activeVp *Viewport
-			for xpath, vp := range v.viewports.Records() {
-				if vp.active && xpath != mainXpath {
-					activeVp = vp
-					break
-				}
-			}
-			if activeVp == nil {
-				if mainVpr, ok := v.viewports.Get(mainXpath); ok {
-					activeVp = mainVpr
-				}
-			}
-
-			if activeVp != nil {
-				lines := 3
-				if m.Button == tea.MouseButtonWheelUp {
-					activeVp.viewport.ScrollUp(lines)
-				} else {
-					activeVp.viewport.ScrollDown(lines)
-				}
-			}
-		}
-	}
-
-	hasActiveInner := v.hasActiveInner(mainXpath)
-
-	// Handle keyboard scrolling for active viewport
-	if m, ok := msg.(tea.KeyMsg); ok {
-		// Find the active viewport (inner first, fall back to main)
-		var activeVp *Viewport
-		for xpath, vp := range v.viewports.Records() {
-			if vp.active && xpath != mainXpath {
-				activeVp = vp
-				break
-			}
-		}
-		if activeVp == nil {
-			if mainVpr, ok := v.viewports.Get(mainXpath); ok {
-				activeVp = mainVpr
-			}
-		}
-
-		if activeVp != nil {
-			switch m.String() {
-			case "up", "k":
-				activeVp.viewport.LineUp(1)
-			case "down", "j":
-				activeVp.viewport.LineDown(1)
-			case "pgup":
-				activeVp.viewport.HalfViewUp()
-			case "pgdown", " ":
-				activeVp.viewport.HalfViewDown()
-			case "home", "g":
-				activeVp.viewport.GotoTop()
-			case "end", "G":
-				activeVp.viewport.GotoBottom()
-			}
-		}
-		// Don't pass KeyMsg to viewports - we handle scrolling manually
-		return tea.Batch(cmds...)
-	}
-
-	for _, vp := range v.viewports.Records() {
-		if !vp.active {
-			continue
-		}
-
-		if updated, cmd := vp.viewport.Update(msg); cmd != nil {
-			vp.viewport = updated
-			cmds = append(cmds, cmd)
-		}
-	}
-
-	if mainVpr, ok := v.viewports.Get(mainXpath); ok && !hasActiveInner {
-		if updated, cmd := mainVpr.viewport.Update(msg); cmd != nil {
-			mainVpr.viewport = updated
-			cmds = append(cmds, cmd)
-		}
-	}
-
-	return tea.Batch(cmds...)
-}
-
-func (v *Viewports) Debug() string {
-	s := fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height)
-	for xpath, vp := range v.viewports.Records() {
-		contentH := lipgloss.Height(vp.content)
-		s += fmt.Sprintf("  '%s': %dx%d h:%d c:%d", xpath, vp.viewport.Width, vp.viewport.Height, vp.viewport.Height, contentH)
-		if vp.active {
-			s += " [A]"
-		}
-		if vp.viewport.ScrollPercent() == 1 {
-			s += " @btm"
-		}
-		s += "\n"
-	}
-	return s
-}
-
-// GetActiveViewportContent returns the content of the currently active viewport
-// Returns empty string if no viewport is active
-func (v *Viewports) GetActiveViewportContent() string {
+// DeselectAll activates only the main viewport
+func (v *Viewports) DeselectAll() {
 	mainXpath := config_attributes.NewXpath("main")
-
-	// Find the active viewport (inner first, fall back to main)
-	var activeVp *Viewport
 	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
-			activeVp = vp
-			break
-		}
+		vp.active = xpath == mainXpath
 	}
-	if activeVp == nil {
-		if mainVpr, ok := v.viewports.Get(mainXpath); ok {
-			activeVp = mainVpr
-		}
-	}
-
-	if activeVp != nil {
-		return activeVp.content
-	}
-	return ""
 }
 
-// GetActiveInnerViewportContent returns the content of the active non-main viewport
-// Returns "", false if main viewport is active or no viewport is active
-// Returns content, true if an inner viewport is active
-func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
-	mainXpath := config_attributes.NewXpath("main")
-
-	// Find active inner viewport only (not main)
-	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
-			// Get the actual rendered content from the viewport
-			return vp.viewport.View(), true
+func (v *Viewports) underMouse(m tea.MouseMsg) []config_attributes.Xpath {
+	var result []config_attributes.Xpath
+	for xpath := range v.viewports.Records() {
+		if zone.Get(xpath.String()).InBounds(m) {
+			result = append(result, xpath)
 		}
 	}
-
-	return "", false
+	return result
 }
 
-// GetActiveInnerViewportXpath returns the xpath of the active non-main viewport
-// Returns empty xpath if main viewport is active or no viewport is active
-func (v *Viewports) GetActiveInnerViewportXpath() config_attributes.Xpath {
-	mainXpath := config_attributes.NewXpath("main")
-
-	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
-			return xpath
-		}
+func (v *Viewports) mostSpecific(xpaths []config_attributes.Xpath) config_attributes.Xpath {
+	if len(xpaths) == 0 {
+		return config_attributes.Xpath{}
 	}
-
-	return config_attributes.Xpath{}
+	sort.Slice(xpaths, func(i, j int) bool { return xpaths[i].Depth() > xpaths[j].Depth() })
+	return xpaths[0]
 }
 
-// GetViewportContent returns the raw content for a given xpath
-// This is used to get the original content for fullscreen mode
-func (v *Viewports) GetViewportContent(xpath config_attributes.Xpath) string {
-	if vp, ok := v.viewports.Get(xpath); ok {
-		return vp.content
+// Utility functions
+
+func truncateLines(content string, maxWidth int) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		truncated := line
+		for lipgloss.Width(truncated) > maxWidth {
+			truncated = truncated[:len(truncated)-1]
+		}
+		lines[i] = truncated
 	}
-	return ""
+	return strings.Join(lines, "\n")
 }
 
-// GetActiveViewportScrollPercent returns the scroll percent of the currently active viewport
-// Returns 0.0 if no viewport is active
-func (v *Viewports) GetActiveViewportScrollPercent() float64 {
-	mainXpath := config_attributes.NewXpath("main")
-
-	// First check for fullscreen viewport
-	if v.IsFullscreen() {
-		if vp, ok := v.viewports.Get(v.fullscreenXpath); ok {
-			return vp.viewport.ScrollPercent()
-		}
+func clamp(v, min, max float64) float64 {
+	if v < min {
+		return min
 	}
-
-	// Find the active viewport (inner first, fall back to main)
-	var activeVp *Viewport
-	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
-			activeVp = vp
-			break
-		}
+	if v > max {
+		return max
 	}
-	if activeVp == nil {
-		if mainVpr, ok := v.viewports.Get(mainXpath); ok {
-			activeVp = mainVpr
-		}
-	}
-
-	if activeVp != nil {
-		return activeVp.viewport.ScrollPercent()
-	}
-	return 0.0
+	return v
 }
