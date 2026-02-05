@@ -30,7 +30,7 @@ const (
 func (m *model) ViewBuildLogs() string {
 	var builder strings.Builder
 
-	colors := m.workflow.State().Conf.Tui.ColorScheme
+	colors := m.workflow.State().Conf.ColorScheme
 
 	// Header for the log view
 	builder.WriteString(colors.HeaderTitle.Render("=== Build Logs ===\n"))
@@ -80,7 +80,7 @@ func (m *model) ViewBuildLogs() string {
 }
 
 func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configuration *config.Configuration, f func(prefixLenScoped int, machine *config.Machine, machineNode *tree.Tree)) {
-	colors := m.workflow.State().Conf.Tui.ColorScheme
+	colors := m.workflow.State().Conf.ColorScheme
 
 	prefixLen += treeStep
 	for _, machine := range configuration.Machines.SortedMap() {
@@ -143,7 +143,7 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			cmdOutput := cmd.String()
 			cmdTas := cmd.TimeAndState
 
-			if !m.workflow.State().Conf.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) && cmdTas.GetEndError() == nil {
+			if !m.workflow.State().Conf.Flags.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) && cmdTas.GetEndError() == nil {
 				if cmdIdx == len(phaseLog.CommandLogs())-1 {
 					cmdLabel = "(hidden)"
 					cmdOutput = ""
