@@ -20,10 +20,11 @@ const (
 )
 
 type Viewports struct {
-	viewports  *omap.Omap[config_attributes.Xpath, *Viewport]
-	dimensions *Dimensions
-	colors     *config.ColorScheme
-	debug      *strings.Builder
+	viewports       *omap.Omap[config_attributes.Xpath, *Viewport]
+	dimensions      *Dimensions
+	colors          *config.ColorScheme
+	debug           *strings.Builder
+	fullscreenXpath config_attributes.Xpath // Tracks which viewport is in fullscreen mode
 }
 
 type Viewport struct {
@@ -49,7 +50,28 @@ type ViewportConfig struct {
 
 func NewViewports(d *Dimensions, c *config.ColorScheme, dbg *strings.Builder) *Viewports {
 	v, _ := omap.New[config_attributes.Xpath, *Viewport]()
-	return &Viewports{viewports: v, dimensions: d, colors: c, debug: dbg}
+	return &Viewports{viewports: v, dimensions: d, colors: c, debug: dbg, fullscreenXpath: config_attributes.Xpath{}}
+}
+
+// IsFullscreen returns true if any viewport is currently in fullscreen mode
+func (v *Viewports) IsFullscreen() bool {
+	return v.fullscreenXpath.Depth() > 0
+}
+
+// GetFullscreenXpath returns the xpath of the viewport currently in fullscreen mode
+func (v *Viewports) GetFullscreenXpath() config_attributes.Xpath {
+	return v.fullscreenXpath
+}
+
+// SetFullscreen sets the fullscreen mode for a viewport
+// Pass an empty xpath to exit fullscreen
+func (v *Viewports) SetFullscreen(xpath config_attributes.Xpath) {
+	v.fullscreenXpath = xpath
+}
+
+// ExitFullscreen exits fullscreen mode
+func (v *Viewports) ExitFullscreen() {
+	v.fullscreenXpath = config_attributes.Xpath{}
 }
 
 // ContentWidth returns the width available for content inside the main viewport,
@@ -132,6 +154,9 @@ func (v *Viewports) getOrCreateViewport(cfg ViewportConfig) string {
 			active: cfg.xpath.String() == "main",
 		}
 		v.viewports.Set(cfg.xpath, vpr)
+	} else {
+		// Update content for existing viewport
+		vpr.content = cfg.content
 	}
 
 	width := cfg.availableWidth
@@ -213,6 +238,14 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 		width -= 2
 	}
 
+	// Ensure minimum dimensions to prevent panics
+	if width < 1 {
+		width = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+
 	return v.getOrCreateViewport(ViewportConfig{
 		xpath:          xpath,
 		content:        content,
@@ -236,6 +269,69 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, cont
 func (v *Viewports) GetOrCreateMainViewport(content string) string {
 	h := v.dimensions.Height - footerHeight
 	return v.createViewport(config_attributes.NewXpath("main"), content, 0, h, h, false, false, true)
+}
+
+// RenderFullscreenViewport renders the fullscreen viewport
+// This takes the existing viewport and renders it in fullscreen mode
+func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, content string) string {
+	// Account for footer (3 lines) and border (2 lines: top + bottom)
+	h := v.dimensions.Height - footerHeight - 2
+	if h < 1 {
+		h = 1
+	}
+	// Account for main viewport's scrollbar (2) and border (2: left + right)
+	width := v.dimensions.Width - 4
+	if width < 1 {
+		width = 1
+	}
+
+	// Check if viewport exists
+	if vp, ok := v.viewports.Get(xpath); ok {
+		// Store scroll position before modifying
+		yOffset := vp.viewport.YOffset
+
+		// Update the viewport dimensions for fullscreen
+		vp.viewport.Width = width
+		vp.viewport.Height = h
+		vp.content = content
+
+		// Process content with proper wrapping for fullscreen
+		proc := lipgloss.NewStyle().Width(width).Render(content)
+		vp.viewport.SetContent(proc)
+
+		// Restore scroll position (but ensure it's valid)
+		maxOffset := max(0, lipgloss.Height(proc)-h)
+		if yOffset > maxOffset {
+			yOffset = maxOffset
+		}
+		vp.viewport.YOffset = yOffset
+
+		// Render scrollbar
+		contentHeight := lipgloss.Height(proc)
+		scrollbar, _ := v.renderScrollbar(vp.viewport.ScrollPercent(), contentHeight, h)
+		combined := v.combineWithScrollbar(vp.viewport.View(), scrollbar, vp.scrollbarZone)
+
+		// Apply border style
+		style := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(v.colors.TableBorder.GetBackground())
+
+		return zone.Mark(xpath.String(), style.Render(combined))
+	}
+
+	// If viewport doesn't exist, create it normally
+	cfg := ViewportConfig{
+		xpath:          xpath,
+		content:        content,
+		availableWidth: width,
+		viewportHeight: h,
+		maxHeight:      h,
+		wrapContent:    true,
+		useBorder:      true,
+		isFullscreen:   true,
+	}
+
+	return v.getOrCreateViewport(cfg)
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) { v.viewports.Del(xpath) }
@@ -384,4 +480,101 @@ func (v *Viewports) Debug() string {
 		s += "\n"
 	}
 	return s
+}
+
+// GetActiveViewportContent returns the content of the currently active viewport
+// Returns empty string if no viewport is active
+func (v *Viewports) GetActiveViewportContent() string {
+	mainXpath := config_attributes.NewXpath("main")
+
+	// Find the active viewport (inner first, fall back to main)
+	var activeVp *Viewport
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			activeVp = vp
+			break
+		}
+	}
+	if activeVp == nil {
+		if mainVpr, ok := v.viewports.Get(mainXpath); ok {
+			activeVp = mainVpr
+		}
+	}
+
+	if activeVp != nil {
+		return activeVp.content
+	}
+	return ""
+}
+
+// GetActiveInnerViewportContent returns the content of the active non-main viewport
+// Returns "", false if main viewport is active or no viewport is active
+// Returns content, true if an inner viewport is active
+func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
+	mainXpath := config_attributes.NewXpath("main")
+
+	// Find active inner viewport only (not main)
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			// Get the actual rendered content from the viewport
+			return vp.viewport.View(), true
+		}
+	}
+
+	return "", false
+}
+
+// GetActiveInnerViewportXpath returns the xpath of the active non-main viewport
+// Returns empty xpath if main viewport is active or no viewport is active
+func (v *Viewports) GetActiveInnerViewportXpath() config_attributes.Xpath {
+	mainXpath := config_attributes.NewXpath("main")
+
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			return xpath
+		}
+	}
+
+	return config_attributes.Xpath{}
+}
+
+// GetViewportContent returns the raw content for a given xpath
+// This is used to get the original content for fullscreen mode
+func (v *Viewports) GetViewportContent(xpath config_attributes.Xpath) string {
+	if vp, ok := v.viewports.Get(xpath); ok {
+		return vp.content
+	}
+	return ""
+}
+
+// GetActiveViewportScrollPercent returns the scroll percent of the currently active viewport
+// Returns 0.0 if no viewport is active
+func (v *Viewports) GetActiveViewportScrollPercent() float64 {
+	mainXpath := config_attributes.NewXpath("main")
+
+	// First check for fullscreen viewport
+	if v.IsFullscreen() {
+		if vp, ok := v.viewports.Get(v.fullscreenXpath); ok {
+			return vp.viewport.ScrollPercent()
+		}
+	}
+
+	// Find the active viewport (inner first, fall back to main)
+	var activeVp *Viewport
+	for xpath, vp := range v.viewports.Records() {
+		if vp.active && xpath != mainXpath {
+			activeVp = vp
+			break
+		}
+	}
+	if activeVp == nil {
+		if mainVpr, ok := v.viewports.Get(mainXpath); ok {
+			activeVp = mainVpr
+		}
+	}
+
+	if activeVp != nil {
+		return activeVp.viewport.ScrollPercent()
+	}
+	return 0.0
 }
