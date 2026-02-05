@@ -1,7 +1,6 @@
 package panix
 
 import (
-	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/spf13/cobra"
@@ -30,7 +29,7 @@ This is the main command for deploying NixOS configurations.`,
 			return err
 		}
 
-		return tui.NewTui(workflowExec)
+		return RunTUI(workflowExec)
 	},
 }
 

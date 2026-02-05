@@ -1,12 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.2/.schema/devbox.schema.json",
-  "packages": [
-    "go@latest",
-    "go-task@latest",
-    "sshping@latest",
-    "graphviz@latest",
-    "github:anomalyco/opencode"
-  ],
+  "packages": ["go-task@latest", "graphviz@latest"],
   "shell": {
     "init_hook": [],
     "scripts": {

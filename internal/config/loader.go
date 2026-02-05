@@ -65,7 +65,10 @@ func LoadConfig(configFile string, flags *pflag.FlagSet) (*Config, error) {
 					// Transform the key in whatever manner.
 					keyRaw := stringy.New(f.Name) //.CamelCase()
 
-					key := keyRaw.Prefix("flags.")
+					key := keyRaw.Get()
+					if !strings.HasPrefix(key, "tui.") {
+						key = keyRaw.Prefix("flags.")
+					}
 
 					val := posflag.FlagVal(flags, f)
 
