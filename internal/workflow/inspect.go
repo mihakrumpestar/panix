@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"slices"
@@ -127,7 +126,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				return err
 			}
 
-			// Run bootstrap detection
+			// Run bootstrap detection and get OS info
 
 			requiresKexec := false
 			commandWithArgs = []string{"cat", "/etc/os-release"}
@@ -153,6 +152,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					if err != nil {
 						return errors.Wrap(err, "error parsing /etc/os-release")
 					}
+
+					// Get NixOS version from os-release
+					mms.Nixos.Store(osrelease["BUILD_ID"])
 
 					if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
 						mms.Bootstrapped.Store(false)
@@ -205,48 +207,58 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 
 			// Regular (non-bootstrap) part
 
-			// Get current generation
-			commandWithArgs = []string{"nixos-rebuild", "list-generations", "--json"}
+			// Get current generation info using multiple small commands instead of
+			// nixos-rebuild list-generations --json which returns all 400+ generations
 
+			// Get generation number from symlink
 			err = exc.Exec(
-				"get generations",
-				"list generations failed",
-				commandWithArgs,
+				"get generation",
+				"failed to read generation symlink",
+				[]string{"readlink", "/nix/var/nix/profiles/system"},
 				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-					output := log.Bytes()
-
-					if w.state.Conf.Flags.DryRun {
-						output = []byte(`
-						[
-							{
-								"generation": 5,
-								"date": "DRY_RUN",
-								"nixosVersion": "DRY_RUN",
-								"kernelVersion": "DRY_RUN",
-								"configurationRevision": "DRY_RUN",
-								"specialisations": [],
-								"current": true
-							}
-						]
-						`)
-					}
-
-					var nixGenerations nixGenerations
-					err = json.Unmarshal(output, &nixGenerations)
-					if err != nil || len(nixGenerations) == 0 {
-						return errors.Wrapf(err, "invalid list-generations output for %s: %s", machine.Name, string(output))
-					}
-
-					for _, nixGeneration := range nixGenerations {
-						if nixGeneration.Current {
-							mms.Generation.Store(nixGeneration.Generation)
-							mms.Date.Store(nixGeneration.Date)
-							mms.Nixos.Store(nixGeneration.NixosVersion)
-							mms.Kernel.Store(nixGeneration.KernelVersion)
-							break
+					link := strings.TrimSpace(log.String())
+					// Parse "system-447-link" -> 447
+					if strings.HasPrefix(link, "system-") && strings.HasSuffix(link, "-link") {
+						genStr := strings.TrimPrefix(link, "system-")
+						genStr = strings.TrimSuffix(genStr, "-link")
+						if gen, err := strconv.ParseUint(genStr, 10, 32); err == nil {
+							mms.Generation.Store(uint32(gen))
 						}
 					}
+					return nil
+				}),
+			)
+			if err != nil {
+				return err
+			}
 
+			// Get date from profile using stat
+			err = exc.Exec(
+				"get generation date",
+				"failed to stat system profile",
+				[]string{"stat", "-c", "%y", "/nix/var/nix/profiles/system"},
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+					date := strings.TrimSpace(log.String())
+					// Remove nanoseconds: "2026-02-05 18:06:06.705587882 +0100" -> "2026-02-05 18:06:06"
+					if idx := strings.Index(date, "."); idx != -1 {
+						date = date[:idx]
+					}
+					mms.Date.Store(date)
+					return nil
+				}),
+			)
+			if err != nil {
+				return err
+			}
+
+			// Get kernel version
+			err = exc.Exec(
+				"get kernel version",
+				"uname failed",
+				[]string{"uname", "-r"},
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+					kernel := strings.TrimSpace(log.String())
+					mms.Kernel.Store(kernel)
 					return nil
 				}),
 			)
@@ -256,15 +268,4 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 
 			return nil
 		})
-}
-
-// Unmarshall struct
-type nixGenerations []struct {
-	Generation            uint32        `json:"generation"`
-	Date                  string        `json:"date"`
-	NixosVersion          string        `json:"nixosVersion"`
-	KernelVersion         string        `json:"kernelVersion"`
-	ConfigurationRevision string        `json:"configurationRevision"`
-	Specialisations       []interface{} `json:"specialisations"`
-	Current               bool          `json:"current"`
 }
