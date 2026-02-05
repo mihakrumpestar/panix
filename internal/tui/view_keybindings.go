@@ -148,23 +148,13 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.String() == "esc":
-		// ESC exits fullscreen mode if active, otherwise quits
+		// ESC exits fullscreen mode, or deselects inner viewport back to main
 		if m.modelView.viewports.IsFullscreen() {
 			m.modelView.viewports.ExitFullscreen()
-			return m, nil
+		} else {
+			m.modelView.viewports.DeselectAll()
 		}
-		// If not in fullscreen, fall through to quit behavior
-		m.quitting = true
-		m.workflow.Cancel()()
-		ctx := m.workflow.Ctx()
-		<-ctx.Done()
-		if m.err != nil && ctx.Err() != nil {
-			m.err = errors.Wrap(m.err, ctx.Err().Error())
-		} else if ctx.Err() != nil {
-			m.err = ctx.Err()
-		}
-		m.modelView.debugOutput.WriteString("CTX done\n")
-		return m, tea.Quit
+		return m, nil
 	}
 
 	return m, nil
@@ -209,8 +199,7 @@ func (m *model) renderNotification() string {
 	return style.Inherit(m.notificationColor).Render(m.notification)
 }
 
-// renderScrollPercent renders the scroll percentage indicator
-func (m *model) renderScrollPercent() string {
+func renderScrollPercent(m *model) string {
 	pct := m.modelView.viewports.GetActiveViewportScrollPercent()
 	pctInt := int(pct * 100)
 	return lipgloss.NewStyle().
@@ -218,141 +207,74 @@ func (m *model) renderScrollPercent() string {
 		Render(fmt.Sprintf("%d%%", pctInt))
 }
 
+// centerVertically centers content vertically within a given height
+func centerVertically(content string, height int) string {
+	contentHeight := lipgloss.Height(content)
+	if contentHeight >= height {
+		return content
+	}
+	paddingTop := (height - contentHeight) / 2
+	paddingBottom := height - contentHeight - paddingTop
+	return lipgloss.NewStyle().
+		PaddingTop(paddingTop).
+		PaddingBottom(paddingBottom).
+		Render(content)
+}
+
 // ViewKeybindings returns the help view with key bindings positioned at the bottom
 func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
+	const footerHeight = 3
 	footerWidth := m.modelView.dimensions.Width
-	footerHeight := 3
 
-	// Get help content
 	helpContent := keymapHelp.View(newKeymap())
-
-	// Get notification content
 	notificationContent := m.renderNotification()
+	scrollPercentContent := renderScrollPercent(m)
 
-	// Get scroll percent
-	scrollPercentContent := m.renderScrollPercent()
+	// Prepare notification box if present
+	var notificationBox string
+	var notifWidth int
+	if notificationContent != "" {
+		notificationBox = lipgloss.NewStyle().
+			Padding(0, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(m.notificationColor.GetForeground()).
+			Inherit(m.notificationColor).
+			Render(notificationContent)
+		notificationBox = centerVertically(notificationBox, footerHeight)
+		notifWidth = lipgloss.Width(notificationBox) + 1 // +1 for spacing
+	}
+
 	scrollPercentWidth := lipgloss.Width(scrollPercentContent)
 
-	// If no notification, create footer with scroll percent on the right
-	if notificationContent == "" {
-		// Calculate available width for help (accounting for scroll percent on the right)
-		availableWidth := footerWidth - scrollPercentWidth - 2 // -2 for spacing
-		if availableWidth < 0 {
-			availableWidth = 0
-		}
-
-		// Truncate help to fit in available space
-		if availableWidth > 0 {
-			helpContent = lipgloss.NewStyle().MaxWidth(availableWidth).Render(helpContent)
-		}
-
-		// Center help content vertically
-		helpHeight := lipgloss.Height(helpContent)
-		if helpHeight < footerHeight {
-			paddingTop := (footerHeight - helpHeight) / 2
-			paddingBottom := footerHeight - helpHeight - paddingTop
-			helpContent = lipgloss.NewStyle().
-				PaddingTop(paddingTop).
-				PaddingBottom(paddingBottom).
-				Render(helpContent)
-		}
-
-		// Center scroll percent vertically
-		scrollPercentHeight := lipgloss.Height(scrollPercentContent)
-		if scrollPercentHeight < footerHeight {
-			paddingTop := (footerHeight - scrollPercentHeight) / 2
-			paddingBottom := footerHeight - scrollPercentHeight - paddingTop
-			scrollPercentContent = lipgloss.NewStyle().
-				PaddingTop(paddingTop).
-				PaddingBottom(paddingBottom).
-				Render(scrollPercentContent)
-		}
-
-		// Create footer row with scroll percent at the far right
-		middleWidth := footerWidth - lipgloss.Width(helpContent) - scrollPercentWidth
-		if middleWidth < 0 {
-			middleWidth = 0
-		}
-
-		footerRow := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			helpContent,
-			lipgloss.NewStyle().Width(middleWidth).Render(""),
-			scrollPercentContent,
-		)
-
-		return "\n" + footerRow
+	// Calculate available width for help
+	availableWidth := footerWidth - notifWidth - scrollPercentWidth - 2
+	if availableWidth < 0 {
+		availableWidth = 0
 	}
 
-	// Create notification box with padding
-	notificationBox := lipgloss.NewStyle().
-		Padding(0, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.notificationColor.GetForeground()).
-		Inherit(m.notificationColor).
-		Render(notificationContent)
-
-	// Get dimensions
-	notifWidth := lipgloss.Width(notificationBox)
-	notifHeight := lipgloss.Height(notificationBox)
-
-	// Ensure notification is exactly footerHeight tall by adding vertical padding
-	if notifHeight < footerHeight {
-		paddingTop := (footerHeight - notifHeight) / 2
-		paddingBottom := footerHeight - notifHeight - paddingTop
-		notificationBox = lipgloss.NewStyle().
-			PaddingTop(paddingTop).
-			PaddingBottom(paddingBottom).
-			Render(notificationBox)
+	// Truncate help if needed and center vertically
+	if availableWidth > 0 {
+		helpContent = lipgloss.NewStyle().MaxWidth(availableWidth).Render(helpContent)
 	}
+	helpContent = centerVertically(helpContent, footerHeight)
+	scrollPercentContent = centerVertically(scrollPercentContent, footerHeight)
 
-	// Calculate available width for help (accounting for both notification and scroll percent)
-	helpWidth := footerWidth - notifWidth - scrollPercentWidth - 4 // -4 for spacing
-	if helpWidth < 0 {
-		helpWidth = 0
-	}
-
-	// Truncate help to fit in available space
-	if helpWidth > 0 {
-		helpContent = lipgloss.NewStyle().MaxWidth(helpWidth).Render(helpContent)
-	}
-
-	// Center help content vertically
-	helpHeight := lipgloss.Height(helpContent)
-	if helpHeight < footerHeight {
-		paddingTop := (footerHeight - helpHeight) / 2
-		paddingBottom := footerHeight - helpHeight - paddingTop
-		helpContent = lipgloss.NewStyle().
-			PaddingTop(paddingTop).
-			PaddingBottom(paddingBottom).
-			Render(helpContent)
-	}
-
-	// Center scroll percent vertically
-	scrollPercentHeight := lipgloss.Height(scrollPercentContent)
-	if scrollPercentHeight < footerHeight {
-		paddingTop := (footerHeight - scrollPercentHeight) / 2
-		paddingBottom := footerHeight - scrollPercentHeight - paddingTop
-		scrollPercentContent = lipgloss.NewStyle().
-			PaddingTop(paddingTop).
-			PaddingBottom(paddingBottom).
-			Render(scrollPercentContent)
-	}
-
-	// Create footer row with notification and scroll percent at the far right
-	middleWidth := footerWidth - lipgloss.Width(helpContent) - notifWidth - scrollPercentWidth - 2
+	// Calculate middle spacing
+	middleWidth := footerWidth - lipgloss.Width(helpContent) - notifWidth - scrollPercentWidth
 	if middleWidth < 0 {
 		middleWidth = 0
 	}
 
-	footerRow := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		helpContent,
-		lipgloss.NewStyle().Width(middleWidth).Render(""),
-		notificationBox,
-		lipgloss.NewStyle().Width(1).Render(" "),
-		scrollPercentContent,
-	)
+	// Build footer row
+	var parts []string
+	parts = append(parts, helpContent)
+	if middleWidth > 0 {
+		parts = append(parts, lipgloss.NewStyle().Width(middleWidth).Render(""))
+	}
+	if notificationBox != "" {
+		parts = append(parts, notificationBox)
+	}
+	parts = append(parts, scrollPercentContent)
 
-	return "\n" + footerRow
+	return "\n" + lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 }

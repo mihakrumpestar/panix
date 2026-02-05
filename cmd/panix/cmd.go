@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/tui"
+	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -58,9 +60,22 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "debug output")
 	rootCmd.PersistentFlags().String("cpuprofile", "", "cpu profiling to file")
+	rootCmd.PersistentFlags().Int("tui.commandOutputMaxHeight", 8, "maximum height for command output viewports in TUI")
 }
 
 // Helpers
+
+// RunTUI runs the TUI with the given workflow.
+// All errors from TUI are handled silently since the TUI displays them visually.
+// Returns non-zero exit code on error without printing error messages.
+func RunTUI(workflowExec *workflow.Workflow) error {
+	err := tui.NewTui(workflowExec)
+	if err != nil {
+		// TUI displays errors visually, so we exit silently with non-zero code
+		os.Exit(1)
+	}
+	return nil
+}
 
 func ConfFromContext(ctx context.Context) *config.Config {
 	conf := ctx.Value(config.ContextConfigKey).(*config.Config)

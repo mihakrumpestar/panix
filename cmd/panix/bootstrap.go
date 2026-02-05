@@ -1,7 +1,6 @@
 package panix
 
 import (
-	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/spf13/cobra"
@@ -31,7 +30,7 @@ Same as "deploy --bootstrap.only".`,
 			return err
 		}
 
-		return tui.NewTui(workflowExec)
+		return RunTUI(workflowExec)
 	},
 }
 

@@ -75,7 +75,7 @@ func NewTui(workflow *workflow.Workflow) error {
 		modelView: modelView{
 			dimensions:  dimensions,
 			spinners:    tui_spinners.NewSpinners(),
-			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput),
+			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.Tui.ColorScheme, debugOutput, workflow.State().Conf.Tui.CommandOutputMaxHeight),
 			debugOutput: debugOutput,
 		},
 		rawKeyReader: rawKeyReader,
@@ -103,6 +103,10 @@ func NewTui(workflow *workflow.Workflow) error {
 	finalModel, ok := m.(model)
 	if ok {
 		fmt.Println(finalModel.View())
+		// Return error from model if present (takes precedence over bubbletea error)
+		if finalModel.err != nil {
+			return finalModel.err
+		}
 	}
 
 	return err

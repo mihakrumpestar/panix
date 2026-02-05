@@ -27,8 +27,8 @@ func (m *model) ViewStatsTable() string {
 	// Header for the log view
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
-	// Use content width accounting for main viewport scrollbar
-	usableWidth := max(m.modelView.viewports.ContentWidth(), 60)
+	// Use content width accounting for main viewport scrollbar and some padding
+	usableWidth := max(m.modelView.viewports.ContentWidth()-2, 40)
 
 	// Header text lengths including icons
 	flakeHeader := string(colors.Flake.Icon) + " FLAKE"
