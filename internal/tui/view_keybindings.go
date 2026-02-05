@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -112,9 +113,15 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		ctx := m.workflow.Ctx()
 		<-ctx.Done()
 
+		// Only propagate context errors if they're not from manual cancellation
+		// context.Canceled is expected when user presses 'q' to quit
 		if m.err != nil && ctx.Err() != nil {
-			m.err = errors.Wrap(m.err, ctx.Err().Error())
-		} else if ctx.Err() != nil {
+			// Wrap existing error with context error unless it's just a cancellation
+			if ctx.Err() != context.Canceled {
+				m.err = errors.Wrap(m.err, ctx.Err().Error())
+			}
+		} else if ctx.Err() != nil && ctx.Err() != context.Canceled {
+			// Set error only if it's not a manual cancellation
 			m.err = ctx.Err()
 		}
 

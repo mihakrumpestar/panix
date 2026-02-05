@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -143,8 +144,11 @@ func (m model) startWorkflow() tea.Cmd {
 			err := m.workflow.CreateWorkflow()
 			if err != nil {
 				m.modelView.debugOutput.WriteString("Error: " + err.Error() + "\n")
-				m.err = err
-				msg = errMsg{err}
+				// Don't treat context.Canceled as an error (user pressed 'q')
+				if err != context.Canceled {
+					m.err = err
+					msg = errMsg{err}
+				}
 				return
 			}
 

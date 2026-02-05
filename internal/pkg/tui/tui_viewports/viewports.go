@@ -175,6 +175,12 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	case tea.KeyMsg:
 		v.handleKey(m, mainXpath)
 		return tea.Batch(cmds...)
+	case tea.WindowSizeMsg:
+		// Update dimensions and resize all viewports
+		v.dimensions.Width = max(m.Width, 40)
+		v.dimensions.Height = m.Height
+		v.resizeAllViewports()
+		return tea.Batch(cmds...)
 	}
 
 	hasActiveInner := v.hasActiveInner(mainXpath)
@@ -212,6 +218,27 @@ func (v *Viewports) Debug() string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+// resizeAllViewports updates all viewport dimensions when terminal resizes
+func (v *Viewports) resizeAllViewports() {
+	mainXpath := config_attributes.NewXpath("main")
+
+	for xpath, vp := range v.viewports.Records() {
+		w := max(1, v.dimensions.Width-scrollbarWidth)
+		h := max(1, v.dimensions.Height-footerHeight)
+
+		if xpath == mainXpath {
+			// Main viewport gets full height minus footer
+			vp.model.Width, vp.model.Height = w, h
+		} else {
+			// Inner viewports: update width, keep existing height or use max height
+			vp.model.Width = w
+			if v.commandOutputMaxHeight > 0 && vp.model.Height > v.commandOutputMaxHeight {
+				vp.model.Height = v.commandOutputMaxHeight
+			}
+		}
+	}
 }
 
 // Internal types and helpers
