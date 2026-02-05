@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"runtime/pprof"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_raw_key_reader"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
@@ -24,11 +28,14 @@ type errMsg struct{ err error }
 func (e errMsg) Error() string { return e.err.Error() }
 
 type model struct {
-	workflow     *workflow.Workflow
-	quitting     bool
-	err          error
-	modelView    modelView
-	rawKeyReader *tui_raw_key_reader.RawKeyReader
+	workflow          *workflow.Workflow
+	quitting          bool
+	err               error
+	modelView         modelView
+	rawKeyReader      *tui_raw_key_reader.RawKeyReader
+	notification      string
+	notificationColor lipgloss.Style
+	notificationTime  time.Time
 }
 
 type modelView struct {
@@ -41,6 +48,16 @@ type modelView struct {
 func NewTui(workflow *workflow.Workflow) error {
 	zone.NewGlobal()
 	defer zone.Close()
+
+	// Ignore SIGINT so ctrl+c can be handled as a keybinding
+	// instead of terminating the process
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT)
+	go func() {
+		for range sigChan {
+			// Ignore SIGINT - it will be handled as a keybinding
+		}
+	}()
 
 	dimensions := &tui_viewports.Dimensions{
 		Width:  120, // Initial dimensions before tea.WindowSizeMsg
@@ -160,6 +177,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateUpdateHookMsg:
 		cmds = append(cmds, m.stateUpdateHook())
 
+	// Handle notification timer expiration
+	case notificationMsg:
+		m.clearNotification()
+
 		// re‐arm for the next keystroke
 	case tui_raw_key_reader.RawKeyReaderMsg:
 		cmds = append(cmds, m.rawKeyReader.Next())
@@ -183,6 +204,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	// Always render main content to update all viewports (even in fullscreen)
 	mainContent := m.ViewMainContent()
 
 	if m.quitting {
@@ -190,9 +212,31 @@ func (m model) View() string {
 		return zone.Scan(mainContent)
 	}
 
+	// Check if we're in fullscreen mode
+	if m.modelView.viewports.IsFullscreen() {
+		fullscreenXpath := m.modelView.viewports.GetFullscreenXpath()
+
+		// Get the updated content from the viewport (now refreshed by ViewMainContent)
+		content := m.modelView.viewports.GetViewportContent(fullscreenXpath)
+		if content == "" {
+			// If no content for fullscreen viewport, exit fullscreen mode
+			m.modelView.viewports.ExitFullscreen()
+		} else {
+			// Render fullscreen viewport with updated content
+			fullscreenViewport := m.modelView.viewports.RenderFullscreenViewport(fullscreenXpath, content)
+
+			var builder strings.Builder
+			builder.WriteString(fullscreenViewport)
+
+			// Add keybindings at the bottom (footer is still shown)
+			builder.WriteString(m.ViewKeybindings(builder))
+
+			return zone.Scan(builder.String())
+		}
+	}
+
 	// Use the special main viewport method
 	mainViewport := m.modelView.viewports.GetOrCreateMainViewport(mainContent)
-	//mainViewport := mainContent
 
 	var builder strings.Builder
 	builder.WriteString(mainViewport)

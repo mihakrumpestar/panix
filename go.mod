@@ -3,7 +3,9 @@ module github.com/mihakrumpestar/panix
 go 1.25.1
 
 require (
+	github.com/acobaugh/osrelease v0.1.0
 	github.com/alitto/pond/v2 v2.5.0
+	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.9
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -25,12 +27,7 @@ require (
 )
 
 require (
-	github.com/acobaugh/osrelease v0.1.0 // indirect
-	github.com/cobaugh/osrelease v0.0.0-20211111170140-20e410975bc3 // indirect
-)
-
-require (
-	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
@@ -60,8 +57,8 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/term v0.29.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
