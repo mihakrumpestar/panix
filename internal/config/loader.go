@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/gookit/goutil/dump"
@@ -31,8 +32,19 @@ func LoadConfig(flags *config_flags.Flags, cmd *cli.Command) (*Config, error) {
 		}
 	}
 
+	tmp := cliflagv3.Provider(cmd, "-")
+
+	tmp2, err := tmp.Read()
+	if err != nil {
+		return nil, err
+	}
+
+	for name, flag := range tmp2 {
+		fmt.Println(strconv.Quote(name), strconv.Quote(fmt.Sprintf("%v", flag)))
+	}
+
 	if cmd != nil {
-		err = k.Load(cliflagv3.Provider(cmd, "."), nil)
+		err = k.Load(tmp, nil)
 		if err != nil {
 			return nil, fmt.Errorf("error loading CLI flags: %w", err)
 		}

@@ -15,7 +15,7 @@ import (
 //   - "name n" - adds short alias 'n'
 type Flags struct {
 	Config               string         `yaml:"config" desc:"config file"` // CLI-only
-	Tags                 []string       `yaml:"tags" desc:"filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)"`
+	Tags                 []string       `yaml:"~tags" desc:"filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)"`
 	Bootstrap            Bootstrap      `yaml:"bootstrap"`
 	RequireAllSuccess    bool           `yaml:"requireAllSuccess" desc:"abort & rollback if any task fails, primarily for CI/CD"`
 	OverrideLocalMachine string         `yaml:"overrideLocalMachine" desc:"hostname of the machine that is local (won't use ssh to connect to it)"`
