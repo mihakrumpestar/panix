@@ -16,19 +16,22 @@ require (
 	github.com/kevinburke/ssh_config v1.4.0
 	github.com/kirill-scherba/omap v0.0.14
 	github.com/knadh/koanf/parsers/yaml v1.1.0
-	github.com/knadh/koanf/providers/cliflagv3 v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.2.2
 	github.com/lrstanley/bubblezone v1.0.0
+	github.com/spf13/pflag v1.0.6
 	github.com/urfave/cli/v3 v3.6.2
 	github.com/urfave/sflags v0.4.1
 	go.uber.org/atomic v1.11.0
 )
 
 require (
-	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
+	dario.cat/mergo v1.0.2 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
+	github.com/fatih/structs v1.1.0 // indirect
+	github.com/knadh/koanf/providers/structs v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/urfave/cli/v2 v2.27.6 // indirect
+	github.com/urfave/cli/v2 v2.27.5 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 )
 
@@ -43,7 +46,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
-	github.com/knadh/koanf/providers/cliflagv2 v1.0.1
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0
 	github.com/mattn/go-isatty v0.0.20 // indirect
