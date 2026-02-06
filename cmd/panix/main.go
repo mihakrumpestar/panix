@@ -33,7 +33,6 @@ func main() {
 	flags, err := gcli.ParseV3(cfg,
 		sflags.EnvPrefix("PANIX_"),
 		sflags.FlagTag("yaml"),
-		sflags.FlagDivider("."),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
