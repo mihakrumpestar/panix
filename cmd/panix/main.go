@@ -27,12 +27,16 @@ func main() {
 		Config:               "panix.yml",
 		OverrideLocalMachine: hostname,
 		Timeout:              7200 * time.Second,
+		Tui: config_flags.Tui{
+			CommandOutputMaxHeight: 8,
+		},
 	}
 
-	// Generate CLI flags from the struct using sflags
+	// Generate CLI flags from the struct using sflags for urfave/cli v3
 	flags, err := gcli.ParseV3(cfg,
 		sflags.EnvPrefix("PANIX_"),
 		sflags.FlagTag("yaml"),
+		sflags.FlagDivider("."),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
@@ -45,9 +49,9 @@ func main() {
 		Version: "0.1.0",
 		Flags:   flags,
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			// Load config from file and env, using cliflagv3 to read CLI flags
-			// Order: config file -> env vars -> CLI flags (highest priority)
-			conf, err := config.LoadConfig(cfg, cmd)
+			// Load config from file and merge with CLI flags
+			// cfg already has CLI values populated via sflags pointers
+			conf, err := config.LoadConfig(cfg)
 			if err != nil {
 				return ctx, fmt.Errorf("failed to load config: %w", err)
 			}

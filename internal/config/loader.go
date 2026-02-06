@@ -3,27 +3,34 @@ package config
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"slices"
-	"strconv"
+	"time"
 
+	"dario.cat/mergo"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 	"github.com/gookit/goutil/dump"
 	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/cliflagv3"
 	"github.com/knadh/koanf/providers/file"
 	koanf "github.com/knadh/koanf/v2"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
-	"github.com/urfave/cli/v3"
 )
 
-// LoadConfig reads configuration from multiple sources in priority order:
-// 1. Config file (YAML) - lowest priority
-// 2. Environment variables (PANIX_*) - via urfave/cli v3 flag sources
-// 3. CLI flags - highest priority (passed via cmd parameter)
-func LoadConfig(flags *config_flags.Flags, cmd *cli.Command) (*Config, error) {
+// configFileOnly is used to unmarshal only the config file
+type configFileOnly struct {
+	Flags       config_flags.Flags `yaml:"flags"`
+	Root        *Root              `yaml:"root"`
+	ColorScheme *ColorScheme       `yaml:"colorScheme"`
+}
+
+// LoadConfig reads configuration from multiple sources:
+// 1. Config file (YAML) - for Root and flags
+// 2. CLI flags - override config file values
+func LoadConfig(flags *config_flags.Flags) (*Config, error) {
 	k := koanf.New(".")
 
+	// Load YAML config file (if exists)
 	_, err := os.Stat(flags.Config)
 	if err == nil {
 		err = k.Load(file.Provider(flags.Config), yaml.Parser())
@@ -32,45 +39,58 @@ func LoadConfig(flags *config_flags.Flags, cmd *cli.Command) (*Config, error) {
 		}
 	}
 
-	tmp := cliflagv3.Provider(cmd, "-")
-
-	tmp2, err := tmp.Read()
-	if err != nil {
-		return nil, err
-	}
-
-	for name, flag := range tmp2 {
-		fmt.Println(strconv.Quote(name), strconv.Quote(fmt.Sprintf("%v", flag)))
-	}
-
-	if cmd != nil {
-		err = k.Load(tmp, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error loading CLI flags: %w", err)
-		}
-	}
-
-	// Unmarshal into a Config struct
-	conf := &Config{}
-	err = k.UnmarshalWithConf("", &conf, koanf.UnmarshalConf{
+	// Parse config file into temporary struct with custom decode hook for time.Duration
+	fileCfg := &configFileOnly{}
+	err = k.UnmarshalWithConf("", &fileCfg, koanf.UnmarshalConf{
 		Tag:       "yaml",
 		FlatPaths: false,
 		DecoderConfig: &mapstructure.DecoderConfig{
-			ErrorUnused:          true,
+			ErrorUnused:          false,
 			WeaklyTypedInput:     true,
 			Squash:               true,
 			IgnoreUntaggedFields: true,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				// Custom hook to convert int/int64 (seconds) to time.Duration
+				func(from, to reflect.Type, data interface{}) (interface{}, error) {
+					if to == reflect.TypeOf(time.Duration(0)) {
+						switch v := data.(type) {
+						case int:
+							return time.Duration(v) * time.Second, nil
+						case int64:
+							return time.Duration(v) * time.Second, nil
+						case float64:
+							return time.Duration(v) * time.Second, nil
+						}
+					}
+					return data, nil
+				},
+			),
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to decode into struct: %w", err)
+		return nil, fmt.Errorf("unable to decode config file: %w", err)
 	}
 
-	conf.Flags.Setup()
+	// Merge config file flags into CLI flags using mergo
+	// CLI flags (already in flags) take precedence over config file values
+	// Default mergo behavior: only fills zero values in dst from src
+	if err := mergo.Merge(flags, fileCfg.Flags); err != nil {
+		return nil, fmt.Errorf("error merging config: %w", err)
+	}
 
+	// Create final config
+	conf := &Config{
+		Flags:       flags,
+		Root:        fileCfg.Root,
+		ColorScheme: fileCfg.ColorScheme,
+	}
+
+	// Apply defaults
 	if conf.ColorScheme == nil {
 		conf.ColorScheme = defaultColorScheme()
 	}
+
+	flags.Setup()
 
 	err = conf.initAndValidateConfig()
 	if err != nil {
