@@ -90,17 +90,23 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 func (w *Workflow) CreateWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
-	for _, flake := range w.state.Conf.Root.Flakes.SortedMap() {
+	for _, flakePair := range w.state.Conf.Root.Flakes.Omap.Pairs() {
+		flake := flakePair.Value
 
 		subPool.SubmitErr(func() error {
 
 			flakePool := w.state.Pool.NewGroup()
 
-			for _, configuration := range flake.Configurations.SortedMap() {
+			for _, configPair := range flake.Configurations.Omap.Pairs() {
+				configuration := configPair.Value
 
 				build := once_async.NewOnceAsync()
 
-				for _, machine := range configuration.Machines.SortedMap() {
+				for _, machinePair := range configuration.Machines.Omap.Pairs() {
+					machine := machinePair.Value
+
+					// Capture loop variables for goroutine
+					machine, configuration, flake := machine, configuration, flake
 
 					flakePool.SubmitErr(func() error {
 
@@ -186,7 +192,12 @@ func (w *Workflow) CreateWorkflow() error {
 		})
 	}
 
-	return subPool.Wait()
+	err := subPool.Wait()
+
+	// Close the hook channel to signal completion to the TUI
+	w.updateHook.Close()
+
+	return err
 }
 
 // Helpers
@@ -212,9 +223,12 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 func (w *WorkflowState) RootTree(function func(i int, machine *config.Machine)) {
 	i := 0
 
-	for _, flake := range w.Conf.Root.Flakes.SortedMap() {
-		for _, configuration := range flake.Configurations.SortedMap() {
-			for _, machine := range configuration.Machines.SortedMap() {
+	for _, flakePair := range w.Conf.Root.Flakes.Omap.Pairs() {
+		flake := flakePair.Value
+		for _, configPair := range flake.Configurations.Omap.Pairs() {
+			configuration := configPair.Value
+			for _, machinePair := range configuration.Machines.Omap.Pairs() {
+				machine := machinePair.Value
 				function(i, machine)
 				i++
 			}

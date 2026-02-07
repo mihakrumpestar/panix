@@ -84,7 +84,7 @@ func defaultColorScheme() *ColorScheme {
 		StatusRunning: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#3b6bec")), // Blue
 
-		// Entitys
+		// Entities
 		Flake: ColorSchemeLogEntity{
 			Color: lipgloss.NewStyle().
 				Bold(true).
@@ -156,17 +156,17 @@ func defaultColorScheme() *ColorScheme {
 
 		// Pre-defined and pre-parsed color pairs for different phase states
 		PhaseColorPairs: map[PhaseState][2]colorful.Color{
-			PhaseStateActive:    {mustColorfullHex("#2952c3"), mustColorfullHex("#3b6bec")}, // Dark blue variations
-			PhaseStateFailed:    {mustColorfullHex("#5f1414"), mustColorfullHex("#DC2626")}, // Dark red variations
-			PhaseStateCompleted: {mustColorfullHex("#14532D"), mustColorfullHex("#11883d")}, // Dark green variations
-			PhaseStateDefault:   {mustColorfullHex("#535862"), mustColorfullHex("#6B7280")}, // Dark gray solid
+			PhaseStateActive:    {mustColorfulHex("#2952c3"), mustColorfulHex("#3b6bec")}, // Dark blue variations
+			PhaseStateFailed:    {mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")}, // Dark red variations
+			PhaseStateCompleted: {mustColorfulHex("#14532D"), mustColorfulHex("#11883d")}, // Dark green variations
+			PhaseStateDefault:   {mustColorfulHex("#535862"), mustColorfulHex("#6B7280")}, // Dark gray solid
 		},
 	}
 }
 
 // Helpers
 
-func mustColorfullHex(hex string) colorful.Color {
+func mustColorfulHex(hex string) colorful.Color {
 	c, err := colorful.Hex(hex)
 	if err != nil {
 		panic(fmt.Sprintf("Invalid color hex %s: %v", hex, err))

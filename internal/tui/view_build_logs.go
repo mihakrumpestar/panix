@@ -38,7 +38,8 @@ func (m *model) ViewBuildLogs() string {
 	prefixLen := treeInitIndent
 
 	// Build separate trees for each flake
-	for _, flake := range m.workflow.State().Conf.Root.Flakes.SortedMap() {
+	for _, flakePair := range m.workflow.State().Conf.Root.Flakes.Omap.Pairs() {
+		flake := flakePair.Value
 		title := m.MostLeftAndMostRight(prefixLen,
 			nodeTitle(colors.Flake, &flake.Attributes),
 			m.DurationDas(colors.Flake, m.workflow.State().Conf.TargetsLogs.Get(flake.Xpath).CalculateDurationAndError()),
@@ -51,7 +52,8 @@ func (m *model) ViewBuildLogs() string {
 
 			// Add configurations
 		prefixLen += treeStep
-		for _, configuration := range flake.Configurations.SortedMap() {
+		for _, configPair := range flake.Configurations.Omap.Pairs() {
+			configuration := configPair.Value
 			title = m.MostLeftAndMostRight(prefixLen,
 				nodeTitle(colors.Configuration, &configuration.Attributes),
 				m.DurationDas(colors.Configuration, m.workflow.State().Conf.TargetsLogs.Get(configuration.Xpath).CalculateDurationAndError()),
@@ -64,7 +66,8 @@ func (m *model) ViewBuildLogs() string {
 				m.addChildLogs(prefixLenScoped, &machine.Attributes, machineNode, colors, PhaseFirstMachineSecond, phases.Inspect)
 			})
 
-			m.addChildLogs(prefixLen, &configuration.Machines.First().Attributes, configurationNode, colors, PhaseOnly, phases.Build)
+			firstMachine := configuration.Machines.Omap.Pairs()[0].Value
+			m.addChildLogs(prefixLen, &firstMachine.Attributes, configurationNode, colors, PhaseOnly, phases.Build)
 
 			m.forMachines(prefixLen, configurationNode, configuration, func(prefixLenScoped int, machine *config.Machine, machineNode *tree.Tree) {
 				m.addChildLogs(prefixLenScoped, &machine.Attributes, machineNode, colors, MachineFirstPhaseSecond, phases.PhasesInOrder()[2:]...)
@@ -83,7 +86,8 @@ func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configu
 	colors := m.workflow.State().Conf.ColorScheme
 
 	prefixLen += treeStep
-	for _, machine := range configuration.Machines.SortedMap() {
+	for _, machinePair := range configuration.Machines.Omap.Pairs() {
+		machine := machinePair.Value
 		title := m.MostLeftAndMostRight(prefixLen,
 			nodeTitle(colors.Machine, &machine.Attributes),
 			m.DurationDas(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(machine.Xpath).CalculateDurationAndError()),
