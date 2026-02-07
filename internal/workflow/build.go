@@ -18,11 +18,15 @@ import (
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
 	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-			if w.state.Conf.Flags.DryRun {
-				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
+			// Initialize MetaBuild if nil
+			if configuration.MetaBuild == nil {
+				configuration.MetaBuild = &config.MetaBuild{}
 			}
 
-			mb := configuration.MetaBuild
+			if w.state.Conf.Flags.DryRun {
+				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
+				return nil
+			}
 
 			// System closure
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.URL, configuration.Name)}
@@ -32,7 +36,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 				return err
 			}
 
-			mb.SystemClosure = parsedOutput[0].Outputs.Out
+			configuration.MetaBuild.SystemClosure = parsedOutput[0].Outputs.Out
 
 			return nil
 		})
