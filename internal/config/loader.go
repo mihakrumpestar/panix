@@ -13,10 +13,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// LoadConfig reads configuration from multiple sources:
-// 1. Defaults (hardcoded) - lowest priority
-// 2. Config file (YAML) - middle priority
-// 3. CLI flags - highest priority
 func LoadConfig(flags config_flags.Flags) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
@@ -41,9 +37,11 @@ func LoadConfig(flags config_flags.Flags) (*Config, error) {
 		return nil, errors.Wrap(err, "failed merging config with cli flags")
 	}
 
-	dump.P(conf.Root)
-
 	// Apply defaults
+	if conf.Flags == nil {
+		conf.Flags = &config_flags.Flags{}
+	}
+
 	if conf.ColorScheme == nil {
 		conf.ColorScheme = defaultColorScheme()
 	}
@@ -64,7 +62,6 @@ func LoadConfig(flags config_flags.Flags) (*Config, error) {
 	}
 
 	if conf.Flags.Logging.Debug {
-
 		dump.P(conf.Flags)
 	}
 
@@ -88,7 +85,7 @@ func (c *Config) initAndValidateConfig() error {
 	}
 
 	for flakeName, flake := range c.Root.Flakes.SortedMap() {
-		if flake.Url == "" {
+		if flake.URL == "" {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
 
@@ -128,7 +125,7 @@ func (c *Config) initAndValidateConfig() error {
 	return nil
 }
 
-// FilterConfigEntrys filters the configuration based on command-line or global selections
+// FilterConfigEntries filters the configuration based on command-line or global selections
 func (c *Config) filterRootTree() error {
 	for flakeName, flake := range c.Root.Flakes.SortedMap() {
 		if flake.Disabled {
@@ -148,7 +145,7 @@ func (c *Config) filterRootTree() error {
 					continue
 				}
 
-				if !machineContainesTags(machine.Tags, c.Flags.Tags) {
+				if !machineContainsTags(machine.Tags, c.Flags.Tags) {
 					delete(configuration.Machines, machineName)
 					continue
 				}
@@ -205,7 +202,7 @@ func (c *Config) initLogs() error {
 
 // Helpers
 
-func machineContainesTags(tags, filterTags []string) bool {
+func machineContainsTags(tags, filterTags []string) bool {
 	if len(filterTags) == 0 {
 		return true
 	}

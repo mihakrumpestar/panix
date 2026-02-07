@@ -15,7 +15,7 @@ type SecretConfig struct {
 
 type Local struct {
 	Path          *string `yaml:"path"`
-	CommandOutput *string `yaml:"commandOutput"`
+	CommandOutput *string `yaml:"command_output"`
 }
 
 type Remote struct {
@@ -26,11 +26,11 @@ type Remote struct {
 
 func (sc *SecretConfig) Validate() error {
 	if sc.Local.Path == nil && sc.Local.CommandOutput == nil {
-		return errors.New("both local input socrets options are empty")
+		return errors.New("both local input secrets options are empty")
 	}
 
 	if sc.Local.Path != nil && sc.Local.CommandOutput != nil {
-		return errors.New("can't use both local input socrets options")
+		return errors.New("can't use both local input secrets options")
 	}
 
 	if sc.Remote.Path == "" {
