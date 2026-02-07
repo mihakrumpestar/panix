@@ -68,12 +68,20 @@ func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 
 func setDefault[T comparable](reverse bool, current *T, def, zero T) {
 	if reverse {
-		if *current == def {
-			*current = zero
-		}
+		clearDefault(current, def, zero)
 	} else {
-		if *current == zero {
-			*current = def
-		}
+		applyDefault(current, def, zero)
+	}
+}
+
+func applyDefault[T comparable](current *T, def, zero T) {
+	if *current == zero {
+		*current = def
+	}
+}
+
+func clearDefault[T comparable](current *T, def, zero T) {
+	if *current == def {
+		*current = zero
 	}
 }

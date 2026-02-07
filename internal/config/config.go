@@ -4,7 +4,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
-	"github.com/mihakrumpestar/panix/internal/pkg/sorted_map"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"go.uber.org/atomic"
 )
@@ -21,23 +20,18 @@ type Config struct {
 // Root
 
 type Root struct {
-	Flakes                       sorted_map.SortedMap[string, *Flake] `yaml:"flakes"`
+	Flakes                       *OrderedMap[string, *Flake] `yaml:"flakes"`
 	config_attributes.Attributes `yaml:",inline"`
 }
 
 func (r *Root) Init() error {
-	err := r.Attributes.Init("", &config_attributes.Attributes{}, &config_flags.Flags{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return r.Attributes.Init("", &config_attributes.Attributes{}, &config_flags.Flags{})
 }
 
 // Flake
 
 type Flake struct {
-	Configurations               sorted_map.SortedMap[string, *Configuration] `yaml:"configurations"`
+	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations"`
 	config_attributes.Attributes `yaml:",inline"`
 	URL                          string     `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
 	FlakeHooks                   FlakeHooks `yaml:"flake_hooks"`
@@ -49,18 +43,13 @@ type FlakeHooks struct {
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes, flags *config_flags.Flags) error {
-	err := f.Attributes.Init(name, attr, flags)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return f.Attributes.Init(name, attr, flags)
 }
 
 // Configuration
 
 type Configuration struct {
-	Machines                     sorted_map.SortedMap[string, *Machine] `yaml:"machines"`
+	Machines                     *OrderedMap[string, *Machine] `yaml:"machines"`
 	config_attributes.Attributes `yaml:",inline"`
 	// TODO: FlakeOutput string `yaml:"flake_output"` // Option to override if non-standard style
 	// Internal
@@ -73,16 +62,8 @@ type MetaBuild struct {
 }
 
 func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Flags) error {
-	err := c.Attributes.Init(name, &parent.Attributes, flags)
-	if err != nil {
-		return err
-	}
-
-	// Internal
-
 	c.Flake = parent
-
-	return nil
+	return c.Attributes.Init(name, &parent.Attributes, flags)
 }
 
 // Machine
