@@ -27,14 +27,14 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 		storeArgs += "?remote-store=local?root=/mnt"
 	}
 
-	commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + machine.Ssh.Hostname + storeArgs}, toTransfer...)
+	commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + machine.SSH.Hostname + storeArgs}, toTransfer...)
 
 	err := exc.Exec("nix copy",
 		"closure copy failed",
 		commandWithArgs,
 		executioner.SkipIfLocal(),
 		executioner.DisableAutoSshCommand(),
-		executioner.Env(machine.Ssh.MaybeSshEnvOpts()),
+		executioner.Env(machine.SSH.MaybeSshEnvOpts()),
 	)
 	if err != nil {
 		return err
