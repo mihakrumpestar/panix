@@ -57,13 +57,7 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					conf := ConfFromContext(ctx)
-					phases := []phases.Phase{phases.Inspect}
-					workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
-					if err != nil {
-						return err
-					}
-					return RunTUI(workflowExec)
+					return runWorkflow(ctx, []phases.Phase{phases.Inspect})
 				},
 			},
 			{
@@ -80,12 +74,7 @@ Same as "deploy --bootstrap.only".`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					conf := ConfFromContext(ctx)
 					conf.Flags.Bootstrap.Only = true
-					phases := phases.PhasesInOrder()
-					workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
-					if err != nil {
-						return err
-					}
-					return RunTUI(workflowExec)
+					return runWorkflow(ctx, phases.PhasesInOrder())
 				},
 			},
 			{
@@ -93,13 +82,7 @@ Same as "deploy --bootstrap.only".`,
 				Usage:       "Build all selected closures",
 				Description: "Build compiles the NixOS configurations for all selected machines.",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					conf := ConfFromContext(ctx)
-					phases := []phases.Phase{phases.Build}
-					workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
-					if err != nil {
-						return err
-					}
-					return RunTUI(workflowExec)
+					return runWorkflow(ctx, []phases.Phase{phases.Build})
 				},
 			},
 			{
@@ -115,13 +98,7 @@ Same as "deploy --bootstrap.only".`,
 
 This is the main command for deploying NixOS configurations.`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					conf := ConfFromContext(ctx)
-					phases := phases.PhasesInOrder()
-					workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
-					if err != nil {
-						return err
-					}
-					return RunTUI(workflowExec)
+					return runWorkflow(ctx, phases.PhasesInOrder())
 				},
 			},
 			{
@@ -129,13 +106,7 @@ This is the main command for deploying NixOS configurations.`,
 				Usage:       "Deploy secrets to all machines",
 				Description: "Secrets deploys encrypted secrets and credentials to all selected machines.",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					conf := ConfFromContext(ctx)
-					phases := []phases.Phase{phases.Inspect, phases.Secrets}
-					workflowExec, err := workflow.NewWorkflow(ctx, conf, phases)
-					if err != nil {
-						return err
-					}
-					return RunTUI(workflowExec)
+					return runWorkflow(ctx, []phases.Phase{phases.Inspect, phases.Secrets})
 				},
 			},
 		},
@@ -149,18 +120,19 @@ This is the main command for deploying NixOS configurations.`,
 
 // ConfFromContext retrieves config from context
 func ConfFromContext(ctx context.Context) *config.Config {
-	conf := ctx.Value(ContextConfigKey).(*config.Config)
-	if conf == nil {
+	conf, ok := ctx.Value(ContextConfigKey).(*config.Config)
+	if !ok || conf == nil {
 		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", ContextConfigKey))
 	}
 	return conf
 }
 
-// RunTUI runs the TUI with the given workflow
-func RunTUI(workflowExec *workflow.Workflow) error {
-	err := tui.NewTui(workflowExec)
+// runWorkflow creates a workflow with the given phases and runs the TUI
+func runWorkflow(ctx context.Context, phaseList []phases.Phase) error {
+	conf := ConfFromContext(ctx)
+	workflowExec, err := workflow.NewWorkflow(ctx, conf, phaseList)
 	if err != nil {
-		os.Exit(1)
+		return err
 	}
-	return nil
+	return tui.NewTui(workflowExec)
 }
