@@ -26,7 +26,7 @@ type Config struct {
 
 type Root struct {
 	Flakes                       sorted_map.SortedMap[string, *Flake] `yaml:"flakes"`
-	config_attributes.Attributes `yaml:",squash"`
+	config_attributes.Attributes `yaml:""`
 }
 
 func (r *Root) Init() error {
@@ -42,14 +42,14 @@ func (r *Root) Init() error {
 
 type Flake struct {
 	Configurations               sorted_map.SortedMap[string, *Configuration] `yaml:"configurations"`
-	config_attributes.Attributes `yaml:",squash"`
+	config_attributes.Attributes `yaml:""`
 	Url                          string     `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
 	FlakeHooks                   FlakeHooks `yaml:"flakeHooks"`
 }
 
 type FlakeHooks struct {
-	Pre  string `yaml:",pre"`
-	Post string `yaml:",post"`
+	Pre  string `yaml:"pre"`
+	Post string `yaml:"post"`
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes, flags *config_flags.Flags) error {
@@ -65,7 +65,7 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes, flags *con
 
 type Configuration struct {
 	Machines                     sorted_map.SortedMap[string, *Machine] `yaml:"machines"`
-	config_attributes.Attributes `yaml:",squash"`
+	config_attributes.Attributes `yaml:""`
 	// TODO: FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
 	// Internal
 	Flake     *Flake
@@ -96,7 +96,7 @@ func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Fla
 // Machine
 
 type Machine struct {
-	config_attributes.Attributes `yaml:",squash"`
+	config_attributes.Attributes `yaml:""`
 	// Internal
 	Configuration *Configuration
 	MetaStatus    *MetaStatus

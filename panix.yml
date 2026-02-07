@@ -1,8 +1,7 @@
 flags:
   #bootstrap:
   #  autoBootstrap: false
-  timeout: 7200 # 2h
-  requireAllSuccess: false
+  timeout: 5500s
   overrideLocalMachine: tmp
   #dryRun: false
 
