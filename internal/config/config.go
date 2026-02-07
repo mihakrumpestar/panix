@@ -109,8 +109,8 @@ type MetaStatus struct { // Atomic due to being read and write at the same time
 func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.Flags) error {
 	// Only machine has them always initialized (root, flake, configurations do not)
 
-	if m.Ssh == nil { // Has to be initialized before InitAttributes
-		m.Ssh = &ssh.SshClient{}
+	if m.SSH == nil { // Has to be initialized before InitAttributes
+		m.SSH = &ssh.SshClient{}
 	}
 
 	// Regular

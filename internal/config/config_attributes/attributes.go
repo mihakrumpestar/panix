@@ -12,7 +12,7 @@ import (
 // Flake, Configuration and Machine Attributes
 
 type Attributes struct {
-	Ssh                 *ssh.SshClient  `yaml:"ssh,omitempty"`
+	SSH                 *ssh.SshClient  `yaml:"ssh,omitempty"`
 	Tags                []string        `yaml:"tags"`
 	Secrets             []*SecretConfig `yaml:"secrets,omitempty"`
 	Disabled            bool            `yaml:"disabled"`
@@ -45,7 +45,7 @@ func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Fla
 		return
 	}
 
-	err = a.Ssh.Init(sshConfig, name, flags.OverrideLocalMachine)
+	err = a.SSH.Init(sshConfig, name, flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrap(err, "ssh")
 	}
@@ -62,8 +62,8 @@ func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Fla
 
 // PassAttributesInto has to be run before rest of the Init
 func (a *Attributes) PassAttributesInto(parentAttr *Attributes) {
-	if a.Ssh == nil {
-		a.Ssh = parentAttr.Ssh
+	if a.SSH == nil {
+		a.SSH = parentAttr.SSH
 	}
 
 	a.Tags = append(a.Tags, parentAttr.Tags...)

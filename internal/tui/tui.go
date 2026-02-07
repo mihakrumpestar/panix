@@ -88,7 +88,7 @@ func NewTui(workflow *workflow.Workflow) error {
 
 	debugOutput.WriteString("TUI initialized\n")
 
-	cpuprofile := workflow.State().Conf.Flags.Logging.Cpuprofile
+	cpuprofile := workflow.State().Conf.Flags.Logging.CPUProfile
 	if cpuprofile != "" {
 		f, err := os.Create(cpuprofile)
 		if err != nil {
