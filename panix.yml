@@ -21,7 +21,7 @@ root:
         #    docker-swarm:
         personal-workstation:
           machines:
-            personal-workstation: 
+            personal-workstation:
               #secrets:
               #  - local:
               #      path: ./README.md

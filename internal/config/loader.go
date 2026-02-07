@@ -80,11 +80,12 @@ func (c *Config) initAndValidateConfig() error {
 		return err
 	}
 
-	if len(c.Root.Flakes) == 0 {
+	if c.Root.Flakes.Len() == 0 {
 		return fmt.Errorf("flakes is required")
 	}
 
-	for flakeName, flake := range c.Root.Flakes.SortedMap() {
+	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
+		flakeName, flake := flakePair.Key, flakePair.Value
 		if flake.URL == "" {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
@@ -94,12 +95,13 @@ func (c *Config) initAndValidateConfig() error {
 			return err
 		}
 
-		if len(flake.Configurations) == 0 {
+		if flake.Configurations.Len() == 0 {
 			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
 		}
 
-		for configurationName, configuration := range flake.Configurations.SortedMap() {
-			if len(configuration.Machines) == 0 {
+		for _, configPair := range flake.Configurations.Omap.Pairs() {
+			configurationName, configuration := configPair.Key, configPair.Value
+			if configuration.Machines.Len() == 0 {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
@@ -108,11 +110,8 @@ func (c *Config) initAndValidateConfig() error {
 				return err
 			}
 
-			for machineName, machine := range configuration.Machines.SortedMap() {
-				if machine == nil {
-					machine = &Machine{}
-					configuration.Machines[machineName] = machine
-				}
+			for _, machinePair := range configuration.Machines.Omap.Pairs() {
+				machineName, machine := machinePair.Key, machinePair.Value
 
 				err = machine.Init(machineName, configuration, c.Flags)
 				if err != nil {
@@ -127,41 +126,41 @@ func (c *Config) initAndValidateConfig() error {
 
 // FilterConfigEntries filters the configuration based on command-line or global selections
 func (c *Config) filterRootTree() error {
-	for flakeName, flake := range c.Root.Flakes.SortedMap() {
-		if flake.Disabled {
-			delete(c.Root.Flakes, flakeName)
+	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
+		flake := flakePair.Value
+		if flake == nil || flake.Configurations == nil {
+			c.Root.Flakes.Omap.Del(flakePair.Key)
 			continue
 		}
 
-		for configurationName, configuration := range flake.Configurations.SortedMap() {
-			if configuration.Disabled {
-				delete(flake.Configurations, configurationName)
+		for _, configPair := range flake.Configurations.Omap.Pairs() {
+			config := configPair.Value
+			if config == nil || config.Disabled || config.Machines == nil {
+				flake.Configurations.Omap.Del(configPair.Key)
 				continue
 			}
 
-			for machineName, machine := range configuration.Machines.SortedMap() {
-				if machine.Disabled {
-					delete(configuration.Machines, machineName)
-					continue
-				}
-
-				if !machineContainsTags(machine.Tags, c.Flags.Tags) {
-					delete(configuration.Machines, machineName)
-					continue
+			// Filter machines
+			for _, machinePair := range config.Machines.Omap.Pairs() {
+				machine := machinePair.Value
+				if machine == nil || machine.Disabled || !machineContainsTags(machine.Tags, c.Flags.Tags) {
+					config.Machines.Omap.Del(machinePair.Key)
 				}
 			}
 
-			if len(configuration.Machines) == 0 {
-				delete(flake.Configurations, configurationName)
+			// Delete config if no machines left
+			if config.Machines.Omap.Len() == 0 {
+				flake.Configurations.Omap.Del(configPair.Key)
 			}
 		}
 
-		if len(flake.Configurations) == 0 {
-			delete(c.Root.Flakes, flakeName)
+		// Delete flake if no configs left
+		if flake.Configurations.Omap.Len() == 0 {
+			c.Root.Flakes.Omap.Del(flakePair.Key)
 		}
 	}
 
-	if len(c.Root.Flakes) == 0 {
+	if c.Root.Flakes.Omap.Len() == 0 {
 		return fmt.Errorf("no flakes left after filtering")
 	}
 
@@ -176,19 +175,22 @@ func (c *Config) initLogs() error {
 
 	c.TargetsLogs = targetsLogs
 
-	for _, flake := range c.Root.Flakes.SortedMap() {
+	for _, pair := range c.Root.Flakes.Omap.Pairs() {
+		flake := pair.Value
 		flakeLogs, err := targetsLogs.Add(flake.Xpath)
 		if err != nil {
 			return err
 		}
 
-		for _, configuration := range flake.Configurations.SortedMap() {
+		for _, configPair := range flake.Configurations.Omap.Pairs() {
+			configuration := configPair.Value
 			configurationLogs, err := targetsLogs.AddWithParent(configuration.Xpath, flakeLogs)
 			if err != nil {
 				return err
 			}
 
-			for _, machine := range configuration.Machines.SortedMap() {
+			for _, machinePair := range configuration.Machines.Omap.Pairs() {
+				machine := machinePair.Value
 				_, err := targetsLogs.AddWithParent(machine.Xpath, configurationLogs)
 				if err != nil {
 					return err

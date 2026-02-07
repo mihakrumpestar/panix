@@ -72,7 +72,7 @@ This command will:
 
 Same as "deploy --bootstrap.only".`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					conf := ConfFromContext(ctx)
+					conf := confFromContext(ctx)
 					conf.Flags.Bootstrap.Only = true
 					return runWorkflow(ctx, phases.PhasesInOrder())
 				},
@@ -118,21 +118,23 @@ This is the main command for deploying NixOS configurations.`,
 	}
 }
 
-// ConfFromContext retrieves config from context
-func ConfFromContext(ctx context.Context) *config.Config {
-	conf, ok := ctx.Value(ContextConfigKey).(*config.Config)
-	if !ok || conf == nil {
-		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", ContextConfigKey))
-	}
-	return conf
-}
+// Helpers
 
 // runWorkflow creates a workflow with the given phases and runs the TUI
 func runWorkflow(ctx context.Context, phaseList []phases.Phase) error {
-	conf := ConfFromContext(ctx)
+	conf := confFromContext(ctx)
 	workflowExec, err := workflow.NewWorkflow(ctx, conf, phaseList)
 	if err != nil {
 		return err
 	}
 	return tui.NewTui(workflowExec)
+}
+
+// confFromContext retrieves config from context
+func confFromContext(ctx context.Context) *config.Config {
+	conf, ok := ctx.Value(ContextConfigKey).(*config.Config)
+	if !ok || conf == nil {
+		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", ContextConfigKey))
+	}
+	return conf
 }
