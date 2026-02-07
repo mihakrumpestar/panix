@@ -9,17 +9,13 @@ import (
 	"go.uber.org/atomic"
 )
 
-const (
-	ContextConfigKey = "config"
-)
-
 type Config struct {
 	Flags       *config_flags.Flags `yaml:"flags"`
 	Root        *Root               `yaml:"root"`
-	ColorScheme *ColorScheme        `yaml:"colorScheme"`
+	ColorScheme *ColorScheme        `yaml:"color_scheme"`
 
 	// Internal
-	*logs.TargetsLogs
+	*logs.TargetsLogs `yaml:"-"`
 }
 
 // Root
@@ -43,8 +39,8 @@ func (r *Root) Init() error {
 type Flake struct {
 	Configurations               sorted_map.SortedMap[string, *Configuration] `yaml:"configurations"`
 	config_attributes.Attributes `yaml:",inline"`
-	Url                          string     `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
-	FlakeHooks                   FlakeHooks `yaml:"flakeHooks"`
+	URL                          string     `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
+	FlakeHooks                   FlakeHooks `yaml:"flake_hooks"`
 }
 
 type FlakeHooks struct {
@@ -66,10 +62,10 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes, flags *con
 type Configuration struct {
 	Machines                     sorted_map.SortedMap[string, *Machine] `yaml:"machines"`
 	config_attributes.Attributes `yaml:",inline"`
-	// TODO: FlakeOutput string `yaml:"flakeOutput"` // Option to override if non-standard style
+	// TODO: FlakeOutput string `yaml:"flake_output"` // Option to override if non-standard style
 	// Internal
-	Flake     *Flake
-	MetaBuild MetaBuild
+	Flake     *Flake     `yaml:"-"`
+	MetaBuild *MetaBuild `yaml:"-"`
 }
 
 type MetaBuild struct {
@@ -94,8 +90,8 @@ func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Fla
 type Machine struct {
 	config_attributes.Attributes `yaml:",inline"`
 	// Internal
-	Configuration *Configuration
-	MetaStatus    *MetaStatus
+	Configuration *Configuration `yaml:"-"`
+	MetaStatus    *MetaStatus    `yaml:"-"`
 }
 
 type MetaStatus struct { // Atomic due to being read and write at the same time
@@ -147,8 +143,8 @@ func (m *Machine) MaybeSudo() []string {
 	return []string{m.OverrideSudoProgram}
 }
 
-func (m *Machine) MaybeBootstrapingPath(restOfPath string) string {
-	if m.Flags.Bootstrap.DisableAuto || !m.MetaStatus.Bootstrapped.Load() {
+func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
+	if m.Flags.Bootstrap.DisableAuto || m.MetaStatus.Bootstrapped.Load() {
 		return restOfPath
 	}
 

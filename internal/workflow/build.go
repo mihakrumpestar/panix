@@ -25,7 +25,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 			mb := configuration.MetaBuild
 
 			// System closure
-			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.Url, configuration.Name)}
+			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.URL, configuration.Name)}
 
 			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
 			if err != nil {

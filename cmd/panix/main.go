@@ -15,6 +15,10 @@ import (
 	"github.com/urfave/sflags/gen/gcli"
 )
 
+const (
+	ContextConfigKey = "config"
+)
+
 func main() {
 	ctx := context.Background()
 
@@ -40,7 +44,7 @@ func main() {
 				return ctx, fmt.Errorf("failed to load config: %w", err)
 			}
 
-			return context.WithValue(ctx, config.ContextConfigKey, conf), nil
+			return context.WithValue(ctx, ContextConfigKey, conf), nil
 		},
 		Commands: []*cli.Command{
 			{
@@ -131,7 +135,7 @@ This is the main command for deploying NixOS configurations.`,
 					if err != nil {
 						return err
 					}
-					return tui.NewTui(workflowExec)
+					return RunTUI(workflowExec)
 				},
 			},
 		},
@@ -145,9 +149,9 @@ This is the main command for deploying NixOS configurations.`,
 
 // ConfFromContext retrieves config from context
 func ConfFromContext(ctx context.Context) *config.Config {
-	conf := ctx.Value(config.ContextConfigKey).(*config.Config)
+	conf := ctx.Value(ContextConfigKey).(*config.Config)
 	if conf == nil {
-		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", config.ContextConfigKey))
+		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", ContextConfigKey))
 	}
 	return conf
 }

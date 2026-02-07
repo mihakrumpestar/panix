@@ -19,26 +19,26 @@ type Attributes struct {
 	OverrideSudoProgram string          `yaml:"override_sudo_program"`
 	HardwareConfigPath  string          `yaml:"hardware_config_path"`
 
-	PostBootstrapHook string `yaml:"postBootstrapHook"`
+	PostBootstrapHook string `yaml:"post_bootstrap_hook"`
 
 	// Internal
-	Name    string
-	Xpath   Xpath
-	Message string
-	Flags   *config_flags.Flags
+	Name    string              `yaml:"-"`
+	Xpath   Xpath               `yaml:"-"`
+	Message string              `yaml:"-"`
+	Flags   *config_flags.Flags `yaml:"-"`
 }
 
 func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) (err error) {
-	defer func() {
-		err = errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
-	}()
-
 	a.Name = name
 	a.Flags = flags
 
 	a.Tags = append(a.Tags, name)
 
 	a.PassAttributesInto(attr)
+
+	defer func() {
+		err = errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
+	}()
 
 	sshConfig, err := ssh.GetCachedSshConfig()
 	if err != nil {

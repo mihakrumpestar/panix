@@ -1,15 +1,15 @@
 flags:
   #bootstrap:
-  #  autoBootstrap: false
+  #  auto_bootstrap: false
   timeout: 5500s
-  overrideLocalMachine: tmp
-  #dryRun: false
+  override_local_machine: tmp
+  #dry_run: false
 
 root:
   flakes:
     infrastructure:
       url: path:../infrastructure
-      flakeHooks:
+      flake_hooks:
         pre: exit 0
         post: exit 0
       configurations:
@@ -28,7 +28,7 @@ root:
               #    remote:
               #      path: /tmp/README.md
               #  - local:
-              #      commandOutput: echo OK
+              #      command_output: echo OK
               #    remote:
               #      path: /tmp/README2.md
             fake:
@@ -50,5 +50,5 @@ root:
                 #hostname: 10.0.60.2
                 username: root
                 port: 22222
-                #identityFile: temp_key
-              #postBootstrapHook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
+                #identity_file: temp_key
+              #post_bootstrap_hook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
