@@ -27,7 +27,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 
 			// TCP check
 
-			commandWithArgs := []string{"nc", "-zvw1", machine.Ssh.Hostname, fmt.Sprintf("%d", machine.Ssh.Port)}
+			commandWithArgs := []string{"nc", "-zvw1", machine.SSH.Hostname, fmt.Sprintf("%d", machine.SSH.Port)}
 
 			err = exc.Exec(
 				"TCP check",

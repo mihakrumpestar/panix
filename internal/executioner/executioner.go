@@ -77,7 +77,7 @@ func (ex *Executioner) Exec(description, statusIfFailed string, commandWithArgs 
 		opt(excOpt)
 	}
 
-	noMachineOrLocal := ex.machine == nil || ex.machine.Ssh.IsLocal
+	noMachineOrLocal := ex.machine == nil || ex.machine.SSH.IsLocal
 
 	// 1) local short‐circuit
 	if noMachineOrLocal && excOpt.skipIfLocal {
