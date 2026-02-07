@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
@@ -19,24 +18,11 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Get hostname for default
-	hostname, _ := os.Hostname()
+	flags := config_flags.Flags{}
+	flags.SetDefault(false)
 
-	// Create config struct with defaults - this is the single source of truth
-	cfg := &config_flags.Flags{
-		Config:               "panix.yml",
-		OverrideLocalMachine: hostname,
-		Timeout:              7200 * time.Second,
-		Tui: config_flags.Tui{
-			CommandOutputMaxHeight: 8,
-		},
-	}
-
-	// Generate CLI flags from the struct using sflags for urfave/cli v3
-	flags, err := gcli.ParseV3(cfg,
+	parsedFlags, err := gcli.ParseV3(&flags,
 		sflags.EnvPrefix("PANIX_"),
-		sflags.FlagTag("yaml"),
-		sflags.FlagDivider("."),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
@@ -47,11 +33,9 @@ func main() {
 		Name:    "panix",
 		Usage:   "Universal NixOS Deployment Tool",
 		Version: "0.1.0",
-		Flags:   flags,
+		Flags:   parsedFlags,
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			// Load config from file and merge with CLI flags
-			// cfg already has CLI values populated via sflags pointers
-			conf, err := config.LoadConfig(cfg)
+			conf, err := config.LoadConfig(flags)
 			if err != nil {
 				return ctx, fmt.Errorf("failed to load config: %w", err)
 			}
