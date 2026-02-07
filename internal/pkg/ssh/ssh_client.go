@@ -9,11 +9,11 @@ type SshClient struct {
 	Hostname                 string `yaml:"hostname"` // Hostname is alias if all other fileds are empty
 	Port                     uint16 `yaml:"port"`
 	Username                 string `yaml:"username"`
-	IdentityFile             string `yaml:"identityFile"` // Path to private/public key
-	DisableStrictKeyChecking bool   `yaml:"disableStrictKeyChecking"`
+	IdentityFile             string `yaml:"identity_file"` // Path to private/public key
+	DisableStrictKeyChecking bool   `yaml:"disable_strict_key_checking"`
 	// Internal
-	IsLocal         bool
-	HostnameIsAlias bool
+	IsLocal         bool `yaml:"-"`
+	HostnameIsAlias bool `yaml:"-"`
 }
 
 func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachine string) error {

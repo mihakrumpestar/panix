@@ -82,7 +82,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 
 				commandWithArgs = append(commandWithArgs, *secret.Local.Path)
 
-				secretRemotePath := machine.MaybeBootstrapingPath(secret.Remote.Path)
+				secretRemotePath := machine.MaybeBootstrappingPath(secret.Remote.Path)
 				if machine.Ssh.IsLocal {
 					commandWithArgs = append(commandWithArgs, secretRemotePath)
 				} else {
