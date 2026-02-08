@@ -4,6 +4,8 @@ import (
 	"sync"
 )
 
+// TODO: marked for removal
+
 // OnceAsync ensures a func() error runs exactly once.
 // All callers wait for completion and get the same error result.
 type OnceAsync struct {
