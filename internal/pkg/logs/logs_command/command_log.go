@@ -31,7 +31,6 @@ func NewCommandLog(description, statusIfFailed string, msgOnly bool) *CommandLog
 
 	if msgOnly {
 		commandLog.Command.Store(description)
-
 		commandLog.TimeAndState.StartTimer()
 		commandLog.TimeAndState.EndTimerWithError(nil)
 	}
@@ -39,36 +38,54 @@ func NewCommandLog(description, statusIfFailed string, msgOnly bool) *CommandLog
 	return commandLog
 }
 
-// Bytes wrapper
+// String returns the string representation of all lines in StdInOutErr.
 func (cl *CommandLog) String() string {
 	return string(cl.Bytes())
 }
 
-// Bytes returns the byte representation of all lines in StdInOutErr
+// Bytes returns the byte representation of all lines in StdInOutErr.
 func (cl *CommandLog) Bytes() []byte {
+	values := cl.stdInOutErr.Values()
+	if len(values) == 0 {
+		return nil
+	}
+
 	var result bytes.Buffer
-	for i, buf := range cl.stdInOutErr.Values() {
+	result.Grow(estimateSize(values))
+
+	for i, buf := range values {
 		if i > 0 {
 			result.WriteByte('\n')
 		}
 		result.Write(buf.Bytes())
 	}
+
 	return result.Bytes()
 }
 
-// Write wrapper
+// estimateSize approximates the total size needed for all buffers.
+func estimateSize(buffers []*safe_buffer.Buffer) int {
+	total := 0
+	for _, buf := range buffers {
+		total += len(buf.Bytes()) + 1 // +1 for potential newline
+	}
+	return total
+}
+
+// WriteString writes a string to the last line in StdInOutErr.
 func (cl *CommandLog) WriteString(s string) (int, error) {
 	return cl.Write([]byte(s))
 }
 
-// Write writes bytes to the last line in StdInOutErr
+// Write writes bytes to the last line in StdInOutErr.
 func (cl *CommandLog) Write(p []byte) (int, error) {
-	// If there are no lines, create the first one
-	if cl.stdInOutErr.Length() == 0 {
+	length := cl.stdInOutErr.Length()
+	if length == 0 {
 		cl.stdInOutErr.Append(safe_buffer.NewBuffer(nil))
+		length = 1
 	}
 
-	stdInOutErr, ok := cl.stdInOutErr.Get(cl.stdInOutErr.Length() - 1)
+	stdInOutErr, ok := cl.stdInOutErr.Get(length - 1)
 	if !ok {
 		panic("stdInOutErr does not have element on specified index")
 	}
@@ -76,24 +93,25 @@ func (cl *CommandLog) Write(p []byte) (int, error) {
 	return stdInOutErr.Write(p)
 }
 
-// WriteLine wrapper
+// WriteLineString writes a string as a new line to StdInOutErr.
 func (cl *CommandLog) WriteLineString(s string) {
 	cl.WriteLine([]byte(s))
 }
 
-// WriteLine writes a new line to StdInOutErr
+// WriteLine writes bytes as a new line to StdInOutErr.
 func (cl *CommandLog) WriteLine(p []byte) {
 	cl.stdInOutErr.Append(safe_buffer.NewBuffer(p))
 }
 
-// ReplaceLastLine replaces the content of the last line in StdInOutErr
+// ReplaceLastLine replaces the content of the last line in StdInOutErr.
 func (cl *CommandLog) ReplaceLastLine(p []byte) {
 	if cl.stdInOutErr.Length() == 0 {
 		cl.WriteLine(p)
-	} else {
-		ok := cl.stdInOutErr.Set(cl.stdInOutErr.Length()-1, safe_buffer.NewBuffer(p))
-		if !ok {
-			panic("stdInOutErr does not have element on specified index")
-		}
+		return
+	}
+
+	ok := cl.stdInOutErr.Set(cl.stdInOutErr.Length()-1, safe_buffer.NewBuffer(p))
+	if !ok {
+		panic("stdInOutErr does not have element on specified index")
 	}
 }
