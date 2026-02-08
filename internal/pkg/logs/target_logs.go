@@ -23,10 +23,10 @@ type DurationAndError struct {
 
 func NewTargetLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *TargetLogs {
 	return &TargetLogs{
-		xpath,
-		logs_phase.NewPhaseLogs(xpath, flags),
-		nil,
-		nil,
+		xpath:     xpath,
+		PhaseLogs: logs_phase.NewPhaseLogs(xpath, flags),
+		parent:    nil,
+		children:  nil,
 	}
 }
 
@@ -43,35 +43,48 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 
 func (ts *TargetLogs) CalculateDurationAndError() DurationAndError {
 	dae := DurationAndError{
-		time.Duration(0),
-		nil,
+		Duration: 0,
+		Err:      nil,
 	}
 
-	// If there are children, we take the one with the longest duration,
-	// else we sum all phase durations
 	if len(ts.children) != 0 {
-		for _, child := range ts.children {
-			childDae := child.CalculateDurationAndError()
-			if childDae.Duration > dae.Duration {
-				dae = childDae
-			}
-		}
+		dae = ts.calculateFromChildren()
 	} else {
-		for _, phaseLog := range ts.PhaseLogs.All() {
-			tas := phaseLog.Value.TimeAndState()
+		dae = ts.calculateFromPhases()
+	}
 
-			duration, err := tas.DurationOrElapsedTime()
-			if err != nil {
-				break
-			}
+	return dae
+}
 
-			dae.Duration += duration
+func (ts *TargetLogs) calculateFromChildren() DurationAndError {
+	var dae DurationAndError
 
-			endErr := tas.GetEndError()
-			if endErr != nil {
-				dae.Err = endErr
-				break
-			}
+	for _, child := range ts.children {
+		childDae := child.CalculateDurationAndError()
+		if childDae.Duration > dae.Duration {
+			dae = childDae
+		}
+	}
+
+	return dae
+}
+
+func (ts *TargetLogs) calculateFromPhases() DurationAndError {
+	var dae DurationAndError
+
+	for _, phaseLog := range ts.PhaseLogs.All() {
+		tas := phaseLog.Value.TimeAndState()
+
+		duration, err := tas.DurationOrElapsedTime()
+		if err != nil {
+			break
+		}
+
+		dae.Duration += duration
+
+		if endErr := tas.GetEndError(); endErr != nil {
+			dae.Err = endErr
+			break
 		}
 	}
 
@@ -79,20 +92,17 @@ func (ts *TargetLogs) CalculateDurationAndError() DurationAndError {
 }
 
 func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
-	// Return first log that has error
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
 		phaseLog := phaseLogPair.Value
-		err := phaseLog.TimeAndState().GetEndError()
-		if err != nil {
+		if err := phaseLog.TimeAndState().GetEndError(); err != nil {
 			return phaseLog
 		}
 	}
 
-	// Or last log
 	return ts.PhaseLogs.Last()
 }
 
-// Deletes/resets phases logs and timer
+// Clear deletes/resets phases logs and timer.
 func (ts *TargetLogs) Clear() {
 	ts.PhaseLogs.Clear()
 }
