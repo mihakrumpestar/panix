@@ -19,10 +19,7 @@ type Spinner struct {
 }
 
 func NewSpinners() *Spinners {
-	spinners, err := omap.New[config_attributes.Xpath, *Spinner]()
-	if err != nil {
-		panic(err)
-	}
+	spinners, _ := omap.New[config_attributes.Xpath, *Spinner]()
 
 	return &Spinners{
 		spinners: spinners,
@@ -30,15 +27,12 @@ func NewSpinners() *Spinners {
 }
 
 func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Model {
-	// Existing spinner
-	spnr, ok := s.spinners.Get(xpath)
-	if ok {
+	if spnr, ok := s.spinners.Get(xpath); ok {
 		return spnr.model
 	}
 
-	// New spinner
 	spnrRaw := spinner.New(spinner.WithSpinner(spinner.Dot))
-	spnr = &Spinner{
+	spnr := &Spinner{
 		model: &spnrRaw,
 	}
 
@@ -65,10 +59,9 @@ func (s *Spinners) SendInitTickIfNotAlready() tea.Cmd {
 }
 
 func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
-	cmds := make([]tea.Cmd, 0)
+	cmds := make([]tea.Cmd, 0, s.spinners.Len())
 
 	for _, spnr := range s.spinners.Records() {
-		// msg only works on spinner it was ment to, so we don't have to filter or anything
 		spinnerModel, cmd := spnr.model.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)

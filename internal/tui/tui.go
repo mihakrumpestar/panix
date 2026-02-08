@@ -16,7 +16,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_raw_key_reader"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
@@ -33,7 +32,6 @@ type model struct {
 	quitting          bool
 	err               error
 	modelView         modelView
-	rawKeyReader      *tui_raw_key_reader.RawKeyReader
 	notification      string
 	notificationColor lipgloss.Style
 	notificationTime  time.Time
@@ -67,8 +65,6 @@ func NewTui(workflow *workflow.Workflow) error {
 
 	debugOutput := &strings.Builder{}
 
-	rawKeyReader := tui_raw_key_reader.NewRawKeyReader(os.Stdin, 1024)
-
 	//stdin := io.TeeReader(os.Stdin, os.Stdout)
 
 	p := tea.NewProgram(model{
@@ -79,9 +75,7 @@ func NewTui(workflow *workflow.Workflow) error {
 			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.ColorScheme, debugOutput, workflow.State().Conf.Flags.Tui.CommandOutputMaxHeight),
 			debugOutput: debugOutput,
 		},
-		rawKeyReader: rawKeyReader,
 	},
-		tea.WithInput(rawKeyReader),
 		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
@@ -118,7 +112,6 @@ func (m model) Init() tea.Cmd {
 		tea.WindowSize(),
 		m.stateUpdateHook(),
 		m.startWorkflow(),
-		m.rawKeyReader.Next(),
 	)
 }
 
@@ -188,10 +181,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle notification timer expiration
 	case notificationMsg:
 		m.clearNotification()
-
-		// re‐arm for the next keystroke
-	case tui_raw_key_reader.RawKeyReaderMsg:
-		cmds = append(cmds, m.rawKeyReader.Next())
 
 	case tea.KeyMsg:
 		return m.HandleKeyInput(msg)
