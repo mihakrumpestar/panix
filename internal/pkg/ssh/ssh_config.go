@@ -44,36 +44,34 @@ func GetCachedSshConfig() (*SshConfig, error) {
 	return cachedSshConfig, cachedError
 }
 
-func (sc *SshConfig) RetriveFullParamsFromSshConfig(sshClient *SshClient) error {
+func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error {
 	alias := sshClient.Hostname
-	var err error
 
-	sshClient.Hostname, err = sc.sc.Get(alias, "HostName") // Required
+	hostname, err := sc.sc.Get(alias, "HostName")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get HostName for alias %q: %w", alias, err)
 	}
-
-	if sshClient.Hostname == "" {
-		return fmt.Errorf("does not have \"Hostname\" field (or it is empty) in ssh_config")
+	if hostname == "" {
+		return fmt.Errorf("ssh config for alias %q has empty or missing HostName", alias)
 	}
+	sshClient.Hostname = hostname
 
-	portRaw, err := sc.sc.Get(alias, "Port") // Not required
-	if err == nil && portRaw != "" {
-		var port64 uint64
-		port64, err = strconv.ParseUint(portRaw, 10, 16)
+	portRaw, _ := sc.sc.Get(alias, "Port")
+	if portRaw != "" {
+		port64, err := strconv.ParseUint(portRaw, 10, 16)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to parse Port for alias %q: %w", alias, err)
 		}
-
 		sshClient.Port = uint16(port64)
 	} else {
-		sshClient.Port = 22 // Default
+		sshClient.Port = 22
 	}
 
-	sshClient.Username, _ = sc.sc.Get(alias, "User") // Not required
-
-	if sshClient.Username == "" {
-		sshClient.Username = "root" // Default
+	username, _ := sc.sc.Get(alias, "User")
+	if username != "" {
+		sshClient.Username = username
+	} else {
+		sshClient.Username = "root"
 	}
 
 	return nil
