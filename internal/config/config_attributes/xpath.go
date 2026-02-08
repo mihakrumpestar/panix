@@ -17,7 +17,7 @@ func NewXpath(xpath ...string) Xpath {
 }
 
 func (x *Xpath) Depth() int {
-	if len(x.path) == 0 {
+	if x.path == "" {
 		return 0
 	}
 	return strings.Count(x.path, "/") + 1
@@ -26,7 +26,7 @@ func (x *Xpath) Depth() int {
 // Creates a new Xpath based on current Xpath as base and appends appendXpath
 // If current Xpath is nil, resulting Xpath consists only of appendXpath
 func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
-	if len(x.path) == 0 {
+	if x.path == "" {
 		return NewXpath(appendXpath...)
 	}
 
