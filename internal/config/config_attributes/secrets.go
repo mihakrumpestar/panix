@@ -25,21 +25,15 @@ type Remote struct {
 }
 
 func (sc *SecretConfig) Validate() error {
-	if sc.Local.Path == nil && sc.Local.CommandOutput == nil {
+	switch {
+	case sc.Local.Path == nil && sc.Local.CommandOutput == nil:
 		return errors.New("both local input secrets options are empty")
-	}
-
-	if sc.Local.Path != nil && sc.Local.CommandOutput != nil {
+	case sc.Local.Path != nil && sc.Local.CommandOutput != nil:
 		return errors.New("can't use both local input secrets options")
-	}
-
-	if sc.Remote.Path == "" {
+	case sc.Remote.Path == "":
 		return errors.New("remote secrets path is empty")
-	}
-
-	if !strings.HasPrefix(sc.Remote.Path, "/") {
+	case !strings.HasPrefix(sc.Remote.Path, "/"):
 		return fmt.Errorf("remote secrets path must be absolute for %s", strconv.Quote(sc.Remote.Path))
 	}
-
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Flake, Configuration and Machine Attributes
+// Flake, Configuration, and Machine Attributes
 
 type Attributes struct {
 	SSH                 *ssh.SshClient  `yaml:"ssh,omitempty"`
@@ -29,11 +29,8 @@ type Attributes struct {
 }
 
 func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) (err error) {
-	a.Name = name
-	a.Flags = flags
-
+	a.Name, a.Flags = name, flags
 	a.Tags = append(a.Tags, name)
-
 	a.PassAttributesInto(attr)
 
 	defer func() {
@@ -65,23 +62,17 @@ func (a *Attributes) PassAttributesInto(parentAttr *Attributes) {
 	if a.SSH == nil {
 		a.SSH = parentAttr.SSH
 	}
-
-	a.Tags = append(a.Tags, parentAttr.Tags...)
-	a.Tags = slices.Compact(a.Tags)
-
+	a.Tags = slices.Compact(append(a.Tags, parentAttr.Tags...))
 	a.Secrets = append(a.Secrets, parentAttr.Secrets...)
 
 	if parentAttr.Disabled {
 		a.Disabled = true
 	}
-
 	if a.OverrideSudoProgram == "" {
 		a.OverrideSudoProgram = parentAttr.OverrideSudoProgram
 	}
-
 	if a.HardwareConfigPath == "" {
 		a.HardwareConfigPath = parentAttr.HardwareConfigPath
 	}
-
 	a.Xpath = parentAttr.Xpath.NewXpathWithAppend(a.Name)
 }

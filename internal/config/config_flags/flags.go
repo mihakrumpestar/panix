@@ -43,45 +43,29 @@ type Logging struct {
 
 func (f *Flags) SetDefault(reverse bool) {
 	defaultHostname, _ := os.Hostname()
-
-	setDefault(reverse, &f.Config, "panix.yml", "")
-	setDefault(reverse, &f.OverrideLocalMachine, defaultHostname, "")
-	setDefault(reverse, &f.Timeout, 2*time.Hour, time.Duration(0))
-	setDefault(reverse, &f.Tui.CommandOutputMaxHeight, 8, 0)
+	toggle(reverse, &f.Config, "panix.yml", "")
+	toggle(reverse, &f.OverrideLocalMachine, defaultHostname, "")
+	toggle(reverse, &f.Timeout, 2*time.Hour, 0)
+	toggle(reverse, &f.Tui.CommandOutputMaxHeight, 8, 0)
 }
 
 func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
-
 	f.SetDefault(true)
-
-	err := mergo.Merge(f, cli)
-	if err != nil {
+	if err := mergo.Merge(f, cli); err != nil {
 		return err
 	}
-
 	f.SetDefault(false)
-
 	return nil
 }
 
-// Helpers
-
-func setDefault[T comparable](reverse bool, current *T, def, zero T) {
+func toggle[T comparable](reverse bool, p *T, def, zero T) {
 	if reverse {
-		clearDefault(current, def, zero)
+		if *p == def {
+			*p = zero
+		}
 	} else {
-		applyDefault(current, def, zero)
-	}
-}
-
-func applyDefault[T comparable](current *T, def, zero T) {
-	if *current == zero {
-		*current = def
-	}
-}
-
-func clearDefault[T comparable](current *T, def, zero T) {
-	if *current == def {
-		*current = zero
+		if *p == zero {
+			*p = def
+		}
 	}
 }
