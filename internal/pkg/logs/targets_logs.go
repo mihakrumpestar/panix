@@ -67,12 +67,10 @@ func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phase
 }
 
 func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase, log *logs_phase.PhaseLog) *logs_phase.PhaseLog {
-	// Create it on nil log or if last child
 	if log == nil || len(targetLogs.children) == 0 {
 		log = targetLogs.PhaseLogs.SetIfNotExists(phase, log)
 	}
 
-	// Children should have same log pointer in phase
 	for _, child := range targetLogs.children {
 		ts.getOrCreateLog(child, phase, log)
 	}
@@ -98,7 +96,7 @@ func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) 
 	return logs.GetCurrentTargetLog()
 }
 
-// Emptys target logs but does not delete them
+// Clear empties target logs but does not delete them.
 func (ts *TargetsLogs) Clear() {
 	for _, pair := range ts.logs.Pairs() {
 		pair.Value.Clear()
@@ -125,12 +123,13 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *logs_stats.StatisticsPerPhas
 			continue
 		}
 
-		if !lastCommand.TimeAndState.IsFinished() {
+		timeAndState := lastCommand.TimeAndState
+		if !timeAndState.IsFinished() {
 			stats.Add(log.Phase(), logs_stats.Running, pair.Key)
 			continue
 		}
 
-		if lastCommand.TimeAndState.GetEndError() != nil {
+		if timeAndState.GetEndError() != nil {
 			stats.Add(log.Phase(), logs_stats.Failed, pair.Key)
 			continue
 		}

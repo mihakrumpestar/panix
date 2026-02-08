@@ -21,11 +21,11 @@ type PhaseLog struct {
 
 func NewPhaseLog(creatorXpath config_attributes.Xpath, phase phases.Phase, flags config_flags.Logging) *PhaseLog {
 	return &PhaseLog{
-		threadsafe.NewSlice[*logs_command.CommandLog](),
-		time_and_state.NewTimeAndState(),
-		creatorXpath,
-		phase,
-		flags,
+		commandLogs:  threadsafe.NewSlice[*logs_command.CommandLog](),
+		timeAndState: time_and_state.NewTimeAndState(),
+		creatorXpath: creatorXpath,
+		phase:        phase,
+		flags:        flags,
 	}
 }
 
@@ -34,15 +34,17 @@ func (pLog *PhaseLog) Phase() phases.Phase {
 }
 
 func (pLog *PhaseLog) LastNonMsgOnlyCommand() *logs_command.CommandLog {
-	var commandLog *logs_command.CommandLog
+	length := pLog.commandLogs.Length()
+	if length == 0 {
+		return nil
+	}
 
-	// Iterate backwards to find the last command that is not just a message
-	for i := pLog.commandLogs.Length() - 1; i >= 0; i-- {
-		var ok bool
-		commandLog, ok = pLog.commandLogs.Get(i)
+	for i := length - 1; i >= 0; i-- {
+		commandLog, ok := pLog.commandLogs.Get(i)
 		if !ok {
 			panic("commandLogs does not have element on specified index")
 		}
+
 		if !commandLog.MsgOnly {
 			return commandLog
 		}

@@ -19,38 +19,32 @@ type StatisticsPerPhase struct {
 
 func NewStatisticsPerPhase() *StatisticsPerPhase {
 	return &StatisticsPerPhase{
-		stats: map[phases.Phase]map[StatsState][]config_attributes.Xpath{},
+		stats: make(map[phases.Phase]map[StatsState][]config_attributes.Xpath),
 	}
 }
 
-func (spp *StatisticsPerPhase) Add(phase phases.Phase, state StatsState, Xpath config_attributes.Xpath) {
+func (spp *StatisticsPerPhase) Add(phase phases.Phase, state StatsState, xpath config_attributes.Xpath) {
 	phaseStats, ok := spp.stats[phase]
 	if !ok {
-		phaseStats = map[StatsState][]config_attributes.Xpath{}
+		phaseStats = make(map[StatsState][]config_attributes.Xpath)
 		spp.stats[phase] = phaseStats
 	}
 
-	phaseStateStats, ok := phaseStats[state]
-	if !ok {
-		phaseStateStats = []config_attributes.Xpath{}
-		phaseStats[state] = phaseStateStats
-	}
-
-	phaseStats[state] = append(phaseStateStats, Xpath)
+	phaseStats[state] = append(phaseStats[state], xpath)
 }
 
 func (spp *StatisticsPerPhase) Get(phase phases.Phase, state StatsState) []config_attributes.Xpath {
 	phaseStats, ok := spp.stats[phase]
 	if !ok {
-		return []config_attributes.Xpath{}
+		return nil
 	}
 
-	phaseStateStats, ok := phaseStats[state]
+	result, ok := phaseStats[state]
 	if !ok {
-		return []config_attributes.Xpath{}
+		return nil
 	}
 
-	return phaseStateStats
+	return result
 }
 
 type StatsPack struct {
@@ -60,9 +54,13 @@ type StatsPack struct {
 }
 
 func (spp *StatisticsPerPhase) GetPack(phase phases.Phase) *StatsPack {
+	if spp == nil {
+		return nil
+	}
+
 	return &StatsPack{
-		spp.Get(phase, Running),
-		spp.Get(phase, Failed),
-		spp.Get(phase, Done),
+		Running: spp.Get(phase, Running),
+		Failed:  spp.Get(phase, Failed),
+		Done:    spp.Get(phase, Done),
 	}
 }
