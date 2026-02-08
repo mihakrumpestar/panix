@@ -47,38 +47,27 @@ func isWayland() bool {
 	return envCache.isWayland
 }
 
-// commandRunner abstracts command execution for testability
-type commandRunner interface {
-	run(ctx context.Context, name string, args ...string) error
-}
-
-// execRunner implements commandRunner using os/exec
-type execRunner struct{}
-
-func (r *execRunner) run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	return cmd.Run()
-}
-
-// defaultRunner is the default command runner
-var defaultRunner commandRunner = &execRunner{}
-
 // copyWithCommand tries to copy using system clipboard commands
-func copyWithCommand(ctx context.Context, text string, runner commandRunner) bool {
+func copyWithCommand(ctx context.Context, text string) bool {
 	// Try Wayland native tool first if on Wayland
 	if isWayland() {
-		if err := runner.run(ctx, "wl-copy", "--", text); err == nil {
+		cmd := exec.CommandContext(ctx, "wl-copy", "--", text)
+		if err := cmd.Run(); err == nil {
 			return true
 		}
 	}
 
 	// Try xclip for X11
-	if err := runner.run(ctx, "xclip", "-selection", "clipboard", "-in"); err == nil {
+	cmd := exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-in")
+	cmd.Stdin = bytes.NewReader([]byte(text))
+	if err := cmd.Run(); err == nil {
 		return true
 	}
 
 	// Try xsel as fallback
-	if err := runner.run(ctx, "xsel", "--clipboard", "--input"); err == nil {
+	cmd = exec.CommandContext(ctx, "xsel", "--clipboard", "--input")
+	cmd.Stdin = bytes.NewReader([]byte(text))
+	if err := cmd.Run(); err == nil {
 		return true
 	}
 
@@ -111,7 +100,7 @@ func CopyToClipboard(text string) error {
 	defer cancel()
 
 	// Try system clipboard commands first (Wayland/X11)
-	if copyWithCommand(ctx, normalized, defaultRunner) {
+	if copyWithCommand(ctx, normalized) {
 		return nil
 	}
 
@@ -126,53 +115,4 @@ func CopyToClipboard(text string) error {
 	}
 
 	return nil
-}
-
-// CopyToClipboardWithStdin copies text using stdin-based clipboard commands
-// This is useful when the text contains special characters
-func CopyToClipboardWithStdin(text string) error {
-	normalized := normalizeText(text)
-
-	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
-	defer cancel()
-
-	// Try stdin-based commands
-	if copyWithStdinCommand(ctx, normalized) {
-		return nil
-	}
-
-	// Fall back to regular methods
-	return CopyToClipboard(text)
-}
-
-// copyWithStdinCommand tries to copy using commands that accept stdin
-func copyWithStdinCommand(ctx context.Context, text string) bool {
-	// Try Wayland
-	if isWayland() {
-		if err := runWithStdin(ctx, "wl-copy", text); err == nil {
-			return true
-		}
-	}
-
-	// Try xclip with stdin
-	if err := runWithStdin(ctx, "xclip", "-selection", "clipboard", "-in", text); err == nil {
-		return true
-	}
-
-	// Try xsel with stdin
-	if err := runWithStdin(ctx, "xsel", "--clipboard", "--input", text); err == nil {
-		return true
-	}
-
-	return false
-}
-
-// runWithStdin runs a command with text as stdin input
-func runWithStdin(ctx context.Context, name string, args ...string) error {
-	text := args[len(args)-1]
-	cmdArgs := args[:len(args)-1]
-
-	cmd := exec.CommandContext(ctx, name, cmdArgs...)
-	cmd.Stdin = bytes.NewReader([]byte(text))
-	return cmd.Run()
 }
