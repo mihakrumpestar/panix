@@ -41,3 +41,11 @@ func (s *Buffer) Bytes() []byte {
 
 	return s.buffer.Bytes()
 }
+
+// Len returns the number of accumulated bytes.
+func (s *Buffer) Len() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return s.buffer.Len()
+}

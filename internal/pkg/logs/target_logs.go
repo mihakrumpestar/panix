@@ -42,18 +42,11 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 }
 
 func (ts *TargetLogs) CalculateDurationAndError() DurationAndError {
-	dae := DurationAndError{
-		Duration: 0,
-		Err:      nil,
-	}
-
 	if len(ts.children) != 0 {
-		dae = ts.calculateFromChildren()
-	} else {
-		dae = ts.calculateFromPhases()
+		return ts.calculateFromChildren()
 	}
 
-	return dae
+	return ts.calculateFromPhases()
 }
 
 func (ts *TargetLogs) calculateFromChildren() DurationAndError {
