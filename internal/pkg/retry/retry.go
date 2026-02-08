@@ -2,30 +2,34 @@ package retry
 
 import "sync"
 
+// Retry provides a mechanism for goroutines to wait and be signaled to retry.
+// It is safe for concurrent use by multiple goroutines.
 type Retry struct {
-	mutex sync.Mutex
-	retry chan struct{}
+	mu      sync.Mutex
+	trigger chan struct{}
 }
 
+// NewTaskRetry creates a new Retry instance.
 func NewTaskRetry() *Retry {
 	return &Retry{
-		retry: make(chan struct{}),
+		trigger: make(chan struct{}),
 	}
 }
 
-// Pauses execution
-func (tr *Retry) Wait() {
-	tr.mutex.Lock()
-	retry := tr.retry
-	tr.mutex.Unlock()
-
-	<-retry
+// Wait blocks until Trigger is called.
+// After waking up, it is ready to wait for the next trigger.
+func (r *Retry) Wait() {
+	r.mu.Lock()
+	ch := r.trigger
+	r.mu.Unlock()
+	<-ch
 }
 
-func (tr *Retry) Trigger() {
-	tr.mutex.Lock()
-	defer tr.mutex.Unlock()
-
-	close(tr.retry)
-	tr.retry = make(chan struct{})
+// Trigger wakes up all goroutines currently waiting in Wait.
+// It is safe to call Trigger multiple times.
+func (r *Retry) Trigger() {
+	r.mu.Lock()
+	close(r.trigger)
+	r.trigger = make(chan struct{})
+	r.mu.Unlock()
 }
