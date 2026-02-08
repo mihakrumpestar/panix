@@ -48,8 +48,12 @@ func (ts *TargetsLogs) Add(xpath config_attributes.Xpath) (*TargetLogs, error) {
 	return targetLogs, nil
 }
 
+func (ts *TargetsLogs) get(xpath config_attributes.Xpath) (*TargetLogs, bool) {
+	return ts.logs.Get(xpath)
+}
+
 func (ts *TargetsLogs) Get(xpath config_attributes.Xpath) *TargetLogs {
-	targetLogs, ok := ts.logs.Get(xpath)
+	targetLogs, ok := ts.get(xpath)
 	if !ok {
 		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
@@ -58,7 +62,7 @@ func (ts *TargetsLogs) Get(xpath config_attributes.Xpath) *TargetLogs {
 }
 
 func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phases.Phase) *logs_phase.PhaseLog {
-	targetLogs, ok := ts.logs.Get(xpath)
+	targetLogs, ok := ts.get(xpath)
 	if !ok {
 		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
@@ -79,21 +83,21 @@ func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase
 }
 
 func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *logs_phase.PhaseLogs {
-	logs, ok := ts.logs.Get(xpath)
+	targetLogs, ok := ts.get(xpath)
 	if !ok {
 		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
 
-	return logs.PhaseLogs
+	return targetLogs.PhaseLogs
 }
 
 func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) *logs_phase.PhaseLog {
-	logs, ok := ts.logs.Get(xpath)
+	targetLogs, ok := ts.get(xpath)
 	if !ok {
 		panic("xpath key not present in TargetsLogs, this should never happen")
 	}
 
-	return logs.GetCurrentTargetLog()
+	return targetLogs.GetCurrentTargetLog()
 }
 
 // Clear empties target logs but does not delete them.

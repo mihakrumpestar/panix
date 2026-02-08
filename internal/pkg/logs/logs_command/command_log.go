@@ -67,7 +67,7 @@ func (cl *CommandLog) Bytes() []byte {
 func estimateSize(buffers []*safe_buffer.Buffer) int {
 	total := 0
 	for _, buf := range buffers {
-		total += len(buf.Bytes()) + 1 // +1 for potential newline
+		total += buf.Len() + 1 // +1 for potential newline
 	}
 	return total
 }
