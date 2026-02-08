@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,12 +16,13 @@ import (
 )
 
 const (
-	footerHeight   = 3
-	scrollThumb    = "█"
-	scrollTrack    = "│"
-	scrollbarWidth = 2
-	borderHeight   = 2
-	borderWidth    = 2
+	footerHeight     = 3
+	scrollThumb      = "█"
+	scrollTrack      = "│"
+	scrollbarWidth   = 2
+	borderHeight     = 2
+	borderWidth      = 2
+	minTerminalWidth = 40
 )
 
 // Dimensions represents terminal size
@@ -34,6 +36,7 @@ type Viewports struct {
 	debug                  *strings.Builder
 	fullscreenXpath        config_attributes.Xpath
 	commandOutputMaxHeight int
+	mainXpath              config_attributes.Xpath
 }
 
 // Viewport wraps a bubbletea viewport with additional state
@@ -57,6 +60,7 @@ func NewViewports(d *Dimensions, c *config.ColorScheme, dbg *strings.Builder, ma
 		colors:                 c,
 		debug:                  dbg,
 		commandOutputMaxHeight: maxHeight,
+		mainXpath:              config_attributes.NewXpath("main"),
 	}
 }
 
@@ -85,7 +89,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, cont
 
 func (v *Viewports) GetOrCreateMainViewport(content string) string {
 	h := v.dimensions.Height - footerHeight
-	return v.createViewport(config_attributes.NewXpath("main"), content, 0, viewportOptions{
+	return v.createViewport(v.mainXpath, content, 0, viewportOptions{
 		height:    h,
 		maxHeight: h,
 		full:      true,
@@ -126,9 +130,8 @@ func (v *Viewports) GetActiveViewportContent() string {
 }
 
 func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
-	mainXpath := config_attributes.NewXpath("main")
 	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
+		if vp.active && xpath != v.mainXpath {
 			return vp.model.View(), true
 		}
 	}
@@ -136,9 +139,8 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 }
 
 func (v *Viewports) GetActiveInnerViewportXpath() config_attributes.Xpath {
-	mainXpath := config_attributes.NewXpath("main")
 	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
+		if vp.active && xpath != v.mainXpath {
 			return xpath
 		}
 	}
@@ -167,23 +169,22 @@ func (v *Viewports) GetActiveViewportScrollPercent() float64 {
 // Update handles messages for all viewports
 func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
-	mainXpath := config_attributes.NewXpath("main")
 
 	switch m := msg.(type) {
 	case tea.MouseMsg:
-		v.handleMouse(m, mainXpath)
+		v.handleMouse(m)
 	case tea.KeyMsg:
-		v.handleKey(m, mainXpath)
+		v.handleKey(m)
 		return tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		// Update dimensions and resize all viewports
-		v.dimensions.Width = max(m.Width, 40)
+		v.dimensions.Width = max(m.Width, minTerminalWidth)
 		v.dimensions.Height = m.Height
 		v.resizeAllViewports()
 		return tea.Batch(cmds...)
 	}
 
-	hasActiveInner := v.hasActiveInner(mainXpath)
+	hasActiveInner := v.hasActiveInner()
 	for _, vp := range v.viewports.Records() {
 		if vp.active {
 			if updated, cmd := vp.model.Update(msg); cmd != nil {
@@ -193,7 +194,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		}
 	}
 
-	if mainVpr, ok := v.viewports.Get(mainXpath); ok && !hasActiveInner {
+	if mainVpr, ok := v.viewports.Get(v.mainXpath); ok && !hasActiveInner {
 		if updated, cmd := mainVpr.model.Update(msg); cmd != nil {
 			mainVpr.model = updated
 			cmds = append(cmds, cmd)
@@ -222,13 +223,11 @@ func (v *Viewports) Debug() string {
 
 // resizeAllViewports updates all viewport dimensions when terminal resizes
 func (v *Viewports) resizeAllViewports() {
-	mainXpath := config_attributes.NewXpath("main")
-
 	for xpath, vp := range v.viewports.Records() {
 		w := max(1, v.dimensions.Width-scrollbarWidth)
 		h := max(1, v.dimensions.Height-footerHeight)
 
-		if xpath == mainXpath {
+		if xpath == v.mainXpath {
 			// Main viewport gets full height minus footer
 			vp.model.Width, vp.model.Height = w, h
 		} else {
@@ -265,7 +264,7 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 			model:         viewport.New(w, h),
 			scrollbarZone: xpath.NewXpathWithAppend("scrollbar"),
 			content:       content,
-			active:        xpath.String() == "main",
+			active:        xpath == v.mainXpath,
 		}
 		vp.model.GotoBottom()
 		v.viewports.Set(xpath, vp)
@@ -342,8 +341,9 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 	pos := int(float64(maxPos) * clamp(pct, 0, 1))
 
 	lines := make([]string, visible)
+	endPos := pos + thumb
 	for i := range lines {
-		if i >= pos && i < pos+thumb {
+		if i >= pos && i < endPos {
 			lines[i] = scrollThumb
 		} else {
 			lines[i] = scrollTrack
@@ -360,11 +360,13 @@ func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attrib
 		return view
 	}
 
-	vLines, bLines := strings.Split(view, "\n"), strings.Split(bar, "\n")
+	vLines := strings.Split(view, "\n")
+	bLines := strings.Split(bar, "\n")
 	result := make([]string, len(vLines))
+	barLen := len(bLines)
 
 	for i, line := range vLines {
-		if i < len(bLines) {
+		if i < barLen {
 			result[i] = line + " " + zone.Mark(barZone.NewXpathWithAppend(fmt.Sprintf("%d", i)).String(), bLines[i])
 		} else {
 			result[i] = line
@@ -374,7 +376,7 @@ func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attrib
 	return strings.Join(result, "\n")
 }
 
-func (v *Viewports) handleMouse(m tea.MouseMsg, mainXpath config_attributes.Xpath) {
+func (v *Viewports) handleMouse(m tea.MouseMsg) {
 	// Handle mouse wheel scrolling first (doesn't require release action)
 	if m.Button == tea.MouseButtonWheelUp || m.Button == tea.MouseButtonWheelDown {
 		if vp := v.getActiveViewport(); vp != nil {
@@ -400,13 +402,13 @@ func (v *Viewports) handleMouse(m tea.MouseMsg, mainXpath config_attributes.Xpat
 	}
 
 	if !hasClick {
-		if mainVp, ok := v.viewports.Get(mainXpath); ok {
+		if mainVp, ok := v.viewports.Get(v.mainXpath); ok {
 			mainVp.active = true
 		}
 	}
 }
 
-func (v *Viewports) handleKey(m tea.KeyMsg, mainXpath config_attributes.Xpath) {
+func (v *Viewports) handleKey(m tea.KeyMsg) {
 	if vp := v.getActiveViewport(); vp != nil {
 		switch m.String() {
 		case "up", "k":
@@ -426,24 +428,22 @@ func (v *Viewports) handleKey(m tea.KeyMsg, mainXpath config_attributes.Xpath) {
 }
 
 func (v *Viewports) getActiveViewport() *Viewport {
-	mainXpath := config_attributes.NewXpath("main")
-
 	for xpath, vp := range v.viewports.Records() {
-		if vp.active && xpath != mainXpath {
+		if vp.active && xpath != v.mainXpath {
 			return vp
 		}
 	}
 
-	if mainVp, ok := v.viewports.Get(mainXpath); ok {
+	if mainVp, ok := v.viewports.Get(v.mainXpath); ok {
 		return mainVp
 	}
 
 	return nil
 }
 
-func (v *Viewports) hasActiveInner(mainXpath config_attributes.Xpath) bool {
+func (v *Viewports) hasActiveInner() bool {
 	for xpath, vp := range v.viewports.Records() {
-		if xpath != mainXpath && vp.active {
+		if xpath != v.mainXpath && vp.active {
 			return true
 		}
 	}
@@ -452,9 +452,8 @@ func (v *Viewports) hasActiveInner(mainXpath config_attributes.Xpath) bool {
 
 // DeselectAll activates only the main viewport
 func (v *Viewports) DeselectAll() {
-	mainXpath := config_attributes.NewXpath("main")
 	for xpath, vp := range v.viewports.Records() {
-		vp.active = xpath == mainXpath
+		vp.active = xpath == v.mainXpath
 	}
 }
 
@@ -478,24 +477,63 @@ func (v *Viewports) mostSpecific(xpaths []config_attributes.Xpath) config_attrib
 
 // Utility functions
 
+// truncateLines truncates each line to maxWidth runes (not bytes).
+// This is efficient for single-byte encodings but correct for all.
 func truncateLines(content string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
-		truncated := line
-		for lipgloss.Width(truncated) > maxWidth {
-			truncated = truncated[:len(truncated)-1]
-		}
-		lines[i] = truncated
+		lines[i] = truncateToRuneWidth(line, maxWidth)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func clamp(v, min, max float64) float64 {
-	if v < min {
+// truncateToRuneWidth truncates a string to fit within maxWidth runes,
+// using lipgloss.Width for accurate display width measurement.
+func truncateToRuneWidth(s string, maxWidth int) string {
+	width := lipgloss.Width(s)
+	if width <= maxWidth {
+		return s
+	}
+
+	// Binary search for the correct truncation point
+	low, high := 0, len(s)
+	for low < high {
+		mid := (low + high) / 2
+		// Find the previous valid UTF-8 boundary
+		for mid > low && !utf8.ValidString(s[:mid]) {
+			mid--
+		}
+		if mid <= low {
+			break
+		}
+
+		w := lipgloss.Width(s[:mid])
+		if w > maxWidth {
+			high = mid
+		} else if w < maxWidth {
+			low = mid + 1
+		} else {
+			return s[:mid]
+		}
+	}
+
+	// Final adjustment to ensure valid UTF-8
+	for low > 0 && !utf8.ValidString(s[:low]) {
+		low--
+	}
+	return s[:low]
+}
+
+func clamp(val, min, max float64) float64 {
+	if val < min {
 		return min
 	}
-	if v > max {
+	if val > max {
 		return max
 	}
-	return v
+	return val
 }
