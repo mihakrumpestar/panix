@@ -52,7 +52,7 @@ func (r *RawKeyReader) Fd() uintptr {
 
 // Helpers
 
-// next returns a tea.Cmd which will block on the next Msg
+// Next returns a tea.Cmd which will block on the next Msg
 // and emit it to your Update.
 func (r *RawKeyReader) Next() tea.Cmd {
 	return func() tea.Msg {
@@ -60,18 +60,34 @@ func (r *RawKeyReader) Next() tea.Cmd {
 	}
 }
 
-// A simple detector for X10 (ESC [ M …) or SGR (ESC [ < … M/m) mouse sequences.
+// Mouse detection constants
 var (
 	x10Prefix  = []byte{'\x1b', '[', 'M'}
 	sgrMouseRe = regexp.MustCompile(`^\x1b\[[<][0-9;]+[Mm]`)
 )
 
 func isMouseEvent(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+
 	// X10: ESC [ M <cb> <cx> <cy>
-	if len(b) >= len(x10Prefix) && b[0] == 0x1b &&
-		b[1] == '[' && b[2] == 'M' {
+	if len(b) >= len(x10Prefix) && bytesEqual(b[:len(x10Prefix)], x10Prefix) {
 		return true
 	}
+
 	// SGR: ESC [ < params M or m
 	return sgrMouseRe.Match(b)
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
