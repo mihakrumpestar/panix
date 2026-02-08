@@ -30,25 +30,21 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 	// Check if machine is local (eg. not remote) based on same Hostname
 	sC.IsLocal = sC.Hostname == overrideLocalMachine
 
-	// Hostname is alias
 	if sC.HostnameIsAlias {
-
-		err := sshConfig.RetriveFullParamsFromSshConfig(sC)
-		if err != nil {
+		if err := sshConfig.RetrieveFullParamsFromSshConfig(sC); err != nil {
 			return err
 		}
-
 		return nil
 	}
 
-	// Hostname is not alias
-	switch {
-	case sC.Hostname == "":
+	if sC.Hostname == "" {
 		return fmt.Errorf("hostname can't be empty")
-	case sC.Port == 0:
-		sC.Port = 22 // Default
-	case sC.Username == "":
-		sC.Username = "root" // Default
+	}
+	if sC.Port == 0 {
+		sC.Port = 22
+	}
+	if sC.Username == "" {
+		sC.Username = "root"
 	}
 
 	return nil
@@ -56,7 +52,7 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 
 func (sC *SshClient) MaybeSshCommandArguments() []string {
 	if sC.HostnameIsAlias {
-		return make([]string, 0)
+		return nil
 	}
 
 	sshArgs := []string{"-p", fmt.Sprintf("%d", sC.Port), "-l", sC.Username}
