@@ -39,6 +39,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					mms.Reachable.Store(true)
 					return nil
 				}),
+				executioner.OnDryRun(func() {
+					mms.Reachable.Store(true)
+				}),
 			)
 			if err != nil {
 				return err
@@ -60,6 +63,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					mms.SSHConnectable.Store(true)
 					return nil
 				}),
+				executioner.OnDryRun(func() {
+					mms.SSHConnectable.Store(true)
+				}),
 			)
 			if err != nil {
 				return err
@@ -74,24 +80,21 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 				"uname failed",
 				commandWithArgs,
 				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-					architecture := log.String()
-
-					if w.state.Conf.Flags.DryRun {
-						architecture = "DRY_RUN"
-					}
-
-					architecture = strings.Trim(architecture, "\n")
+					architecture := strings.Trim(log.String(), "\n")
 
 					if architecture == "" {
 						return fmt.Errorf("architecture output was empty")
 					}
 
-					if !slices.Contains(KexecSupportedPlatforms, architecture) && !w.state.Conf.Flags.DryRun {
+					if !slices.Contains(KexecSupportedPlatforms, architecture) {
 						return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
 					}
 
 					mms.Architecture.Store(architecture)
 					return nil
+				}),
+				executioner.OnDryRun(func() {
+					mms.Architecture.Store("DRY_RUN")
 				}),
 			)
 			if err != nil {
@@ -121,6 +124,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					mms.IsRoot.Store(parsedOutput == 0)
 					return nil
 				}),
+				executioner.OnDryRun(func() {
+					mms.IsRoot.Store(true)
+				}),
 			)
 			if err != nil {
 				return err
@@ -140,12 +146,6 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 						return errors.Wrap(err, log.String())
 					}),
 				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-
-					if w.state.Conf.Flags.DryRun {
-						mms.Bootstrapped.Store(false)
-						return nil
-					}
-
 					output := log.String()
 
 					osrelease, err := osrelease.ReadString(output)
@@ -169,7 +169,11 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 
 					mms.Bootstrapped.Store(true)
 					return nil
-				}))
+				}),
+				executioner.OnDryRun(func() {
+					mms.Bootstrapped.Store(false)
+				}),
+			)
 			if err != nil {
 				return err
 			}
@@ -227,6 +231,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					}
 					return nil
 				}),
+				executioner.OnDryRun(func() {
+					mms.Generation.Store(1)
+				}),
 			)
 			if err != nil {
 				return err
@@ -246,6 +253,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					mms.Date.Store(date)
 					return nil
 				}),
+				executioner.OnDryRun(func() {
+					mms.Date.Store("DRY_RUN")
+				}),
 			)
 			if err != nil {
 				return err
@@ -260,6 +270,9 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) (err erro
 					kernel := strings.TrimSpace(log.String())
 					mms.Kernel.Store(kernel)
 					return nil
+				}),
+				executioner.OnDryRun(func() {
+					mms.Kernel.Store("DRY_RUN")
 				}),
 			)
 			if err != nil {

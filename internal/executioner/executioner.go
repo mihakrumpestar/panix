@@ -35,6 +35,7 @@ type ExecOptions struct {
 	disableAutoSshCommand bool
 	onFailure             func(*logs_command.CommandLog, error) error
 	onSuccess             func(*logs_command.CommandLog) error
+	onDryRun              func()
 	env                   []string
 }
 
@@ -61,6 +62,13 @@ func OnFailure(f func(*logs_command.CommandLog, error) error) ExecOption {
 func OnSuccess(f func(*logs_command.CommandLog) error) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.onSuccess = f
+	}
+}
+
+// OnDryRun is mandatory - every command that has OnSuccess must also provide OnDryRun
+func OnDryRun(f func()) ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.onDryRun = f
 	}
 }
 

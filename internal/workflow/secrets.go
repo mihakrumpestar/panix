@@ -63,6 +63,10 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 
 							return err
 						}),
+						executioner.OnDryRun(func() {
+							// In dry-run mode, skip writing to file
+							_ = f.Close()
+						}),
 					)
 					if err != nil {
 						return err
