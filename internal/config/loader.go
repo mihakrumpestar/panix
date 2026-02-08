@@ -126,38 +126,56 @@ func (c *Config) initAndValidateConfig() error {
 
 // FilterConfigEntries filters the configuration based on command-line or global selections
 func (c *Config) filterRootTree() error {
+	// Collect keys to delete instead of modifying while iterating
+	flakesToDelete := make([]string, 0)
+
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		if flake == nil || flake.Configurations == nil {
-			c.Root.Flakes.Omap.Del(flakePair.Key)
+			flakesToDelete = append(flakesToDelete, flakePair.Key)
 			continue
 		}
+
+		configsToDelete := make([]string, 0)
 
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			config := configPair.Value
 			if config == nil || config.Disabled || config.Machines == nil {
-				flake.Configurations.Omap.Del(configPair.Key)
+				configsToDelete = append(configsToDelete, configPair.Key)
 				continue
 			}
 
 			// Filter machines
+			machinesToDelete := make([]string, 0)
 			for _, machinePair := range config.Machines.Omap.Pairs() {
 				machine := machinePair.Value
 				if machine == nil || machine.Disabled || !machineContainsTags(machine.Tags, c.Flags.Tags) {
-					config.Machines.Omap.Del(machinePair.Key)
+					machinesToDelete = append(machinesToDelete, machinePair.Key)
 				}
+			}
+
+			for _, key := range machinesToDelete {
+				config.Machines.Omap.Del(key)
 			}
 
 			// Delete config if no machines left
 			if config.Machines.Omap.Len() == 0 {
-				flake.Configurations.Omap.Del(configPair.Key)
+				configsToDelete = append(configsToDelete, configPair.Key)
 			}
+		}
+
+		for _, key := range configsToDelete {
+			flake.Configurations.Omap.Del(key)
 		}
 
 		// Delete flake if no configs left
 		if flake.Configurations.Omap.Len() == 0 {
-			c.Root.Flakes.Omap.Del(flakePair.Key)
+			flakesToDelete = append(flakesToDelete, flakePair.Key)
 		}
+	}
+
+	for _, key := range flakesToDelete {
+		c.Root.Flakes.Omap.Del(key)
 	}
 
 	if c.Root.Flakes.Omap.Len() == 0 {

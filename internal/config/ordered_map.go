@@ -57,6 +57,13 @@ type keyValueExtractor[K comparable, V any] struct {
 
 func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 	if mapping, ok := node.(*ast.MappingNode); ok {
+		valueType := reflect.TypeOf((*V)(nil)).Elem()
+		isPtr := valueType.Kind() == reflect.Ptr
+		var elemType reflect.Type
+		if isPtr {
+			elemType = valueType.Elem()
+		}
+
 		for _, val := range mapping.Values {
 			var key K
 			if err := yaml.NodeToValue(val.Key, &key); err != nil {
@@ -64,24 +71,19 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 			}
 
 			var value V
-			valueType := reflect.TypeOf((*V)(nil)).Elem()
 
 			// Check if value is a NullNode (key without value)
 			if _, isNull := val.Value.(*ast.NullNode); isNull {
 				// Key has no value - for pointer types, create new instance
-				if valueType.Kind() == reflect.Ptr {
-					elemType := valueType.Elem()
-					if elemType.Kind() == reflect.Struct {
-						newPtr := reflect.New(elemType)
-						value = newPtr.Interface().(V)
-					}
+				if isPtr && elemType.Kind() == reflect.Struct {
+					newPtr := reflect.New(elemType)
+					value = newPtr.Interface().(V)
 				}
 				// For non-pointer types, value remains as zero value
 			} else {
 				// Value exists in YAML, unmarshal it
-				if valueType.Kind() == reflect.Ptr {
+				if isPtr {
 					// For pointer types, allocate a new struct first, then unmarshal into it
-					elemType := valueType.Elem()
 					if elemType.Kind() == reflect.Struct {
 						newPtr := reflect.New(elemType)
 						_ = yaml.NodeToValue(val.Value, newPtr.Interface())

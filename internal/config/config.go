@@ -112,13 +112,18 @@ func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.F
 	return nil
 }
 
+var (
+	emptySudo = []string{}
+	sudoCmd   = []string{"sudo"}
+)
+
 func (m *Machine) MaybeSudo() []string {
 	if m.MetaStatus.IsRoot.Load() {
-		return make([]string, 0) // Return zero slice (instead of nil), since this might be the starting slice
+		return emptySudo // Return zero slice (instead of nil), since this might be the starting slice
 	}
 
 	if m.OverrideSudoProgram == "" {
-		return []string{"sudo"}
+		return sudoCmd
 	}
 
 	return []string{m.OverrideSudoProgram}

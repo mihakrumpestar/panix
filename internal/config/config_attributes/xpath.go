@@ -38,15 +38,15 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 // Check if provided xpath is a child of called Xpath
 func (x Xpath) IsChild(xpath Xpath) bool {
 	// Check if x.path is a prefix of xpath.path
-	// Must be prefix AND child must be deeper
-	return strings.HasPrefix(xpath.path, x.path+"/") && xpath.Depth() > x.Depth()
+	// Must be prefix AND child must be deeper (longer string)
+	return strings.HasPrefix(xpath.path, x.path+"/") && len(xpath.path) > len(x.path)
 }
 
 // Check if provided xpath is a parent of called Xpath
 func (x Xpath) IsParent(xpath Xpath) bool {
 	// Check if xpath.path is a prefix of x.path
 	// Must be prefix AND current path must be deeper than the potential parent
-	return strings.HasPrefix(x.path, xpath.path+"/") && x.Depth() > xpath.Depth()
+	return strings.HasPrefix(x.path, xpath.path+"/") && len(x.path) > len(xpath.path)
 }
 
 func (x Xpath) String() string {
