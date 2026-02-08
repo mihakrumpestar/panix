@@ -8,30 +8,27 @@ import (
 )
 
 type TimeAndState struct {
-	startTime *atomic.Time
-	endTime   *atomic.Time
-	endErr    *atomic.Error
+	startTime atomic.Time
+	endTime   atomic.Time
+	endErr    atomic.Error
 }
 
 func NewTimeAndState() *TimeAndState {
-	return &TimeAndState{
-		&atomic.Time{},
-		&atomic.Time{},
-		&atomic.Error{},
-	}
+	return &TimeAndState{}
 }
 
 func NewTimeAndStateCustom(startTime, endTime time.Time, endErr error) *TimeAndState {
-	return &TimeAndState{
-		atomic.NewTime(startTime),
-		atomic.NewTime(endTime),
-		atomic.NewError(endErr),
-	}
+	tas := &TimeAndState{}
+	tas.startTime.Store(startTime)
+	tas.endTime.Store(endTime)
+	tas.endErr.Store(endErr)
+	return tas
 }
 
 func (tas *TimeAndState) StartTimer() time.Time {
-	if tas.HasStarted() {
-		return tas.startTime.Load()
+	startTime := tas.startTime.Load()
+	if !startTime.IsZero() {
+		return startTime
 	}
 
 	timeNow := time.Now()
@@ -66,10 +63,6 @@ func (tas *TimeAndState) HasStarted() bool {
 	return !tas.startTime.Load().IsZero()
 }
 
-func (tas *TimeAndState) GetEndTime() time.Time {
-	return tas.endTime.Load()
-}
-
 func (tas *TimeAndState) IsFinished() bool {
 	return !tas.endTime.Load().IsZero()
 }
@@ -79,35 +72,38 @@ func (tas *TimeAndState) GetEndError() error {
 }
 
 func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {
-	duration, err := tas.Duration()
-	if err == nil {
-		return duration, nil
+	startTime := tas.startTime.Load()
+	if startTime.IsZero() {
+		return time.Duration(0), errors.New("timer has not started yet")
 	}
 
-	duration, err = tas.ElapsedTime()
-	if err == nil {
-		return duration, nil
+	endTime := tas.endTime.Load()
+	if !endTime.IsZero() {
+		return endTime.Sub(startTime), nil
 	}
 
-	return time.Duration(0), err
+	return time.Since(startTime), nil
 }
 
 func (tas *TimeAndState) Duration() (time.Duration, error) {
-	if !tas.HasStarted() {
+	startTime := tas.startTime.Load()
+	if startTime.IsZero() {
 		return time.Duration(0), errors.New("timer has not started yet")
 	}
 
-	if !tas.IsFinished() {
-		return time.Duration(0), errors.New("timer has ended yet")
+	endTime := tas.endTime.Load()
+	if endTime.IsZero() {
+		return time.Duration(0), errors.New("timer has not ended yet")
 	}
 
-	return tas.GetEndTime().Sub(tas.GetStartTime()), nil
+	return endTime.Sub(startTime), nil
 }
 
 func (tas *TimeAndState) ElapsedTime() (time.Duration, error) {
-	if !tas.HasStarted() {
+	startTime := tas.startTime.Load()
+	if startTime.IsZero() {
 		return time.Duration(0), errors.New("timer has not started yet")
 	}
 
-	return time.Since(tas.GetStartTime()), nil
+	return time.Since(startTime), nil
 }

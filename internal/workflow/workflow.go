@@ -59,7 +59,7 @@ func (w *Workflow) State() *WorkflowState {
 	return w.state
 }
 
-func (w *Workflow) WaitForUpdate() <-chan uint64 {
+func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
 
@@ -212,7 +212,7 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 
 	phaseLog.Verbose("Started %s of %s", phaseLog.Phase(), xpath)
 
-	exc := executioner.NewExecutioner(w.ctx, w.state.Conf.Flags, machine, phaseLog, w.updateHook.OnUpdateHook)
+	exc := executioner.NewExecutioner(w.ctx, w.state.Conf.Flags, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	phaseLog.Verbose("Finished %s of %s", phaseLog.Phase(), xpath)

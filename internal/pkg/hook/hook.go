@@ -1,32 +1,37 @@
 package hook
 
-import "sync/atomic"
+import "sync"
 
+// Hook provides a lightweight notification mechanism for signaling updates.
+// It uses a buffered channel to ensure non-blocking sends.
+// Close must be called exactly once when done.
 type Hook struct {
-	channel   chan uint64
-	iteration atomic.Uint64
+	ch   chan struct{}
+	once sync.Once
 }
 
+// NewHook creates a new Hook with a buffer size of 1.
 func NewHook() *Hook {
-	return &Hook{
-		make(chan uint64),
-		atomic.Uint64{},
-	}
+	return &Hook{ch: make(chan struct{}, 1)}
 }
 
-func (h *Hook) WaitForUpdate() <-chan uint64 {
-	return h.channel
+// WaitForUpdate returns a receive-only channel for update notifications.
+// The channel is closed when the hook is closed.
+func (h *Hook) WaitForUpdate() <-chan struct{} {
+	return h.ch
 }
 
-func (h *Hook) Close() {
-	close(h.channel)
-}
-
-func (h *Hook) OnUpdateHook() {
+// Signal notifies all listeners of an update.
+// This is non-blocking and drops updates if the buffer is full.
+func (h *Hook) Signal() {
 	select {
-	case h.channel <- h.iteration.Add(1):
-		// Successfully sent update
+	case h.ch <- struct{}{}:
 	default:
-		// Channel is full or no receiver, skip without blocking
 	}
+}
+
+// Close closes the hook, signaling completion to all listeners.
+// Safe to call multiple times (subsequent calls are no-ops).
+func (h *Hook) Close() {
+	h.once.Do(func() { close(h.ch) })
 }
