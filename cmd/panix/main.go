@@ -29,7 +29,7 @@ func main() {
 		sflags.EnvPrefix("PANIX_"),
 	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed parsing flags: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -38,6 +38,7 @@ func main() {
 		Usage:   "Universal NixOS Deployment Tool",
 		Version: "0.1.0",
 		Flags:   parsedFlags,
+		Suggest: true,
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
 			conf, err := config.LoadConfig(flags)
 			if err != nil {
@@ -113,7 +114,7 @@ This is the main command for deploying NixOS configurations.`,
 	}
 
 	if err := cmd.Run(ctx, os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "runtime error: %v\n", err)
 		os.Exit(1)
 	}
 }
