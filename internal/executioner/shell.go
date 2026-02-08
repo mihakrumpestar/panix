@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"syscall"
 
 	"github.com/creack/pty"
@@ -14,112 +13,137 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (ex *Executioner) shellStream(description, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) (err error) {
+const (
+	ptyBufferSize = 8192
+)
+
+// ANSI escape sequence regex pattern - matches common escape sequences
+// Handles: \x1b[K (erase line), \x1b[...m (colors), \x1b[...A/B/C/D (cursor), etc.
+// Also handles OSC (Operating System Command) sequences like \x1b]0;...BEL
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07\x1b]*[\x07\x1b\\]`)
+
+func (ex *Executioner) shellStream(description, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) error {
+	if err := validateExecOptions(excOpt); err != nil {
+		return err
+	}
+
 	commandLog := ex.phaseLog.NewCommand(description, statusIfFailed, false)
 
 	commandLog.TimeAndState.StartTimer()
+	var execErr error
 	defer func() {
-		commandLog.TimeAndState.EndTimerWithError(err)
+		commandLog.TimeAndState.EndTimerWithError(execErr)
 		ex.onUpdateHook()
 	}()
 
-	command := commandWithArgs[0]
-	args := commandWithArgs[1:]
-
-	// Prepare initial event
-	cmd := exec.CommandContext(ex.ctx, command, args...)
-	cmd.Env = append(os.Environ(), excOpt.env...)
-
-	command = strings.Join(excOpt.env, " ")
-	if command != "" {
-		command += "\n"
-	}
-	command += strings.Join(cmd.Args, " ")
-
-	commandLog.Command.Store(command)
+	cmd := ex.prepareCommand(commandWithArgs, excOpt)
+	commandLog.Command.Store(cmd.String())
 	ex.onUpdateHook()
 
-	// dry-run short-circuit
 	if ex.dryRun {
+		return ex.handleDryRun(excOpt)
+	}
+
+	ptyFile, err := pty.Start(cmd)
+	if err != nil {
+		return err
+	}
+	commandLog.Pty = ptyFile
+	defer func() { _ = ptyFile.Close() }()
+
+	readErr := ex.readPTYOutput(ptyFile, commandLog)
+	execErr = ex.finalizeExecution(cmd, readErr, commandLog, excOpt)
+
+	if execErr != nil {
+		return errors.Wrap(execErr, statusIfFailed)
+	}
+	return nil
+}
+
+func (ex *Executioner) prepareCommand(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
+	cmd := exec.CommandContext(ex.ctx, commandWithArgs[0], commandWithArgs[1:]...)
+	cmd.Env = append(os.Environ(), excOpt.env...)
+	return cmd
+}
+
+func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
+	if excOpt.onDryRun == nil {
 		if excOpt.onSuccess != nil {
-			err := excOpt.onSuccess(commandLog)
-			if err != nil {
-				return err
-			}
+			return errors.New("OnDryRun is mandatory when OnSuccess is provided - please provide dry-run handling")
 		}
 		return nil
 	}
+	excOpt.onDryRun()
+	return nil
+}
 
-	// Start the process with PTY
-	commandLog.Pty, err = pty.Start(cmd)
-	if err != nil {
-		return
-	}
+func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *logs_command.CommandLog) error {
+	buf := make([]byte, ptyBufferSize)
 
-	defer func() {
-		errPty := commandLog.Pty.Close()
-		if err != nil && errPty != nil {
-			err = errors.Wrap(err, errPty.Error())
-		} else if errPty != nil {
-			err = errPty
-		}
-	}()
-
-	// Read from PTY and capture to buffer in real-time
-	buf := make([]byte, 8192)
-	var readErr error
-
-	// Warning: the folowing read sequance applies to pty.stdin too
 	for {
-		var n int
-		n, readErr = commandLog.Pty.Read(buf)
-		if readErr != nil {
-			readErr = ptyError(readErr)
-			if readErr != nil && readErr != io.EOF {
-				commandLog.WriteLineString("PTY read error: " + readErr.Error())
-				commandLog.WriteLineString("")
-			}
-
-			break
+		n, err := ptyFile.Read(buf)
+		if err != nil {
+			return ex.handleReadError(err, commandLog)
 		}
 
-		if n > 0 {
-			rawBuffer := buf[:n]
-
-			// Process the buffer to handle terminal control sequences properly
-			// This makes it work like a normal terminal would
-			readErr = processTerminalOutput(rawBuffer, commandLog)
-			if readErr != nil {
-				commandLog.WriteLineString("processTerminalOutput write error: " + readErr.Error())
-				commandLog.WriteLineString("")
-
-				break
-			}
-
-			ex.onUpdateHook()
+		if n == 0 {
+			continue
 		}
-	}
 
-	// Wait for command to complete
-	err = cmd.Wait()
-	if err != nil && readErr != nil {
-		err = errors.Wrap(err, readErr.Error())
-	} else if readErr != nil {
-		err = readErr
-	}
-	if err != nil {
-		if excOpt.onFailure != nil {
-			err = excOpt.onFailure(commandLog, err)
+		err = processTerminalOutput(buf[:n], commandLog)
+		if err != nil {
+			commandLog.WriteLineString("processTerminalOutput write error: " + err.Error())
+			commandLog.WriteLineString("")
+			return err
 		}
-	} else if excOpt.onSuccess != nil {
-		err = excOpt.onSuccess(commandLog)
-	}
 
-	if err != nil {
-		err = errors.Wrap(err, statusIfFailed)
+		ex.onUpdateHook()
 	}
+}
 
-	return
+func (ex *Executioner) handleReadError(err error, commandLog *logs_command.CommandLog) error {
+	err = ptyError(err)
+	if err != nil && err != io.EOF {
+		commandLog.WriteLineString("PTY read error: " + err.Error())
+		commandLog.WriteLineString("")
+	}
+	return err
+}
+
+func (ex *Executioner) finalizeExecution(
+	cmd *exec.Cmd,
+	readErr error,
+	commandLog *logs_command.CommandLog,
+	excOpt *ExecOptions,
+) error {
+	waitErr := cmd.Wait()
+	err := consolidateErrors(waitErr, readErr)
+
+	if err != nil && excOpt.onFailure != nil {
+		return excOpt.onFailure(commandLog, err)
+	}
+	if err == nil && excOpt.onSuccess != nil {
+		return excOpt.onSuccess(commandLog)
+	}
+	return err
+}
+
+func validateExecOptions(excOpt *ExecOptions) error {
+	if excOpt.onSuccess != nil && excOpt.onDryRun == nil {
+		return errors.New("OnDryRun is mandatory when OnSuccess is provided - every command with OnSuccess must handle dry-run mode")
+	}
+	return nil
+}
+
+func consolidateErrors(waitErr, readErr error) error {
+	switch {
+	case waitErr != nil && readErr != nil:
+		return errors.Wrap(waitErr, readErr.Error())
+	case readErr != nil:
+		return readErr
+	default:
+		return waitErr
+	}
 }
 
 // Helpers
@@ -133,47 +157,38 @@ func ptyError(err error) error {
 	if !ok || pathErr.Err != syscall.EIO {
 		return err
 	}
-
 	return nil
 }
 
 // processTerminalOutput processes terminal output to handle control sequences
 // like a real terminal would, but in a way that's safe for TUI display
 func processTerminalOutput(buf []byte, exm *logs_command.CommandLog) error {
-	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), []byte{})
-
-	// Split by position markers
+	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), nil)
 	sequences := bytes.Split(buf, []byte("\r"))
 
-	for index, sequence := range sequences {
-		if bytes.HasPrefix(sequence, []byte("\n")) {
-			sequence = bytes.TrimPrefix(sequence, []byte("\n"))
-			exm.WriteLine(sequence)
-		} else {
-			if index == 0 { // Stitch together from previous buffer
-				_, err := exm.Write(sequence)
-				if err != nil {
-					return err
-				}
-
-				continue
-			}
-
-			exm.ReplaceLastLine(sequence)
+	for i, seq := range sequences {
+		if err := processSequence(seq, i == 0, exm); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
+func processSequence(seq []byte, isFirst bool, exm *logs_command.CommandLog) error {
+	if bytes.HasPrefix(seq, []byte("\n")) {
+		exm.WriteLine(bytes.TrimPrefix(seq, []byte("\n")))
+		return nil
+	}
+
+	if isFirst {
+		_, err := exm.Write(seq)
+		return err
+	}
+
+	exm.ReplaceLastLine(seq)
 	return nil
 }
 
 func CleanAnsiAndSpace(b []byte) []byte {
-	// ANSI escape sequence regex pattern - matches common escape sequences
-	// Handles: \x1b[K (erase line), \x1b[...m (colors), \x1b[...A/B/C/D (cursor), etc.
-	// Also handles OSC (Operating System Command) sequences like \x1b]0;...BEL
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07\x1b]*[\x07\x1b\\]`)
-	cleaned := ansiRegex.ReplaceAll(b, []byte{})
-
-	cleaned = bytes.TrimSpace(cleaned)
-
-	return cleaned
+	return bytes.TrimSpace(ansiRegex.ReplaceAll(b, nil))
 }
