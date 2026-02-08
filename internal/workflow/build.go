@@ -23,11 +23,6 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 				configuration.MetaBuild = &config.MetaBuild{}
 			}
 
-			if w.state.Conf.Flags.DryRun {
-				configuration.MetaBuild.SystemClosure = "BUILD_OUTPUT_PATH_PLACEHOLDER"
-				return nil
-			}
-
 			// System closure
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.URL, configuration.Name)}
 
@@ -53,20 +48,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		commandWithArgs,
 		executioner.DisableAutoSshCommand(),
 		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-			output := log.Bytes()
-			output = lastNonEmptyLine(output)
-
-			if w.state.Conf.Flags.DryRun {
-				output = []byte(`
-						[
-							{
-								"outputs": {
-									"out": "DRY_RUN"
-								}
-							}
-						]
-						`)
-			}
+			output := lastNonEmptyLine(log.Bytes())
 
 			err := json.Unmarshal(output, &parsedOutput)
 			if err != nil || len(parsedOutput) == 0 {
@@ -74,7 +56,12 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 			}
 
 			return nil
-		}), // "--print-build-logs"
+		}),
+		executioner.OnDryRun(func() {
+			parsedOutput = BuidOutputJson{{Outputs: struct {
+				Out string `json:"out"`
+			}{Out: "BUILD_OUTPUT_PATH_PLACEHOLDER"}}}
+		}),
 	)
 	if err != nil {
 		return nil, err
