@@ -28,29 +28,25 @@ type Attributes struct {
 	Flags   *config_flags.Flags `yaml:"-"`
 }
 
-func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) (err error) {
+func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) error {
 	a.Name, a.Flags = name, flags
 	a.Tags = append(a.Tags, name)
 	a.PassAttributesInto(attr)
 
-	defer func() {
-		err = errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
-	}()
-
 	sshConfig, err := ssh.GetCachedSshConfig()
 	if err != nil {
-		return
+		return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 	}
 
 	err = a.SSH.Init(sshConfig, name, flags.OverrideLocalMachine)
 	if err != nil {
-		return errors.Wrap(err, "ssh")
+		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
 	}
 
 	for _, secret := range a.Secrets {
 		err = secret.Validate()
 		if err != nil {
-			return
+			return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 		}
 	}
 
