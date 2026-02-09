@@ -15,112 +15,146 @@ import (
 )
 
 var (
-	keymapHelp = func() help.Model {
-		h := help.New()
-		h.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-		h.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-		return h
-	}()
+	notificationBaseStyle = lipgloss.NewStyle().Bold(true)
+	centerStyleCache      = make(map[int]lipgloss.Style)
+	keymapHelp            = help.New()
 )
 
-// notificationMsg is sent when the notification should fade out
+func init() {
+	keymapHelp.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+	keymapHelp.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+}
+
+// notificationMsg clears the notification after timeout
 type notificationMsg struct{}
 
-// keymap defines all the key bindings for the TUI
-type keymap struct {
-	quit       key.Binding
-	toggle     key.Binding
-	retry      key.Binding
-	copy       key.Binding
-	fullscreen key.Binding
+// keyDef defines a single key binding
+type keyDef struct {
+	keys    []string
+	help    string
+	handler func(*model) (tea.Model, tea.Cmd)
 }
 
-// ShortHelp returns the key bindings to show in the short help view
-func (k keymap) ShortHelp() []key.Binding {
-	return []key.Binding{k.quit, k.toggle, k.retry, k.copy, k.fullscreen}
+// keyDefs is the single source of truth for all key bindings
+var keyDefs = []keyDef{
+	{[]string{"q"}, "quit", (*model).handleQuit},
+	{[]string{"h"}, "toggle logs", (*model).handleToggle},
+	{[]string{"r"}, "retry", (*model).handleRetry},
+	{[]string{"ctrl+c"}, "copy", (*model).handleCopy},
+	{[]string{"m"}, "fullscreen", (*model).handleFullscreen},
 }
 
-// FullHelp returns the key bindings to show in the full help view
-func (k keymap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.quit, k.copy},
-		{k.toggle, k.retry},
-		{k.fullscreen},
+// pre-initialized bindings for help view (populated in init)
+var keyBindings []key.Binding
+
+// Keymap implements help.KeyMap for bubble tea help component
+type Keymap struct{}
+
+// ShortHelp returns key bindings for the short help view
+func (k Keymap) ShortHelp() []key.Binding {
+	return keyBindings
+}
+
+// FullHelp returns key bindings for the full help view
+func (k Keymap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{keyBindings}
+}
+
+func init() {
+	keyBindings = make([]key.Binding, len(keyDefs))
+	for i, kd := range keyDefs {
+		keyBindings[i] = key.NewBinding(
+			key.WithKeys(kd.keys...),
+			key.WithHelp(kd.keys[0], kd.help),
+		)
 	}
 }
 
-// newKeymap creates a new keymap with all the necessary key bindings
-func newKeymap() keymap {
-	return keymap{
-		quit: key.NewBinding(
-			key.WithKeys("q"),
-			key.WithHelp("q", "quit"),
-		),
-		toggle: key.NewBinding(
-			key.WithKeys("h"),
-			key.WithHelp("h", "show/hide hidden logs"),
-		),
-		retry: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "retry failed"),
-		),
-		copy: key.NewBinding(
-			key.WithKeys("ctrl+c"),
-			key.WithHelp("ctrl+c", "copy viewport"),
-		),
-		fullscreen: key.NewBinding(
-			key.WithKeys("m"),
-			key.WithHelp("m", "toggle fullscreen"),
-		),
-	}
-}
-
-// HandleKeyInput handles key input using the keymap and returns the updated model and command
+// HandleKeyInput routes key events to their handlers
 func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	keys := newKeymap()
-
-	switch {
-	case key.Matches(msg, keys.copy):
-		return m.handleCopy()
-	case key.Matches(msg, keys.quit):
-		return m.handleQuit()
-	case key.Matches(msg, keys.toggle):
-		return m.handleToggle()
-	case key.Matches(msg, keys.retry):
-		return m.handleRetry()
-	case key.Matches(msg, keys.fullscreen):
-		return m.handleFullscreen()
-	case msg.String() == "esc":
+	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
-
+	for _, kd := range keyDefs {
+		for _, k := range kd.keys {
+			if msg.String() == k {
+				return kd.handler(m)
+			}
+		}
+	}
 	return m, nil
 }
+
+// ViewKeybindings renders the footer with help, notification, and scroll percent
+func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
+	const footerHeight = 3
+	width := m.modelView.dimensions.Width
+
+	// Use bubbles help library for consistent styling
+	helpContent := keymapHelp.View(Keymap{})
+	helpContent = lipgloss.NewStyle().MaxWidth(width / 2).Render(helpContent)
+	helpContent = centerVertically(helpContent, footerHeight)
+
+	// Notification (if any)
+	notificationContent := m.renderNotification()
+	var notifWidth int
+	var notificationBox string
+	if notificationContent != "" {
+		notificationBox = lipgloss.NewStyle().
+			Padding(0, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(m.notificationColor.GetForeground()).
+			Inherit(m.notificationColor).
+			Render(notificationContent)
+		notificationBox = centerVertically(notificationBox, footerHeight)
+		notifWidth = lipgloss.Width(notificationBox)
+	}
+
+	// Scroll percent
+	scrollPercent := renderScrollPercent(m)
+	scrollPercent = centerVertically(scrollPercent, footerHeight)
+	scrollWidth := lipgloss.Width(scrollPercent)
+
+	// Calculate spacing
+	middleWidth := width - lipgloss.Width(helpContent) - notifWidth - scrollWidth
+	if middleWidth < 0 {
+		middleWidth = 0
+	}
+
+	// Assemble footer
+	parts := []string{helpContent}
+	if middleWidth > 0 {
+		parts = append(parts, lipgloss.NewStyle().Width(middleWidth).Render(""))
+	}
+	if notificationBox != "" {
+		parts = append(parts, notificationBox)
+	}
+	parts = append(parts, scrollPercent)
+
+	return "\n" + lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+}
+
+// Handlers
 
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 	content, isInner := m.modelView.viewports.GetActiveInnerViewportContent()
 	if !isInner {
 		return m.setNotification("Select an inner viewport to copy", m.workflow.State().Conf.ColorScheme.StatusWarning)
 	}
-
 	if content == "" {
 		return m.setNotification("No content to copy", m.workflow.State().Conf.ColorScheme.StatusWarning)
 	}
-
 	if err := tui_clipboard.CopyToClipboard(content); err != nil {
 		return m.setNotification("Copy failed: "+err.Error(), m.workflow.State().Conf.ColorScheme.StatusError)
 	}
-
 	return m.setNotification("Copied to clipboard", m.workflow.State().Conf.ColorScheme.StatusOK)
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	m.quitting = true
 	m.workflow.Cancel()()
-
 	ctx := m.workflow.Ctx()
 	<-ctx.Done()
-
 	if m.err != nil && ctx.Err() != nil {
 		if ctx.Err() != context.Canceled {
 			m.err = errors.Wrap(m.err, ctx.Err().Error())
@@ -128,9 +162,7 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	} else if ctx.Err() != nil && ctx.Err() != context.Canceled {
 		m.err = ctx.Err()
 	}
-
 	m.modelView.debugOutput.WriteString("CTX done\n")
-
 	return m, tea.Quit
 }
 
@@ -150,14 +182,12 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 		m.modelView.viewports.ExitFullscreen()
 		return m, nil
 	}
-
 	activeInnerXpath := m.modelView.viewports.GetActiveInnerViewportXpath()
 	if activeInnerXpath.Depth() > 0 {
 		m.modelView.viewports.SetFullscreen(activeInnerXpath)
 	} else {
 		return m.setNotification("Select a viewport first", m.workflow.State().Conf.ColorScheme.StatusWarning)
 	}
-
 	return m, nil
 }
 
@@ -170,50 +200,38 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// setNotification sets a notification message with color and starts the timer
+// Notification helpers
+
 func (m *model) setNotification(text string, color lipgloss.Style) (tea.Model, tea.Cmd) {
 	m.notification = text
 	m.notificationColor = color
 	m.notificationTime = time.Now()
-	return m, m.notificationTimer()
+	return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return notificationMsg{} })
 }
 
-// notificationTimer returns a command that waits for the notification duration
-func (m *model) notificationTimer() tea.Cmd {
-	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-		return notificationMsg{}
-	})
-}
-
-// clearNotification clears the notification
 func (m *model) clearNotification() {
 	m.notification = ""
 	m.notificationTime = time.Time{}
 }
 
-// renderNotification renders the notification with fade effect based on time elapsed
 func (m *model) renderNotification() string {
 	if m.notification == "" {
 		return ""
 	}
-
 	elapsed := time.Since(m.notificationTime)
-	duration := 3 * time.Second
-	fadeDuration := time.Second
-
+	const duration = 3 * time.Second
+	const fadeDuration = time.Second
 	if elapsed > duration {
 		return ""
 	}
-
-	inFade := elapsed > duration-fadeDuration
-
-	style := lipgloss.NewStyle().Bold(true)
-	if inFade {
+	style := notificationBaseStyle
+	if elapsed > duration-fadeDuration {
 		style = style.Faint(true)
 	}
-
 	return style.Inherit(m.notificationColor).Render(m.notification)
 }
+
+// Utility functions
 
 func renderScrollPercent(m *model) string {
 	pct := m.modelView.viewports.GetActiveViewportScrollPercent()
@@ -223,7 +241,6 @@ func renderScrollPercent(m *model) string {
 		Render(fmt.Sprintf("%d%%", pctInt))
 }
 
-// centerVertically centers content vertically within a given height
 func centerVertically(content string, height int) string {
 	contentHeight := lipgloss.Height(content)
 	if contentHeight >= height {
@@ -231,66 +248,11 @@ func centerVertically(content string, height int) string {
 	}
 	paddingTop := (height - contentHeight) / 2
 	paddingBottom := height - contentHeight - paddingTop
-	return lipgloss.NewStyle().
-		PaddingTop(paddingTop).
-		PaddingBottom(paddingBottom).
-		Render(content)
-}
-
-// ViewKeybindings returns the help view with key bindings positioned at the bottom
-func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
-	const footerHeight = 3
-	footerWidth := m.modelView.dimensions.Width
-
-	helpContent := keymapHelp.View(newKeymap())
-	notificationContent := m.renderNotification()
-	scrollPercentContent := renderScrollPercent(m)
-
-	// Prepare notification box if present
-	var notificationBox string
-	var notifWidth int
-	if notificationContent != "" {
-		notificationBox = lipgloss.NewStyle().
-			Padding(0, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(m.notificationColor.GetForeground()).
-			Inherit(m.notificationColor).
-			Render(notificationContent)
-		notificationBox = centerVertically(notificationBox, footerHeight)
-		notifWidth = lipgloss.Width(notificationBox) + 1
+	cacheKey := paddingTop<<16 | paddingBottom
+	if style, ok := centerStyleCache[cacheKey]; ok {
+		return style.Render(content)
 	}
-
-	scrollPercentWidth := lipgloss.Width(scrollPercentContent)
-
-	// Calculate available width for help
-	availableWidth := footerWidth - notifWidth - scrollPercentWidth - 2
-	if availableWidth < 0 {
-		availableWidth = 0
-	}
-
-	// Truncate help if needed and center vertically
-	if availableWidth > 0 {
-		helpContent = lipgloss.NewStyle().MaxWidth(availableWidth).Render(helpContent)
-	}
-	helpContent = centerVertically(helpContent, footerHeight)
-	scrollPercentContent = centerVertically(scrollPercentContent, footerHeight)
-
-	// Calculate middle spacing
-	middleWidth := footerWidth - lipgloss.Width(helpContent) - notifWidth - scrollPercentWidth
-	if middleWidth < 0 {
-		middleWidth = 0
-	}
-
-	// Build footer row
-	var parts []string
-	parts = append(parts, helpContent)
-	if middleWidth > 0 {
-		parts = append(parts, lipgloss.NewStyle().Width(middleWidth).Render(""))
-	}
-	if notificationBox != "" {
-		parts = append(parts, notificationBox)
-	}
-	parts = append(parts, scrollPercentContent)
-
-	return "\n" + lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+	style := lipgloss.NewStyle().PaddingTop(paddingTop).PaddingBottom(paddingBottom)
+	centerStyleCache[cacheKey] = style
+	return style.Render(content)
 }
