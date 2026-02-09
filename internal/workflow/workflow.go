@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"slices"
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
@@ -10,7 +9,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
-	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -68,7 +66,6 @@ func (w *Workflow) Cancel() context.CancelFunc {
 }
 
 func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.Xpath, f func() error) error {
-
 	for {
 		err := f()
 		if err != nil {
@@ -78,129 +75,12 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 			}
 
 			w.state.Retry.Wait()
-
-			// Task is being retried, so logs are cleared
 			w.state.Conf.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
 		} else {
 			return nil
 		}
 	}
 }
-
-func (w *Workflow) CreateWorkflow() error {
-	subPool := w.state.Pool.NewGroup()
-
-	for _, flakePair := range w.state.Conf.Root.Flakes.Omap.Pairs() {
-		flake := flakePair.Value
-
-		subPool.SubmitErr(func() error {
-
-			flakePool := w.state.Pool.NewGroup()
-
-			for _, configPair := range flake.Configurations.Omap.Pairs() {
-				configuration := configPair.Value
-
-				build := once_async.NewOnceAsync()
-
-				for _, machinePair := range configuration.Machines.Omap.Pairs() {
-					machine := machinePair.Value
-
-					// Capture loop variables for goroutine
-					machine, configuration, flake := machine, configuration, flake
-
-					flakePool.SubmitErr(func() error {
-
-						// Status
-						if slices.Contains(w.state.Phases, phases.Inspect) {
-							err := w.NewTaskWithRetry(phases.Inspect, machine.Xpath, func() error {
-								return w.executeInspectPhaseMachine(machine)
-							})
-							if err != nil {
-								return err
-							}
-						}
-
-						if w.state.Conf.Flags.Bootstrap.Only && machine.MetaStatus.Bootstrapped.Load() {
-							return nil
-						}
-
-						// Bootstrap
-						if !machine.MetaStatus.Bootstrapped.Load() {
-
-							if !w.state.Conf.Flags.Bootstrap.DisableDisko &&
-								slices.Contains(w.state.Phases, phases.Bootstrap) {
-
-								err := w.NewTaskWithRetry(phases.Bootstrap, machine.Xpath, func() error {
-									return w.executeBootstrapPhaseMachine(flake, configuration, machine)
-								})
-								if err != nil {
-									return err
-								}
-							}
-						}
-
-						// Build
-						if slices.Contains(w.state.Phases, phases.Build) {
-							err := build.Do(func() error {
-								return w.NewTaskWithRetry(phases.Build, configuration.Xpath, func() error {
-									return w.executeBuildPhaseConfiguration(flake, configuration)
-								})
-							})
-							if err != nil {
-								return err
-							}
-						}
-
-						// Transfer
-						if slices.Contains(w.state.Phases, phases.Transfer) {
-							err := w.NewTaskWithRetry(phases.Transfer, machine.Xpath, func() error {
-								return w.executeTransferPhaseMachine(machine)
-							})
-							if err != nil {
-								return err
-							}
-						}
-
-						// Secrets
-						if slices.Contains(w.state.Phases, phases.Secrets) {
-							err := w.NewTaskWithRetry(phases.Secrets, machine.Xpath, func() error {
-								return w.executeSecretsPhaseMachine(machine)
-							})
-							if err != nil {
-								return err
-							}
-						}
-
-						// Activate
-						if slices.Contains(w.state.Phases, phases.Activate) {
-							err := w.NewTaskWithRetry(phases.Activate, machine.Xpath, func() error {
-								return w.executeActivatePhaseMachine(machine)
-							})
-							if err != nil {
-								return err
-							}
-						}
-
-						return nil
-					})
-				}
-			}
-
-			err := flakePool.Wait()
-
-			return err
-		})
-	}
-
-	err := subPool.Wait()
-
-	// Close the hook channel to signal completion to the TUI
-	w.updateHook.Close()
-
-	return err
-}
-
-// Helpers
 
 func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error) (err error) {
 	phaseLog := w.state.Conf.TargetsLogs.GetOrCreateLog(xpath, phase)
@@ -217,6 +97,36 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 
 	phaseLog.Verbose("Finished %s of %s", phaseLog.Phase(), xpath)
 
+	return err
+}
+
+// CreateWorkflow orchestrates the execution of all phases
+func (w *Workflow) CreateWorkflow() error {
+	subPool := w.state.Pool.NewGroup()
+
+	w.state.RootTree(func(i int, machine *config.Machine) {
+		subPool.SubmitErr(func() error {
+			// Create a shared phase runner for this machine
+			runner := &phaseRunner{
+				w:       w,
+				flake:   machine.Configuration.Flake,
+				config:  machine.Configuration,
+				machine: machine,
+			}
+
+			// Execute each phase in order
+			for _, phase := range w.state.Phases {
+				if err := runner.run(phase); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+	})
+
+	err := subPool.Wait()
+	w.updateHook.Close()
 	return err
 }
 

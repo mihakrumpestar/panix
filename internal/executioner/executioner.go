@@ -79,7 +79,7 @@ func Env(env []string) ExecOption {
 	}
 }
 
-func (ex *Executioner) Exec(description, statusIfFailed string, commandWithArgs []string, opts ...ExecOption) error {
+func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string, commandWithArgs []string, opts ...ExecOption) error {
 	excOpt := &ExecOptions{}
 	for _, opt := range opts {
 		opt(excOpt)
@@ -91,7 +91,7 @@ func (ex *Executioner) Exec(description, statusIfFailed string, commandWithArgs 
 	if noMachineOrLocal && excOpt.skipIfLocal {
 		defer ex.onUpdateHook()
 
-		comLog := ex.phaseLog.NewCommand("(skipped)", "", true)
+		comLog := ex.phaseLog.NewCommand("(skipped)", "", "", true)
 		if excOpt.onSuccess != nil {
 			err := excOpt.onSuccess(comLog)
 			if err != nil {
@@ -103,8 +103,8 @@ func (ex *Executioner) Exec(description, statusIfFailed string, commandWithArgs 
 	}
 
 	if noMachineOrLocal || excOpt.disableAutoSshCommand {
-		return ex.shellStream(description, statusIfFailed, commandWithArgs, excOpt)
+		return ex.shellStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
 	}
 
-	return ex.sshStream(description, statusIfFailed, commandWithArgs, excOpt)
+	return ex.sshStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
 }

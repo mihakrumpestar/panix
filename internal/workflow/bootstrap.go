@@ -12,8 +12,6 @@ import (
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-
-			// DiskoScript
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
 
 			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
@@ -28,12 +26,11 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 				return err
 			}
 
-			commandWithArgs := []string{diskoScript}
-
 			err = exc.Exec(
 				"disko",
+				"partitioning disk",
 				"diskoScript failed",
-				commandWithArgs,
+				[]string{diskoScript},
 			)
 			if err != nil {
 				return err
@@ -43,8 +40,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 				return nil
 			}
 
-			commandWithArgs = []string{machine.PostBootstrapHook}
-			err = exc.Exec("post bootstrap hook", "post bootstrap hook failed", commandWithArgs)
+			err = exc.Exec("post bootstrap hook", "running post-bootstrap hook", "post bootstrap hook failed", []string{machine.PostBootstrapHook})
 			if err != nil {
 				return err
 			}

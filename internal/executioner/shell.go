@@ -22,12 +22,12 @@ const (
 // Also handles OSC (Operating System Command) sequences like \x1b]0;...BEL
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07\x1b]*[\x07\x1b\\]`)
 
-func (ex *Executioner) shellStream(description, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) error {
+func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) error {
 	if err := validateExecOptions(excOpt); err != nil {
 		return err
 	}
 
-	commandLog := ex.phaseLog.NewCommand(description, statusIfFailed, false)
+	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, false)
 
 	commandLog.TimeAndState.StartTimer()
 	var execErr error
