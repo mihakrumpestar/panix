@@ -13,6 +13,67 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
+// tableColumn represents a column definition with its header and style.
+type tableColumn struct {
+	header string
+	style  func(*config.ColorScheme) lipgloss.Style
+}
+
+// makeTableColumns returns all column definitions.
+// The empty header strings are for index and status icon columns that use visual indicators.
+func makeTableColumns(colors *config.ColorScheme) ([]string, func(int) lipgloss.Style) {
+	columns := []tableColumn{
+		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow.Width(3).Align(lipgloss.Center)
+		}},
+		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow.Width(3).Align(lipgloss.Center)
+		}},
+		{header: string(colors.Flake.Icon) + " FLAKE", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.Flake.Color
+		}},
+		{header: string(colors.Configuration.Icon) + " CONFIG", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.Configuration.Color
+		}},
+		{header: string(colors.Machine.Icon) + " MACHINE", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.Machine.Color
+		}},
+		{header: "ARCH", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow
+		}},
+		{header: "STATUS", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow
+		}},
+		{header: "GEN", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow
+		}},
+		{header: "DATE", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow
+		}},
+		{header: "NIXOS", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow
+		}},
+		{header: "KERNEL", style: func(c *config.ColorScheme) lipgloss.Style {
+			return c.TableRow
+		}},
+	}
+
+	headers := make([]string, len(columns))
+	for i, col := range columns {
+		headers[i] = col.header
+	}
+
+	return headers, func(col int) lipgloss.Style {
+		if col >= 0 && col < len(columns) {
+			return columns[col].style(colors)
+		}
+		return colors.TableRow
+	}
+}
+
+// rowSpanMarker is the visual indicator shown for spanned (merged) cells in the table.
+const rowSpanMarker = " 󱞩"
+
 func (m *model) ViewStatsTable() string {
 	state := m.workflow.State()
 	phasesList := state.Phases
@@ -24,94 +85,58 @@ func (m *model) ViewStatsTable() string {
 
 	var builder strings.Builder
 
-	// Header for the log view
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
-	// Use content width accounting for main viewport scrollbar and some padding
+	// Account for main viewport scrollbar and padding
 	usableWidth := max(m.modelView.viewports.ContentWidth()-2, 40)
 
-	// Header text lengths including icons
-	flakeHeader := string(colors.Flake.Icon) + " FLAKE"
-	configurationHeader := string(colors.Configuration.Icon) + " CONFIGURATION"
-	machineHeader := string(colors.Machine.Icon) + " MACHINE"
+	headers, styleFunc := makeTableColumns(colors)
 
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
-		Headers("", "", flakeHeader, configurationHeader, machineHeader, "ARCH", "STATUS", "GEN", "LAST GEN DATE", "NIXOS", "KERNEL").
+		Headers(headers...).
 		Width(usableWidth).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == -1 {
 				return colors.TableRow
 			}
-
-			switch col {
-			case 0: // Index
-				return colors.TableRow.Width(3).Align(lipgloss.Center)
-			case 1: // Status icon
-				return colors.TableRow.Width(3).Align(lipgloss.Center)
-			case 2: // FLAKE
-				return colors.Flake.Color
-			case 3: // CONFIG
-				return colors.Configuration.Color
-			case 4: // MACHINE
-				return colors.Machine.Color
-			case 5: // Architecture
-				return colors.TableRow
-			case 6: // Bootstrap status
-				return colors.TableRow
-			case 7: // Generation
-				return colors.TableRow
-			case 8: // Date
-				return colors.TableRow
-			case 9: // Nixos
-				return colors.TableRow
-			case 10: // Kernel
-				return colors.TableRow
-			default:
-				return colors.TableRow
-			}
+			return styleFunc(col)
 		})
 
-	// Track previous values to implement row spanning
 	var prevFlakeName, prevConfigName string
 
 	state.RootTree(func(i int, machine *config.Machine) {
 		configuration := machine.Configuration
 		flake := configuration.Flake
-
 		xpath := machine.Xpath
 
 		ps := machine.MetaStatus
-
 		phaseLog := state.Conf.TargetsLogs.GetFirstLogErrorOrLastLog(machine.Xpath)
 
-		// Determine if we should show flake name (only on first occurrence)
+		// Row spanning logic: show cell content only on first occurrence
 		showFlake := flake.Name != prevFlakeName
 		if showFlake {
 			prevFlakeName = flake.Name
 		}
 
-		// Determine if we should show config name (only on first occurrence of each config within a flake)
 		showConfig := configuration.Name != prevConfigName || flake.Name != prevFlakeName
 		if showConfig {
 			prevConfigName = configuration.Name
 		}
 
-		// Get display values (default values are for spanning)
-		flakeDisplay := " 󱞩"
+		flakeDisplay := rowSpanMarker
 		if showFlake {
 			flakeDisplay = flake.Name
 		}
 
-		configDisplay := " 󱞩"
+		configDisplay := rowSpanMarker
 		if showConfig {
 			configDisplay = configuration.Name
 		}
 
 		generationString := ""
-		generation := ps.Generation.Load()
-		if generation != 0 {
+		if generation := ps.Generation.Load(); generation != 0 {
 			generationString = fmt.Sprintf("%d", generation)
 		}
 
