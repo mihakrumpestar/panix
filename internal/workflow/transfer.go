@@ -30,6 +30,7 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 	commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + machine.SSH.Hostname + storeArgs}, toTransfer...)
 
 	err := exc.Exec("nix copy",
+		"copying closure",
 		"closure copy failed",
 		commandWithArgs,
 		executioner.SkipIfLocal(),
