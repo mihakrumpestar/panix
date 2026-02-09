@@ -27,6 +27,7 @@ type errMsg struct{ err error }
 
 func (e errMsg) Error() string { return e.err.Error() }
 
+// Model holds the complete TUI state.
 type model struct {
 	workflow          *workflow.Workflow
 	quitting          bool
@@ -44,67 +45,72 @@ type modelView struct {
 	debugOutput *strings.Builder
 }
 
+// NewTui initializes and runs the TUI application.
 func NewTui(workflow *workflow.Workflow) error {
 	zone.NewGlobal()
 	defer zone.Close()
 
-	// Ignore SIGINT so ctrl+c can be handled as a keybinding
-	// instead of terminating the process
+	// Handle SIGINT as a keybinding instead of terminating the process
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT)
+	defer signal.Stop(sigChan)
+
 	go func() {
 		for range sigChan {
-			// Ignore SIGINT - it will be handled as a keybinding
+			// SIGINT is handled as a keybinding
 		}
 	}()
 
 	dimensions := &tui_viewports.Dimensions{
-		Width:  120, // Initial dimensions before tea.WindowSizeMsg
-		Height: 120, // Initial dimensions before tea.WindowSizeMsg
+		Width:  80,
+		Height: 24,
 	}
 
 	debugOutput := &strings.Builder{}
-
-	//stdin := io.TeeReader(os.Stdin, os.Stdout)
+	state := workflow.State()
 
 	p := tea.NewProgram(model{
 		workflow: workflow,
 		modelView: modelView{
 			dimensions:  dimensions,
 			spinners:    tui_spinners.NewSpinners(),
-			viewports:   tui_viewports.NewViewports(dimensions, workflow.State().Conf.ColorScheme, debugOutput, workflow.State().Conf.Flags.Tui.CommandOutputMaxHeight),
+			viewports:   tui_viewports.NewViewports(dimensions, state.Conf.ColorScheme, debugOutput, state.Conf.Flags.Tui.CommandOutputMaxHeight),
 			debugOutput: debugOutput,
 		},
 	},
-		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
-		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 
 	debugOutput.WriteString("TUI initialized\n")
 
-	cpuprofile := workflow.State().Conf.Flags.Logging.CPUProfile
+	cpuprofile := state.Conf.Flags.Logging.CPUProfile
 	if cpuprofile != "" {
-		f, err := os.Create(cpuprofile)
-		if err != nil {
+		if err := startCPUProfile(cpuprofile); err != nil {
 			log.Fatal(err)
 		}
-		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
 
-	m, err := p.Run() // Blocking
+	m, err := p.Run()
 
-	// Print the final view to stdout after exiting alt-screen
 	finalModel, ok := m.(model)
 	if ok {
 		fmt.Println(finalModel.View())
-		// Return error from model if present (takes precedence over bubbletea error)
 		if finalModel.err != nil {
 			return finalModel.err
 		}
 	}
 
 	return err
+}
+
+func startCPUProfile(path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	return pprof.StartCPUProfile(f)
 }
 
 func (m model) Init() tea.Cmd {
@@ -117,39 +123,35 @@ func (m model) Init() tea.Cmd {
 
 func (m model) startWorkflow() tea.Cmd {
 	return func() tea.Msg {
-		// Use a closure to handle both panic recovery and error handling
-		msg := tea.Quit()
+		var msg tea.Msg = tea.Quit()
 
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					var err error
-					if e, ok := r.(error); ok {
-						err = fmt.Errorf("panic recovered: %w\n\n%s", e, string(debug.Stack()))
-					} else {
-						err = fmt.Errorf("panic recovered: %v\n\n%s", r, string(debug.Stack()))
-					}
-					m.err = err
-					msg = errMsg{err}
-				}
-			}()
-
-			err := m.workflow.CreateWorkflow()
-			if err != nil {
-				m.modelView.debugOutput.WriteString("Error: " + err.Error() + "\n")
-				// Don't treat context.Canceled as an error (user pressed 'q')
-				if err != context.Canceled {
-					m.err = err
-					msg = errMsg{err}
-				}
-				return
+		defer func() {
+			if r := recover(); r != nil {
+				m.err = recoverPanic(r)
+				msg = errMsg{m.err}
 			}
-
-			m.modelView.debugOutput.WriteString("All ok\n")
 		}()
+
+		if err := m.workflow.CreateWorkflow(); err != nil {
+			m.modelView.debugOutput.WriteString("Error: " + err.Error() + "\n")
+			if err != context.Canceled {
+				m.err = err
+				msg = errMsg{err}
+			}
+		} else {
+			m.modelView.debugOutput.WriteString("All ok\n")
+		}
 
 		return msg
 	}
+}
+
+func recoverPanic(r any) error {
+	stack := string(debug.Stack())
+	if e, ok := r.(error); ok {
+		return fmt.Errorf("panic recovered: %w\n\n%s", e, stack)
+	}
+	return fmt.Errorf("panic recovered: %v\n\n%s", r, stack)
 }
 
 func (m model) stateUpdateHook() tea.Cmd {
@@ -158,13 +160,12 @@ func (m model) stateUpdateHook() tea.Cmd {
 		if !ok {
 			return tea.Quit()
 		}
-
 		return stateUpdateHookMsg{}
 	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmds := make([]tea.Cmd, 0)
+	cmds := make([]tea.Cmd, 0, 8)
 
 	cmds = append(cmds, m.modelView.spinners.SendInitTickIfNotAlready())
 	cmds = append(cmds, m.modelView.viewports.Update(msg))
@@ -174,11 +175,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, tea.Quit
 
-	// Trigger re-render when update is received
 	case stateUpdateHookMsg:
 		cmds = append(cmds, m.stateUpdateHook())
 
-	// Handle notification timer expiration
 	case notificationMsg:
 		m.clearNotification()
 
@@ -187,12 +186,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		dimensions := m.modelView.dimensions
-
-		// Ensure minimum width
 		dimensions.Width = max(msg.Width, 40)
 		dimensions.Height = msg.Height
 
-	// Update spinners
 	case spinner.TickMsg:
 		cmds = append(cmds, m.modelView.spinners.Update(msg))
 	}
@@ -201,50 +197,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	// Always render main content to update all viewports (even in fullscreen)
 	mainContent := m.ViewMainContent()
 
 	if m.quitting {
-		// When quitting, return the full content without viewport
 		return zone.Scan(mainContent)
 	}
 
-	// Check if we're in fullscreen mode
 	if m.modelView.viewports.IsFullscreen() {
-		fullscreenXpath := m.modelView.viewports.GetFullscreenXpath()
-
-		// Get the updated content from the viewport (now refreshed by ViewMainContent)
-		content := m.modelView.viewports.GetViewportContent(fullscreenXpath)
-		if content == "" {
-			// If no content for fullscreen viewport, exit fullscreen mode
-			m.modelView.viewports.ExitFullscreen()
-		} else {
-			// Render fullscreen viewport with updated content
-			fullscreenViewport := m.modelView.viewports.RenderFullscreenViewport(fullscreenXpath, content)
-
-			var builder strings.Builder
-			builder.WriteString(fullscreenViewport)
-
-			// Add keybindings at the bottom (footer is still shown)
-			builder.WriteString(m.ViewKeybindings(builder))
-
-			return zone.Scan(builder.String())
+		result := m.renderFullscreen(mainContent)
+		if result != "" {
+			return result
 		}
 	}
 
-	// Use the special main viewport method
 	mainViewport := m.modelView.viewports.GetOrCreateMainViewport(mainContent)
 
 	var builder strings.Builder
 	builder.WriteString(mainViewport)
-
-	// Add keybindings at the bottom
 	builder.WriteString(m.ViewKeybindings(builder))
 
 	return zone.Scan(builder.String())
 }
 
-// Helpers
+func (m model) renderFullscreen(mainContent string) string {
+	fullscreenXpath := m.modelView.viewports.GetFullscreenXpath()
+	content := m.modelView.viewports.GetViewportContent(fullscreenXpath)
+
+	if content == "" {
+		m.modelView.viewports.ExitFullscreen()
+		return ""
+	}
+
+	fullscreenViewport := m.modelView.viewports.RenderFullscreenViewport(fullscreenXpath, content)
+
+	var builder strings.Builder
+	builder.WriteString(fullscreenViewport)
+	builder.WriteString(m.ViewKeybindings(builder))
+
+	return zone.Scan(builder.String())
+}
 
 // ViewMainContent generates the main content that is in a viewport
 func (m model) ViewMainContent() string {

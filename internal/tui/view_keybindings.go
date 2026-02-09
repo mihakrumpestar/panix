@@ -17,7 +17,6 @@ import (
 var (
 	keymapHelp = func() help.Model {
 		h := help.New()
-		// Make keys white while keeping descriptions as default
 		h.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 		h.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 		return h
@@ -82,89 +81,101 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, keys.copy):
-		content, isInner := m.modelView.viewports.GetActiveInnerViewportContent()
-		if !isInner {
-			m.notification = "Select an inner viewport to copy"
-			m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusWarning
-			m.notificationTime = time.Now()
-			return m, m.notificationTimer()
-		}
-		if content != "" {
-			err := tui_clipboard.CopyToClipboard(content)
-			if err != nil {
-				m.notification = "Copy failed: " + err.Error()
-				m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusError
-			} else {
-				m.notification = "Copied to clipboard"
-				m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusOK
-			}
-			m.notificationTime = time.Now()
-			return m, m.notificationTimer()
-		}
-		m.notification = "No content to copy"
-		m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusWarning
-		m.notificationTime = time.Now()
-		return m, m.notificationTimer()
+		return m.handleCopy()
 	case key.Matches(msg, keys.quit):
-		m.quitting = true
-		m.workflow.Cancel()()
-
-		// Block quiting until Workflow finalizes and terminates its tasks
-		ctx := m.workflow.Ctx()
-		<-ctx.Done()
-
-		// Only propagate context errors if they're not from manual cancellation
-		// context.Canceled is expected when user presses 'q' to quit
-		if m.err != nil && ctx.Err() != nil {
-			// Wrap existing error with context error unless it's just a cancellation
-			if ctx.Err() != context.Canceled {
-				m.err = errors.Wrap(m.err, ctx.Err().Error())
-			}
-		} else if ctx.Err() != nil && ctx.Err() != context.Canceled {
-			// Set error only if it's not a manual cancellation
-			m.err = ctx.Err()
-		}
-
-		m.modelView.debugOutput.WriteString("CTX done\n")
-
-		return m, tea.Quit
+		return m.handleQuit()
 	case key.Matches(msg, keys.toggle):
-		m.workflow.State().Conf.Flags.Tui.ShowAllBuildLogs = !m.workflow.State().Conf.Flags.Tui.ShowAllBuildLogs
-
-		return m, nil
+		return m.handleToggle()
 	case key.Matches(msg, keys.retry):
-		m.workflow.State().Retry.Trigger()
-
-		return m, nil
+		return m.handleRetry()
 	case key.Matches(msg, keys.fullscreen):
-		// Toggle fullscreen for the active inner viewport
-		if m.modelView.viewports.IsFullscreen() {
-			// Exit fullscreen
-			m.modelView.viewports.ExitFullscreen()
-		} else {
-			// Enter fullscreen for active inner viewport
-			activeInnerXpath := m.modelView.viewports.GetActiveInnerViewportXpath()
-			if activeInnerXpath.Depth() > 0 {
-				m.modelView.viewports.SetFullscreen(activeInnerXpath)
-			} else {
-				m.notification = "Select a viewport first"
-				m.notificationColor = m.workflow.State().Conf.ColorScheme.StatusWarning
-				m.notificationTime = time.Now()
-				return m, m.notificationTimer()
-			}
-		}
-		return m, nil
+		return m.handleFullscreen()
 	case msg.String() == "esc":
-		// ESC exits fullscreen mode, or deselects inner viewport back to main
-		if m.modelView.viewports.IsFullscreen() {
-			m.modelView.viewports.ExitFullscreen()
-		} else {
-			m.modelView.viewports.DeselectAll()
-		}
-		return m, nil
+		return m.handleEsc()
 	}
 
 	return m, nil
+}
+
+func (m *model) handleCopy() (tea.Model, tea.Cmd) {
+	content, isInner := m.modelView.viewports.GetActiveInnerViewportContent()
+	if !isInner {
+		return m.setNotification("Select an inner viewport to copy", m.workflow.State().Conf.ColorScheme.StatusWarning)
+	}
+
+	if content == "" {
+		return m.setNotification("No content to copy", m.workflow.State().Conf.ColorScheme.StatusWarning)
+	}
+
+	if err := tui_clipboard.CopyToClipboard(content); err != nil {
+		return m.setNotification("Copy failed: "+err.Error(), m.workflow.State().Conf.ColorScheme.StatusError)
+	}
+
+	return m.setNotification("Copied to clipboard", m.workflow.State().Conf.ColorScheme.StatusOK)
+}
+
+func (m *model) handleQuit() (tea.Model, tea.Cmd) {
+	m.quitting = true
+	m.workflow.Cancel()()
+
+	ctx := m.workflow.Ctx()
+	<-ctx.Done()
+
+	if m.err != nil && ctx.Err() != nil {
+		if ctx.Err() != context.Canceled {
+			m.err = errors.Wrap(m.err, ctx.Err().Error())
+		}
+	} else if ctx.Err() != nil && ctx.Err() != context.Canceled {
+		m.err = ctx.Err()
+	}
+
+	m.modelView.debugOutput.WriteString("CTX done\n")
+
+	return m, tea.Quit
+}
+
+func (m *model) handleToggle() (tea.Model, tea.Cmd) {
+	state := m.workflow.State()
+	state.Conf.Flags.Tui.ShowAllBuildLogs = !state.Conf.Flags.Tui.ShowAllBuildLogs
+	return m, nil
+}
+
+func (m *model) handleRetry() (tea.Model, tea.Cmd) {
+	m.workflow.State().Retry.Trigger()
+	return m, nil
+}
+
+func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
+	if m.modelView.viewports.IsFullscreen() {
+		m.modelView.viewports.ExitFullscreen()
+		return m, nil
+	}
+
+	activeInnerXpath := m.modelView.viewports.GetActiveInnerViewportXpath()
+	if activeInnerXpath.Depth() > 0 {
+		m.modelView.viewports.SetFullscreen(activeInnerXpath)
+	} else {
+		return m.setNotification("Select a viewport first", m.workflow.State().Conf.ColorScheme.StatusWarning)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleEsc() (tea.Model, tea.Cmd) {
+	if m.modelView.viewports.IsFullscreen() {
+		m.modelView.viewports.ExitFullscreen()
+	} else {
+		m.modelView.viewports.DeselectAll()
+	}
+	return m, nil
+}
+
+// setNotification sets a notification message with color and starts the timer
+func (m *model) setNotification(text string, color lipgloss.Style) (tea.Model, tea.Cmd) {
+	m.notification = text
+	m.notificationColor = color
+	m.notificationTime = time.Now()
+	return m, m.notificationTimer()
 }
 
 // notificationTimer returns a command that waits for the notification duration
@@ -188,16 +199,14 @@ func (m *model) renderNotification() string {
 
 	elapsed := time.Since(m.notificationTime)
 	duration := 3 * time.Second
-	fadeDuration := time.Second // 1 second fade for better visibility
+	fadeDuration := time.Second
 
 	if elapsed > duration {
 		return ""
 	}
 
-	// Check if we're in the fade period (last 1 second)
 	inFade := elapsed > duration-fadeDuration
 
-	// Apply visual fade using Faint during fade period
 	style := lipgloss.NewStyle().Bold(true)
 	if inFade {
 		style = style.Faint(true)
@@ -248,7 +257,7 @@ func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
 			Inherit(m.notificationColor).
 			Render(notificationContent)
 		notificationBox = centerVertically(notificationBox, footerHeight)
-		notifWidth = lipgloss.Width(notificationBox) + 1 // +1 for spacing
+		notifWidth = lipgloss.Width(notificationBox) + 1
 	}
 
 	scrollPercentWidth := lipgloss.Width(scrollPercentContent)
