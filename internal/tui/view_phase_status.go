@@ -15,17 +15,20 @@ import (
 
 const (
 	gradientAnimationCycleTime = 4 * time.Second
+	phaseArrow                 = "󰜴"
+	statusSeparator            = "/"
+	animationCacheInterval     = 50 * time.Millisecond
 )
 
+// ViewPhaseStatus renders the phase status view.
 func (m *model) ViewPhaseStatus() string {
-	var builder strings.Builder
-
 	colors := m.workflow.State().Conf.ColorScheme
 
-	builder.WriteString(colors.HeaderTitle.Render("=== Phase Status ===\n"))
-	builder.WriteString(m.renderPhaseFlow(colors))
+	var b strings.Builder
+	b.WriteString(colors.HeaderTitle.Render("=== Phase Status ===\n"))
+	b.WriteString(m.renderPhaseFlow(colors))
 
-	return builder.String()
+	return b.String()
 }
 
 func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
@@ -37,125 +40,163 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 
 	termWidth := m.modelView.viewports.ContentWidth()
 
+	// Cache styles to avoid repeated allocations
+	centerStyle := lipgloss.NewStyle().Align(lipgloss.Center)
+	borderStyle := colors.TableBorder.Width(1).Align(lipgloss.Center)
+
 	// Create table for phase flow
 	t := table.New().
 		Width(termWidth).
-		Border(lipgloss.HiddenBorder()). // Debug: lipgloss.NormalBorder()
+		Border(lipgloss.HiddenBorder()).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if (col+1)%2 == 0 {
-				return colors.TableBorder.Width(1).Align(lipgloss.Center)
+				return borderStyle
 			}
-
-			return lipgloss.NewStyle().Align(lipgloss.Center)
+			return centerStyle
 		})
 
 	stats := m.workflow.State().Conf.TargetsLogs.ComputeStatisticsPerPhase()
 
 	// Build table row with phase groups and arrows
-	var row []string
+	row := make([]string, 0, len(phasesList)*2+1)
 
 	for _, phase := range phasesList {
-		statsPhase := stats.GetPack(phase)
-		statsPhase.Done = []config_attributes.Xpath{}
+		statsPack := stats.GetPack(phase)
+		if statsPack == nil {
+			statsPack = &logs_stats.StatsPack{}
+		}
 
-		// Create phase group
-		phaseGroup := createPhaseGroup(string(phase), statsPhase, colors, termWidth)
-		row = append(row, phaseGroup)
-
-		// Add arrow
-		row = append(row, "󰜴")
+		// For active phases, don't show Done items
+		phaseGroup := createPhaseGroup(
+			string(phase),
+			statsPack.Running,
+			statsPack.Failed,
+			nil, // Done is nil for active phases
+			statsPack,
+			colors,
+			termWidth,
+		)
+		row = append(row, phaseGroup, phaseArrow)
 	}
 
-	// Add "Done" phase group
+	// Add "Done" phase group - for final phase, don't show Running/Failed
+	lastPhase := phasesList[len(phasesList)-1]
+	statsDone := stats.GetPack(lastPhase)
+	if statsDone == nil {
+		statsDone = &logs_stats.StatsPack{}
+	}
 
-	statsDone := stats.GetPack(phasesList[len(phasesList)-1])
-	statsDone.Running = []config_attributes.Xpath{}
-	statsDone.Failed = []config_attributes.Xpath{}
-	phaseGroup := createPhaseGroup("Done", statsDone, colors, termWidth)
-	row = append(row, phaseGroup)
+	donePhaseGroup := createPhaseGroup(
+		"Done",
+		nil, // Running is nil for Done phase
+		nil, // Failed is nil for Done phase
+		statsDone.Done,
+		statsDone,
+		colors,
+		termWidth,
+	)
+	row = append(row, donePhaseGroup)
 
-	// Set the table row
 	t.Row(row...)
 
-	return fmt.Sprintf("%s\n", t.String())
+	return t.String() + "\n"
 }
 
-func createPhaseGroup(phase string, stats *logs_stats.StatsPack, colors *config.ColorScheme, termWidth int) string {
-	displayName := strings.Title(phase)
+func capitalize(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+}
+
+func createPhaseGroup(
+	phase string,
+	running, failed, done []config_attributes.Xpath,
+	stats *logs_stats.StatsPack,
+	colors *config.ColorScheme,
+	termWidth int,
+) string {
+	displayName := capitalize(phase)
+
+	// Compute width from plain text before styling to avoid expensive lipgloss.Width
+	plainNameWidth := lipgloss.Width(displayName) + 2 // +2 for padding
+	columnStyle := lipgloss.NewStyle().Width(plainNameWidth).Margin(int(float64(termWidth) * 0.005)).Align(lipgloss.Center)
 
 	// Create phase name with gradient
 	phaseNameText := createAnimatedGradient(displayName, stats, colors)
-	columnStyle := lipgloss.NewStyle().Width(lipgloss.Width(phaseNameText)).Margin(int(float64(termWidth) * 0.005)).Align(lipgloss.Center)
 	phaseNameText = columnStyle.Render(phaseNameText)
 
 	// Create status line
-	statusLine := buildStatusLine(stats, colors)
+	statusLine := buildStatusLine(running, failed, done, colors)
 	statusLine = columnStyle.Render(statusLine)
-	// Both name and stats should be centered within their container
-	phaseGroupContent := lipgloss.JoinVertical(lipgloss.Center, phaseNameText, statusLine)
 
-	return phaseGroupContent
+	return lipgloss.JoinVertical(lipgloss.Center, phaseNameText, statusLine)
 }
+
+// Animation state - updated at most once per cache interval
+type animationState struct {
+	progress    float64
+	lastTime    time.Time
+	initialized bool
+}
+
+var globalAnimation = &animationState{}
 
 func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *config.ColorScheme) string {
 	phaseState := determinePhaseState(stats)
 
+	// Update animation state at most once per cache interval
 	now := time.Now()
-	progress := float64(now.UnixNano()%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
-
-	// Create a sine wave for smooth back-and-forth animation
-	// This goes from 0 to 1 and back to 0 smoothly
-	blendFactor := math.Sin(progress*2*math.Pi)*0.5 + 0.5
+	if !globalAnimation.initialized || now.Sub(globalAnimation.lastTime) >= animationCacheInterval {
+		if !globalAnimation.initialized {
+			globalAnimation.initialized = true
+		}
+		globalAnimation.lastTime = now
+		progress := float64(now.UnixNano()%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
+		globalAnimation.progress = math.Sin(progress*2*math.Pi)*0.5 + 0.5
+	}
 
 	colorPair := colors.PhaseColorPairs[phaseState]
-	c1 := colorPair[0]
-	c2 := colorPair[1]
-	finalColor := c1.BlendLuv(c2, blendFactor)
+	finalColor := colorPair[0].BlendLuv(colorPair[1], globalAnimation.progress)
 
-	styledText := lipgloss.NewStyle().
-		Background(lipgloss.Color(finalColor.Hex())).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 1).
-		Render(text)
-
-	return styledText
+	return cachedPhaseStyle.Background(lipgloss.Color(finalColor.Hex())).Render(text)
 }
+
+// Reusable style for phase rendering - only the background color changes
+var cachedPhaseStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#FFFFFF")).
+	Bold(true).
+	Padding(0, 1)
 
 // buildStatusLine creates compact status indicators for horizontal layout
-func buildStatusLine(stats *logs_stats.StatsPack, colors *config.ColorScheme) string {
-	indicators := make([]string, 0)
+func buildStatusLine(running, failed, done []config_attributes.Xpath, colors *config.ColorScheme) string {
+	var indicators []string
 
-	if len(stats.Running) > 0 {
-		indicators = append(indicators, colors.StatusRunning.Render(fmt.Sprintf("%d", len(stats.Running))))
+	if len(running) > 0 {
+		indicators = append(indicators, colors.StatusRunning.Render(fmt.Sprintf("%d", len(running))))
 	}
 
-	if len(stats.Failed) > 0 {
-		indicators = append(indicators, colors.StatusError.Render(fmt.Sprintf("%d", len(stats.Failed))))
+	if len(failed) > 0 {
+		indicators = append(indicators, colors.StatusError.Render(fmt.Sprintf("%d", len(failed))))
 	}
 
-	if len(stats.Done) > 0 {
-		indicators = append(indicators, colors.StatusOK.Render(fmt.Sprintf("%d", len(stats.Done))))
+	if len(done) > 0 {
+		indicators = append(indicators, colors.StatusOK.Render(fmt.Sprintf("%d", len(done))))
 	}
 
-	statusText := strings.Join(indicators, colors.TableBorder.Render("/"))
-
-	return statusText
+	return strings.Join(indicators, colors.TableBorder.Render(statusSeparator))
 }
-
-// Helpers
 
 // determinePhaseState determines the visual state of a phase based on its counts
 func determinePhaseState(stats *logs_stats.StatsPack) config.PhaseState {
-	if len(stats.Running) > 0 {
+	switch {
+	case len(stats.Running) > 0:
 		return config.PhaseStateActive
-	}
-	if len(stats.Failed) > 0 && len(stats.Running) == 0 && len(stats.Done) == 0 {
+	case len(stats.Failed) > 0 && len(stats.Running) == 0 && len(stats.Done) == 0:
 		return config.PhaseStateFailed
-	}
-	if len(stats.Done) > 0 && len(stats.Running) == 0 && len(stats.Failed) == 0 {
+	case len(stats.Done) > 0 && len(stats.Running) == 0 && len(stats.Failed) == 0:
 		return config.PhaseStateCompleted
+	default:
+		return config.PhaseStateDefault
 	}
-
-	return config.PhaseStateDefault
 }
