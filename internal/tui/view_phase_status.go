@@ -66,13 +66,13 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 			statsPack = &logs_stats.StatsPack{}
 		}
 
-		// For active phases, don't show Done items
+		// For active phases, don't show Done items and don't use Done for color calc
 		phaseGroup := createPhaseGroup(
 			string(phase),
 			statsPack.Running,
 			statsPack.Failed,
 			nil, // Done is nil for active phases
-			statsPack,
+			&logs_stats.StatsPack{Running: statsPack.Running, Failed: statsPack.Failed},
 			colors,
 			termWidth,
 		)
@@ -91,7 +91,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 		nil, // Running is nil for Done phase
 		nil, // Failed is nil for Done phase
 		statsDone.Done,
-		statsDone,
+		&logs_stats.StatsPack{Done: statsDone.Done},
 		colors,
 		termWidth,
 	)
