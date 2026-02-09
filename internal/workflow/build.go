@@ -14,16 +14,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-// This function is called by executeMachineBuild for individual machine builds
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
 	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-			// Initialize MetaBuild if nil
 			if configuration.MetaBuild == nil {
 				configuration.MetaBuild = &config.MetaBuild{}
 			}
 
-			// System closure
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.URL, configuration.Name)}
 
 			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
@@ -37,13 +34,14 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		})
 }
 
-func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string) (BuidOutputJson, error) {
-	var parsedOutput BuidOutputJson
+func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string) (BuildOutputJson, error) {
+	var parsedOutput BuildOutputJson
 
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
 	err := exc.Exec(
 		"build",
+		"building system closure",
 		"build failed",
 		commandWithArgs,
 		executioner.DisableAutoSshCommand(),
@@ -58,7 +56,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			parsedOutput = BuidOutputJson{{Outputs: struct {
+			parsedOutput = BuildOutputJson{{Outputs: struct {
 				Out string `json:"out"`
 			}{Out: "BUILD_OUTPUT_PATH_PLACEHOLDER"}}}
 		}),
@@ -72,25 +70,18 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 	return parsedOutput, nil
 }
 
-// Unmarshall
-type BuidOutputJson []struct {
+type BuildOutputJson []struct {
 	Outputs struct {
 		Out string `json:"out"`
 	} `json:"outputs"`
 }
 
-// Helpers
-
 func lastNonEmptyLine(b []byte) []byte {
-	// Split on newlines
 	lines := bytes.Split(b, []byte("\n"))
-
-	// From last
 	slices.Reverse(lines)
 
 	for _, line := range lines {
 		trimmed := bytes.TrimSpace(line)
-
 		if len(trimmed) > 0 {
 			return trimmed
 		}

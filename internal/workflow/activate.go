@@ -10,41 +10,34 @@ import (
 func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Activate, machine,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-
 			systemClosure := machine.Configuration.MetaBuild.SystemClosure
 
 			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
-
-				commandWithArgs := []string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"}
-
 				err := exc.Exec(
 					"nixos-install",
+					"installing NixOS",
 					"nixos-install failed",
-					commandWithArgs,
+					[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
 				)
 				if err != nil {
 					return err
 				}
-
-				commandWithArgs = []string{"reboot"}
 
 				err = exc.Exec(
 					"reboot",
+					"rebooting",
 					"reboot failed",
-					commandWithArgs,
+					[]string{"reboot"},
 				)
 				if err != nil {
 					return err
 				}
-
 			} else {
-
-				commandWithArgs := append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure)
-
 				err := exc.Exec(
 					"add system closure to profiles",
+					"updating system profile",
 					"setting system closure to profiles failed",
-					commandWithArgs,
+					append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure),
 				)
 				if err != nil {
 					return err
@@ -52,17 +45,15 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 				binPath := systemClosure + "/bin/switch-to-configuration"
 
-				commandWithArgs = append(machine.MaybeSudo(), binPath, "switch")
-
 				err = exc.Exec(
 					"activate",
+					"activating configuration",
 					"activation failed",
-					commandWithArgs,
+					append(machine.MaybeSudo(), binPath, "switch"),
 				)
 				if err != nil {
 					return err
 				}
-
 			}
 
 			return nil

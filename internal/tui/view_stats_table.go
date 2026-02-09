@@ -191,7 +191,7 @@ func (m *model) getStatusText(phaseLog *logs_phase.PhaseLog, colors *config.Colo
 			return "" // TODO: fix this bug
 		}
 
-		return colors.StatusRunning.Render(lastCommand.Description + "-ing")
+		return colors.StatusRunning.Render(lastCommand.StatusIfRunning)
 	}
 
 	if tas.GetEndError() != nil {

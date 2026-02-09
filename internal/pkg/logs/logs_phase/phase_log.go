@@ -53,8 +53,8 @@ func (pLog *PhaseLog) LastNonMsgOnlyCommand() *logs_command.CommandLog {
 	return nil
 }
 
-func (pLog *PhaseLog) NewCommand(description, statusIfFailed string, msgOnly bool) *logs_command.CommandLog {
-	commandLog := logs_command.NewCommandLog(description, statusIfFailed, msgOnly)
+func (pLog *PhaseLog) NewCommand(description, statusIfRunning, statusIfFailed string, msgOnly bool) *logs_command.CommandLog {
+	commandLog := logs_command.NewCommandLog(description, statusIfRunning, statusIfFailed, msgOnly)
 	pLog.commandLogs.Append(commandLog)
 
 	return commandLog
@@ -67,7 +67,7 @@ func (pLog *PhaseLog) Verbose(format string, a ...any) *logs_command.CommandLog 
 
 	msg := fmt.Sprintf("VERBOSE "+format, a...)
 
-	return pLog.NewCommand(msg, "", true)
+	return pLog.NewCommand(msg, "", "", true)
 }
 
 func (pLog *PhaseLog) Debug(format string, a ...any) *logs_command.CommandLog {
@@ -77,7 +77,7 @@ func (pLog *PhaseLog) Debug(format string, a ...any) *logs_command.CommandLog {
 
 	msg := fmt.Sprintf("DEBUG "+format, a...)
 
-	return pLog.NewCommand(msg, "", true)
+	return pLog.NewCommand(msg, "", "", true)
 }
 
 func (pLog *PhaseLog) CommandLogs() []*logs_command.CommandLog {
