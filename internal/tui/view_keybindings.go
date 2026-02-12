@@ -163,7 +163,7 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 		m.err = ctx.Err()
 	}
 	m.modelView.debugOutput.WriteString("CTX done\n")
-	return m, tea.Quit
+	return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 }
 
 func (m *model) handleToggle() (tea.Model, tea.Cmd) {
