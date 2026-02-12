@@ -5,6 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/rs/zerolog/log"
 )
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
@@ -41,7 +42,10 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 		return err
 	}
 
-	phaseLog.Verbose("Transferred %s to %s\n", toTransfer, machine.Name)
+	log.Info().
+		Str("machine", machine.Name).
+		Strs("transferred", toTransfer).
+		Msgf("Transferred %s to %s\n", toTransfer, machine.Name)
 
 	return nil
 }

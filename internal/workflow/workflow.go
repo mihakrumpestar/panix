@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/rs/zerolog/log"
 )
 
 type Workflow struct {
@@ -90,12 +91,18 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 		phaseLog.TimeAndState().EndTimerWithError(err)
 	}()
 
-	phaseLog.Verbose("Started %s of %s", phaseLog.Phase(), xpath)
+	log.Info().
+		Str("phase", string(phaseLog.Phase())).
+		Str("xpath", xpath.String()).
+		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
 
 	exc := executioner.NewExecutioner(w.ctx, w.state.Conf.Flags, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
-	phaseLog.Verbose("Finished %s of %s", phaseLog.Phase(), xpath)
+	log.Info().
+		Str("phase", string(phaseLog.Phase())).
+		Str("xpath", xpath.String()).
+		Msgf("Finished %s of %s", phaseLog.Phase(), xpath)
 
 	return err
 }
