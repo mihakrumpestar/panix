@@ -45,7 +45,7 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 	log.Info().
 		Str("machine", machine.Name).
 		Strs("transferred", toTransfer).
-		Msgf("Transferred %s to %s\n", toTransfer, machine.Name)
+		Msgf("Transferred %s to %s", toTransfer, machine.Name)
 
 	return nil
 }
