@@ -70,7 +70,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		Str("flake", flake.Name).
 		Str("configuration", configuration.Name).
 		Str("closure", configuration.MetaBuild.SystemClosure).
-		Msgf("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure)
+		Msgf("Built %s/%s -> %s", flake.Name, configuration.Name, parsedOutput[0].Outputs.Out)
 
 	return parsedOutput, nil
 }
