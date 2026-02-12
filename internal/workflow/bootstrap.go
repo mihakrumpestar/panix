@@ -26,6 +26,14 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 				return err
 			}
 
+			// Upload disk encryption keys BEFORE running disko
+			// Keys must be available for LUKS unlocking during partitioning
+			if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
+				if err := w.executeDiskEncryptionKeys(exc, machine, phaseLog); err != nil {
+					return err
+				}
+			}
+
 			err = exc.Exec(
 				"disko",
 				"partitioning disk",
@@ -36,11 +44,16 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 				return err
 			}
 
-			if machine.PostBootstrapHook == "" {
+			if machine.Bootstrap.PostBootstrapHook == "" {
 				return nil
 			}
 
-			err = exc.Exec("post bootstrap hook", "running post-bootstrap hook", "post bootstrap hook failed", []string{machine.PostBootstrapHook})
+			err = exc.Exec(
+				"post bootstrap hook",
+				"running post-bootstrap hook",
+				"post bootstrap hook failed",
+				[]string{machine.Bootstrap.PostBootstrapHook},
+			)
 			if err != nil {
 				return err
 			}
@@ -48,4 +61,33 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 			return nil
 		},
 	)
+}
+
+// executeDiskEncryptionKeys transfers disk encryption keys to the target machine
+// Must be called BEFORE disko runs, so keys are available for LUKS unlocking
+func (w *Workflow) executeDiskEncryptionKeys(
+	exc *executioner.Executioner,
+	machine *config.Machine,
+	phaseLog *logs_phase.PhaseLog,
+) error {
+	keys := machine.Bootstrap.DiskEncryptionKeys
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	for _, key := range keys {
+		if err := key.Validate(); err != nil {
+			return fmt.Errorf("invalid disk encryption key: %w", err)
+		}
+
+		// Convert to SecretConfig and reuse transferSecret
+		secretConfig := key.ToSecretConfig()
+
+		if err := w.transferSecret(exc, machine, secretConfig); err != nil {
+			return fmt.Errorf("failed to transfer disk encryption key to %s: %w", key.Remote, err)
+		}
+	}
+
+	return nil
 }
