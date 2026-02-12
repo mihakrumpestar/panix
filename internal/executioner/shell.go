@@ -27,7 +27,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		return err
 	}
 
-	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, false)
+	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed)
 
 	commandLog.TimeAndState.StartTimer()
 	var execErr error

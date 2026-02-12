@@ -89,16 +89,6 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 
 	// 1) local short‐circuit
 	if noMachineOrLocal && excOpt.skipIfLocal {
-		defer ex.onUpdateHook()
-
-		comLog := ex.phaseLog.NewCommand("(skipped)", "", "", true)
-		if excOpt.onSuccess != nil {
-			err := excOpt.onSuccess(comLog)
-			if err != nil {
-				return err
-			}
-		}
-
 		return nil
 	}
 

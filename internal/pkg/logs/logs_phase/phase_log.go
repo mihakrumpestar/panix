@@ -1,8 +1,6 @@
 package logs_phase
 
 import (
-	"fmt"
-
 	"github.com/hayageek/threadsafe"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
@@ -33,51 +31,25 @@ func (pLog *PhaseLog) Phase() phases.Phase {
 	return pLog.phase
 }
 
-func (pLog *PhaseLog) LastNonMsgOnlyCommand() *logs_command.CommandLog {
+func (pLog *PhaseLog) Last() *logs_command.CommandLog {
 	length := pLog.commandLogs.Length()
 	if length == 0 {
 		return nil
 	}
 
-	for i := length - 1; i >= 0; i-- {
-		commandLog, ok := pLog.commandLogs.Get(i)
-		if !ok {
-			panic("commandLogs does not have element on specified index")
-		}
-
-		if !commandLog.MsgOnly {
-			return commandLog
-		}
+	commandLog, ok := pLog.commandLogs.Get(length - 1)
+	if !ok {
+		panic("commandLogs does not have element on specified index")
 	}
-
-	return nil
-}
-
-func (pLog *PhaseLog) NewCommand(description, statusIfRunning, statusIfFailed string, msgOnly bool) *logs_command.CommandLog {
-	commandLog := logs_command.NewCommandLog(description, statusIfRunning, statusIfFailed, msgOnly)
-	pLog.commandLogs.Append(commandLog)
 
 	return commandLog
 }
 
-func (pLog *PhaseLog) Verbose(format string, a ...any) *logs_command.CommandLog {
-	if !pLog.flags.Verbose {
-		return nil
-	}
+func (pLog *PhaseLog) NewCommand(description, statusIfRunning, statusIfFailed string) *logs_command.CommandLog {
+	commandLog := logs_command.NewCommandLog(description, statusIfRunning, statusIfFailed)
+	pLog.commandLogs.Append(commandLog)
 
-	msg := fmt.Sprintf("VERBOSE "+format, a...)
-
-	return pLog.NewCommand(msg, "", "", true)
-}
-
-func (pLog *PhaseLog) Debug(format string, a ...any) *logs_command.CommandLog {
-	if !pLog.flags.Debug {
-		return nil
-	}
-
-	msg := fmt.Sprintf("DEBUG "+format, a...)
-
-	return pLog.NewCommand(msg, "", "", true)
+	return commandLog
 }
 
 func (pLog *PhaseLog) CommandLogs() []*logs_command.CommandLog {

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_clipboard"
 	"github.com/pkg/errors"
+	zerolog "github.com/rs/zerolog/log"
 )
 
 var (
@@ -162,7 +163,9 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	} else if ctx.Err() != nil && ctx.Err() != context.Canceled {
 		m.err = ctx.Err()
 	}
-	m.modelView.debugOutput.WriteString("CTX done\n")
+
+	zerolog.Debug().Msg("Context done, exiting TUI")
+
 	return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 }
 

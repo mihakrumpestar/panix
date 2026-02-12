@@ -186,7 +186,7 @@ func (m *model) getStatusText(phaseLog *logs_phase.PhaseLog, colors *config.Colo
 
 	tas := phaseLog.TimeAndState()
 	if !tas.IsFinished() {
-		lastCommand := phaseLog.LastNonMsgOnlyCommand()
+		lastCommand := phaseLog.Last()
 		if lastCommand == nil {
 			return "" // TODO: fix this bug
 		}
@@ -195,7 +195,7 @@ func (m *model) getStatusText(phaseLog *logs_phase.PhaseLog, colors *config.Colo
 	}
 
 	if tas.GetEndError() != nil {
-		return colors.StatusError.Render(phaseLog.LastNonMsgOnlyCommand().StatusIfFailed)
+		return colors.StatusError.Render(phaseLog.Last().StatusIfFailed)
 	}
 
 	return colors.StatusOK.Render("done")
