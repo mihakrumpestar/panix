@@ -41,7 +41,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 		})
 }
 
-func (w *Workflow) generateSecretFromCommand(exc *executioner.Executioner, secret *config_attributes.SecretConfig) error {
+func (w *Workflow) generateSecretFromCommand(exc *executioner.Executioner, secret *config_attributes.Secret) error {
 	f, err := os.CreateTemp("", "secret-*")
 	if err != nil {
 		return errors.Wrap(err, "creating temp file for secret")
@@ -93,7 +93,7 @@ func (w *Workflow) generateSecretFromCommand(exc *executioner.Executioner, secre
 	return nil
 }
 
-func (w *Workflow) transferSecret(exc *executioner.Executioner, machine *config.Machine, secret *config_attributes.SecretConfig) error {
+func (w *Workflow) transferSecret(exc *executioner.Executioner, machine *config.Machine, secret *config_attributes.Secret) error {
 	commandWithArgs := []string{"rsync", "-rcPEx"}
 
 	maybeSudo := machine.MaybeSudo()

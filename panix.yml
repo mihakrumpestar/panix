@@ -36,6 +36,11 @@ root:
                 hostname: fake
                 username: root
                 port: 22
+              bootstrap:
+                disk_encryption_keys:
+                  - local: /home/user/secrets/luks.key
+                    remote: /tmp/luks-key
+
         personal-laptop:
           machines:
             personal-laptop:

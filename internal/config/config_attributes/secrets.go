@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type SecretConfig struct {
+type Secret struct {
 	Local  Local  `yaml:"local"`
 	Remote Remote `yaml:"remote"`
 }
@@ -24,7 +24,7 @@ type Remote struct {
 	GID  *uint  `yaml:"gid,omitempty"`
 }
 
-func (sc *SecretConfig) Validate() error {
+func (sc *Secret) Validate() error {
 	switch {
 	case sc.Local.Path == nil && sc.Local.CommandOutput == nil:
 		return errors.New("both local input secrets options are empty")
