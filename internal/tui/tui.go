@@ -94,15 +94,16 @@ func NewTui(workflow *workflow.Workflow) error {
 
 	m, err := p.Run()
 
-	finalModel, ok := m.(model)
-	if ok {
-		fmt.Println(finalModel.View())
-		if finalModel.err != nil {
-			return finalModel.err
-		}
+	if err != nil {
+		return err
 	}
 
-	return err
+	finalModel, ok := m.(model)
+	if ok && finalModel.err != nil {
+		return finalModel.err
+	}
+
+	return nil
 }
 
 func startCPUProfile(path string) error {
@@ -117,13 +118,16 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.WindowSize(),
 		m.stateUpdateHook(),
-		m.startWorkflow(),
+		startWorkflow(m),
 	)
 }
 
-func (m model) startWorkflow() tea.Cmd {
+// workflowDoneMsg signals the workflow has completed
+type workflowDoneMsg struct{}
+
+func startWorkflow(m model) tea.Cmd {
 	return func() tea.Msg {
-		var msg tea.Msg = tea.Quit()
+		var msg tea.Msg = workflowDoneMsg{}
 
 		defer func() {
 			if r := recover(); r != nil {
@@ -158,7 +162,7 @@ func (m model) stateUpdateHook() tea.Cmd {
 	return func() tea.Msg {
 		_, ok := <-m.workflow.WaitForUpdate()
 		if !ok {
-			return tea.Quit()
+			return workflowDoneMsg{}
 		}
 		return stateUpdateHookMsg{}
 	}
@@ -173,7 +177,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case errMsg:
 		m.err = msg.err
-		return m, tea.Quit
+		m.quitting = true
+		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+
+	case workflowDoneMsg:
+		m.quitting = true
+		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 
 	case stateUpdateHookMsg:
 		cmds = append(cmds, m.stateUpdateHook())
