@@ -15,26 +15,18 @@ type CommandLog struct {
 	StatusIfRunning string
 	StatusIfFailed  string
 	Command         atomic.String
-	MsgOnly         bool
 	stdInOutErr     *threadsafe.Slice[*safe_buffer.Buffer] // Each line is a separate buffer to allow line replacement
 	TimeAndState    *time_and_state.TimeAndState
 	Pty             *os.File
 }
 
-func NewCommandLog(description, statusIfRunning, statusIfFailed string, msgOnly bool) *CommandLog {
+func NewCommandLog(description, statusIfRunning, statusIfFailed string) *CommandLog {
 	commandLog := &CommandLog{
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
-		MsgOnly:         msgOnly,
 		stdInOutErr:     threadsafe.NewSlice[*safe_buffer.Buffer](),
 		TimeAndState:    time_and_state.NewTimeAndState(),
-	}
-
-	if msgOnly {
-		commandLog.Command.Store(description)
-		commandLog.TimeAndState.StartTimer()
-		commandLog.TimeAndState.EndTimerWithError(nil)
 	}
 
 	return commandLog

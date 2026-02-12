@@ -12,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/rs/zerolog/log"
 )
 
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
@@ -65,7 +66,11 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		return nil, err
 	}
 
-	phaseLog.Verbose("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure)
+	log.Info().
+		Str("flake", flake.Name).
+		Str("configuration", configuration.Name).
+		Str("closure", configuration.MetaBuild.SystemClosure).
+		Msgf("Built %s/%s -> %s\n", flake.Name, configuration.Name, configuration.MetaBuild.SystemClosure)
 
 	return parsedOutput, nil
 }

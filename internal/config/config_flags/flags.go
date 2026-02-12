@@ -35,10 +35,10 @@ type Tui struct {
 }
 
 type Logging struct {
-	Verbose bool `yaml:"verbose" flag:"verbose v" desc:"verbose output"`
-	// Developers only
-	Debug      bool   `yaml:"debug" flag:"debug d" desc:"debug output"`
-	CPUProfile string `yaml:"cpu_profile" flag:"cpuprofile" desc:"path for cpu profiling to file, declaring it enables it"`
+	Log        bool   `yaml:"log" flag:"log l" desc:"enable logging to file"`
+	LogFile    string `yaml:"log_file" flag:"logFile" desc:"log file path (does not enable logging)"`
+	Debug      bool   `yaml:"debug" flag:"debug d" desc:"debug output (enables logging automatically)"`
+	CPUProfile string `yaml:"cpu_profile" flag:"cpuProfile" desc:"path for cpu profiling to file, declaring it enables it"`
 }
 
 func (f *Flags) SetDefault(reverse bool) {
@@ -47,6 +47,7 @@ func (f *Flags) SetDefault(reverse bool) {
 	toggle(reverse, &f.OverrideLocalMachine, defaultHostname, "")
 	toggle(reverse, &f.Timeout, 2*time.Hour, 0)
 	toggle(reverse, &f.Tui.CommandOutputMaxHeight, 8, 0)
+	toggle(reverse, &f.LogFile, "panix.log", "")
 }
 
 func (f *Flags) MergeConfWithCliFlags(cli Flags) error {

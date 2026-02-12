@@ -122,7 +122,7 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *logs_stats.StatisticsPerPhas
 			continue
 		}
 
-		lastCommand := log.LastNonMsgOnlyCommand()
+		lastCommand := log.Last()
 		if lastCommand == nil {
 			continue
 		}
@@ -166,7 +166,7 @@ func (ts *TargetsLogs) Debug() string {
 			str += fmt.Sprintf("    %s finished:%v err:%v len:%d\n", logPair.Key, logPair.Value.TimeAndState().IsFinished(), logPair.Value.TimeAndState().GetEndError(), len(logPair.Value.CommandLogs()))
 
 			for _, log := range logPair.Value.CommandLogs() {
-				str += fmt.Sprintf("      '%s' msgOnly:%v finished:%v, err:%v\n", log.Description, log.MsgOnly, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())
+				str += fmt.Sprintf("      '%s' finished:%v, err:%v\n", log.Description, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())
 			}
 		}
 	}

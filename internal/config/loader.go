@@ -46,7 +46,12 @@ func LoadConfig(flags config_flags.Flags) (*Config, error) {
 		conf.ColorScheme = defaultColorScheme()
 	}
 
-	err = conf.initAndValidateConfig()
+	err = config_flags.InitLogging(conf.Flags.Logging)
+	if err != nil {
+		return nil, err
+	}
+
+	err = conf.initAndValidateRootConfig()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -56,7 +61,7 @@ func LoadConfig(flags config_flags.Flags) (*Config, error) {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	err = conf.initLogs()
+	err = conf.initBuildLogs()
 	if err != nil {
 		return nil, fmt.Errorf("failed to init logs: %w", err)
 	}
@@ -70,7 +75,7 @@ func LoadConfig(flags config_flags.Flags) (*Config, error) {
 
 // Helper functions
 
-func (c *Config) initAndValidateConfig() error {
+func (c *Config) initAndValidateRootConfig() error {
 	if c.Root == nil {
 		return fmt.Errorf("root is nil")
 	}
@@ -185,7 +190,7 @@ func (c *Config) filterRootTree() error {
 	return nil
 }
 
-func (c *Config) initLogs() error {
+func (c *Config) initBuildLogs() error {
 	targetsLogs, err := logs.NewTargetsLogs(c.Flags.Logging)
 	if err != nil {
 		return err

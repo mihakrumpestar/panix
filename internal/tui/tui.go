@@ -19,6 +19,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
+	zerolog "github.com/rs/zerolog/log"
 )
 
 type stateUpdateHookMsg struct{}
@@ -39,10 +40,9 @@ type model struct {
 }
 
 type modelView struct {
-	dimensions  *tui_viewports.Dimensions
-	spinners    *tui_spinners.Spinners
-	viewports   *tui_viewports.Viewports
-	debugOutput *strings.Builder
+	dimensions *tui_viewports.Dimensions
+	spinners   *tui_spinners.Spinners
+	viewports  *tui_viewports.Viewports
 }
 
 // NewTui initializes and runs the TUI application.
@@ -66,23 +66,19 @@ func NewTui(workflow *workflow.Workflow) error {
 		Height: 24,
 	}
 
-	debugOutput := &strings.Builder{}
 	state := workflow.State()
 
 	p := tea.NewProgram(model{
 		workflow: workflow,
 		modelView: modelView{
-			dimensions:  dimensions,
-			spinners:    tui_spinners.NewSpinners(),
-			viewports:   tui_viewports.NewViewports(dimensions, state.Conf.ColorScheme, debugOutput, state.Conf.Flags.Tui.CommandOutputMaxHeight),
-			debugOutput: debugOutput,
+			dimensions: dimensions,
+			spinners:   tui_spinners.NewSpinners(),
+			viewports:  tui_viewports.NewViewports(dimensions, state.Conf.ColorScheme, nil, state.Conf.Flags.Tui.CommandOutputMaxHeight),
 		},
 	},
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
-
-	debugOutput.WriteString("TUI initialized\n")
 
 	cpuprofile := state.Conf.Flags.Logging.CPUProfile
 	if cpuprofile != "" {
@@ -137,13 +133,13 @@ func startWorkflow(m model) tea.Cmd {
 		}()
 
 		if err := m.workflow.CreateWorkflow(); err != nil {
-			m.modelView.debugOutput.WriteString("Error: " + err.Error() + "\n")
+			zerolog.Error().Err(err).Msg("Workflow execution failed")
 			if err != context.Canceled {
 				m.err = err
 				msg = errMsg{err}
 			}
 		} else {
-			m.modelView.debugOutput.WriteString("All ok\n")
+			zerolog.Info().Msg("Workflow completed successfully")
 		}
 
 		return msg
@@ -213,7 +209,7 @@ func (m model) View() string {
 	}
 
 	if m.modelView.viewports.IsFullscreen() {
-		result := m.renderFullscreen(mainContent)
+		result := m.renderFullscreen()
 		if result != "" {
 			return result
 		}
@@ -228,7 +224,7 @@ func (m model) View() string {
 	return zone.Scan(builder.String())
 }
 
-func (m model) renderFullscreen(mainContent string) string {
+func (m model) renderFullscreen() string {
 	fullscreenXpath := m.modelView.viewports.GetFullscreenXpath()
 	content := m.modelView.viewports.GetViewportContent(fullscreenXpath)
 
@@ -265,7 +261,6 @@ func (m model) ViewMainContent() string {
 		debugContent := m.modelView.spinners.Debug()
 		debugContent += m.modelView.viewports.Debug()
 		debugContent += m.workflow.State().Conf.TargetsLogs.Debug()
-		debugContent += "\nDebug console output:\n" + m.modelView.debugOutput.String()
 		builder.WriteString(debugHeader + debugContent)
 	}
 
