@@ -11,7 +11,7 @@ import (
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Transfer, machine,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-			systemClosure := machine.Configuration.MetaBuild.SystemClosure
+			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
 			err := executeTransferPhaseMachineWrapper(exc, phaseLog, machine, []string{systemClosure}, true)
 			if err != nil {
@@ -24,7 +24,7 @@ func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 
 func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, machine *config.Machine, toTransfer []string, transferClosure bool) error {
 	storeArgs := ""
-	if !machine.MetaStatus.Bootstrapped.Load() && transferClosure {
+	if !machine.MetaInspect.Bootstrapped.Load() && transferClosure {
 		storeArgs += "?remote-store=local?root=/mnt"
 	}
 
