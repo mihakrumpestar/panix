@@ -177,8 +177,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 
 	case workflowDoneMsg:
-		m.quitting = true
-		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+		// Only exit automatically if exitOnComplete flag is set
+		if m.workflow.State().Conf.Flags.ExitOnComplete {
+			m.quitting = true
+			return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+		}
+		// Stay open - user can press 'q' to quit or 'r' to retry
+		return m, nil
 
 	case stateUpdateHookMsg:
 		cmds = append(cmds, m.stateUpdateHook())
