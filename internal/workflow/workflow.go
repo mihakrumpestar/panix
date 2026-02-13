@@ -15,10 +15,11 @@ import (
 )
 
 type Workflow struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	state      *WorkflowState
-	updateHook *hook.Hook
+	originalCtx    context.Context
+	ctxWithTimeout context.Context
+	cancel         context.CancelFunc
+	state          *WorkflowState
+	updateHook     *hook.Hook
 }
 
 type WorkflowState struct {
@@ -38,8 +39,9 @@ func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phas
 	}
 
 	return &Workflow{
-		ctx:    ctxWithTimeout,
-		cancel: cancel,
+		originalCtx:    ctx,
+		ctxWithTimeout: ctxWithTimeout,
+		cancel:         cancel,
 		state: &WorkflowState{
 			Conf:   conf,
 			Phases: phases,
@@ -51,7 +53,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phas
 }
 
 func (w *Workflow) Ctx() context.Context {
-	return w.ctx
+	return w.ctxWithTimeout
 }
 
 func (w *Workflow) State() *WorkflowState {
@@ -96,7 +98,7 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 		Str("xpath", xpath.String()).
 		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
 
-	exc := executioner.NewExecutioner(w.ctx, w.state.Conf.Flags, machine, phaseLog, w.updateHook.Signal)
+	exc := executioner.NewExecutioner(w.ctxWithTimeout, w.state.Conf.Flags, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	log.Info().

@@ -18,6 +18,7 @@ type Flags struct {
 	DryRunWithStatus     bool           `yaml:"dry_run_with_status" flag:"dryRunWithStatus" env:"DRY_RUN_WITH_STATUS" desc:"show what would be done without executing, but with real status query"`
 	Timeout              time.Duration  `yaml:"timeout" flag:"timeout" desc:"timeout for TUI"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" flag:"skipPhases s" env:"SKIP_PHASES" desc:"declare phases to skip"`
+	ExitOnComplete       bool           `yaml:"exit_on_complete" flag:"exitOnComplete" env:"EXIT_ON_COMPLETE" desc:"exit TUI immediately when workflow completes (otherwise stays open until user quits)"`
 
 	Tui     `yaml:"tui" flag:"tui"`
 	Logging `yaml:"logging" flag:"logging"`
