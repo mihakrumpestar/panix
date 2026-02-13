@@ -53,8 +53,8 @@ type Configuration struct {
 	config_attributes.Attributes `yaml:",inline"`
 	// TODO: FlakeOutput string `yaml:"flake_output"` // Option to override if non-standard style
 	// Internal
-	Flake     *Flake     `yaml:"-"`
-	MetaBuild *MetaBuild `yaml:"-"`
+	ParentFlake *Flake     `yaml:"-"`
+	MetaBuild   *MetaBuild `yaml:"-"`
 }
 
 type MetaBuild struct {
@@ -62,7 +62,7 @@ type MetaBuild struct {
 }
 
 func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Flags) error {
-	c.Flake = parent
+	c.ParentFlake = parent
 	return c.Attributes.Init(name, &parent.Attributes, flags)
 }
 
@@ -71,11 +71,11 @@ func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Fla
 type Machine struct {
 	config_attributes.Attributes `yaml:",inline"`
 	// Internal
-	Configuration *Configuration `yaml:"-"`
-	MetaStatus    *MetaStatus    `yaml:"-"`
+	ParentConfiguration *Configuration `yaml:"-"`
+	MetaInspect         *MetaInspect   `yaml:"-"`
 }
 
-type MetaStatus struct { // Atomic due to being read and write at the same time
+type MetaInspect struct { // Atomic due to being read and write at the same time
 	Reachable      atomic.Bool
 	SSHConnectable atomic.Bool
 	Architecture   atomic.String
@@ -103,11 +103,8 @@ func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.F
 
 	// Internal
 
-	m.Configuration = parent
-
-	if m.MetaStatus == nil {
-		m.MetaStatus = &MetaStatus{}
-	}
+	m.ParentConfiguration = parent
+	m.MetaInspect = &MetaInspect{}
 
 	return nil
 }
@@ -118,7 +115,7 @@ var (
 )
 
 func (m *Machine) MaybeSudo() []string {
-	if m.MetaStatus.IsRoot.Load() {
+	if m.MetaInspect.IsRoot.Load() {
 		return emptySudo // Return zero slice (instead of nil), since this might be the starting slice
 	}
 
@@ -130,7 +127,7 @@ func (m *Machine) MaybeSudo() []string {
 }
 
 func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
-	if m.Flags.Bootstrap.DisableAuto || m.MetaStatus.Bootstrapped.Load() {
+	if m.Flags.Bootstrap.DisableAuto || m.MetaInspect.Bootstrapped.Load() {
 		return restOfPath
 	}
 

@@ -40,12 +40,12 @@ func getOrCreateOnceAsync(xpath string) *once_async.OnceAsync {
 // run executes a phase with automatic once-per-scope semantics
 func (pr *phaseRunner) run(phase phases.Phase) error {
 	// Check bootstrap status - skip bootstrap phase if already bootstrapped
-	if phase == phases.Bootstrap && pr.machine.MetaStatus.Bootstrapped.Load() {
+	if phase == phases.Bootstrap && pr.machine.MetaInspect.Bootstrapped.Load() {
 		return nil
 	}
 
 	// If in Bootstrap.Only mode and machine is already bootstrapped, skip all phases
-	if pr.w.state.Conf.Flags.Bootstrap.Only && pr.machine.MetaStatus.Bootstrapped.Load() {
+	if pr.w.state.Conf.Flags.Bootstrap.Only && pr.machine.MetaInspect.Bootstrapped.Load() {
 		return nil
 	}
 

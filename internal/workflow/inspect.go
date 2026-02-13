@@ -20,7 +20,7 @@ var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-			mms := machine.MetaStatus
+			mms := machine.MetaInspect
 
 			commands := []struct {
 				name        string

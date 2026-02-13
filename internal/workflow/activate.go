@@ -10,9 +10,9 @@ import (
 func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Activate, machine,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
-			systemClosure := machine.Configuration.MetaBuild.SystemClosure
+			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
-			if !machine.MetaStatus.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
+			if !machine.MetaInspect.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
 				err := exc.Exec(
 					"nixos-install",
 					"installing NixOS",
