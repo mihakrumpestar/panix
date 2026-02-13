@@ -8,8 +8,8 @@ import (
 
 // DiskEncryptionKey defines a single disk encryption key mapping
 type DiskEncryptionKey struct {
-	Local  string `yaml:"local"`  // Local path to the key file
-	Remote string `yaml:"remote"` // Remote path where key should be placed
+	Local  string `yaml:"local" validate:"required,filepath"`  // Local path to the key file
+	Remote string `yaml:"remote" validate:"required,filepath"` // Remote path where key should be placed
 }
 
 // Validate ensures the disk encryption key configuration is valid

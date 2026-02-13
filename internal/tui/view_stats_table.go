@@ -107,11 +107,11 @@ func (m *model) ViewStatsTable() string {
 	var prevFlakeName, prevConfigName string
 
 	state.RootTree(func(i int, machine *config.Machine) {
-		configuration := machine.Configuration
-		flake := configuration.Flake
+		configuration := machine.ParentConfiguration
+		flake := configuration.ParentFlake
 		xpath := machine.Xpath
 
-		ps := machine.MetaStatus
+		ps := machine.MetaInspect
 		phaseLog := state.Conf.TargetsLogs.GetFirstLogErrorOrLastLog(machine.Xpath)
 
 		// Row spanning logic: show cell content only on first occurrence

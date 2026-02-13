@@ -116,8 +116,8 @@ func (w *Workflow) CreateWorkflow() error {
 			// Create a shared phase runner for this machine
 			runner := &phaseRunner{
 				w:       w,
-				flake:   machine.Configuration.Flake,
-				config:  machine.Configuration,
+				flake:   machine.ParentConfiguration.ParentFlake,
+				config:  machine.ParentConfiguration,
 				machine: machine,
 			}
 

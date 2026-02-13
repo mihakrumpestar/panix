@@ -22,14 +22,9 @@
           inherit version;
 
           src = ./.;
+          subPackages = ["cmd/panix"];
 
-          vendorHash = "sha256-uoxbEoVf/yc/PmoHKoPwZEsSuuJIydNjwZ5JH8chqak==";
-
-          subPackages = ["cmd"];
-
-          postInstall = ''
-            mv $out/bin/cmd $out/bin/panix
-          '';
+          vendorHash = "sha256-xLesqtYJ+IRQOOqynKS6yIFLE0lQODxF1LYoc0soWpI=";
 
           meta = with pkgs.lib; {
             description = "A TUI application for Nix deployment workflows";
