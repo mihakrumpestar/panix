@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ var keyDefs = []keyDef{
 	{[]string{"q"}, "quit", (*model).handleQuit},
 	{[]string{"h"}, "toggle logs", (*model).handleToggle},
 	{[]string{"r"}, "retry", (*model).handleRetry},
+	{[]string{"ctrl+r"}, "restart", (*model).handleRestart},
 	{[]string{"ctrl+c"}, "copy", (*model).handleCopy},
 	{[]string{"m"}, "fullscreen", (*model).handleFullscreen},
 }
@@ -76,20 +78,20 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
+
 	for _, kd := range keyDefs {
-		for _, k := range kd.keys {
-			if msg.String() == k {
-				return kd.handler(m)
-			}
+		if slices.Contains(kd.keys, msg.String()) {
+			return kd.handler(m)
 		}
 	}
+
 	return m, nil
 }
 
 // ViewKeybindings renders the footer with help, notification, and scroll percent
 func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
 	const footerHeight = 3
-	width := m.modelView.dimensions.Width
+	width := m.dimensions.Width
 
 	// Use bubbles help library for consistent styling
 	helpContent := keymapHelp.View(Keymap{})
@@ -138,30 +140,28 @@ func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
 // Handlers
 
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
-	content, isInner := m.modelView.viewports.GetActiveInnerViewportContent()
+	content, isInner := m.resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m.setNotification("Select an inner viewport to copy", m.workflow.State().Conf.ColorScheme.StatusWarning)
+		return m.setNotification("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
 	}
 	if content == "" {
-		return m.setNotification("No content to copy", m.workflow.State().Conf.ColorScheme.StatusWarning)
+		return m.setNotification("No content to copy", m.conf.ColorScheme.StatusWarning)
 	}
 	if err := tui_clipboard.CopyToClipboard(content); err != nil {
-		return m.setNotification("Copy failed: "+err.Error(), m.workflow.State().Conf.ColorScheme.StatusError)
+		return m.setNotification("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
 	}
-	return m.setNotification("Copied to clipboard", m.workflow.State().Conf.ColorScheme.StatusOK)
+	return m.setNotification("Copied to clipboard", m.conf.ColorScheme.StatusOK)
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	m.quitting = true
-	m.workflow.Cancel()()
-	ctx := m.workflow.Ctx()
-	<-ctx.Done()
-	if m.err != nil && ctx.Err() != nil {
-		if ctx.Err() != context.Canceled {
-			m.err = errors.Wrap(m.err, ctx.Err().Error())
+	err := m.resetable.workflow.Cancel()
+	if m.resetable.err != nil && err != nil {
+		if err != context.Canceled {
+			m.resetable.err = errors.Wrap(m.resetable.err, err.Error())
 		}
-	} else if ctx.Err() != nil && ctx.Err() != context.Canceled {
-		m.err = ctx.Err()
+	} else if err != nil && err != context.Canceled {
+		m.resetable.err = err
 	}
 
 	zerolog.Debug().Msg("Context done, exiting TUI")
@@ -170,35 +170,43 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleToggle() (tea.Model, tea.Cmd) {
-	state := m.workflow.State()
-	state.Conf.Flags.Tui.ShowAllBuildLogs = !state.Conf.Flags.Tui.ShowAllBuildLogs
+	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
 	return m, nil
 }
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
-	m.workflow.State().Retry.Trigger()
+	m.resetable.workflow.State().Retry.Trigger()
 	return m, nil
 }
 
+func (m *model) handleRestart() (tea.Model, tea.Cmd) {
+	return m, tea.Batch(
+		m.setNotificationCmd("Restarting workflow...", m.conf.ColorScheme.StatusOK),
+		func() tea.Msg {
+			return restartMsg{}
+		},
+	)
+}
+
 func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
-	if m.modelView.viewports.IsFullscreen() {
-		m.modelView.viewports.ExitFullscreen()
+	if m.resetable.viewports.IsFullscreen() {
+		m.resetable.viewports.ExitFullscreen()
 		return m, nil
 	}
-	activeInnerXpath := m.modelView.viewports.GetActiveInnerViewportXpath()
+	activeInnerXpath := m.resetable.viewports.GetActiveInnerViewportXpath()
 	if activeInnerXpath.Depth() > 0 {
-		m.modelView.viewports.SetFullscreen(activeInnerXpath)
+		m.resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m.setNotification("Select a viewport first", m.workflow.State().Conf.ColorScheme.StatusWarning)
+		return m.setNotification("Select a viewport first", m.conf.ColorScheme.StatusWarning)
 	}
 	return m, nil
 }
 
 func (m *model) handleEsc() (tea.Model, tea.Cmd) {
-	if m.modelView.viewports.IsFullscreen() {
-		m.modelView.viewports.ExitFullscreen()
+	if m.resetable.viewports.IsFullscreen() {
+		m.resetable.viewports.ExitFullscreen()
 	} else {
-		m.modelView.viewports.DeselectAll()
+		m.resetable.viewports.DeselectAll()
 	}
 	return m, nil
 }
@@ -210,6 +218,15 @@ func (m *model) setNotification(text string, color lipgloss.Style) (tea.Model, t
 	m.notificationColor = color
 	m.notificationTime = time.Now()
 	return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return notificationMsg{} })
+}
+
+func (m *model) setNotificationCmd(text string, color lipgloss.Style) tea.Cmd {
+	return func() tea.Msg {
+		m.notification = text
+		m.notificationColor = color
+		m.notificationTime = time.Now()
+		return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return notificationMsg{} })()
+	}
 }
 
 func (m *model) clearNotification() {
@@ -237,10 +254,10 @@ func (m *model) renderNotification() string {
 // Utility functions
 
 func renderScrollPercent(m *model) string {
-	pct := m.modelView.viewports.GetActiveViewportScrollPercent()
+	pct := m.resetable.viewports.GetActiveViewportScrollPercent()
 	pctInt := int(pct * 100)
 	return lipgloss.NewStyle().
-		Foreground(m.workflow.State().Conf.ColorScheme.TableBorder.GetForeground()).
+		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
 		Render(fmt.Sprintf("%d%%", pctInt))
 }
 

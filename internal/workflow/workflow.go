@@ -8,6 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -15,45 +16,47 @@ import (
 )
 
 type Workflow struct {
-	originalCtx    context.Context
-	ctxWithTimeout context.Context
-	cancel         context.CancelFunc
-	state          *WorkflowState
-	updateHook     *hook.Hook
+	ctx        context.Context
+	cancel     context.CancelFunc
+	conf       *config.Config
+	state      *WorkflowState
+	updateHook *hook.Hook
+	runner     *runner
 }
 
 type WorkflowState struct {
-	Conf   *config.Config
-	Phases []phases.Phase
-	Pool   pond.Pool
-	Retry  *retry.Retry
+	Pool        pond.Pool
+	Retry       *retry.Retry
+	TargetsLogs *logs.TargetsLogs
 }
 
-func NewWorkflow(ctx context.Context, conf *config.Config, phasesI []phases.Phase) (*Workflow, error) {
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Flags.Timeout)
-
-	phases, err := phases.ValidatePhases(phasesI, conf.Flags.SkipPhases)
+func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
+	targetsLogs, err := logs.InitBuildLogs(conf.Root, conf.Flags.Logging)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
-	return &Workflow{
-		originalCtx:    ctx,
-		ctxWithTimeout: ctxWithTimeout,
-		cancel:         cancel,
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Flags.Timeout)
+
+	wf := &Workflow{
+		ctx:    ctxWithTimeout,
+		cancel: cancel,
+		conf:   conf,
 		state: &WorkflowState{
-			Conf:   conf,
-			Phases: phases,
-			Pool:   pond.NewPool(0, pond.WithContext(ctxWithTimeout)),
-			Retry:  retry.NewTaskRetry(),
+			Pool:        pond.NewPool(0, pond.WithContext(ctxWithTimeout)),
+			Retry:       retry.NewTaskRetry(),
+			TargetsLogs: targetsLogs,
 		},
 		updateHook: hook.NewHook(),
-	}, nil
-}
+	}
 
-func (w *Workflow) Ctx() context.Context {
-	return w.ctxWithTimeout
+	// Initialize the runner as an internal attribute of the workflow
+	// This ensures onceRegistry is bound to this workflow instance
+	wf.runner = &runner{
+		w: wf,
+	}
+
+	return wf, nil
 }
 
 func (w *Workflow) State() *WorkflowState {
@@ -64,21 +67,26 @@ func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
 
-func (w *Workflow) Cancel() context.CancelFunc {
-	return w.cancel
+// Cancel cancels the context and waits for it's completion
+func (w *Workflow) Cancel() error {
+	w.cancel()
+	<-w.ctx.Done()
+
+	return w.ctx.Err()
 }
 
 func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.Xpath, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
-			if w.state.Conf.Flags.RequireAllSuccess {
+			if w.conf.Flags.RequireAllSuccess {
 				w.cancel()
 				return err
 			}
 
 			w.state.Retry.Wait()
-			w.state.Conf.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
+
+			w.state.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
 		} else {
 			return nil
 		}
@@ -86,7 +94,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 }
 
 func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error) (err error) {
-	phaseLog := w.state.Conf.TargetsLogs.GetOrCreateLog(xpath, phase)
+	phaseLog := w.state.TargetsLogs.GetOrCreateLog(xpath, phase)
 
 	phaseLog.TimeAndState().StartTimer()
 	defer func() {
@@ -98,7 +106,7 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 		Str("xpath", xpath.String()).
 		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
 
-	exc := executioner.NewExecutioner(w.ctxWithTimeout, w.state.Conf.Flags, machine, phaseLog, w.updateHook.Signal)
+	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	log.Info().
@@ -113,19 +121,19 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 func (w *Workflow) CreateWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
-	w.state.RootTree(func(i int, machine *config.Machine) {
+	w.RootTree(func(i int, machine *config.Machine) {
 		subPool.SubmitErr(func() error {
-			// Create a shared phase runner for this machine
-			runner := &phaseRunner{
-				w:       w,
+			// Create a shared phaseRunner for this machine
+			pr := &phaseRunner{
+				r:       w.runner,
 				flake:   machine.ParentConfiguration.ParentFlake,
 				config:  machine.ParentConfiguration,
 				machine: machine,
 			}
 
 			// Execute each phase in order
-			for _, phase := range w.state.Phases {
-				if err := runner.run(phase); err != nil {
+			for _, phase := range w.conf.Phases {
+				if err := pr.run(phase); err != nil {
 					return err
 				}
 			}
@@ -139,10 +147,10 @@ func (w *Workflow) CreateWorkflow() error {
 	return err
 }
 
-func (w *WorkflowState) RootTree(function func(i int, machine *config.Machine)) {
+func (w *Workflow) RootTree(function func(i int, machine *config.Machine)) {
 	i := 0
 
-	for _, flakePair := range w.Conf.Root.Flakes.Omap.Pairs() {
+	for _, flakePair := range w.conf.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			configuration := configPair.Value
@@ -152,5 +160,25 @@ func (w *WorkflowState) RootTree(function func(i int, machine *config.Machine)) 
 				i++
 			}
 		}
+	}
+}
+
+// executePhase executes a phase by dispatching to the appropriate handler
+func (w *Workflow) executePhase(phase phases.Phase, flake *config.Flake, config *config.Configuration, machine *config.Machine) error {
+	switch phase {
+	case phases.Inspect:
+		return w.executeInspectPhaseMachine(machine)
+	case phases.Build:
+		return w.executeBuildPhaseConfiguration(flake, config)
+	case phases.Bootstrap:
+		return w.executeBootstrapPhaseMachine(flake, config, machine)
+	case phases.Transfer:
+		return w.executeTransferPhaseMachine(machine)
+	case phases.Secrets:
+		return w.executeSecretsPhaseMachine(machine)
+	case phases.Activate:
+		return w.executeActivatePhaseMachine(machine)
+	default:
+		return nil
 	}
 }

@@ -8,8 +8,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/tui"
-	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 	"github.com/urfave/cli/v3"
 	"github.com/urfave/sflags"
 	"github.com/urfave/sflags/gen/gcli"
@@ -39,14 +39,6 @@ func main() {
 		Version: "0.1.0",
 		Flags:   parsedFlags,
 		Suggest: true,
-		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			conf, err := config.LoadConfig(flags)
-			if err != nil {
-				return ctx, fmt.Errorf("failed to load config: %w", err)
-			}
-
-			return context.WithValue(ctx, ContextConfigKey, conf), nil
-		},
 		Commands: []*cli.Command{
 			{
 				Name:  "status",
@@ -58,7 +50,7 @@ This includes:
 - SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					return runWorkflow(ctx, []phases.Phase{phases.Inspect})
+					return runTui(ctx, flags, []phases.Phase{phases.Inspect})
 				},
 			},
 			{
@@ -73,9 +65,9 @@ This command will:
 
 Same as "deploy --bootstrap.only".`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					conf := confFromContext(ctx)
-					conf.Flags.Bootstrap.Only = true
-					return runWorkflow(ctx, phases.PhasesInOrder())
+					return runTui(ctx, flags, phases.PhasesInOrder(), func(conf *config.Config) {
+						conf.Flags.Bootstrap.Only = true
+					})
 				},
 			},
 			{
@@ -83,7 +75,7 @@ Same as "deploy --bootstrap.only".`,
 				Usage:       "Build all selected closures",
 				Description: "Build compiles the NixOS configurations for all selected machines.",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					return runWorkflow(ctx, []phases.Phase{phases.Build})
+					return runTui(ctx, flags, []phases.Phase{phases.Build})
 				},
 			},
 			{
@@ -99,7 +91,7 @@ Same as "deploy --bootstrap.only".`,
 
 This is the main command for deploying NixOS configurations.`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					return runWorkflow(ctx, phases.PhasesInOrder())
+					return runTui(ctx, flags, phases.PhasesInOrder())
 				},
 			},
 			{
@@ -107,7 +99,7 @@ This is the main command for deploying NixOS configurations.`,
 				Usage:       "Deploy secrets to all machines",
 				Description: "Secrets deploys encrypted secrets and credentials to all selected machines.",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					return runWorkflow(ctx, []phases.Phase{phases.Inspect, phases.Secrets})
+					return runTui(ctx, flags, []phases.Phase{phases.Inspect, phases.Secrets})
 				},
 			},
 		},
@@ -121,21 +113,15 @@ This is the main command for deploying NixOS configurations.`,
 
 // Helpers
 
-// runWorkflow creates a workflow with the given phases and runs the TUI
-func runWorkflow(ctx context.Context, phaseList []phases.Phase) error {
-	conf := confFromContext(ctx)
-	workflowExec, err := workflow.NewWorkflow(ctx, conf, phaseList)
+func runTui(ctx context.Context, flags config_flags.Flags, commandPhases []phases.Phase, fn ...func(conf *config.Config)) error {
+	conf, err := config.LoadConfig(flags, commandPhases)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to load config")
 	}
-	return tui.NewTui(workflowExec)
-}
 
-// confFromContext retrieves config from context
-func confFromContext(ctx context.Context) *config.Config {
-	conf, ok := ctx.Value(ContextConfigKey).(*config.Config)
-	if !ok || conf == nil {
-		panic(fmt.Errorf("internal error: %s key is nil/empty in cmd context", ContextConfigKey))
+	for _, callback := range fn {
+		callback(conf)
 	}
-	return conf
+
+	return tui.NewTui(ctx, conf)
 }

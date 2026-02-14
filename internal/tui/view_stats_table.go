@@ -75,11 +75,11 @@ func makeTableColumns(colors *config.ColorScheme) ([]string, func(int) lipgloss.
 const rowSpanMarker = " 󱞩"
 
 func (m *model) ViewStatsTable() string {
-	state := m.workflow.State()
-	phasesList := state.Phases
-	colors := state.Conf.ColorScheme
+	state := m.resetable.workflow.State()
+	phasesList := m.conf.Phases
+	colors := m.conf.ColorScheme
 
-	if state.Conf.Flags.DryRun || !slices.Contains(phasesList, phases.Inspect) {
+	if m.conf.Flags.DryRun || !slices.Contains(phasesList, phases.Inspect) {
 		return ""
 	}
 
@@ -88,7 +88,7 @@ func (m *model) ViewStatsTable() string {
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Account for main viewport scrollbar and padding
-	usableWidth := max(m.modelView.viewports.ContentWidth()-2, 40)
+	usableWidth := max(m.resetable.viewports.ContentWidth()-2, 40)
 
 	headers, styleFunc := makeTableColumns(colors)
 
@@ -106,13 +106,13 @@ func (m *model) ViewStatsTable() string {
 
 	var prevFlakeName, prevConfigName string
 
-	state.RootTree(func(i int, machine *config.Machine) {
+	m.resetable.workflow.RootTree(func(i int, machine *config.Machine) {
 		configuration := machine.ParentConfiguration
 		flake := configuration.ParentFlake
 		xpath := machine.Xpath
 
 		ps := machine.MetaInspect
-		phaseLog := state.Conf.TargetsLogs.GetFirstLogErrorOrLastLog(machine.Xpath)
+		phaseLog := state.TargetsLogs.GetFirstLogErrorOrLastLog(machine.Xpath)
 
 		// Row spanning logic: show cell content only on first occurrence
 		showFlake := flake.Name != prevFlakeName
@@ -162,15 +162,15 @@ func (m *model) ViewStatsTable() string {
 
 func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phase.PhaseLog) string {
 	if phaseLog == nil {
-		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
+		return m.resetable.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
 	tas := phaseLog.TimeAndState()
 	if !tas.IsFinished() {
-		return m.modelView.spinners.GetOrCreateSpinner(xpath).View()
+		return m.resetable.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
-	m.modelView.spinners.RemoveIfExists(xpath)
+	m.resetable.spinners.RemoveIfExists(xpath)
 
 	if tas.GetEndError() != nil {
 		return "🔴"

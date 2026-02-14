@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"runtime/pprof"
 	"strings"
 	"syscall"
@@ -16,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
+	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
@@ -30,23 +30,25 @@ func (e errMsg) Error() string { return e.err.Error() }
 
 // Model holds the complete TUI state.
 type model struct {
-	workflow          *workflow.Workflow
+	ctx               context.Context
+	conf              *config.Config
+	dimensions        *tui_viewports.Dimensions
 	quitting          bool
-	err               error
-	modelView         modelView
+	resetable         resetable // Has to be able to reset
 	notification      string
 	notificationColor lipgloss.Style
 	notificationTime  time.Time
 }
 
-type modelView struct {
-	dimensions *tui_viewports.Dimensions
-	spinners   *tui_spinners.Spinners
-	viewports  *tui_viewports.Viewports
+type resetable struct {
+	err       error
+	workflow  *workflow.Workflow // Has to be able to reset
+	spinners  *tui_spinners.Spinners
+	viewports *tui_viewports.Viewports
 }
 
 // NewTui initializes and runs the TUI application.
-func NewTui(workflow *workflow.Workflow) error {
+func NewTui(ctx context.Context, conf *config.Config) error {
 	zone.NewGlobal()
 	defer zone.Close()
 
@@ -66,21 +68,7 @@ func NewTui(workflow *workflow.Workflow) error {
 		Height: 24,
 	}
 
-	state := workflow.State()
-
-	p := tea.NewProgram(model{
-		workflow: workflow,
-		modelView: modelView{
-			dimensions: dimensions,
-			spinners:   tui_spinners.NewSpinners(),
-			viewports:  tui_viewports.NewViewports(dimensions, state.Conf.ColorScheme, nil, state.Conf.Flags.Tui.CommandOutputMaxHeight),
-		},
-	},
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
-
-	cpuprofile := state.Conf.Flags.Logging.CPUProfile
+	cpuprofile := conf.Flags.Logging.CPUProfile
 	if cpuprofile != "" {
 		if err := startCPUProfile(cpuprofile); err != nil {
 			log.Fatal(err)
@@ -88,15 +76,28 @@ func NewTui(workflow *workflow.Workflow) error {
 		defer pprof.StopCPUProfile()
 	}
 
-	m, err := p.Run()
+	p := tea.NewProgram(&model{
+		ctx:        ctx,
+		conf:       conf,
+		dimensions: dimensions,
+	},
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 
+	m, err := p.Run()
 	if err != nil {
 		return err
 	}
 
-	finalModel, ok := m.(model)
-	if ok && finalModel.err != nil {
-		return finalModel.err
+	finalModel, ok := m.(*model)
+	if !ok {
+		panic("internal error: type casting for model failed")
+	}
+
+	err = finalModel.resetable.err
+	if err == nil {
+		return err
 	}
 
 	return nil
@@ -110,83 +111,95 @@ func startCPUProfile(path string) error {
 	return pprof.StartCPUProfile(f)
 }
 
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.WindowSize(),
+		m.startWorkflow(),
 		m.stateUpdateHook(),
-		startWorkflow(m),
 	)
 }
 
 // workflowDoneMsg signals the workflow has completed
 type workflowDoneMsg struct{}
 
-func startWorkflow(m model) tea.Cmd {
+// restartMsg signals the workflow should be restarted
+type restartMsg struct{}
+
+func (m *model) startWorkflow() tea.Cmd {
 	return func() tea.Msg {
-		var msg tea.Msg = workflowDoneMsg{}
+		workflow, err := workflow.NewWorkflow(m.ctx, m.conf)
+		if err != nil {
+			return errMsg{err}
+		}
 
-		defer func() {
-			if r := recover(); r != nil {
-				m.err = recoverPanic(r)
-				msg = errMsg{m.err}
-			}
-		}()
+		m.resetable = resetable{
+			workflow:  workflow,
+			spinners:  tui_spinners.NewSpinners(),
+			viewports: tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
+		}
 
-		if err := m.workflow.CreateWorkflow(); err != nil {
+		err = workflow.CreateWorkflow()
+		if err != nil {
 			zerolog.Error().Err(err).Msg("Workflow execution failed")
 			if err != context.Canceled {
-				m.err = err
-				msg = errMsg{err}
+				return errMsg{err}
 			}
 		} else {
 			zerolog.Info().Msg("Workflow completed successfully")
 		}
 
-		return msg
+		return workflowDoneMsg{}
 	}
 }
 
-func recoverPanic(r any) error {
-	stack := string(debug.Stack())
-	if e, ok := r.(error); ok {
-		return fmt.Errorf("panic recovered: %w\n\n%s", e, stack)
-	}
-	return fmt.Errorf("panic recovered: %v\n\n%s", r, stack)
-}
-
-func (m model) stateUpdateHook() tea.Cmd {
+func (m *model) stateUpdateHook() tea.Cmd {
 	return func() tea.Msg {
-		_, ok := <-m.workflow.WaitForUpdate()
-		if !ok {
-			return workflowDoneMsg{}
+		if m.resetable.workflow != nil {
+			_, ok := <-m.resetable.workflow.WaitForUpdate()
+			if !ok {
+				return workflowDoneMsg{}
+			}
+		} else {
+			time.Sleep(10 * time.Millisecond)
 		}
+
 		return stateUpdateHookMsg{}
 	}
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	cmds := make([]tea.Cmd, 0, 8)
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 
-	cmds = append(cmds, m.modelView.spinners.SendInitTickIfNotAlready())
-	cmds = append(cmds, m.modelView.viewports.Update(msg))
+	cmd = tea.Batch(cmd, m.resetable.spinners.ProcessPendingTicks())
+	cmd = tea.Batch(cmd, m.resetable.viewports.Update(msg))
 
 	switch msg := msg.(type) {
 	case errMsg:
-		m.err = msg.err
+		m.resetable.err = msg.err
 		m.quitting = true
 		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 
 	case workflowDoneMsg:
 		// Only exit automatically if exitOnComplete flag is set
-		if m.workflow.State().Conf.Flags.ExitOnComplete {
+		if m.conf.Flags.ExitOnComplete {
 			m.quitting = true
 			return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 		}
 		// Stay open - user can press 'q' to quit or 'r' to retry
 		return m, nil
 
+	case restartMsg:
+		// Cancel current workflow
+		m.resetable.workflow.Cancel()
+
+		// Recreate the workflow
+		return m, tea.Batch(
+			m.startWorkflow(),
+			m.stateUpdateHook(),
+		)
+
 	case stateUpdateHookMsg:
-		cmds = append(cmds, m.stateUpdateHook())
+		cmd = tea.Batch(cmd, m.stateUpdateHook())
 
 	case notificationMsg:
 		m.clearNotification()
@@ -195,32 +208,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.HandleKeyInput(msg)
 
 	case tea.WindowSizeMsg:
-		dimensions := m.modelView.dimensions
+		dimensions := m.dimensions
 		dimensions.Width = max(msg.Width, 40)
 		dimensions.Height = msg.Height
 
 	case spinner.TickMsg:
-		cmds = append(cmds, m.modelView.spinners.Update(msg))
+		cmd = tea.Batch(cmd, m.resetable.spinners.Update(msg))
 	}
 
-	return m, tea.Batch(cmds...)
+	return m, cmd
 }
 
-func (m model) View() string {
+func (m *model) View() string {
+	if m.resetable.workflow == nil {
+		return ""
+	}
+
 	mainContent := m.ViewMainContent()
 
 	if m.quitting {
 		return zone.Scan(mainContent)
 	}
 
-	if m.modelView.viewports.IsFullscreen() {
+	if m.resetable.viewports.IsFullscreen() {
 		result := m.renderFullscreen()
 		if result != "" {
 			return result
 		}
 	}
 
-	mainViewport := m.modelView.viewports.GetOrCreateMainViewport(mainContent)
+	mainViewport := m.resetable.viewports.GetOrCreateMainViewport(mainContent)
 
 	var builder strings.Builder
 	builder.WriteString(mainViewport)
@@ -229,16 +246,16 @@ func (m model) View() string {
 	return zone.Scan(builder.String())
 }
 
-func (m model) renderFullscreen() string {
-	fullscreenXpath := m.modelView.viewports.GetFullscreenXpath()
-	content := m.modelView.viewports.GetViewportContent(fullscreenXpath)
+func (m *model) renderFullscreen() string {
+	fullscreenXpath := m.resetable.viewports.GetFullscreenXpath()
+	content := m.resetable.viewports.GetViewportContent(fullscreenXpath)
 
 	if content == "" {
-		m.modelView.viewports.ExitFullscreen()
+		m.resetable.viewports.ExitFullscreen()
 		return ""
 	}
 
-	fullscreenViewport := m.modelView.viewports.RenderFullscreenViewport(fullscreenXpath, content)
+	fullscreenViewport := m.resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content)
 
 	var builder strings.Builder
 	builder.WriteString(fullscreenViewport)
@@ -248,24 +265,24 @@ func (m model) renderFullscreen() string {
 }
 
 // ViewMainContent generates the main content that is in a viewport
-func (m model) ViewMainContent() string {
+func (m *model) ViewMainContent() string {
 	var builder strings.Builder
 
 	builder.WriteString(m.ViewStatsTable())
 	builder.WriteString(m.ViewPhaseStatus())
 	builder.WriteString(m.ViewBuildLogs())
 
-	if m.err != nil {
+	if m.resetable.err != nil {
 		errorHeader := "=== Error ===\n"
-		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
-		builder.WriteString(m.workflow.State().Conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
+		errorContent := fmt.Sprintf("\n%s\n", m.resetable.err.Error())
+		builder.WriteString(m.conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
-	if m.workflow.State().Conf.Flags.Logging.Debug {
+	if m.conf.Flags.Logging.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
-		debugContent := m.modelView.spinners.Debug()
-		debugContent += m.modelView.viewports.Debug()
-		debugContent += m.workflow.State().Conf.TargetsLogs.Debug()
+		debugContent := m.resetable.spinners.Debug()
+		debugContent += m.resetable.viewports.Debug()
+		debugContent += m.resetable.workflow.State().TargetsLogs.Debug()
 		builder.WriteString(debugHeader + debugContent)
 	}
 

@@ -22,7 +22,7 @@ const (
 
 // ViewPhaseStatus renders the phase status view.
 func (m *model) ViewPhaseStatus() string {
-	colors := m.workflow.State().Conf.ColorScheme
+	colors := m.conf.ColorScheme
 
 	var b strings.Builder
 	b.WriteString(colors.HeaderTitle.Render("=== Phase Status ===\n"))
@@ -32,13 +32,13 @@ func (m *model) ViewPhaseStatus() string {
 }
 
 func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
-	phasesList := m.workflow.State().Phases
+	phasesList := m.conf.Phases
 
 	if len(phasesList) == 0 {
 		return colors.TableRow.Render("No phases to display")
 	}
 
-	termWidth := m.modelView.viewports.ContentWidth()
+	termWidth := m.resetable.viewports.ContentWidth()
 
 	// Cache styles to avoid repeated allocations
 	centerStyle := lipgloss.NewStyle().Align(lipgloss.Center)
@@ -55,7 +55,7 @@ func (m *model) renderPhaseFlow(colors *config.ColorScheme) string {
 			return centerStyle
 		})
 
-	stats := m.workflow.State().Conf.TargetsLogs.ComputeStatisticsPerPhase()
+	stats := m.resetable.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
 
 	// Build table row with phase groups and arrows
 	row := make([]string, 0, len(phasesList)*2+1)
