@@ -9,11 +9,11 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
-func LoadConfig(flags config_flags.Flags) (*Config, error) {
+func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
 		d.SkipNilField = true
@@ -61,9 +61,9 @@ func LoadConfig(flags config_flags.Flags) (*Config, error) {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
 
-	err = conf.initBuildLogs()
+	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
 	if err != nil {
-		return nil, fmt.Errorf("failed to init logs: %w", err)
+		return nil, err
 	}
 
 	if conf.Flags.Logging.Debug {
@@ -185,41 +185,6 @@ func (c *Config) filterRootTree() error {
 
 	if c.Root.Flakes.Omap.Len() == 0 {
 		return fmt.Errorf("no flakes left after filtering")
-	}
-
-	return nil
-}
-
-func (c *Config) initBuildLogs() error {
-	targetsLogs, err := logs.NewTargetsLogs(c.Flags.Logging)
-	if err != nil {
-		return err
-	}
-
-	c.TargetsLogs = targetsLogs
-
-	for _, pair := range c.Root.Flakes.Omap.Pairs() {
-		flake := pair.Value
-		flakeLogs, err := targetsLogs.Add(flake.Xpath)
-		if err != nil {
-			return err
-		}
-
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			configuration := configPair.Value
-			configurationLogs, err := targetsLogs.AddWithParent(configuration.Xpath, flakeLogs)
-			if err != nil {
-				return err
-			}
-
-			for _, machinePair := range configuration.Machines.Omap.Pairs() {
-				machine := machinePair.Value
-				_, err := targetsLogs.AddWithParent(machine.Xpath, configurationLogs)
-				if err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	return nil

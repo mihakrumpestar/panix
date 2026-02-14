@@ -2,6 +2,7 @@ package tui_spinners
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,12 +11,12 @@ import (
 )
 
 type Spinners struct {
-	spinners *omap.Omap[config_attributes.Xpath, *Spinner]
+	spinners   *omap.Omap[config_attributes.Xpath, *Spinner]
+	pendingCmd tea.Cmd
 }
 
 type Spinner struct {
-	initTickSend bool
-	model        *spinner.Model
+	model *spinner.Model
 }
 
 func NewSpinners() *Spinners {
@@ -37,6 +38,7 @@ func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Mo
 	}
 
 	s.spinners.Set(xpath, spnr)
+	s.pendingCmd = tea.Batch(s.pendingCmd, spnr.model.Tick)
 
 	return spnr.model
 }
@@ -45,39 +47,37 @@ func (s *Spinners) RemoveIfExists(xpath config_attributes.Xpath) {
 	s.spinners.Del(xpath)
 }
 
-func (s *Spinners) SendInitTickIfNotAlready() tea.Cmd {
-	cmds := make([]tea.Cmd, 0)
-
-	for _, spnr := range s.spinners.Records() {
-		if !spnr.initTickSend {
-			cmds = append(cmds, spnr.model.Tick)
-			spnr.initTickSend = true
-		}
+func (s *Spinners) ProcessPendingTicks() tea.Cmd {
+	if s == nil {
+		return nil
 	}
 
-	return tea.Batch(cmds...)
+	cmd := s.pendingCmd
+	s.pendingCmd = nil
+	return cmd
 }
 
 func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
-	cmds := make([]tea.Cmd, 0, s.spinners.Len())
+	var cmd tea.Cmd
 
 	for _, spnr := range s.spinners.Records() {
-		spinnerModel, cmd := spnr.model.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
+		spinnerModel, spinnerCmd := spnr.model.Update(msg)
+		if spinnerCmd != nil {
+			cmd = tea.Batch(cmd, spinnerCmd)
 			*spnr.model = spinnerModel
 		}
 	}
 
-	return tea.Batch(cmds...)
+	return cmd
 }
 
 func (s *Spinners) Debug() string {
-	str := fmt.Sprintf("\nSpinners: %d\n", s.spinners.Len())
+	var str strings.Builder
+	fmt.Fprintf(&str, "\nSpinners: %d\n", s.spinners.Len())
 
 	for pathx := range s.spinners.Records() {
-		str += fmt.Sprintf("  '%s'\n", pathx)
+		fmt.Fprintf(&str, "  '%s'\n", pathx)
 	}
 
-	return str
+	return str.String()
 }

@@ -87,7 +87,8 @@ func (ts *TargetLogs) calculateFromPhases() DurationAndError {
 func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
 		phaseLog := phaseLogPair.Value
-		if err := phaseLog.TimeAndState().GetEndError(); err != nil {
+		err := phaseLog.TimeAndState().GetEndError()
+		if err != nil {
 			return phaseLog
 		}
 	}
