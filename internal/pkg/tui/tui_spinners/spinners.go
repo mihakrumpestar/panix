@@ -3,6 +3,7 @@ package tui_spinners
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,25 +17,32 @@ type Spinners struct {
 }
 
 type Spinner struct {
-	model *spinner.Model
+	lastUsed time.Time
+	model    *spinner.Model
 }
 
-func NewSpinners() *Spinners {
-	spinners, _ := omap.New[config_attributes.Xpath, *Spinner]()
+func NewSpinners() (*Spinners, error) {
+	spinners, err := omap.New[config_attributes.Xpath, *Spinner]()
+	if err != nil {
+		return nil, err
+	}
 
 	return &Spinners{
 		spinners: spinners,
-	}
+	}, nil
 }
 
 func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Model {
-	if spnr, ok := s.spinners.Get(xpath); ok {
+	spnr, ok := s.spinners.Get(xpath)
+	if ok {
+		spnr.lastUsed = time.Now()
 		return spnr.model
 	}
 
 	spnrRaw := spinner.New(spinner.WithSpinner(spinner.Dot))
-	spnr := &Spinner{
-		model: &spnrRaw,
+	spnr = &Spinner{
+		lastUsed: time.Now(),
+		model:    &spnrRaw,
 	}
 
 	s.spinners.Set(xpath, spnr)
@@ -43,13 +51,17 @@ func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Mo
 	return spnr.model
 }
 
-func (s *Spinners) RemoveIfExists(xpath config_attributes.Xpath) {
-	s.spinners.Del(xpath)
-}
-
 func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 	if s == nil {
 		return nil
+	}
+
+	// Delete spinners that have not been rendered in View for more than x time
+	now := time.Now()
+	for _, spinner := range s.spinners.Pairs() {
+		if now.Sub(spinner.Value.lastUsed).Milliseconds() > 200 {
+			s.spinners.Del(spinner.Key)
+		}
 	}
 
 	cmd := s.pendingCmd

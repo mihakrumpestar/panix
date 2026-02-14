@@ -239,7 +239,6 @@ func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinish
 	}
 
 	if tas.IsFinished() {
-		m.resetable.spinners.RemoveIfExists(spinnerXpath)
 		return iconOnFinished
 	}
 

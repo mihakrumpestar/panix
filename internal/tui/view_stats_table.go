@@ -170,8 +170,6 @@ func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phas
 		return m.resetable.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
-	m.resetable.spinners.RemoveIfExists(xpath)
-
 	if tas.GetEndError() != nil {
 		return "🔴"
 	}
