@@ -132,9 +132,14 @@ func (m *model) startWorkflow() tea.Cmd {
 			return errMsg{err}
 		}
 
+		spinners, err := tui_spinners.NewSpinners()
+		if err != nil {
+			return errMsg{err}
+		}
+
 		m.resetable = resetable{
 			workflow:  workflow,
-			spinners:  tui_spinners.NewSpinners(),
+			spinners:  spinners,
 			viewports: tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
 		}
 
