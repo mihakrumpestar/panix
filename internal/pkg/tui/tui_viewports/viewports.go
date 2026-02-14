@@ -168,6 +168,10 @@ func (v *Viewports) GetActiveViewportScrollPercent() float64 {
 
 // Update handles messages for all viewports
 func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
+	if v == nil {
+		return nil
+	}
+
 	var cmds []tea.Cmd
 
 	switch m := msg.(type) {

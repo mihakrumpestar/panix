@@ -3,8 +3,8 @@ package config
 import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"go.uber.org/atomic"
 )
 
@@ -14,7 +14,7 @@ type Config struct {
 	ColorScheme *ColorScheme        `yaml:"color_scheme"`
 
 	// Internal
-	*logs.TargetsLogs `yaml:"-"`
+	Phases []phases.Phase `yaml:"-"`
 }
 
 // Root

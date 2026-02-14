@@ -32,12 +32,12 @@ const (
 // ViewBuildLogs generates the Docker-style build log view with tree structure
 func (m *model) ViewBuildLogs() string {
 	var builder strings.Builder
-	state := m.workflow.State()
-	colors := state.Conf.ColorScheme
+	state := m.resetable.workflow.State()
+	colors := m.conf.ColorScheme
 
 	builder.WriteString(colors.HeaderTitle.Render("=== Build Logs ===\n"))
 
-	for _, flakePair := range state.Conf.Root.Flakes.Omap.Pairs() {
+	for _, flakePair := range m.conf.Root.Flakes.Omap.Pairs() {
 		m.renderFlakeNode(&builder, flakePair.Value, state, colors, treeInitIndent)
 	}
 
@@ -48,7 +48,7 @@ func (m *model) ViewBuildLogs() string {
 func (m *model) renderFlakeNode(builder *strings.Builder, flake *config.Flake, state *workflow.WorkflowState, colors *config.ColorScheme, prefixLen int) {
 	title := m.MostLeftAndMostRight(prefixLen,
 		nodeTitle(colors.Flake, &flake.Attributes),
-		m.DurationDas(colors.Flake, state.Conf.TargetsLogs.Get(flake.Xpath).CalculateDurationAndError()),
+		m.DurationDas(colors.Flake, state.TargetsLogs.Get(flake.Xpath).CalculateDurationAndError()),
 	)
 
 	flakeNode := tree.New().
@@ -67,7 +67,7 @@ func (m *model) renderFlakeNode(builder *strings.Builder, flake *config.Flake, s
 func (m *model) renderConfigurationNode(flakeNode *tree.Tree, configuration *config.Configuration, state *workflow.WorkflowState, colors *config.ColorScheme, prefixLen int) {
 	title := m.MostLeftAndMostRight(prefixLen,
 		nodeTitle(colors.Configuration, &configuration.Attributes),
-		m.DurationDas(colors.Configuration, state.Conf.TargetsLogs.Get(configuration.Xpath).CalculateDurationAndError()),
+		m.DurationDas(colors.Configuration, state.TargetsLogs.Get(configuration.Xpath).CalculateDurationAndError()),
 	)
 
 	configurationNode := tree.New().Root(title)
@@ -87,14 +87,14 @@ func (m *model) renderConfigurationNode(flakeNode *tree.Tree, configuration *con
 }
 
 func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configuration *config.Configuration, f func(prefixLenScoped int, machine *config.Machine, machineNode *tree.Tree)) {
-	colors := m.workflow.State().Conf.ColorScheme
+	colors := m.conf.ColorScheme
 
 	prefixLen += treeStep
 	for _, machinePair := range configuration.Machines.Omap.Pairs() {
 		machine := machinePair.Value
 		title := m.MostLeftAndMostRight(prefixLen,
 			nodeTitle(colors.Machine, &machine.Attributes),
-			m.DurationDas(colors.Machine, m.workflow.State().Conf.TargetsLogs.Get(machine.Xpath).CalculateDurationAndError()),
+			m.DurationDas(colors.Machine, m.resetable.workflow.State().TargetsLogs.Get(machine.Xpath).CalculateDurationAndError()),
 		)
 
 		machineNode := tree.New().Root(title)
@@ -108,7 +108,7 @@ func (m *model) forMachines(prefixLen int, configurationNode *tree.Tree, configu
 }
 
 func (m *model) addChildLogs(prefixLen int, attr *config_attributes.Attributes, treeRoot *tree.Tree, colors *config.ColorScheme, hierarchy BuildLogHierarchy, limitToPhases ...phases.Phase) {
-	logs := m.workflow.State().Conf.TargetsLogs.GetLogs(attr.Xpath)
+	logs := m.resetable.workflow.State().TargetsLogs.GetLogs(attr.Xpath)
 
 	if logs.Len() == 0 {
 		return
@@ -133,11 +133,26 @@ func (m *model) phaseNodes(prefixLen int, xpath config_attributes.Xpath, phaseLo
 			continue
 		}
 
+		// Hide inspect or secrets phase if they already finished with no error
+		if !m.conf.Flags.Tui.ShowAllBuildLogs &&
+			slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) &&
+			phaseLog.TimeAndState().IsFinished() &&
+			phaseLog.TimeAndState().GetEndError() == nil {
+			continue
+		}
+
 		phaseXpath := xpath.NewXpathWithAppend(string(phase))
 		phaseTree, _ := m.phaseLogs(prefixLen, phaseLog, colors, phaseXpath)
 
 		cmds := phaseLog.CommandLogs()
 		for cmdIdx, cmd := range cmds {
+			// Only show last command if inspect or secrets phase
+			if !m.conf.Flags.Tui.ShowAllBuildLogs &&
+				slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) &&
+				cmdIdx != len(cmds)-1 {
+				continue
+			}
+
 			m.renderCommandNode(phaseTree, prefixLen, phase, cmdIdx, len(cmds), cmd, phaseXpath, colors)
 		}
 
@@ -154,15 +169,6 @@ func (m *model) renderCommandNode(phaseTree *tree.Tree, prefixLen int, phase pha
 	cmdOutput := cmd.String()
 	cmdTas := cmd.TimeAndState
 
-	if !m.workflow.State().Conf.Flags.Tui.ShowAllBuildLogs && slices.Contains([]phases.Phase{phases.Inspect, phases.Secrets}, phase) && cmdTas.GetEndError() == nil {
-		if cmdIdx == totalCmds-1 {
-			cmdLabel = "(hidden)"
-			cmdOutput = ""
-		} else {
-			return
-		}
-	}
-
 	iconOnFinished := fmt.Sprintf("%d ", cmdIdx+1)
 	commandXpath := phaseXpath.NewXpathWithAppend(cmdLabel)
 	labelXpath := commandXpath.NewXpathWithAppend("label")
@@ -175,7 +181,7 @@ func (m *model) renderCommandNode(phaseTree *tree.Tree, prefixLen int, phase pha
 	reservedWidth := iconWidth + durationWidth
 	adjustedPrefixLenCmd := prefixLenCmd + reservedWidth
 
-	cmdLabelViewport := m.modelView.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, adjustedPrefixLenCmd)
+	cmdLabelViewport := m.resetable.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, adjustedPrefixLenCmd)
 
 	entry := leftIcon + cmdLabelViewport + duration
 	cmdHeader := colors.Command.Color.Render(entry)
@@ -184,10 +190,10 @@ func (m *model) renderCommandNode(phaseTree *tree.Tree, prefixLen int, phase pha
 	viewportXpath := commandXpath.NewXpathWithAppend("output")
 	output := strings.TrimSpace(cmdOutput)
 	if len(output) != 0 {
-		outputViewport := m.modelView.viewports.GetOrCreateViewport(viewportXpath, output, prefixLenCmd+treeStep*2-1)
+		outputViewport := m.resetable.viewports.GetOrCreateViewport(viewportXpath, output, prefixLenCmd+treeStep*2-1)
 		cmdTree.Child(outputViewport)
 	} else {
-		m.modelView.viewports.RemoveIfExistsViewport(viewportXpath)
+		m.resetable.viewports.RemoveIfExistsViewport(viewportXpath)
 	}
 
 	if err := cmdTas.GetEndError(); err != nil {
@@ -216,7 +222,7 @@ func (m *model) phaseLogs(prefixLen int, phaseLog *logs_phase.PhaseLog, colors *
 // Helpers
 
 func (m *model) MostLeftAndMostRight(prefixLen int, left, right string) string {
-	availableWidth := m.modelView.viewports.ContentWidth() - prefixLen
+	availableWidth := m.resetable.viewports.ContentWidth() - prefixLen
 
 	contentRightWidth := lipgloss.Width(right)
 	contentLeftWidth := max(availableWidth-contentRightWidth, lipgloss.Width(left))
@@ -233,11 +239,11 @@ func (m *model) IconOrSpinner(spinnerXpath config_attributes.Xpath, iconOnFinish
 	}
 
 	if tas.IsFinished() {
-		m.modelView.spinners.RemoveIfExists(spinnerXpath)
+		m.resetable.spinners.RemoveIfExists(spinnerXpath)
 		return iconOnFinished
 	}
 
-	return m.modelView.spinners.GetOrCreateSpinner(spinnerXpath).View()
+	return m.resetable.spinners.GetOrCreateSpinner(spinnerXpath).View()
 }
 
 func (m *model) DurationTas(logStyle config.ColorSchemeLogEntity, tas *time_and_state.TimeAndState) string {

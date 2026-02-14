@@ -12,7 +12,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
-			if !machine.MetaInspect.Bootstrapped.Load() && !w.state.Conf.Flags.Bootstrap.DisableAuto {
+			if !machine.MetaInspect.Bootstrapped.Load() && !w.conf.Flags.Bootstrap.DisableAuto {
 				err := exc.Exec(
 					"nixos-install",
 					"installing NixOS",
