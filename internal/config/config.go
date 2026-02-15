@@ -11,7 +11,7 @@ import (
 type Config struct {
 	Flags       *config_flags.Flags `yaml:"flags"`
 	Root        *Root               `yaml:"root"`
-	ColorScheme *ColorScheme        `yaml:"color_scheme"`
+	ColorScheme *ColorScheme        `yaml:"-"`
 
 	// Internal
 	Phases []phases.Phase `yaml:"-"`

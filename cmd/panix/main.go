@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	"github.com/mihakrumpestar/panix/internal/pkg/schema"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -102,6 +104,21 @@ This is the main command for deploying NixOS configurations.`,
 					return runTui(ctx, flags, []phases.Phase{phases.Inspect, phases.Secrets})
 				},
 			},
+			{
+				Name:  "schema",
+				Usage: "Generate YAML schema for configuration files",
+				Description: `Schema generates a JSON/YAML schema for the Panix configuration file format.
+This schema can be used by editors and IDEs to provide autocompletion and validation.`,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "Output file path, use '-' for stdout",
+						Value:   "panix-schema.yml",
+					},
+				},
+				Action: runSchemaCommand,
+			},
 		},
 	}
 
@@ -124,4 +141,35 @@ func runTui(ctx context.Context, flags config_flags.Flags, commandPhases []phase
 	}
 
 	return tui.NewTui(ctx, conf)
+}
+
+func runSchemaCommand(ctx context.Context, cmd *cli.Command) error {
+	outputPath := cmd.String("output")
+
+	// Generate the schema
+	schemaYAML, err := schema.GenerateYAML()
+	if err != nil {
+		return fmt.Errorf("failed to generate schema: %w", err)
+	}
+
+	// Output the schema
+	if outputPath == "-" {
+		fmt.Print(string(schemaYAML))
+	} else {
+		// Ensure directory exists
+		dir := filepath.Dir(outputPath)
+		if dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", dir, err)
+			}
+		}
+
+		if err := os.WriteFile(outputPath, schemaYAML, 0644); err != nil {
+			return fmt.Errorf("failed to write schema to %s: %w", outputPath, err)
+		}
+
+		fmt.Printf("Schema written to: %s\n", outputPath)
+	}
+
+	return nil
 }

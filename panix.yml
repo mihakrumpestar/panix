@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=./panix-schema.yaml
+
 flags:
   #bootstrap:
   #  auto_bootstrap: false
@@ -56,4 +58,5 @@ root:
                 username: root
                 port: 22222
                 #identity_file: temp_key
-              #post_bootstrap_hook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
+              #bootstrap:
+              #  post_bootstrap_hook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
