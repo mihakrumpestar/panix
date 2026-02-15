@@ -24,7 +24,6 @@ require (
 	github.com/urfave/cli/v3 v3.6.2
 	github.com/urfave/sflags v0.4.1
 	go.uber.org/atomic v1.11.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

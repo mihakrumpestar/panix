@@ -1,11 +1,8 @@
-# yaml-language-server: $schema=./panix-schema.yaml
+# yaml-language-server: $schema=./panix-schema.yml
 
 flags:
-  #bootstrap:
-  #  auto_bootstrap: false
   timeout: 5500s
   override_local_machine: tmp
-  #dry_run: false
 
 root:
   flakes:
