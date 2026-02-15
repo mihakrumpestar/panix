@@ -70,7 +70,9 @@ func (w *Workflow) WaitForUpdate() <-chan struct{} {
 // Cancel cancels the context and waits for it's completion
 func (w *Workflow) Cancel() error {
 	w.cancel()
-	<-w.ctx.Done()
+	<-w.ctx.Done() // Wait to fully finish context
+
+	w.updateHook.Close() // If we don't close it, WaitForUpdate will wait beyond the restart
 
 	return w.ctx.Err()
 }
