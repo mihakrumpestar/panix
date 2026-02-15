@@ -13,16 +13,16 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	zerolog "github.com/rs/zerolog/log"
 )
 
-type stateUpdateHookMsg struct{}
+type workflowUpdateHookMsg struct{}
 
 type errMsg struct{ err error }
 
@@ -30,14 +30,12 @@ func (e errMsg) Error() string { return e.err.Error() }
 
 // Model holds the complete TUI state.
 type model struct {
-	ctx               context.Context
-	conf              *config.Config
-	dimensions        *tui_viewports.Dimensions
-	quitting          bool
-	resetable         resetable // Has to be able to reset
-	notification      string
-	notificationColor lipgloss.Style
-	notificationTime  time.Time
+	ctx          context.Context
+	conf         *config.Config
+	dimensions   *tui_viewports.Dimensions
+	quitting     bool
+	resetable    resetable // Has to be able to reset
+	notification *tui_notifications.Notification
 }
 
 type resetable struct {
@@ -77,9 +75,10 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	}
 
 	p := tea.NewProgram(&model{
-		ctx:        ctx,
-		conf:       conf,
-		dimensions: dimensions,
+		ctx:          ctx,
+		conf:         conf,
+		dimensions:   dimensions,
+		notification: tui_notifications.New(),
 	},
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
@@ -115,7 +114,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.WindowSize(),
 		m.startWorkflow(),
-		m.stateUpdateHook(),
+		m.workflowUpdateHook(),
 	)
 }
 
@@ -157,18 +156,17 @@ func (m *model) startWorkflow() tea.Cmd {
 	}
 }
 
-func (m *model) stateUpdateHook() tea.Cmd {
+func (m *model) workflowUpdateHook() tea.Cmd {
 	return func() tea.Msg {
 		if m.resetable.workflow != nil {
-			_, ok := <-m.resetable.workflow.WaitForUpdate()
-			if !ok {
-				return workflowDoneMsg{}
-			}
+			<-m.resetable.workflow.WaitForUpdate()
+			zerolog.Debug().Msg("workflowUpdateHook triggered")
 		} else {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
+			zerolog.Debug().Msg("workflowUpdateHook was nil")
 		}
 
-		return stateUpdateHookMsg{}
+		return workflowUpdateHookMsg{}
 	}
 }
 
@@ -198,16 +196,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetable.workflow.Cancel()
 
 		// Recreate the workflow
-		return m, tea.Batch(
-			m.startWorkflow(),
-			m.stateUpdateHook(),
-		)
+		return m, m.startWorkflow()
 
-	case stateUpdateHookMsg:
-		cmd = tea.Batch(cmd, m.stateUpdateHook())
+	case workflowUpdateHookMsg:
+		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
-	case notificationMsg:
-		m.clearNotification()
+	case tui_notifications.Msg:
+		m.notification.Clear()
 
 	case tea.KeyMsg:
 		return m.HandleKeyInput(msg)

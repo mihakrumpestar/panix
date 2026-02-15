@@ -59,7 +59,7 @@ func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 	// Delete spinners that have not been rendered in View for more than x time
 	now := time.Now()
 	for _, spinner := range s.spinners.Pairs() {
-		if now.Sub(spinner.Value.lastUsed).Milliseconds() > 200 {
+		if now.Sub(spinner.Value.lastUsed).Milliseconds() > 300 {
 			s.spinners.Del(spinner.Key)
 		}
 	}
