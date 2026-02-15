@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_clipboard"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
 	"github.com/pkg/errors"
 	zerolog "github.com/rs/zerolog/log"
 )
@@ -27,8 +27,9 @@ func init() {
 	keymapHelp.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 }
 
-// notificationMsg clears the notification after timeout
-type notificationMsg struct{}
+// NotificationMsg is an alias for tui_notifications.Msg for backward compatibility.
+// Deprecated: Use tui_notifications.Msg directly.
+type NotificationMsg = tui_notifications.Msg
 
 // keyDef defines a single key binding
 type keyDef struct {
@@ -99,15 +100,15 @@ func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
 	helpContent = centerVertically(helpContent, footerHeight)
 
 	// Notification (if any)
-	notificationContent := m.renderNotification()
+	notificationContent := m.notification.Render(notificationBaseStyle)
 	var notifWidth int
 	var notificationBox string
 	if notificationContent != "" {
 		notificationBox = lipgloss.NewStyle().
 			Padding(0, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(m.notificationColor.GetForeground()).
-			Inherit(m.notificationColor).
+			BorderForeground(m.notification.GetColor().GetForeground()).
+			Inherit(m.notification.GetColor()).
 			Render(notificationContent)
 		notificationBox = centerVertically(notificationBox, footerHeight)
 		notifWidth = lipgloss.Width(notificationBox)
@@ -142,15 +143,15 @@ func (m *model) ViewKeybindings(builderAbove strings.Builder) string {
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 	content, isInner := m.resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m.setNotification("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
+		return m.notification.SetModel(m, "Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
 	}
 	if content == "" {
-		return m.setNotification("No content to copy", m.conf.ColorScheme.StatusWarning)
+		return m.notification.SetModel(m, "No content to copy", m.conf.ColorScheme.StatusWarning)
 	}
 	if err := tui_clipboard.CopyToClipboard(content); err != nil {
-		return m.setNotification("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
+		return m.notification.SetModel(m, "Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
 	}
-	return m.setNotification("Copied to clipboard", m.conf.ColorScheme.StatusOK)
+	return m.notification.SetModel(m, "Copied to clipboard", m.conf.ColorScheme.StatusOK)
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
@@ -181,7 +182,7 @@ func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 
 func (m *model) handleRestart() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(
-		m.setNotificationCmd("Restarting workflow...", m.conf.ColorScheme.StatusOK),
+		m.notification.SetCmd("Restarting workflow...", m.conf.ColorScheme.StatusOK),
 		func() tea.Msg {
 			return restartMsg{}
 		},
@@ -197,7 +198,7 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	if activeInnerXpath.Depth() > 0 {
 		m.resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m.setNotification("Select a viewport first", m.conf.ColorScheme.StatusWarning)
+		return m.notification.SetModel(m, "Select a viewport first", m.conf.ColorScheme.StatusWarning)
 	}
 	return m, nil
 }
@@ -209,46 +210,6 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 		m.resetable.viewports.DeselectAll()
 	}
 	return m, nil
-}
-
-// Notification helpers
-
-func (m *model) setNotification(text string, color lipgloss.Style) (tea.Model, tea.Cmd) {
-	m.notification = text
-	m.notificationColor = color
-	m.notificationTime = time.Now()
-	return m, tea.Tick(3*time.Second, func(time.Time) tea.Msg { return notificationMsg{} })
-}
-
-func (m *model) setNotificationCmd(text string, color lipgloss.Style) tea.Cmd {
-	return func() tea.Msg {
-		m.notification = text
-		m.notificationColor = color
-		m.notificationTime = time.Now()
-		return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return notificationMsg{} })()
-	}
-}
-
-func (m *model) clearNotification() {
-	m.notification = ""
-	m.notificationTime = time.Time{}
-}
-
-func (m *model) renderNotification() string {
-	if m.notification == "" {
-		return ""
-	}
-	elapsed := time.Since(m.notificationTime)
-	const duration = 3 * time.Second
-	const fadeDuration = time.Second
-	if elapsed > duration {
-		return ""
-	}
-	style := notificationBaseStyle
-	if elapsed > duration-fadeDuration {
-		style = style.Faint(true)
-	}
-	return style.Inherit(m.notificationColor).Render(m.notification)
 }
 
 // Utility functions
