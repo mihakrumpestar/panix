@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"gopkg.in/yaml.v3"
 )
 
 // Generator holds the state for schema generation
