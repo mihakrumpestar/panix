@@ -1,0 +1,5 @@
+{
+    "yaml.schemas": {
+        "panix-schema.yaml": "panix.yml"
+    }
+}
