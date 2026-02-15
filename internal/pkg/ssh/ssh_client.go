@@ -6,11 +6,11 @@ import (
 )
 
 type SshClient struct {
-	Hostname                 string `yaml:"hostname"` // Hostname is alias if all other fileds are empty
-	Port                     uint16 `yaml:"port"`
-	Username                 string `yaml:"username"`
-	IdentityFile             string `yaml:"identity_file"` // Path to private/public key
-	DisableStrictKeyChecking bool   `yaml:"disable_strict_key_checking"`
+	Hostname                 string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
+	Port                     uint16 `yaml:"port" desc:"SSH port number"`
+	Username                 string `yaml:"username" desc:"SSH username"`
+	IdentityFile             string `yaml:"identity_file" desc:"Path to SSH private key"`
+	DisableStrictKeyChecking bool   `yaml:"disable_strict_key_checking" desc:"Disable strict host key checking"`
 	// Internal
 	IsLocal         bool `yaml:"-"`
 	HostnameIsAlias bool `yaml:"-"`
