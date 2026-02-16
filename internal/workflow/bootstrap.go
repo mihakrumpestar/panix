@@ -7,6 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
@@ -70,17 +71,10 @@ func (w *Workflow) executeDiskEncryptionKeys(
 	machine *config.Machine,
 	phaseLog *logs_phase.PhaseLog,
 ) error {
-	keys := machine.Bootstrap.DiskEncryptionKeys
-
-	if len(keys) == 0 {
-		return nil
-	}
-
-	for _, key := range keys {
-		secretConfig := key.ToSecretConfig()
-
-		if err := w.transferSecret(exc, machine, secretConfig); err != nil {
-			return fmt.Errorf("failed to transfer disk encryption key to %s: %w", key.Remote, err)
+	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
+		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key")
+		if err != nil {
+			return errors.Wrapf(err, "failed to transfer disk encryption key to %s", diskEncryptionKey.RemotePath)
 		}
 	}
 

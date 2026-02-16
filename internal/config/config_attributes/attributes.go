@@ -12,9 +12,9 @@ import (
 // Flake, Configuration, and Machine Attributes
 
 type Attributes struct {
-	SSH     *ssh.SshClient `yaml:"ssh,omitempty"`
-	Tags    []string       `yaml:"tags"`
-	Secrets []*Secret      `yaml:"secrets,omitempty"`
+	SSH     *ssh.SshClient              `yaml:"ssh,omitempty"`
+	Tags    []string                    `yaml:"tags"`
+	Secrets []*PlainFileOrDirToTransfer `yaml:"secrets,omitempty"`
 
 	Disabled            bool   `yaml:"disabled"`
 	OverrideSudoProgram string `yaml:"override_sudo_program"`
@@ -28,9 +28,18 @@ type Attributes struct {
 	Flags   *config_flags.Flags `yaml:"-" validate:"-"`
 }
 
+type PlainFileOrDirToTransfer struct {
+	LocalPath  string `yaml:"local_path,required" desc:"Path to a local file or dir" validate:"required,filepath"`
+	RemotePath string `yaml:"remote_path,required" desc:"Absolute path on remote machine" validate:"required,abspath"`
+	UID        *uint  `yaml:"uid,omitempty" desc:"Optional User ID for remote"` // TODO: validate that either both have to be set or not set at all
+	GID        *uint  `yaml:"gid,omitempty" desc:"Optional Group ID for remote"`
+}
+
 type Bootstrap struct {
-	DiskEncryptionKeys []*DiskEncryptionKey `yaml:"disk_encryption_keys,omitempty"`
-	PostBootstrapHook  string               `yaml:"post_bootstrap_hook"`
+	DiskEncryptionKeys []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys,omitempty"`
+	PostBootstrapHook  string                      `yaml:"post_bootstrap_hook"`
+	KexecURL           string                      `yaml:"kexec_url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"`
+	KexecExtraFlags    string                      `yaml:"kexec_extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
 }
 
 func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) error {
