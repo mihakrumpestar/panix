@@ -77,11 +77,6 @@ func (w *Workflow) executeDiskEncryptionKeys(
 	}
 
 	for _, key := range keys {
-		if err := key.Validate(); err != nil {
-			return fmt.Errorf("invalid disk encryption key: %w", err)
-		}
-
-		// Convert to SecretConfig and reuse transferSecret
 		secretConfig := key.ToSecretConfig()
 
 		if err := w.transferSecret(exc, machine, secretConfig); err != nil {

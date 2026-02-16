@@ -1,9 +1,9 @@
 package config_attributes
 
 import (
-	"slices"
 	"strconv"
 
+	"dario.cat/mergo"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
@@ -22,11 +22,10 @@ type Attributes struct {
 
 	Bootstrap Bootstrap `yaml:"bootstrap"`
 
-	// Internal
-	Name    string              `yaml:"-"`
-	Xpath   Xpath               `yaml:"-"`
-	Message string              `yaml:"-"`
-	Flags   *config_flags.Flags `yaml:"-"`
+	Name    string              `yaml:"-" validate:"-"`
+	Xpath   Xpath               `yaml:"-" validate:"-"`
+	Message string              `yaml:"-" validate:"-"`
+	Flags   *config_flags.Flags `yaml:"-" validate:"-"`
 }
 
 type Bootstrap struct {
@@ -34,57 +33,40 @@ type Bootstrap struct {
 	PostBootstrapHook  string               `yaml:"post_bootstrap_hook"`
 }
 
-func (a *Attributes) Init(name string, attr *Attributes, flags *config_flags.Flags) error {
-	a.Name, a.Flags = name, flags
-	a.Tags = append(a.Tags, name)
-	a.PassAttributesInto(attr)
+func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) error {
+	err := a.PassAttributesInto(name, parentAttr)
+	if err != nil {
+		return err
+	}
+
+	if !isMachine {
+		return nil
+	}
 
 	sshConfig, err := ssh.GetCachedSshConfig()
 	if err != nil {
 		return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 	}
 
-	err = a.SSH.Init(sshConfig, name, flags.OverrideLocalMachine)
+	err = a.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
-	}
-
-	for _, diskEncryptionKey := range a.Bootstrap.DiskEncryptionKeys {
-		err = diskEncryptionKey.Validate()
-		if err != nil {
-			return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
-		}
-	}
-
-	for _, secret := range a.Secrets {
-		err = secret.Validate()
-		if err != nil {
-			return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
-		}
 	}
 
 	return nil
 }
 
 // PassAttributesInto has to be run before rest of the Init
-func (a *Attributes) PassAttributesInto(parentAttr *Attributes) {
-	if a.SSH == nil {
-		a.SSH = parentAttr.SSH
+func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) error {
+	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
+	if err != nil {
+		return err
 	}
-	a.Tags = slices.Compact(append(a.Tags, parentAttr.Tags...))
-	a.Secrets = append(a.Secrets, parentAttr.Secrets...)
 
-	if parentAttr.Disabled {
-		a.Disabled = true
-	}
-	if a.OverrideSudoProgram == "" {
-		a.OverrideSudoProgram = parentAttr.OverrideSudoProgram
-	}
-	if a.HardwareConfigPath == "" {
-		a.HardwareConfigPath = parentAttr.HardwareConfigPath
-	}
-	if len(a.Bootstrap.DiskEncryptionKeys) == 0 {
-		a.Bootstrap.DiskEncryptionKeys = parentAttr.Bootstrap.DiskEncryptionKeys
-	}
-	a.Xpath = parentAttr.Xpath.NewXpathWithAppend(a.Name)
+	// Custom set/merge
+	a.Name = name
+	a.Tags = append(a.Tags, name)
+	a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
+
+	return nil
 }
