@@ -361,13 +361,17 @@ func (g *Generator) processOrderedMap(t reflect.Type, field reflect.StructField)
 
 	// Get the value type for AdditionalProperties based on field name
 	var valueType reflect.Type
+	var allowNull bool
 	switch fieldName {
 	case "flakes":
 		valueType = reflect.TypeOf(&config.Flake{})
+		allowNull = false
 	case "configurations":
 		valueType = reflect.TypeOf(&config.Configuration{})
+		allowNull = false
 	case "machines":
 		valueType = reflect.TypeOf(&config.Machine{})
+		allowNull = true
 	}
 
 	if valueType != nil {
@@ -375,15 +379,24 @@ func (g *Generator) processOrderedMap(t reflect.Type, field reflect.StructField)
 		if err != nil {
 			return nil, err
 		}
-		// Allow null/empty values for OrderedMap entries (key-only is valid)
-		return &TypeDefinition{
-			Type: "object",
-			AdditionalProperties: map[string]interface{}{
+
+		var additionalProps interface{}
+		if allowNull {
+			// Allow null/empty values for machines (key-only is valid)
+			additionalProps = map[string]interface{}{
 				"anyOf": []interface{}{
 					valueSchema,
 					map[string]interface{}{"type": "null"},
 				},
-			},
+			}
+		} else {
+			// Flakes and configurations require a value
+			additionalProps = valueSchema
+		}
+
+		return &TypeDefinition{
+			Type:                 "object",
+			AdditionalProperties: additionalProps,
 		}, nil
 	}
 
