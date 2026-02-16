@@ -35,6 +35,11 @@ Now you can get (for example) the hardware config:
 nixos-generate-config --no-filesystems --show-hardware-config
 ```
 
+## Caviats
+
+- local and remote have to have `rsync` installed to transfer plan files/dirs (note that `kexec` already includes `rsync`)
+- default remote shell (e.g. `sh`) has to be POSIX compliant shell for specific commands to run (e.g. can't use `Fish` shell)
+
 ### YAML schema
 
 Panix can generate YAML schema with `panix schema` for seeing parameter descriptions and their validation. You just reference it in `panix.yml` as (you might need to add support using an extension like [vscode-yaml](https://github.com/redhat-developer/vscode-yaml)):

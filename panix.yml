@@ -22,14 +22,8 @@ root:
           machines:
             personal-workstation:
               #secrets:
-              #  - local:
-              #      path: ./README.md
-              #    remote:
-              #      path: /tmp/README.md
-              #  - local:
-              #      command_output: echo OK
-              #    remote:
-              #      path: /tmp/README2.md
+              #  - local_path: ./README.md
+              #    remote_path: /tmp/README2.md
             fake:
               ssh:
                 hostname: fake

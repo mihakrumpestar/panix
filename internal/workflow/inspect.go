@@ -15,8 +15,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
-
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
@@ -158,7 +156,12 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 
 			if !mms.Bootstrapped.Load() {
 				if requiresKexec {
-					return fmt.Errorf("kexec not implemented")
+					if machine.Flags.Bootstrap.DisableAuto {
+						return fmt.Errorf("machine requires kexec but automatic bootstrap is disabled")
+					}
+					if err := w.executeKexec(exc, machine); err != nil {
+						return err
+					}
 				}
 				if machine.HardwareConfigPath != "" {
 					err := exc.Exec(

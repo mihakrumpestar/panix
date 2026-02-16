@@ -19,7 +19,7 @@ type SshClient struct {
 
 func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachine string) error {
 	if sC == nil {
-		return nil
+		return errors.New("internal error: SshClient is nil")
 	}
 
 	if machineName == "" {
@@ -42,9 +42,6 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 		return nil
 	}
 
-	if sC.Hostname == "" {
-		return fmt.Errorf("hostname can't be empty")
-	}
 	if sC.Port == 0 {
 		sC.Port = 22
 	}
