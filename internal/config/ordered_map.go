@@ -13,7 +13,7 @@ import (
 // OrderedMap is a wrapper around omap.Omap that provides YAML unmarshaling support
 // compatible with github.com/goccy/go-yaml.
 type OrderedMap[K comparable, V any] struct {
-	*omap.Omap[K, V]
+	*omap.Omap[K, V] `validate:"-"`
 }
 
 // NewOrderedMap creates a new OrderedMap.
