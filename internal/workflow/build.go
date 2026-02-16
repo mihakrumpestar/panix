@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -22,7 +23,12 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 				configuration.MetaBuild = &config.MetaBuild{}
 			}
 
-			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.toplevel", flake.URL, configuration.Name)}
+			flakeOutput := configuration.FlakeOutput
+			if flakeOutput == "" {
+				flakeOutput = "nixosConfigurations.<name>.config.system.build.toplevel"
+			}
+			flakeOutput = strings.ReplaceAll(flakeOutput, "<name>", configuration.Name)
+			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
 			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
 			if err != nil {
