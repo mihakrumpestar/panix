@@ -1,6 +1,4 @@
-// Package schema provides functionality to generate YAML schema from Go structs
-// using YAML tags. It properly handles special types like OrderedMap.
-package schema
+package config_schema
 
 import (
 	"fmt"
@@ -40,6 +38,11 @@ type TypeDefinition struct {
 	Example              interface{}            `yaml:"example,omitempty"`
 	AdditionalProperties interface{}            `yaml:"additionalProperties,omitempty"`
 	AnyOf                []interface{}          `yaml:"anyOf,omitempty"`
+	Format               string                 `yaml:"format,omitempty"`
+	Minimum              *int                   `yaml:"minimum,omitempty"`
+	Maximum              *int                   `yaml:"maximum,omitempty"`
+	MinLength            *int                   `yaml:"minLength,omitempty"`
+	MaxLength            *int                   `yaml:"maxLength,omitempty"`
 }
 
 // Schema represents the root YAML schema document
@@ -160,15 +163,12 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 
 		properties[fieldName] = prop
 
-		// Check if field is required
-		// A field is required only if:
-		// 1. It has a "required" struct tag
-		// OR
-		// 2. It's not a pointer, not inline, AND marked with a special "required" yaml option
-		// For now, we only mark fields as required if they have explicit "required" tag
-		isRequired := field.Tag.Get("required") == "true"
+		// Check if field is required based on yaml or validate tags
+		validateTag := field.Tag.Get("validate")
+		yamlHasRequired := strings.Contains(yamlTag, ",required")
+		validateHasRequired := strings.Contains(validateTag, "required")
 
-		if isRequired {
+		if yamlHasRequired || validateHasRequired {
 			required = append(required, fieldName)
 		}
 	}
@@ -188,29 +188,39 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 		return def, nil
 	}
 
+	validateTag := field.Tag.Get("validate")
+
 	switch t.Kind() {
 	case reflect.Bool:
 		return &TypeDefinition{Type: "boolean"}, nil
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return &TypeDefinition{Type: "integer"}, nil
+		td := &TypeDefinition{Type: "integer"}
+		g.applyValidateConstraints(td, validateTag, "integer")
+		return td, nil
 
 	case reflect.Float32, reflect.Float64:
-		return &TypeDefinition{Type: "number"}, nil
+		td := &TypeDefinition{Type: "number"}
+		g.applyValidateConstraints(td, validateTag, "number")
+		return td, nil
 
 	case reflect.String:
-		return &TypeDefinition{Type: "string"}, nil
+		td := &TypeDefinition{Type: "string"}
+		g.applyValidateConstraints(td, validateTag, "string")
+		return td, nil
 
 	case reflect.Slice, reflect.Array:
 		itemType, err := g.processType(t.Elem(), field)
 		if err != nil {
 			return nil, err
 		}
-		return &TypeDefinition{
+		td := &TypeDefinition{
 			Type:  "array",
 			Items: itemType,
-		}, nil
+		}
+		g.applyValidateConstraints(td, validateTag, "array")
+		return td, nil
 
 	case reflect.Map:
 		// Handle regular maps
@@ -249,6 +259,78 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 	default:
 		return nil, fmt.Errorf("unsupported type kind: %v", t.Kind())
 	}
+}
+
+// applyValidateConstraints applies validation tag constraints to the type definition
+func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, baseType string) {
+	if validateTag == "" {
+		return
+	}
+
+	tags := strings.Split(validateTag, ",")
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" || tag == "required" || tag == "omitempty" {
+			continue
+		}
+
+		if strings.HasPrefix(tag, "min=") {
+			val := strings.TrimPrefix(tag, "min=")
+			if v, err := parseInt(val); err == nil {
+				switch baseType {
+				case "integer":
+					td.Minimum = &v
+				case "string":
+					td.MinLength = &v
+				}
+			}
+		} else if strings.HasPrefix(tag, "max=") {
+			val := strings.TrimPrefix(tag, "max=")
+			if v, err := parseInt(val); err == nil {
+				switch baseType {
+				case "integer":
+					td.Maximum = &v
+				case "string":
+					td.MaxLength = &v
+				}
+			}
+		} else if strings.HasPrefix(tag, "len=") {
+			val := strings.TrimPrefix(tag, "len=")
+			if v, err := parseInt(val); err == nil {
+				switch baseType {
+				case "string":
+					td.MinLength = &v
+					td.MaxLength = &v
+				}
+			}
+		} else {
+			// Handle format tags
+			switch tag {
+			case "filepath":
+				td.Format = "file-path"
+			case "abspath":
+				td.Format = "uri-reference"
+				td.Pattern = "^/.*"
+			case "uri":
+				td.Format = "uri"
+			case "email":
+				td.Format = "email"
+			case "url":
+				td.Format = "uri"
+			case "uuid":
+				td.Format = "uuid"
+			case "datetime":
+				td.Format = "date-time"
+			}
+		}
+	}
+}
+
+// parseInt parses a string to an integer
+func parseInt(s string) (int, error) {
+	var v int
+	_, err := fmt.Sscanf(s, "%d", &v)
+	return v, err
 }
 
 // isOrderedMap checks if a type is an OrderedMap

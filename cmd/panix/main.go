@@ -8,7 +8,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/schema"
+	"github.com/mihakrumpestar/panix/internal/config/config_schema"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -114,7 +114,7 @@ This schema can be used by editors and IDEs to provide autocompletion and valida
 						Name:    "output",
 						Aliases: []string{"o"},
 						Usage:   "Output file path, use '-' for stdout",
-						Value:   "panix-schema.yml",
+						Value:   "panix-schema.yaml",
 					},
 				},
 				Action: runSchemaCommand,
@@ -147,7 +147,7 @@ func runSchemaCommand(ctx context.Context, cmd *cli.Command) error {
 	outputPath := cmd.String("output")
 
 	// Generate the schema
-	schemaYAML, err := schema.GenerateYAML()
+	schemaYAML, err := config_schema.GenerateYAML()
 	if err != nil {
 		return fmt.Errorf("failed to generate schema: %w", err)
 	}
