@@ -50,7 +50,7 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
 type Configuration struct {
 	Machines                     *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	// TODO: FlakeOutput string `yaml:"flake_output"` // Option to override if non-standard style
+	FlakeOutput                  string `yaml:"flake_output" desc:"Option to override flake output if non-standard style (default: nixosConfigurations.<name>.config.system.build.toplevel)"`
 	// Internal
 	ParentFlake *Flake     `yaml:"-" validate:"-"`
 	MetaBuild   *MetaBuild `yaml:"-" validate:"-"`
