@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=./panix-schema.yml
+# yaml-language-server: $schema=./panix-schema.yaml
 
 flags:
   timeout: 5500s
@@ -45,7 +45,7 @@ root:
             personal-laptop:
         server-01:
           machines:
-            server-01:
+            server-01:        
         kiosk:
           machines:
             kiosk:

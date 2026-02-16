@@ -3,24 +3,23 @@ package config
 import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"go.uber.org/atomic"
 )
 
 type Config struct {
 	Flags       *config_flags.Flags `yaml:"flags"`
-	Root        *Root               `yaml:"root"`
-	ColorScheme *ColorScheme        `yaml:"-"`
+	Root        *Root               `yaml:"root,required" validate:"required"`
+	ColorScheme *ColorScheme        `yaml:"-" validate:"-"`
 
 	// Internal
-	Phases []phases.Phase `yaml:"-"`
+	Phases []phases.Phase `yaml:"-" validate:"-"`
 }
 
 // Root
 
 type Root struct {
-	Flakes                       *OrderedMap[string, *Flake] `yaml:"flakes"`
+	Flakes                       *OrderedMap[string, *Flake] `yaml:"flakes,required"`
 	config_attributes.Attributes `yaml:",inline"`
 }
 
@@ -31,9 +30,9 @@ func (r *Root) Init(flags *config_flags.Flags) error {
 // Flake
 
 type Flake struct {
-	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations"`
+	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	URL                          string     `yaml:"url"` // Flake path (eg. `path:...`) or url (eg. `ssh:...`)
+	URL                          string     `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...')"`
 	FlakeHooks                   FlakeHooks `yaml:"flake_hooks"`
 }
 
@@ -49,12 +48,12 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
 // Configuration
 
 type Configuration struct {
-	Machines                     *OrderedMap[string, *Machine] `yaml:"machines"`
+	Machines                     *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
 	// TODO: FlakeOutput string `yaml:"flake_output"` // Option to override if non-standard style
 	// Internal
 	ParentFlake *Flake     `yaml:"-" validate:"-"`
-	MetaBuild   *MetaBuild `yaml:"-"`
+	MetaBuild   *MetaBuild `yaml:"-" validate:"-"`
 }
 
 type MetaBuild struct {
@@ -70,9 +69,8 @@ func (c *Configuration) Init(name string, parent *Flake) error {
 
 type Machine struct {
 	config_attributes.Attributes `yaml:",inline"`
-	// Internal
-	ParentConfiguration *Configuration `yaml:"-" validate:"-"`
-	MetaInspect         *MetaInspect   `yaml:"-" validate:"-"`
+	ParentConfiguration          *Configuration `yaml:"-" validate:"-"`
+	MetaInspect                  *MetaInspect   `yaml:"-" validate:"-"`
 }
 
 type MetaInspect struct { // Atomic due to being read and write at the same time
@@ -88,18 +86,10 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 }
 
 func (m *Machine) Init(name string, parent *Configuration) error {
-	if m.SSH == nil { // Has to be initialized before InitAttributes
-		m.SSH = &ssh.SshClient{}
-	}
-
-	// Regular
-
 	err := m.Attributes.Init(name, &parent.Attributes, true)
 	if err != nil {
 		return err
 	}
-
-	// Internal
 
 	m.ParentConfiguration = parent
 	m.MetaInspect = &MetaInspect{}

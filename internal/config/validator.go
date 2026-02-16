@@ -6,7 +6,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func ValidateConfig(conf *Config) error {
+func (conf *Config) ValidateStructTags() error {
 	v := validator.New()
 
 	v.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {

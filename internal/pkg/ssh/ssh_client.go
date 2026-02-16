@@ -8,13 +8,13 @@ import (
 
 type SshClient struct {
 	Hostname                 string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
-	Port                     uint16 `yaml:"port" desc:"SSH port number"`
+	Port                     uint16 `yaml:"port" desc:"SSH port number" validate:"min=1"`
 	Username                 string `yaml:"username" desc:"SSH username"`
-	IdentityFile             string `yaml:"identity_file" desc:"Path to SSH private key"`
+	IdentityFile             string `yaml:"identity_file" desc:"Path to SSH private key" validate:"omitempty,filepath"`
 	DisableStrictKeyChecking bool   `yaml:"disable_strict_key_checking" desc:"Disable strict host key checking"`
 	// Internal
-	IsLocal         bool `yaml:"-"`
-	HostnameIsAlias bool `yaml:"-"`
+	IsLocal         bool `yaml:"-" validate:"-"`
+	HostnameIsAlias bool `yaml:"-" validate:"-"`
 }
 
 func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachine string) error {

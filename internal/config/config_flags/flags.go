@@ -37,9 +37,9 @@ type Tui struct {
 
 type Logging struct {
 	Log        bool   `yaml:"log" flag:"log l" desc:"enable logging to file"`
-	LogFile    string `yaml:"log_file" flag:"logFile" desc:"log file path (does not enable logging)"`
-	Debug      bool   `yaml:"debug" flag:"debug d" desc:"debug output (enables logging automatically)"`
-	CPUProfile string `yaml:"cpu_profile" flag:"cpuProfile" desc:"path for cpu profiling to file, declaring it enables it"`
+	LogFile    string `yaml:"log_file" flag:"logFile" desc:"log file path (enables logging)" validate:"omitempty,filepath"`
+	Debug      bool   `yaml:"debug" flag:"debug d" desc:"debug output (enables logging)"`
+	CPUProfile string `yaml:"cpu_profile" flag:"cpuProfile" desc:"path for cpu profiling to file, declaring it enables it" validate:"omitempty,filepath"`
 }
 
 func (f *Flags) SetDefault(reverse bool) {

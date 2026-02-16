@@ -1,8 +1,8 @@
 package config_attributes
 
 type Secret struct {
-	Local  Local  `yaml:"local" desc:"Local secret source" validate:"required"`
-	Remote Remote `yaml:"remote" desc:"Remote secret destination" validate:"required"`
+	Local  Local  `yaml:"local,required" desc:"Local secret source" validate:"required"`
+	Remote Remote `yaml:"remote,required" desc:"Remote secret destination" validate:"required"`
 }
 
 type Local struct {
@@ -11,7 +11,7 @@ type Local struct {
 }
 
 type Remote struct {
-	Path string `yaml:"path" desc:"Absolute path on remote machine" validate:"required,abspath"`
+	Path string `yaml:"path,required" desc:"Absolute path on remote machine" validate:"required,abspath"`
 	UID  *uint  `yaml:"uid,omitempty" desc:"User ID for the secret file"`
 	GID  *uint  `yaml:"gid,omitempty" desc:"Group ID for the secret file"`
 }

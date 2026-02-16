@@ -48,6 +48,10 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) e
 		return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 	}
 
+	if a.SSH == nil {
+		a.SSH = &ssh.SshClient{}
+	}
+
 	err = a.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))

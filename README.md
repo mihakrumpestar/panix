@@ -40,7 +40,7 @@ nixos-generate-config --no-filesystems --show-hardware-config
 Panix can generate YAML schema with `panix schema` for seeing parameter descriptions and their validation. You just reference it in `panix.yml` as (you might need to add support using an extension like [vscode-yaml](https://github.com/redhat-developer/vscode-yaml)):
 
 ```yml
-# yaml-language-server: $schema=./panix-schema.yml
+# yaml-language-server: $schema=./panix-schema.yaml
 ```
 
 ## Notes
