@@ -45,6 +45,9 @@ func (om *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 	if file != nil && file.Docs != nil && len(file.Docs) > 0 && file.Docs[0].Body != nil {
 		extractor := &keyValueExtractor[K, V]{om: om}
 		ast.Walk(extractor, file.Docs[0].Body)
+		if extractor.err != nil {
+			return extractor.err
+		}
 	}
 
 	return nil
@@ -52,7 +55,8 @@ func (om *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 
 // keyValueExtractor is an AST visitor that extracts key-value pairs from mapping nodes.
 type keyValueExtractor[K comparable, V any] struct {
-	om *OrderedMap[K, V]
+	om  *OrderedMap[K, V]
+	err error
 }
 
 func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
@@ -67,7 +71,8 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 		for _, val := range mapping.Values {
 			var key K
 			if err := yaml.NodeToValue(val.Key, &key); err != nil {
-				continue
+				e.err = fmt.Errorf("failed to unmarshal key: %w", err)
+				return nil
 			}
 
 			var value V
@@ -86,15 +91,24 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 					// For pointer types, allocate a new struct first, then unmarshal into it
 					if elemType.Kind() == reflect.Struct {
 						newPtr := reflect.New(elemType)
-						_ = yaml.NodeToValue(val.Value, newPtr.Interface())
+						if err := yaml.NodeToValue(val.Value, newPtr.Interface()); err != nil {
+							e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+							return nil
+						}
 						value = newPtr.Interface().(V)
 					} else {
 						// Pointer to non-struct (e.g., *string, *int)
-						_ = yaml.NodeToValue(val.Value, &value)
+						if err := yaml.NodeToValue(val.Value, &value); err != nil {
+							e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+							return nil
+						}
 					}
 				} else {
 					// Non-pointer type, unmarshal directly
-					_ = yaml.NodeToValue(val.Value, &value)
+					if err := yaml.NodeToValue(val.Value, &value); err != nil {
+						e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+						return nil
+					}
 				}
 			}
 
