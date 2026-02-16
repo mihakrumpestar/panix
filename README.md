@@ -4,46 +4,50 @@ Nix deployment tool
 
 ## Setup
 
-Remote requires to have ssh key authentication (kay file has to be without password, unless you are uaing SSH agent), password auth is not supported.
+Remote requires to have ssh key authentication (kay file has to be without password, unless you are using an SSH agent), and password auth is also not supported.
 
 If you have only password auth, create and add a temporary key to remote with the following commands:
 
 ```sh
-# On remote
-passwd
+# On remote (set password for root user)
+sudo passwd
 ```
 
 ```sh
-export HOST=<host>
+export REMOTE=<host>
 
+# Generate key pair
 ssh-keygen -t ed25519 -f ./temp_key -C "temporary_deployment_key" -N ""
 
-SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub nixos@$HOST
-
-# Installation requires root user
-ssh -i ./temp_key -o IdentitiesOnly=yes nixos@$HOST "sudo mkdir -p /root/.ssh; sudo cp ~/.ssh/authorized_keys /root/.ssh"
+# Copy key to remote (with disabled SSH agent to prevent trying to auth with keys in agent)
+SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub root@$REMOTE
 ```
 
 You now may test the login with:
 
 ```sh
-ssh -i ./temp_key -o IdentitiesOnly=yes root@$HOST
+ssh -i ./temp_key -o IdentitiesOnly=yes root@$REMOTE
 ```
 
-Now you can get the hardware config:
+Now you can get (for example) the hardware config:
 
 ```sh
 nixos-generate-config --no-filesystems --show-hardware-config
 ```
 
+### YAML schema
+
+Panix can generate YAML schema with `panix schema` for seeing parameter descriptions and their validation. You just reference it in `panix.yml` as (you might need to add support using an extension like [vscode-yaml](https://github.com/redhat-developer/vscode-yaml)):
+
+```yml
+# yaml-language-server: $schema=./panix-schema.yml
+```
+
 ## Notes
 
-Problematic:
+The following packages were inadequate for use for panix:
 
 - [Koanf](https://github.com/knadh/koanf/issues/221)
-
-Not using:
-
 - [Viper](https://github.com/spf13/viper/issues/819)
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
