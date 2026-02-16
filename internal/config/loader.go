@@ -52,17 +52,17 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 		return nil, err
 	}
 
-	err = conf.initAndValidateRootConfig()
+	err = conf.ValidateStructTags()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	err = ValidateConfig(conf)
+	err = conf.initRoot()
 	if err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	err = conf.filterRootTree()
+	err = conf.filterRoot()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
 	}
@@ -81,40 +81,22 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 
 // Helper functions
 
-func (c *Config) initAndValidateRootConfig() error {
-	if c.Root == nil {
-		return fmt.Errorf("root is nil")
-	}
-
+func (c *Config) initRoot() error {
 	err := c.Root.Init(c.Flags)
 	if err != nil {
 		return err
 	}
 
-	if c.Root.Flakes.Len() == 0 {
-		return fmt.Errorf("flakes is required")
-	}
-
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flakeName, flake := flakePair.Key, flakePair.Value
-		if flake.URL == "" {
-			return fmt.Errorf("flake %s has no URL configured", flakeName)
-		}
 
 		err := flake.Init(flakeName, &c.Root.Attributes)
 		if err != nil {
 			return err
 		}
 
-		if flake.Configurations.Len() == 0 {
-			return fmt.Errorf("flakes[%s]configurations is empty", flakeName)
-		}
-
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			configurationName, configuration := configPair.Key, configPair.Value
-			if configuration.Machines.Len() == 0 {
-				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
-			}
 
 			err := configuration.Init(configurationName, flake)
 			if err != nil {
@@ -136,7 +118,7 @@ func (c *Config) initAndValidateRootConfig() error {
 }
 
 // FilterConfigEntries filters the configuration based on command-line or global selections
-func (c *Config) filterRootTree() error {
+func (c *Config) filterRoot() error {
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		if flake == nil || flake.Disabled || flake.Configurations == nil {
