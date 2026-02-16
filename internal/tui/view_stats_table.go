@@ -88,7 +88,7 @@ func (m *model) ViewStatsTable() string {
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	// Account for main viewport scrollbar and padding
-	usableWidth := max(m.resetable.viewports.ContentWidth()-2, 40)
+	usableWidth := max(m.resetable.viewports.ContentWidth(), 40)
 
 	headers, styleFunc := makeTableColumns(colors)
 

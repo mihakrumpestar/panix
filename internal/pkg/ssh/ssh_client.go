@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -19,6 +20,10 @@ type SshClient struct {
 func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachine string) error {
 	if sC == nil {
 		return nil
+	}
+
+	if machineName == "" {
+		return errors.New("machine name is empty")
 	}
 
 	// Use machineName as Hostname if Hostname is empty
