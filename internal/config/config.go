@@ -24,8 +24,8 @@ type Root struct {
 	config_attributes.Attributes `yaml:",inline"`
 }
 
-func (r *Root) Init() error {
-	return r.Attributes.Init("", &config_attributes.Attributes{}, &config_flags.Flags{})
+func (r *Root) Init(flags *config_flags.Flags) error {
+	return r.Attributes.Init("root", &config_attributes.Attributes{Flags: flags}, false)
 }
 
 // Flake
@@ -42,8 +42,8 @@ type FlakeHooks struct {
 	Post string `yaml:"post"`
 }
 
-func (f *Flake) Init(name string, attr *config_attributes.Attributes, flags *config_flags.Flags) error {
-	return f.Attributes.Init(name, attr, flags)
+func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
+	return f.Attributes.Init(name, attr, false)
 }
 
 // Configuration
@@ -53,7 +53,7 @@ type Configuration struct {
 	config_attributes.Attributes `yaml:",inline"`
 	// TODO: FlakeOutput string `yaml:"flake_output"` // Option to override if non-standard style
 	// Internal
-	ParentFlake *Flake     `yaml:"-"`
+	ParentFlake *Flake     `yaml:"-" validate:"-"`
 	MetaBuild   *MetaBuild `yaml:"-"`
 }
 
@@ -61,9 +61,9 @@ type MetaBuild struct {
 	SystemClosure string
 }
 
-func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Flags) error {
+func (c *Configuration) Init(name string, parent *Flake) error {
 	c.ParentFlake = parent
-	return c.Attributes.Init(name, &parent.Attributes, flags)
+	return c.Attributes.Init(name, &parent.Attributes, false)
 }
 
 // Machine
@@ -71,8 +71,8 @@ func (c *Configuration) Init(name string, parent *Flake, flags *config_flags.Fla
 type Machine struct {
 	config_attributes.Attributes `yaml:",inline"`
 	// Internal
-	ParentConfiguration *Configuration `yaml:"-"`
-	MetaInspect         *MetaInspect   `yaml:"-"`
+	ParentConfiguration *Configuration `yaml:"-" validate:"-"`
+	MetaInspect         *MetaInspect   `yaml:"-" validate:"-"`
 }
 
 type MetaInspect struct { // Atomic due to being read and write at the same time
@@ -87,16 +87,14 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	Kernel         atomic.String
 }
 
-func (m *Machine) Init(name string, parent *Configuration, flags *config_flags.Flags) error {
-	// Only machine has them always initialized (root, flake, configurations do not)
-
+func (m *Machine) Init(name string, parent *Configuration) error {
 	if m.SSH == nil { // Has to be initialized before InitAttributes
 		m.SSH = &ssh.SshClient{}
 	}
 
 	// Regular
 
-	err := m.Attributes.Init(name, &parent.Attributes, flags)
+	err := m.Attributes.Init(name, &parent.Attributes, true)
 	if err != nil {
 		return err
 	}

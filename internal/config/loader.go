@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config, error) {
@@ -56,6 +57,11 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
+	err = ValidateConfig(conf)
+	if err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	err = conf.filterRootTree()
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter config: %w", err)
@@ -80,7 +86,7 @@ func (c *Config) initAndValidateRootConfig() error {
 		return fmt.Errorf("root is nil")
 	}
 
-	err := c.Root.Init()
+	err := c.Root.Init(c.Flags)
 	if err != nil {
 		return err
 	}
@@ -95,7 +101,7 @@ func (c *Config) initAndValidateRootConfig() error {
 			return fmt.Errorf("flake %s has no URL configured", flakeName)
 		}
 
-		err := flake.Init(flakeName, &c.Root.Attributes, c.Flags)
+		err := flake.Init(flakeName, &c.Root.Attributes)
 		if err != nil {
 			return err
 		}
@@ -110,7 +116,7 @@ func (c *Config) initAndValidateRootConfig() error {
 				return fmt.Errorf("flakes[%s]configurations[%s]machines is empty", flakeName, configurationName)
 			}
 
-			err := configuration.Init(configurationName, flake, c.Flags)
+			err := configuration.Init(configurationName, flake)
 			if err != nil {
 				return err
 			}
@@ -118,7 +124,7 @@ func (c *Config) initAndValidateRootConfig() error {
 			for _, machinePair := range configuration.Machines.Omap.Pairs() {
 				machineName, machine := machinePair.Key, machinePair.Value
 
-				err = machine.Init(machineName, configuration, c.Flags)
+				err = machine.Init(machineName, configuration)
 				if err != nil {
 					return err
 				}
@@ -131,56 +137,42 @@ func (c *Config) initAndValidateRootConfig() error {
 
 // FilterConfigEntries filters the configuration based on command-line or global selections
 func (c *Config) filterRootTree() error {
-	// Collect keys to delete instead of modifying while iterating
-	flakesToDelete := make([]string, 0)
-
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
-		if flake == nil || flake.Configurations == nil {
-			flakesToDelete = append(flakesToDelete, flakePair.Key)
+		if flake == nil || flake.Disabled || flake.Configurations == nil {
+			c.Root.Flakes.Omap.Del(flakePair.Key)
 			continue
 		}
-
-		configsToDelete := make([]string, 0)
 
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			config := configPair.Value
 			if config == nil || config.Disabled || config.Machines == nil {
-				configsToDelete = append(configsToDelete, configPair.Key)
+				flake.Configurations.Omap.Del(configPair.Key)
 				continue
 			}
 
 			// Filter machines
-			machinesToDelete := make([]string, 0)
 			for _, machinePair := range config.Machines.Omap.Pairs() {
 				machine := machinePair.Value
 				if machine == nil || machine.Disabled || !machineContainsTags(machine.Tags, c.Flags.Tags) {
-					machinesToDelete = append(machinesToDelete, machinePair.Key)
+					log.Debug().Bool("machine == nil", machine == nil).
+						Bool("disabled", machine.Disabled).
+						Strs("machine.Tags", machine.Tags).
+						Msgf("deleting machine %s", strconv.Quote(machinePair.Key))
+					config.Machines.Omap.Del(machinePair.Key)
 				}
-			}
-
-			for _, key := range machinesToDelete {
-				config.Machines.Omap.Del(key)
 			}
 
 			// Delete config if no machines left
 			if config.Machines.Omap.Len() == 0 {
-				configsToDelete = append(configsToDelete, configPair.Key)
+				flake.Configurations.Omap.Del(configPair.Key)
 			}
-		}
-
-		for _, key := range configsToDelete {
-			flake.Configurations.Omap.Del(key)
 		}
 
 		// Delete flake if no configs left
 		if flake.Configurations.Omap.Len() == 0 {
-			flakesToDelete = append(flakesToDelete, flakePair.Key)
+			c.Root.Flakes.Omap.Del(flakePair.Key)
 		}
-	}
-
-	for _, key := range flakesToDelete {
-		c.Root.Flakes.Omap.Del(key)
 	}
 
 	if c.Root.Flakes.Omap.Len() == 0 {
