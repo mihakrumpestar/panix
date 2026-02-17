@@ -21,10 +21,10 @@ type tableColumn struct {
 
 // makeTableColumns returns all column definitions.
 // The empty header strings are for index and status icon columns that use visual indicators.
-func makeTableColumns(colors *config.ColorScheme) ([]string, func(int) lipgloss.Style) {
+func makeTableColumns(colors *config.ColorScheme, indexWidth int) ([]string, func(int) lipgloss.Style) {
 	columns := []tableColumn{
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow.Width(3).Align(lipgloss.Center)
+			return c.TableRow.Width(indexWidth).Align(lipgloss.Right)
 		}},
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.TableRow.Width(3).Align(lipgloss.Center)
@@ -90,7 +90,10 @@ func (m *model) ViewStatsTable() string {
 	// Account for main viewport scrollbar and padding
 	usableWidth := max(m.resetable.viewports.ContentWidth(), 40)
 
-	headers, styleFunc := makeTableColumns(colors)
+	machineCount := m.resetable.workflow.MachineCount()
+	indexWidth := len(fmt.Sprintf("%d", machineCount))
+
+	headers, styleFunc := makeTableColumns(colors, indexWidth)
 
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
