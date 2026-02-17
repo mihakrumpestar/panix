@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
@@ -237,11 +238,13 @@ func (m *model) View() string {
 		}
 	}
 
-	mainViewport := m.resetable.viewports.GetOrCreateMainViewport(mainContent)
+	footer := m.ViewFooter(strings.Builder{})
+	footerHeight := lipgloss.Height(footer)
+	mainViewport := m.resetable.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
 
 	var builder strings.Builder
 	builder.WriteString(mainViewport)
-	builder.WriteString(m.ViewFooter(builder))
+	builder.WriteString(footer)
 
 	return zone.Scan(builder.String())
 }
@@ -255,11 +258,13 @@ func (m *model) renderFullscreen() string {
 		return ""
 	}
 
-	fullscreenViewport := m.resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content)
+	footer := m.ViewFooter(strings.Builder{})
+	footerHeight := lipgloss.Height(footer)
+	fullscreenViewport := m.resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
 
 	var builder strings.Builder
 	builder.WriteString(fullscreenViewport)
-	builder.WriteString(m.ViewFooter(builder))
+	builder.WriteString(footer)
 
 	return zone.Scan(builder.String())
 }
