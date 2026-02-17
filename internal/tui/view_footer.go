@@ -177,7 +177,7 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 
 func renderScrollPercent(m *model) string {
 	pct := m.resetable.viewports.GetActiveViewportScrollPercent()
-	return lipgloss.NewStyle().
+	return lipgloss.NewStyle().PaddingLeft(1).
 		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
 		Render(fmt.Sprintf("%d%%", int(pct*100)))
 }
