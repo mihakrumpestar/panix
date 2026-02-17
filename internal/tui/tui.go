@@ -241,7 +241,7 @@ func (m *model) View() string {
 
 	var builder strings.Builder
 	builder.WriteString(mainViewport)
-	builder.WriteString(m.ViewKeybindings(builder))
+	builder.WriteString(m.ViewFooter(builder))
 
 	return zone.Scan(builder.String())
 }
@@ -259,7 +259,7 @@ func (m *model) renderFullscreen() string {
 
 	var builder strings.Builder
 	builder.WriteString(fullscreenViewport)
-	builder.WriteString(m.ViewKeybindings(builder))
+	builder.WriteString(m.ViewFooter(builder))
 
 	return zone.Scan(builder.String())
 }

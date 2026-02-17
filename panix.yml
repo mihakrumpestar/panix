@@ -31,8 +31,8 @@ root:
                 port: 22
               bootstrap:
                 disk_encryption_keys:
-                  - local: /home/user/secrets/luks.key
-                    remote: /tmp/luks-key
+                  - local_path: /home/user/secrets/luks.key
+                    remote_path: /tmp/luks-key
 
         personal-laptop:
           machines:
