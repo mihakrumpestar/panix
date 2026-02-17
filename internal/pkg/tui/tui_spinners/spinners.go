@@ -70,6 +70,10 @@ func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 }
 
 func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
+	if _, ok := msg.(spinner.TickMsg); !ok {
+		return nil
+	}
+
 	var cmd tea.Cmd
 
 	for _, spnr := range s.spinners.Records() {
