@@ -16,7 +16,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-const treeStep = 3
+const (
+	treeStep  = 3
+	timerStep = 1
+)
 
 var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 
@@ -77,7 +80,7 @@ func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes,
 			continue
 		}
 		phaseXpath := attr.Xpath.NewXpathWithAppend(string(phase))
-		phaseNode := tree.New().Root(colors.Phase.Color.Render(m.layoutLine(indent,
+		phaseNode := tree.New().Root(colors.Phase.Color.Render(m.layoutLine(indent, calcTimerIndent(indent),
 			m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), timeAndState)+" "+strings.ToUpper(string(phase)),
 			m.durationText(colors.Phase, timeAndState))))
 		cmds := phaseLog.CommandLogs()
@@ -117,18 +120,22 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	parent.Child(cmdNode)
 }
 
+func calcTimerIndent(indent int) int {
+	return max(timerStep*4-indent/treeStep*timerStep, 0)
+}
+
 func (m *model) entityLine(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, duration time.Duration) string {
-	return m.layoutLine(indent,
+	return m.layoutLine(indent, calcTimerIndent(indent),
 		style.Color.Render(fmt.Sprintf("%c %s %s", style.Icon, attr.Name, attr.Message)),
 		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))
 }
 
-func (m *model) layoutLine(indent int, left, right string) string {
-	available := m.resetable.viewports.ContentWidth() - indent
+func (m *model) layoutLine(indent, timerIndent int, left, right string) string {
+	available := m.resetable.viewports.ContentWidth() - indent - timerIndent
 	rightWidth := lipgloss.Width(right)
 	return lipgloss.JoinHorizontal(lipgloss.Left,
 		lipgloss.NewStyle().Width(max(available-rightWidth, lipgloss.Width(left))).Render(left),
-		lipgloss.NewStyle().Width(rightWidth).Render(right))
+		right)
 }
 
 func (m *model) spinnerOrIcon(xpath config_attributes.Xpath, icon string, timeAndState *time_and_state.TimeAndState) string {
