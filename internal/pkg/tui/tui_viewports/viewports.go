@@ -84,7 +84,7 @@ func (v *Viewports) GetOrCreateViewport(xpath config_attributes.Xpath, content s
 }
 
 func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, content string, indent int) string {
-	return v.createViewport(xpath, content, indent, viewportOptions{})
+	return v.createViewport(xpath, content, indent, viewportOptions{wrapContent: true, noPadding: true})
 }
 
 func (v *Viewports) GetOrCreateMainViewport(content string) string {
@@ -115,7 +115,7 @@ func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, cont
 	vp.model.SetContent(proc)
 	vp.model.YOffset = min(yOffset, max(0, lipgloss.Height(proc)-h))
 
-	return v.renderViewport(vp, h, true)
+	return v.renderViewport(vp, h, true, false)
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) { v.viewports.Del(xpath) }
@@ -253,6 +253,7 @@ type viewportOptions struct {
 	wrapContent    bool
 	useBorder      bool
 	full           bool
+	noPadding      bool
 }
 
 func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string, indent int, opts viewportOptions) string {
@@ -276,12 +277,12 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 		vp.content = content
 	}
 
-	proc := v.processContent(content, w, opts.wrapContent)
+	proc := v.processContent(content, w, opts.wrapContent, opts.noPadding)
 	contentHeight := lipgloss.Height(proc)
 
 	if contentHeight > opts.maxHeight && opts.maxHeight > 0 && !opts.full {
 		w = max(1, w-scrollbarWidth)
-		proc = v.processContent(content, w, opts.wrapContent)
+		proc = v.processContent(content, w, opts.wrapContent, opts.noPadding)
 		contentHeight = lipgloss.Height(proc)
 	}
 
@@ -300,25 +301,34 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 	if pct == 1 {
 		vp.model.GotoBottom()
 	} else {
-		// Clamp YOffset to valid range for new content
 		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
 		vp.model.YOffset = min(yOffset, maxOffset)
 	}
 
-	return zone.Mark(xpath.String(), v.renderViewport(vp, finalHeight, opts.useBorder))
+	return zone.Mark(xpath.String(), v.renderViewport(vp, finalHeight, opts.useBorder, opts.noPadding))
 }
 
-func (v *Viewports) processContent(content string, width int, wrap bool) string {
+func (v *Viewports) processContent(content string, width int, wrap bool, noPadding bool) string {
 	if wrap {
+		if noPadding {
+			return lipgloss.NewStyle().Width(width).Align(lipgloss.Left).Render(content)
+		}
 		return lipgloss.NewStyle().Width(width).Render(content)
 	}
 	return truncateLines(content, width)
 }
 
-func (v *Viewports) renderViewport(vp *Viewport, height int, useBorder bool) string {
+func (v *Viewports) renderViewport(vp *Viewport, height int, useBorder bool, noPadding bool) string {
 	contentHeight := lipgloss.Height(vp.content)
 	scrollbar, _ := v.renderScrollbar(vp.model.ScrollPercent(), contentHeight, height)
 	combined := v.combineWithScrollbar(vp.model.View(), scrollbar, vp.scrollbarZone)
+
+	if noPadding {
+		if vp.active {
+			combined = lipgloss.NewStyle().Background(lipgloss.Color("183")).Render(combined)
+		}
+		return combined
+	}
 
 	if !useBorder {
 		return combined
