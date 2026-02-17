@@ -14,6 +14,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/rs/zerolog/log"
+	"github.com/stoewer/go-strcase"
 )
 
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
@@ -30,7 +31,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 			flakeOutput = strings.ReplaceAll(flakeOutput, "<name>", configuration.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
+			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables, "system closure")
 			if err != nil {
 				return err
 			}
@@ -41,15 +42,15 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		})
 }
 
-func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string) (BuildOutputJson, error) {
+func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string, whatIsBuilding string) (BuildOutputJson, error) {
 	var parsedOutput BuildOutputJson
 
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
 	err := exc.Exec(
-		"build",
-		"building system closure",
-		"build failed",
+		fmt.Sprintf("build %s", whatIsBuilding),
+		fmt.Sprintf("building %s", whatIsBuilding),
+		fmt.Sprintf("%s build failed", whatIsBuilding),
 		commandWithArgs,
 		executioner.DisableAutoSshCommand(),
 		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
@@ -65,7 +66,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		executioner.OnDryRun(func() {
 			parsedOutput = BuildOutputJson{{Outputs: struct {
 				Out string `json:"out"`
-			}{Out: "BUILD_OUTPUT_PATH_PLACEHOLDER"}}}
+			}{Out: strcase.SnakeCase(whatIsBuilding) + "_BUILD_OUTPUT_PATH_PLACEHOLDER"}}}
 		}),
 	)
 	if err != nil {

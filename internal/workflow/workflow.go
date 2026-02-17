@@ -149,6 +149,14 @@ func (w *Workflow) CreateWorkflow() error {
 	return err
 }
 
+func (w *Workflow) MachineCount() int {
+	count := 0
+	w.RootTree(func(i int, machine *config.Machine) {
+		count = i
+	})
+	return count
+}
+
 func (w *Workflow) RootTree(function func(i int, machine *config.Machine)) {
 	i := 0
 

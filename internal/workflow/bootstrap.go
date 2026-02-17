@@ -15,7 +15,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
 
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables)
+			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables, "disko")
 			if err != nil {
 				return err
 			}
