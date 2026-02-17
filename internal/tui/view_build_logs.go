@@ -166,6 +166,9 @@ func (m *model) renderCommandNode(phaseTree *tree.Tree, prefixLen int, phase pha
 	prefixLenCmd := prefixLen + treeStep
 
 	cmdLabel := cmd.Description
+	if m.conf.Flags.Tui.ShowCommandsInLabels {
+		cmdLabel = cmd.Command.Load()
+	}
 	cmdOutput := cmd.String()
 	cmdTas := cmd.TimeAndState
 
