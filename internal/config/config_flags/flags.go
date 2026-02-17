@@ -32,6 +32,7 @@ type Bootstrap struct {
 
 type Tui struct {
 	ShowAllBuildLogs       bool `yaml:"show_all_build_logs" flag:"showAllBuildLogs" env:"SHOW_BUILD_LOGS" desc:"show all build logs in TUI"`
+	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" flag:"showCommandsInLabels" env:"SHOW_COMMANDS_IN_LABELS" desc:"show commands instead of descriptions as labels in build logs"`
 	CommandOutputMaxHeight int  `yaml:"command_output_max_height" flag:"commandOutputMaxHeight" env:"COMMAND_OUTPUT_MAX_HEIGHT" desc:"maximum height for command output viewports in TUI"`
 }
 
