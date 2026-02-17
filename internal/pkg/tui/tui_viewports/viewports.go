@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	footerHeight     = 3
 	scrollThumb      = "█"
 	scrollTrack      = "│"
 	scrollbarWidth   = 2
@@ -37,6 +36,7 @@ type Viewports struct {
 	fullscreenXpath        config_attributes.Xpath
 	commandOutputMaxHeight int
 	mainXpath              config_attributes.Xpath
+	footerHeight           int
 }
 
 // Viewport wraps a bubbletea viewport with additional state
@@ -87,7 +87,8 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath config_attributes.Xpath, cont
 	return v.createViewport(xpath, content, indent, viewportOptions{wrapContent: true, noPadding: true})
 }
 
-func (v *Viewports) GetOrCreateMainViewport(content string) string {
+func (v *Viewports) GetOrCreateMainViewport(content string, footerHeight int) string {
+	v.footerHeight = footerHeight
 	h := v.dimensions.Height - footerHeight
 	return v.createViewport(v.mainXpath, content, 0, viewportOptions{
 		height:    h,
@@ -96,7 +97,8 @@ func (v *Viewports) GetOrCreateMainViewport(content string) string {
 	})
 }
 
-func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, content string) string {
+func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, content string, footerHeight int) string {
+	v.footerHeight = footerHeight
 	h := max(1, v.dimensions.Height-footerHeight-borderHeight)
 	w := max(1, v.dimensions.Width-scrollbarWidth-borderWidth)
 
@@ -229,7 +231,7 @@ func (v *Viewports) Debug() string {
 func (v *Viewports) resizeAllViewports() {
 	for xpath, vp := range v.viewports.Records() {
 		w := max(1, v.dimensions.Width-scrollbarWidth)
-		h := max(1, v.dimensions.Height-footerHeight)
+		h := max(1, v.dimensions.Height-v.footerHeight)
 
 		if xpath == v.mainXpath {
 			// Main viewport gets full height minus footer
