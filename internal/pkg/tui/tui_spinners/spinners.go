@@ -2,6 +2,7 @@ package tui_spinners
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -11,8 +12,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 )
 
+const maxSpinners = 5
+
 type Spinners struct {
-	spinners   *omap.Omap[config_attributes.Xpath, *Spinner]
+	spinners   *omap.Omap[int, *Spinner]
 	pendingCmd tea.Cmd
 }
 
@@ -22,7 +25,7 @@ type Spinner struct {
 }
 
 func NewSpinners() (*Spinners, error) {
-	spinners, err := omap.New[config_attributes.Xpath, *Spinner]()
+	spinners, err := omap.New[int, *Spinner]()
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +36,11 @@ func NewSpinners() (*Spinners, error) {
 }
 
 func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Model {
-	spnr, ok := s.spinners.Get(xpath)
+	h := fnv.New32a()
+	h.Write([]byte(xpath.String()))
+	hashKey := int(h.Sum32() % maxSpinners)
+
+	spnr, ok := s.spinners.Get(hashKey)
 	if ok {
 		spnr.lastUsed = time.Now()
 		return spnr.model
@@ -45,7 +52,7 @@ func (s *Spinners) GetOrCreateSpinner(xpath config_attributes.Xpath) *spinner.Mo
 		model:    &spnrRaw,
 	}
 
-	s.spinners.Set(xpath, spnr)
+	s.spinners.Set(hashKey, spnr)
 	s.pendingCmd = tea.Batch(s.pendingCmd, spnr.model.Tick)
 
 	return spnr.model
@@ -91,8 +98,8 @@ func (s *Spinners) Debug() string {
 	var str strings.Builder
 	fmt.Fprintf(&str, "\nSpinners: %d\n", s.spinners.Len())
 
-	for pathx := range s.spinners.Records() {
-		fmt.Fprintf(&str, "  '%s'\n", pathx)
+	for key := range s.spinners.Records() {
+		fmt.Fprintf(&str, "  key=%d\n", key)
 	}
 
 	return str.String()
