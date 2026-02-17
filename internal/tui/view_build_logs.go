@@ -169,6 +169,8 @@ func (m *model) renderCommandNode(phaseTree *tree.Tree, prefixLen int, phase pha
 	if m.conf.Flags.Tui.ShowCommandsInLabels {
 		cmdLabel = cmd.Command.Load()
 	}
+	cmdLabel = strings.TrimSpace(cmdLabel)
+
 	cmdOutput := cmd.String()
 	cmdTas := cmd.TimeAndState
 
@@ -185,14 +187,15 @@ func (m *model) renderCommandNode(phaseTree *tree.Tree, prefixLen int, phase pha
 	adjustedPrefixLenCmd := prefixLenCmd + reservedWidth
 
 	cmdLabelViewport := m.resetable.viewports.GetOrCreateLabelViewport(labelXpath, cmdLabel, adjustedPrefixLenCmd)
+	viewportXpath := commandXpath.NewXpathWithAppend("output")
+	output := strings.TrimSpace(cmdOutput)
+	outputNotEmpty := len(output) != 0
 
-	entry := leftIcon + cmdLabelViewport + duration
+	entry := joinLabelWithConnector(leftIcon, cmdLabelViewport, duration, outputNotEmpty, colors)
 	cmdHeader := colors.Command.Color.Render(entry)
 	cmdTree := tree.New().Root(cmdHeader)
 
-	viewportXpath := commandXpath.NewXpathWithAppend("output")
-	output := strings.TrimSpace(cmdOutput)
-	if len(output) != 0 {
+	if outputNotEmpty {
 		outputViewport := m.resetable.viewports.GetOrCreateViewport(viewportXpath, output, prefixLenCmd+treeStep*2-1)
 		cmdTree.Child(outputViewport)
 	} else {
@@ -263,4 +266,18 @@ func (m *model) DurationDas(logStyle config.ColorSchemeLogEntity, das logs.Durat
 
 func nodeTitle(logStyle config.ColorSchemeLogEntity, attr *config_attributes.Attributes) string {
 	return logStyle.Color.Render(fmt.Sprintf("%c %s %s", logStyle.Icon, attr.Name, attr.Message))
+}
+
+func joinLabelWithConnector(leftIcon, label, right string, outputNotEmpty bool, colors *config.ColorScheme) string {
+	labelHeight := lipgloss.Height(label)
+
+	treeEnumeratorHeight := labelHeight - 1
+	if outputNotEmpty && treeEnumeratorHeight > 0 {
+		treeEnumerator := slices.Repeat([]string{colors.TreeEnumerator.Render("│")}, treeEnumeratorHeight)
+
+		parts := append([]string{leftIcon}, treeEnumerator...)
+		leftIcon = lipgloss.JoinVertical(lipgloss.Left, parts...)
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftIcon, colors.Command.Color.Render(label), right)
 }
