@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
@@ -176,6 +175,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	cmd = tea.Batch(cmd, m.resetable.spinners.ProcessPendingTicks())
 	cmd = tea.Batch(cmd, m.resetable.viewports.Update(msg))
+	cmd = tea.Batch(cmd, m.notification.Update(msg))
+	cmd = tea.Batch(cmd, m.resetable.spinners.Update(msg))
 
 	switch msg := msg.(type) {
 	case errMsg:
@@ -202,19 +203,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case workflowUpdateHookMsg:
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
-	case tui_notifications.Msg:
-		m.notification.Clear()
-
 	case tea.KeyMsg:
 		return m.HandleKeyInput(msg)
 
 	case tea.WindowSizeMsg:
-		dimensions := m.dimensions
-		dimensions.Width = max(msg.Width, 40)
-		dimensions.Height = msg.Height
-
-	case spinner.TickMsg:
-		cmd = tea.Batch(cmd, m.resetable.spinners.Update(msg))
+		m.dimensions.Width = max(msg.Width, 40)
+		m.dimensions.Height = msg.Height
 	}
 
 	return m, cmd
@@ -238,7 +232,7 @@ func (m *model) View() string {
 		}
 	}
 
-	footer := m.ViewFooter(strings.Builder{})
+	footer := m.ViewFooter()
 	footerHeight := lipgloss.Height(footer)
 	mainViewport := m.resetable.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
 
@@ -258,7 +252,7 @@ func (m *model) renderFullscreen() string {
 		return ""
 	}
 
-	footer := m.ViewFooter(strings.Builder{})
+	footer := m.ViewFooter()
 	footerHeight := lipgloss.Height(footer)
 	fullscreenViewport := m.resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
 
