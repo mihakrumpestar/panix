@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -67,30 +66,19 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) ViewFooter(_ strings.Builder) string {
+func (m *model) ViewFooter() string {
 	width := m.dimensions.Width
 	scrollPercent := renderScrollPercent(m)
 	scrollWidth := lipgloss.Width(scrollPercent)
 
-	notificationContent := m.notification.Render(notificationBaseStyle)
-	var notificationBox string
-	notificationWidth := 0
-	if notificationContent != "" {
-		notificationBox = lipgloss.NewStyle().
-			Padding(0, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(m.notification.GetColor().GetForeground()).
-			Inherit(m.notification.GetColor()).
-			Render(notificationContent)
-		notificationWidth = lipgloss.Width(notificationBox)
-	}
+	notificationBox, notificationBoxWidth := m.notification.RenderBox(notificationBaseStyle)
 
 	helpWidth := max(width-scrollWidth, 1)
-	helpContent := "\n\n" + keymapHelp.View(Keymap{}) + "\n"
-	helpContent = lipgloss.NewStyle().Width(helpWidth).MaxWidth(max(helpWidth-notificationWidth, 1)).Render(helpContent)
+	helpContent := "\n\n" + keymapHelp.View(Keymap{})
+	helpContent = lipgloss.NewStyle().Width(helpWidth).MaxWidth(max(helpWidth-notificationBoxWidth, 1)).Render(helpContent)
 
 	parts := []string{helpContent}
-	if notificationBox != "" {
+	if notificationBoxWidth != 0 {
 		parts = append(parts, "\n"+notificationBox)
 	}
 	parts = append(parts, scrollPercent)
@@ -103,15 +91,15 @@ func (m *model) ViewFooter(_ strings.Builder) string {
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 	content, isInner := m.resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m.notification.SetModel(m, "Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
+		return m, m.notification.Set("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
 	}
 	if content == "" {
-		return m.notification.SetModel(m, "No content to copy", m.conf.ColorScheme.StatusWarning)
+		return m, m.notification.Set("No content to copy", m.conf.ColorScheme.StatusWarning)
 	}
 	if err := tui_clipboard.CopyToClipboard(content); err != nil {
-		return m.notification.SetModel(m, "Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
+		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
 	}
-	return m.notification.SetModel(m, "Copied to clipboard", m.conf.ColorScheme.StatusOK)
+	return m, m.notification.Set("Copied to clipboard", m.conf.ColorScheme.StatusOK)
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
@@ -143,10 +131,8 @@ func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 
 func (m *model) handleRestart() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(
-		m.notification.SetCmd("Restarting workflow...", m.conf.ColorScheme.StatusOK),
-		func() tea.Msg {
-			return restartMsg{}
-		},
+		m.notification.Set("Restarting workflow...", m.conf.ColorScheme.StatusOK),
+		func() tea.Msg { return restartMsg{} },
 	)
 }
 
@@ -159,7 +145,7 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	if activeInnerXpath.Depth() > 0 {
 		m.resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m.notification.SetModel(m, "Select a viewport first", m.conf.ColorScheme.StatusWarning)
+		return m, m.notification.Set("Select a viewport first", m.conf.ColorScheme.StatusWarning)
 	}
 	return m, nil
 }

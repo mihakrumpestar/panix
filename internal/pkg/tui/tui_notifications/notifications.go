@@ -1,100 +1,101 @@
-// Package tui_notifications provides notification functionality for the TUI.
 package tui_notifications
 
 import (
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Msg is the tea.Msg that clears the notification after timeout.
-type Msg struct{}
+const (
+	duration     = 3 * time.Second
+	fadeStart    = 1 * time.Second
+	tickInterval = 250 * time.Millisecond
+)
 
-// Notification holds the state of a notification.
+type notificationTickMsg struct{}
+
 type Notification struct {
-	text  string
-	color lipgloss.Style
-	time  time.Time
+	text    string
+	fgR     uint8
+	fgG     uint8
+	fgB     uint8
+	started time.Time
 }
 
-// New creates a new empty Notification.
-func New() *Notification {
-	return &Notification{}
-}
+func New() *Notification { return &Notification{} }
 
-// Set sets the notification text and color, and returns a tea.Cmd that will
-// fire after 3 seconds to clear the notification.
 func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
-	n.text = text
-	n.color = color
-	n.time = time.Now()
-	return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return Msg{} })
-}
+	n.text, n.started = text, time.Now()
+	n.fgR, n.fgG, n.fgB = 180, 180, 180
 
-// SetModel sets the notification and returns the model and command.
-// This is a convenience method for use in Update methods.
-func (n *Notification) SetModel(model tea.Model, text string, color lipgloss.Style) (tea.Model, tea.Cmd) {
-	return model, n.Set(text, color)
-}
-
-// SetCmd returns a tea.Cmd that sets the notification when executed.
-// This is useful when you need to return a command that sets the notification
-// later in the update cycle.
-func (n *Notification) SetCmd(text string, color lipgloss.Style) tea.Cmd {
-	return func() tea.Msg {
-		n.text = text
-		n.color = color
-		n.time = time.Now()
-		return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return Msg{} })()
+	if fg := color.GetForeground(); fg != nil {
+		r, g, b, _ := fg.RGBA()
+		n.fgR, n.fgG, n.fgB = uint8(r>>8), uint8(g>>8), uint8(b>>8)
 	}
+
+	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return notificationTickMsg{} })
 }
 
-// Clear clears the notification state.
+func (n *Notification) Update(msg tea.Msg) tea.Cmd {
+	if _, ok := msg.(notificationTickMsg); !ok {
+		return nil
+	}
+
+	if n.text == "" {
+		return nil
+	}
+
+	if time.Since(n.started) >= duration {
+		n.Clear()
+		return nil
+	}
+
+	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return notificationTickMsg{} })
+}
+
 func (n *Notification) Clear() {
 	n.text = ""
-	n.time = time.Time{}
+	n.started = time.Time{}
 }
 
-// IsEmpty returns true if there's no notification to display.
-func (n *Notification) IsEmpty() bool {
-	return n.text == ""
+func (n *Notification) isExpired() bool {
+	return n.text == "" || time.Since(n.started) >= duration
 }
 
-// GetText returns the notification text.
-func (n *Notification) GetText() string {
-	return n.text
+func (n *Notification) fadedColor() lipgloss.TerminalColor {
+	elapsed := time.Since(n.started)
+	if elapsed < fadeStart {
+		return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))
+	}
+
+	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
+	factor := 1.0 - (progress * 0.4)
+	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
+		uint8(float64(n.fgR)*factor),
+		uint8(float64(n.fgG)*factor),
+		uint8(float64(n.fgB)*factor)))
 }
 
-// GetColor returns the notification color style.
-func (n *Notification) GetColor() lipgloss.Style {
-	return n.color
-}
-
-// GetTime returns the notification timestamp.
-func (n *Notification) GetTime() time.Time {
-	return n.time
-}
-
-// Render renders the notification with the given base style.
-// It handles the fade-out effect based on elapsed time.
 func (n *Notification) Render(baseStyle lipgloss.Style) string {
-	if n.text == "" {
+	if n.isExpired() {
 		return ""
 	}
+	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
+}
 
-	elapsed := time.Since(n.time)
-	const duration = 3 * time.Second
-	const fadeDuration = time.Second
-
-	if elapsed > duration {
-		return ""
+func (n *Notification) RenderBox(baseStyle lipgloss.Style) (string, int) {
+	if n.isExpired() {
+		return "", 0
 	}
 
-	style := baseStyle
-	if elapsed > duration-fadeDuration {
-		style = style.Faint(true)
-	}
+	fg := n.fadedColor()
+	box := lipgloss.NewStyle().
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(fg).
+		Render(n.Render(baseStyle))
 
-	return style.Inherit(n.color).Render(n.text)
+	return box, lipgloss.Width(box)
 }
