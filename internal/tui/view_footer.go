@@ -60,6 +60,11 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
+
+	if m.resetable.statsTable.HandleNavigation(msg.String(), m.resetable.viewports.HasActiveInner()) {
+		return m, nil
+	}
+
 	for _, kd := range keyDefs {
 		if slices.Contains(kd.keys, msg.String()) {
 			return kd.handler(m)
@@ -160,8 +165,10 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 	if m.resetable.viewports.IsFullscreen() {
 		m.resetable.viewports.ExitFullscreen()
-	} else {
+	} else if m.resetable.viewports.HasActiveInner() {
 		m.resetable.viewports.DeselectAll()
+	} else {
+		m.resetable.statsTable.Reset()
 	}
 	return m, nil
 }
