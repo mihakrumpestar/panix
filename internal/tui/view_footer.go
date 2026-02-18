@@ -41,6 +41,7 @@ type keyDef struct {
 var keyDefs = []keyDef{
 	{[]string{"q"}, "quit", (*model).handleQuit},
 	{[]string{"h"}, "toggle inspect/secrets logs", (*model).handleToggle},
+	{[]string{"a"}, "toggle active only", (*model).handleToggleActiveOnly},
 	{[]string{"c"}, "toggle descriptions/commands", (*model).handleToggleCommands},
 	{[]string{"r"}, "retry", (*model).handleRetry},
 	{[]string{"ctrl+r"}, "restart", (*model).handleRestart},
@@ -122,6 +123,11 @@ func (m *model) handleToggle() (tea.Model, tea.Cmd) {
 
 func (m *model) handleToggleCommands() (tea.Model, tea.Cmd) {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
+	return m, nil
+}
+
+func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
+	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
 	return m, nil
 }
 

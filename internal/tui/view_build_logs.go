@@ -79,6 +79,9 @@ func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes,
 		if !m.conf.Flags.Tui.ShowAllBuildLogs && slices.Contains(hideablePhases, phase) && timeAndState.IsFinished() && timeAndState.GetEndError() == nil {
 			continue
 		}
+		if m.conf.Flags.Tui.ShowActiveOnly && timeAndState.IsFinished() && timeAndState.GetEndError() == nil {
+			continue
+		}
 		phaseXpath := attr.Xpath.NewXpathWithAppend(string(phase))
 		phaseNode := tree.New().Root(colors.Phase.Color.Render(m.layoutLine(indent, calcTimerIndent(indent),
 			m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), timeAndState)+" "+strings.ToUpper(string(phase)),
