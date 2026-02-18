@@ -45,8 +45,8 @@ func (pLog *PhaseLog) Last() *logs_command.CommandLog {
 	return commandLog
 }
 
-func (pLog *PhaseLog) NewCommand(description, statusIfRunning, statusIfFailed string) *logs_command.CommandLog {
-	commandLog := logs_command.NewCommandLog(description, statusIfRunning, statusIfFailed)
+func (pLog *PhaseLog) NewCommand(description, statusIfRunning, statusIfFailed string, command []string) *logs_command.CommandLog {
+	commandLog := logs_command.NewCommandLog(description, statusIfRunning, statusIfFailed, command)
 	pLog.commandLogs.Append(commandLog)
 
 	return commandLog
