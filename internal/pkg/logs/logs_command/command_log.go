@@ -3,28 +3,29 @@ package logs_command
 import (
 	"bytes"
 	"os"
+	"strings"
 
 	"github.com/hayageek/threadsafe"
 	"github.com/mihakrumpestar/panix/internal/pkg/safe_buffer"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
-	"go.uber.org/atomic"
 )
 
 type CommandLog struct {
 	Description     string
 	StatusIfRunning string
 	StatusIfFailed  string
-	Command         atomic.String
+	Command         string
 	stdInOutErr     *threadsafe.Slice[*safe_buffer.Buffer] // Each line is a separate buffer to allow line replacement
 	TimeAndState    *time_and_state.TimeAndState
 	Pty             *os.File
 }
 
-func NewCommandLog(description, statusIfRunning, statusIfFailed string) *CommandLog {
+func NewCommandLog(description, statusIfRunning, statusIfFailed string, command []string) *CommandLog {
 	commandLog := &CommandLog{
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
+		Command:         strings.Join(command, " "),
 		stdInOutErr:     threadsafe.NewSlice[*safe_buffer.Buffer](),
 		TimeAndState:    time_and_state.NewTimeAndState(),
 	}

@@ -30,7 +30,7 @@ func (m *model) ViewBuildLogs() string {
 	for _, pair := range m.conf.Root.Flakes.Omap.Pairs() {
 		m.renderFlake(&builder, pair.Value, state, colors)
 	}
-	builder.WriteString("\n\n")
+
 	return builder.String()
 }
 
@@ -100,7 +100,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	cmdIndent := indent + treeStep
 	label := strings.TrimSpace(cmd.Description)
 	if m.conf.Flags.Tui.ShowCommandsInLabels {
-		label = strings.TrimSpace(cmd.Command.Load())
+		label = cmd.Command
 	}
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
 	icon := m.spinnerOrIcon(cmdXpath, fmt.Sprintf("%d ", idx+1), cmd.TimeAndState)
@@ -153,7 +153,7 @@ func (m *model) spinnerOrIcon(xpath config_attributes.Xpath, icon string, timeAn
 
 func (m *model) durationText(style config.ColorSchemeLogEntity, timeAndState *time_and_state.TimeAndState) string {
 	if d, err := timeAndState.DurationOrElapsedTime(); err == nil {
-		return style.Color.Render(fmt.Sprintf("(%.2fs)", d.Seconds()))
+		return style.Color.PaddingLeft(1).Render(fmt.Sprintf("(%.2fs)", d.Seconds()))
 	}
 	return ""
 }
