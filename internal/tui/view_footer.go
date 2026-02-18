@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -74,7 +75,7 @@ func (m *model) ViewFooter() string {
 	notificationBox, notificationBoxWidth := m.notification.RenderBox(notificationBaseStyle)
 
 	helpWidth := max(width-scrollWidth, 1)
-	helpContent := "\n\n" + keymapHelp.View(Keymap{})
+	helpContent := "\n\n" + wrapKeybindingsByPair(keymapHelp, Keymap{}, helpWidth)
 	helpContent = lipgloss.NewStyle().Width(helpWidth).MaxWidth(max(helpWidth-notificationBoxWidth, 1)).Render(helpContent)
 
 	parts := []string{helpContent}
@@ -160,6 +161,48 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 }
 
 // Utility functions
+
+func wrapKeybindingsByPair(h help.Model, k help.KeyMap, maxWidth int) string {
+	bindings := k.ShortHelp()
+	if len(bindings) == 0 {
+		return ""
+	}
+
+	separator := h.Styles.ShortSeparator.Inline(true).Render(h.ShortSeparator)
+	sepWidth := lipgloss.Width(separator)
+	var lines []string
+	var currentLine strings.Builder
+	var currentWidth int
+
+	for _, kb := range bindings {
+		if !kb.Enabled() {
+			continue
+		}
+
+		item := h.Styles.ShortKey.Inline(true).Render(kb.Help().Key) + " " +
+			h.Styles.ShortDesc.Inline(true).Render(kb.Help().Desc)
+		itemWidth := lipgloss.Width(item)
+
+		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
+			lines = append(lines, currentLine.String())
+			currentLine.Reset()
+			currentWidth = 0
+		}
+
+		if currentWidth > 0 {
+			currentLine.WriteString(separator)
+			currentWidth += sepWidth
+		}
+		currentLine.WriteString(item)
+		currentWidth += itemWidth
+	}
+
+	if currentWidth > 0 {
+		lines = append(lines, currentLine.String())
+	}
+
+	return strings.Join(lines, "\n")
+}
 
 func renderScrollPercent(m *model) string {
 	pct := m.resetable.viewports.GetActiveViewportScrollPercent()
