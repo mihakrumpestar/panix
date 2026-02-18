@@ -27,7 +27,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		return err
 	}
 
-	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed)
+	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, commandWithArgs)
 
 	commandLog.TimeAndState.StartTimer()
 	var execErr error
@@ -36,8 +36,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		ex.onUpdateHook()
 	}()
 
-	cmd := ex.prepareCommand(commandWithArgs, excOpt)
-	commandLog.Command.Store(cmd.String())
+	cmd := ex.prepareCommandWithEnv(commandWithArgs, excOpt)
 	ex.onUpdateHook()
 
 	if ex.dryRun {
@@ -60,7 +59,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	return nil
 }
 
-func (ex *Executioner) prepareCommand(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
+func (ex *Executioner) prepareCommandWithEnv(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
 	cmd := exec.CommandContext(ex.ctx, commandWithArgs[0], commandWithArgs[1:]...)
 	cmd.Env = append(os.Environ(), excOpt.env...)
 	return cmd
