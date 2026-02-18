@@ -30,12 +30,13 @@ func (e errMsg) Error() string { return e.err.Error() }
 
 // Model holds the complete TUI state.
 type model struct {
-	ctx          context.Context
-	conf         *config.Config
-	dimensions   *tui_viewports.Dimensions
-	quitting     bool
-	resetable    resetable // Has to be able to reset
-	notification *tui_notifications.Notification
+	ctx                context.Context
+	conf               *config.Config
+	dimensions         *tui_viewports.Dimensions
+	quitting           bool
+	resetable          resetable // Has to be able to reset
+	notification       *tui_notifications.Notification
+	lastWorkflowUpdate time.Time
 }
 
 type resetable struct {
@@ -158,13 +159,20 @@ func (m *model) startWorkflow() tea.Cmd {
 
 func (m *model) workflowUpdateHook() tea.Cmd {
 	return func() tea.Msg {
-		if m.resetable.workflow != nil {
-			<-m.resetable.workflow.WaitForUpdate()
-			zerolog.Debug().Msg("workflowUpdateHook triggered")
-		} else {
+		if m.resetable.workflow == nil {
 			time.Sleep(20 * time.Millisecond)
 			zerolog.Debug().Msg("workflowUpdateHook was nil")
+			return workflowUpdateHookMsg{}
 		}
+
+		<-m.resetable.workflow.WaitForUpdate()
+
+		now := time.Now()
+		elapsed := now.Sub(m.lastWorkflowUpdate)
+		if elapsed < 100*time.Millisecond {
+			time.Sleep(100*time.Millisecond - elapsed)
+		}
+		m.lastWorkflowUpdate = time.Now()
 
 		return workflowUpdateHookMsg{}
 	}
