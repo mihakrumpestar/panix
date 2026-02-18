@@ -466,6 +466,10 @@ func (v *Viewports) hasActiveInner() bool {
 	return false
 }
 
+func (v *Viewports) HasActiveInner() bool {
+	return v.hasActiveInner()
+}
+
 // DeselectAll activates only the main viewport
 func (v *Viewports) DeselectAll() {
 	for xpath, vp := range v.viewports.Records() {

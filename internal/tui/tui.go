@@ -34,16 +34,17 @@ type model struct {
 	conf               *config.Config
 	dimensions         *tui_viewports.Dimensions
 	quitting           bool
-	resetable          resetable // Has to be able to reset
+	resetable          resetable
 	notification       *tui_notifications.Notification
 	lastWorkflowUpdate time.Time
 }
 
 type resetable struct {
-	err       error
-	workflow  *workflow.Workflow // Has to be able to reset
-	spinners  *tui_spinners.Spinners
-	viewports *tui_viewports.Viewports
+	err        error
+	workflow   *workflow.Workflow
+	spinners   *tui_spinners.Spinners
+	viewports  *tui_viewports.Viewports
+	statsTable *StatsTable
 }
 
 // NewTui initializes and runs the TUI application.
@@ -138,9 +139,10 @@ func (m *model) startWorkflow() tea.Cmd {
 		}
 
 		m.resetable = resetable{
-			workflow:  workflow,
-			spinners:  spinners,
-			viewports: tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
+			workflow:   workflow,
+			spinners:   spinners,
+			viewports:  tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
+			statsTable: NewStatsTable(),
 		}
 
 		err = workflow.CreateWorkflow()
@@ -213,6 +215,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.HandleKeyInput(msg)
+
+	case tea.MouseMsg:
+		m.resetable.statsTable.HandleMouseClick(msg)
 
 	case tea.WindowSizeMsg:
 		m.dimensions.Width = max(msg.Width, 40)
