@@ -20,7 +20,7 @@ const (
 	gradientAnimationCycleTime = 4 * time.Second
 	phaseArrow                 = "󰜴"
 	statusSeparator            = "/"
-	animationCacheInterval     = 250 * time.Millisecond
+	animationCacheInterval     = 100 * time.Millisecond
 	phaseStatusZonePrefix      = "phase-status"
 )
 
@@ -33,7 +33,7 @@ func NewPhaseStatus() *PhaseStatus { return &PhaseStatus{SelectedPhase: -1} }
 
 func (p *PhaseStatus) Reset() { p.SelectedPhase = -1; p.Phases = nil }
 
-func (p *PhaseStatus) HandleMouseClick(msg tea.MouseMsg, _ int) bool {
+func (p *PhaseStatus) HandleMouseClick(msg tea.MouseMsg) bool {
 	if msg.Action != tea.MouseActionRelease {
 		return false
 	}
@@ -92,14 +92,16 @@ func (m *model) renderPhaseFlow() string {
 		if sp == nil {
 			sp = &logs_stats.StatsPack{}
 		}
-		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, sp, termWidth, i), phaseArrow)
+		phaseStats := &logs_stats.StatsPack{Running: sp.Running, Failed: sp.Failed}
+		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, termWidth, i), phaseArrow)
 	}
 
 	lastStats := stats.GetPack(phasesList[len(phasesList)-1])
 	if lastStats == nil {
 		lastStats = &logs_stats.StatsPack{}
 	}
-	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, lastStats, termWidth, -1))
+	doneStats := &logs_stats.StatsPack{Done: lastStats.Done}
+	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, doneStats, termWidth, -1))
 
 	return table.New().
 		Width(termWidth).
