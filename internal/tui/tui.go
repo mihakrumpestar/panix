@@ -40,11 +40,12 @@ type model struct {
 }
 
 type resetable struct {
-	err        error
-	workflow   *workflow.Workflow
-	spinners   *tui_spinners.Spinners
-	viewports  *tui_viewports.Viewports
-	statsTable *StatsTable
+	err         error
+	workflow    *workflow.Workflow
+	spinners    *tui_spinners.Spinners
+	viewports   *tui_viewports.Viewports
+	statsTable  *StatsTable
+	phaseStatus *PhaseStatus
 }
 
 // NewTui initializes and runs the TUI application.
@@ -139,10 +140,11 @@ func (m *model) startWorkflow() tea.Cmd {
 		}
 
 		m.resetable = resetable{
-			workflow:   workflow,
-			spinners:   spinners,
-			viewports:  tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
-			statsTable: NewStatsTable(),
+			workflow:    workflow,
+			spinners:    spinners,
+			viewports:   tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
+			statsTable:  NewStatsTable(),
+			phaseStatus: NewPhaseStatus(),
 		}
 
 		err = workflow.CreateWorkflow()
@@ -217,7 +219,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.HandleKeyInput(msg)
 
 	case tea.MouseMsg:
-		m.resetable.statsTable.HandleMouseClick(msg)
+		m.handleMouseClick(msg)
 
 	case tea.WindowSizeMsg:
 		m.dimensions.Width = max(msg.Width, 40)
@@ -299,4 +301,20 @@ func (m *model) ViewMainContent() string {
 	}
 
 	return builder.String()
+}
+
+func (m *model) handleMouseClick(msg tea.MouseMsg) {
+	if msg.Action != tea.MouseActionRelease {
+		return
+	}
+
+	if m.resetable.statsTable.HandleMouseClick(msg) {
+		m.resetable.phaseStatus.Reset()
+		return
+	}
+
+	termWidth := m.resetable.viewports.ContentWidth()
+	if m.resetable.phaseStatus.HandleMouseClick(msg, termWidth) {
+		m.resetable.statsTable.Reset()
+	}
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
-	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -21,39 +20,48 @@ const treeStep = 3
 var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 
 func (m *model) ViewBuildLogs() string {
-	var builder strings.Builder
-	state, colors := m.resetable.workflow.State(), m.conf.ColorScheme
-	builder.WriteString(colors.HeaderTitle.Render("=== Build Logs ===\n"))
+	var b strings.Builder
+	b.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
 
 	selectedXpath := m.resetable.statsTable.GetSelectedXpath()
-	stopAtError := selectedXpath.Depth() > 0
+	selectedPhase := m.resetable.phaseStatus.GetSelectedPhase()
+	colors := m.conf.ColorScheme
 
 	for _, flakePair := range m.conf.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
-		flakeNode := m.createNode(0, colors.Flake, &flake.Attributes, state, true)
+		flakeNode := m.createNode(0, colors.Flake, &flake.Attributes, true)
 
 		for _, cfgPair := range flake.Configurations.Omap.Pairs() {
 			cfg := cfgPair.Value
-			cfgNode := m.createNode(treeStep, colors.Configuration, &cfg.Attributes, state, false)
+			cfgNode := m.createNode(treeStep, colors.Configuration, &cfg.Attributes, false)
 			machines := cfg.Machines.Omap.Pairs()
 
-			if selectedXpath.Depth() > 0 {
-				if m.renderSelectedMachine(cfgNode, cfg, state, colors, selectedXpath, stopAtError) {
-					flakeNode.Child(cfgNode)
-					builder.WriteString("\n" + flakeNode.String())
-					return builder.String()
+			switch {
+			case selectedXpath.Depth() > 0:
+				for _, pair := range machines {
+					if pair.Value.Xpath == selectedXpath {
+						m.addMachineTree(cfgNode, cfg, pair.Value)
+						break
+					}
 				}
-				continue
-			}
-
-			for _, pair := range machines {
-				m.addMachinePhases(cfgNode, pair.Value, colors, treeStep*2, phases.Inspect)
-			}
-			if len(machines) > 0 {
-				m.addPhases(cfgNode, &machines[0].Value.Attributes, colors, treeStep*2, false, phases.Build)
-			}
-			for _, pair := range machines {
-				m.addMachinePhases(cfgNode, pair.Value, colors, treeStep*2, phases.PhasesInOrder()[2:]...)
+			case selectedPhase != "":
+				if phases.ShouldRunOnce(selectedPhase) && len(machines) > 0 {
+					m.addPhases(cfgNode, &machines[0].Value.Attributes, treeStep*2, false, selectedPhase)
+				} else {
+					for _, pair := range machines {
+						m.addMachinePhases(cfgNode, pair.Value, treeStep*2, selectedPhase)
+					}
+				}
+			default:
+				for _, pair := range machines {
+					m.addMachinePhases(cfgNode, pair.Value, treeStep*2, phases.Inspect)
+				}
+				if len(machines) > 0 {
+					m.addPhases(cfgNode, &machines[0].Value.Attributes, treeStep*2, false, phases.Build)
+				}
+				for _, pair := range machines {
+					m.addMachinePhases(cfgNode, pair.Value, treeStep*2, phases.PhasesInOrder()[2:]...)
+				}
 			}
 
 			if cfgNode.Children().Length() > 0 {
@@ -62,48 +70,39 @@ func (m *model) ViewBuildLogs() string {
 		}
 
 		if flakeNode.Children().Length() > 0 {
-			builder.WriteString("\n" + flakeNode.String())
+			b.WriteString("\n" + flakeNode.String())
 		}
 	}
-
-	return builder.String()
+	return b.String()
 }
 
-func (m *model) renderSelectedMachine(cfgNode *tree.Tree, cfg *config.Configuration, state *workflow.WorkflowState, colors *config.ColorScheme, selectedXpath config_attributes.Xpath, stopAtError bool) bool {
-	for _, pair := range cfg.Machines.Omap.Pairs() {
-		machine := pair.Value
-		if machine.Xpath != selectedXpath {
-			continue
-		}
+func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, machine *config.Machine) {
+	indent := treeStep * 2
+	node := m.createNode(indent, m.conf.ColorScheme.Machine, &machine.Attributes, false)
 
-		indent := treeStep * 2
-		machineNode := m.createNode(indent, colors.Machine, &machine.Attributes, state, false)
-		errored := m.addPhases(machineNode, &machine.Attributes, colors, indent+treeStep, stopAtError, phases.Inspect)
-
-		if !errored {
-			m.addPhases(machineNode, &cfg.Attributes, colors, indent+treeStep, stopAtError, phases.Build)
-			m.addPhases(machineNode, &machine.Attributes, colors, indent+treeStep, stopAtError, phases.PhasesInOrder()[2:]...)
-		}
-
-		if machineNode.Children().Length() > 0 {
-			cfgNode.Child(machineNode)
-		}
-		return true
+	errored := m.addPhases(node, &machine.Attributes, indent+treeStep, true, phases.Inspect)
+	if !errored {
+		m.addPhases(node, &cfg.Attributes, indent+treeStep, true, phases.Build)
+		m.addPhases(node, &machine.Attributes, indent+treeStep, true, phases.PhasesInOrder()[2:]...)
 	}
-	return false
+
+	if node.Children().Length() > 0 {
+		cfgNode.Child(node)
+	}
 }
 
-func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, colors *config.ColorScheme, indent int, allowed ...phases.Phase) {
-	node := m.createNode(indent, colors.Machine, &machine.Attributes, m.resetable.workflow.State(), false)
-	m.addPhases(node, &machine.Attributes, colors, indent+treeStep, false, allowed...)
+func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, indent int, allowed ...phases.Phase) {
+	node := m.createNode(indent, m.conf.ColorScheme.Machine, &machine.Attributes, false)
+	m.addPhases(node, &machine.Attributes, indent+treeStep, false, allowed...)
 	if node.Children().Length() > 0 {
 		parent.Child(node)
 	}
 }
 
-func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, state *workflow.WorkflowState, isRoot bool) *tree.Tree {
-	duration := state.TargetsLogs.Get(attr.Xpath).CalculateDurationAndError().Duration
-	line := m.layoutLine(indent, style.Color.Render(fmt.Sprintf("%c %s %s", style.Icon, attr.Name, attr.Message)),
+func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, isRoot bool) *tree.Tree {
+	duration := m.resetable.workflow.State().TargetsLogs.Get(attr.Xpath).CalculateDurationAndError().Duration
+	line := m.layoutLine(indent,
+		style.Color.Render(fmt.Sprintf("%c %s %s", style.Icon, attr.Name, attr.Message)),
 		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))
 
 	t := tree.New().Root(line)
@@ -113,58 +112,56 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 	return t
 }
 
-func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes, colors *config.ColorScheme, indent int, stopAtError bool, allowed ...phases.Phase) bool {
+func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes, indent int, stopAtError bool, allowed ...phases.Phase) bool {
 	logs := m.resetable.workflow.State().TargetsLogs.GetLogs(attr.Xpath)
-
 	for _, entry := range logs.All() {
-		phase := entry.Key
-		if !slices.Contains(allowed, phase) {
+		if !slices.Contains(allowed, entry.Key) {
 			continue
 		}
-
-		if hasError := m.addPhase(parent, attr, phase, entry.Value, colors, indent); hasError && stopAtError {
+		if m.addPhase(parent, attr, entry.Key, entry.Value, indent) && stopAtError {
 			return true
 		}
 	}
 	return false
 }
 
-func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, phase phases.Phase, phaseLog *logs_phase.PhaseLog, colors *config.ColorScheme, indent int) bool {
+func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, phase phases.Phase, phaseLog *logs_phase.PhaseLog, indent int) bool {
 	if phaseLog == nil {
 		return false
 	}
 
 	tas := phaseLog.TimeAndState()
-	if !m.conf.Flags.Tui.ShowAllBuildLogs && slices.Contains(hideablePhases, phase) && tas.IsFinished() && tas.GetEndError() == nil {
-		return false
-	}
-	if m.conf.Flags.Tui.ShowActiveOnly && tas.IsFinished() && tas.GetEndError() == nil {
+	hideable := slices.Contains(hideablePhases, phase)
+	shouldHide := (!m.conf.Flags.Tui.ShowAllBuildLogs && hideable) || m.conf.Flags.Tui.ShowActiveOnly
+	if shouldHide && tas.IsFinished() && tas.GetEndError() == nil {
 		return false
 	}
 
+	colors := m.conf.ColorScheme
 	phaseXpath := attr.Xpath.NewXpathWithAppend(string(phase))
 	icon := m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), tas)
-	line := m.layoutLine(indent, colors.Phase.Color.Render(icon+" "+strings.ToUpper(string(phase))),
-		m.durationText(colors.Phase, tas))
+	duration := m.durationText(colors.Phase, tas)
+	line := m.layoutLine(indent, colors.Phase.Color.Render(icon+" "+strings.ToUpper(string(phase))), duration)
 	phaseNode := tree.New().Root(colors.Phase.Color.Render(line))
 
 	cmds := phaseLog.CommandLogs()
-	hasError := false
+	hasError := tas.GetEndError() != nil
 	for i, cmd := range cmds {
-		if m.conf.Flags.Tui.ShowAllBuildLogs || !slices.Contains(hideablePhases, phase) || i == len(cmds)-1 {
-			m.addCommand(phaseNode, cmd, i, phaseXpath, colors, indent)
+		if m.conf.Flags.Tui.ShowAllBuildLogs || !hideable || i == len(cmds)-1 {
+			m.addCommand(phaseNode, cmd, i, phaseXpath, indent)
 			if cmd.TimeAndState.GetEndError() != nil {
 				hasError = true
 			}
 		}
 	}
 	parent.Child(phaseNode)
-
-	return hasError || tas.GetEndError() != nil
+	return hasError
 }
 
-func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx int, phaseXpath config_attributes.Xpath, colors *config.ColorScheme, indent int) {
+func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx int, phaseXpath config_attributes.Xpath, indent int) {
+	colors := m.conf.ColorScheme
 	cmdIndent := indent + treeStep
+
 	label := strings.TrimSpace(cmd.Description)
 	if m.conf.Flags.Tui.ShowCommandsInLabels {
 		label = cmd.Command
@@ -176,13 +173,14 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	labelViewport := m.resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, cmdIndent+lipgloss.Width(icon)+lipgloss.Width(duration))
 
 	output := strings.TrimSpace(cmd.String())
-	if hasOutput := len(output) > 0; hasOutput && lipgloss.Height(labelViewport) > 1 {
+	if len(output) > 0 && lipgloss.Height(labelViewport) > 1 {
 		icon = lipgloss.JoinVertical(lipgloss.Left, append([]string{icon},
 			slices.Repeat([]string{colors.TreeEnumerator.Render("│")}, lipgloss.Height(labelViewport)-1)...)...)
 	}
 
 	cmdNode := tree.New().Root(colors.Command.Color.Render(lipgloss.JoinHorizontal(lipgloss.Top, icon, colors.Command.Color.Render(labelViewport), duration)))
-	if output := strings.TrimSpace(cmd.String()); len(output) > 0 {
+
+	if len(output) > 0 {
 		cmdNode.Child(m.resetable.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
 	} else {
 		m.resetable.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("output"))
