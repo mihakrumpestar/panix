@@ -97,22 +97,10 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		panic("internal error: type casting for model failed")
 	}
 
-	if finalModel.quitting && finalModel.dimensions.Height > 1 {
+	if finalModel.quitting {
 		content := finalModel.ViewMainContent()
-		maxLen := len(content)
-		maxLines := finalModel.dimensions.Height - 1
-		for i, newlines := 0, 0; i < maxLen; i++ {
-			if content[i] == '\n' {
-				newlines++
-				if newlines >= maxLines {
-					maxLen = i
-					break
-				}
-			}
-		}
-		fmt.Println(content[:maxLen])
+		fmt.Println(content)
 	}
-
 	return finalModel.resetable.err
 }
 
