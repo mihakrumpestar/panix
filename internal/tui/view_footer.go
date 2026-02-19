@@ -61,7 +61,15 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEsc()
 	}
 
-	if m.resetable.statsTable.HandleNavigation(msg.String(), m.resetable.viewports.HasActiveInner()) {
+	hasActiveInner := m.resetable.viewports.HasActiveInner()
+
+	if m.resetable.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
+		m.resetable.phaseStatus.Reset()
+		return m, nil
+	}
+
+	if m.resetable.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
+		m.resetable.statsTable.Reset()
 		return m, nil
 	}
 
@@ -167,8 +175,10 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 		m.resetable.viewports.ExitFullscreen()
 	} else if m.resetable.viewports.HasActiveInner() {
 		m.resetable.viewports.DeselectAll()
-	} else {
+	} else if m.resetable.statsTable.SelectedMachine >= 0 {
 		m.resetable.statsTable.Reset()
+	} else if m.resetable.phaseStatus.SelectedPhase >= 0 {
+		m.resetable.phaseStatus.Reset()
 	}
 	return m, nil
 }
