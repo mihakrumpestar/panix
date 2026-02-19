@@ -312,8 +312,7 @@ func (m *model) handleMouseClick(msg tea.MouseMsg) {
 		return
 	}
 
-	termWidth := m.resetable.viewports.ContentWidth()
-	if m.resetable.phaseStatus.HandleMouseClick(msg, termWidth) {
+	if m.resetable.phaseStatus.HandleMouseClick(msg) {
 		m.resetable.statsTable.Reset()
 	}
 }
