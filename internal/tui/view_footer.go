@@ -231,5 +231,5 @@ func renderScrollPercent(m *model) string {
 	pct := m.resetable.viewports.GetActiveViewportScrollPercent()
 	return lipgloss.NewStyle().PaddingLeft(1).
 		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
-		Render(fmt.Sprintf("%d%%", int(pct*100)))
+		Render(fmt.Sprintf("%3d%%", int(pct*100)))
 }
