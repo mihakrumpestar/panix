@@ -245,7 +245,7 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 		if col >= 0 && col < len(columns) {
 			style := columns[col].style(colors)
 			if row == selectedRow {
-				style = style.Background(lipgloss.Color("238"))
+				style = style.Background(colors.SelectionHighlightBackground.GetBackground())
 			}
 			return style
 		}

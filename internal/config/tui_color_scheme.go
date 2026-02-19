@@ -38,6 +38,9 @@ type ColorScheme struct {
 	TableRow    lipgloss.Style
 	TableRowAlt lipgloss.Style
 
+	// Selection/highlight color
+	SelectionHighlightBackground lipgloss.Style
+
 	// Tree colors
 	TreeRoot       lipgloss.Style
 	TreeNode       lipgloss.Style
@@ -135,6 +138,10 @@ func defaultColorScheme() *ColorScheme {
 
 		TableRowAlt: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#BFBFBF")), // Light gray
+
+		// Highlight/selection color
+		SelectionHighlightBackground: lipgloss.NewStyle().
+			Background(lipgloss.Color("#444444")), // Dark gray for selection
 
 		// Tree colors
 		TreeRoot: lipgloss.NewStyle().
