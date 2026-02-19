@@ -73,7 +73,7 @@ func (p *PhaseStatus) GetSelectedPhase() phases.Phase {
 }
 
 func (m *model) ViewPhaseStatus() string {
-	return m.conf.ColorScheme.HeaderTitle.Render("=== Phase Status ===\n") + m.renderPhaseFlow()
+	return m.conf.ColorScheme.HeaderTitle.Render("=== Phase Status ===") + "\n" + m.renderPhaseFlow()
 }
 
 func (m *model) renderPhaseFlow() string {
@@ -118,7 +118,7 @@ func (m *model) renderPhaseFlow() string {
 func (m *model) createPhaseGroup(name string, running, failed, done []config_attributes.Xpath, stats *logs_stats.StatsPack, termWidth int, phaseIdx int) string {
 	displayName := strings.ToUpper(name[:1]) + strings.ToLower(name[1:])
 	width := lipgloss.Width(displayName) + 2
-	colStyle := lipgloss.NewStyle().Width(width).Margin(int(float64(termWidth) * 0.005)).Align(lipgloss.Center)
+	colStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
 
 	phaseName := colStyle.Render(createAnimatedGradient(displayName, stats, m.conf.ColorScheme))
 	statusLine := buildStatusLine(running, failed, done, m.conf.ColorScheme)
