@@ -83,7 +83,7 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) ViewFooter() string {
 	width := m.dimensions.Width
-	scrollPercent := renderScrollPercent(m)
+	scrollPercent := "\n\n" + renderScrollPercent(m)
 	scrollWidth := lipgloss.Width(scrollPercent)
 
 	notificationBox, notificationBoxWidth := m.notification.RenderBox(notificationBaseStyle)

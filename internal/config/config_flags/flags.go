@@ -16,7 +16,7 @@ type Flags struct {
 	OverrideLocalMachine string         `yaml:"override_local_machine" flag:"overrideLocalMachine" env:"OVERRIDE_LOCAL_MACHINE" desc:"hostname of the machine that is local (won't use ssh to connect to it)"`
 	DryRun               bool           `yaml:"dry_run" flag:"dryRun d" env:"DRY_RUN" desc:"show what would be done without executing"`
 	DryRunWithStatus     bool           `yaml:"dry_run_with_status" flag:"dryRunWithStatus" env:"DRY_RUN_WITH_STATUS" desc:"show what would be done without executing, but with real status query"`
-	Timeout              time.Duration  `yaml:"timeout" flag:"timeout" desc:"timeout for TUI"`
+	Timeout              time.Duration  `yaml:"timeout" flag:"timeout" desc:"timeout for workflow"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" flag:"skipPhases s" env:"SKIP_PHASES" desc:"declare phases to skip"`
 	ExitOnComplete       bool           `yaml:"exit_on_complete" flag:"exitOnComplete" env:"EXIT_ON_COMPLETE" desc:"exit TUI immediately when workflow completes (otherwise stays open until user quits)"`
 
