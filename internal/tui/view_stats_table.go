@@ -34,31 +34,31 @@ func (s *StatsTable) Reset() {
 	s.MachineXpaths = nil
 }
 
-func (s *StatsTable) HandleMouseClick(msg tea.MouseMsg) {
+func (s *StatsTable) HandleMouseClick(msg tea.MouseMsg) bool {
 	if msg.Action != tea.MouseActionRelease {
-		return
+		return false
 	}
 
 	z := zone.Get(statsTableZonePrefix)
 	if z == nil || !z.InBounds(msg) {
-		return
+		return false
 	}
 
 	dataRows := len(s.MachineXpaths)
 	if dataRows == 0 {
-		return
+		return false
 	}
 
 	relY := msg.Y - z.StartY
 	headerLines := 3
 
 	if relY < headerLines {
-		return
+		return false
 	}
 
 	rowIndex := relY - headerLines
 	if rowIndex >= dataRows {
-		return
+		return false
 	}
 
 	if s.SelectedMachine == rowIndex {
@@ -66,30 +66,22 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseMsg) {
 	} else {
 		s.SelectedMachine = rowIndex
 	}
+	return true
 }
 
 func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport {
-		return false
-	}
-
-	machineCount := len(s.MachineXpaths)
-	if machineCount == 0 {
+	if hasActiveInnerViewport || len(s.MachineXpaths) == 0 || s.SelectedMachine < 0 {
 		return false
 	}
 
 	switch key {
-	case "up", "k":
-		if s.SelectedMachine < 0 {
-			s.SelectedMachine = 0
-		} else if s.SelectedMachine > 0 {
+	case "left":
+		if s.SelectedMachine > 0 {
 			s.SelectedMachine--
 		}
 		return true
-	case "down", "j":
-		if s.SelectedMachine < 0 {
-			s.SelectedMachine = 0
-		} else if s.SelectedMachine < machineCount-1 {
+	case "right":
+		if s.SelectedMachine < len(s.MachineXpaths)-1 {
 			s.SelectedMachine++
 		}
 		return true
