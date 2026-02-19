@@ -37,14 +37,9 @@ tasks:
   nix:build:
     desc: Build the package using nix
     cmds:
-      - nix build path:$(pwd)#default --extra-experimental-features "nix-command flakes" 2>&1
+      - nix build path:$(pwd)#default --extra-experimental-features "nix-command flakes"
 
   nix:run:
     desc: Run the application using nix
     cmds:
       - nix run path:$(pwd)#default --extra-experimental-features "nix-command flakes" -- {{.CLI_ARGS}}
-
-  nix:update-hash:
-    desc: Update vendorHash after dependency changes
-    cmds:
-      - nix-prefetch-git --url file://$(pwd) --rev HEAD 2>&1 | jq -r '.sha256'

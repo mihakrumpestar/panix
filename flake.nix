@@ -24,13 +24,13 @@
           src = ./.;
           subPackages = ["cmd/panix"];
 
-          vendorHash = "sha256-xLesqtYJ+IRQOOqynKS6yIFLE0lQODxF1LYoc0soWpI=";
+          vendorHash = "sha256-v7OZAxbwxVARFHwV6drwFli01kjjJh3TqockIp4V3eM=";
 
           meta = with pkgs.lib; {
             description = "A TUI application for Nix deployment workflows";
             homepage = "https://github.com/mihakrumpestar/panix";
             license = licenses.mit;
-            maintainers = [];
+            maintainers = [mihakrumpestar];
             mainProgram = "panix";
           };
         };
@@ -47,8 +47,10 @@
         buildInputs = with pkgs; [
           go
           gopls
-          gotools
           go-tools
+
+          go-task
+          graphviz
         ];
       };
     });
