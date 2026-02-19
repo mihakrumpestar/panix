@@ -327,7 +327,7 @@ func (v *Viewports) renderViewport(vp *Viewport, height int, useBorder bool, noP
 
 	if noPadding {
 		if vp.active {
-			combined = lipgloss.NewStyle().Background(lipgloss.Color("183")).Render(combined)
+			combined = v.colors.SelectionHighlightBackground.Render(combined)
 		}
 		return combined
 	}
