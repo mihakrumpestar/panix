@@ -43,16 +43,18 @@ func main() {
 		Suggest: true,
 		Commands: []*cli.Command{
 			{
-				Name:  "status",
-				Usage: "Query machine status per host",
-				Description: `Status queries and displays the current machine status of all configured hosts.
+				Name:  "inspect",
+				Usage: "Inspect machine per host",
+				Description: `Inspect queries and displays the current machine status of all configured hosts.
 This includes:
 - Current NixOS generation
 - Last deployment time
-- SSH connectivity status
 - Bootstrap status (initialized/uninitialized)`,
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					return runTui(ctx, flags, []phases.Phase{phases.Inspect})
+					return runTui(ctx, flags, []phases.Phase{phases.Inspect}, func(conf *config.Config) {
+						// Don't do kexec if we are only inspecting the machine
+						conf.Flags.Bootstrap.DisableAuto = true
+					})
 				},
 			},
 			{
