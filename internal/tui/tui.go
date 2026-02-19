@@ -97,12 +97,23 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		panic("internal error: type casting for model failed")
 	}
 
-	err = finalModel.resetable.err
-	if err == nil {
-		return err
+	if finalModel.quitting && finalModel.dimensions.Height > 1 {
+		content := finalModel.ViewMainContent()
+		maxLen := len(content)
+		maxLines := finalModel.dimensions.Height - 1
+		for i, newlines := 0, 0; i < maxLen; i++ {
+			if content[i] == '\n' {
+				newlines++
+				if newlines >= maxLines {
+					maxLen = i
+					break
+				}
+			}
+		}
+		fmt.Println(content[:maxLen])
 	}
 
-	return nil
+	return finalModel.resetable.err
 }
 
 func startCPUProfile(path string) error {
@@ -237,7 +248,7 @@ func (m *model) View() string {
 	mainContent := m.ViewMainContent()
 
 	if m.quitting {
-		return zone.Scan(mainContent)
+		return ""
 	}
 
 	if m.resetable.viewports.IsFullscreen() {
