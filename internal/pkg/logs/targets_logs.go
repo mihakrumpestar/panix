@@ -61,6 +61,14 @@ func (ts *TargetsLogs) Get(xpath config_attributes.Xpath) *TargetLogs {
 	return targetLogs
 }
 
+func (ts *TargetsLogs) CalculateDurationAndError() {
+	for _, pair := range ts.logs.Pairs() {
+		if pair.Value.parent == nil { // Calculate only root nodes - flakes
+			pair.Value.calculateDurationAndError()
+		}
+	}
+}
+
 func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phases.Phase) *logs_phase.PhaseLog {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {

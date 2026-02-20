@@ -20,12 +20,12 @@ type CommandLog struct {
 	Pty             *os.File
 }
 
-func NewCommandLog(description, statusIfRunning, statusIfFailed string, command []string) *CommandLog {
+func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
 	commandLog := &CommandLog{
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
-		Command:         strings.Join(command, " "),
+		Command:         strings.Join(env, " ") + " " + strings.Join(command, " "),
 		stdInOutErr:     threadsafe.NewSlice[*safe_buffer.Buffer](),
 		TimeAndState:    time_and_state.NewTimeAndState(),
 	}
