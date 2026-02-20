@@ -32,13 +32,7 @@ func (r *Root) Init(flags *config_flags.Flags) error {
 type Flake struct {
 	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	URL                          string     `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...')"`
-	FlakeHooks                   FlakeHooks `yaml:"flake_hooks"`
-}
-
-type FlakeHooks struct {
-	Pre  string `yaml:"pre"`
-	Post string `yaml:"post"`
+	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...')"`
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {

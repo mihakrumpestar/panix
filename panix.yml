@@ -8,9 +8,6 @@ root:
   flakes:
     infrastructure:
       url: path:../infrastructure
-      flake_hooks:
-        pre: exit 0
-        post: exit 0
       configurations:
         #server-03:
         #  machines:
