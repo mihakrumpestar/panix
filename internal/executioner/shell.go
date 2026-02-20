@@ -23,11 +23,12 @@ const (
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07\x1b]*[\x07\x1b\\]`)
 
 func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) error {
-	if err := validateExecOptions(excOpt); err != nil {
+	err := validateExecOptions(excOpt)
+	if err != nil {
 		return err
 	}
 
-	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, commandWithArgs)
+	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt.env)
 
 	commandLog.TimeAndState.StartTimer()
 	var execErr error
@@ -174,8 +175,8 @@ func processTerminalOutput(buf []byte, exm *logs_command.CommandLog) error {
 }
 
 func processSequence(seq []byte, isFirst bool, exm *logs_command.CommandLog) error {
-	if bytes.HasPrefix(seq, []byte("\n")) {
-		exm.WriteLine(bytes.TrimPrefix(seq, []byte("\n")))
+	if after, ok := bytes.CutPrefix(seq, []byte("\n")); ok {
+		exm.WriteLine(after)
 		return nil
 	}
 
