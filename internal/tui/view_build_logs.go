@@ -23,6 +23,8 @@ func (m *model) ViewBuildLogs() string {
 	var b strings.Builder
 	b.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
 
+	m.resetable.workflow.State().TargetsLogs.CalculateDurationAndError()
+
 	selectedXpath := m.resetable.statsTable.GetSelectedXpath()
 	selectedPhase := m.resetable.phaseStatus.GetSelectedPhase()
 	colors := m.conf.ColorScheme
@@ -100,7 +102,7 @@ func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, ind
 }
 
 func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, isRoot bool) *tree.Tree {
-	duration := m.resetable.workflow.State().TargetsLogs.Get(attr.Xpath).CalculateDurationAndError().Duration
+	duration := m.resetable.workflow.State().TargetsLogs.Get(attr.Xpath).GetCachedDurationAndError().Duration
 	line := m.layoutLine(indent,
 		style.Color.Render(fmt.Sprintf("%c %s %s", style.Icon, attr.Name, attr.Message)),
 		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))

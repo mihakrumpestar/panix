@@ -14,6 +14,7 @@ type TargetLogs struct {
 	*logs_phase.PhaseLogs
 	parent   *TargetLogs
 	children []*TargetLogs
+	cache    DurationAndError
 }
 
 type DurationAndError struct {
@@ -41,19 +42,24 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 	return nil
 }
 
-func (ts *TargetLogs) CalculateDurationAndError() DurationAndError {
-	if len(ts.children) != 0 {
-		return ts.calculateFromChildren()
-	}
+func (ts *TargetLogs) GetCachedDurationAndError() DurationAndError {
+	return ts.cache
+}
 
-	return ts.calculateFromPhases()
+func (ts *TargetLogs) calculateDurationAndError() DurationAndError {
+	if len(ts.children) != 0 {
+		ts.cache = ts.calculateFromChildren()
+	} else {
+		ts.cache = ts.calculateFromPhases()
+	}
+	return ts.cache
 }
 
 func (ts *TargetLogs) calculateFromChildren() DurationAndError {
 	var dae DurationAndError
 
 	for _, child := range ts.children {
-		childDae := child.CalculateDurationAndError()
+		childDae := child.calculateDurationAndError()
 		if childDae.Duration > dae.Duration {
 			dae = childDae
 		}
