@@ -86,6 +86,10 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 				return err
 			}
 
+			if w.conf.Flags.ExitOnComplete {
+				return err
+			}
+
 			w.state.Retry.Wait()
 
 			w.state.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
