@@ -18,7 +18,7 @@ type Flags struct {
 	DryRunWithStatus     bool           `yaml:"dry_run_with_status" help:"show what would be done without executing, but with real status query"`
 	Timeout              time.Duration  `yaml:"timeout" help:"timeout for workflow" default:"2h"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"declare phases to skip"`
-	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"exit TUI immediately when workflow completes (otherwise stays open until user quits)"`
+	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode"`
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."`
 	Logging `yaml:"logging"`
@@ -31,9 +31,9 @@ type Bootstrap struct {
 }
 
 type Tui struct {
-	ShowAllBuildLogs       bool `yaml:"show_all_build_logs" help:"show all build logs in TUI"`
-	ShowActiveOnly         bool `yaml:"show_active_only" help:"show only running or errored logs in TUI build logs"`
-	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" help:"show commands instead of descriptions as labels in build logs"`
+	ShowAllBuildLogs       bool `yaml:"show_all_build_logs" help:"show all build logs in TUI (keybind h)"`
+	ShowActiveOnly         bool `yaml:"show_active_only" help:"show only running or errored logs in TUI build logs (keybind a)"`
+	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" help:"show commands instead of descriptions as labels in build logs (keybind c)"`
 	CommandOutputMaxHeight int  `yaml:"command_output_max_height" help:"maximum height for command output viewports in TUI" default:"8"`
 }
 
