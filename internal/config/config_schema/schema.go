@@ -7,6 +7,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 )
 
 // Generator holds the state for schema generation
@@ -38,6 +39,8 @@ type TypeDefinition struct {
 	Example              interface{}            `yaml:"example,omitempty"`
 	AdditionalProperties interface{}            `yaml:"additionalProperties,omitempty"`
 	AnyOf                []interface{}          `yaml:"anyOf,omitempty"`
+	AllOf                []interface{}          `yaml:"allOf,omitempty"`
+	Ref                  string                 `yaml:"$ref,omitempty"`
 	Format               string                 `yaml:"format,omitempty"`
 	Minimum              *int                   `yaml:"minimum,omitempty"`
 	Maximum              *int                   `yaml:"maximum,omitempty"`
@@ -56,6 +59,7 @@ type Schema struct {
 	Required             RequiredList           `yaml:"required,omitempty"`
 	AdditionalProperties interface{}            `yaml:"additionalProperties,omitempty"`
 	Definitions          map[string]interface{} `yaml:"definitions,omitempty"`
+	AllOf                []interface{}          `yaml:"allOf,omitempty"`
 }
 
 // NewGenerator creates a new schema generator
@@ -82,13 +86,16 @@ func (g *Generator) Generate() (*Schema, error) {
 
 	// Generate schema from config.Config
 	cfgType := reflect.TypeOf(config.Config{})
-	properties, required, err := g.processStruct(cfgType)
+	properties, required, allOf, err := g.processStruct(cfgType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process Config struct: %w", err)
 	}
 
 	schema.Properties = properties
 	schema.Required = required
+	if len(allOf) > 0 {
+		schema.AllOf = allOf
+	}
 
 	// Add collected definitions
 	for name, def := range g.definitions {
@@ -99,16 +106,17 @@ func (g *Generator) Generate() (*Schema, error) {
 }
 
 // processStruct processes a struct type and returns its properties, required fields, and any definitions
-func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []string, error) {
+func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []string, []interface{}, error) {
 	properties := make(map[string]interface{})
 	required := []string{}
+	var allOf []interface{}
 
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 
 	if t.Kind() != reflect.Struct {
-		return nil, nil, fmt.Errorf("expected struct type, got %v", t.Kind())
+		return nil, nil, nil, fmt.Errorf("expected struct type, got %v", t.Kind())
 	}
 
 	for i := 0; i < t.NumField(); i++ {
@@ -132,11 +140,18 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 			continue
 		}
 
-		// Handle inline embedded structs - flatten their properties into parent
+		// Handle inline embedded structs
 		if strings.Contains(yamlTag, ",inline") {
-			inlineProps, inlineRequired, err := g.processStruct(field.Type)
+			// Check if this is the Attributes struct - use reference instead of flattening
+			if g.isAttributesType(field.Type) {
+				ref := g.createAttributesDefinition()
+				allOf = append(allOf, ref)
+				continue
+			}
+			// For other inline structs, flatten their properties into parent
+			inlineProps, inlineRequired, _, err := g.processStruct(field.Type)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to process inline field %s: %w", field.Name, err)
+				return nil, nil, nil, fmt.Errorf("failed to process inline field %s: %w", field.Name, err)
 			}
 			for name, prop := range inlineProps {
 				properties[name] = prop
@@ -151,7 +166,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 		// Process the field type
 		prop, err := g.processType(field.Type, field)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to process field %s: %w", field.Name, err)
+			return nil, nil, nil, fmt.Errorf("failed to process field %s: %w", field.Name, err)
 		}
 
 		// Add description from desc tag if present
@@ -173,7 +188,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 		}
 	}
 
-	return properties, required, nil
+	return properties, required, allOf, nil
 }
 
 // processType processes a type and returns its schema definition
@@ -240,9 +255,21 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 		}
 
 		// Process as regular struct
-		properties, required, err := g.processStruct(t)
+		properties, required, allOf, err := g.processStruct(t)
 		if err != nil {
 			return nil, err
+		}
+
+		// If there's an allOf (e.g., Attributes reference), use allOf structure
+		if len(allOf) > 0 {
+			return &TypeDefinition{
+				AllOf: append(allOf, &TypeDefinition{
+					Type:                 "object",
+					Properties:           properties,
+					Required:             RequiredList(required),
+					AdditionalProperties: false,
+				}),
+			}, nil
 		}
 
 		return &TypeDefinition{
@@ -432,6 +459,41 @@ func (g *Generator) getYAMLFieldName(field reflect.StructField, yamlTag string) 
 	}
 
 	return parts[0]
+}
+
+// isAttributesType checks if a type is the config_attributes.Attributes type
+func (g *Generator) isAttributesType(t reflect.Type) bool {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t.String() == "config_attributes.Attributes"
+}
+
+// createAttributesDefinition creates or returns the Attributes definition and returns a reference to it
+func (g *Generator) createAttributesDefinition() *TypeDefinition {
+	const defName = "Attributes"
+
+	// Return existing reference if already created
+	if _, exists := g.definitions[defName]; exists {
+		return &TypeDefinition{Ref: "#/definitions/" + defName}
+	}
+
+	// Process the Attributes struct
+	attrType := reflect.TypeOf(config_attributes.Attributes{})
+	properties, required, _, err := g.processStruct(attrType)
+	if err != nil {
+		return nil
+	}
+
+	// Create the definition
+	g.definitions[defName] = &TypeDefinition{
+		Type:                 "object",
+		Properties:           properties,
+		Required:             RequiredList(required),
+		AdditionalProperties: false,
+	}
+
+	return &TypeDefinition{Ref: "#/definitions/" + defName}
 }
 
 // GenerateYAML generates the schema and returns it as YAML bytes
