@@ -32,7 +32,7 @@ type PhaseMetadata struct {
 }
 
 // PhaseRegistry contains metadata for all phases
-// Phases are defined in execution order
+// they are defined in execution order
 var PhaseRegistry = []PhaseMetadata{
 	{Phase: Inspect, Scope: ScopeMachine},
 	{Phase: Build, Scope: ScopeConfig}, // Once per config
