@@ -196,12 +196,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 
 	case workflowDoneMsg:
+		zerolog.Debug().Msg("workflowDoneMsg")
+
 		// Only exit automatically if exitOnComplete flag is set
 		if m.conf.Flags.ExitOnComplete {
 			m.quitting = true
 			return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 		}
-		// Stay open - user can press 'q' to quit or 'r' to retry
+		// Stay open — user can press 'q' to quit or 'r' to retry
 		return m, nil
 
 	case restartMsg:
@@ -286,7 +288,7 @@ func (m *model) ViewMainContent() string {
 	builder.WriteString(m.ViewBuildLogs())
 
 	if m.resetable.err != nil {
-		errorHeader := "=== Error ===\n"
+		errorHeader := "\n\n=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", m.resetable.err.Error())
 		builder.WriteString(m.conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}

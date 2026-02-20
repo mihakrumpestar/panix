@@ -21,7 +21,7 @@ type Flags struct {
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"exit TUI immediately when workflow completes (otherwise stays open until user quits)"`
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."`
-	Logging `yaml:"logging" embed:"" prefix:"logging."`
+	Logging `yaml:"logging"`
 }
 
 type Bootstrap struct {
