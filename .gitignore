@@ -25,6 +25,7 @@ go.work.sum
 .env
 
 .task
+.opencode
 build
 dist
 debug
@@ -35,5 +36,4 @@ temp_key.pub
 
 panix
 panix.log
-panix-schema.yaml
 TODO.md

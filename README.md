@@ -45,11 +45,15 @@ Not caviats so per se, just good things to know:
 
 ## YAML schema
 
-Panix can generate YAML schema with `panix schema` for seeing parameter descriptions and their validation in your IDE. You just reference it in `panix.yml` as (you might need to add support using an extension like [vscode-yaml](https://github.com/redhat-developer/vscode-yaml)):
+Panix can generate YAML schema with `panix schema` for seeing parameter descriptions and their validation in your IDE. You just reference it in `panix.yml` as:
 
 ```yml
 # yaml-language-server: $schema=./panix-schema.yaml
+
+...
 ```
+
+Note that you might need to add support using an extension like [vscode-yaml](https://github.com/redhat-developer/vscode-yaml).
 
 ## Contributing
 

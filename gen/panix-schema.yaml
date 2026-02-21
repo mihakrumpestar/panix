@@ -1,0 +1,211 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: https://panix.dev/schema.json
+title: Panix Configuration Schema
+description: Schema for Panix NixOS deployment configuration files
+type: object
+properties:
+  flags:
+    type: object
+    properties:
+      bootstrap:
+        type: object
+        properties:
+          disable_auto:
+            type: boolean
+          disable_disko:
+            type: boolean
+          only:
+            type: boolean
+        additionalProperties: false
+      config:
+        type: string
+      dry_run:
+        type: boolean
+      dry_run_with_status:
+        type: boolean
+      exit_on_complete:
+        type: boolean
+      logging:
+        type: object
+        properties:
+          cpu_profile:
+            type: string
+          debug:
+            type: boolean
+          log:
+            type: boolean
+          log_file:
+            type: string
+        additionalProperties: false
+      override_local_machine:
+        type: string
+      require_all_success:
+        type: boolean
+      skip_phases:
+        type: array
+        items:
+          type: string
+      tags:
+        type: array
+        items:
+          type: string
+      timeout:
+        type: string
+        description: Duration string (e.g., '2h', '30m', '1h30m')
+      tui:
+        type: object
+        properties:
+          command_output_max_height:
+            type: integer
+          show_active_only:
+            type: boolean
+          show_all_build_logs:
+            type: boolean
+          show_commands_in_labels:
+            type: boolean
+        additionalProperties: false
+    additionalProperties: false
+  root:
+    allOf:
+    - $ref: "#/definitions/Attributes"
+    - type: object
+      properties:
+        flakes:
+          type: object
+          additionalProperties:
+            allOf:
+            - $ref: "#/definitions/Attributes"
+            - type: object
+              properties:
+                configurations:
+                  type: object
+                  additionalProperties:
+                    allOf:
+                    - $ref: "#/definitions/Attributes"
+                    - type: object
+                      properties:
+                        flake_output:
+                          type: string
+                          description: "Option to override flake output if non-standard style (default: nixosConfigurations.<name>.config.system.build.toplevel)"
+                        machines:
+                          type: object
+                          additionalProperties:
+                            anyOf:
+                            - allOf:
+                              - $ref: "#/definitions/Attributes"
+                              - type: object
+                                additionalProperties: false
+                            - type: "null"
+                      required:
+                      - machines
+                      additionalProperties: false
+                url:
+                  type: string
+                  description: Flake path (eg. 'path:...') or url (eg. 'ssh:...')
+                  format: uri
+              required:
+              - configurations
+              - url
+              additionalProperties: false
+      required:
+      - flakes
+      additionalProperties: false
+required:
+- root
+additionalProperties: false
+definitions:
+  Attributes:
+    type: object
+    properties:
+      bootstrap:
+        type: object
+        properties:
+          disk_encryption_keys:
+            type: array
+            items:
+              type: object
+              properties:
+                gid:
+                  type: integer
+                  description: Optional Group ID for remote
+                local_path:
+                  type: string
+                  description: Path to a local file or dir
+                  format: file-path
+                remote_path:
+                  type: string
+                  description: Absolute path on remote machine
+                  pattern: ^/.*
+                  format: uri-reference
+                uid:
+                  type: integer
+                  description: Optional User ID for remote
+              required:
+              - local_path
+              - remote_path
+              additionalProperties: false
+          kexec_extra_flags:
+            type: string
+            description: Extra flags to pass to kexec (e.g. '--no-sync')
+          kexec_url:
+            type: string
+            description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+          post_bootstrap_hook:
+            type: string
+        additionalProperties: false
+      disabled:
+        type: boolean
+      hardware_config_path:
+        type: string
+      override_sudo_program:
+        type: string
+      secrets:
+        type: array
+        items:
+          type: object
+          properties:
+            gid:
+              type: integer
+              description: Optional Group ID for remote
+            local_path:
+              type: string
+              description: Path to a local file or dir
+              format: file-path
+            remote_path:
+              type: string
+              description: Absolute path on remote machine
+              pattern: ^/.*
+              format: uri-reference
+            uid:
+              type: integer
+              description: Optional User ID for remote
+          required:
+          - local_path
+          - remote_path
+          additionalProperties: false
+      ssh:
+        type: object
+        properties:
+          disable_strict_key_checking:
+            type: boolean
+            description: Disable strict host key checking
+          hostname:
+            type: string
+            description: SSH hostname or IP address
+          identity_file:
+            type: string
+            description: Path to SSH private key
+            format: file-path
+          port:
+            type: integer
+            description: SSH port number
+            minimum: 1
+          username:
+            type: string
+            description: SSH username
+        additionalProperties: false
+      tags:
+        type: array
+        items:
+          type: string
+    additionalProperties: false

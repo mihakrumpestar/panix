@@ -82,9 +82,10 @@ func (m *model) renderPhaseFlow() string {
 		return m.conf.ColorScheme.TableRow.Render("No phases to display")
 	}
 
-	m.resetable.phaseStatus.Phases = phasesList[:]
-	termWidth := m.resetable.viewports.ContentWidth()
-	stats := m.resetable.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
+	r := m.resetable.Load()
+	r.phaseStatus.Phases = phasesList[:]
+	termWidth := r.viewports.ContentWidth()
+	stats := r.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
 
 	row := make([]string, 0, len(phasesList)*2+1)
 	for i, phase := range phasesList {
@@ -123,7 +124,8 @@ func (m *model) createPhaseGroup(name string, running, failed, done []config_att
 	phaseName := colStyle.Render(createAnimatedGradient(displayName, stats, m.conf.ColorScheme))
 	statusLine := buildStatusLine(running, failed, done, m.conf.ColorScheme)
 
-	if phaseIdx >= 0 && phaseIdx == m.resetable.phaseStatus.SelectedPhase {
+	r := m.resetable.Load()
+	if phaseIdx >= 0 && phaseIdx == r.phaseStatus.SelectedPhase {
 		statusLine = m.conf.ColorScheme.SelectionHighlightBackground.Width(width).Align(lipgloss.Center).Render(statusLine)
 	} else {
 		statusLine = colStyle.Render(statusLine)
