@@ -15,7 +15,7 @@ tasks:
   run:
     desc: Run the application with go run
     cmds:
-      - go generate
+      - go generate ./...
       - go run cmd/panix/main.go {{.CLI_ARGS}}
 
   run:race:
