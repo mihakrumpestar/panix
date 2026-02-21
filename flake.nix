@@ -14,7 +14,7 @@
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
 
-      version = "0.1.0";
+      version = builtins.readFile ./VERSION;
     in {
       packages = {
         default = pkgs.buildGoModule {
@@ -24,7 +24,7 @@
           src = ./.;
           subPackages = ["cmd/panix"];
 
-          vendorHash = "sha256-v7OZAxbwxVARFHwV6drwFli01kjjJh3TqockIp4V3eM=";
+          vendorHash = "sha256-pL4jrFJI1AQJR4/ifX3PP0rV2fyzTlC9lLwwnti19VE=";
 
           meta = with pkgs.lib; {
             description = "A TUI application for Nix deployment workflows";

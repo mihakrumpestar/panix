@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/mihakrumpestar/panix/internal/config"
@@ -15,7 +17,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var version = "0.0.1"
+//go:embed VERSION
+var versionRaw string
+
+var version = strings.TrimSpace(versionRaw)
 
 type CLI struct {
 	config_flags.Flags
