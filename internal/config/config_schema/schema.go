@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 )
@@ -54,6 +55,7 @@ type TypeDefinition struct {
 type Schema struct {
 	Schema               string                 `yaml:"$schema"`
 	ID                   string                 `yaml:"$id,omitempty"`
+	Version              string                 `yaml:"version,omitempty"`
 	Title                string                 `yaml:"title,omitempty"`
 	Description          string                 `yaml:"description,omitempty"`
 	Type                 string                 `yaml:"type,omitempty"`
@@ -77,6 +79,7 @@ func (g *Generator) Generate() (*Schema, error) {
 	schema := &Schema{
 		Schema:               "http://json-schema.org/draft-07/schema#",
 		ID:                   "https://panix.dev/schema.json",
+		Version:              gen.VersionRaw,
 		Title:                "Panix Configuration Schema",
 		Description:          "Schema for Panix NixOS deployment configuration files",
 		Type:                 "object",
