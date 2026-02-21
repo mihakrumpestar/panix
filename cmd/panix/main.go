@@ -4,11 +4,10 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/alecthomas/kong"
+	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/config/config_schema"
@@ -17,10 +16,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-//go:embed VERSION
-var versionRaw string
-
-var version = strings.TrimSpace(versionRaw)
+var version = strings.TrimSpace(gen.VersionRaw)
 
 type CLI struct {
 	config_flags.Flags
@@ -89,27 +85,5 @@ func (c *CLI) runTui(commandPhases []phases.Phase, modifiers ...func(conf *confi
 }
 
 func (c *CLI) runSchemaCommand(outputPath string) error {
-	schemaYAML, err := config_schema.GenerateYAML()
-	if err != nil {
-		return fmt.Errorf("failed to generate schema: %w", err)
-	}
-
-	if outputPath == "-" {
-		fmt.Print(string(schemaYAML))
-		return nil
-	}
-
-	dir := filepath.Dir(outputPath)
-	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
-
-	if err := os.WriteFile(outputPath, schemaYAML, 0644); err != nil {
-		return fmt.Errorf("failed to write schema to %s: %w", outputPath, err)
-	}
-
-	fmt.Printf("Schema written to: %s\n", outputPath)
-	return nil
+	return config_schema.GenerateSchema(outputPath)
 }

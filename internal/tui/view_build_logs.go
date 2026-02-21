@@ -23,10 +23,11 @@ func (m *model) ViewBuildLogs() string {
 	var b strings.Builder
 	b.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
 
-	m.resetable.workflow.State().TargetsLogs.CalculateDurationAndError()
+	r := m.resetable.Load()
+	r.workflow.State().TargetsLogs.CalculateDurationAndError()
 
-	selectedXpath := m.resetable.statsTable.GetSelectedXpath()
-	selectedPhase := m.resetable.phaseStatus.GetSelectedPhase()
+	selectedXpath := r.statsTable.GetSelectedXpath()
+	selectedPhase := r.phaseStatus.GetSelectedPhase()
 	colors := m.conf.ColorScheme
 
 	for _, flakePair := range m.conf.Root.Flakes.Omap.Pairs() {
@@ -102,7 +103,7 @@ func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, ind
 }
 
 func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, isRoot bool) *tree.Tree {
-	duration := m.resetable.workflow.State().TargetsLogs.Get(attr.Xpath).GetCachedDurationAndError().Duration
+	duration := m.resetable.Load().workflow.State().TargetsLogs.Get(attr.Xpath).GetCachedDurationAndError().Duration
 	line := m.layoutLine(indent,
 		style.Color.Render(fmt.Sprintf("%c %s %s", style.Icon, attr.Name, attr.Message)),
 		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))
@@ -115,7 +116,7 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 }
 
 func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes, indent int, stopAtError bool, allowed ...phases.Phase) bool {
-	logs := m.resetable.workflow.State().TargetsLogs.GetLogs(attr.Xpath)
+	logs := m.resetable.Load().workflow.State().TargetsLogs.GetLogs(attr.Xpath)
 	for _, entry := range logs.All() {
 		if !slices.Contains(allowed, entry.Key) {
 			continue
@@ -163,6 +164,7 @@ func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, 
 func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx int, phaseXpath config_attributes.Xpath, indent int) {
 	colors := m.conf.ColorScheme
 	cmdIndent := indent + treeStep
+	r := m.resetable.Load()
 
 	label := strings.TrimSpace(cmd.Description)
 	if m.conf.Flags.Tui.ShowCommandsInLabels {
@@ -172,7 +174,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
 	icon := m.spinnerOrIcon(cmdXpath, fmt.Sprintf("%d ", idx+1), cmd.TimeAndState)
 	duration := m.durationText(colors.Command, cmd.TimeAndState)
-	labelViewport := m.resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, cmdIndent+lipgloss.Width(icon)+lipgloss.Width(duration))
+	labelViewport := r.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, cmdIndent+lipgloss.Width(icon)+lipgloss.Width(duration))
 
 	output := strings.TrimSpace(cmd.String())
 	if len(output) > 0 && lipgloss.Height(labelViewport) > 1 {
@@ -183,9 +185,9 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	cmdNode := tree.New().Root(colors.Command.Color.Render(lipgloss.JoinHorizontal(lipgloss.Top, icon, colors.Command.Color.Render(labelViewport), duration)))
 
 	if len(output) > 0 {
-		cmdNode.Child(m.resetable.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
+		cmdNode.Child(r.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
 	} else {
-		m.resetable.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("output"))
+		r.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("output"))
 	}
 
 	if err := cmd.TimeAndState.GetEndError(); err != nil {
@@ -197,7 +199,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 
 func (m *model) layoutLine(indent int, left, right string) string {
 	timerIndent := max(4-indent/treeStep, 0)
-	available := m.resetable.viewports.ContentWidth() - indent - timerIndent
+	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndent
 	rightWidth := lipgloss.Width(right)
 	return lipgloss.JoinHorizontal(lipgloss.Left,
 		lipgloss.NewStyle().Width(max(available-rightWidth, lipgloss.Width(left))).Render(left),
@@ -211,7 +213,7 @@ func (m *model) spinnerOrIcon(xpath config_attributes.Xpath, icon string, tas *t
 	if tas.IsFinished() {
 		return icon
 	}
-	return m.resetable.spinners.GetOrCreateSpinner(xpath).View()
+	return m.resetable.Load().spinners.GetOrCreateSpinner(xpath).View()
 }
 
 func (m *model) durationText(style config.ColorSchemeLogEntity, tas *time_and_state.TimeAndState) string {

@@ -15,19 +15,20 @@ tasks:
   run:
     desc: Run the application with go run
     cmds:
-      -  go run cmd/panix/main.go {{.CLI_ARGS}}
+      - go generate
+      - go run cmd/panix/main.go {{.CLI_ARGS}}
 
   run:race:
-    desc: Run the application with go run
+    desc: Run the application with go run + race check
     env:
       GORACE: log_path={{.DEBUG_DIR}}/race.log
     cmds:
-      -  go run --race cmd/panix/main.go {{.CLI_ARGS}}
+      - go run --race cmd/panix/main.go {{.CLI_ARGS}}
 
   run:profile:
     desc: Run the application with go run
     cmds:
-      -  go run cmd/panix/main.go --cpuprofile={{.DEBUG_DIR}}/profile.prof {{.CLI_ARGS}}
+      - go run cmd/panix/main.go --cpuprofile={{.DEBUG_DIR}}/profile.prof {{.CLI_ARGS}}
 
   profile:
     cmds:
