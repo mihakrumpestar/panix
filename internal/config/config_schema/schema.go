@@ -2,6 +2,8 @@ package config_schema
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -514,4 +516,30 @@ func GenerateYAMLString() (string, error) {
 		return "", err
 	}
 	return string(bytes), nil
+}
+
+func GenerateSchema(outputPath string) error {
+	schemaYAML, err := GenerateYAML()
+	if err != nil {
+		return fmt.Errorf("failed to generate schema: %w", err)
+	}
+
+	if outputPath == "-" {
+		fmt.Print(string(schemaYAML))
+		return nil
+	}
+
+	dir := filepath.Dir(outputPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
+
+	if err := os.WriteFile(outputPath, schemaYAML, 0644); err != nil {
+		return fmt.Errorf("failed to write schema to %s: %w", outputPath, err)
+	}
+
+	fmt.Printf("Schema written to: %s\n", outputPath)
+	return nil
 }

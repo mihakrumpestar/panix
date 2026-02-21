@@ -61,15 +61,16 @@ func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEsc()
 	}
 
-	hasActiveInner := m.resetable.viewports.HasActiveInner()
+	r := m.resetable.Load()
+	hasActiveInner := r.viewports.HasActiveInner()
 
-	if m.resetable.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		m.resetable.phaseStatus.Reset()
+	if r.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
+		r.phaseStatus.Reset()
 		return m, nil
 	}
 
-	if m.resetable.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
-		m.resetable.statsTable.Reset()
+	if r.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
+		r.statsTable.Reset()
 		return m, nil
 	}
 
@@ -104,7 +105,8 @@ func (m *model) ViewFooter() string {
 // Handlers
 
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
-	content, isInner := m.resetable.viewports.GetActiveInnerViewportContent()
+	r := m.resetable.Load()
+	content, isInner := r.viewports.GetActiveInnerViewportContent()
 	if !isInner {
 		return m, m.notification.Set("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
 	}
@@ -119,11 +121,12 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	m.quitting = true
-	err := m.resetable.workflow.Cancel()
-	if m.resetable.err != nil && err != nil && err != context.Canceled {
-		m.resetable.err = errors.Wrap(m.resetable.err, err.Error())
+	r := m.resetable.Load()
+	err := r.workflow.Cancel()
+	if r.err != nil && err != nil && err != context.Canceled {
+		r.err = errors.Wrap(r.err, err.Error())
 	} else if err != nil && err != context.Canceled {
-		m.resetable.err = err
+		r.err = err
 	}
 	zerolog.Debug().Msg("Context done, exiting TUI")
 	return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
@@ -145,7 +148,7 @@ func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
-	m.resetable.workflow.State().Retry.Trigger()
+	m.resetable.Load().workflow.State().Retry.Trigger()
 	return m, nil
 }
 
@@ -157,13 +160,14 @@ func (m *model) handleRestart() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
-	if m.resetable.viewports.IsFullscreen() {
-		m.resetable.viewports.ExitFullscreen()
+	r := m.resetable.Load()
+	if r.viewports.IsFullscreen() {
+		r.viewports.ExitFullscreen()
 		return m, nil
 	}
-	activeInnerXpath := m.resetable.viewports.GetActiveInnerViewportXpath()
+	activeInnerXpath := r.viewports.GetActiveInnerViewportXpath()
 	if activeInnerXpath.Depth() > 0 {
-		m.resetable.viewports.SetFullscreen(activeInnerXpath)
+		r.viewports.SetFullscreen(activeInnerXpath)
 	} else {
 		return m, m.notification.Set("Select a viewport first", m.conf.ColorScheme.StatusWarning)
 	}
@@ -171,14 +175,15 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleEsc() (tea.Model, tea.Cmd) {
-	if m.resetable.viewports.IsFullscreen() {
-		m.resetable.viewports.ExitFullscreen()
-	} else if m.resetable.viewports.HasActiveInner() {
-		m.resetable.viewports.DeselectAll()
-	} else if m.resetable.statsTable.SelectedMachine >= 0 {
-		m.resetable.statsTable.Reset()
-	} else if m.resetable.phaseStatus.SelectedPhase >= 0 {
-		m.resetable.phaseStatus.Reset()
+	r := m.resetable.Load()
+	if r.viewports.IsFullscreen() {
+		r.viewports.ExitFullscreen()
+	} else if r.viewports.HasActiveInner() {
+		r.viewports.DeselectAll()
+	} else if r.statsTable.SelectedMachine >= 0 {
+		r.statsTable.Reset()
+	} else if r.phaseStatus.SelectedPhase >= 0 {
+		r.phaseStatus.Reset()
 	}
 	return m, nil
 }
@@ -228,7 +233,7 @@ func wrapKeybindingsByPair(h help.Model, k help.KeyMap, maxWidth int) string {
 }
 
 func renderScrollPercent(m *model) string {
-	pct := m.resetable.viewports.GetActiveViewportScrollPercent()
+	pct := m.resetable.Load().viewports.GetActiveViewportScrollPercent()
 	return lipgloss.NewStyle().PaddingLeft(1).
 		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
 		Render(fmt.Sprintf("%3d%%", int(pct*100)))

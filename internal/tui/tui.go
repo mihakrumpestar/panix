@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -16,9 +17,7 @@ import (
 	zone "github.com/lrstanley/bubblezone"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
-	"github.com/mihakrumpestar/panix/internal/workflow"
 	zerolog "github.com/rs/zerolog/log"
 )
 
@@ -34,18 +33,9 @@ type model struct {
 	conf               *config.Config
 	dimensions         *tui_viewports.Dimensions
 	quitting           bool
-	resetable          resetable
+	resetable          atomic.Pointer[resetable]
 	notification       *tui_notifications.Notification
 	lastWorkflowUpdate time.Time
-}
-
-type resetable struct {
-	err         error
-	workflow    *workflow.Workflow
-	spinners    *tui_spinners.Spinners
-	viewports   *tui_viewports.Viewports
-	statsTable  *StatsTable
-	phaseStatus *PhaseStatus
 }
 
 // NewTui initializes and runs the TUI application.
@@ -101,7 +91,10 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		content := finalModel.ViewMainContent()
 		fmt.Println(content)
 	}
-	return finalModel.resetable.err
+	if r := finalModel.resetable.Load(); r != nil {
+		return r.err
+	}
+	return nil
 }
 
 func startCPUProfile(path string) error {
@@ -120,55 +113,19 @@ func (m *model) Init() tea.Cmd {
 	)
 }
 
-// workflowDoneMsg signals the workflow has completed
-type workflowDoneMsg struct{}
-
 // restartMsg signals the workflow should be restarted
 type restartMsg struct{}
 
-func (m *model) startWorkflow() tea.Cmd {
-	return func() tea.Msg {
-		workflow, err := workflow.NewWorkflow(m.ctx, m.conf)
-		if err != nil {
-			return errMsg{err}
-		}
-
-		spinners, err := tui_spinners.NewSpinners()
-		if err != nil {
-			return errMsg{err}
-		}
-
-		m.resetable = resetable{
-			workflow:    workflow,
-			spinners:    spinners,
-			viewports:   tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
-			statsTable:  NewStatsTable(),
-			phaseStatus: NewPhaseStatus(),
-		}
-
-		err = workflow.CreateWorkflow()
-		if err != nil {
-			zerolog.Error().Err(err).Msg("Workflow execution failed")
-			if err != context.Canceled {
-				return errMsg{err}
-			}
-		} else {
-			zerolog.Info().Msg("Workflow completed successfully")
-		}
-
-		return workflowDoneMsg{}
-	}
-}
-
 func (m *model) workflowUpdateHook() tea.Cmd {
 	return func() tea.Msg {
-		if m.resetable.workflow == nil {
+		r := m.resetable.Load()
+		if r == nil || r.workflow == nil {
 			time.Sleep(20 * time.Millisecond)
 			zerolog.Debug().Msg("workflowUpdateHook was nil")
 			return workflowUpdateHookMsg{}
 		}
 
-		<-m.resetable.workflow.WaitForUpdate()
+		<-r.workflow.WaitForUpdate()
 
 		now := time.Now()
 		elapsed := now.Sub(m.lastWorkflowUpdate)
@@ -184,14 +141,17 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	cmd = tea.Batch(cmd, m.resetable.spinners.ProcessPendingTicks())
-	cmd = tea.Batch(cmd, m.resetable.viewports.Update(msg))
-	cmd = tea.Batch(cmd, m.notification.Update(msg))
-	cmd = tea.Batch(cmd, m.resetable.spinners.Update(msg))
+	r := m.resetable.Load()
+	if r != nil {
+		cmd = tea.Batch(cmd, r.spinners.ProcessPendingTicks())
+		cmd = tea.Batch(cmd, r.viewports.Update(msg))
+		cmd = tea.Batch(cmd, m.notification.Update(msg))
+		cmd = tea.Batch(cmd, r.spinners.Update(msg))
+	}
 
 	switch msg := msg.(type) {
 	case errMsg:
-		m.resetable.err = msg.err
+		r.err = msg.err
 		m.quitting = true
 		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 
@@ -207,11 +167,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case restartMsg:
-		// Cancel current workflow
-		m.resetable.workflow.Cancel()
-
-		// Recreate the workflow
-		return m, m.startWorkflow()
+		return m, m.restartWorkflow()
 
 	case workflowUpdateHookMsg:
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
@@ -231,7 +187,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) View() string {
-	if m.resetable.workflow == nil {
+	r := m.resetable.Load()
+	if r == nil || r.workflow == nil {
 		return ""
 	}
 
@@ -241,7 +198,7 @@ func (m *model) View() string {
 		return ""
 	}
 
-	if m.resetable.viewports.IsFullscreen() {
+	if r.viewports.IsFullscreen() {
 		result := m.renderFullscreen()
 		if result != "" {
 			return result
@@ -250,7 +207,7 @@ func (m *model) View() string {
 
 	footer := m.ViewFooter()
 	footerHeight := lipgloss.Height(footer)
-	mainViewport := m.resetable.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
+	mainViewport := r.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
 
 	var builder strings.Builder
 	builder.WriteString(mainViewport)
@@ -260,17 +217,18 @@ func (m *model) View() string {
 }
 
 func (m *model) renderFullscreen() string {
-	fullscreenXpath := m.resetable.viewports.GetFullscreenXpath()
-	content := m.resetable.viewports.GetViewportContent(fullscreenXpath)
+	r := m.resetable.Load()
+	fullscreenXpath := r.viewports.GetFullscreenXpath()
+	content := r.viewports.GetViewportContent(fullscreenXpath)
 
 	if content == "" {
-		m.resetable.viewports.ExitFullscreen()
+		r.viewports.ExitFullscreen()
 		return ""
 	}
 
 	footer := m.ViewFooter()
 	footerHeight := lipgloss.Height(footer)
-	fullscreenViewport := m.resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
+	fullscreenViewport := r.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
 
 	var builder strings.Builder
 	builder.WriteString(fullscreenViewport)
@@ -279,7 +237,6 @@ func (m *model) renderFullscreen() string {
 	return zone.Scan(builder.String())
 }
 
-// ViewMainContent generates the main content that is in a viewport
 func (m *model) ViewMainContent() string {
 	var builder strings.Builder
 
@@ -287,17 +244,18 @@ func (m *model) ViewMainContent() string {
 	builder.WriteString(m.ViewPhaseStatus())
 	builder.WriteString(m.ViewBuildLogs())
 
-	if m.resetable.err != nil {
+	r := m.resetable.Load()
+	if r.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
-		errorContent := fmt.Sprintf("\n%s\n", m.resetable.err.Error())
+		errorContent := fmt.Sprintf("\n%s\n", r.err.Error())
 		builder.WriteString(m.conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
 	if m.conf.Flags.Logging.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
-		debugContent := m.resetable.spinners.Debug()
-		debugContent += m.resetable.viewports.Debug()
-		debugContent += m.resetable.workflow.State().TargetsLogs.Debug()
+		debugContent := r.spinners.Debug()
+		debugContent += r.viewports.Debug()
+		debugContent += r.workflow.State().TargetsLogs.Debug()
 		builder.WriteString(debugHeader + debugContent)
 	}
 
@@ -309,12 +267,13 @@ func (m *model) handleMouseClick(msg tea.MouseMsg) {
 		return
 	}
 
-	if m.resetable.statsTable.HandleMouseClick(msg) {
-		m.resetable.phaseStatus.Reset()
+	r := m.resetable.Load()
+	if r.statsTable.HandleMouseClick(msg) {
+		r.phaseStatus.Reset()
 		return
 	}
 
-	if m.resetable.phaseStatus.HandleMouseClick(msg) {
-		m.resetable.statsTable.Reset()
+	if r.phaseStatus.HandleMouseClick(msg) {
+		r.statsTable.Reset()
 	}
 }

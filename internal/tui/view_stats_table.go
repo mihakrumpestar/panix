@@ -97,7 +97,8 @@ func (s *StatsTable) GetSelectedXpath() config_attributes.Xpath {
 }
 
 func (m *model) ViewStatsTable() string {
-	state := m.resetable.workflow.State()
+	r := m.resetable.Load()
+	state := r.workflow.State()
 	phasesList := m.conf.Phases
 	colors := m.conf.ColorScheme
 
@@ -108,11 +109,11 @@ func (m *model) ViewStatsTable() string {
 	var builder strings.Builder
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
-	usableWidth := max(m.resetable.viewports.ContentWidth(), 40)
-	machineCount := m.resetable.workflow.MachineCount()
+	usableWidth := max(r.viewports.ContentWidth(), 40)
+	machineCount := r.workflow.MachineCount()
 	indexWidth := len(fmt.Sprintf("%d", machineCount))
 
-	statsTable := m.resetable.statsTable
+	statsTable := r.statsTable
 	statsTable.MachineXpaths = nil
 
 	headers, styleFunc := makeTableColumns(colors, indexWidth, statsTable.SelectedMachine)
@@ -127,7 +128,7 @@ func (m *model) ViewStatsTable() string {
 
 	var prevFlakeName, prevConfigName string
 
-	m.resetable.workflow.RootTree(func(i int, machine *config.Machine) {
+	r.workflow.RootTree(func(i int, machine *config.Machine) {
 		configuration := machine.ParentConfiguration
 		flake := configuration.ParentFlake
 		xpath := machine.Xpath
@@ -246,13 +247,14 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 }
 
 func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phase.PhaseLog) string {
+	r := m.resetable.Load()
 	if phaseLog == nil {
-		return m.resetable.spinners.GetOrCreateSpinner(xpath).View()
+		return r.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
 	tas := phaseLog.TimeAndState()
 	if !tas.IsFinished() {
-		return m.resetable.spinners.GetOrCreateSpinner(xpath).View()
+		return r.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
 	if tas.GetEndError() != nil {
