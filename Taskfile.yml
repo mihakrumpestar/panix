@@ -79,6 +79,7 @@ tasks:
           git commit -m "chore: bump version to $NEW_VERSION"
         fi
         
+        NOTES_TMP=""
         echo "Add custom release notes? (y/N)"
         read -r ADD_NOTES
         if [ "$ADD_NOTES" = "y" ] || [ "$ADD_NOTES" = "Y" ]; then
@@ -89,8 +90,8 @@ tasks:
           else
             NOTES=""
           fi
-          rm -f "$NOTES_TMP"
         else
           NOTES=""
         fi
         gh release create "v$NEW_VERSION" $NOTES --generate-notes
+        rm -f "$NOTES_TMP"
