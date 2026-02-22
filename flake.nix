@@ -30,7 +30,7 @@
             description = "A TUI application for Nix deployment workflows";
             homepage = "https://github.com/mihakrumpestar/panix";
             license = licenses.mit;
-            maintainers = [ { name = "mihakrumpestar"; } ];
+            maintainers = [{name = "mihakrumpestar";}];
             mainProgram = "panix";
           };
         };
@@ -53,6 +53,7 @@
           graphviz
           pre-commit
           nix-update
+          gh
         ];
 
         shellHook = ''
