@@ -73,9 +73,11 @@ tasks:
           exit 1
         fi
         
-        echo "$NEW_VERSION" > {{.VERSION_FILE}}
-        git add {{.VERSION_FILE}}
-        git commit -m "chore: bump version to $NEW_VERSION"
+        if [ "$NEW_VERSION" != "$CURRENT" ]; then
+          echo "$NEW_VERSION" > {{.VERSION_FILE}}
+          git add {{.VERSION_FILE}}
+          git commit -m "chore: bump version to $NEW_VERSION"
+        fi
         
         echo "Add custom release notes? (y/N)"
         read -r ADD_NOTES
