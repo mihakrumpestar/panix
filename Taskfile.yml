@@ -54,3 +54,32 @@ tasks:
    desc: Update vendor hash
    cmds:
     - nix-update --flake --version=skip default
+
+  release:
+    desc: Create a new GitHub release
+    vars:
+      VERSION_FILE: gen/VERSION
+    cmds:
+      - |
+        CURRENT=$(cat {{.VERSION_FILE}})
+        VERSION_TMP=$(mktemp)
+        echo "$CURRENT" > "$VERSION_TMP"
+        ${EDITOR:-vi} "$VERSION_TMP"
+        NEW_VERSION=$(cat "$VERSION_TMP" | tr -d '\n')
+        rm "$VERSION_TMP"
+        
+        if [ -z "$NEW_VERSION" ]; then
+          echo "Error: Version cannot be empty"
+          exit 1
+        fi
+        
+        echo "$NEW_VERSION" > {{.VERSION_FILE}}
+        git add {{.VERSION_FILE}}
+        git commit -m "chore: bump version to $NEW_VERSION"
+        
+        NOTES_TMP=$(mktemp)
+        echo "# Enter custom release notes above this line (can be empty)" > "$NOTES_TMP"
+        ${EDITOR:-vi} "$NOTES_TMP"
+        grep -v "^#" "$NOTES_TMP" | grep -q . && NOTES="--notes-file $NOTES_TMP" || NOTES=""
+        gh release create "v$NEW_VERSION" $NOTES --generate-notes
+        rm -f "$NOTES_TMP"
