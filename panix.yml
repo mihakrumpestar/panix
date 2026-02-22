@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=./panix-schema.yaml
+# yaml-language-server: $schema=./gen/panix-schema.yaml
 
 flags:
   timeout: 5500s
