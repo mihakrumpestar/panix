@@ -1,5 +1,11 @@
 # Contributing
 
+Get into dev shell
+
+```sh
+nix develop
+```
+
 The following packages were inadequate for use for panix:
 
 - [Koanf](https://github.com/knadh/koanf/issues/221)
