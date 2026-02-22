@@ -77,9 +77,18 @@ tasks:
         git add {{.VERSION_FILE}}
         git commit -m "chore: bump version to $NEW_VERSION"
         
-        NOTES_TMP=$(mktemp)
-        echo "# Enter custom release notes above this line (can be empty)" > "$NOTES_TMP"
-        ${EDITOR:-vi} "$NOTES_TMP"
-        grep -v "^#" "$NOTES_TMP" | grep -q . && NOTES="--notes-file $NOTES_TMP" || NOTES=""
+        echo "Add custom release notes? (y/N)"
+        read -r ADD_NOTES
+        if [ "$ADD_NOTES" = "y" ] || [ "$ADD_NOTES" = "Y" ]; then
+          NOTES_TMP=$(mktemp)
+          ${EDITOR:-vi} "$NOTES_TMP"
+          if [ -s "$NOTES_TMP" ]; then
+            NOTES="--notes-file $NOTES_TMP"
+          else
+            NOTES=""
+          fi
+          rm -f "$NOTES_TMP"
+        else
+          NOTES=""
+        fi
         gh release create "v$NEW_VERSION" $NOTES --generate-notes
-        rm -f "$NOTES_TMP"
