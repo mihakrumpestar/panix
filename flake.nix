@@ -14,7 +14,7 @@
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
 
-      version = builtins.readFile ./VERSION;
+      version = builtins.readFile ./gen/VERSION;
     in {
       packages = {
         default = pkgs.buildGoModule {
@@ -30,7 +30,7 @@
             description = "A TUI application for Nix deployment workflows";
             homepage = "https://github.com/mihakrumpestar/panix";
             license = licenses.mit;
-            maintainers = [mihakrumpestar];
+            maintainers = [ { name = "mihakrumpestar"; } ];
             mainProgram = "panix";
           };
         };
@@ -51,7 +51,14 @@
 
           go-task
           graphviz
+          pre-commit
+          nix-update
         ];
+
+        shellHook = ''
+          pre-commit autoupdate
+          pre-commit install
+        '';
       };
     });
 }

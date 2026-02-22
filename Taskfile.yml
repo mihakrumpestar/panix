@@ -30,7 +30,7 @@ tasks:
     cmds:
       - go run cmd/panix/main.go --cpuprofile={{.DEBUG_DIR}}/profile.prof {{.CLI_ARGS}}
 
-  profile:
+  profile-ui:
     cmds:
       # https://ksysoev.github.io/posts/go-cpu-profile/
       - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/profile.prof
@@ -44,3 +44,13 @@ tasks:
     desc: Run the application using nix
     cmds:
       - nix run path:$(pwd)#default --extra-experimental-features "nix-command flakes" -- {{.CLI_ARGS}}
+
+  nix:update:
+    desc: Update flake
+    cmds:
+      - nix flake update
+
+  nix:vendor:
+   desc: Update vendor hash
+   cmds:
+    - nix-update --flake --version=skip default
