@@ -60,6 +60,7 @@ tasks:
     vars:
       VERSION_FILE: gen/VERSION
     cmds:
+      # Version and tag
       - |
         CURRENT=$(cat {{.VERSION_FILE}})
         VERSION_TMP=$(mktemp)
@@ -74,11 +75,13 @@ tasks:
         fi
         
         if [ "$NEW_VERSION" != "$CURRENT" ]; then
+          go generate ./...
           echo "$NEW_VERSION" > {{.VERSION_FILE}}
           git add {{.VERSION_FILE}}
           git commit -m "chore: bump version to $NEW_VERSION"
         fi
-        
+      # Release
+      - |
         NOTES_TMP=""
         echo "Add custom release notes? (y/N)"
         read -r ADD_NOTES
@@ -94,4 +97,8 @@ tasks:
           NOTES=""
         fi
         gh release create "v$NEW_VERSION" $NOTES --generate-notes
+
+      # Cleanup
+      - |
+        git push
         rm -f "$NOTES_TMP"

@@ -76,7 +76,7 @@ func (g *Generator) Generate() (*Schema, error) {
 	schema := &Schema{
 		Schema:               "http://json-schema.org/draft-07/schema#",
 		ID:                   "https://panix.dev/schema.json",
-		Version:              gen.VersionRaw,
+		Version:              gen.Version(),
 		Title:                "Panix Configuration Schema",
 		Description:          "Schema for Panix NixOS deployment configuration files",
 		Type:                 "object",

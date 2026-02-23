@@ -1,6 +1,6 @@
 $schema: "http://json-schema.org/draft-07/schema#"
 $id: https://panix.dev/schema.json
-version: 0.0.1
+version: 0.0.2
 title: Panix Configuration Schema
 description: Schema for Panix NixOS deployment configuration files
 type: object
