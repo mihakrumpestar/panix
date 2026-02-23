@@ -1,10 +1,25 @@
-# panix
+<h1 align="center">Panix</h1>
 
-Nix deployment tool
+<p align="center">
+  <strong>Stateless TUI for bootstrapping and deploying NixOS</strong>
+</p>
+
+<p align="center">
+  <img alt="GitHub License" src="https://img.shields.io/github/license/mihakrumpestar/panix">
+  <img alt="GitHub go.mod Go version" src="https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix">
+  <img alt="Static Badge" src="https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white">
+</p>
+
+<p align="center">
+  A declarative NixOS deployment tool for managing remote systems with ease.
+</p>
+
+> [!WARNING]
+> The tool is currently in alpha stage. Expect breaking changes.
 
 ## Setup
 
-Remote requires to have ssh key authentication (kay file has to be without password, unless you are using an SSH agent), and password auth is also not supported.
+Remote requires SSH key authentication (key file must be without password, unless you are using an SSH agent). Password authentication is not supported.
 
 If you have only password auth, create and add a temporary key to remote with the following commands:
 
@@ -35,9 +50,9 @@ Now you can get (for example) the hardware config:
 nixos-generate-config --no-filesystems --show-hardware-config
 ```
 
-## Caviats
+## Caveats
 
-Not caviats so per se, just good things to know:
+These aren't caveats per se, but important considerations:
 
 - local and remote have to have `rsync` installed to transfer plan files/dirs (note that `kexec` already includes `rsync`)
 - default remote shell (e.g. `sh`) has to be POSIX compliant shell for specific commands to run (e.g. can't use `Fish` shell)
@@ -46,6 +61,14 @@ Not caviats so per se, just good things to know:
 ## YAML schema
 
 Panix can generate YAML schema with `panix schema` for seeing parameter descriptions and their validation in your IDE. You just reference it in `panix.yml` as:
+
+```yml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/refs/heads/main/gen/panix-schema.yaml
+
+...
+```
+
+or
 
 ```yml
 # yaml-language-server: $schema=./panix-schema.yaml
@@ -57,4 +80,6 @@ Note that you might need to add support using an extension like [vscode-yaml](ht
 
 ## Contributing
 
-[Link](CONTRIBUTING.md)
+Contributions are welcome! Whether it's bug reports, feature requests, constructive criticism, or pull requests — all feedback is appreciated.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

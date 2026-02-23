@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
-	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/mihakrumpestar/panix/gen"
@@ -15,8 +13,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
-
-var version = strings.TrimSpace(gen.VersionRaw)
 
 type CLI struct {
 	config_flags.Flags
@@ -45,7 +41,7 @@ func main() {
 	ctx := kong.Parse(&cli,
 		kong.Name("panix"),
 		kong.Description("Universal NixOS Deployment Tool"),
-		kong.Vars{"version": version},
+		kong.Vars{"version": gen.Version()},
 		kong.DefaultEnvars("PANIX"),
 	)
 
