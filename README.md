@@ -17,11 +17,73 @@
 > [!WARNING]
 > The tool is currently in alpha stage. Expect breaking changes.
 
+## Demo
+
+Video:
+
+![Demo video](./assets/demo.gif)
+
+TUI:
+
+![TUI sgowcase](./assets/tui.png)
+
+## Features
+
+### Deployment Pipeline
+
+- **Phase-based workflow**: Inspect → Build → Bootstrap → Transfer → Secrets → Activate
+- **Multi-flake support**: Deploy configurations from multiple flakes in a single workflow
+- **Shared builds**: Build once per configuration, deploy to multiple machines (deduplication)
+- **Parallel execution**: Concurrent deployment to multiple machines
+
+### Bootstrap (Unique)
+
+- **Kexec bootstrapping**: Automatically convert any Linux machine to NixOS without manual intervention
+- **Disko integration**: Automatic disk partitioning with [disko](https://github.com/nix-community/disko)
+- **Disk encryption support**: Transfer LUKS/disk encryption keys before partitioning
+- **Post-bootstrap hooks**: Run custom scripts after bootstrapping (e.g., `systemd-cryptenroll` for TPM)
+- **Custom kexec tarballs**: Use your own kexec images for specialized setups
+
+### Configuration Inheritance
+
+- **Hierarchical attributes**: Flake → Configuration → Machine inheritance
+- **Tag-based filtering**: Filter machines by tags (names are automatically registered as tags)
+- **Attribute merging**: Child configs inherit and can override parent settings
+
+### TUI (Terminal User Interface)
+
+- **Real-time status table**: Architecture, generation, date, NixOS version, kernel
+- **Phase status visualization**: Animated progress indicators
+- **Build log viewports**: Scrollable logs with filtering options
+- **Mouse support**: Click to select machines/phases
+- **Keybinds**: `r` retry, `ctrl+r` restart, `m` fullscreen, `c` toggle commands, `h` toggle logs
+- **Retry mechanism**: Built-in retry for transient failures without restart
+
+### Remote Management
+
+- **SSH config integration**: Uses your existing `~/.ssh/config` for host aliases
+- **Local machine support**: Deploy to the local machine without SSH
+- **Automatic sudo handling**: Detects root vs non-root and adjusts commands accordingly
+
+### CLI & CI/CD
+
+- **Dry-run mode**: Preview changes without executing (`--dry-run`, `--dry-run-with-status`)
+- **Exit on complete**: Auto-exit for CI/CD pipelines (`--exit-on-complete`)
+- **Require all success**: Fail-fast mode for CI/CD (`--require-all-success`)
+- **Phase skipping**: Skip specific phases (`--skip-phases`)
+- **Configurable timeout**: Set workflow timeout
+
+### Developer Experience
+
+- **YAML schema**: IDE autocompletion with `panix schema` command
+- **File logging**: Debug mode with `--debug` flag
+- **CPU profiling**: Built-in profiling for performance analysis
+
 ## Setup
 
 Remote requires SSH key authentication (key file must be without password, unless you are using an SSH agent). Password authentication is not supported.
 
-If you have only password auth, create and add a temporary key to remote with the following commands:
+If you have only password auth (you booted NixOS ISO), create and add a temporary key to remote with the following commands:
 
 ```sh
 # On remote (set password for root user)

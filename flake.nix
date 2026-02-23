@@ -59,6 +59,8 @@
         shellHook = ''
           pre-commit autoupdate
           pre-commit install
+
+          exec zsh
         '';
       };
     });
