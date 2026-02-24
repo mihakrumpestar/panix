@@ -39,7 +39,7 @@ type Tui struct {
 
 type Logging struct {
 	Log        bool   `yaml:"log" short:"l" help:"enable logging to file"`
-	LogFile    string `yaml:"log_file" help:"log file path (enables logging)" default:"panix.log"`
+	LogFile    string `yaml:"log_file" help:"log file path" default:"panix.log"`
 	Debug      bool   `yaml:"debug" short:"d" help:"debug output (enables logging)"`
 	CPUProfile string `yaml:"cpu_profile" help:"path for cpu profiling to file, declaring it enables it"`
 }
