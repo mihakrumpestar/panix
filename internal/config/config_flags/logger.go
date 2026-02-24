@@ -11,7 +11,7 @@ import (
 
 func InitLogging(flags Logging) error {
 	// Determine if logging should be enabled
-	enabled := flags.Log || flags.Debug || flags.LogFile != ""
+	enabled := flags.Log || flags.Debug
 
 	if !enabled {
 		// Logging is disabled - set global level to disable all logging
