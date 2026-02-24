@@ -42,26 +42,5 @@
           name = "panix";
         };
       };
-
-      devShells.default = pkgs.mkShell {
-        buildInputs = with pkgs; [
-          go
-          gopls
-          go-tools
-
-          go-task
-          graphviz
-          pre-commit
-          nix-update
-          gh
-        ];
-
-        shellHook = ''
-          pre-commit autoupdate
-          pre-commit install
-
-          exec zsh
-        '';
-      };
     });
 }
