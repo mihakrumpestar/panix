@@ -36,7 +36,10 @@ root:
             personal-laptop:
         server-01:
           machines:
-            server-01:        
+            server-01:
+        vps-02:
+          machines:
+            vps-02:
         kiosk:
           machines:
             kiosk:

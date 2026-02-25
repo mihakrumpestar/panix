@@ -119,31 +119,43 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 			}
 
 			requiresKexec := false
+
 			err := exc.Exec(
 				"bootstrap detection",
 				"detecting bootstrap status",
-				"reading /etc/os-release failed",
+				"bootstrap detection failed",
 				[]string{"cat", "/etc/os-release"},
 				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
 					return errors.Wrap(err, log.String())
 				}),
 				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					output := log.String()
+
 					osrelease, err := osrelease.ReadString(output)
 					if err != nil {
 						return errors.Wrap(err, "error parsing /etc/os-release")
 					}
+
 					mms.Nixos.Store(osrelease["BUILD_ID"])
+
 					if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
 						mms.Bootstrapped.Store(false)
 						return nil
 					}
+
 					if osrelease["ID"] != "nixos" {
 						requiresKexec = true
 						mms.Bootstrapped.Store(false)
+
+						if machine.Flags.Bootstrap.DisableAuto {
+							return fmt.Errorf("machine requires kexec but automatic bootstrap is disabled")
+						}
+
 						return nil
 					}
+
 					mms.Bootstrapped.Store(true)
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {
@@ -156,9 +168,6 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 
 			if !mms.Bootstrapped.Load() {
 				if requiresKexec {
-					if machine.Flags.Bootstrap.DisableAuto {
-						return fmt.Errorf("machine requires kexec but automatic bootstrap is disabled")
-					}
 					if err := w.executeKexec(exc, machine); err != nil {
 						return err
 					}
@@ -177,7 +186,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				return nil
 			}
 
-			genResult := exc.Exec(
+			err = exc.Exec(
 				"get generation",
 				"reading generation info",
 				"failed to read generation symlink",
@@ -196,11 +205,11 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					mms.Generation.Store(1)
 				}),
 			)
-			if genResult != nil {
-				return genResult
+			if err != nil {
+				return err
 			}
 
-			dateResult := exc.Exec(
+			err = exc.Exec(
 				"get generation date",
 				"reading generation date",
 				"failed to stat system profile",
@@ -217,8 +226,8 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					mms.Date.Store("DRY_RUN")
 				}),
 			)
-			if dateResult != nil {
-				return dateResult
+			if err != nil {
+				return err
 			}
 
 			return exc.Exec(
