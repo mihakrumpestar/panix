@@ -21,6 +21,8 @@ root:
               #secrets:
               #  - local_path: ./README.md
               #    remote_path: /tmp/README2.md
+              bootstrap:
+                post_bootstrap_hook: systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=false --fido2-with-user-presence=true --wipe-slot=all /dev/nvme0n1p2
             fake:
               ssh:
                 hostname: fake
