@@ -76,8 +76,6 @@ TUI:
 ### Developer Experience
 
 - **YAML schema**: IDE autocompletion with `panix schema` command
-- **File logging**: Debug mode with `--debug` flag
-- **CPU profiling**: Built-in profiling for performance analysis
 
 ## Setup
 
@@ -110,6 +108,9 @@ Now you can get (for example) the hardware config:
 
 ```sh
 nixos-generate-config --no-filesystems --show-hardware-config
+
+# or on non-NixOS installs
+nix-shell -p nixos-install-tools --command "nixos-generate-config --no-filesystems --show-hardware-config"
 ```
 
 ## Caveats

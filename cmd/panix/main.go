@@ -19,7 +19,7 @@ type CLI struct {
 
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
-	Inspect struct{} `cmd:"" help:"Inspect machine per host"`
+	Inspect struct{} `cmd:"" help:"Inspect machine per host (automatic bootstrapping is disabled here)"`
 
 	Bootstrap struct{} `cmd:"" help:"Explicit bootstrap phase"`
 

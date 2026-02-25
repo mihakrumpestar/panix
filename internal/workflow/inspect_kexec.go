@@ -53,7 +53,7 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 			"download kexec tarball",
 			"downloading kexec tarball",
 			"failed to download kexec tarball",
-			[]string{"curl", "--fail", "-Ss", "-L", "-o", "$HOME/kexec/kexec.tar", kexecURL},
+			[]string{"curl", "--fail", "-#", "-L", "-o", "$HOME/kexec/kexec.tar", kexecURL},
 		)
 	} else {
 		err = w.transferPlainFileOrDir(exc, machine, &config_attributes.PlainFileOrDirToTransfer{
@@ -68,13 +68,13 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 	var tarArgs []string
 	switch {
 	case strings.HasSuffix(kexecURL, ".tar.gz") || strings.HasSuffix(kexecURL, ".tgz"):
-		tarArgs = []string{"-xzf", "$HOME/kexec/kexec.tar"}
+		tarArgs = []string{"-xvzf", "$HOME/kexec/kexec.tar"}
 	case strings.HasSuffix(kexecURL, ".tar.xz"):
-		tarArgs = []string{"-xJf", "$HOME/kexec/kexec.tar"}
+		tarArgs = []string{"-xvJf", "$HOME/kexec/kexec.tar"}
 	case strings.HasSuffix(kexecURL, ".tar.zst"):
-		tarArgs = []string{"--use-compress-program=zstd", "-xf", "$HOME/kexec/kexec.tar"}
+		tarArgs = []string{"--use-compress-program=zstd", "-xvf", "$HOME/kexec/kexec.tar"}
 	default:
-		tarArgs = []string{"-xf", "$HOME/kexec/kexec.tar"}
+		tarArgs = []string{"-xvf", "$HOME/kexec/kexec.tar"}
 	}
 	tarArgs = append(tarArgs, "-C", "$HOME/kexec")
 
@@ -107,7 +107,10 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 		"kexec failed",
 		kexecCmd,
 		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-			return w.waitForKexecReconnect(exc, machine)
+			if err := w.waitForKexecReconnect(exc, machine); err != nil {
+				return err
+			}
+			return w.verifyInstaller(exc)
 		}),
 		executioner.OnDryRun(func() {}),
 	)
@@ -119,22 +122,37 @@ func (w *Workflow) waitForKexecReconnect(exc *executioner.Executioner, machine *
 	hostname := machine.SSH.Hostname
 	port := machine.SSH.Port
 
-	reconnectScript := fmt.Sprintf(
-		`for i in $(seq 1 60); do if nc -zvw1 %s %d 2>/dev/null; then exit 0; fi; sleep 5; done; exit 1`,
+	waitForDisconnectScript := fmt.Sprintf(
+		`for i in $(seq 1 300); do if ! nc -zvw1 %s %d 2>/dev/null; then exit 0; fi; sleep 1; done; exit 1`,
 		hostname, port,
 	)
 
 	err := exc.Exec(
-		"wait for reconnect",
-		"waiting for machine to reconnect after kexec",
-		"machine did not reconnect after kexec",
-		[]string{"sh", "-c", reconnectScript},
+		"wait for disconnect",
+		"waiting for machine to become unreachable",
+		"failed to wait for disconnect",
+		[]string{"sh", "-c", waitForDisconnectScript},
 		executioner.DisableAutoSshCommand(),
 	)
 	if err != nil {
 		return err
 	}
 
+	reconnectScript := fmt.Sprintf(
+		`for i in $(seq 1 60); do if nc -zvw1 %s %d 2>/dev/null; then exit 0; fi; sleep 5; done; exit 1`,
+		hostname, port,
+	)
+
+	return exc.Exec(
+		"wait for reconnect",
+		"waiting for machine to reconnect after kexec",
+		"machine did not reconnect after kexec",
+		[]string{"sh", "-c", reconnectScript},
+		executioner.DisableAutoSshCommand(),
+	)
+}
+
+func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 	return exc.Exec(
 		"verify installer",
 		"verifying NixOS installer",
@@ -143,12 +161,12 @@ func (w *Workflow) waitForKexecReconnect(exc *executioner.Executioner, machine *
 		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 			output := log.String()
 
-			osrelease, err := osrelease.ReadString(output)
+			osRelease, err := osrelease.ReadString(output)
 			if err != nil {
 				return errors.Wrap(err, "error parsing /etc/os-release")
 			}
 
-			if osrelease["ID"] != "nixos" || osrelease["VARIANT_ID"] != "installer" {
+			if osRelease["ID"] != "nixos" || osRelease["VARIANT_ID"] != "installer" {
 				return fmt.Errorf("kexec did not boot into NixOS installer")
 			}
 
