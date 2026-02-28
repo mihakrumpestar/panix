@@ -21,8 +21,8 @@ root:
               #secrets:
               #  - local_path: ./README.md
               #    remote_path: /tmp/README2.md
-              bootstrap:
-                post_bootstrap_hook: systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=false --fido2-with-user-presence=true --wipe-slot=all /dev/nvme0n1p2
+              #bootstrap: # Can't use the following as FIDO2 key wants PIN
+              #  post_bootstrap_hook: systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=false --fido2-with-user-presence=true --wipe-slot=all /dev/nvme0n1p2
             fake:
               ssh:
                 hostname: fake
@@ -51,5 +51,5 @@ root:
                 username: root
                 port: 22222
                 #identity_file: temp_key
-              #bootstrap:
-              #  post_bootstrap_hook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
+              bootstrap:
+                post_bootstrap_hook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
