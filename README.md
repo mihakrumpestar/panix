@@ -39,11 +39,13 @@ Some machines already run NixOS. Others are bare metal, cloud instances, or lega
 - **No recovery path**: When something fails halfway through, you're left reconnecting manually, parsing logs, guessing what went wrong
 - **Fleet heterogeneity**: Multiple flakes, multiple configurations, machines in different states - no unified view
 
-The ecosystem has tools for pieces of this puzzle. **nixos-anywhere** handles bootstrap. **deploy-rs**, **Colmena** (and many others) manage generations. Each excels at its domain. But orchestration across these concerns - bootstrap, deploy, secrets, visibility, recovery - remains manual.
+The ecosystem has tools for pieces of this puzzle. **nixos-anywhere** handles bootstrap. **deploy-rs**, **Colmena** (and many others) manage deployments. Each excels at its domain. But orchestration across these concerns - bootstrap, deploy, secrets, visibility, recovery - remains manual.
+
+A lot of the tools that manage deployments also introduce themselves as a dependancy in your flake, making it possible to deploy only with their tool. Panix intentionaly does not require you to modify your flake for it.
 
 **The missing piece: an operator-focused interface.**
 
-Not a script that runs and exits. Not a single command whose output you scroll through to find the relevant information after it already failed. But an interactive, real-time view into your deployment pipeline - where you can see every phase, every machine, every failure, and act on them immediately.
+Not a script that runs and exits. Not a single command whose output you scroll through (or it might not even provide them) to find the relevant information after it already failed. But an interactive, real-time view into your deployment pipeline - where you can see every phase, every machine, every failure, and act on them immediately.
 
 This is the gap Panix fills.
 
@@ -51,15 +53,15 @@ This is the gap Panix fills.
 
 ## What Panix Actually Is
 
-Panix is a **stateless, phase-orianted deployment orchestrator** with a real-time TUI. Stateless means it holds no persistent state of its own - everything derives from your flake, your configuration file and actual state of the machines.
+Panix is a **stateless, phase-oriented deployment orchestrator** with a real-time TUI. Stateless means it holds no persistent state of its own - everything derives from your flake, your configuration file and actual state of the machines.
 
-The TUI isn't a gimmick. It's a recognition that deployments are **interactive processes**. Things fail, networks hiccup, builds take time, etc. Having visibility into every phase of every machine - seeing the architecture detection, watching the closure transfer, observing the activation - transforms deployment from a "_blindly run and pray_" operation into a controlled, observable process.
+The TUI isn't a gimmick. It's a recognition that deployments are **interactive processes**. Things fail, networks hiccup, builds take time, etc. Having visibility into every phase of every machine - seeing the architecture detection, watching the closure transfer, observing the activation - transforms deployment from a "*blindly run and pray*" operation into a controlled, observable process.
 
 ---
 
 ## The Phase Pipeline
 
-Panix doesn't just "run a deployment." It executes a carefully ordered pipeline of phases, each with a specific scope and purpose:
+Panix doesn't just "*run a deployment*". It executes a carefully ordered pipeline of phases, each with a specific scope and purpose:
 
 <div align="center">
 
@@ -67,7 +69,7 @@ Inspect → Build → Bootstrap → Transfer → Secrets → Activate
 
 </div>
 
-**Scope-aware execution**: The `Build` phase runs once per configuration, not per machine. If three machines share the same `nixosConfiguration`, you build once. The closure is then transferred to all three machines independently in parallel.
+**Scope-aware execution**: The `build` phase runs once per configuration, not per machine. If three machines share the same `nixosConfiguration`, you build once. The closure is then transferred to all three machines independently in parallel.
 
 **Phase-by-phase breakdown:**
 
