@@ -32,7 +32,7 @@ func (r *Root) Init(flags *config_flags.Flags) error {
 type Flake struct {
 	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...')"`
+	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
