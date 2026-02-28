@@ -13,57 +13,76 @@ properties:
         properties:
           disable_auto:
             type: boolean
+            description: Disable automatic bootstrap (even if target machine does not have NixOS installed)
           disable_disko:
             type: boolean
+            description: Disables building, transfer and bootstrap of disko tool
           only:
             type: boolean
+            description: Only initializes uninitialized machines
         additionalProperties: false
       config:
         type: string
+        description: Config file
       dry_run:
         type: boolean
+        description: Show what would be done without executing
       dry_run_with_status:
         type: boolean
+        description: Show what would be done without executing, but with real inspect query
       exit_on_complete:
         type: boolean
+        description: Exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode
       logging:
         type: object
         properties:
           cpu_profile:
             type: string
+            description: Path for cpu profiling to file, declaring it enables it
           debug:
             type: boolean
+            description: Debug output (enables logging)
           log:
             type: boolean
+            description: Enable logging to file
           log_file:
             type: string
+            description: Log file path
         additionalProperties: false
       override_local_machine:
         type: string
+        description: Hostname of the machine that is local (won't use ssh to connect to it)
       require_all_success:
         type: boolean
+        description: Abort if any task fails, primarily for CI/CD
       skip_phases:
         type: array
+        description: Declare phases to skip (not all phases can be skipped)
         items:
           type: string
       tags:
         type: array
+        description: Filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)
         items:
           type: string
       timeout:
         type: string
-        description: Duration string (e.g., '2h', '30m', '1h30m')
+        description: Timeout for workflow (eg. '1h', '1m15s')
       tui:
         type: object
         properties:
           command_output_max_height:
             type: integer
+            description: Maximum height for command labels and outputs viewports in TUI
           show_active_only:
             type: boolean
+            description: Show only running or errored logs in TUI build logs (keybind a)
           show_all_build_logs:
             type: boolean
+            description: Show all build logs in TUI (keybind h)
           show_commands_in_labels:
             type: boolean
+            description: Show raw commands instead of descriptions as labels in build logs (keybind c)
         additionalProperties: false
     additionalProperties: false
   root:
@@ -406,7 +425,7 @@ properties:
                 type: string
             url:
               type: string
-              description: Flake path (eg. 'path:...') or url (eg. 'ssh:...')
+              description: "Flake path (eg. 'path:...') or url (eg. 'ssh:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"
               format: uri
           required:
           - configurations

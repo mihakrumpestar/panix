@@ -155,8 +155,12 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 			return nil, nil, fmt.Errorf("failed to process field %s: %w", field.Name, err)
 		}
 
-		// Add description from desc tag if present
-		if desc := field.Tag.Get("desc"); desc != "" {
+		// Add description from desc tag, falling back to help tag
+		desc := field.Tag.Get("desc")
+		if desc == "" {
+			desc = field.Tag.Get("help")
+		}
+		if desc != "" {
 			if td, ok := prop.(*TypeDefinition); ok {
 				td.Description = desc
 			}

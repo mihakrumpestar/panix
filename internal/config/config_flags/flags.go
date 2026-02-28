@@ -9,39 +9,39 @@ import (
 )
 
 type Flags struct {
-	Config               string         `yaml:"config" short:"c" help:"config file" default:"panix.yml"`
-	Tags                 []string       `yaml:"tags" short:"t" help:"filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)"`
+	Config               string         `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
+	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)"`
 	Bootstrap            Bootstrap      `yaml:"bootstrap" embed:"" prefix:"bootstrap."`
-	RequireAllSuccess    bool           `yaml:"require_all_success" help:"abort & rollback if any task fails, primarily for CI/CD"`
-	OverrideLocalMachine string         `yaml:"override_local_machine" help:"hostname of the machine that is local (won't use ssh to connect to it)"`
-	DryRun               bool           `yaml:"dry_run" help:"show what would be done without executing"`
-	DryRunWithStatus     bool           `yaml:"dry_run_with_status" help:"show what would be done without executing, but with real status query"`
-	Timeout              time.Duration  `yaml:"timeout" help:"timeout for workflow" default:"2h"`
-	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"declare phases to skip"`
-	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode"`
+	RequireAllSuccess    bool           `yaml:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
+	OverrideLocalMachine string         `yaml:"override_local_machine" help:"Hostname of the machine that is local (won't use ssh to connect to it)"`
+	DryRun               bool           `yaml:"dry_run" help:"Show what would be done without executing"`
+	DryRunWithStatus     bool           `yaml:"dry_run_with_status" help:"Show what would be done without executing, but with real inspect query"`
+	Timeout              time.Duration  `yaml:"timeout" help:"Timeout for workflow (eg. '1h', '1m15s')" default:"2h"`
+	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
+	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode"`
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."`
 	Logging `yaml:"logging"`
 }
 
 type Bootstrap struct {
-	Only         bool `yaml:"only" help:"only initializes uninitialized machines"`
-	DisableAuto  bool `yaml:"disable_auto" help:"disable automatic bootstrap (even if target machine does not have NixOS installed)"`
-	DisableDisko bool `yaml:"disable_disko" help:"disables building, transfer and bootstrap of disko tool"`
+	Only         bool `yaml:"only" help:"Only initializes uninitialized machines"`
+	DisableAuto  bool `yaml:"disable_auto" help:"Disable automatic bootstrap (even if target machine does not have NixOS installed)"`
+	DisableDisko bool `yaml:"disable_disko" help:"Disables building, transfer and bootstrap of disko tool"`
 }
 
 type Tui struct {
-	ShowAllBuildLogs       bool `yaml:"show_all_build_logs" help:"show all build logs in TUI (keybind h)"`
-	ShowActiveOnly         bool `yaml:"show_active_only" help:"show only running or errored logs in TUI build logs (keybind a)"`
-	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" help:"show commands instead of descriptions as labels in build logs (keybind c)"`
-	CommandOutputMaxHeight int  `yaml:"command_output_max_height" help:"maximum height for command output viewports in TUI" default:"8"`
+	ShowAllBuildLogs       bool `yaml:"show_all_build_logs" help:"Show all build logs in TUI (keybind h)"`
+	ShowActiveOnly         bool `yaml:"show_active_only" help:"Show only running or errored logs in TUI build logs (keybind a)"`
+	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" help:"Show raw commands instead of descriptions as labels in build logs (keybind c)"`
+	CommandOutputMaxHeight int  `yaml:"command_output_max_height" help:"Maximum height for command labels and outputs viewports in TUI" default:"8"`
 }
 
 type Logging struct {
-	Log        bool   `yaml:"log" short:"l" help:"enable logging to file"`
-	LogFile    string `yaml:"log_file" help:"log file path" default:"panix.log"`
-	Debug      bool   `yaml:"debug" short:"d" help:"debug output (enables logging)"`
-	CPUProfile string `yaml:"cpu_profile" help:"path for cpu profiling to file, declaring it enables it"`
+	Log        bool   `yaml:"log" short:"l" help:"Enable logging to file"`
+	LogFile    string `yaml:"log_file" help:"Log file path" default:"panix.log"`
+	Debug      bool   `yaml:"debug" short:"d" help:"Debug output (enables logging)"`
+	CPUProfile string `yaml:"cpu_profile" help:"Path for cpu profiling to file, declaring it enables it"`
 }
 
 func (f *Flags) SetDefault(reverse bool) {
