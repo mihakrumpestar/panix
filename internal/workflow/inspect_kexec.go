@@ -59,7 +59,7 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 		err = w.transferPlainFileOrDir(exc, machine, &config_attributes.PlainFileOrDirToTransfer{
 			LocalPath:  kexecURL,
 			RemotePath: "$HOME/kexec/kexec.tar",
-		}, "kexec tarball")
+		}, "kexec tarball", false)
 	}
 	if err != nil {
 		return err

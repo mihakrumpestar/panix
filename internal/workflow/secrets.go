@@ -21,7 +21,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 	return w.Phase(machine.Attributes.Xpath, phases.Secrets, nil,
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			for _, secret := range secrets {
-				err = w.transferPlainFileOrDir(exc, machine, secret, "secrets")
+				err = w.transferPlainFileOrDir(exc, machine, secret, "secrets", true)
 				if err != nil {
 					return err
 				}
@@ -31,21 +31,28 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 		})
 }
 
-func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine *config.Machine, plainFileOrDir *config_attributes.PlainFileOrDirToTransfer, transferOfWhat string) error {
-	commandWithArgs := []string{"rsync", "-rcPEx"}
+func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine *config.Machine, plainFileOrDir *config_attributes.PlainFileOrDirToTransfer, transferOfWhat string, transferOSSecrets bool) error {
+	commandWithArgs := []string{"rsync", "-rcPEx", "--mkpath"}
 
 	maybeSudo := machine.MaybeSudo()
-	if len(maybeSudo) == 1 {
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", maybeSudo[0]))
+	if len(maybeSudo) != 0 {
+		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", strings.Join(maybeSudo, " ")))
 	}
 
+	perms := plainFileOrDir.GetPermissions()
+	commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=D%o,F%o", perms, perms))
+
 	if plainFileOrDir.UID != nil && plainFileOrDir.GID != nil {
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=%d:%d", plainFileOrDir.UID, plainFileOrDir.GID))
+		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chown=%d:%d", *plainFileOrDir.UID, *plainFileOrDir.GID))
 	}
 
 	commandWithArgs = append(commandWithArgs, plainFileOrDir.LocalPath)
 
-	secretRemotePath := machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
+	secretRemotePath := plainFileOrDir.RemotePath
+	if transferOSSecrets {
+		secretRemotePath = machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
+	}
+
 	if machine.SSH.IsLocal {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {
@@ -62,6 +69,7 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 		fmt.Sprintf("transferring %s", transferOfWhat),
 		fmt.Sprintf("%s transfer failed", transferOfWhat),
 		commandWithArgs,
+		executioner.DisableAutoSshCommand(),
 	)
 	if err != nil {
 		return err

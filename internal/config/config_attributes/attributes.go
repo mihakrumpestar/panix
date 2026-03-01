@@ -1,6 +1,7 @@
 package config_attributes
 
 import (
+	"os"
 	"strconv"
 
 	"dario.cat/mergo"
@@ -29,10 +30,18 @@ type Attributes struct {
 }
 
 type PlainFileOrDirToTransfer struct {
-	LocalPath  string `yaml:"local_path,required" desc:"Path to a local file or dir" validate:"required,filepath"`
-	RemotePath string `yaml:"remote_path,required" desc:"Absolute path on remote machine" validate:"required,abspath"`
-	UID        *uint  `yaml:"uid,omitempty" desc:"Optional User ID for remote"` // TODO: validate that either both have to be set or not set at all
-	GID        *uint  `yaml:"gid,omitempty" desc:"Optional Group ID for remote"`
+	LocalPath      string       `yaml:"local_path,required" desc:"Path to a local file or dir" validate:"required,filepath"`
+	RemotePath     string       `yaml:"remote_path,required" desc:"Absolute path on remote machine" validate:"required,abspath"`
+	UID            *uint        `yaml:"uid,omitempty" desc:"Optional User ID for remote" validate:"required_with=GID"`
+	GID            *uint        `yaml:"gid,omitempty" desc:"Optional Group ID for remote" validate:"required_with=UID"`
+	PermissionsRaw *os.FileMode `yaml:"permissions,omitempty" desc:"Optional file permissions (default: 0700)"`
+}
+
+func (p *PlainFileOrDirToTransfer) GetPermissions() os.FileMode {
+	if p.PermissionsRaw == nil {
+		return 0700
+	}
+	return *p.PermissionsRaw
 }
 
 type Bootstrap struct {

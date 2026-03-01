@@ -3,6 +3,7 @@
 flags:
   timeout: 5500s
   override_local_machine: tmp
+  
 
 root:
   flakes:
@@ -39,6 +40,21 @@ root:
         server-01:
           machines:
             server-01:
+        server-03:
+          machines:
+            server-03:
+              bootstrap:
+                disk_encryption_keys:
+                  - local_path: /tmp/disko-encryption-password.txt
+                    remote_path: /tmp/disko-encryption-password.txt
+                post_bootstrap_hook: systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all /dev/sda2
+              ssh:
+                hostname: 10.0.200.180
+                username: root
+                port: 22
+                identity_file: temp_key
+                disable_strict_key_checking: true
+
         vps-02:
           machines:
             vps-02:
