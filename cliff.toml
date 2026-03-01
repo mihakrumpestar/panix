@@ -1,4 +1,7 @@
 [changelog]
+header = """
+# Changelog\n
+"""
 body = """
 {% if version %}\
     ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
@@ -19,6 +22,7 @@ trim = true
 [git]
 conventional_commits = true
 filter_unconventional = true
+split_commits = true
 commit_parsers = [
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
@@ -27,6 +31,7 @@ commit_parsers = [
     { message = "^refactor", group = "Refactor" },
     { message = "^style", group = "Styling" },
     { message = "^test", group = "Testing" },
+    { message = "^chore\\(release\\):", skip = true },
     { message = "^chore|^ci", group = "Miscellaneous" },
 ]
 protect_breaking_commits = false
