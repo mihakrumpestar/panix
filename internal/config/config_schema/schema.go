@@ -100,6 +100,16 @@ func (g *Generator) Generate() (*Schema, error) {
 }
 
 // processStruct processes a struct type and returns its properties and required fields
+func (g *Generator) hasExactValidateTag(validateTag, tag string) bool {
+	tags := strings.Split(validateTag, ",")
+	for _, t := range tags {
+		if strings.TrimSpace(t) == tag {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []string, error) {
 	properties := make(map[string]interface{})
 	required := []string{}
@@ -171,7 +181,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 		// Check if field is required based on yaml or validate tags
 		validateTag := field.Tag.Get("validate")
 		yamlHasRequired := strings.Contains(yamlTag, ",required")
-		validateHasRequired := strings.Contains(validateTag, "required")
+		validateHasRequired := g.hasExactValidateTag(validateTag, "required")
 
 		if yamlHasRequired || validateHasRequired {
 			required = append(required, fieldName)

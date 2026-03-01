@@ -72,7 +72,8 @@ func (w *Workflow) executeDiskEncryptionKeys(
 	phaseLog *logs_phase.PhaseLog,
 ) error {
 	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
-		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key")
+
+		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key", false)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transfer disk encryption key to %s", diskEncryptionKey.RemotePath)
 		}
