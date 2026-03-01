@@ -62,13 +62,13 @@ tasks:
     cmds:
       - |
         CURRENT=$(cat {{.VERSION_FILE}})
-        SUGGESTED=$(git-cliff --bumped-version 2>/dev/null || echo "$CURRENT")
+        SUGGESTED=$(git-cliff --bumped-version 2>/dev/null | sed 's/^v//' || echo "$CURRENT")
         echo "Current version: $CURRENT"
         echo "Suggested version: $SUGGESTED"
         VERSION_TMP=$(mktemp)
         echo "$SUGGESTED" > "$VERSION_TMP"
         ${EDITOR:-vi} "$VERSION_TMP"
-        NEW_VERSION=$(cat "$VERSION_TMP" | tr -d '\n')
+        NEW_VERSION=$(cat "$VERSION_TMP" | tr -d '\n' | sed 's/^v//')
         rm "$VERSION_TMP"
         
         if [ -z "$NEW_VERSION" ]; then
@@ -84,9 +84,11 @@ tasks:
         fi
         
         git push
+        git tag "v$NEW_VERSION"
+        git push --tags
         
         NOTES_TMP=$(mktemp)
-        git-cliff --tag "v$NEW_VERSION" > "$NOTES_TMP"
+        git-cliff --latest > "$NOTES_TMP"
         echo "Generated release notes:"
         cat "$NOTES_TMP"
         echo ""
