@@ -77,9 +77,10 @@ tasks:
         fi
         
         if [ "$NEW_VERSION" != "$CURRENT" ]; then
-          go generate ./...
           echo "$NEW_VERSION" > {{.VERSION_FILE}}
-          git add {{.VERSION_FILE}}
+
+          go generate ./...
+          git add ./*
           git commit -m "chore: bump version to $NEW_VERSION"
         fi
         
