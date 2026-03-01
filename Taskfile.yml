@@ -60,11 +60,13 @@ tasks:
     vars:
       VERSION_FILE: gen/VERSION
     cmds:
-      # Version and tag
       - |
         CURRENT=$(cat {{.VERSION_FILE}})
+        SUGGESTED=$(git-cliff --bumped-version 2>/dev/null || echo "$CURRENT")
+        echo "Current version: $CURRENT"
+        echo "Suggested version: $SUGGESTED"
         VERSION_TMP=$(mktemp)
-        echo "$CURRENT" > "$VERSION_TMP"
+        echo "$SUGGESTED" > "$VERSION_TMP"
         ${EDITOR:-vi} "$VERSION_TMP"
         NEW_VERSION=$(cat "$VERSION_TMP" | tr -d '\n')
         rm "$VERSION_TMP"
@@ -80,25 +82,17 @@ tasks:
           git add {{.VERSION_FILE}}
           git commit -m "chore: bump version to $NEW_VERSION"
         fi
-      # Release
+      - git push
       - |
-        NOTES_TMP=""
-        echo "Add custom release notes? (y/N)"
-        read -r ADD_NOTES
-        if [ "$ADD_NOTES" = "y" ] || [ "$ADD_NOTES" = "Y" ]; then
-          NOTES_TMP=$(mktemp)
+        NOTES_TMP=$(mktemp)
+        git-cliff --latest --unreleased > "$NOTES_TMP"
+        echo "Generated release notes:"
+        cat "$NOTES_TMP"
+        echo ""
+        echo "Edit release notes? (y/N)"
+        read -r EDIT_NOTES
+        if [ "$EDIT_NOTES" = "y" ] || [ "$EDIT_NOTES" = "Y" ]; then
           ${EDITOR:-vi} "$NOTES_TMP"
-          if [ -s "$NOTES_TMP" ]; then
-            NOTES="--notes-file $NOTES_TMP"
-          else
-            NOTES=""
-          fi
-        else
-          NOTES=""
         fi
-        gh release create "v$NEW_VERSION" $NOTES --generate-notes
-
-      # Cleanup
-      - |
-        git push
+        gh release create "v$NEW_VERSION" --notes-file "$NOTES_TMP"
         rm -f "$NOTES_TMP"

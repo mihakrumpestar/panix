@@ -9,7 +9,8 @@
     "graphviz@latest",
     "pre-commit@latest",
     "nix-update@latest",
-    "gh@latest"
+    "gh@latest",
+    "git-cliff@latest"
   ],
   "env": {
     "DEVBOX_NO_PROMPT": "true"
