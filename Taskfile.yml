@@ -82,10 +82,11 @@ tasks:
           git add {{.VERSION_FILE}}
           git commit -m "chore: bump version to $NEW_VERSION"
         fi
-      - git push
-      - |
+        
+        git push
+        
         NOTES_TMP=$(mktemp)
-        git-cliff --latest --unreleased > "$NOTES_TMP"
+        git-cliff --tag "v$NEW_VERSION" > "$NOTES_TMP"
         echo "Generated release notes:"
         cat "$NOTES_TMP"
         echo ""
