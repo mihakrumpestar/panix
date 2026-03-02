@@ -93,6 +93,7 @@ properties:
         properties:
           disk_encryption_keys:
             type: array
+            description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
             items:
               type: object
               properties:
@@ -139,6 +140,7 @@ properties:
               properties:
                 disk_encryption_keys:
                   type: array
+                  description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
                   items:
                     type: object
                     properties:
@@ -183,6 +185,7 @@ properties:
                     properties:
                       disk_encryption_keys:
                         type: array
+                        description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
                         items:
                           type: object
                           properties:
@@ -235,6 +238,7 @@ properties:
                             properties:
                               disk_encryption_keys:
                                 type: array
+                                description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
                                 items:
                                   type: object
                                   properties:

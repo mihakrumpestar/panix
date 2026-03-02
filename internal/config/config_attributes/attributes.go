@@ -45,7 +45,7 @@ func (p *PlainFileOrDirToTransfer) GetPermissions() os.FileMode {
 }
 
 type Bootstrap struct {
-	DiskEncryptionKeys []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys,omitempty"`
+	DiskEncryptionKeys []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys,omitempty" desc:"Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'"`
 	PostBootstrapHook  string                      `yaml:"post_bootstrap_hook"`
 	KexecURL           string                      `yaml:"kexec_url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"`
 	KexecExtraFlags    string                      `yaml:"kexec_extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
