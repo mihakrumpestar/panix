@@ -216,7 +216,7 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 | Key | Action |
 |-----|--------|
 | `r` | Retry failed phases |
-| `ctrl+r` | Restart entire workflow |
+| `ctrl+r` | Restart entire workflow (this does not reread the yaml config) |
 | `m` | Toggle logs fullscreen (make any build logs label or command output in build logs fullscrean for easier reading) |
 | `ctrl-c` | Copy active build logs label or command output to clipboard |
 | `c` | Toggle labels between descriptions and raw commands |
