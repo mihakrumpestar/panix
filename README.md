@@ -281,7 +281,7 @@ panix --exit-on-complete --require-all-success
 panix --dry-run
 
 # Dry run with real status queries (inspects machines, doesn't build/transfer)
-panix --dry-run-with-status
+panix --dry-run-with-inspect
 ```
 
 ### IDE Support
@@ -352,7 +352,7 @@ export REMOTE=<host>
 ssh-keygen -t ed25519 -f ./temp_key -C "temporary_deployment_key" -N ""
 
 # Copy key to remote (with disabled SSH agent to prevent trying to auth with keys in agent)
-SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub root@$REMOTE
+SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@$REMOTE
 ```
 
 You now may test the login with:

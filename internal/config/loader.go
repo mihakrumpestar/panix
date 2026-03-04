@@ -74,6 +74,7 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
+		dump.P(conf.Root)
 	}
 
 	return conf, nil

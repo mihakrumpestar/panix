@@ -134,7 +134,7 @@ func (v *Viewports) GetActiveViewportContent() string {
 func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 	for xpath, vp := range v.viewports.Records() {
 		if vp.active && xpath != v.mainXpath {
-			return vp.model.View(), true
+			return vp.content, true
 		}
 	}
 	return "", false
