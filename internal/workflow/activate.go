@@ -45,7 +45,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 				if len(machine.Bootstrap.PostBootstrapProvisionedHooks) > 0 {
 					if !machine.Bootstrap.DisableAutomaticReboot {
 						activeSSH := machine.MetaInspect.ActiveSSH
-						err = activeSSH.WaitForDisconnect(exc, "waiting for machine to reboot")
+						err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to reboot")
 						if err != nil {
 							return err
 						}
@@ -53,7 +53,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 						machine.SwitchToRegularSSH()
 						activeSSH = machine.MetaInspect.ActiveSSH
 
-						err = activeSSH.WaitForReconnect(exc, "waiting for machine to come back online", "machine did not reconnect after reboot")
+						err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to come back online", "machine did not reconnect after reboot")
 						if err != nil {
 							return err
 						}
