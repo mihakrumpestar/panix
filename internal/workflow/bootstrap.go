@@ -45,21 +45,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 				return err
 			}
 
-			if machine.Bootstrap.PostBootstrapHook == "" {
-				return nil
-			}
-
-			err = exc.Exec(
-				"post bootstrap hook",
-				"running post-bootstrap hook",
-				"post bootstrap hook failed",
-				[]string{machine.Bootstrap.PostBootstrapHook},
-			)
-			if err != nil {
-				return err
-			}
-
-			return nil
+			return exc.ExecuteHooks(machine.Bootstrap.PostBootstrapHooks, "post bootstrap hook")
 		},
 	)
 }

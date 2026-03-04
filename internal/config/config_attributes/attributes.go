@@ -45,11 +45,20 @@ func (p *PlainFileOrDirToTransfer) GetPermissions() os.FileMode {
 }
 
 type Bootstrap struct {
-	DiskEncryptionKeys []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys,omitempty" desc:"Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'"`
-	PostBootstrapHook  string                      `yaml:"post_bootstrap_hook"`
-	KexecURL           string                      `yaml:"kexec_url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"`
-	KexecExtraFlags    string                      `yaml:"kexec_extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
+	SSH                           *ssh.SshClient              `yaml:"ssh,omitempty" desc:"Bootstrap SSH configuration (used during initial provisioning)"`
+	DiskEncryptionKeys            []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys,omitempty" desc:"Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'"`
+	PostBootstrapHooks            []PostBootstrapHookCommand  `yaml:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning"`
+	PostBootstrapInstallHooks     []PostBootstrapHookCommand  `yaml:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`
+	PostBootstrapProvisionedHooks []PostBootstrapHookCommand  `yaml:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`
+	KexecURL                      string                      `yaml:"kexec_url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"`
+	KexecExtraFlags               string                      `yaml:"kexec_extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
+	DisableAutomaticReboot        bool                        `yaml:"disable_automatic_reboot" desc:"Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)"`
 }
+
+type PostBootstrapHookCommand string
+
+const PostBootstrapHookWaitForOnline PostBootstrapHookCommand = "waitForOnline"
+const PostBootstrapHookWaitForOffline PostBootstrapHookCommand = "waitForOffline"
 
 func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) error {
 	err := a.PassAttributesInto(name, parentAttr)
@@ -69,10 +78,27 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) e
 	if a.SSH == nil {
 		a.SSH = &ssh.SshClient{}
 	}
+	// Set defaults for regular SSH: strict key checking enabled, auto-add disabled
+	// This runs when both fields are unset (false from YAML parsing)
+	if !a.SSH.StrictKeyChecking && !a.SSH.DisableAutoAddHostKey {
+		a.SSH.StrictKeyChecking = true
+	}
 
 	err = a.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
+	}
+
+	if a.Bootstrap.SSH != nil {
+		// Set defaults for bootstrap SSH: strict key checking disabled, auto-add enabled
+		// This runs when both fields are unset (false from YAML parsing)
+		if !a.Bootstrap.SSH.StrictKeyChecking && !a.Bootstrap.SSH.DisableAutoAddHostKey {
+			a.Bootstrap.SSH.DisableAutoAddHostKey = true
+		}
+		err = a.Bootstrap.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
+		if err != nil {
+			return errors.Wrapf(errors.Wrap(err, "bootstrap ssh"), "%s", strconv.Quote(a.Xpath.String()))
+		}
 	}
 
 	return nil
@@ -83,6 +109,16 @@ func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) err
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
 	if err != nil {
 		return err
+	}
+
+	// Deep copy SSH pointers to avoid sharing between machines
+	if a.SSH != nil {
+		sshCopy := *a.SSH
+		a.SSH = &sshCopy
+	}
+	if a.Bootstrap.SSH != nil {
+		sshCopy := *a.Bootstrap.SSH
+		a.Bootstrap.SSH = &sshCopy
 	}
 
 	// Custom set/merge

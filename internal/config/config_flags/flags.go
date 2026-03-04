@@ -15,7 +15,7 @@ type Flags struct {
 	RequireAllSuccess    bool           `yaml:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
 	OverrideLocalMachine string         `yaml:"override_local_machine" help:"Hostname of the machine that is local (won't use ssh to connect to it)"`
 	DryRun               bool           `yaml:"dry_run" help:"Show what would be done without executing"`
-	DryRunWithStatus     bool           `yaml:"dry_run_with_status" help:"Show what would be done without executing, but with real inspect query"`
+	DryRunWithInspect    bool           `yaml:"dry_run_with_inspect" help:"Show what would be done without executing, but with real inspect query"`
 	Timeout              time.Duration  `yaml:"timeout" help:"Timeout for workflow (eg. '1h', '1m15s')" default:"2h"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode"`

@@ -53,15 +53,16 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 		secretRemotePath = machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
 	}
 
-	if machine.SSH.IsLocal {
+	activeSSH := machine.MetaInspect.ActiveSSH
+	if activeSSH.IsLocal {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {
-		sshArgs := machine.SSH.MaybeSshCommandArguments()
+		sshArgs := activeSSH.MaybeSshCommandArguments()
 		if len(sshArgs) != 0 {
 			commandWithArgs = append(commandWithArgs, "-e=ssh "+strings.Join(sshArgs, " "))
 		}
 
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", machine.SSH.Hostname, secretRemotePath))
+		commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", activeSSH.Hostname, secretRemotePath))
 	}
 
 	err := exc.Exec(

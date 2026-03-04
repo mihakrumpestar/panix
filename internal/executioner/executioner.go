@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 )
@@ -17,11 +16,10 @@ type Executioner struct {
 	onUpdateHook func()
 }
 
-// NewExecutioner: if machine == nil it indicates that the command will be executed locally
-func NewExecutioner(ctx context.Context, conf *config_flags.Flags, machine *config.Machine, phaseLog *logs_phase.PhaseLog, onUpdateHook func()) *Executioner {
+func NewExecutioner(ctx context.Context, dryRun bool, machine *config.Machine, phaseLog *logs_phase.PhaseLog, onUpdateHook func()) *Executioner {
 	return &Executioner{
 		ctx:          ctx,
-		dryRun:       conf.DryRun,
+		dryRun:       dryRun,
 		machine:      machine,
 		phaseLog:     phaseLog,
 		onUpdateHook: onUpdateHook,
@@ -85,9 +83,12 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 		opt(excOpt)
 	}
 
-	noMachineOrLocal := ex.machine == nil || ex.machine.SSH.IsLocal
+	var isLocal bool
+	if ex.machine != nil && ex.machine.MetaInspect.ActiveSSH != nil {
+		isLocal = ex.machine.MetaInspect.ActiveSSH.IsLocal
+	}
+	noMachineOrLocal := ex.machine == nil || isLocal
 
-	// 1) local short‐circuit
 	if noMachineOrLocal && excOpt.skipIfLocal {
 		return nil
 	}
@@ -97,4 +98,31 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	}
 
 	return ex.sshStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
+}
+
+func (ex *Executioner) ExecLocal(description, statusIfRunning, statusIfFailed string, commandWithArgs []string) error {
+	return ex.Exec(description, statusIfRunning, statusIfFailed, commandWithArgs, DisableAutoSshCommand())
+}
+
+func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, fn func() error) error {
+	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
+
+	commandLog.TimeAndState.StartTimer()
+	var execErr error
+	defer func() {
+		commandLog.TimeAndState.EndTimerWithError(execErr)
+		ex.onUpdateHook()
+	}()
+
+	ex.onUpdateHook()
+
+	if ex.dryRun {
+		return nil
+	}
+
+	execErr = fn()
+	if execErr != nil {
+		return execErr
+	}
+	return nil
 }

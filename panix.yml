@@ -19,20 +19,11 @@ root:
         personal-workstation:
           machines:
             personal-workstation:
-              #secrets:
-              #  - local_path: ./README.md
-              #    remote_path: /tmp/README2.md
-              #bootstrap: # Can't use the following as FIDO2 key wants PIN
-              #  post_bootstrap_hook: systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=false --fido2-with-user-presence=true --wipe-slot=all /dev/nvme0n1p2
             fake:
               ssh:
                 hostname: fake
                 username: root
                 port: 22
-              bootstrap:
-                disk_encryption_keys:
-                  - local_path: /home/user/secrets/luks.key
-                    remote_path: /tmp/luks-key
 
         personal-laptop:
           machines:
@@ -47,13 +38,13 @@ root:
                 disk_encryption_keys:
                   - local_path: /tmp/disko-encryption-password.txt
                     remote_path: /tmp/disko-encryption-password.txt
-                post_bootstrap_hook: systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all /dev/sda2
-              ssh:
-                hostname: 10.0.200.180
-                username: root
-                port: 22
-                identity_file: temp_key
-                disable_strict_key_checking: true
+                post_bootstrap_hooks:
+                  - systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all /dev/sda2
+                ssh:
+                  hostname: 10.0.200.180
+                  username: root
+                  port: 22
+                  identity_file: temp_key
 
         vps-02:
           machines:
@@ -68,4 +59,5 @@ root:
                 port: 22222
                 #identity_file: temp_key
               bootstrap:
-                post_bootstrap_hook: systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
+                post_bootstrap_hooks:
+                  - systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2

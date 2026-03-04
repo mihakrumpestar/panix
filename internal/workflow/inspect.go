@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config"
@@ -20,6 +21,47 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
 			mms := machine.MetaInspect
 
+			if machine.SSH.IsLocal {
+				machine.SwitchToRegularSSH()
+				mms.Reachable.Store(true)
+				mms.SSHConnectable.Store(true)
+			} else {
+				err := exc.ExecFn(
+					"SSH reachability check",
+					"checking SSH reachability",
+					"SSH unreachable",
+					func() error {
+						bootstrapSSHReachable := false
+						regularSSHReachable := false
+
+						if machine.Bootstrap.SSH != nil {
+							bootstrapSSHReachable = machine.Bootstrap.SSH.ReachabilityCheck(5 * time.Second)
+						}
+
+						if bootstrapSSHReachable {
+							machine.SwitchToBootstrapSSH()
+						} else {
+							regularSSHReachable = machine.SSH.ReachabilityCheck(5 * time.Second)
+							if regularSSHReachable {
+								machine.SwitchToRegularSSH()
+							}
+						}
+
+						if !bootstrapSSHReachable && !regularSSHReachable {
+							return fmt.Errorf("both bootstrap SSH and regular SSH are unreachable")
+						}
+
+						mms.Reachable.Store(true)
+						return nil
+					},
+				)
+				if err != nil {
+					return err
+				}
+			}
+
+			activeSSH := mms.ActiveSSH
+
 			commands := []struct {
 				name        string
 				runningMsg  string
@@ -32,7 +74,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					name:       "TCP check",
 					runningMsg: "checking TCP connectivity",
 					failMsg:    "unreachable",
-					args:       []string{"nc", "-zvw1", machine.SSH.Hostname, fmt.Sprintf("%d", machine.SSH.Port)},
+					args:       []string{"nc", "-zvw1", activeSSH.Hostname, fmt.Sprintf("%d", activeSSH.Port)},
 					opts: []executioner.ExecOption{
 						executioner.SkipIfLocal(),
 						executioner.DisableAutoSshCommand(),
