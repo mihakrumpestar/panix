@@ -27,7 +27,7 @@ properties:
       dry_run:
         type: boolean
         description: Show what would be done without executing
-      dry_run_with_status:
+      dry_run_with_inspect:
         type: boolean
         description: Show what would be done without executing, but with real inspect query
       exit_on_complete:
@@ -91,6 +91,9 @@ properties:
       bootstrap:
         type: object
         properties:
+          disable_automatic_reboot:
+            type: boolean
+            description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
           disk_encryption_keys:
             type: array
             description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
@@ -125,8 +128,45 @@ properties:
           kexec_url:
             type: string
             description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-          post_bootstrap_hook:
-            type: string
+          post_bootstrap_hooks:
+            type: array
+            description: Commands to run after disko partitioning
+            items:
+              type: string
+          post_bootstrap_install_hooks:
+            type: array
+            description: Commands to run after nixos-install (before reboot)
+            items:
+              type: string
+          post_bootstrap_provisioned_hooks:
+            type: array
+            description: Commands to run after reboot (uses regular SSH)
+            items:
+              type: string
+          ssh:
+            type: object
+            description: Bootstrap SSH configuration (used during initial provisioning)
+            properties:
+              disable_auto_add_host_key:
+                type: boolean
+                description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+              hostname:
+                type: string
+                description: SSH hostname or IP address
+              identity_file:
+                type: string
+                description: Path to SSH private key
+                format: file-path
+              port:
+                type: integer
+                description: SSH port number
+              strict_key_checking:
+                type: boolean
+                description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
+              username:
+                type: string
+                description: SSH username
+            additionalProperties: false
         additionalProperties: false
       disabled:
         type: boolean
@@ -138,6 +178,9 @@ properties:
             bootstrap:
               type: object
               properties:
+                disable_automatic_reboot:
+                  type: boolean
+                  description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
                 disk_encryption_keys:
                   type: array
                   description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
@@ -172,8 +215,45 @@ properties:
                 kexec_url:
                   type: string
                   description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-                post_bootstrap_hook:
-                  type: string
+                post_bootstrap_hooks:
+                  type: array
+                  description: Commands to run after disko partitioning
+                  items:
+                    type: string
+                post_bootstrap_install_hooks:
+                  type: array
+                  description: Commands to run after nixos-install (before reboot)
+                  items:
+                    type: string
+                post_bootstrap_provisioned_hooks:
+                  type: array
+                  description: Commands to run after reboot (uses regular SSH)
+                  items:
+                    type: string
+                ssh:
+                  type: object
+                  description: Bootstrap SSH configuration (used during initial provisioning)
+                  properties:
+                    disable_auto_add_host_key:
+                      type: boolean
+                      description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+                    hostname:
+                      type: string
+                      description: SSH hostname or IP address
+                    identity_file:
+                      type: string
+                      description: Path to SSH private key
+                      format: file-path
+                    port:
+                      type: integer
+                      description: SSH port number
+                    strict_key_checking:
+                      type: boolean
+                      description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
+                    username:
+                      type: string
+                      description: SSH username
+                  additionalProperties: false
               additionalProperties: false
             configurations:
               type: object
@@ -183,6 +263,9 @@ properties:
                   bootstrap:
                     type: object
                     properties:
+                      disable_automatic_reboot:
+                        type: boolean
+                        description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
                       disk_encryption_keys:
                         type: array
                         description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
@@ -217,8 +300,45 @@ properties:
                       kexec_url:
                         type: string
                         description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-                      post_bootstrap_hook:
-                        type: string
+                      post_bootstrap_hooks:
+                        type: array
+                        description: Commands to run after disko partitioning
+                        items:
+                          type: string
+                      post_bootstrap_install_hooks:
+                        type: array
+                        description: Commands to run after nixos-install (before reboot)
+                        items:
+                          type: string
+                      post_bootstrap_provisioned_hooks:
+                        type: array
+                        description: Commands to run after reboot (uses regular SSH)
+                        items:
+                          type: string
+                      ssh:
+                        type: object
+                        description: Bootstrap SSH configuration (used during initial provisioning)
+                        properties:
+                          disable_auto_add_host_key:
+                            type: boolean
+                            description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+                          hostname:
+                            type: string
+                            description: SSH hostname or IP address
+                          identity_file:
+                            type: string
+                            description: Path to SSH private key
+                            format: file-path
+                          port:
+                            type: integer
+                            description: SSH port number
+                          strict_key_checking:
+                            type: boolean
+                            description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
+                          username:
+                            type: string
+                            description: SSH username
+                        additionalProperties: false
                     additionalProperties: false
                   disabled:
                     type: boolean
@@ -236,6 +356,9 @@ properties:
                           bootstrap:
                             type: object
                             properties:
+                              disable_automatic_reboot:
+                                type: boolean
+                                description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
                               disk_encryption_keys:
                                 type: array
                                 description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
@@ -270,8 +393,45 @@ properties:
                               kexec_url:
                                 type: string
                                 description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-                              post_bootstrap_hook:
-                                type: string
+                              post_bootstrap_hooks:
+                                type: array
+                                description: Commands to run after disko partitioning
+                                items:
+                                  type: string
+                              post_bootstrap_install_hooks:
+                                type: array
+                                description: Commands to run after nixos-install (before reboot)
+                                items:
+                                  type: string
+                              post_bootstrap_provisioned_hooks:
+                                type: array
+                                description: Commands to run after reboot (uses regular SSH)
+                                items:
+                                  type: string
+                              ssh:
+                                type: object
+                                description: Bootstrap SSH configuration (used during initial provisioning)
+                                properties:
+                                  disable_auto_add_host_key:
+                                    type: boolean
+                                    description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+                                  hostname:
+                                    type: string
+                                    description: SSH hostname or IP address
+                                  identity_file:
+                                    type: string
+                                    description: Path to SSH private key
+                                    format: file-path
+                                  port:
+                                    type: integer
+                                    description: SSH port number
+                                  strict_key_checking:
+                                    type: boolean
+                                    description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
+                                  username:
+                                    type: string
+                                    description: SSH username
+                                additionalProperties: false
                             additionalProperties: false
                           disabled:
                             type: boolean
@@ -309,9 +469,9 @@ properties:
                           ssh:
                             type: object
                             properties:
-                              disable_strict_key_checking:
+                              disable_auto_add_host_key:
                                 type: boolean
-                                description: Disable strict host key checking
+                                description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
                               hostname:
                                 type: string
                                 description: SSH hostname or IP address
@@ -322,7 +482,9 @@ properties:
                               port:
                                 type: integer
                                 description: SSH port number
-                                minimum: 1
+                              strict_key_checking:
+                                type: boolean
+                                description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
                               username:
                                 type: string
                                 description: SSH username
@@ -365,9 +527,9 @@ properties:
                   ssh:
                     type: object
                     properties:
-                      disable_strict_key_checking:
+                      disable_auto_add_host_key:
                         type: boolean
-                        description: Disable strict host key checking
+                        description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
                       hostname:
                         type: string
                         description: SSH hostname or IP address
@@ -378,7 +540,9 @@ properties:
                       port:
                         type: integer
                         description: SSH port number
-                        minimum: 1
+                      strict_key_checking:
+                        type: boolean
+                        description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
                       username:
                         type: string
                         description: SSH username
@@ -426,9 +590,9 @@ properties:
             ssh:
               type: object
               properties:
-                disable_strict_key_checking:
+                disable_auto_add_host_key:
                   type: boolean
-                  description: Disable strict host key checking
+                  description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
                 hostname:
                   type: string
                   description: SSH hostname or IP address
@@ -439,7 +603,9 @@ properties:
                 port:
                   type: integer
                   description: SSH port number
-                  minimum: 1
+                strict_key_checking:
+                  type: boolean
+                  description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
                 username:
                   type: string
                   description: SSH username
@@ -490,9 +656,9 @@ properties:
       ssh:
         type: object
         properties:
-          disable_strict_key_checking:
+          disable_auto_add_host_key:
             type: boolean
-            description: Disable strict host key checking
+            description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
           hostname:
             type: string
             description: SSH hostname or IP address
@@ -503,7 +669,9 @@ properties:
           port:
             type: integer
             description: SSH port number
-            minimum: 1
+          strict_key_checking:
+            type: boolean
+            description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
           username:
             type: string
             description: SSH username

@@ -112,7 +112,8 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 		Str("xpath", xpath.String()).
 		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
 
-	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags, machine, phaseLog, w.updateHook.Signal)
+	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phase != phases.Inspect)
+	exc := executioner.NewExecutioner(w.ctx, dryRun, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	log.Info().

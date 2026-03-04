@@ -7,14 +7,15 @@ import (
 )
 
 type SshClient struct {
-	Hostname                 string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
-	Port                     uint16 `yaml:"port" desc:"SSH port number" validate:"min=1"`
-	Username                 string `yaml:"username" desc:"SSH username"`
-	IdentityFile             string `yaml:"identity_file" desc:"Path to SSH private key" validate:"omitempty,filepath"`
-	DisableStrictKeyChecking bool   `yaml:"disable_strict_key_checking" desc:"Disable strict host key checking"`
-	// Internal
-	IsLocal         bool `yaml:"-" validate:"-"`
-	HostnameIsAlias bool `yaml:"-" validate:"-"`
+	Hostname              string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
+	Port                  uint16 `yaml:"port" desc:"SSH port number"`
+	Username              string `yaml:"username" desc:"SSH username"`
+	IdentityFile          string `yaml:"identity_file" desc:"Path to SSH private key" validate:"omitempty,filepath"`
+	StrictKeyChecking     bool   `yaml:"strict_key_checking" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`
+	DisableAutoAddHostKey bool   `yaml:"disable_auto_add_host_key" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"`
+	// Internal - computed during Init(), never inherit from parent
+	IsLocal         bool `yaml:"-" json:"-" validate:"-" mergo:"-"`
+	HostnameIsAlias bool `yaml:"-" json:"-" validate:"-" mergo:"-"`
 }
 
 func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachine string) error {
@@ -26,19 +27,22 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 		return errors.New("machine name is empty")
 	}
 
-	// Use machineName as Hostname if Hostname is empty
+	// Use machineName as Hostname if Hostname is empty (indicates SSH config alias usage)
 	if sC.Hostname == "" {
 		sC.HostnameIsAlias = true
 		sC.Hostname = machineName
 	}
 
-	// Check if machine is local (eg. not remote) based on same Hostname
-	sC.IsLocal = sC.Hostname == overrideLocalMachine
-
 	if sC.HostnameIsAlias {
 		if err := sshConfig.RetrieveFullParamsFromSshConfig(sC); err != nil {
 			return err
 		}
+	}
+
+	// Check if machine is local after hostname is fully resolved (from SSH config if alias)
+	sC.IsLocal = sC.Hostname == overrideLocalMachine
+
+	if sC.HostnameIsAlias {
 		return nil
 	}
 
@@ -53,18 +57,20 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 }
 
 func (sC *SshClient) MaybeSshCommandArguments() []string {
-	if sC.HostnameIsAlias {
-		return nil
+	var sshArgs []string
+
+	if !sC.HostnameIsAlias {
+		sshArgs = []string{"-p", fmt.Sprintf("%d", sC.Port), "-l", sC.Username}
+
+		if sC.IdentityFile != "" {
+			sshArgs = append(sshArgs, "-i", sC.IdentityFile, "-o", "IdentitiesOnly=yes")
+		}
 	}
 
-	sshArgs := []string{"-p", fmt.Sprintf("%d", sC.Port), "-l", sC.Username}
-
-	if sC.IdentityFile != "" {
-		sshArgs = append(sshArgs, "-i", sC.IdentityFile, "-o", "IdentitiesOnly=yes")
-	}
-
-	if sC.DisableStrictKeyChecking {
+	if !sC.StrictKeyChecking {
 		sshArgs = append(sshArgs, "-o", "UserKnownHostsFile=/dev/null", "-o", "StrictHostKeyChecking=no")
+	} else if !sC.DisableAutoAddHostKey {
+		sshArgs = append(sshArgs, "-o", "StrictHostKeyChecking=accept-new")
 	}
 
 	return sshArgs

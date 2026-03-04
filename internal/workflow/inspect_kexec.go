@@ -106,50 +106,24 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 		"executing kexec into NixOS installer",
 		"kexec failed",
 		kexecCmd,
-		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-			if err := w.waitForKexecReconnect(exc, machine); err != nil {
-				return err
-			}
-			return w.verifyInstaller(exc)
-		}),
 		executioner.OnDryRun(func() {}),
-	)
-
-	return err
-}
-
-func (w *Workflow) waitForKexecReconnect(exc *executioner.Executioner, machine *config.Machine) error {
-	hostname := machine.SSH.Hostname
-	port := machine.SSH.Port
-
-	waitForDisconnectScript := fmt.Sprintf(
-		`for i in $(seq 1 300); do if ! nc -zvw1 %s %d 2>/dev/null; then exit 0; fi; sleep 1; done; exit 1`,
-		hostname, port,
-	)
-
-	err := exc.Exec(
-		"wait for disconnect",
-		"waiting for machine to become unreachable",
-		"failed to wait for disconnect",
-		[]string{"sh", "-c", waitForDisconnectScript},
-		executioner.DisableAutoSshCommand(),
 	)
 	if err != nil {
 		return err
 	}
 
-	reconnectScript := fmt.Sprintf(
-		`for i in $(seq 1 60); do if nc -zvw1 %s %d 2>/dev/null; then exit 0; fi; sleep 5; done; exit 1`,
-		hostname, port,
-	)
+	activeSSH := machine.MetaInspect.ActiveSSH
+	err = activeSSH.WaitForDisconnect(exc, "waiting for machine to become unreachable")
+	if err != nil {
+		return err
+	}
 
-	return exc.Exec(
-		"wait for reconnect",
-		"waiting for machine to reconnect after kexec",
-		"machine did not reconnect after kexec",
-		[]string{"sh", "-c", reconnectScript},
-		executioner.DisableAutoSshCommand(),
-	)
+	err = activeSSH.WaitForReconnect(exc, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
+	if err != nil {
+		return err
+	}
+
+	return w.verifyInstaller(exc)
 }
 
 func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {

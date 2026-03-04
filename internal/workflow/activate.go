@@ -23,14 +23,43 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 					return err
 				}
 
-				err = exc.Exec(
-					"reboot",
-					"rebooting",
-					"reboot failed",
-					[]string{"reboot"},
-				)
-				if err != nil {
-					return err
+				if len(machine.Bootstrap.PostBootstrapInstallHooks) > 0 {
+					err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapInstallHooks, "post bootstrap install hook")
+					if err != nil {
+						return err
+					}
+				}
+
+				if !machine.Bootstrap.DisableAutomaticReboot {
+					err = exc.Exec(
+						"reboot",
+						"rebooting",
+						"reboot failed",
+						[]string{"reboot"},
+					)
+					if err != nil {
+						return err
+					}
+				}
+
+				if len(machine.Bootstrap.PostBootstrapProvisionedHooks) > 0 {
+					if !machine.Bootstrap.DisableAutomaticReboot {
+						activeSSH := machine.MetaInspect.ActiveSSH
+						err = activeSSH.WaitForDisconnect(exc, "waiting for machine to reboot")
+						if err != nil {
+							return err
+						}
+
+						machine.SwitchToRegularSSH()
+						activeSSH = machine.MetaInspect.ActiveSSH
+
+						err = activeSSH.WaitForReconnect(exc, "waiting for machine to come back online", "machine did not reconnect after reboot")
+						if err != nil {
+							return err
+						}
+					}
+
+					return exc.ExecuteHooks(machine.Bootstrap.PostBootstrapProvisionedHooks, "post bootstrap provisioned hook")
 				}
 			} else {
 				err := exc.Exec(
