@@ -160,8 +160,6 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}
 			}
 
-			requiresKexec := false
-
 			err := exc.Exec(
 				"bootstrap detection",
 				"detecting bootstrap status",
@@ -178,15 +176,13 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 						return errors.Wrap(err, "error parsing /etc/os-release")
 					}
 
-					mms.Nixos.Store(osrelease["BUILD_ID"])
-
 					if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
 						mms.Bootstrapped.Store(false)
 						return nil
 					}
 
 					if osrelease["ID"] != "nixos" {
-						requiresKexec = true
+						mms.RequiresKexec.Store(true)
 						mms.Bootstrapped.Store(false)
 
 						if machine.Flags.Bootstrap.DisableAuto {
@@ -197,11 +193,13 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					}
 
 					mms.Bootstrapped.Store(true)
+					mms.Nixos.Store(osrelease["BUILD_ID"])
 
 					return nil
 				}),
 				executioner.OnDryRun(func() {
 					mms.Bootstrapped.Store(false)
+					mms.RequiresKexec.Store(true)
 				}),
 			)
 			if err != nil {
@@ -209,11 +207,6 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 			}
 
 			if !mms.Bootstrapped.Load() {
-				if requiresKexec {
-					if err := w.executeKexec(exc, machine); err != nil {
-						return err
-					}
-				}
 				if machine.HardwareConfigPath != "" {
 					err := exc.Exec(
 						"generate config",

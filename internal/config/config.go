@@ -74,6 +74,7 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	Architecture   atomic.String
 	IsRoot         atomic.Bool
 	Bootstrapped   atomic.Bool
+	RequiresKexec  atomic.Bool
 	Generation     atomic.Uint32
 	Date           atomic.String
 	Nixos          atomic.String
