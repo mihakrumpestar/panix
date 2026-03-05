@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"time"
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
@@ -13,6 +14,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	WorkerPoolMaxConcurrency    = 1000
+	SSHReachabilityCheckTimeout = 5 * time.Second
 )
 
 type Workflow struct {
@@ -43,7 +49,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
-			Pool:        pond.NewPool(1000, pond.WithContext(ctxWithTimeout)),
+			Pool:        pond.NewPool(WorkerPoolMaxConcurrency, pond.WithContext(ctxWithTimeout)),
 			Retry:       retry.NewTaskRetry(),
 			TargetsLogs: targetsLogs,
 		},

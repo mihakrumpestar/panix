@@ -10,6 +10,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 )
 
 // Generator holds the state for schema generation
@@ -482,12 +483,12 @@ func GenerateSchema(outputPath string) error {
 
 	dir := filepath.Dir(outputPath)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, config_flags.DefaultDirPermissions); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
 
-	if err := os.WriteFile(outputPath, schemaYAML, 0644); err != nil {
+	if err := os.WriteFile(outputPath, schemaYAML, config_flags.DefaultLogFilePermissions); err != nil {
 		return fmt.Errorf("failed to write schema to %s: %w", outputPath, err)
 	}
 

@@ -9,6 +9,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	DefaultLogFilePermissions os.FileMode = 0644
+	DefaultDirPermissions     os.FileMode = 0755
+)
+
 func InitLogging(flags Logging) error {
 	// Determine if logging should be enabled
 	enabled := flags.Log || flags.Debug
@@ -23,13 +28,13 @@ func InitLogging(flags Logging) error {
 	// Ensure directory exists
 	dir := filepath.Dir(flags.LogFile)
 	if dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, DefaultDirPermissions); err != nil {
 			return err
 		}
 	}
 
 	// Open log file
-	file, err := os.OpenFile(flags.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(flags.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, DefaultLogFilePermissions)
 	if err != nil {
 		return err
 	}
