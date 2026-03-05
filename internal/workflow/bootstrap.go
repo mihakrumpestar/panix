@@ -163,7 +163,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 
 	kexecExtraFlags := machine.Bootstrap.KexecExtraFlags
 	if kexecExtraFlags != "" {
-		kexecCmd = append(kexecCmd, fmt.Sprintf("--kexec-extra-flags '%s'", kexecExtraFlags))
+		kexecCmd = append(kexecCmd, "--kexec-extra-flags", kexecExtraFlags)
 	}
 
 	err = exc.Exec(
@@ -224,6 +224,11 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 // Helpers
 
 func isURL(s string) bool {
-	_, err := url.Parse(s)
-	return err == nil
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+
+	// Ensure it has a valid scheme (http or https) and a host
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }

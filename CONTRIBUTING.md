@@ -6,6 +6,20 @@ Get into dev shell:
 devbox shell
 ```
 
+Tasks that are used are implemented in [Taskfile.yml](Taskfile.yml).
+
+Check
+
+```sh
+go-task
+
+# or if you configure alias
+task
+```
+
+for usage.
+
+
 The following packages were inadequate for use for Panix:
 
 - [Koanf link to issue](https://github.com/knadh/koanf/issues/221)

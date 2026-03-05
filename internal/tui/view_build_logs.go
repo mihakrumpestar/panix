@@ -103,7 +103,7 @@ func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, ind
 }
 
 func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, isRoot bool) *tree.Tree {
-	duration := m.resetable.Load().workflow.State().TargetsLogs.Get(attr.Xpath).GetCachedDurationAndError().Duration
+	duration := m.resetable.Load().workflow.State().TargetsLogs.MustGet(attr.Xpath).GetCachedDurationAndError().Duration
 	line := m.layoutLine(indent,
 		style.Color.Render(fmt.Sprintf("%c %s %s", style.Icon, attr.Name, attr.Message)),
 		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))
@@ -116,7 +116,7 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 }
 
 func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes, indent int, stopAtError bool, allowed ...phases.Phase) bool {
-	logs := m.resetable.Load().workflow.State().TargetsLogs.GetLogs(attr.Xpath)
+	logs := m.resetable.Load().workflow.State().TargetsLogs.MustGetLogs(attr.Xpath)
 	for _, entry := range logs.All() {
 		if !slices.Contains(allowed, entry.Key) {
 			continue

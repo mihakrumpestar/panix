@@ -33,7 +33,7 @@ func InitLogging(flags Logging) error {
 		}
 	}
 
-	// Open log file
+	// Open log file (we don't close it, and that is ok)
 	file, err := os.OpenFile(flags.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, DefaultLogFilePermissions)
 	if err != nil {
 		return err

@@ -49,7 +49,6 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	if err != nil {
 		return err
 	}
-	commandLog.Pty = ptyFile
 	defer func() { _ = ptyFile.Close() }()
 
 	readErr := ex.readPTYOutput(ptyFile, commandLog)
