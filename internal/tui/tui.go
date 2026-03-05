@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"runtime/pprof"
@@ -51,12 +50,13 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		Height: 24,
 	}
 
-	cpuprofile := conf.Flags.Logging.CPUProfile
-	if cpuprofile != "" {
-		if err := startCPUProfile(cpuprofile); err != nil {
-			log.Fatal(err)
+	cpuProfile := conf.Flags.Logging.CPUProfile
+	if cpuProfile != "" {
+		stopCPUProfile, err := startCPUProfile(cpuProfile)
+		if err != nil {
+			return err
 		}
-		defer pprof.StopCPUProfile()
+		defer stopCPUProfile()
 	}
 
 	p := tea.NewProgram(&model{
@@ -89,16 +89,22 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	return nil
 }
 
-func startCPUProfile(path string) error {
+func startCPUProfile(path string) (func(), error) {
 	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := pprof.StartCPUProfile(f); err != nil {
+
+	err = pprof.StartCPUProfile(f)
+	if err != nil {
 		f.Close()
-		return err
+		return nil, err
 	}
-	return nil
+
+	return func() {
+		pprof.StopCPUProfile()
+		_ = f.Close()
+	}, nil
 }
 
 func (m *model) Init() tea.Cmd {
