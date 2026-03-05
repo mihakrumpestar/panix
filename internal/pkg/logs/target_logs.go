@@ -81,13 +81,15 @@ func (ts *TargetLogs) calculateFromPhases() DurationAndError {
 
 		duration, err := tas.DurationOrElapsedTime()
 		if err != nil {
+			dae.Err = err
 			break
 		}
 
 		dae.Duration += duration
 
-		if endErr := tas.GetEndError(); endErr != nil {
-			dae.Err = endErr
+		err = tas.GetEndError()
+		if err != nil {
+			dae.Err = err
 			break
 		}
 	}

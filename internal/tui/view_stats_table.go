@@ -57,7 +57,7 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseMsg) bool {
 	}
 
 	rowIndex := relY - headerLines
-	if rowIndex >= dataRows {
+	if rowIndex < 0 || rowIndex >= dataRows || rowIndex >= len(s.MachineXpaths) {
 		return false
 	}
 

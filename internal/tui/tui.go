@@ -76,7 +76,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 
 	finalModel, ok := m.(*model)
 	if !ok {
-		panic("internal error: type casting for model failed")
+		return fmt.Errorf("internal error: type assertion failed for finalModel")
 	}
 
 	if finalModel.quitting {
