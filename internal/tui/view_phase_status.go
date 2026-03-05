@@ -14,6 +14,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_stats"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -27,11 +28,23 @@ const (
 type PhaseStatus struct {
 	SelectedPhase int
 	Phases        []phases.Phase
+	anim          animationState
 }
 
-func NewPhaseStatus() *PhaseStatus { return &PhaseStatus{SelectedPhase: -1} }
+type animationState struct {
+	progress    atomic.Uint64
+	lastTime    atomic.Int64
+	initialized atomic.Bool
+}
 
-func (p *PhaseStatus) Reset() { p.SelectedPhase = -1; p.Phases = nil }
+func NewPhaseStatus() *PhaseStatus {
+	return &PhaseStatus{SelectedPhase: -1}
+}
+
+func (p *PhaseStatus) Reset() {
+	p.SelectedPhase = -1
+	p.Phases = nil
+}
 
 func (p *PhaseStatus) HandleMouseClick(msg tea.MouseMsg) bool {
 	if msg.Action != tea.MouseActionRelease {
@@ -121,10 +134,10 @@ func (m *model) createPhaseGroup(name string, running, failed, done []config_att
 	width := lipgloss.Width(displayName) + 2
 	colStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
 
-	phaseName := colStyle.Render(createAnimatedGradient(displayName, stats, m.conf.ColorScheme))
+	r := m.resetable.Load()
+	phaseName := colStyle.Render(createAnimatedGradient(displayName, stats, m.conf.ColorScheme, &r.phaseStatus.anim))
 	statusLine := buildStatusLine(running, failed, done, m.conf.ColorScheme)
 
-	r := m.resetable.Load()
 	if phaseIdx >= 0 && phaseIdx == r.phaseStatus.SelectedPhase {
 		statusLine = m.conf.ColorScheme.SelectionHighlightBackground.Width(width).Align(lipgloss.Center).Render(statusLine)
 	} else {
@@ -138,20 +151,20 @@ func (m *model) createPhaseGroup(name string, running, failed, done []config_att
 	return content
 }
 
-var anim struct {
-	progress    float64
-	lastTime    time.Time
-	initialized bool
-}
-
-func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *config.ColorScheme) string {
+func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *config.ColorScheme, anim *animationState) string {
 	now := time.Now()
-	if !anim.initialized || now.Sub(anim.lastTime) >= animationCacheInterval {
-		anim.initialized = true
-		anim.lastTime = now
+
+	if !anim.initialized.Load() || now.Sub(time.Unix(0, anim.lastTime.Load())) >= animationCacheInterval {
+		anim.initialized.Store(true)
+		anim.lastTime.Store(now.UnixNano())
+
 		p := float64(now.UnixNano()%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
-		anim.progress = math.Sin(p*2*math.Pi)*0.5 + 0.5
+		progress := math.Sin(p*2*math.Pi)*0.5 + 0.5
+
+		anim.progress.Store(math.Float64bits(progress))
 	}
+
+	progress := math.Float64frombits(anim.progress.Load())
 
 	var state config.PhaseState
 	switch {
@@ -164,7 +177,7 @@ func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *co
 	}
 
 	c := colors.PhaseColorPairs[state]
-	finalColor := c[0].BlendLuv(c[1], anim.progress)
+	finalColor := c[0].BlendLuv(c[1], progress)
 	return cachedPhaseStyle.Background(lipgloss.Color(finalColor.Hex())).Render(text)
 }
 

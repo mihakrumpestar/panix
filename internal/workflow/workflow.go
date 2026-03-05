@@ -43,7 +43,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
-			Pool:        pond.NewPool(0, pond.WithContext(ctxWithTimeout)),
+			Pool:        pond.NewPool(1000, pond.WithContext(ctxWithTimeout)),
 			Retry:       retry.NewTaskRetry(),
 			TargetsLogs: targetsLogs,
 		},
@@ -70,7 +70,7 @@ func (w *Workflow) WaitForUpdate() <-chan struct{} {
 // Cancel cancels the context and waits for it's completion
 func (w *Workflow) Cancel() error {
 	w.cancel()
-	<-w.ctx.Done() // Wait to fully finish context
+	<-w.ctx.Done() // Wait to fully finish context (this also stops and cancels pool)
 
 	w.updateHook.Close() // If we don't close it, WaitForUpdate will wait beyond the restart
 
