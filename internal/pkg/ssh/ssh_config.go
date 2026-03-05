@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/kevinburke/ssh_config"
+	"github.com/pkg/errors"
 )
 
 type SshConfig struct {
@@ -22,19 +23,24 @@ var (
 
 func GetCachedSshConfig() (*SshConfig, error) {
 	once.Do(func() {
-		// Load SSH config
-		home := os.Getenv("HOME")
+		// Load SSH config using secure home directory resolution
+		home, err := os.UserHomeDir()
+		if err != nil {
+			cachedError = errors.Wrap(err, "failed to get user home directory")
+			return
+		}
+
 		cfgPath := filepath.Join(home, ".ssh", "config")
 		sshCfgRaw, err := os.Open(cfgPath)
 		if err != nil {
-			cachedError = fmt.Errorf("failed to open SSH config: %w", err)
+			cachedError = errors.Wrap(err, "failed to open SSH config")
 			return
 		}
 		defer sshCfgRaw.Close()
 
 		sshCfg, err := ssh_config.Decode(sshCfgRaw)
 		if err != nil {
-			cachedError = fmt.Errorf("failed to parse SSH config: %w", err)
+			cachedError = errors.Wrap(err, "failed to parse SSH config")
 			return
 		}
 
