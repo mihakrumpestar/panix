@@ -94,7 +94,11 @@ func startCPUProfile(path string) error {
 	if err != nil {
 		return err
 	}
-	return pprof.StartCPUProfile(f)
+	if err := pprof.StartCPUProfile(f); err != nil {
+		f.Close()
+		return err
+	}
+	return nil
 }
 
 func (m *model) Init() tea.Cmd {

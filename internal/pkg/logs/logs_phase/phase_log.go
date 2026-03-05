@@ -39,7 +39,7 @@ func (pLog *PhaseLog) Last() *logs_command.CommandLog {
 
 	commandLog, ok := pLog.commandLogs.Get(length - 1)
 	if !ok {
-		panic("commandLogs does not have element on specified index")
+		panic("internal error: commandLogs does not have element on specified index")
 	}
 
 	return commandLog
