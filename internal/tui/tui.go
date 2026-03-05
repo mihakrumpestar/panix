@@ -44,15 +44,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	defer zone.Close()
 
 	// Handle SIGINT as a keybinding instead of terminating the process
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT)
-	defer signal.Stop(sigChan)
-
-	go func() {
-		for range sigChan {
-			// SIGINT is handled as a keybinding
-		}
-	}()
+	defer setupSIGINTHandler(ctx)()
 
 	dimensions := &tui_viewports.Dimensions{
 		Width:  80,
@@ -275,5 +267,29 @@ func (m *model) handleMouseClick(msg tea.MouseMsg) {
 
 	if r.phaseStatus.HandleMouseClick(msg) {
 		r.statsTable.Reset()
+	}
+}
+
+// Helpers
+
+// setupSIGINTHandler captures SIGINT signals and routes them as keybindings
+// instead of terminating the process. Returns a cleanup function.
+func setupSIGINTHandler(ctx context.Context) func() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-sigChan:
+				// SIGINT is handled as a keybinding
+			}
+		}
+	}()
+
+	return func() {
+		signal.Stop(sigChan)
 	}
 }
