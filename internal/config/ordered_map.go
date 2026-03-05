@@ -8,6 +8,7 @@ import (
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 	omap "github.com/kirill-scherba/omap"
+	"github.com/pkg/errors"
 )
 
 // OrderedMap is a wrapper around omap.Omap that provides YAML unmarshaling support
@@ -17,9 +18,12 @@ type OrderedMap[K comparable, V any] struct {
 }
 
 // NewOrderedMap creates a new OrderedMap.
-func NewOrderedMap[K comparable, V any]() *OrderedMap[K, V] {
-	m, _ := omap.New[K, V]()
-	return &OrderedMap[K, V]{Omap: m}
+func NewOrderedMap[K comparable, V any]() (*OrderedMap[K, V], error) {
+	m, err := omap.New[K, V]()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create ordered map")
+	}
+	return &OrderedMap[K, V]{Omap: m}, nil
 }
 
 // UnmarshalYAML implements yaml.BytesUnmarshaler interface.
@@ -28,7 +32,10 @@ func NewOrderedMap[K comparable, V any]() *OrderedMap[K, V] {
 func (om *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 	// Create a new omap if needed
 	if om.Omap == nil {
-		m, _ := omap.New[K, V]()
+		m, err := omap.New[K, V]()
+		if err != nil {
+			return errors.Wrap(err, "failed to create ordered map")
+		}
 		om.Omap = m
 	}
 

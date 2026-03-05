@@ -7,6 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 // PhaseLogs manages a collection of PhaseLog instances indexed by phase.
@@ -17,17 +18,17 @@ type PhaseLogs struct {
 }
 
 // NewPhaseLogs creates a new PhaseLogs instance.
-func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *PhaseLogs {
+func NewPhaseLogs(xpath config_attributes.Xpath, flags config_flags.Logging) (*PhaseLogs, error) {
 	phaseLogs, err := omap.New[phases.Phase, *PhaseLog]()
 	if err != nil {
-		panic(err)
+		return nil, errors.Wrapf(err, "failed to create phase logs map for %s", xpath.String())
 	}
 
 	return &PhaseLogs{
 		logs:  phaseLogs,
 		xpath: xpath,
 		flags: flags,
-	}
+	}, nil
 }
 
 // Get retrieves a PhaseLog for the given phase, or nil if not found.
