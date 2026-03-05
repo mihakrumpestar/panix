@@ -4,10 +4,16 @@ import (
 	"sync"
 )
 
-// TODO: marked for removal
-
 // OnceAsync ensures a func() error runs exactly once.
 // All callers wait for completion and get the same error result.
+//
+// Synchronization Guarantees:
+// The result field is safely shared between goroutines due to the
+// memory ordering guarantees of sync.Once and channel operations:
+//   - sync.Once ensures fn() executes exactly once
+//   - The channel close happens-after the result assignment
+//   - Channel receive happens-before reading the result field
+//   - Therefore, all goroutines see the fully written result
 type OnceAsync struct {
 	once   sync.Once
 	done   chan struct{} // Closed after execution

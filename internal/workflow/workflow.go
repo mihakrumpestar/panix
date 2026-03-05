@@ -56,11 +56,12 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		updateHook: hook.NewHook(),
 	}
 
-	// Initialize the runner as an internal attribute of the workflow
-	// This ensures onceRegistry is bound to this workflow instance
-	wf.runner = &runner{
-		w: wf,
+	runner, err := newRunner(wf)
+	if err != nil {
+		cancel()
+		return nil, err
 	}
+	wf.runner = runner
 
 	return wf, nil
 }
@@ -96,7 +97,10 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 				return err
 			}
 
-			w.state.Retry.Wait()
+			err = w.state.Retry.Wait(w.ctx)
+			if err != nil {
+				return err
+			}
 
 			w.state.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
 		} else {
