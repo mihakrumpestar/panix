@@ -109,13 +109,11 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 
 	kexecURL = strings.ReplaceAll(kexecURL, "<arch>", arch)
 
-	maybeSudo := machine.MaybeSudo()
-
 	err := exc.Exec(
 		"create kexec directory",
 		"creating kexec directory",
 		"failed to create kexec directory",
-		append(append([]string{}, maybeSudo...), "mkdir", "-p", "/tmp/kexec"),
+		append(machine.MaybeSudo(), "mkdir", "-p", "/tmp/kexec"),
 	)
 	if err != nil {
 		return err
@@ -155,20 +153,17 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		"extract kexec tarball",
 		"extracting kexec tarball",
 		"failed to extract kexec tarball",
-		append(append([]string{}, maybeSudo...), append([]string{"tar"}, tarArgs...)...),
+		append(append(machine.MaybeSudo(), "tar"), tarArgs...),
 	)
 	if err != nil {
 		return err
 	}
 
+	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
+
 	kexecExtraFlags := machine.Bootstrap.KexecExtraFlags
-	kexecCmd := []string{"/tmp/kexec/kexec/run"}
 	if kexecExtraFlags != "" {
 		kexecCmd = append(kexecCmd, fmt.Sprintf("--kexec-extra-flags '%s'", kexecExtraFlags))
-	}
-
-	if len(maybeSudo) > 0 {
-		kexecCmd = append(append([]string{}, maybeSudo...), kexecCmd...)
 	}
 
 	err = exc.Exec(
@@ -182,7 +177,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		return err
 	}
 
-	activeSSH := machine.MetaInspect.ActiveSSH
+	activeSSH := machine.MetaInspect.GetActiveSSH()
 	err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
 	if err != nil {
 		return err

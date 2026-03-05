@@ -79,7 +79,15 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	Date           atomic.String
 	Nixos          atomic.String
 	Kernel         atomic.String
-	ActiveSSH      *ssh.SshClient
+	activeSSH      atomic.Pointer[ssh.SshClient]
+}
+
+func (m *MetaInspect) GetActiveSSH() *ssh.SshClient {
+	return m.activeSSH.Load()
+}
+
+func (m *MetaInspect) SetActiveSSH(sshClient *ssh.SshClient) {
+	m.activeSSH.Store(sshClient)
 }
 
 func (m *Machine) Init(name string, parent *Configuration) error {
@@ -90,7 +98,7 @@ func (m *Machine) Init(name string, parent *Configuration) error {
 
 	m.ParentConfiguration = parent
 	m.MetaInspect = &MetaInspect{}
-	m.MetaInspect.ActiveSSH = m.SSH
+	m.MetaInspect.SetActiveSSH(m.SSH)
 
 	return nil
 }
@@ -122,10 +130,10 @@ func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
 
 func (m *Machine) SwitchToBootstrapSSH() {
 	if m.Bootstrap.SSH != nil {
-		m.MetaInspect.ActiveSSH = m.Bootstrap.SSH
+		m.MetaInspect.SetActiveSSH(m.Bootstrap.SSH)
 	}
 }
 
 func (m *Machine) SwitchToRegularSSH() {
-	m.MetaInspect.ActiveSSH = m.SSH
+	m.MetaInspect.SetActiveSSH(m.SSH)
 }

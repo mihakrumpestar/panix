@@ -30,9 +30,11 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 		return NewXpath(appendXpath...)
 	}
 
-	return Xpath{
-		path: x.path + "/" + strings.Join(appendXpath, "/"),
-	}
+	var builder strings.Builder
+	builder.WriteString(x.path)
+	builder.WriteByte('/')
+	builder.WriteString(strings.Join(appendXpath, "/"))
+	return Xpath{path: builder.String()}
 }
 
 // Check if provided xpath is a child of called Xpath
