@@ -28,7 +28,7 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 		storeArgs += "?remote-store=local?root=/mnt"
 	}
 
-	activeSSH := machine.MetaInspect.ActiveSSH
+	activeSSH := machine.MetaInspect.GetActiveSSH()
 	commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + activeSSH.Hostname + storeArgs}, toTransfer...)
 
 	err := exc.Exec("nix copy",

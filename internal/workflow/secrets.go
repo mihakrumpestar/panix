@@ -53,7 +53,7 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 		secretRemotePath = machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
 	}
 
-	activeSSH := machine.MetaInspect.ActiveSSH
+	activeSSH := machine.MetaInspect.GetActiveSSH()
 	if activeSSH.IsLocal {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {

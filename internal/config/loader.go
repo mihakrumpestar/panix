@@ -21,14 +21,16 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 		d.MaxDepth = 99
 	})
 
-	// Load YAML config file
-	confRaw, err := os.ReadFile(flags.Config)
+	// Load YAML config file using streaming
+	file, err := os.Open(flags.Config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed reading config %s", strconv.Quote(flags.Config))
+		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(flags.Config))
 	}
+	defer file.Close()
 
 	conf := &Config{}
-	err = yaml.Unmarshal(confRaw, conf)
+	decoder := yaml.NewDecoder(file)
+	err = decoder.Decode(conf)
 	if err != nil {
 		return nil, errors.New(yaml.FormatError(err, true, false))
 	}

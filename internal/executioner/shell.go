@@ -81,23 +81,28 @@ func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *logs_command.
 	buf := make([]byte, ptyBufferSize)
 
 	for {
-		n, err := ptyFile.Read(buf)
-		if err != nil {
-			return ex.handleReadError(err, commandLog)
-		}
+		select {
+		case <-ex.ctx.Done():
+			return ex.ctx.Err()
+		default:
+			n, err := ptyFile.Read(buf)
+			if err != nil {
+				return ex.handleReadError(err, commandLog)
+			}
 
-		if n == 0 {
-			continue
-		}
+			if n == 0 {
+				continue
+			}
 
-		err = processTerminalOutput(buf[:n], commandLog)
-		if err != nil {
-			commandLog.WriteLineString("processTerminalOutput write error: " + err.Error())
-			commandLog.WriteLineString("")
-			return err
-		}
+			err = processTerminalOutput(buf[:n], commandLog)
+			if err != nil {
+				commandLog.WriteLineString("processTerminalOutput write error: " + err.Error())
+				commandLog.WriteLineString("")
+				return err
+			}
 
-		ex.onUpdateHook()
+			ex.onUpdateHook()
+		}
 	}
 }
 
