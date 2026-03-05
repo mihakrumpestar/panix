@@ -355,20 +355,23 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 	thumb := max(1, int(float64(visible)*float64(visible)/float64(total)))
 	maxPos := visible - thumb
 	pos := int(float64(maxPos) * clamp(pct, 0, 1))
-
-	lines := make([]string, visible)
 	endPos := pos + thumb
-	for i := range lines {
+
+	var builder strings.Builder
+	for i := 0; i < visible; i++ {
+		if i > 0 {
+			builder.WriteByte('\n')
+		}
 		if i >= pos && i < endPos {
-			lines[i] = scrollThumb
+			builder.WriteString(scrollThumb)
 		} else {
-			lines[i] = scrollTrack
+			builder.WriteString(scrollTrack)
 		}
 	}
 
 	return lipgloss.NewStyle().
 		Foreground(v.colors.TableBorder.GetForeground()).
-		Render(strings.Join(lines, "\n")), 1
+		Render(builder.String()), 1
 }
 
 func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attributes.Xpath) string {
