@@ -12,6 +12,7 @@ func (sC *SshClient) ReachabilityCheck(timeout time.Duration) bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	_ = conn.Close()
+
 	return true
 }

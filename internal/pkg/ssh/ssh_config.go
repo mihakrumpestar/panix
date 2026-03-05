@@ -9,6 +9,7 @@ import (
 
 	"github.com/kevinburke/ssh_config"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 type SshConfig struct {
@@ -62,7 +63,10 @@ func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error
 	}
 	sshClient.Hostname = hostname
 
-	portRaw, _ := sc.sc.Get(alias, "Port")
+	portRaw, err := sc.sc.Get(alias, "Port")
+	if err != nil {
+		log.Warn().Err(err).Str("alias", alias).Msg("failed to read Port from SSH config")
+	}
 	if portRaw != "" {
 		port64, err := strconv.ParseUint(portRaw, 10, 16)
 		if err != nil {
@@ -73,7 +77,10 @@ func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error
 		sshClient.Port = DefaultSSHPort
 	}
 
-	username, _ := sc.sc.Get(alias, "User")
+	username, err := sc.sc.Get(alias, "User")
+	if err != nil {
+		log.Warn().Err(err).Str("alias", alias).Msg("failed to read User from SSH config")
+	}
 	if username != "" {
 		sshClient.Username = username
 	} else {

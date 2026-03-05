@@ -130,7 +130,11 @@ func (m *model) renderPhaseFlow() string {
 }
 
 func (m *model) createPhaseGroup(name string, running, failed, done []config_attributes.Xpath, stats *logs_stats.StatsPack, termWidth int, phaseIdx int) string {
-	displayName := strings.ToUpper(name[:1]) + strings.ToLower(name[1:])
+	if len(name) == 0 {
+		name = "unnamed"
+	}
+
+	displayName := strings.ToTitle(name)
 	width := lipgloss.Width(displayName) + 2
 	colStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
 

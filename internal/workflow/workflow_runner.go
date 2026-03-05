@@ -1,8 +1,7 @@
 package workflow
 
 import (
-	"sync"
-
+	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
@@ -13,7 +12,7 @@ import (
 // It is bound to a Workflow instance to avoid global state issues
 type runner struct {
 	w            *Workflow
-	onceRegistry sync.Map // map[string]*once_async.OnceAsync
+	onceRegistry *omap.Omap[string, *once_async.OnceAsync]
 }
 
 // phaseRunner handles the execution of a single phase for a specific machine
@@ -25,19 +24,38 @@ type phaseRunner struct {
 	machine *config.Machine
 }
 
+func newRunner(w *Workflow) (*runner, error) {
+	onceRegistry, err := omap.New[string, *once_async.OnceAsync]()
+	if err != nil {
+		return nil, err
+	}
+
+	return &runner{
+		w:            w,
+		onceRegistry: onceRegistry,
+	}, nil
+}
+
 // getOrCreateOnceAsync returns a OnceAsync for the given xpath
 // This ensures that phases with ScopeConfig or ScopeFlake only run once
 func (r *runner) getOrCreateOnceAsync(xpath string) *once_async.OnceAsync {
-	if once, ok := r.onceRegistry.Load(xpath); ok {
-		return once.(*once_async.OnceAsync)
+	once, ok := r.onceRegistry.Get(xpath)
+	if ok {
+		return once
 	}
 
-	once := once_async.NewOnceAsync()
-	actual, loaded := r.onceRegistry.LoadOrStore(xpath, once)
-	if loaded {
-		return actual.(*once_async.OnceAsync)
+	newOnce := once_async.NewOnceAsync()
+	existing, ok := r.onceRegistry.Get(xpath)
+	if ok {
+		return existing
 	}
-	return once
+
+	err := r.onceRegistry.Set(xpath, newOnce)
+	if err != nil {
+		return newOnce
+	}
+
+	return newOnce
 }
 
 // run executes a phase with automatic once-per-scope semantics
