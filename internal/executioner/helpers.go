@@ -8,6 +8,16 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 )
 
+const (
+	// 5 min disconnect timeout
+	WaitForDisconnectTimeout  = 300
+	WaitForDisconnectInterval = time.Second
+
+	// 10 min reconnect timeout
+	WaitForReconnectTimeout      = 300
+	WaitForReconnectCheckTimeout = 2 * time.Second
+)
+
 func (ex *Executioner) ExecuteHooks(hooks []config_attributes.PostBootstrapHookCommand, hookType string) error {
 	for i, hook := range hooks {
 		switch hook {
@@ -44,11 +54,11 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg str
 		statusMsg,
 		"failed to wait for disconnect",
 		func() error {
-			for i := 0; i < 300; i++ {
-				if !sshClient.ReachabilityCheck(time.Second) {
+			for i := 0; i < WaitForDisconnectTimeout; i++ {
+				if !sshClient.ReachabilityCheck(WaitForDisconnectInterval) {
 					return nil
 				}
-				time.Sleep(time.Second)
+				time.Sleep(WaitForDisconnectInterval)
 			}
 			return fmt.Errorf("host %s:%d did not disconnect within 5 minutes", sshClient.Hostname, sshClient.Port)
 		},
@@ -61,8 +71,8 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg, fai
 		statusMsg,
 		failMsg,
 		func() error {
-			for i := 0; i < 300; i++ {
-				if sshClient.ReachabilityCheck(2 * time.Second) {
+			for i := 0; i < WaitForReconnectTimeout; i++ {
+				if sshClient.ReachabilityCheck(WaitForReconnectCheckTimeout) {
 					return nil
 				}
 			}
