@@ -166,7 +166,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	cmdIndent := indent + treeStep
 	r := m.resetable.Load()
 
-	label := strings.TrimSpace(cmd.Description)
+	label := cmd.Description
 	if m.conf.Flags.Tui.ShowCommandsInLabels {
 		label = cmd.Command
 	}

@@ -153,12 +153,13 @@ func (m *model) createPhaseGroup(name string, running, failed, done []config_att
 
 func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *config.ColorScheme, anim *animationState) string {
 	now := time.Now()
+	nowNano := now.UnixNano()
 
 	if !anim.initialized.Load() || now.Sub(time.Unix(0, anim.lastTime.Load())) >= animationCacheInterval {
 		anim.initialized.Store(true)
-		anim.lastTime.Store(now.UnixNano())
+		anim.lastTime.Store(nowNano)
 
-		p := float64(now.UnixNano()%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
+		p := float64(nowNano%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
 		progress := math.Sin(p*2*math.Pi)*0.5 + 0.5
 
 		anim.progress.Store(math.Float64bits(progress))
