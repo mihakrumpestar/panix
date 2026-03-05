@@ -55,10 +55,15 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg str
 		"failed to wait for disconnect",
 		func() error {
 			for i := 0; i < WaitForDisconnectTimeout; i++ {
-				if !sshClient.ReachabilityCheck(WaitForDisconnectInterval) {
-					return nil
+				select {
+				case <-exc.ctx.Done():
+					return exc.ctx.Err()
+				default:
+					if !sshClient.ReachabilityCheck(WaitForDisconnectInterval) {
+						return nil
+					}
+					time.Sleep(WaitForDisconnectInterval)
 				}
-				time.Sleep(WaitForDisconnectInterval)
 			}
 			return fmt.Errorf("host %s:%d did not disconnect within 5 minutes", sshClient.Hostname, sshClient.Port)
 		},
@@ -72,8 +77,13 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg, fai
 		failMsg,
 		func() error {
 			for i := 0; i < WaitForReconnectTimeout; i++ {
-				if sshClient.ReachabilityCheck(WaitForReconnectCheckTimeout) {
-					return nil
+				select {
+				case <-exc.ctx.Done():
+					return exc.ctx.Err()
+				default:
+					if sshClient.ReachabilityCheck(WaitForReconnectCheckTimeout) {
+						return nil
+					}
 				}
 			}
 			return fmt.Errorf("host %s:%d did not reconnect within 10 minutes", sshClient.Hostname, sshClient.Port)

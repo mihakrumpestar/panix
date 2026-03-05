@@ -83,7 +83,7 @@ func (cl *CommandLog) Write(p []byte) (int, error) {
 
 	stdInOutErr, ok := cl.stdInOutErr.Get(length - 1)
 	if !ok {
-		panic(fmt.Sprintf("command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
+		panic(fmt.Sprintf("internal error: command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
 	}
 
 	return stdInOutErr.Write(p)
@@ -109,6 +109,6 @@ func (cl *CommandLog) ReplaceLastLine(p []byte) {
 	index := cl.stdInOutErr.Length() - 1
 	ok := cl.stdInOutErr.Set(index, safe_buffer.NewBuffer(p))
 	if !ok {
-		panic(fmt.Sprintf("command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.stdInOutErr.Length()))
+		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.stdInOutErr.Length()))
 	}
 }

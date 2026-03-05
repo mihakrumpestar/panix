@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -143,7 +144,7 @@ func validateExecOptions(excOpt *ExecOptions) error {
 func consolidateErrors(waitErr, readErr error) error {
 	switch {
 	case waitErr != nil && readErr != nil:
-		return errors.Wrap(waitErr, readErr.Error())
+		return fmt.Errorf("wait error: %v; read error: %v", waitErr, readErr)
 	case readErr != nil:
 		return readErr
 	default:

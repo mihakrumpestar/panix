@@ -84,8 +84,10 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	}
 
 	var isLocal bool
-	if ex.machine != nil && ex.machine.MetaInspect.GetActiveSSH() != nil {
-		isLocal = ex.machine.MetaInspect.GetActiveSSH().IsLocal
+	if ex.machine != nil {
+		if ssh := ex.machine.MetaInspect.GetActiveSSH(); ssh != nil {
+			isLocal = ssh.IsLocal
+		}
 	}
 	noMachineOrLocal := ex.machine == nil || isLocal
 
