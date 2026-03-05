@@ -70,14 +70,14 @@ func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error
 		}
 		sshClient.Port = uint16(port64)
 	} else {
-		sshClient.Port = 22
+		sshClient.Port = DefaultSSHPort
 	}
 
 	username, _ := sc.sc.Get(alias, "User")
 	if username != "" {
 		sshClient.Username = username
 	} else {
-		sshClient.Username = "root"
+		sshClient.Username = DefaultSSHUsername
 	}
 
 	return nil

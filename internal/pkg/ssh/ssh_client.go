@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+const (
+	DefaultSSHPort     uint16 = 22
+	DefaultSSHUsername string = "root"
+)
+
 type SshClient struct {
 	Hostname              string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
 	Port                  uint16 `yaml:"port" desc:"SSH port number"`
@@ -47,10 +52,10 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 	}
 
 	if sC.Port == 0 {
-		sC.Port = 22
+		sC.Port = DefaultSSHPort
 	}
 	if sC.Username == "" {
-		sC.Username = "root"
+		sC.Username = DefaultSSHUsername
 	}
 
 	return nil

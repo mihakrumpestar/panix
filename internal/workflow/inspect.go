@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config"
@@ -35,13 +34,13 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 						regularSSHReachable := false
 
 						if machine.Bootstrap.SSH != nil {
-							bootstrapSSHReachable = machine.Bootstrap.SSH.ReachabilityCheck(5 * time.Second)
+							bootstrapSSHReachable = machine.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 						}
 
 						if bootstrapSSHReachable {
 							machine.SwitchToBootstrapSSH()
 						} else {
-							regularSSHReachable = machine.SSH.ReachabilityCheck(5 * time.Second)
+							regularSSHReachable = machine.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 							if regularSSHReachable {
 								machine.SwitchToRegularSSH()
 							}
