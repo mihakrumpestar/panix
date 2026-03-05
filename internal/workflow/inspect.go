@@ -60,107 +60,77 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}
 			}
 
-			activeSSH := mms.ActiveSSH
-
-			commands := []struct {
-				name        string
-				runningMsg  string
-				failMsg     string
-				args        []string
-				opts        []executioner.ExecOption
-				skipOnError bool
-			}{
-				{
-					name:       "TCP check",
-					runningMsg: "checking TCP connectivity",
-					failMsg:    "unreachable",
-					args:       []string{"nc", "-zvw1", activeSSH.Hostname, fmt.Sprintf("%d", activeSSH.Port)},
-					opts: []executioner.ExecOption{
-						executioner.SkipIfLocal(),
-						executioner.DisableAutoSshCommand(),
-						executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-							mms.Reachable.Store(true)
-							return nil
-						}),
-						executioner.OnDryRun(func() {
-							mms.Reachable.Store(true)
-						}),
-					},
-				},
-				{
-					name:       "SSH connect",
-					runningMsg: "connecting via SSH",
-					failMsg:    "SSH auth failed",
-					args:       []string{"echo", "OK"},
-					opts: []executioner.ExecOption{
-						executioner.SkipIfLocal(),
-						executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
-							return errors.Wrap(err, log.String())
-						}),
-						executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-							mms.SSHConnectable.Store(true)
-							return nil
-						}),
-						executioner.OnDryRun(func() {
-							mms.SSHConnectable.Store(true)
-						}),
-					},
-				},
-				{
-					name:       "architecture",
-					runningMsg: "detecting architecture",
-					failMsg:    "uname failed",
-					args:       []string{"uname", "-m"},
-					opts: []executioner.ExecOption{
-						executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-							architecture := strings.Trim(log.String(), "\n")
-							if architecture == "" {
-								return fmt.Errorf("architecture output was empty")
-							}
-							if !slices.Contains(KexecSupportedPlatforms, architecture) {
-								return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
-							}
-							mms.Architecture.Store(architecture)
-							return nil
-						}),
-						executioner.OnDryRun(func() {
-							mms.Architecture.Store("DRY_RUN")
-						}),
-					},
-				},
-				{
-					name:       "superuser check",
-					runningMsg: "checking superuser privileges",
-					failMsg:    "checking superuser failed",
-					args:       []string{"id", "-u"},
-					opts: []executioner.ExecOption{
-						executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
-							return errors.Wrap(err, log.String())
-						}),
-						executioner.OnSuccess(func(log *logs_command.CommandLog) error {
-							output := strings.Trim(log.String(), "\n ")
-							parsedOutput, err := strconv.ParseUint(output, 10, 64)
-							if err != nil {
-								return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
-							}
-							mms.IsRoot.Store(parsedOutput == 0)
-							return nil
-						}),
-						executioner.OnDryRun(func() {
-							mms.IsRoot.Store(true)
-						}),
-					},
-				},
-			}
-
-			for _, cmd := range commands {
-				err := exc.Exec(cmd.name, cmd.runningMsg, cmd.failMsg, cmd.args, cmd.opts...)
-				if err != nil && !cmd.skipOnError {
-					return err
-				}
-			}
-
 			err := exc.Exec(
+				"SSH connect",
+				"connecting via SSH",
+				"SSH auth failed",
+				[]string{"echo", "OK"},
+				executioner.SkipIfLocal(),
+				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
+					return errors.Wrap(err, log.String())
+				}),
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+					mms.SSHConnectable.Store(true)
+					return nil
+				}),
+				executioner.OnDryRun(func() {
+					mms.SSHConnectable.Store(true)
+				}),
+			)
+			if err != nil {
+				return err
+			}
+
+			err = exc.Exec(
+				"architecture",
+				"detecting architecture",
+				"uname failed",
+				[]string{"uname", "-m"},
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+					architecture := strings.Trim(log.String(), "\n")
+					if architecture == "" {
+						return fmt.Errorf("architecture output was empty")
+					}
+					if !slices.Contains(KexecSupportedPlatforms, architecture) {
+						return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
+					}
+					mms.Architecture.Store(architecture)
+					return nil
+				}),
+				executioner.OnDryRun(func() {
+					mms.Architecture.Store("DRY_RUN")
+				}),
+			)
+			if err != nil {
+				return err
+			}
+
+			err = exc.Exec(
+				"superuser check",
+				"checking superuser privileges",
+				"checking superuser failed",
+				[]string{"id", "-u"},
+				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
+					return errors.Wrap(err, log.String())
+				}),
+				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+					output := strings.Trim(log.String(), "\n ")
+					parsedOutput, err := strconv.ParseUint(output, 10, 64)
+					if err != nil {
+						return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
+					}
+					mms.IsRoot.Store(parsedOutput == 0)
+					return nil
+				}),
+				executioner.OnDryRun(func() {
+					mms.IsRoot.Store(true)
+				}),
+			)
+			if err != nil {
+				return err
+			}
+
+			err = exc.Exec(
 				"bootstrap detection",
 				"detecting bootstrap status",
 				"bootstrap detection failed",
