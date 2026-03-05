@@ -1,12 +1,12 @@
 package logs
 
 import (
-	"errors"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/pkg/errors"
 )
 
 type TargetLogs struct {
@@ -22,13 +22,18 @@ type DurationAndError struct {
 	Err      error
 }
 
-func NewTargetLogs(xpath config_attributes.Xpath, flags config_flags.Logging) *TargetLogs {
+func NewTargetLogs(xpath config_attributes.Xpath, flags config_flags.Logging) (*TargetLogs, error) {
+	phaseLogs, err := logs_phase.NewPhaseLogs(xpath, flags)
+	if err != nil {
+		return nil, err
+	}
+
 	return &TargetLogs{
 		xpath:     xpath,
-		PhaseLogs: logs_phase.NewPhaseLogs(xpath, flags),
+		PhaseLogs: phaseLogs,
 		parent:    nil,
 		children:  nil,
-	}
+	}, nil
 }
 
 func (ts *TargetLogs) AddParent(parent *TargetLogs) error {

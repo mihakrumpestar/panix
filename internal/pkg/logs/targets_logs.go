@@ -10,6 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_stats"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 type TargetsLogs struct {
@@ -20,7 +21,7 @@ type TargetsLogs struct {
 func NewTargetsLogs(flags config_flags.Logging) (*TargetsLogs, error) {
 	logs, err := omap.New[config_attributes.Xpath, *TargetLogs]()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create targets logs map")
 	}
 
 	return &TargetsLogs{
@@ -39,9 +40,12 @@ func (ts *TargetsLogs) AddWithParent(xpath config_attributes.Xpath, parent *Targ
 }
 
 func (ts *TargetsLogs) Add(xpath config_attributes.Xpath) (*TargetLogs, error) {
-	targetLogs := NewTargetLogs(xpath, ts.flags)
+	targetLogs, err := NewTargetLogs(xpath, ts.flags)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create target logs for %s", xpath.String())
+	}
 
-	err := ts.logs.Set(xpath, targetLogs)
+	err = ts.logs.Set(xpath, targetLogs)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +60,7 @@ func (ts *TargetsLogs) get(xpath config_attributes.Xpath) (*TargetLogs, bool) {
 func (ts *TargetsLogs) Get(xpath config_attributes.Xpath) *TargetLogs {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic("xpath key not present in TargetsLogs, this should never happen")
+		panic(fmt.Sprintf("xpath %q not present in TargetsLogs, this should never happen", xpath.String()))
 	}
 
 	return targetLogs
@@ -73,7 +77,7 @@ func (ts *TargetsLogs) CalculateDurationAndError() {
 func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phases.Phase) *logs_phase.PhaseLog {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic("xpath key not present in TargetsLogs, this should never happen")
+		panic(fmt.Sprintf("xpath %q not present in TargetsLogs for phase %s, this should never happen", xpath.String(), phase))
 	}
 
 	return ts.getOrCreateLog(targetLogs, phase, nil)
@@ -94,7 +98,7 @@ func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase
 func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *logs_phase.PhaseLogs {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic("xpath key not present in TargetsLogs, this should never happen")
+		panic(fmt.Sprintf("xpath %q not present in TargetsLogs, this should never happen", xpath.String()))
 	}
 
 	return targetLogs.PhaseLogs
@@ -103,7 +107,7 @@ func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *logs_phase.PhaseL
 func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) *logs_phase.PhaseLog {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic("xpath key not present in TargetsLogs, this should never happen")
+		panic(fmt.Sprintf("xpath %q not present in TargetsLogs, this should never happen", xpath.String()))
 	}
 
 	return targetLogs.GetCurrentTargetLog()
