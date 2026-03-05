@@ -136,7 +136,7 @@ func (m *model) ViewStatsTable() string {
 		statsTable.MachineXpaths = append(statsTable.MachineXpaths, xpath)
 
 		ps := machine.MetaInspect
-		phaseLog := state.TargetsLogs.GetFirstLogErrorOrLastLog(machine.Xpath)
+		phaseLog := state.TargetsLogs.MustGetFirstLogErrorOrLastLog(machine.Xpath)
 
 		showFlake := flake.Name != prevFlakeName
 		if showFlake {

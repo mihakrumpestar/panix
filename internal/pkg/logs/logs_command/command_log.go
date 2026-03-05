@@ -3,7 +3,6 @@ package logs_command
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hayageek/threadsafe"
@@ -18,7 +17,6 @@ type CommandLog struct {
 	Command         string
 	stdInOutErr     *threadsafe.Slice[*safe_buffer.Buffer] // Each line is a separate buffer to allow line replacement
 	TimeAndState    *time_and_state.TimeAndState
-	Pty             *os.File
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {

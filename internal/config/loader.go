@@ -125,14 +125,14 @@ func (c *Config) filterRoot() error {
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		if flake == nil || flake.Disabled || flake.Configurations == nil {
-			c.Root.Flakes.Omap.Del(flakePair.Key)
+			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
 			continue
 		}
 
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			config := configPair.Value
 			if config == nil || config.Disabled || config.Machines == nil {
-				flake.Configurations.Omap.Del(configPair.Key)
+				_, _ = flake.Configurations.Omap.Del(configPair.Key)
 				continue
 			}
 
@@ -144,19 +144,19 @@ func (c *Config) filterRoot() error {
 						Bool("disabled", machine.Disabled).
 						Strs("machine.Tags", machine.Tags).
 						Msgf("deleting machine %s", strconv.Quote(machinePair.Key))
-					config.Machines.Omap.Del(machinePair.Key)
+					_, _ = config.Machines.Omap.Del(machinePair.Key)
 				}
 			}
 
 			// Delete config if no machines left
 			if config.Machines.Omap.Len() == 0 {
-				flake.Configurations.Omap.Del(configPair.Key)
+				_, _ = flake.Configurations.Omap.Del(configPair.Key)
 			}
 		}
 
 		// Delete flake if no configs left
 		if flake.Configurations.Omap.Len() == 0 {
-			c.Root.Flakes.Omap.Del(flakePair.Key)
+			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
 		}
 	}
 

@@ -102,7 +102,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 				return err
 			}
 
-			w.state.TargetsLogs.Get(xpath).PhaseLogs.Get(phase).Clear()
+			w.state.TargetsLogs.MustGet(xpath).PhaseLogs.Get(phase).Clear()
 		} else {
 			return nil
 		}
@@ -110,7 +110,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 }
 
 func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error) (err error) {
-	phaseLog := w.state.TargetsLogs.GetOrCreateLog(xpath, phase)
+	phaseLog := w.state.TargetsLogs.MustGetOrCreateLog(xpath, phase)
 
 	phaseLog.TimeAndState().StartTimer()
 	defer func() {
@@ -167,7 +167,7 @@ func (w *Workflow) CreateWorkflow() error {
 func (w *Workflow) MachineCount() int {
 	count := 0
 	w.RootTree(func(i int, machine *config.Machine) {
-		count = i
+		count++
 	})
 	return count
 }
