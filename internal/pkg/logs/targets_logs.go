@@ -2,6 +2,7 @@ package logs
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
@@ -163,10 +164,12 @@ func (ts *TargetsLogs) Debug() string {
 			parent = pair.Value.parent.xpath
 		}
 
-		children := ""
+		var builder strings.Builder
 		for _, child := range pair.Value.children {
-			children += child.xpath.String() + ","
+			builder.WriteString(child.xpath.String())
+			builder.WriteByte(',')
 		}
+		children := builder.String()
 
 		str += fmt.Sprintf("  '%s' parent:%s children:%v, len:%d\n", pair.Key, parent, children, pair.Value.PhaseLogs.Len())
 
