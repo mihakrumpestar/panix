@@ -15,7 +15,7 @@
 ---
 
 > [!WARNING]
-> The tool is currently in alpha stage. Expect breaking changes.
+> The tool is currently in beta stage. Expect breaking changes.
 
 ## Demo
 
@@ -41,7 +41,7 @@ Some machines already run NixOS. Others are bare metal, cloud instances, or lega
 
 The ecosystem has tools for pieces of this puzzle. **nixos-anywhere** handles bootstrap. **deploy-rs**, **Colmena** (and many others) manage deployments. Each excels at its domain. But orchestration across these concerns - bootstrap, deploy, secrets, visibility, recovery - remains manual.
 
-A lot of the tools that manage deployments also introduce themselves as a dependancy in your flake, making it possible to deploy only with their tool. Panix intentionaly does not require you to modify your flake for it.
+A lot of the tools that manage deployments also introduce themselves as a dependancy in your flake, making it possible to deploy only with their tool (without at least some caviats to get the system closure path). Panix intentionaly does not require you to modify your flake for it.
 
 **The missing piece: an operator-focused interface.**
 
@@ -92,7 +92,10 @@ Or if it changed beyond a phase, just restart the whole workflow with `ctrl+r` w
 
 ---
 
-## Hierarchical Configuration Inheritance
+## Features
+
+<details>
+<summary><strong>Hierarchical Configuration Inheritance</strong></summary>
 
 Your infrastructure has natural hierarchies: flakes contain configurations, configurations contain machines. Panix's configuration model reflects this:
 
@@ -130,9 +133,10 @@ root:
                   remote_path: /etc/ssl/cert.pem
 ```
 
----
+</details>
 
-## Bootstrap: From Nothing to NixOS
+<details>
+<summary><strong>Bootstrap: From Nothing to NixOS</strong></summary>
 
 The bootstrap flow is where Panix distinguishes itself most clearly:
 
@@ -151,18 +155,86 @@ machines:
       disk_encryption_keys:       # Transferred BEFORE disko runs
         - local_path: ./secrets/luks.key
           remote_path: /tmp/luks-key
-      post_bootstrap_hook: |
-        systemd-cryptenroll --tpm2-device=auto /dev/nvme0n1p2
+      post_bootstrap_hooks:       # Run after disko partitioning
+        - systemd-cryptenroll --tpm2-device=auto /dev/nvme0n1p2
 ```
 
-The `post_bootstrap_hook` runs after disko but before activation - perfect for enrolling TPM for disk encryption, something that requires the disks to be partitioned but the system not yet activated.
+#### Bootstrap Hooks
 
-> [!WARNING]
-> Needs testing.
+Panix provides multiple hook points during bootstrap:
 
----
+| Hook | When it runs | SSH used |
+|------|--------------|----------|
+| `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH |
+| `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH |
+| `post_bootstrap_provisioned_hooks` | After reboot into new system | Regular SSH |
 
-## Multi-Flake Deployments
+Special hook commands:
+- `waitForOnline` - Wait for machine to become reachable (useful after reboot)
+- `waitForOffline` - Wait for machine to become unreachable (useful during reboot)
+
+```yaml
+machines:
+  server:
+    bootstrap:
+      post_bootstrap_hooks:
+        - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+      post_bootstrap_install_hooks:
+        - echo "Installation complete, preparing for reboot"
+      post_bootstrap_provisioned_hooks:
+        - reboot # second reboot
+        - waitForOffline
+        - waitForOnline
+        - systemctl enable --now my-service
+```
+
+#### Bootstrap SSH
+
+For machines that need different SSH credentials during initial provisioning (e.g., before vs after bootstrap), you can specify a separate bootstrap SSH configuration:
+
+```yaml
+machines:
+  server:
+    ssh:                          # Regular SSH (after bootstrap)
+      hostname: 192.168.1.100
+      identity_file: ./keys/prod.key
+    bootstrap:
+      ssh:                        # Bootstrap SSH (during provisioning)
+        hostname: 192.168.1.100
+        identity_file: ./keys/temp.key
+```
+
+During the **Inspect** phase, Panix checks which SSH configuration is reachable and uses it for subsequent operations. After reboot, it automatically switches to the regular SSH configuration for `post_bootstrap_provisioned_hooks`.
+
+#### SSH Key Checking Options
+
+```yaml
+ssh:
+  # Enable strict host key checking (default: true for regular SSH)
+  strict_key_checking: true
+  # Disable auto-adding host keys (default: false for regular SSH)
+  disable_auto_add_host_key: false
+```
+
+Defaults:
+- **Regular SSH**: `strict_key_checking: true`, `disable_auto_add_host_key: false` (secure by default)
+- **Bootstrap SSH**: `strict_key_checking: false`, `disable_auto_add_host_key: true` (permissive for new machines)
+
+#### Disable Automatic Reboot
+
+To prevent automatic reboot after `nixos-install` (useful for manual inspection or custom reboot handling):
+
+```yaml
+machines:
+  server:
+    bootstrap:
+      disable_automatic_reboot: true
+```
+
+</details>
+
+<details>
+<summary><strong>Multi-Flake Deployments</strong></summary>
 
 Your infrastructure may span multiple flakes/repositories. Panix treats this as a first-class concern:
 
@@ -194,11 +266,10 @@ root:
 
 With this you get complete visibility across your entire infrastructure. Each flake builds independently, each configuration deduplicates builds across its machines.
 
----
+</details>
 
-## Feature Deep Dive
-
-### Real-Time TUI
+<details>
+<summary><strong>Real-Time TUI</strong></summary>
 
 ![TUI Showcase](./assets/tui.png)
 
@@ -211,7 +282,7 @@ The stats table shows you what matters:
 
 Click and navigate (`left`/`right` keys) to any machine to filter build logs. This also works for phase status.
 
-### Keybinds
+#### Keybinds
 
 | Key | Action |
 |-----|--------|
@@ -223,21 +294,28 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 | `h` | Toggle to include `inspect` and `secrets` phases in the build logs |
 | `a` | Show only active/errored build logs |
 | `left`/`right` | Navigate between stats table or phase status entrys |
-| `mouse click` | Select and entry from stats table, phase status, build logs command label or command output
+| `mouse click` | Select and entry from stats table, phase status, build logs command label or command output |
 | `mouse scroll`/`up`/`down` | Allows scrolling main view or an inner view when selected (eg. command output) |
 | `q` | Quit |
 
-### Tag-Based Filtering
+</details>
+
+<details>
+<summary><strong>Tag-Based Filtering</strong></summary>
 
 Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through inheritance. Deploy subsets of your infrastructure:
 
 ```bash
-panix --tags production     # All production-tagged machines
-panix --tags webserver      # All machines under webserver config
-panix --tags server-01      # Single machine
+panix --tags production         # All production-tagged machines
+panix --tags webserver          # All machines under webserver config
+panix --tags server-01          # Single machine
+panix --tags server-01,special  # Single machine and tag special
 ```
 
-### SSH Config Integration
+</details>
+
+<details>
+<summary><strong>SSH Config Integration</strong></summary>
 
 Panix reads `~/.ssh/config`. If your machine name matches a host alias:
 
@@ -258,10 +336,14 @@ machines:
       port: 2222
       username: admin
       identity_file: ./keys/server.key
-      disable_strict_key_checking: true   # Useful for bootstrapping fresh machines
+      strict_key_checking: false      # Disable strict host key checking
+      disable_auto_add_host_key: true  # Prevent auto-adding host keys
 ```
 
-### Local Machine Detection
+</details>
+
+<details>
+<summary><strong>Local Machine Detection</strong></summary>
 
 Deploying to the machine you're on? If the machine name matches the system hostname, Panix skips SSH entirely - executing commands directly via shell:
 
@@ -271,7 +353,10 @@ machines:
   workstation:              # Detected as local, no SSH
 ```
 
-### CI/CD ready
+</details>
+
+<details>
+<summary><strong>CI/CD Ready</strong></summary>
 
 ```bash
 # Exit when complete, fail fast on any error
@@ -284,7 +369,10 @@ panix --dry-run
 panix --dry-run-with-inspect
 ```
 
-### IDE Support
+</details>
+
+<details>
+<summary><strong>IDE Support</strong></summary>
 
 You can directly reference the YAML schema for autocompletion and validation:
 
@@ -294,7 +382,7 @@ You can directly reference the YAML schema for autocompletion and validation:
 ...
 ```
 
-Or you can generate it localy:
+Or you can generate it locally:
 
 ```bash
 panix schema
@@ -307,6 +395,8 @@ and reference it:
 
 ...
 ```
+
+</details>
 
 ---
 
@@ -336,9 +426,13 @@ panix.packages."${system}".panix
 
 Note: Remote requires SSH key authentication (key file must be without password, unless you are using an SSH agent). Password authentication is not supported.
 
-### 1. SSH Authentication
+### 1. Remote
 
-If you have only password auth (you booted NixOS ISO), create and add a temporary key to remote with the following commands:
+Boot into NixOS installer, any Linux live ISO (note that it might be missing packages needed to start Kexec) or your already provisioned NixOS
+
+### 2. SSH Authentication
+
+If you have only password auth, create and add a temporary key to remote with the following commands:
 
 ```sh
 # On remote (set password for root user)
@@ -391,6 +485,66 @@ root:
 panix
 ```
 
+```sh
+> panix --help
+Usage: panix <command> [flags]
+
+Universal NixOS Deployment Tool
+
+Flags:
+  -h, --help                               Show context-sensitive help.
+  -c, --config="panix.yml"                 Config file ($PANIX_CONFIG)
+  -t, --tags=TAGS,...                      Filter machines by tags (flakes, configurations and machine names are already registered as
+                                           tags, children inherit all parent tags) ($PANIX_TAGS)
+      --bootstrap.only                     Only initializes uninitialized machines ($PANIX_BOOTSTRAP_ONLY)
+      --bootstrap.disable-auto             Disable automatic bootstrap (even if target machine does not have NixOS installed)
+                                           ($PANIX_BOOTSTRAP_DISABLE_AUTO)
+      --bootstrap.disable-disko            Disables building, transfer and bootstrap of disko tool ($PANIX_BOOTSTRAP_DISABLE_DISKO)
+      --require-all-success                Abort if any task fails, primarily for CI/CD ($PANIX_REQUIRE_ALL_SUCCESS)
+      --override-local-machine=STRING      Hostname of the machine that is local (won't use ssh to connect to it)
+                                           ($PANIX_OVERRIDE_LOCAL_MACHINE)
+      --dry-run                            Show what would be done without executing ($PANIX_DRY_RUN)
+      --dry-run-with-inspect               Show what would be done without executing, but with real inspect query
+                                           ($PANIX_DRY_RUN_WITH_INSPECT)
+      --timeout=2h                         Timeout for workflow (eg. '1h', '1m15s') ($PANIX_TIMEOUT)
+  -s, --skip-phases=SKIP-PHASES,...        Declare phases to skip (not all phases can be skipped) ($PANIX_SKIP_PHASES)
+      --exit-on-complete                   Exit TUI immediately when workflow completes (otherwise stays open until user quits);
+                                           'retry' and 'restart' do not work in this mode ($PANIX_EXIT_ON_COMPLETE)
+      --tui.show-all-build-logs            Show all build logs in TUI (keybind h) ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
+      --tui.show-active-only               Show only running or errored logs in TUI build logs (keybind a)
+                                           ($PANIX_TUI_SHOW_ACTIVE_ONLY)
+      --tui.show-commands-in-labels        Show raw commands instead of descriptions as labels in build logs (keybind c)
+                                           ($PANIX_TUI_SHOW_COMMANDS_IN_LABELS)
+      --tui.command-output-max-height=8    Maximum height for command labels and outputs viewports in TUI
+                                           ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+  -l, --log                                Enable logging to file ($PANIX_LOG)
+      --log-file="panix.log"               Log file path ($PANIX_LOG_FILE)
+  -d, --debug                              Debug output (enables logging) ($PANIX_DEBUG)
+      --cpu-profile=STRING                 Path for cpu profiling to file, declaring it enables it ($PANIX_CPU_PROFILE)
+      --version                            Show version ($PANIX_VERSION)
+
+Commands:
+  inspect [flags]
+    Inspect machine per host (automatic bootstrapping is disabled here)
+
+  bootstrap [flags]
+    Explicit bootstrap phase
+
+  build [flags]
+    Build all selected closures
+
+  deploy [flags]
+    Do full workflow (inspect -> bootstrap -> secrets -> build -> push -> activate)
+
+  secrets [flags]
+    Deploy secrets to all machines
+
+  schema [flags]
+    Generate YAML schema for configuration files
+
+Run "panix <command> --help" for more information on a command.
+```
+
 ---
 
 ## Configuration Reference
@@ -401,11 +555,29 @@ Here is an example, but for all options check [panix-schema.yaml](./gen/panix-sc
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
 flags:
+  config: panix.yml                    # Config file path
+  tags: []                             # Filter machines by tags
   timeout: 2h
   exit_on_complete: false
   require_all_success: false
   skip_phases: []
-  override_local_machine: my-laptop
+  override_local_machine: my-laptop   # Override which machine is considered local
+  dry_run: false                      # Show what would happen without executing
+  dry_run_with_inspect: false         # Dry run but with real inspect queries
+  bootstrap:
+    only: false                       # Only bootstrap uninitialized machines
+    disable_auto: false               # Disable automatic bootstrap
+    disable_disko: false              # Disable disko tool
+  tui:
+    show_all_build_logs: false        # Show inspect/secrets phases in build logs
+    show_active_only: false           # Show only running/errored logs
+    show_commands_in_labels: false    # Show raw commands instead of descriptions
+    command_output_max_height: 8      # Max height for command output viewports
+  logging:
+    log: false                        # Enable logging to file
+    log_file: panix.log               # Log file path
+    debug: false                      # Enable debug output
+    cpu_profile: ""                   # Path for CPU profiling
 
 root:
   tags: [production]
@@ -436,12 +608,17 @@ root:
         database:
           machines:
             db-01:
+              ssh:
+                hostname: 10.0.1.50
               bootstrap:
+                ssh:                        # Bootstrap SSH for initial provisioning
+                  hostname: 10.0.1.50
+                  identity_file: ./keys/bootstrap.key
                 disk_encryption_keys:
                   - local_path: ./secrets/db/luks.key
                     remote_path: /tmp/luks-key
-                post_bootstrap_hook: |
-                  systemd-cryptenroll --tpm2-device=auto /dev/sda2
+                post_bootstrap_hooks:
+                  - systemd-cryptenroll --tpm2-device=auto /dev/sda2
     
     monitoring:
       url: github:myorg/monitoring#main
@@ -451,13 +628,14 @@ root:
             prom-01:
 ```
 
+The one I use is at [panix.yml](panix.yml).
+
 ---
 
 ## Requirements & Caveats
 
-- **nix**: Panix uses `nix` that it finds in PATH, it also uses commands like `nc`, `uname`, `id`, `echo`, `cat`, `readlink`, `stat`, `curl` and `tar`
+- **nix**: Panix uses `nix` that it finds in PATH, it also uses commands like `uname`, `id`, `echo`, `cat`, `readlink`, `stat`, `curl` and `tar`
 - **rsync**: Required on both local and remote for file transfers (included in `kexec` images)
-- **POSIX shell**: for certain operations, local and remote default shell must be POSIX-compliant (eg. not `Fish`)
 - **kexec memory**: Minimum 1GB RAM without swap for `kexec` bootstrap
 - **nix store locking**: nix does not allow writing to store by more than one at a time, so some builds may have a `waiting for store lock` warning for a brief time until the lock is lifted
 - **ssh key auth**: only ssh key auth is supported, no password auth
