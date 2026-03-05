@@ -60,7 +60,7 @@ func (ts *TargetsLogs) get(xpath config_attributes.Xpath) (*TargetLogs, bool) {
 func (ts *TargetsLogs) Get(xpath config_attributes.Xpath) *TargetLogs {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic(fmt.Sprintf("xpath %q not present in TargetsLogs, this should never happen", xpath.String()))
+		panic(fmt.Sprintf("internal error: xpath %q not present in TargetsLogs", xpath.String()))
 	}
 
 	return targetLogs
@@ -77,7 +77,7 @@ func (ts *TargetsLogs) CalculateDurationAndError() {
 func (ts *TargetsLogs) GetOrCreateLog(xpath config_attributes.Xpath, phase phases.Phase) *logs_phase.PhaseLog {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic(fmt.Sprintf("xpath %q not present in TargetsLogs for phase %s, this should never happen", xpath.String(), phase))
+		panic(fmt.Sprintf("internal error: xpath %q not present in TargetsLogs for phase %s", xpath.String(), phase))
 	}
 
 	return ts.getOrCreateLog(targetLogs, phase, nil)
@@ -98,7 +98,7 @@ func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase
 func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *logs_phase.PhaseLogs {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic(fmt.Sprintf("xpath %q not present in TargetsLogs, this should never happen", xpath.String()))
+		panic(fmt.Sprintf("internal error: xpath %q not present in TargetsLogs", xpath.String()))
 	}
 
 	return targetLogs.PhaseLogs
@@ -107,7 +107,7 @@ func (ts *TargetsLogs) GetLogs(xpath config_attributes.Xpath) *logs_phase.PhaseL
 func (ts *TargetsLogs) GetFirstLogErrorOrLastLog(xpath config_attributes.Xpath) *logs_phase.PhaseLog {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
-		panic(fmt.Sprintf("xpath %q not present in TargetsLogs, this should never happen", xpath.String()))
+		panic(fmt.Sprintf("internal error: xpath %q not present in TargetsLogs", xpath.String()))
 	}
 
 	return targetLogs.GetCurrentTargetLog()
