@@ -33,7 +33,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 			flakeOutput = strings.ReplaceAll(flakeOutput, "<name>", configuration.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables, "system closure")
+			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, flake, configuration, installables, "system closure")
 			if err != nil {
 				return err
 			}
@@ -44,7 +44,13 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		})
 }
 
-func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string, whatIsBuilding string) (BuildOutputJSON, error) {
+func (w *Workflow) executeBuildPhaseConfigurationWrapper(
+	exc *executioner.Executioner,
+	flake *config.Flake,
+	configuration *config.Configuration,
+	installables []string,
+	whatIsBuilding string,
+) (BuildOutputJSON, error) {
 	var parsedOutput BuildOutputJSON
 
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)

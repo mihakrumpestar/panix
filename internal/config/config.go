@@ -34,7 +34,7 @@ func (r *Root) Init(flags *config_flags.Flags) error {
 type Flake struct {
 	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
+	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
@@ -46,7 +46,7 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
 type Configuration struct {
 	Machines                     *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	FlakeOutput                  string `yaml:"flake_output" desc:"Option to override flake output if non-standard style (default: nixosConfigurations.<name>.config.system.build.toplevel)"`
+	FlakeOutput                  string `yaml:"flake_output" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
 	// Internal
 	ParentFlake *Flake     `yaml:"-" validate:"-"`
 	MetaBuild   *MetaBuild `yaml:"-" validate:"-"`

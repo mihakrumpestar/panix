@@ -32,7 +32,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 
 			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
 
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, phaseLog, flake, configuration, installables, "disko")
+			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, flake, configuration, installables, "disko")
 			if err != nil {
 				return err
 			}
@@ -43,7 +43,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 
 			diskoScript := parsedOutput[0].Outputs.Out
 
-			err = executeTransferPhaseMachineWrapper(exc, phaseLog, machine, []string{diskoScript}, false)
+			err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
 			if err != nil {
 				return err
 			}

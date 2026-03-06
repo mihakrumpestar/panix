@@ -16,8 +16,8 @@ type SSHClient struct {
 	Port                  uint16 `yaml:"port" desc:"SSH port number"`
 	Username              string `yaml:"username" desc:"SSH username"`
 	IdentityFile          string `yaml:"identity_file" desc:"Path to SSH private key" validate:"omitempty,filepath"`
-	StrictKeyChecking     bool   `yaml:"strict_key_checking" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`
-	DisableAutoAddHostKey bool   `yaml:"disable_auto_add_host_key" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"`
+	StrictKeyChecking     bool   `yaml:"strict_key_checking" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`                                                //nolint:lll
+	DisableAutoAddHostKey bool   `yaml:"disable_auto_add_host_key" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"` //nolint:lll
 	// Internal - computed during Init(), never inherit from parent
 	IsLocal         bool `yaml:"-" json:"-" validate:"-" mergo:"-"`
 	HostnameIsAlias bool `yaml:"-" json:"-" validate:"-" mergo:"-"`

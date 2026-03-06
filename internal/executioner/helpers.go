@@ -24,7 +24,7 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 		case attributes.PostBootstrapHookWaitForOnline:
 			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
 
-			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), fmt.Sprintf("%s did not come online", hookType))
+			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), hookType+" did not come online")
 			if err != nil {
 				return err
 			}

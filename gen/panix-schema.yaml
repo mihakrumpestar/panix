@@ -32,7 +32,7 @@ properties:
         description: Show what would be done without executing, but with real inspect query
       exit_on_complete:
         type: boolean
-        description: Exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode
+        description: Exit TUI on completion; 'retry' and 'restart' are disabled in this mode
       logging:
         type: object
         properties:
@@ -62,7 +62,7 @@ properties:
           type: string
       tags:
         type: array
-        description: Filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)
+        description: Filter machines by tags (flakes, configs and names are already registered as tags)
         items:
           type: string
       timeout:
@@ -96,7 +96,7 @@ properties:
             description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
           disk_encryption_keys:
             type: array
-            description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
+            description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
             items:
               type: object
               properties:
@@ -183,7 +183,7 @@ properties:
                   description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
                 disk_encryption_keys:
                   type: array
-                  description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
+                  description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
                   items:
                     type: object
                     properties:
@@ -268,7 +268,7 @@ properties:
                         description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
                       disk_encryption_keys:
                         type: array
-                        description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
+                        description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
                         items:
                           type: object
                           properties:
@@ -344,7 +344,7 @@ properties:
                     type: boolean
                   flake_output:
                     type: string
-                    description: "Option to override flake output if non-standard style (default: nixosConfigurations.<name>.config.system.build.toplevel)"
+                    description: "Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"
                   hardware_config_path:
                     type: string
                   machines:
@@ -361,7 +361,7 @@ properties:
                                 description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
                               disk_encryption_keys:
                                 type: array
-                                description: Keys are transfered to root dir on remote, which is the installer. If you want them to be transfered to disk of the final system, prefix path with '/mnt'
+                                description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
                                 items:
                                   type: object
                                   properties:
@@ -616,7 +616,7 @@ properties:
                 type: string
             url:
               type: string
-              description: "Flake path (eg. 'path:...') or url (eg. 'ssh:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"
+              description: "Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"
               format: uri
           required:
           - configurations

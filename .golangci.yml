@@ -15,6 +15,9 @@ linters:
     - nilaway
 
   settings:
+    lll:
+      line-length: 150
+
     varnamelen:
       ignore-type-assert-ok: true
       ignore-map-index-ok: true
