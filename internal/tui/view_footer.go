@@ -23,7 +23,9 @@ var (
 func init() {
 	keymapHelp.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 	keymapHelp.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+
 	keyBindings = make([]key.Binding, len(keyDefs))
+
 	for i, kd := range keyDefs {
 		keyBindings[i] = key.NewBinding(
 			key.WithKeys(kd.keys...),
@@ -94,9 +96,11 @@ func (m *model) ViewFooter() string {
 	helpContent = lipgloss.NewStyle().Width(helpWidth).MaxWidth(max(helpWidth-notificationBoxWidth, 1)).Render(helpContent)
 
 	parts := []string{helpContent}
+
 	if notificationBoxWidth != 0 {
 		parts = append(parts, "\n"+notificationBox)
 	}
+
 	parts = append(parts, scrollPercent)
 
 	return lipgloss.JoinHorizontal(lipgloss.Center, parts...)
@@ -106,13 +110,16 @@ func (m *model) ViewFooter() string {
 
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 	r := m.resetable.Load()
+
 	content, isInner := r.viewports.GetActiveInnerViewportContent()
 	if !isInner {
 		return m, m.notification.Set("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
 	}
+
 	if content == "" {
 		return m, m.notification.Set("No content to copy", m.conf.ColorScheme.StatusWarning)
 	}
+
 	if err := tui_clipboard.CopyToClipboard(content); err != nil {
 		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
 	}
@@ -128,6 +135,7 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	} else if err != nil && err != context.Canceled {
 		r.err = err
 	}
+
 	zerolog.Debug().Msg("Context done, exiting TUI")
 	return m, tea.Quit
 }
@@ -165,7 +173,9 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 		r.viewports.ExitFullscreen()
 		return m, nil
 	}
+
 	activeInnerXpath := r.viewports.GetActiveInnerViewportXpath()
+
 	if activeInnerXpath.Depth() > 0 {
 		r.viewports.SetFullscreen(activeInnerXpath)
 	} else {
@@ -198,8 +208,11 @@ func wrapKeybindingsByPair(h help.Model, k help.KeyMap, maxWidth int) string {
 
 	separator := h.Styles.ShortSeparator.Inline(true).Render(h.ShortSeparator)
 	sepWidth := lipgloss.Width(separator)
+
 	var lines []string
+
 	var currentLine strings.Builder
+
 	var currentWidth int
 
 	for _, kb := range bindings {
@@ -214,14 +227,18 @@ func wrapKeybindingsByPair(h help.Model, k help.KeyMap, maxWidth int) string {
 		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
 			lines = append(lines, currentLine.String())
 			currentLine.Reset()
+
 			currentWidth = 0
 		}
 
 		if currentWidth > 0 {
 			currentLine.WriteString(separator)
+
 			currentWidth += sepWidth
 		}
+
 		currentLine.WriteString(item)
+
 		currentWidth += itemWidth
 	}
 

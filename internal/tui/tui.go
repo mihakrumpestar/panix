@@ -80,6 +80,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		content := finalModel.ViewMainContent()
 		fmt.Println(content)
 	}
+
 	if r := finalModel.resetable.Load(); r != nil {
 		return r.err
 	}
@@ -100,6 +101,7 @@ func startCPUProfile(path string) (func(), error) {
 
 	return func() {
 		pprof.StopCPUProfile()
+
 		_ = f.Close()
 	}, nil
 }
@@ -128,9 +130,11 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 
 		now := time.Now()
 		elapsed := now.Sub(m.lastWorkflowUpdate)
+
 		if elapsed < 100*time.Millisecond {
 			time.Sleep(100*time.Millisecond - elapsed)
 		}
+
 		m.lastWorkflowUpdate = time.Now()
 
 		return workflowUpdateHookMsg{}
@@ -214,6 +218,7 @@ func (m *model) View() tea.View {
 	mainViewport := r.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
 
 	var builder strings.Builder
+
 	builder.WriteString(mainViewport)
 	builder.WriteString(footer)
 
@@ -236,6 +241,7 @@ func (m *model) renderFullscreen() string {
 	fullscreenViewport := r.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
 
 	var builder strings.Builder
+
 	builder.WriteString(fullscreenViewport)
 	builder.WriteString(footer)
 
@@ -292,8 +298,7 @@ func setupSIGINTHandler(ctx context.Context) func() {
 			select {
 			case <-ctx.Done():
 				return
-			case <-sigChan:
-				// SIGINT is handled as a keybinding
+			case <-sigChan: // SIGINT is handled as a keybinding
 			}
 		}
 	}()

@@ -46,6 +46,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 					if !machine.Bootstrap.DisableAutomaticReboot {
 						activeSSH := machine.MetaInspect.GetActiveSSH()
 						err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to reboot")
+
 						if err != nil {
 							return err
 						}

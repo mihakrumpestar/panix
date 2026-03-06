@@ -45,12 +45,14 @@ func (cl *CommandLog) Bytes() []byte {
 	}
 
 	var result bytes.Buffer
+
 	result.Grow(estimateSize(values))
 
 	for i, buf := range values {
 		if i > 0 {
 			result.WriteByte('\n')
 		}
+
 		result.Write(buf.Bytes())
 	}
 
@@ -76,10 +78,12 @@ func (cl *CommandLog) Write(p []byte) (int, error) {
 	length := cl.stdInOutErr.Length()
 	if length == 0 {
 		cl.stdInOutErr.Append(safe_buffer.NewBuffer(nil))
+
 		length = 1
 	}
 
 	stdInOutErr, ok := cl.stdInOutErr.Get(length - 1)
+
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
 	}
@@ -106,6 +110,7 @@ func (cl *CommandLog) ReplaceLastLine(p []byte) {
 
 	index := cl.stdInOutErr.Length() - 1
 	ok := cl.stdInOutErr.Set(index, safe_buffer.NewBuffer(p))
+
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.stdInOutErr.Length()))
 	}

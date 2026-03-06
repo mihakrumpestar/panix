@@ -36,6 +36,7 @@ func (om *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to create ordered map")
 		}
+
 		om.Omap = m
 	}
 
@@ -52,6 +53,7 @@ func (om *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 	if file != nil && file.Docs != nil && len(file.Docs) > 0 && file.Docs[0].Body != nil {
 		extractor := &keyValueExtractor[K, V]{om: om}
 		ast.Walk(extractor, file.Docs[0].Body)
+
 		if extractor.err != nil {
 			return extractor.err
 		}
@@ -70,6 +72,7 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 	if mapping, ok := node.(*ast.MappingNode); ok {
 		valueType := reflect.TypeOf((*V)(nil)).Elem()
 		isPtr := valueType.Kind() == reflect.Ptr
+
 		var elemType reflect.Type
 		if isPtr {
 			elemType = valueType.Elem()
@@ -87,11 +90,11 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 			// Check if value is a NullNode (key without value)
 			if _, isNull := val.Value.(*ast.NullNode); isNull {
 				// Key has no value - for pointer types, create new instance
+				// For non-pointer types, value remains as zero value
 				if isPtr && elemType.Kind() == reflect.Struct {
 					newPtr := reflect.New(elemType)
 					value = newPtr.Interface().(V)
 				}
-				// For non-pointer types, value remains as zero value
 			} else {
 				// Value exists in YAML, unmarshal it
 				if isPtr {

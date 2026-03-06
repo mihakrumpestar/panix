@@ -45,6 +45,7 @@ func (r *runner) getOrCreateOnceAsync(xpath string) *once_async.OnceAsync {
 	}
 
 	newOnce := once_async.NewOnceAsync()
+
 	existing, ok := r.onceRegistry.Get(xpath)
 	if ok {
 		return existing
@@ -75,8 +76,10 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	scope := phases.GetPhaseScope(phase)
 
 	// Determine the xpath and execution function based on scope
-	var xpath config_attributes.Xpath
-	var execFn func() error
+	var (
+		xpath  config_attributes.Xpath
+		execFn func() error
+	)
 
 	switch scope {
 	case phases.ScopeFlake:

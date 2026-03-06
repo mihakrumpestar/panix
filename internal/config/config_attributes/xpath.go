@@ -31,9 +31,11 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 	}
 
 	var builder strings.Builder
+
 	builder.WriteString(x.path)
 	builder.WriteByte('/')
 	builder.WriteString(strings.Join(appendXpath, "/"))
+
 	return Xpath{path: builder.String()}
 }
 

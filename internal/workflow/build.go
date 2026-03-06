@@ -28,6 +28,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 			if flakeOutput == "" {
 				flakeOutput = "nixosConfigurations.<name>.config.system.build.toplevel"
 			}
+
 			flakeOutput = strings.ReplaceAll(flakeOutput, "<name>", configuration.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 

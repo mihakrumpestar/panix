@@ -14,9 +14,6 @@
     "git-cliff@latest"
   ],
   "env": {
-    "GOPATH": "$PWD/.devbox",
-    "PATH": "$PATH:$PWD/.devbox/bin",
-
     "DEVBOX_NO_PROMPT": "true"
   },
   "shell": {

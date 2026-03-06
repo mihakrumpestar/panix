@@ -32,7 +32,9 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt.env)
 
 	commandLog.TimeAndState.StartTimer()
+
 	var execErr error
+
 	defer func() {
 		commandLog.TimeAndState.EndTimerWithError(execErr)
 		ex.onUpdateHook()
@@ -49,6 +51,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = ptyFile.Close() }()
 
 	readErr := ex.readPTYOutput(ptyFile, commandLog)
@@ -62,6 +65,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 
 func (ex *Executioner) prepareCommandWithEnv(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
 	cmd := exec.CommandContext(ex.ctx, commandWithArgs[0], commandWithArgs[1:]...)
+
 	cmd.Env = append(os.Environ(), excOpt.env...)
 	return cmd
 }
@@ -73,6 +77,7 @@ func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
 		}
 		return nil
 	}
+
 	excOpt.onDryRun()
 	return nil
 }
@@ -127,9 +132,11 @@ func (ex *Executioner) finalizeExecution(
 	if err != nil && excOpt.onFailure != nil {
 		return excOpt.onFailure(commandLog, err)
 	}
+
 	if err == nil && excOpt.onSuccess != nil {
 		return excOpt.onSuccess(commandLog)
 	}
+
 	return err
 }
 

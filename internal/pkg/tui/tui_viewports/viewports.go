@@ -163,6 +163,7 @@ func (v *Viewports) GetActiveViewportScrollPercent() float64 {
 			return vp.model.ScrollPercent()
 		}
 	}
+
 	if vp := v.getActiveViewport(); vp != nil {
 		return vp.model.ScrollPercent()
 	}
@@ -192,10 +193,12 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	}
 
 	hasActiveInner := v.hasActiveInner()
+
 	for _, vp := range v.viewports.Records() {
 		if vp.active {
 			if updated, cmd := vp.model.Update(msg); cmd != nil {
 				vp.model = updated
+
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -204,6 +207,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	if mainVpr, ok := v.viewports.Get(v.mainXpath); ok && !hasActiveInner {
 		if updated, cmd := mainVpr.model.Update(msg); cmd != nil {
 			mainVpr.model = updated
+
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -214,15 +218,20 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 // Debug returns debug info about all viewports
 func (v *Viewports) Debug() string {
 	var sb strings.Builder
+
 	sb.WriteString(fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height))
+
 	for xpath, vp := range v.viewports.Records() {
 		sb.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, vp.model.Width, vp.model.Height, lipgloss.Height(vp.content)))
+
 		if vp.active {
 			sb.WriteString(" [A]")
 		}
+
 		if vp.model.ScrollPercent() == 1 {
 			sb.WriteString(" @btm")
 		}
+
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -241,6 +250,7 @@ func (v *Viewports) resizeAllViewports() {
 		} else {
 			// Inner viewports: update width, keep existing height or use max height
 			vp.model.SetWidth(w)
+
 			if v.commandOutputMaxHeight > 0 && vp.model.Height() > v.commandOutputMaxHeight {
 				vp.model.SetHeight(v.commandOutputMaxHeight)
 			}
@@ -365,6 +375,7 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 		if i > 0 {
 			builder.WriteByte('\n')
 		}
+
 		if i >= pos && i < endPos {
 			builder.WriteString(scrollThumb)
 		} else {
@@ -486,6 +497,7 @@ func (v *Viewports) DeselectAll() {
 
 func (v *Viewports) underMouse(m tea.MouseMsg) []config_attributes.Xpath {
 	var result []config_attributes.Xpath
+
 	for xpath := range v.viewports.Records() {
 		if zone.Get(xpath.String()).InBounds(m) {
 			result = append(result, xpath)
@@ -498,6 +510,7 @@ func (v *Viewports) mostSpecific(xpaths []config_attributes.Xpath) config_attrib
 	if len(xpaths) == 0 {
 		return config_attributes.Xpath{}
 	}
+
 	sort.Slice(xpaths, func(i, j int) bool { return xpaths[i].Depth() > xpaths[j].Depth() })
 	return xpaths[0]
 }
@@ -534,6 +547,7 @@ func truncateToRuneWidth(s string, maxWidth int) string {
 		for mid > low && !utf8.ValidString(s[:mid]) {
 			mid--
 		}
+
 		if mid <= low {
 			break
 		}
@@ -559,6 +573,7 @@ func clamp(val, min, max float64) float64 {
 	if val < min {
 		return min
 	}
+
 	if val > max {
 		return max
 	}
