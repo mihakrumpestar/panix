@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
+	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
@@ -23,7 +24,7 @@ var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 // The tree structure adapts based on what's selected:
 // - If a machine is selected in stats table: show that machine's logs
 // - If a phase is selected: show that phase across all machines
-// - Otherwise: show default view (Inspect + Build + remaining phases)
+// - Otherwise: show default view (Inspect + remaining phases per scope)
 func (m *model) ViewBuildLogs() string {
 	var b strings.Builder
 	b.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
@@ -57,27 +58,11 @@ func (m *model) ViewBuildLogs() string {
 					}
 				}
 			case selectedPhase != "":
-				// Show selected phase across relevant machines
-				if phases.ShouldRunOnce(selectedPhase) && len(machines) > 0 {
-					// Phase runs once (like BUILD), add to first machine
-					m.addPhases(cfgNode, &machines[0].Value.Attributes, treeStep*2, false, selectedPhase)
-				} else {
-					// Phase runs per-machine, add to all machines
-					for _, pair := range machines {
-						m.addMachinePhases(cfgNode, pair.Value, treeStep*2, selectedPhase)
-					}
-				}
+				// Show selected phase across relevant machines/config
+				m.addPhaseToTree(cfgNode, cfg, machines, selectedPhase)
 			default:
-				// Default view: Inspect (per machine) + Build (once) + remaining phases (per machine)
-				for _, pair := range machines {
-					m.addMachinePhases(cfgNode, pair.Value, treeStep*2, phases.Inspect)
-				}
-				if len(machines) > 0 {
-					m.addPhases(cfgNode, &machines[0].Value.Attributes, treeStep*2, false, phases.Build)
-				}
-				for _, pair := range machines {
-					m.addMachinePhases(cfgNode, pair.Value, treeStep*2, phases.PhasesInOrder()[2:]...)
-				}
+				// Default view: phases in order from PhaseRegistry, respecting scope
+				m.addDefaultTree(cfgNode, cfg, machines)
 			}
 
 			if cfgNode.Children().Length() > 0 {
@@ -92,6 +77,19 @@ func (m *model) ViewBuildLogs() string {
 	return b.String()
 }
 
+func (m *model) addPhaseToTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine], phase phases.Phase) {
+	indent := treeStep * 2
+	// ScopeConfig phases (like Build) run once per configuration
+	// ScopeMachine phases run per machine
+	if phases.GetPhaseScope(phase) == phases.ScopeConfig {
+		m.addPhases(cfgNode, &cfg.Attributes, indent, false, phase)
+	} else {
+		for _, pair := range machines {
+			m.addMachinePhases(cfgNode, pair.Value, indent, phase)
+		}
+	}
+}
+
 // addMachineTree adds a machine and all its phases to the config node
 // Used when a specific machine is selected in the stats table
 func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, machine *config.Machine) {
@@ -101,13 +99,36 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	// Add Inspect phase (stops at first error)
 	errored := m.addPhases(node, &machine.Attributes, indent+treeStep, true, phases.Inspect)
 	if !errored {
-		// If Inspect passed, add Build phase (once per configuration) and remaining phases
-		m.addPhases(node, &cfg.Attributes, indent+treeStep, true, phases.Build)
-		m.addPhases(node, &machine.Attributes, indent+treeStep, true, phases.PhasesInOrder()[2:]...)
+		// Add remaining phases after Inspect, using appropriate attributes based on scope
+		for _, pm := range phases.PhaseRegistry[1:] {
+			attr := &machine.Attributes
+			if pm.Scope == phases.ScopeConfig {
+				attr = &cfg.Attributes
+			}
+			m.addPhases(node, attr, indent+treeStep, true, pm.Phase)
+		}
 	}
 
 	if node.Children().Length() > 0 {
 		cfgNode.Child(node)
+	}
+}
+
+// addDefaultTree adds all phases in order from PhaseRegistry to the tree
+// Respects scope: ScopeConfig phases at config level, ScopeMachine per machine
+func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine]) {
+	indent := treeStep * 2
+
+	for _, pm := range phases.PhaseRegistry {
+		if pm.Scope == phases.ScopeConfig {
+			// Config-scoped phase (like Build): use config attributes
+			m.addPhases(cfgNode, &cfg.Attributes, indent, false, pm.Phase)
+		} else {
+			// Machine-scoped phase: add for each machine
+			for _, pair := range machines {
+				m.addMachinePhases(cfgNode, pair.Value, indent, pm.Phase)
+			}
+		}
 	}
 }
 

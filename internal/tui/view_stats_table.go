@@ -197,7 +197,7 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 		{header: string(colors.Flake.Icon) + " FLAKE", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.Flake.Color
 		}},
-		{header: string(colors.Configuration.Icon) + " CONFIG", style: func(c *config.ColorScheme) lipgloss.Style {
+		{header: string(colors.Configuration.Icon) + " CONFIGURATION", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.Configuration.Color
 		}},
 		{header: string(colors.Machine.Icon) + " MACHINE", style: func(c *config.ColorScheme) lipgloss.Style {
