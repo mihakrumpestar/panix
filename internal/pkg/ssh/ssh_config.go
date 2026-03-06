@@ -34,7 +34,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 
 		cfgPath := filepath.Join(home, ".ssh", "config")
 
-		sshCfgRaw, err := os.Open(cfgPath)
+		sshCfgRaw, err := os.Open(cfgPath) // #nosec G304 -- cfgPath is constructed from UserHomeDir() with known suffix
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to open SSH config")
 

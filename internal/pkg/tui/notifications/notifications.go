@@ -37,6 +37,8 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 
 	if fg := color.GetForeground(); fg != nil {
 		r, g, b, _ := fg.RGBA()
+
+		// #nosec G115 -- rgba values are 0-65535, >>8 safely converts to 0-255 range
 		n.fgR, n.fgG, n.fgB = uint8(r>>rgbaShift), uint8(g>>rgbaShift), uint8(b>>rgbaShift)
 	}
 
