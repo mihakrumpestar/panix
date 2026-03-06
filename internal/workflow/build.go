@@ -75,6 +75,10 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		return nil, errors.Wrap(err, "failed to execute build phase")
 	}
 
+	if len(parsedOutput) == 0 {
+		return nil, fmt.Errorf("invalid build output for %s/%s: no outputs", flake.Name, configuration.Name)
+	}
+
 	log.Info().
 		Str("flake", flake.Name).
 		Str("configuration", configuration.Name).

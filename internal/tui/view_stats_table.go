@@ -287,7 +287,12 @@ func (m *model) getStatusText(phaseLog *phase.PhaseLog, colors *config.ColorSche
 	}
 
 	if tas.GetEndError() != nil {
-		return colors.StatusError.Render(phaseLog.Last().StatusIfFailed)
+		lastCommand := phaseLog.Last()
+		if lastCommand == nil {
+			return colors.StatusError.Render("internal error: last command is nil")
+		}
+
+		return colors.StatusError.Render(lastCommand.StatusIfFailed)
 	}
 
 	return colors.StatusOK.Render("done")
