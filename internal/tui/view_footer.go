@@ -10,7 +10,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_clipboard"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
 	"github.com/pkg/errors"
 	zerolog "github.com/rs/zerolog/log"
 )
@@ -120,7 +120,7 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 		return m, m.notification.Set("No content to copy", m.conf.ColorScheme.StatusWarning)
 	}
 
-	if err := tui_clipboard.CopyToClipboard(content); err != nil {
+	if err := clipboard.CopyToClipboard(content); err != nil {
 		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
 	}
 	return m, m.notification.Set("Copied to clipboard", m.conf.ColorScheme.StatusOK)

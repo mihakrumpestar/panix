@@ -9,10 +9,10 @@ import (
 	"charm.land/lipgloss/v2/tree"
 	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
-	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -147,7 +147,7 @@ func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, ind
 
 // createNode creates a tree node for an entity (flake/config/machine)
 // Each node shows: icon + name + message (left aligned) and duration (right aligned)
-func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *config_attributes.Attributes, isRoot bool) *tree.Tree {
+func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *attributes.Attributes, isRoot bool) *tree.Tree {
 	duration := m.resetable.Load().workflow.State().TargetsLogs.MustGet(attr.Xpath).GetCachedDurationAndError().Duration
 	line := m.layoutLine(indent,
 		style.Color.Render(fmt.Sprintf("%s %s %s", string(style.Icon), attr.Name, attr.Message)),
@@ -164,7 +164,7 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 
 // addPhases adds phase nodes to a parent tree for specific phases
 // Returns true if an error was encountered (for stopAtError logic)
-func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes, indent int, stopAtError bool, allowed ...phases.Phase) bool {
+func (m *model) addPhases(parent *tree.Tree, attr *attributes.Attributes, indent int, stopAtError bool, allowed ...phases.Phase) bool {
 	logs := m.resetable.Load().workflow.State().TargetsLogs.MustGetLogs(attr.Xpath)
 	for _, entry := range logs.All() {
 		if !slices.Contains(allowed, entry.Key) {
@@ -180,7 +180,7 @@ func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes,
 
 // addPhase adds a single phase node with its commands to the parent tree
 // Hides successful hideable phases unless ShowAllBuildLogs is true
-func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, phase phases.Phase, phaseLog *logs_phase.PhaseLog, indent int) bool {
+func (m *model) addPhase(parent *tree.Tree, attr *attributes.Attributes, phase phases.Phase, phaseLog *phase.PhaseLog, indent int) bool {
 	if phaseLog == nil {
 		return false
 	}
@@ -220,7 +220,7 @@ func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, 
 // addCommand adds a command node with its output and errors to the phase tree
 // Each command shows: index + description/command + duration
 // If output exists, it wraps in a scrollable viewport
-func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx int, phaseXpath config_attributes.Xpath, indent int) {
+func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, phaseXpath attributes.Xpath, indent int) {
 	colors := m.conf.ColorScheme
 	cmdIndent := indent + treeStep
 	resetable := m.resetable.Load()
@@ -275,7 +275,7 @@ func (m *model) layoutLine(indent int, left, right string) string {
 
 // spinnerOrIcon returns an icon or spinner based on execution state
 // Shows spinner if running, icon if finished, empty string if not started
-func (m *model) spinnerOrIcon(xpath config_attributes.Xpath, icon string, tas *time_and_state.TimeAndState) string {
+func (m *model) spinnerOrIcon(xpath attributes.Xpath, icon string, tas *timeandstate.TimeAndState) string {
 	if !tas.HasStarted() {
 		return ""
 	}
@@ -289,7 +289,7 @@ func (m *model) spinnerOrIcon(xpath config_attributes.Xpath, icon string, tas *t
 
 // durationText formats duration text with proper styling
 // Returns empty string if execution hasn't started
-func (m *model) durationText(style config.ColorSchemeLogEntity, tas *time_and_state.TimeAndState) string {
+func (m *model) durationText(style config.ColorSchemeLogEntity, tas *timeandstate.TimeAndState) string {
 	if d, err := tas.DurationOrElapsedTime(); err == nil {
 		return style.Color.PaddingLeft(1).Render(fmt.Sprintf("(%.2fs)", d.Seconds()))
 	}

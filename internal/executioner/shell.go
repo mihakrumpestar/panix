@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/pkg/errors"
 )
 
@@ -82,7 +82,7 @@ func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
 	return nil
 }
 
-func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *logs_command.CommandLog) error {
+func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *command.CommandLog) error {
 	buf := make([]byte, ptyBufferSize)
 
 	for {
@@ -111,7 +111,7 @@ func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *logs_command.
 	}
 }
 
-func (ex *Executioner) handleReadError(err error, commandLog *logs_command.CommandLog) error {
+func (ex *Executioner) handleReadError(err error, commandLog *command.CommandLog) error {
 	err = ptyError(err)
 	if err != nil && err != io.EOF {
 		commandLog.WriteLineString("PTY read error: " + err.Error())
@@ -123,7 +123,7 @@ func (ex *Executioner) handleReadError(err error, commandLog *logs_command.Comma
 func (ex *Executioner) finalizeExecution(
 	cmd *exec.Cmd,
 	readErr error,
-	commandLog *logs_command.CommandLog,
+	commandLog *command.CommandLog,
 	excOpt *ExecOptions,
 ) error {
 	waitErr := cmd.Wait()
@@ -174,7 +174,7 @@ func ptyError(err error) error {
 
 // processTerminalOutput processes terminal output to handle control sequences
 // like a real terminal would, but in a way that's safe for TUI display
-func processTerminalOutput(buf []byte, exm *logs_command.CommandLog) error {
+func processTerminalOutput(buf []byte, exm *command.CommandLog) error {
 	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), nil)
 	sequences := bytes.Split(buf, []byte("\r"))
 
@@ -186,7 +186,7 @@ func processTerminalOutput(buf []byte, exm *logs_command.CommandLog) error {
 	return nil
 }
 
-func processSequence(seq []byte, isFirst bool, exm *logs_command.CommandLog) error {
+func processSequence(seq []byte, isFirst bool, exm *command.CommandLog) error {
 	if after, ok := bytes.CutPrefix(seq, []byte("\n")); ok {
 		exm.WriteLine(after)
 		return nil

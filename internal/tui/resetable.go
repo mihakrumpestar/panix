@@ -2,8 +2,8 @@ package tui
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	zerolog "github.com/rs/zerolog/log"
 )
@@ -11,8 +11,8 @@ import (
 type resetable struct {
 	err         error
 	workflow    *workflow.Workflow
-	spinners    *tui_spinners.Spinners
-	viewports   *tui_viewports.Viewports
+	spinners    *spinners.Spinners
+	viewports   *viewports.Viewports
 	statsTable  *StatsTable
 	phaseStatus *PhaseStatus
 }
@@ -27,7 +27,7 @@ func (m *model) startWorkflow() tea.Cmd {
 			return errMsg{err}
 		}
 
-		spinners, err := tui_spinners.NewSpinners()
+		spinners, err := spinners.NewSpinners()
 		if err != nil {
 			return errMsg{err}
 		}
@@ -35,7 +35,7 @@ func (m *model) startWorkflow() tea.Cmd {
 		m.resetable.Store(&resetable{
 			workflow:    workflow,
 			spinners:    spinners,
-			viewports:   tui_viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
+			viewports:   viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
 			statsTable:  NewStatsTable(),
 			phaseStatus: NewPhaseStatus(),
 		})

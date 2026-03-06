@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 )
 
@@ -18,17 +18,17 @@ const (
 	WaitForReconnectCheckInterval = 2 * time.Second
 )
 
-func (ex *Executioner) ExecuteHooks(hooks []config_attributes.PostBootstrapHookCommand, hookType string) error {
+func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookType string) error {
 	for idx, hook := range hooks {
 		switch hook {
-		case config_attributes.PostBootstrapHookWaitForOnline:
+		case attributes.PostBootstrapHookWaitForOnline:
 			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
 			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), fmt.Sprintf("%s did not come online", hookType))
 
 			if err != nil {
 				return err
 			}
-		case config_attributes.PostBootstrapHookWaitForOffline:
+		case attributes.PostBootstrapHookWaitForOffline:
 			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
 			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
 
@@ -50,7 +50,7 @@ func (ex *Executioner) ExecuteHooks(hooks []config_attributes.PostBootstrapHookC
 	return nil
 }
 
-func WaitForDisconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg string) error {
+func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg string) error {
 	return exc.ExecFn(
 		"wait for disconnect",
 		statusMsg,
@@ -74,7 +74,7 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg str
 	)
 }
 
-func WaitForReconnect(exc *Executioner, sshClient *ssh.SshClient, statusMsg, failMsg string) error {
+func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, failMsg string) error {
 	return exc.ExecFn(
 		"wait for reconnect",
 		statusMsg,

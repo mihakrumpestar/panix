@@ -1,8 +1,8 @@
 package config
 
 import (
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
+	config_flags "github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -80,14 +80,14 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	Date           atomic.String
 	Nixos          atomic.String
 	Kernel         atomic.String
-	activeSSH      atomic.Pointer[ssh.SshClient]
+	activeSSH      atomic.Pointer[ssh.SSHClient]
 }
 
-func (m *MetaInspect) GetActiveSSH() *ssh.SshClient {
+func (m *MetaInspect) GetActiveSSH() *ssh.SSHClient {
 	return m.activeSSH.Load()
 }
 
-func (m *MetaInspect) SetActiveSSH(sshClient *ssh.SshClient) {
+func (m *MetaInspect) SetActiveSSH(sshClient *ssh.SSHClient) {
 	m.activeSSH.Store(sshClient)
 }
 

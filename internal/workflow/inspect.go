@@ -9,15 +9,15 @@ import (
 	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
-		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			mms := machine.MetaInspect
 
 			if machine.SSH.IsLocal {
@@ -65,10 +65,10 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"SSH auth failed",
 				[]string{"echo", "OK"},
 				executioner.SkipIfLocal(),
-				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
+				executioner.OnFailure(func(log *command.CommandLog, err error) error {
 					return errors.Wrap(err, log.String())
 				}),
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					mms.SSHConnectable.Store(true)
 					return nil
 				}),
@@ -85,7 +85,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"detecting architecture",
 				"uname failed",
 				[]string{"uname", "-m"},
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					architecture := strings.Trim(log.String(), "\n")
 					if architecture == "" {
 						return fmt.Errorf("architecture output was empty")
@@ -111,10 +111,10 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"checking superuser privileges",
 				"checking superuser failed",
 				[]string{"id", "-u"},
-				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
+				executioner.OnFailure(func(log *command.CommandLog, err error) error {
 					return errors.Wrap(err, log.String())
 				}),
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					output := strings.Trim(log.String(), "\n ")
 					parsedOutput, err := strconv.ParseUint(output, 10, 64)
 
@@ -138,10 +138,10 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"detecting bootstrap status",
 				"bootstrap detection failed",
 				[]string{"cat", "/etc/os-release"},
-				executioner.OnFailure(func(log *logs_command.CommandLog, err error) error {
+				executioner.OnFailure(func(log *command.CommandLog, err error) error {
 					return errors.Wrap(err, log.String())
 				}),
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					output := log.String()
 
 					osrelease, err := osrelease.ReadString(output)
@@ -199,7 +199,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"reading generation info",
 				"failed to read generation symlink",
 				[]string{"readlink", "/nix/var/nix/profiles/system"},
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					link := strings.TrimSpace(log.String())
 					if strings.HasPrefix(link, "system-") && strings.HasSuffix(link, "-link") {
 						genStr := strings.TrimSuffix(strings.TrimPrefix(link, "system-"), "-link")
@@ -222,7 +222,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"reading generation date",
 				"failed to stat system profile",
 				[]string{"stat", "-c", "%y", "/nix/var/nix/profiles/system"},
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					date := strings.TrimSpace(log.String())
 					if idx := strings.Index(date, "."); idx != -1 {
 						date = date[:idx]
@@ -244,7 +244,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				"reading kernel version",
 				"uname failed",
 				[]string{"uname", "-r"},
-				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+				executioner.OnSuccess(func(log *command.CommandLog) error {
 					mms.Kernel.Store(strings.TrimSpace(log.String()))
 					return nil
 				}),
