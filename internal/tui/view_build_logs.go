@@ -32,7 +32,7 @@ var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 func (m *model) ViewBuildLogs() string {
 	var builder strings.Builder
 
-	builder.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
+	builder.WriteString(m.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n"))
 
 	resetable := m.resetable.Load()
 	resetable.workflow.State().TargetsLogs.CalculateDurationAndError()
@@ -162,8 +162,8 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 	treeInst := tree.New().Root(line)
 	if isRoot {
 		treeInst = treeInst.Enumerator(tree.RoundedEnumerator).
-			EnumeratorStyle(m.conf.ColorScheme.TreeEnumerator).
-			IndenterStyle(m.conf.ColorScheme.TreeEnumerator)
+			EnumeratorStyle(m.conf.ColorScheme.Tree.Enumerator).
+			IndenterStyle(m.conf.ColorScheme.Tree.Enumerator)
 	}
 
 	return treeInst
@@ -252,7 +252,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	output := strings.TrimSpace(cmd.String())
 	if len(output) > 0 && lipgloss.Height(labelViewport) > 1 {
 		icon = lipgloss.JoinVertical(lipgloss.Left, append([]string{icon},
-			slices.Repeat([]string{colors.TreeEnumerator.Render("│")}, lipgloss.Height(labelViewport)-1)...)...)
+			slices.Repeat([]string{colors.Tree.Enumerator.Render("│")}, lipgloss.Height(labelViewport)-1)...)...)
 	}
 
 	cmdNode := tree.New().Root(colors.Command.Color.Render(

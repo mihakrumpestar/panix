@@ -354,7 +354,7 @@ func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder boo
 
 	if noPadding {
 		if viewport.active {
-			combined = v.colors.SelectionHighlightBackground.Render(combined)
+			combined = v.colors.Table.SelectionHighlightBackground.Render(combined)
 		}
 
 		return combined
@@ -364,9 +364,9 @@ func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder boo
 		return combined
 	}
 
-	borderColor := v.colors.TableBorder.GetForeground()
+	borderColor := v.colors.Table.Border.GetForeground()
 	if viewport.active {
-		borderColor = v.colors.TableBorder.GetBackground()
+		borderColor = v.colors.Table.Border.GetBackground()
 	}
 
 	return lipgloss.NewStyle().
@@ -400,7 +400,7 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 	}
 
 	return lipgloss.NewStyle().
-		Foreground(v.colors.TableBorder.GetForeground()).
+		Foreground(v.colors.Table.Border.GetForeground()).
 		Render(builder.String()), 1
 }
 
