@@ -1,0 +1,10 @@
+version: v2.0.0
+
+name: custom-gcl
+
+destination: .devbox/bin
+
+plugins:
+  - module: "go.uber.org/nilaway"
+    import: "go.uber.org/nilaway/cmd/gclplugin"
+    version: latest
