@@ -65,6 +65,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 }
 
 func (ex *Executioner) prepareCommandWithEnv(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
+	// #nosec G204 -- commandWithArgs comes from internal configuration, not user input
 	cmd := exec.CommandContext(ex.ctx, commandWithArgs[0], commandWithArgs[1:]...)
 	env := os.Environ()
 	cmd.Env = append(env, excOpt.env...)

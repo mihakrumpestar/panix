@@ -98,14 +98,14 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 }
 
 func startCPUProfile(path string) (func(), error) {
-	f, err := os.Create(path)
+	file, err := os.Create(path) // #nosec G304 -- path comes from controlled configuration flag
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create CPU profile file")
 	}
 
-	err = pprof.StartCPUProfile(f)
+	err = pprof.StartCPUProfile(file)
 	if err != nil {
-		f.Close()
+		file.Close()
 
 		return nil, errors.Wrap(err, "failed to start CPU profile")
 	}
@@ -113,7 +113,7 @@ func startCPUProfile(path string) (func(), error) {
 	return func() {
 		pprof.StopCPUProfile()
 
-		_ = f.Close()
+		_ = file.Close()
 	}, nil
 }
 
