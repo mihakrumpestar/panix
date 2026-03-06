@@ -128,7 +128,13 @@ func (e *keyValueExtractor[K, V]) createNullValue(isPtr bool, elemType reflect.T
 
 	if isPtr && elemType.Kind() == reflect.Struct {
 		newPtr := reflect.New(elemType)
-		value = newPtr.Interface().(V)
+
+		var ok bool
+
+		value, ok = newPtr.Interface().(V)
+		if !ok {
+			panic(fmt.Sprintf("type assertion failed: expected %T, got %T", value, newPtr.Interface()))
+		}
 	}
 
 	return value
@@ -159,7 +165,13 @@ func (e *keyValueExtractor[K, V]) unmarshalStructPtr(node ast.Node, value *V, el
 	if err := yaml.NodeToValue(node, newPtr.Interface()); err != nil {
 		return fmt.Errorf("failed to unmarshal %v: %w", key, err)
 	}
-	*value = newPtr.Interface().(V)
+
+	v, ok := newPtr.Interface().(V)
+	if !ok {
+		return fmt.Errorf("type assertion failed: expected %T, got %T", value, newPtr.Interface())
+	}
+
+	*value = v
 
 	return nil
 }
