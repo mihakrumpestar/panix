@@ -94,13 +94,13 @@ func (p *PhaseStatus) GetSelectedPhase() phases.Phase {
 }
 
 func (m *model) ViewPhaseStatus() string {
-	return m.conf.ColorScheme.HeaderTitle.Render("=== Phase Status ===") + "\n" + m.renderPhaseFlow()
+	return m.conf.ColorScheme.Header.Title.Render("=== Phase Status ===") + "\n" + m.renderPhaseFlow()
 }
 
 func (m *model) renderPhaseFlow() string {
 	phasesList := m.conf.Phases
 	if len(phasesList) == 0 {
-		return m.conf.ColorScheme.TableRow.Render("No phases to display")
+		return m.conf.ColorScheme.Table.Row.Render("No phases to display")
 	}
 
 	r := m.resetable.Load()
@@ -131,7 +131,7 @@ func (m *model) renderPhaseFlow() string {
 		Border(lipgloss.HiddenBorder()).
 		StyleFunc(func(_, col int) lipgloss.Style {
 			if (col+1)%2 == 0 {
-				return m.conf.ColorScheme.TableBorder.Width(1).Align(lipgloss.Center)
+				return m.conf.ColorScheme.Table.Border.Width(1).Align(lipgloss.Center)
 			}
 
 			return lipgloss.NewStyle().Align(lipgloss.Center)
@@ -153,7 +153,7 @@ func (m *model) createPhaseGroup(name string, running, failed, done []attributes
 	statusLine := buildStatusLine(running, failed, done, m.conf.ColorScheme)
 
 	if phaseIdx >= 0 && phaseIdx == r.phaseStatus.SelectedPhase {
-		statusLine = m.conf.ColorScheme.SelectionHighlightBackground.Width(width).Align(lipgloss.Center).Render(statusLine)
+		statusLine = m.conf.ColorScheme.Table.SelectionHighlightBackground.Width(width).Align(lipgloss.Center).Render(statusLine)
 	} else {
 		statusLine = colStyle.Render(statusLine)
 	}
@@ -205,16 +205,16 @@ func buildStatusLine(running, failed, done []attributes.Xpath, colors *config.Co
 	var parts []string
 
 	if n := len(running); n > 0 {
-		parts = append(parts, colors.StatusRunning.Render(strconv.Itoa(n)))
+		parts = append(parts, colors.Status.Running.Render(strconv.Itoa(n)))
 	}
 
 	if n := len(failed); n > 0 {
-		parts = append(parts, colors.StatusError.Render(strconv.Itoa(n)))
+		parts = append(parts, colors.Status.Error.Render(strconv.Itoa(n)))
 	}
 
 	if n := len(done); n > 0 {
-		parts = append(parts, colors.StatusOK.Render(strconv.Itoa(n)))
+		parts = append(parts, colors.Status.OK.Render(strconv.Itoa(n)))
 	}
 
-	return strings.Join(parts, colors.TableBorder.Render(statusSeparator))
+	return strings.Join(parts, colors.Table.Border.Render(statusSeparator))
 }

@@ -12,6 +12,7 @@ linters:
     - tagalign # Bad check
     - ireturn # A lot of bubbletea is based on interfaces
     - goconst # Just some same strings across codebase
+    - gochecknoglobals # constants are ok
 
   enable:
     - nilaway

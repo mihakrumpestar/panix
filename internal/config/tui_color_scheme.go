@@ -12,19 +12,40 @@ type ColorSchemeLogEntity struct {
 	Icon  rune
 }
 
-// ColorScheme defines a reusable color scheme for the TUI.
+type ColorSchemeHeader struct {
+	Title  lipgloss.Style
+	Border lipgloss.Style
+}
+
+type ColorSchemeStatus struct {
+	OK      lipgloss.Style
+	Warning lipgloss.Style
+	Error   lipgloss.Style
+	Running lipgloss.Style
+}
+
+type ColorSchemeTable struct {
+	Header                       lipgloss.Style
+	Border                       lipgloss.Style
+	Row                          lipgloss.Style
+	RowAlt                       lipgloss.Style
+	SelectionHighlightBackground lipgloss.Style
+}
+
+type ColorSchemeTree struct {
+	Root       lipgloss.Style
+	Node       lipgloss.Style
+	Leaf       lipgloss.Style
+	Enumerator lipgloss.Style
+}
+
 type ColorScheme struct {
-	// Header colors
-	HeaderTitle  lipgloss.Style
-	HeaderBorder lipgloss.Style
+	Header  ColorSchemeHeader
+	Status  ColorSchemeStatus
+	Table   ColorSchemeTable
+	Tree    ColorSchemeTree
+	Spinner lipgloss.Style
 
-	// Status colors
-	StatusOK      lipgloss.Style
-	StatusWarning lipgloss.Style
-	StatusError   lipgloss.Style
-	StatusRunning lipgloss.Style
-
-	// Entity colors
 	Flake         ColorSchemeLogEntity
 	Configuration ColorSchemeLogEntity
 	Machine       ColorSchemeLogEntity
@@ -32,28 +53,9 @@ type ColorScheme struct {
 	Command       ColorSchemeLogEntity
 	Error         ColorSchemeLogEntity
 
-	// Table colors
-	TableHeader lipgloss.Style
-	TableBorder lipgloss.Style
-	TableRow    lipgloss.Style
-	TableRowAlt lipgloss.Style
-
-	// Selection/highlight color
-	SelectionHighlightBackground lipgloss.Style
-
-	// Tree colors
-	TreeRoot       lipgloss.Style
-	TreeNode       lipgloss.Style
-	TreeLeaf       lipgloss.Style
-	TreeEnumerator lipgloss.Style
-
-	// Spinner colors
-	Spinner lipgloss.Style
-
 	PhaseColorPairs map[PhaseState][2]colorful.Color
 }
 
-// PhaseState represents the visual state of a phase.
 type PhaseState int
 
 const (
@@ -63,115 +65,81 @@ const (
 	PhaseStateCompleted
 )
 
-// DefaultColorScheme returns the default color scheme.
 func defaultColorScheme() *ColorScheme {
+	borderStyle := makeBorderStyle()
+
 	return &ColorScheme{
-		// Header colors
-		HeaderTitle: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#00ADD8")), // Cyan
-
-		HeaderBorder: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6272A4")), // Comment gray
-
-		// Status colors
-		StatusOK: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#50FA7B")), // Green
-
-		StatusWarning: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFB86C")), // Orange
-
-		StatusError: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF5555")), // Red
-
-		StatusRunning: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#3b6bec")), // Blue
-
-		// Entities
-		Flake: ColorSchemeLogEntity{
-			Color: lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#F1FA8C")), // Yellow
-			Icon: '📁',
+		Header: ColorSchemeHeader{
+			Title:  makeHeaderTitleStyle(),
+			Border: borderStyle,
 		},
-
-		Configuration: ColorSchemeLogEntity{
-			Color: lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFB86C")), // Orange
-			Icon: '📦',
+		Status: ColorSchemeStatus{
+			OK:      makeForegroundStyle("#50FA7B"),
+			Warning: makeForegroundStyle("#FFB86C"),
+			Error:   makeForegroundStyle("#FF5555"),
+			Running: makeForegroundStyle("#3b6bec"),
 		},
-
-		Machine: ColorSchemeLogEntity{
-			Color: lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#8BE9FD")), // Cyan
-			Icon: '💻',
+		Table: ColorSchemeTable{
+			Header:                       makeBoldForegroundStyle("#F8F8F2"),
+			Border:                       borderStyle,
+			Row:                          makeForegroundStyle("#F8F8F2"),
+			RowAlt:                       makeForegroundStyle("#BFBFBF"),
+			SelectionHighlightBackground: makeBackgroundStyle("#444444"),
 		},
-
-		Phase: ColorSchemeLogEntity{
-			Color: lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF79C6")), // Pink
-			Icon: '📋',
+		Tree: ColorSchemeTree{
+			Root:       makeBoldForegroundStyle("#F1FA8C"),
+			Node:       makeForegroundStyle("#8BE9FD"),
+			Leaf:       makeForegroundStyle("#50FA7B"),
+			Enumerator: borderStyle,
 		},
-
-		Command: ColorSchemeLogEntity{
-			Color: lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#BD93F9")), // Purple
-			Icon: '⚙',
-		},
-
-		Error: ColorSchemeLogEntity{
-			Color: lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF5555")), // Red
-			Icon: '✗',
-		},
-
-		// Table colors
-		TableHeader: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#F8F8F2")), // White
-
-		TableBorder: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6272A4")), // Comment gray
-
-		TableRow: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F8F8F2")), // White
-
-		TableRowAlt: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#BFBFBF")), // Light gray
-
-		// Highlight/selection color
-		SelectionHighlightBackground: lipgloss.NewStyle().
-			Background(lipgloss.Color("#444444")), // Dark gray for selection
-
-		// Tree colors
-		TreeRoot: lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#F1FA8C")), // Yellow
-
-		TreeNode: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8BE9FD")), // Cyan
-
-		TreeLeaf: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#50FA7B")), // Green
-
-		TreeEnumerator: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6272A4")), // Comment gray
-
-		// Spinner colors
-		Spinner: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#8BE9FD")), // Cyan
-
-		// Pre-defined and pre-parsed color pairs for different phase states
-		PhaseColorPairs: map[PhaseState][2]colorful.Color{
-			PhaseStateActive:    {mustColorfulHex("#2952c3"), mustColorfulHex("#3b6bec")}, // Dark blue variations
-			PhaseStateFailed:    {mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")}, // Dark red variations
-			PhaseStateCompleted: {mustColorfulHex("#14532D"), mustColorfulHex("#11883d")}, // Dark green variations
-			PhaseStateDefault:   {mustColorfulHex("#535862"), mustColorfulHex("#6B7280")}, // Dark gray solid
-		},
+		Spinner:         makeForegroundStyle("#8BE9FD"),
+		Flake:           makeLogEntity("#F1FA8C", '📁', true),
+		Configuration:   makeLogEntity("#FFB86C", '📦', false),
+		Machine:         makeLogEntity("#8BE9FD", '💻', false),
+		Phase:           makeLogEntity("#FF79C6", '📋', false),
+		Command:         makeLogEntity("#BD93F9", '⚙', false),
+		Error:           makeLogEntity("#FF5555", '✗', false),
+		PhaseColorPairs: makePhaseColorPairs(),
 	}
 }
 
-// Helpers
+func makeForegroundStyle(color string) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+}
+
+func makeBoldForegroundStyle(color string) lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color))
+}
+
+func makeBackgroundStyle(color string) lipgloss.Style {
+	return lipgloss.NewStyle().Background(lipgloss.Color(color))
+}
+
+func makeBorderStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
+}
+
+func makeHeaderTitleStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
+}
+
+func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	if bold {
+		style = style.Bold(true)
+	}
+
+	return ColorSchemeLogEntity{Color: style, Icon: icon}
+}
+
+func makePhaseColorPairs() map[PhaseState][2]colorful.Color {
+	return map[PhaseState][2]colorful.Color{
+		PhaseStateActive:    {mustColorfulHex("#2952c3"), mustColorfulHex("#3b6bec")},
+		PhaseStateFailed:    {mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")},
+		PhaseStateCompleted: {mustColorfulHex("#14532D"), mustColorfulHex("#11883d")},
+		PhaseStateDefault:   {mustColorfulHex("#535862"), mustColorfulHex("#6B7280")},
+	}
+}
 
 func mustColorfulHex(hex string) colorful.Color {
 	c, err := colorful.Hex(hex)

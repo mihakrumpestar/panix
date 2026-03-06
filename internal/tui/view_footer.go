@@ -121,18 +121,18 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 
 	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m, m.notification.Set("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
+		return m, m.notification.Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning)
 	}
 
 	if content == "" {
-		return m, m.notification.Set("No content to copy", m.conf.ColorScheme.StatusWarning)
+		return m, m.notification.Set("No content to copy", m.conf.ColorScheme.Status.Warning)
 	}
 
 	if err := clipboard.CopyToClipboard(content); err != nil {
-		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
+		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Error)
 	}
 
-	return m, m.notification.Set("Copied to clipboard", m.conf.ColorScheme.StatusOK)
+	return m, m.notification.Set("Copied to clipboard", m.conf.ColorScheme.Status.OK)
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
@@ -177,7 +177,7 @@ func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 
 func (m *model) handleRestart() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(
-		m.notification.Set("Restarting workflow...", m.conf.ColorScheme.StatusOK),
+		m.notification.Set("Restarting workflow...", m.conf.ColorScheme.Status.OK),
 		func() tea.Msg { return restartMsg{} },
 	)
 }
@@ -195,7 +195,7 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	if activeInnerXpath.Depth() > 0 {
 		resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m, m.notification.Set("Select a viewport first", m.conf.ColorScheme.StatusWarning)
+		return m, m.notification.Set("Select a viewport first", m.conf.ColorScheme.Status.Warning)
 	}
 
 	return m, nil
@@ -273,6 +273,6 @@ func renderScrollPercent(m *model) string {
 	pct := m.resetable.Load().viewports.GetActiveViewportScrollPercent()
 
 	return lipgloss.NewStyle().PaddingLeft(1).
-		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
+		Foreground(m.conf.ColorScheme.Table.Border.GetForeground()).
 		Render(fmt.Sprintf("%3d%%", int(pct*100))) //nolint:mnd
 }

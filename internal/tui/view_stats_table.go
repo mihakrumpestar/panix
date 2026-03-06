@@ -11,6 +11,7 @@ import (
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -104,37 +105,41 @@ func (s *StatsTable) GetSelectedXpath() attributes.Xpath {
 func (m *model) ViewStatsTable() string {
 	resetable := m.resetable.Load()
 	state := resetable.workflow.State()
-	phasesList := m.conf.Phases
-	colors := m.conf.ColorScheme
 
-	if m.conf.Flags.DryRun || !slices.Contains(phasesList, phases.Inspect) {
+	if m.conf.Flags.DryRun || !slices.Contains(m.conf.Phases, phases.Inspect) {
 		return ""
 	}
 
 	var builder strings.Builder
 
-	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
+	builder.WriteString(m.conf.ColorScheme.Header.Title.Render("=== Stats table ===\n"))
 
 	usableWidth := resetable.viewports.ContentWidth()
-	machineCount := resetable.workflow.MachineCount()
-	indexWidth := len(strconv.Itoa(machineCount))
-
+	indexWidth := len(strconv.Itoa(resetable.workflow.MachineCount()))
 	statsTable := resetable.statsTable
 	statsTable.MachineXpaths = nil
 
-	headers, styleFunc := makeTableColumns(colors, indexWidth, statsTable.SelectedMachine)
-
+	headers, styleFunc := makeTableColumns(m.conf.ColorScheme, indexWidth, statsTable.SelectedMachine)
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
-		BorderStyle(colors.TableBorder).
+		BorderStyle(m.conf.ColorScheme.Table.Border).
 		Headers(headers...).
 		Width(usableWidth).
 		Wrap(false).
 		StyleFunc(styleFunc)
 
+	m.populateTableRows(tbl, statsTable, state.TargetsLogs)
+
+	tableContent := zone.Mark(statsTableZonePrefix, tbl.String())
+	builder.WriteString("\n" + tableContent + "\n\n")
+
+	return builder.String()
+}
+
+func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targetsLogs *logs.TargetsLogs) {
 	var prevFlakeName, prevConfigName string
 
-	resetable.workflow.RootTree(func(idx int, machine *config.Machine) {
+	m.resetable.Load().workflow.RootTree(func(idx int, machine *config.Machine) {
 		configuration := machine.ParentConfiguration
 		flake := configuration.ParentFlake
 		xpath := machine.Xpath
@@ -142,7 +147,7 @@ func (m *model) ViewStatsTable() string {
 		statsTable.MachineXpaths = append(statsTable.MachineXpaths, xpath)
 
 		metaInspect := machine.MetaInspect
-		phaseLog := state.TargetsLogs.MustGetFirstLogErrorOrLastLog(machine.Xpath)
+		phaseLog := targetsLogs.MustGetFirstLogErrorOrLastLog(machine.Xpath)
 
 		showFlake := flake.Name != prevFlakeName
 		if showFlake {
@@ -176,18 +181,13 @@ func (m *model) ViewStatsTable() string {
 			configDisplay,
 			machine.Name,
 			metaInspect.Architecture.Load(),
-			m.getStatusText(phaseLog, colors),
+			m.getStatusText(phaseLog, m.conf.ColorScheme),
 			generationString,
 			metaInspect.Date.Load(),
 			metaInspect.Nixos.Load(),
 			metaInspect.Kernel.Load(),
 		)
 	})
-
-	tableContent := zone.Mark(statsTableZonePrefix, tbl.String())
-	builder.WriteString("\n" + tableContent + "\n\n")
-
-	return builder.String()
 }
 
 type tableColumn struct {
@@ -198,10 +198,10 @@ type tableColumn struct {
 func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow int) ([]string, func(row, col int) lipgloss.Style) {
 	columns := []tableColumn{
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow.Width(indexWidth).Align(lipgloss.Right)
+			return c.Table.Row.Width(indexWidth).Align(lipgloss.Right)
 		}},
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow.Width(statusIconReservedWidth).Align(lipgloss.Center)
+			return c.Table.Row.Width(statusIconReservedWidth).Align(lipgloss.Center)
 		}},
 		{header: string(colors.Flake.Icon) + " FLAKE", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.Flake.Color
@@ -213,22 +213,22 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 			return c.Machine.Color
 		}},
 		{header: "ARCH", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow
+			return c.Table.Row
 		}},
 		{header: "STATUS", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow
+			return c.Table.Row
 		}},
 		{header: "GEN", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow
+			return c.Table.Row
 		}},
 		{header: "DATE", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow
+			return c.Table.Row
 		}},
 		{header: "NIXOS", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow
+			return c.Table.Row
 		}},
 		{header: "KERNEL", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow
+			return c.Table.Row
 		}},
 	}
 
@@ -239,20 +239,20 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 
 	return headers, func(row, col int) lipgloss.Style {
 		if row == table.HeaderRow {
-			return colors.TableRow
+			return colors.Table.Row
 		}
 
 		if col >= 0 && col < len(columns) {
 			style := columns[col].style(colors)
 
 			if row == selectedRow {
-				style = style.Background(colors.SelectionHighlightBackground.GetBackground())
+				style = style.Background(colors.Table.SelectionHighlightBackground.GetBackground())
 			}
 
 			return style
 		}
 
-		return colors.TableRow
+		return colors.Table.Row
 	}
 }
 
@@ -286,17 +286,17 @@ func (m *model) getStatusText(phaseLog *phase.PhaseLog, colors *config.ColorSche
 			return ""
 		}
 
-		return colors.StatusRunning.Render(lastCommand.StatusIfRunning)
+		return colors.Status.Running.Render(lastCommand.StatusIfRunning)
 	}
 
 	if tas.GetEndError() != nil {
 		lastCommand := phaseLog.Last()
 		if lastCommand == nil {
-			return colors.StatusError.Render("internal error: last command is nil")
+			return colors.Status.Error.Render("internal error: last command is nil")
 		}
 
-		return colors.StatusError.Render(lastCommand.StatusIfFailed)
+		return colors.Status.Error.Render(lastCommand.StatusIfFailed)
 	}
 
-	return colors.StatusOK.Render("done")
+	return colors.Status.OK.Render("done")
 }
