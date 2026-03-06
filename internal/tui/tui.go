@@ -119,7 +119,7 @@ func startCPUProfile(path string) (func(), error) {
 
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(
-		func() tea.Msg { return tea.RequestWindowSize() },
+		tea.RequestWindowSize,
 		m.startWorkflow(),
 		m.workflowUpdateHook(),
 	)

@@ -575,11 +575,13 @@ func truncateToRuneWidth(str string, maxWidth int) string {
 		}
 
 		w := lipgloss.Width(str[:mid])
-		if w > maxWidth {
+
+		switch {
+		case w > maxWidth:
 			high = mid
-		} else if w < maxWidth {
+		case w < maxWidth:
 			low = mid + 1
-		} else {
+		default:
 			return str[:mid]
 		}
 	}

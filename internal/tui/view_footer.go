@@ -198,13 +198,15 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 
 func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 	resetable := m.resetable.Load()
-	if resetable.viewports.IsFullscreen() {
+
+	switch {
+	case resetable.viewports.IsFullscreen():
 		resetable.viewports.ExitFullscreen()
-	} else if resetable.viewports.HasActiveInner() {
+	case resetable.viewports.HasActiveInner():
 		resetable.viewports.DeselectAll()
-	} else if resetable.statsTable.SelectedMachine >= 0 {
+	case resetable.statsTable.SelectedMachine >= 0:
 		resetable.statsTable.Reset()
-	} else if resetable.phaseStatus.SelectedPhase >= 0 {
+	case resetable.phaseStatus.SelectedPhase >= 0:
 		resetable.phaseStatus.Reset()
 	}
 
