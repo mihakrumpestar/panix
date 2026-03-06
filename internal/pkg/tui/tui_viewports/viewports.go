@@ -6,11 +6,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/kirill-scherba/omap"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 )
@@ -110,12 +110,13 @@ func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, cont
 		})
 	}
 
-	yOffset := vp.model.YOffset
-	vp.model.Width, vp.model.Height = w, h
+	yOffset := vp.model.YOffset()
+	vp.model.SetWidth(w)
+	vp.model.SetHeight(h)
 	vp.content = content
 	proc := lipgloss.NewStyle().Width(w).Render(content)
 	vp.model.SetContent(proc)
-	vp.model.YOffset = min(yOffset, max(0, lipgloss.Height(proc)-h))
+	vp.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-h)))
 
 	return v.renderViewport(vp, h, true, false)
 }
@@ -179,7 +180,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case tea.MouseMsg:
 		v.handleMouse(m)
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		v.handleKey(m)
 		return tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
@@ -235,12 +236,13 @@ func (v *Viewports) resizeAllViewports() {
 
 		if xpath == v.mainXpath {
 			// Main viewport gets full height minus footer
-			vp.model.Width, vp.model.Height = w, h
+			vp.model.SetWidth(w)
+			vp.model.SetHeight(h)
 		} else {
 			// Inner viewports: update width, keep existing height or use max height
-			vp.model.Width = w
-			if v.commandOutputMaxHeight > 0 && vp.model.Height > v.commandOutputMaxHeight {
-				vp.model.Height = v.commandOutputMaxHeight
+			vp.model.SetWidth(w)
+			if v.commandOutputMaxHeight > 0 && vp.model.Height() > v.commandOutputMaxHeight {
+				vp.model.SetHeight(v.commandOutputMaxHeight)
 			}
 		}
 	}
@@ -268,7 +270,7 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 	vp, exists := v.viewports.Get(xpath)
 	if !exists {
 		vp = &Viewport{
-			model:         viewport.New(w, h),
+			model:         viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
 			scrollbarZone: xpath.NewXpathWithAppend("scrollbar"),
 			content:       content,
 			active:        xpath == v.mainXpath,
@@ -295,16 +297,17 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 		finalHeight = h
 	}
 
-	vp.model.Width, vp.model.Height = w, finalHeight
+	vp.model.SetWidth(w)
+	vp.model.SetHeight(finalHeight)
 
-	yOffset, pct := vp.model.YOffset, vp.model.ScrollPercent()
+	yOffset, pct := vp.model.YOffset(), vp.model.ScrollPercent()
 	vp.model.SetContent(proc)
 
 	if pct == 1 {
 		vp.model.GotoBottom()
 	} else {
 		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
-		vp.model.YOffset = min(yOffset, maxOffset)
+		vp.model.SetYOffset(min(yOffset, maxOffset))
 	}
 
 	return zone.Mark(xpath.String(), v.renderViewport(vp, finalHeight, opts.useBorder, opts.noPadding))
@@ -396,10 +399,10 @@ func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attrib
 }
 
 func (v *Viewports) handleMouse(m tea.MouseMsg) {
-	// Handle mouse wheel scrolling first (doesn't require release action)
-	if m.Button == tea.MouseButtonWheelUp || m.Button == tea.MouseButtonWheelDown {
+	// Handle mouse wheel scrolling first
+	if wheel, ok := m.(tea.MouseWheelMsg); ok {
 		if vp := v.getActiveViewport(); vp != nil {
-			if m.Button == tea.MouseButtonWheelUp {
+			if wheel.Button == tea.MouseWheelUp {
 				vp.model.ScrollUp(3)
 			} else {
 				vp.model.ScrollDown(3)
@@ -408,12 +411,13 @@ func (v *Viewports) handleMouse(m tea.MouseMsg) {
 		return
 	}
 
-	// Handle click-to-activate (only on release)
-	if m.Action != tea.MouseActionRelease {
+	// Handle click-to-activate (only on click messages)
+	click, ok := m.(tea.MouseClickMsg)
+	if !ok {
 		return
 	}
 
-	clicked := v.mostSpecific(v.underMouse(m))
+	clicked := v.mostSpecific(v.underMouse(click))
 	hasClick := clicked.Depth() > 0
 
 	for xpath, vp := range v.viewports.Records() {
@@ -427,7 +431,7 @@ func (v *Viewports) handleMouse(m tea.MouseMsg) {
 	}
 }
 
-func (v *Viewports) handleKey(m tea.KeyMsg) {
+func (v *Viewports) handleKey(m tea.KeyPressMsg) {
 	if vp := v.getActiveViewport(); vp != nil {
 		switch m.String() {
 		case "up", "k":
@@ -436,7 +440,7 @@ func (v *Viewports) handleKey(m tea.KeyMsg) {
 			vp.model.ScrollDown(1)
 		case "pgup":
 			vp.model.HalfPageUp()
-		case "pgdown", " ":
+		case "pgdown", "space":
 			vp.model.HalfPageDown()
 		case "home", "g":
 			vp.model.GotoTop()

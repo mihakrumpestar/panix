@@ -3,7 +3,7 @@ package tui
 import (
 	"context"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
