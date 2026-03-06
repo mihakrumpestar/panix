@@ -628,7 +628,7 @@ root:
             prom-01:
 ```
 
-The one I use is at [panix.yml](panix.yml).
+The one used for testing to deploy [infrastructure](https://github.com/mihakrumpestar/infrastructure) is at [panix.yml](panix.yml).
 
 ---
 
