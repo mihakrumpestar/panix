@@ -305,7 +305,8 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 			continue
 		}
 
-		if strings.HasPrefix(tag, "min=") {
+		switch {
+		case strings.HasPrefix(tag, "min="):
 			val := strings.TrimPrefix(tag, "min=")
 			if v, err := parseInt(val); err == nil {
 				switch baseType {
@@ -315,7 +316,7 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 					td.MinLength = &v
 				}
 			}
-		} else if strings.HasPrefix(tag, "max=") {
+		case strings.HasPrefix(tag, "max="):
 			val := strings.TrimPrefix(tag, "max=")
 			if v, err := parseInt(val); err == nil {
 				switch baseType {
@@ -325,16 +326,15 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 					td.MaxLength = &v
 				}
 			}
-		} else if strings.HasPrefix(tag, "len=") {
+		case strings.HasPrefix(tag, "len="):
 			val := strings.TrimPrefix(tag, "len=")
 			if v, err := parseInt(val); err == nil {
-				switch baseType {
-				case "string":
+				if baseType == "string" {
 					td.MinLength = &v
 					td.MaxLength = &v
 				}
 			}
-		} else {
+		default:
 			// Handle format tags
 			switch tag {
 			case "filepath":
