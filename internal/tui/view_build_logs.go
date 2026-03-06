@@ -55,6 +55,7 @@ func (m *model) ViewBuildLogs() string {
 				for _, pair := range machines {
 					if pair.Value.Xpath == selectedXpath {
 						m.addMachineTree(cfgNode, cfg, pair.Value)
+
 						break
 					}
 				}
@@ -75,6 +76,7 @@ func (m *model) ViewBuildLogs() string {
 			builder.WriteString("\n" + flakeNode.String())
 		}
 	}
+
 	return builder.String()
 }
 
@@ -159,6 +161,7 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 			EnumeratorStyle(m.conf.ColorScheme.TreeEnumerator).
 			IndenterStyle(m.conf.ColorScheme.TreeEnumerator)
 	}
+
 	return treeInst
 }
 
@@ -175,6 +178,7 @@ func (m *model) addPhases(parent *tree.Tree, attr *attributes.Attributes, indent
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -214,6 +218,7 @@ func (m *model) addPhase(parent *tree.Tree, attr *attributes.Attributes, phase p
 	}
 
 	parent.Child(phaseNode)
+
 	return hasError
 }
 
@@ -268,6 +273,7 @@ func (m *model) layoutLine(indent int, left, right string) string {
 	timerIndent := max(4-indent/treeStep, 0)
 	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndent
 	rightWidth := lipgloss.Width(right)
+
 	return lipgloss.JoinHorizontal(lipgloss.Left,
 		lipgloss.NewStyle().Width(max(available-rightWidth, lipgloss.Width(left))).Render(left),
 		right)
@@ -293,5 +299,6 @@ func (m *model) durationText(style config.ColorSchemeLogEntity, tas *timeandstat
 	if d, err := tas.DurationOrElapsedTime(); err == nil {
 		return style.Color.PaddingLeft(1).Render(fmt.Sprintf("(%.2fs)", d.Seconds()))
 	}
+
 	return ""
 }

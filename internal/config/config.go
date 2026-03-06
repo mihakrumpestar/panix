@@ -58,7 +58,13 @@ type MetaBuild struct {
 
 func (c *Configuration) Init(name string, parent *Flake) error {
 	c.ParentFlake = parent
-	return c.Attributes.Init(name, &parent.Attributes, false)
+
+	err := c.Attributes.Init(name, &parent.Attributes, false)
+	if err != nil {
+		return errors.Wrap(err, "failed to init configuration attributes")
+	}
+
+	return nil
 }
 
 // Machine
@@ -111,7 +117,7 @@ var (
 
 func (m *Machine) MaybeSudo() []string {
 	if m.MetaInspect.IsRoot.Load() {
-		return emptySudo // Return zero slice (instead of nil), since this might be the starting slice
+		return emptySudo
 	}
 
 	if m.OverrideSudoProgram == "" {

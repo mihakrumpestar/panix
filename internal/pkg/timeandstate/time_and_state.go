@@ -22,6 +22,7 @@ func NewTimeAndStateCustom(startTime, endTime time.Time, endErr error) *TimeAndS
 	tas.startTime.Store(startTime)
 	tas.endTime.Store(endTime)
 	tas.endErr.Store(endErr)
+
 	return tas
 }
 
@@ -72,6 +73,7 @@ func (tas *TimeAndState) GetEndError() error {
 	if err != nil {
 		return errors.Wrap(err, "end error")
 	}
+
 	return nil
 }
 

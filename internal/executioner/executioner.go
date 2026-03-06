@@ -92,7 +92,6 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	}
 
 	noMachineOrLocal := ex.machine == nil || isLocal
-
 	if noMachineOrLocal && excOpt.skipIfLocal {
 		return nil
 	}
@@ -126,5 +125,6 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 	if execErr != nil {
 		return execErr
 	}
+
 	return nil
 }

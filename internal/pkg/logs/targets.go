@@ -143,11 +143,13 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *stats.StatisticsPerPhase {
 		timeAndState := lastCommand.TimeAndState
 		if !timeAndState.IsFinished() {
 			statistics.Add(log.Phase(), stats.Running, pair.Key)
+
 			continue
 		}
 
 		if timeAndState.GetEndError() != nil {
 			statistics.Add(log.Phase(), stats.Failed, pair.Key)
+
 			continue
 		}
 

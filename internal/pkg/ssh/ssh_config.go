@@ -28,6 +28,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to get user home directory")
+
 			return
 		}
 
@@ -36,6 +37,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		sshCfgRaw, err := os.Open(cfgPath)
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to open SSH config")
+
 			return
 		}
 		defer sshCfgRaw.Close()
@@ -43,6 +45,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		sshCfg, err := ssh_config.Decode(sshCfgRaw)
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to parse SSH config")
+
 			return
 		}
 

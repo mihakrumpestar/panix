@@ -43,6 +43,7 @@ func (s *Spinners) GetOrCreateSpinner(xpath attributes.Xpath) *spinner.Model {
 	spnr, ok := s.spinners.Get(hashKey)
 	if ok {
 		spnr.lastUsed = time.Now()
+
 		return spnr.model
 	}
 
@@ -73,6 +74,7 @@ func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 
 	cmd := s.pendingCmd
 	s.pendingCmd = nil
+
 	return cmd
 }
 

@@ -29,6 +29,7 @@ func stripANSI(text string) string {
 func normalizeText(text string) string {
 	text = strings.TrimSpace(text)
 	text = stripANSI(text)
+
 	return text
 }
 
@@ -44,6 +45,7 @@ func isWayland() bool {
 		envCache.isWayland = os.Getenv("WAYLAND_DISPLAY") != "" ||
 			strings.Contains(os.Getenv("XDG_SESSION_TYPE"), "wayland")
 	})
+
 	return envCache.isWayland
 }
 
@@ -52,7 +54,9 @@ func copyWithCommand(ctx context.Context, text string) bool {
 	// Try Wayland native tool first if on Wayland
 	if isWayland() {
 		cmd := exec.CommandContext(ctx, "wl-copy", "--", text)
-		if err := cmd.Run(); err == nil {
+
+		err := cmd.Run()
+		if err == nil {
 			return true
 		}
 	}
@@ -61,7 +65,8 @@ func copyWithCommand(ctx context.Context, text string) bool {
 	cmd := exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-in")
 	cmd.Stdin = bytes.NewReader([]byte(text))
 
-	if err := cmd.Run(); err == nil {
+	err := cmd.Run()
+	if err == nil {
 		return true
 	}
 
@@ -69,11 +74,9 @@ func copyWithCommand(ctx context.Context, text string) bool {
 	cmd = exec.CommandContext(ctx, "xsel", "--clipboard", "--input")
 	cmd.Stdin = bytes.NewReader([]byte(text))
 
-	if err := cmd.Run(); err == nil {
-		return true
-	}
+	err = cmd.Run()
 
-	return false
+	return err == nil
 }
 
 // copyWithLibrary tries to copy using atotto/clipboard library
@@ -81,6 +84,7 @@ func copyWithLibrary(text string) bool {
 	if err := clipboard.WriteAll(text); err == nil {
 		return true
 	}
+
 	return false
 }
 
@@ -90,6 +94,7 @@ func copyWithOSC52(text string) error {
 	if err != nil {
 		return errors.Wrap(err, "writing OSC52 to terminal failed")
 	}
+
 	return nil
 }
 

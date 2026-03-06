@@ -23,15 +23,15 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 		switch hook {
 		case attributes.PostBootstrapHookWaitForOnline:
 			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
-			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), fmt.Sprintf("%s did not come online", hookType))
 
+			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), fmt.Sprintf("%s did not come online", hookType))
 			if err != nil {
 				return err
 			}
 		case attributes.PostBootstrapHookWaitForOffline:
 			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
-			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
 
+			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
 			if err != nil {
 				return err
 			}
@@ -47,6 +47,7 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -90,6 +91,7 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, fai
 					}
 				}
 			}
+
 			return fmt.Errorf("host %s:%d did not reconnect within 10 minutes", sshClient.Hostname, sshClient.Port)
 		},
 	)
