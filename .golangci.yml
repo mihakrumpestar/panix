@@ -1,0 +1,25 @@
+version: "2"
+
+linters:
+  default: all
+
+  #disable:
+
+  enable:
+    - nilaway
+
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -QF1008 # could remove embedded field from selector
+
+    custom:
+      nilaway:
+        type: module
+        description: Static analysis tool to detect potential nil panics in Go code.
+        settings:
+          # Settings must be a "map from string to string" to mimic command line flags: the keys are
+          # flag names and the values are the values to the particular flags.
+          #include-pkgs: "<YOUR_PACKAGE_PREFIXES>"
+          exclude-pkgs: "" # Exclude generated code
