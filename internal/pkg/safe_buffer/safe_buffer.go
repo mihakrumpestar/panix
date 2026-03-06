@@ -5,6 +5,8 @@ package safe_buffer
 import (
 	"bytes"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 // Buffer is a goroutine safe bytes.Buffer
@@ -23,7 +25,12 @@ func (s *Buffer) Write(p []byte) (n int, err error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	return s.buffer.Write(p)
+	n, err = s.buffer.Write(p)
+	if err != nil {
+		return n, errors.Wrap(err, "failed to write to buffer")
+	}
+
+	return n, nil
 }
 
 // String returns the contents of the unread portion of the buffer

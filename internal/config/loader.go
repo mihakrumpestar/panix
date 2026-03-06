@@ -52,7 +52,7 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 
 	err = config_flags.InitLogging(conf.Flags.Logging)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to initialize logging")
 	}
 
 	err = conf.ValidateStructTags()
@@ -72,7 +72,7 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 
 	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "invalid phases")
 	}
 
 	if conf.Flags.Logging.Debug {

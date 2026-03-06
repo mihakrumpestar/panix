@@ -130,9 +130,9 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	m.quitting = true
 	r := m.resetable.Load()
 	err := r.workflow.Cancel()
-	if r.err != nil && err != nil && err != context.Canceled {
+	if r.err != nil && err != nil && !errors.Is(err, context.Canceled) {
 		r.err = errors.Wrap(r.err, err.Error())
-	} else if err != nil && err != context.Canceled {
+	} else if err != nil && !errors.Is(err, context.Canceled) {
 		r.err = err
 	}
 

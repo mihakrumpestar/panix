@@ -6,6 +6,7 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 type Flags struct {
@@ -58,7 +59,7 @@ func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 	f.SetDefault(true)
 
 	if err := mergo.Merge(f, cli); err != nil {
-		return err
+		return errors.Wrap(err, "failed to merge flags")
 	}
 
 	f.SetDefault(false)

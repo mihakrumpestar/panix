@@ -8,6 +8,7 @@ import (
 	"github.com/hayageek/threadsafe"
 	"github.com/mihakrumpestar/panix/internal/pkg/safe_buffer"
 	"github.com/mihakrumpestar/panix/internal/pkg/time_and_state"
+	"github.com/pkg/errors"
 )
 
 type CommandLog struct {
@@ -88,7 +89,12 @@ func (cl *CommandLog) Write(p []byte) (int, error) {
 		panic(fmt.Sprintf("internal error: command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
 	}
 
-	return stdInOutErr.Write(p)
+	n, err := stdInOutErr.Write(p)
+	if err != nil {
+		return n, errors.Wrap(err, "failed to write to command log")
+	}
+
+	return n, nil
 }
 
 // WriteLineString writes a string as a new line to StdInOutErr.
