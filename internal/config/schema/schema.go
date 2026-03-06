@@ -25,8 +25,9 @@ type RequiredList []string
 
 func (r RequiredList) MarshalYAML() (interface{}, error) {
 	if len(r) == 0 {
-		return nil, nil
+		return []string{}, nil
 	}
+
 	return []string(r), nil
 }
 
@@ -110,6 +111,7 @@ func (g *Generator) hasExactValidateTag(validateTag, tag string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -158,6 +160,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 			}
 
 			required = append(required, inlineRequired...)
+
 			continue
 		}
 
@@ -219,16 +222,19 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		td := &TypeDefinition{Type: "integer"}
 		g.applyValidateConstraints(td, validateTag, "integer")
+
 		return td, nil
 
 	case reflect.Float32, reflect.Float64:
 		td := &TypeDefinition{Type: "number"}
 		g.applyValidateConstraints(td, validateTag, "number")
+
 		return td, nil
 
 	case reflect.String:
 		td := &TypeDefinition{Type: "string"}
 		g.applyValidateConstraints(td, validateTag, "string")
+
 		return td, nil
 
 	case reflect.Slice, reflect.Array:
@@ -236,11 +242,14 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 		if err != nil {
 			return nil, err
 		}
+
 		td := &TypeDefinition{
 			Type:  "array",
 			Items: itemType,
 		}
+
 		g.applyValidateConstraints(td, validateTag, "array")
+
 		return td, nil
 
 	case reflect.Map:
@@ -249,6 +258,7 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 		if err != nil {
 			return nil, err
 		}
+
 		return &TypeDefinition{
 			Type:                 "object",
 			AdditionalProperties: valueType,
@@ -349,9 +359,14 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 
 // parseInt parses a string to an integer
 func parseInt(s string) (int, error) {
-	var v int
-	_, err := fmt.Sscanf(s, "%d", &v)
-	return v, err
+	var parsed int
+
+	_, err := fmt.Sscanf(s, "%d", &parsed)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to parse string '%s' to int", s)
+	}
+
+	return parsed, nil
 }
 
 // isOrderedMap checks if a type is an OrderedMap
@@ -363,6 +378,7 @@ func (g *Generator) isOrderedMap(typ reflect.Type) bool {
 
 	// Check if it has the Omap field which is characteristic of OrderedMap
 	_, hasOmap := typ.FieldByName("Omap")
+
 	return hasOmap
 }
 
@@ -481,6 +497,7 @@ func GenerateYAMLString() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return string(bytes), nil
 }
 
@@ -492,6 +509,7 @@ func GenerateSchema(outputPath string) error {
 
 	if outputPath == "-" {
 		fmt.Print(string(schemaYAML))
+
 		return nil
 	}
 
@@ -507,5 +525,6 @@ func GenerateSchema(outputPath string) error {
 	}
 
 	fmt.Printf("Schema written to: %s\n", outputPath)
+
 	return nil
 }

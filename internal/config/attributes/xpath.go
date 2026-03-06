@@ -20,6 +20,7 @@ func (x Xpath) Depth() int {
 	if x.path == "" {
 		return 0
 	}
+
 	return strings.Count(x.path, "/") + 1
 }
 

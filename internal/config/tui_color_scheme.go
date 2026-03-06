@@ -178,5 +178,6 @@ func mustColorfulHex(hex string) colorful.Color {
 	if err != nil {
 		panic(fmt.Sprintf("Invalid color hex %s: %v", hex, err))
 	}
+
 	return c
 }

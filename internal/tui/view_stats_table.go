@@ -63,6 +63,7 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	} else {
 		s.SelectedMachine = rowIndex
 	}
+
 	return true
 }
 
@@ -76,13 +77,16 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 		if s.SelectedMachine > 0 {
 			s.SelectedMachine--
 		}
+
 		return true
 	case "right":
 		if s.SelectedMachine < len(s.MachineXpaths)-1 {
 			s.SelectedMachine++
 		}
+
 		return true
 	}
+
 	return false
 }
 
@@ -90,6 +94,7 @@ func (s *StatsTable) GetSelectedXpath() attributes.Xpath {
 	if s.SelectedMachine < 0 || s.SelectedMachine >= len(s.MachineXpaths) {
 		return attributes.Xpath{}
 	}
+
 	return s.MachineXpaths[s.SelectedMachine]
 }
 

@@ -63,6 +63,7 @@ func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 	}
 
 	f.SetDefault(false)
+
 	return nil
 }
 

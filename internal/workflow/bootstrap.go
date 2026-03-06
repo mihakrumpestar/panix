@@ -92,6 +92,7 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 	if arch == "" || arch == "DRY_RUN" {
 		arch = "x86_64"
 	}
+
 	return w.executeKexecReal(exc, machine, arch)
 }
 
@@ -196,6 +197,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 	}
 
 	machine.MetaInspect.RequiresKexec.Store(false)
+
 	return nil
 }
 

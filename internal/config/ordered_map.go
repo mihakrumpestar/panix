@@ -23,6 +23,7 @@ func NewOrderedMap[K comparable, V any]() (*OrderedMap[K, V], error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create ordered map")
 	}
+
 	return &OrderedMap[K, V]{Omap: m}, nil
 }
 
@@ -82,6 +83,7 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 			var key K
 			if err := yaml.NodeToValue(val.Key, &key); err != nil {
 				e.err = fmt.Errorf("failed to unmarshal key: %w", err)
+
 				return nil
 			}
 
@@ -103,6 +105,7 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 						newPtr := reflect.New(elemType)
 						if err := yaml.NodeToValue(val.Value, newPtr.Interface()); err != nil {
 							e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+
 							return nil
 						}
 						value = newPtr.Interface().(V)
@@ -110,6 +113,7 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 						// Pointer to non-struct (e.g., *string, *int)
 						if err := yaml.NodeToValue(val.Value, &value); err != nil {
 							e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+
 							return nil
 						}
 					}
@@ -117,6 +121,7 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 					// Non-pointer type, unmarshal directly
 					if err := yaml.NodeToValue(val.Value, &value); err != nil {
 						e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+
 						return nil
 					}
 				}
@@ -125,7 +130,9 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 			e.om.Omap.Set(key, value)
 		}
 		// Don't recurse into values
+
 		return nil
 	}
+
 	return e
 }

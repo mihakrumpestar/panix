@@ -60,13 +60,15 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	if execErr != nil {
 		return errors.Wrap(execErr, statusIfFailed)
 	}
+
 	return nil
 }
 
 func (ex *Executioner) prepareCommandWithEnv(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
 	cmd := exec.CommandContext(ex.ctx, commandWithArgs[0], commandWithArgs[1:]...)
+	env := os.Environ()
+	cmd.Env = append(env, excOpt.env...)
 
-	cmd.Env = append(os.Environ(), excOpt.env...)
 	return cmd
 }
 
@@ -75,10 +77,12 @@ func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
 		if excOpt.onSuccess != nil {
 			return errors.New("OnDryRun is mandatory when OnSuccess is provided - please provide dry-run handling")
 		}
+
 		return nil
 	}
 
 	excOpt.onDryRun()
+
 	return nil
 }
 
@@ -103,6 +107,7 @@ func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *command.Comma
 			if err != nil {
 				commandLog.WriteLineString("processTerminalOutput write error: " + err.Error())
 				commandLog.WriteLineString("")
+
 				return err
 			}
 
@@ -117,6 +122,7 @@ func (ex *Executioner) handleReadError(err error, commandLog *command.CommandLog
 		commandLog.WriteLineString("PTY read error: " + err.Error())
 		commandLog.WriteLineString("")
 	}
+
 	return err
 }
 
@@ -144,6 +150,7 @@ func validateExecOptions(excOpt *ExecOptions) error {
 	if excOpt.onSuccess != nil && excOpt.onDryRun == nil {
 		return errors.New("OnDryRun is mandatory when OnSuccess is provided - every command with OnSuccess must handle dry-run mode")
 	}
+
 	return nil
 }
 
@@ -169,6 +176,7 @@ func ptyError(err error) error {
 	if !ok || pathErr.Err != syscall.EIO {
 		return err
 	}
+
 	return nil
 }
 
@@ -183,21 +191,28 @@ func processTerminalOutput(buf []byte, exm *command.CommandLog) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
 func processSequence(seq []byte, isFirst bool, exm *command.CommandLog) error {
 	if after, ok := bytes.CutPrefix(seq, []byte("\n")); ok {
 		exm.WriteLine(after)
+
 		return nil
 	}
 
 	if isFirst {
 		_, err := exm.Write(seq)
-		return err
+		if err != nil {
+			return errors.Wrap(err, "failed to write to command log")
+		}
+
+		return nil
 	}
 
 	exm.ReplaceLastLine(seq)
+
 	return nil
 }
 

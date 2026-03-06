@@ -51,6 +51,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 						}
 
 						mms.Reachable.Store(true)
+
 						return nil
 					},
 				)
@@ -70,6 +71,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 				executioner.OnSuccess(func(log *command.CommandLog) error {
 					mms.SSHConnectable.Store(true)
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {
@@ -96,6 +98,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					}
 
 					mms.Architecture.Store(architecture)
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {
@@ -123,6 +126,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					}
 
 					mms.IsRoot.Store(parsedOutput == 0)
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {
@@ -151,6 +155,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 
 					if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
 						mms.Bootstrapped.Store(false)
+
 						return nil
 					}
 
@@ -191,6 +196,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 						return errors.Wrap(err, "hardware config generation failed")
 					}
 				}
+
 				return nil
 			}
 
@@ -207,6 +213,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 							mms.Generation.Store(uint32(gen))
 						}
 					}
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {
@@ -229,6 +236,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					}
 
 					mms.Date.Store(date)
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {
@@ -246,6 +254,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				[]string{"uname", "-r"},
 				executioner.OnSuccess(func(log *command.CommandLog) error {
 					mms.Kernel.Store(strings.TrimSpace(log.String()))
+
 					return nil
 				}),
 				executioner.OnDryRun(func() {

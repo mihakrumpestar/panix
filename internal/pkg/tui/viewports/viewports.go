@@ -55,6 +55,7 @@ func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, dbg *strin
 	if maxHeight < 1 {
 		maxHeight = 1
 	}
+
 	return &Viewports{
 		viewports:              viewportsMap,
 		dimensions:             dimensions,
@@ -130,6 +131,7 @@ func (v *Viewports) GetActiveViewportContent() string {
 	if vp := v.getActiveViewport(); vp != nil {
 		return vp.content
 	}
+
 	return ""
 }
 
@@ -139,6 +141,7 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 			return vp.content, true
 		}
 	}
+
 	return "", false
 }
 
@@ -148,6 +151,7 @@ func (v *Viewports) GetActiveInnerViewportXpath() attributes.Xpath {
 			return xpath
 		}
 	}
+
 	return attributes.Xpath{}
 }
 
@@ -155,6 +159,7 @@ func (v *Viewports) GetViewportContent(xpath attributes.Xpath) string {
 	if vp, ok := v.viewports.Get(xpath); ok {
 		return vp.content
 	}
+
 	return ""
 }
 
@@ -168,6 +173,7 @@ func (v *Viewports) GetActiveViewportScrollPercent() float64 {
 	if vp := v.getActiveViewport(); vp != nil {
 		return vp.model.ScrollPercent()
 	}
+
 	return 0.0
 }
 
@@ -184,12 +190,14 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		v.handleMouse(msgVal)
 	case tea.KeyPressMsg:
 		v.handleKey(msgVal)
+
 		return tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		// Update dimensions and resize all viewports
 		v.dimensions.Width = max(msgVal.Width, minTerminalWidth)
 		v.dimensions.Height = msgVal.Height
 		v.resizeAllViewports()
+
 		return tea.Batch(cmds...)
 	}
 
@@ -223,7 +231,7 @@ func (v *Viewports) Debug() string {
 	builder.WriteString(fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height))
 
 	for xpath, viewport := range v.viewports.Records() {
-		builder.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, viewport.model.Width, viewport.model.Height, lipgloss.Height(viewport.content)))
+		builder.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, viewport.model.Width(), viewport.model.Height(), lipgloss.Height(viewport.content)))
 
 		if viewport.active {
 			builder.WriteString(" [A]")
@@ -235,6 +243,7 @@ func (v *Viewports) Debug() string {
 
 		builder.WriteString("\n")
 	}
+
 	return builder.String()
 }
 
@@ -330,8 +339,10 @@ func (v *Viewports) processContent(content string, width int, wrap bool, noPaddi
 		if noPadding {
 			return lipgloss.NewStyle().Width(width).Align(lipgloss.Left).Render(content)
 		}
+
 		return lipgloss.NewStyle().Width(width).Render(content)
 	}
+
 	return truncateLines(content, width)
 }
 
@@ -344,6 +355,7 @@ func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder boo
 		if viewport.active {
 			combined = v.colors.SelectionHighlightBackground.Render(combined)
 		}
+
 		return combined
 	}
 
@@ -421,6 +433,7 @@ func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 				vp.model.ScrollDown(3)
 			}
 		}
+
 		return
 	}
 
@@ -484,6 +497,7 @@ func (v *Viewports) hasActiveInner() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -506,6 +520,7 @@ func (v *Viewports) underMouse(m tea.MouseMsg) []attributes.Xpath {
 			result = append(result, xpath)
 		}
 	}
+
 	return result
 }
 
@@ -515,6 +530,7 @@ func (v *Viewports) mostSpecific(xpaths []attributes.Xpath) attributes.Xpath {
 	}
 
 	sort.Slice(xpaths, func(idx, j int) bool { return xpaths[idx].Depth() > xpaths[j].Depth() })
+
 	return xpaths[0]
 }
 
@@ -531,6 +547,7 @@ func truncateLines(content string, maxWidth int) string {
 	for i, line := range lines {
 		lines[i] = truncateToRuneWidth(line, maxWidth)
 	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -569,6 +586,7 @@ func truncateToRuneWidth(str string, maxWidth int) string {
 	for low > 0 && !utf8.ValidString(str[:low]) {
 		low--
 	}
+
 	return str[:low]
 }
 
@@ -580,5 +598,6 @@ func clamp(val, minimum, maximum float64) float64 {
 	if val > maximum {
 		return maximum
 	}
+
 	return val
 }

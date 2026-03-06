@@ -57,6 +57,7 @@ func (ts *TargetLogs) calculateDurationAndError() DurationAndError {
 	} else {
 		ts.cache = ts.calculateFromPhases()
 	}
+
 	return ts.cache
 }
 
@@ -82,6 +83,7 @@ func (ts *TargetLogs) calculateFromPhases() DurationAndError {
 		duration, err := tas.DurationOrElapsedTime()
 		if err != nil {
 			dae.Err = err
+
 			break
 		}
 
@@ -90,6 +92,7 @@ func (ts *TargetLogs) calculateFromPhases() DurationAndError {
 		err = tas.GetEndError()
 		if err != nil {
 			dae.Err = err
+
 			break
 		}
 	}
@@ -100,8 +103,8 @@ func (ts *TargetLogs) calculateFromPhases() DurationAndError {
 func (ts *TargetLogs) GetCurrentTargetLog() *phase.PhaseLog {
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
 		phaseLog := phaseLogPair.Value
-		err := phaseLog.TimeAndState().GetEndError()
 
+		err := phaseLog.TimeAndState().GetEndError()
 		if err != nil {
 			return phaseLog
 		}

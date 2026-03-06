@@ -85,6 +85,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	if r := finalModel.resetable.Load(); r != nil {
 		return r.err
 	}
+
 	return nil
 }
 
@@ -97,7 +98,8 @@ func startCPUProfile(path string) (func(), error) {
 	err = pprof.StartCPUProfile(f)
 	if err != nil {
 		f.Close()
-		return nil, err
+
+		return nil, errors.Wrap(err, "failed to start CPU profile")
 	}
 
 	return func() {
@@ -124,6 +126,7 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 		if resetable == nil || resetable.workflow == nil {
 			time.Sleep(20 * time.Millisecond)
 			log.Debug().Msg("workflowUpdateHook was nil")
+
 			return workflowUpdateHookMsg{}
 		}
 
@@ -157,6 +160,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		resetable.err = msg.err
 		m.quitting = true
+
 		return m, tea.Quit
 
 	case workflowDoneMsg:
@@ -165,9 +169,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Only exit automatically if exitOnComplete flag is set
 		if m.conf.Flags.ExitOnComplete {
 			m.quitting = true
+
 			return m, tea.Quit
 		}
 		// Stay open — user can press 'q' to quit or 'r' to retry
+
 		return m, nil
 
 	case restartMsg:
@@ -210,6 +216,7 @@ func (m *model) View() tea.View {
 		result := m.renderFullscreen()
 		if result != "" {
 			view.SetContent(result)
+
 			return view
 		}
 	}
@@ -224,6 +231,7 @@ func (m *model) View() tea.View {
 	builder.WriteString(footer)
 
 	view.SetContent(zone.Scan(builder.String()))
+
 	return view
 }
 
@@ -234,6 +242,7 @@ func (m *model) renderFullscreen() string {
 
 	if content == "" {
 		resetable.viewports.ExitFullscreen()
+
 		return ""
 	}
 
@@ -278,6 +287,7 @@ func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
 	resetable := m.resetable.Load()
 	if resetable.statsTable.HandleMouseClick(msg) {
 		resetable.phaseStatus.Reset()
+
 		return
 	}
 
