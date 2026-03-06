@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err error) {
+func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) error {
 	secrets := machine.Secrets
 
 	if len(secrets) == 0 {
@@ -22,7 +22,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 	return w.Phase(machine.Attributes.Xpath, phases.Secrets, nil,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			for _, secret := range secrets {
-				err = w.transferPlainFileOrDir(exc, machine, secret, "secrets", true)
+				err := w.transferPlainFileOrDir(exc, machine, secret, "secrets", true)
 				if err != nil {
 					return err
 				}
@@ -67,9 +67,9 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 	}
 
 	err := exc.Exec(
-		fmt.Sprintf("transfer of %s", transferOfWhat),
-		fmt.Sprintf("transferring %s", transferOfWhat),
-		fmt.Sprintf("%s transfer failed", transferOfWhat),
+		"transfer of "+transferOfWhat,
+		"transferring "+transferOfWhat,
+		transferOfWhat+" transfer failed",
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
 	)

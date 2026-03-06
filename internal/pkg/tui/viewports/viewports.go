@@ -3,6 +3,7 @@ package viewports
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -401,7 +402,7 @@ func (v *Viewports) combineWithScrollbar(view, bar string, barZone attributes.Xp
 
 	for i, line := range vLines {
 		if i < barLen {
-			result[i] = line + " " + zone.Mark(barZone.NewXpathWithAppend(fmt.Sprintf("%d", i)).String(), bLines[i])
+			result[i] = line + " " + zone.Mark(barZone.NewXpathWithAppend(strconv.Itoa(i)).String(), bLines[i])
 		} else {
 			result[i] = line
 		}
@@ -571,13 +572,13 @@ func truncateToRuneWidth(str string, maxWidth int) string {
 	return str[:low]
 }
 
-func clamp(val, min, max float64) float64 {
-	if val < min {
-		return min
+func clamp(val, minimum, maximum float64) float64 {
+	if val < minimum {
+		return minimum
 	}
 
-	if val > max {
-		return max
+	if val > maximum {
+		return maximum
 	}
 	return val
 }

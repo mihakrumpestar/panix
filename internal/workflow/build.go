@@ -50,9 +50,9 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
 	err := exc.Exec(
-		fmt.Sprintf("build %s", whatIsBuilding),
-		fmt.Sprintf("building %s", whatIsBuilding),
-		fmt.Sprintf("%s build failed", whatIsBuilding),
+		"build "+whatIsBuilding,
+		"building "+whatIsBuilding,
+		whatIsBuilding+" build failed",
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
 		executioner.OnSuccess(func(log *command.CommandLog) error {

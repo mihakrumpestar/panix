@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -192,15 +193,15 @@ func buildStatusLine(running, failed, done []attributes.Xpath, colors *config.Co
 	var parts []string
 
 	if n := len(running); n > 0 {
-		parts = append(parts, colors.StatusRunning.Render(fmt.Sprint(n)))
+		parts = append(parts, colors.StatusRunning.Render(strconv.Itoa(n)))
 	}
 
 	if n := len(failed); n > 0 {
-		parts = append(parts, colors.StatusError.Render(fmt.Sprint(n)))
+		parts = append(parts, colors.StatusError.Render(strconv.Itoa(n)))
 	}
 
 	if n := len(done); n > 0 {
-		parts = append(parts, colors.StatusOK.Render(fmt.Sprint(n)))
+		parts = append(parts, colors.StatusOK.Render(strconv.Itoa(n)))
 	}
 
 	return strings.Join(parts, colors.TableBorder.Render(statusSeparator))
