@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -109,7 +109,7 @@ func (m *model) ViewStatsTable() string {
 
 	usableWidth := max(resetable.viewports.ContentWidth(), 40)
 	machineCount := resetable.workflow.MachineCount()
-	indexWidth := len(fmt.Sprintf("%d", machineCount))
+	indexWidth := len(strconv.Itoa(machineCount))
 
 	statsTable := resetable.statsTable
 	statsTable.MachineXpaths = nil
@@ -158,11 +158,11 @@ func (m *model) ViewStatsTable() string {
 
 		generationString := ""
 		if generation := metaInspect.Generation.Load(); generation != 0 {
-			generationString = fmt.Sprintf("%d", generation)
+			generationString = strconv.FormatUint(uint64(generation), 10)
 		}
 
 		tbl.Row(
-			fmt.Sprintf("%d", idx+1),
+			strconv.Itoa(idx+1),
 			m.getStatusIcon(xpath, phaseLog),
 			flakeDisplay,
 			configDisplay,

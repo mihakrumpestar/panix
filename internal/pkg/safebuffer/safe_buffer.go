@@ -21,11 +21,11 @@ func NewBuffer(buf []byte) *Buffer {
 
 // Write appends the contents of p to the buffer, growing the buffer as needed. It returns
 // the number of bytes written.
-func (s *Buffer) Write(p []byte) (n int, err error) {
+func (s *Buffer) Write(p []byte) (int, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	n, err = s.buffer.Write(p)
+	n, err := s.buffer.Write(p)
 	if err != nil {
 		return n, errors.Wrap(err, "failed to write to buffer")
 	}
