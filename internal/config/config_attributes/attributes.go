@@ -95,6 +95,7 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) e
 		if !a.Bootstrap.SSH.StrictKeyChecking && !a.Bootstrap.SSH.DisableAutoAddHostKey {
 			a.Bootstrap.SSH.DisableAutoAddHostKey = true
 		}
+
 		err = a.Bootstrap.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
 		if err != nil {
 			return errors.Wrapf(errors.Wrap(err, "bootstrap ssh"), "%s", strconv.Quote(a.Xpath.String()))
@@ -116,6 +117,7 @@ func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) err
 		sshCopy := *a.SSH
 		a.SSH = &sshCopy
 	}
+
 	if a.Bootstrap.SSH != nil {
 		sshCopy := *a.Bootstrap.SSH
 		a.Bootstrap.SSH = &sshCopy

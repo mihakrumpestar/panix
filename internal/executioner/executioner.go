@@ -84,11 +84,13 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	}
 
 	var isLocal bool
+
 	if ex.machine != nil {
 		if ssh := ex.machine.MetaInspect.GetActiveSSH(); ssh != nil {
 			isLocal = ssh.IsLocal
 		}
 	}
+
 	noMachineOrLocal := ex.machine == nil || isLocal
 
 	if noMachineOrLocal && excOpt.skipIfLocal {
@@ -110,7 +112,9 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 
 	commandLog.TimeAndState.StartTimer()
+
 	var execErr error
+
 	defer func() {
 		commandLog.TimeAndState.EndTimerWithError(execErr)
 		ex.onUpdateHook()

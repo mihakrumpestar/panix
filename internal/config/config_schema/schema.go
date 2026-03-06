@@ -89,6 +89,7 @@ func (g *Generator) Generate() (*Schema, error) {
 
 	// Generate schema from config.Config
 	cfgType := reflect.TypeOf(config.Config{})
+
 	properties, required, err := g.processStruct(cfgType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process Config struct: %w", err)
@@ -150,9 +151,11 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to process inline field %s: %w", field.Name, err)
 			}
+
 			for name, prop := range inlineProps {
 				properties[name] = prop
 			}
+
 			required = append(required, inlineRequired...)
 			continue
 		}
@@ -171,6 +174,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 		if desc == "" {
 			desc = field.Tag.Get("help")
 		}
+
 		if desc != "" {
 			if td, ok := prop.(*TypeDefinition); ok {
 				td.Description = desc
@@ -368,6 +372,7 @@ func (g *Generator) processOrderedMap(t reflect.Type, field reflect.StructField)
 	// Get the field name from the yaml tag or struct field name
 	yamlTag := field.Tag.Get("yaml")
 	fieldName := field.Name
+
 	if yamlTag != "" && yamlTag != "-" {
 		parts := strings.Split(yamlTag, ",")
 		if parts[0] != "" {
@@ -377,7 +382,9 @@ func (g *Generator) processOrderedMap(t reflect.Type, field reflect.StructField)
 
 	// Get the value type for AdditionalProperties based on field name
 	var valueType reflect.Type
+
 	var allowNull bool
+
 	switch fieldName {
 	case "flakes":
 		valueType = reflect.TypeOf(&config.Flake{})
@@ -453,6 +460,7 @@ func (g *Generator) getYAMLFieldName(field reflect.StructField, yamlTag string) 
 // GenerateYAML generates the schema and returns it as YAML bytes
 func GenerateYAML() ([]byte, error) {
 	gen := NewGenerator()
+
 	schema, err := gen.Generate()
 	if err != nil {
 		return nil, err

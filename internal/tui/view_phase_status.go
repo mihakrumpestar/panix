@@ -60,6 +60,7 @@ func (p *PhaseStatus) HandleNavigation(key string, hasActiveInnerViewport bool) 
 	if hasActiveInnerViewport || len(p.Phases) == 0 || p.SelectedPhase < 0 {
 		return false
 	}
+
 	switch key {
 	case "left":
 		if p.SelectedPhase > 0 {
@@ -169,6 +170,7 @@ func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *co
 	progress := math.Float64frombits(anim.progress.Load())
 
 	var state config.PhaseState
+
 	switch {
 	case len(stats.Running) > 0:
 		state = config.PhaseStateActive
@@ -187,14 +189,18 @@ var cachedPhaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 
 func buildStatusLine(running, failed, done []config_attributes.Xpath, colors *config.ColorScheme) string {
 	var parts []string
+
 	if n := len(running); n > 0 {
 		parts = append(parts, colors.StatusRunning.Render(fmt.Sprint(n)))
 	}
+
 	if n := len(failed); n > 0 {
 		parts = append(parts, colors.StatusError.Render(fmt.Sprint(n)))
 	}
+
 	if n := len(done); n > 0 {
 		parts = append(parts, colors.StatusOK.Render(fmt.Sprint(n)))
 	}
+
 	return strings.Join(parts, colors.TableBorder.Render(statusSeparator))
 }

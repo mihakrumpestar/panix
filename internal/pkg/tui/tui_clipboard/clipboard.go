@@ -60,6 +60,7 @@ func copyWithCommand(ctx context.Context, text string) bool {
 	// Try xclip for X11
 	cmd := exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-in")
 	cmd.Stdin = bytes.NewReader([]byte(text))
+
 	if err := cmd.Run(); err == nil {
 		return true
 	}
@@ -67,6 +68,7 @@ func copyWithCommand(ctx context.Context, text string) bool {
 	// Try xsel as fallback
 	cmd = exec.CommandContext(ctx, "xsel", "--clipboard", "--input")
 	cmd.Stdin = bytes.NewReader([]byte(text))
+
 	if err := cmd.Run(); err == nil {
 		return true
 	}

@@ -96,6 +96,7 @@ func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 
 func (s *Spinners) Debug() string {
 	var str strings.Builder
+
 	fmt.Fprintf(&str, "\nSpinners: %d\n", s.spinners.Len())
 
 	for key := range s.spinners.Records() {

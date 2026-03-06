@@ -54,6 +54,7 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 	if sC.Port == 0 {
 		sC.Port = DefaultSSHPort
 	}
+
 	if sC.Username == "" {
 		sC.Username = DefaultSSHUsername
 	}

@@ -61,6 +61,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		cancel()
 		return nil, err
 	}
+
 	wf.runner = runner
 
 	return wf, nil
@@ -113,6 +114,7 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 	phaseLog := w.state.TargetsLogs.MustGetOrCreateLog(xpath, phase)
 
 	phaseLog.TimeAndState().StartTimer()
+
 	defer func() {
 		phaseLog.TimeAndState().EndTimerWithError(err)
 	}()
@@ -159,9 +161,9 @@ func (w *Workflow) CreateWorkflow() error {
 		})
 	})
 
-	err := subPool.Wait()
 	w.updateHook.Close()
-	return err
+
+	return subPool.Wait()
 }
 
 func (w *Workflow) MachineCount() int {
@@ -182,6 +184,7 @@ func (w *Workflow) RootTree(function func(i int, machine *config.Machine)) {
 			for _, machinePair := range configuration.Machines.Omap.Pairs() {
 				machine := machinePair.Value
 				function(i, machine)
+
 				i++
 			}
 		}

@@ -46,6 +46,7 @@ type Logging struct {
 
 func (f *Flags) SetDefault(reverse bool) {
 	defaultHostname, _ := os.Hostname()
+
 	toggle(reverse, &f.Config, "panix.yml", "")
 	toggle(reverse, &f.OverrideLocalMachine, defaultHostname, "")
 	toggle(reverse, &f.Timeout, 2*time.Hour, 0)
@@ -55,9 +56,11 @@ func (f *Flags) SetDefault(reverse bool) {
 
 func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 	f.SetDefault(true)
+
 	if err := mergo.Merge(f, cli); err != nil {
 		return err
 	}
+
 	f.SetDefault(false)
 	return nil
 }
