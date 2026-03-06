@@ -13,6 +13,7 @@ linters:
     - ireturn # A lot of bubbletea is based on interfaces
     - goconst # Just some same strings across codebase
     - gochecknoglobals # constants are ok
+    - forbidigo # We don't use print statements for debugging
 
   enable:
     - nilaway
