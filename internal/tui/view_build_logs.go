@@ -16,7 +16,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-const treeStep = 3
+const (
+	treeStep    = 3
+	indentStep  = 2
+	timerIndent = 4
+)
 
 var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 
@@ -81,7 +85,7 @@ func (m *model) ViewBuildLogs() string {
 }
 
 func (m *model) addPhaseToTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine], phase phases.Phase) {
-	indent := treeStep * 2
+	indent := treeStep * indentStep
 	// ScopeConfig phases (like Build) run once per configuration
 	// ScopeMachine phases run per machine
 	if phases.GetPhaseScope(phase) == phases.ScopeConfig {
@@ -96,7 +100,7 @@ func (m *model) addPhaseToTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 // addMachineTree adds a machine and all its phases to the config node
 // Used when a specific machine is selected in the stats table
 func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, machine *config.Machine) {
-	indent := treeStep * 2
+	indent := treeStep * indentStep
 	node := m.createNode(indent, m.conf.ColorScheme.Machine, &machine.Attributes, false)
 
 	// Add Inspect phase (stops at first error)
@@ -121,7 +125,7 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 // addDefaultTree adds all phases in order from PhaseRegistry to the tree
 // Respects scope: ScopeConfig phases at config level, ScopeMachine per machine
 func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine]) {
-	indent := treeStep * 2
+	indent := treeStep * indentStep
 
 	for _, phaseMeta := range phases.PhaseRegistry {
 		if phaseMeta.Scope == phases.ScopeConfig {
@@ -270,8 +274,8 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 // layoutLine creates a line with left-aligned content and right-aligned duration
 // Calculates available width minus indent and timer indent
 func (m *model) layoutLine(indent int, left, right string) string {
-	timerIndent := max(4-indent/treeStep, 0)
-	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndent
+	timerIndentCorrection := max(0, timerIndent-indent/treeStep)
+	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndentCorrection
 	rightWidth := lipgloss.Width(right)
 
 	return lipgloss.JoinHorizontal(lipgloss.Left,

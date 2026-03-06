@@ -15,8 +15,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-const statsTableZonePrefix = "stats-table"
-const rowSpanMarker = " 󱞩"
+const (
+	statsTableZonePrefix    = "stats-table"
+	rowSpanMarker           = " 󱞩"
+	statusIconReservedWidth = 3
+)
 
 type StatsTable struct {
 	SelectedMachine int
@@ -112,7 +115,7 @@ func (m *model) ViewStatsTable() string {
 
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
-	usableWidth := max(resetable.viewports.ContentWidth(), 40)
+	usableWidth := resetable.viewports.ContentWidth()
 	machineCount := resetable.workflow.MachineCount()
 	indexWidth := len(strconv.Itoa(machineCount))
 
@@ -198,7 +201,7 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 			return c.TableRow.Width(indexWidth).Align(lipgloss.Right)
 		}},
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.TableRow.Width(3).Align(lipgloss.Center)
+			return c.TableRow.Width(statusIconReservedWidth).Align(lipgloss.Center)
 		}},
 		{header: string(colors.Flake.Icon) + " FLAKE", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.Flake.Color

@@ -24,6 +24,9 @@ const (
 	statusSeparator            = "/"
 	animationCacheInterval     = 100 * time.Millisecond
 	phaseStatusZonePrefix      = "phase-status"
+
+	displayNamePadding = 2
+	animationAmplitude = 0.5
 )
 
 type PhaseStatus struct {
@@ -142,7 +145,7 @@ func (m *model) createPhaseGroup(name string, running, failed, done []attributes
 	}
 
 	displayName := strings.ToTitle(name)
-	width := lipgloss.Width(displayName) + 2
+	width := lipgloss.Width(displayName) + displayNamePadding
 	colStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
 
 	r := m.resetable.Load()
@@ -172,7 +175,7 @@ func createAnimatedGradient(text string, stats *stats.StatsPack, colors *config.
 		anim.lastTime.Store(nowNano)
 
 		p := float64(nowNano%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
-		progress := math.Sin(p*2*math.Pi)*0.5 + 0.5
+		progress := math.Sin(p*2*math.Pi)*animationAmplitude + animationAmplitude
 
 		anim.progress.Store(math.Float64bits(progress))
 	}
