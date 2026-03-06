@@ -38,6 +38,7 @@ func (pl *PhaseLogs) Get(phase phases.Phase) *PhaseLog {
 	}
 
 	phaseLog, _ := pl.logs.Get(phase)
+
 	return phaseLog
 }
 
@@ -124,6 +125,7 @@ func (pl *PhaseLogs) Del(phase phases.Phase) error {
 	if !ok {
 		return fmt.Errorf("key for del does not exist: %v", phase)
 	}
+
 	return nil
 }
 

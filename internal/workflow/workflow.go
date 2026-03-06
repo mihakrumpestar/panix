@@ -60,6 +60,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 	runner, err := newRunner(wf)
 	if err != nil {
 		cancel()
+
 		return nil, err
 	}
 
@@ -92,6 +93,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath attributes.Xpath, 
 		if err != nil {
 			if w.conf.Flags.RequireAllSuccess {
 				w.cancel()
+
 				return err
 			}
 

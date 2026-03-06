@@ -68,11 +68,13 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if resetable.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
 		resetable.phaseStatus.Reset()
+
 		return m, nil
 	}
 
 	if resetable.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
 		resetable.statsTable.Reset()
+
 		return m, nil
 	}
 
@@ -81,6 +83,7 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return kd.handler(m)
 		}
 	}
+
 	return m, nil
 }
 
@@ -123,6 +126,7 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 	if err := clipboard.CopyToClipboard(content); err != nil {
 		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.StatusError)
 	}
+
 	return m, m.notification.Set("Copied to clipboard", m.conf.ColorScheme.StatusOK)
 }
 
@@ -138,26 +142,31 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	}
 
 	zerolog.Debug().Msg("Context done, exiting TUI")
+
 	return m, tea.Quit
 }
 
 func (m *model) handleToggle() (tea.Model, tea.Cmd) {
 	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
+
 	return m, nil
 }
 
 func (m *model) handleToggleCommands() (tea.Model, tea.Cmd) {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
+
 	return m, nil
 }
 
 func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
 	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
+
 	return m, nil
 }
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 	m.resetable.Load().workflow.State().Retry.Trigger()
+
 	return m, nil
 }
 
@@ -172,6 +181,7 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	resetable := m.resetable.Load()
 	if resetable.viewports.IsFullscreen() {
 		resetable.viewports.ExitFullscreen()
+
 		return m, nil
 	}
 
@@ -182,6 +192,7 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	} else {
 		return m, m.notification.Set("Select a viewport first", m.conf.ColorScheme.StatusWarning)
 	}
+
 	return m, nil
 }
 
@@ -196,6 +207,7 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 	} else if resetable.phaseStatus.SelectedPhase >= 0 {
 		resetable.phaseStatus.Reset()
 	}
+
 	return m, nil
 }
 
@@ -252,6 +264,7 @@ func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth in
 
 func renderScrollPercent(m *model) string {
 	pct := m.resetable.Load().viewports.GetActiveViewportScrollPercent()
+
 	return lipgloss.NewStyle().PaddingLeft(1).
 		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
 		Render(fmt.Sprintf("%3d%%", int(pct*100)))

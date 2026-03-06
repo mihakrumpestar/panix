@@ -50,6 +50,7 @@ func (n *Notification) Update(msg tea.Msg) tea.Cmd {
 
 	if time.Since(n.started) >= duration {
 		n.Clear()
+
 		return nil
 	}
 
@@ -73,6 +74,7 @@ func (n *Notification) fadedColor() color.Color {
 
 	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
 	factor := 1.0 - (progress * 0.4)
+
 	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
 		uint8(float64(n.fgR)*factor),
 		uint8(float64(n.fgG)*factor),
@@ -83,6 +85,7 @@ func (n *Notification) Render(baseStyle lipgloss.Style) string {
 	if n.isExpired() {
 		return ""
 	}
+
 	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
 }
 

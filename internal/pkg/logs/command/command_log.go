@@ -66,6 +66,7 @@ func estimateSize(buffers []*safebuffer.Buffer) int {
 	for _, buf := range buffers {
 		total += buf.Len() + 1 // +1 for potential newline
 	}
+
 	return total
 }
 
@@ -84,17 +85,16 @@ func (cl *CommandLog) Write(data []byte) (int, error) {
 	}
 
 	stdInOutErr, ok := cl.stdInOutErr.Get(length - 1)
-
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
 	}
 
-	n, err := stdInOutErr.Write(data)
+	written, err := stdInOutErr.Write(data)
 	if err != nil {
-		return n, errors.Wrap(err, "failed to write to command log")
+		return written, errors.Wrap(err, "failed to write to command log")
 	}
 
-	return n, nil
+	return written, nil
 }
 
 // WriteLineString writes a string as a new line to StdInOutErr.
@@ -111,6 +111,7 @@ func (cl *CommandLog) WriteLine(p []byte) {
 func (cl *CommandLog) ReplaceLastLine(data []byte) {
 	if cl.stdInOutErr.Length() == 0 {
 		cl.WriteLine(data)
+
 		return
 	}
 

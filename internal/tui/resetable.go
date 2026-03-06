@@ -43,6 +43,7 @@ func (m *model) startWorkflow() tea.Cmd {
 		err = workflow.CreateWorkflow()
 		if err != nil {
 			zerolog.Error().Err(err).Msg("Workflow execution failed")
+
 			return errMsg{err}
 		} else {
 			zerolog.Info().Msg("Workflow completed successfully")

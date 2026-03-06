@@ -127,6 +127,7 @@ func (c *Config) filterRoot() error {
 		flake := flakePair.Value
 		if flake == nil || flake.Disabled || flake.Configurations == nil {
 			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
+
 			continue
 		}
 
@@ -134,6 +135,7 @@ func (c *Config) filterRoot() error {
 			config := configPair.Value
 			if config == nil || config.Disabled || config.Machines == nil {
 				_, _ = flake.Configurations.Omap.Del(configPair.Key)
+
 				continue
 			}
 

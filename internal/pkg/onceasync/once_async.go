@@ -35,5 +35,6 @@ func (oa *OnceAsync) Do(fn func() error) error {
 		close(oa.done)   // Unblock all waiters
 	})
 	<-oa.done // Wait for completion (immediate if already done)
+
 	return oa.result
 }

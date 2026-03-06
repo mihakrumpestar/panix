@@ -49,6 +49,7 @@ func GetPhaseMetadata(phase Phase) (PhaseMetadata, bool) {
 			return pm, true
 		}
 	}
+
 	return PhaseMetadata{}, false
 }
 
@@ -59,6 +60,7 @@ func PhasesInOrder() []Phase {
 	for i, pm := range PhaseRegistry {
 		result[i] = pm.Phase
 	}
+
 	return result
 }
 
@@ -96,11 +98,13 @@ func GetPhaseScope(phase Phase) PhaseScope {
 	if meta, ok := GetPhaseMetadata(phase); ok {
 		return meta.Scope
 	}
+
 	return ScopeMachine
 }
 
 // ShouldRunOnce returns true if this phase should only run once per scope instance
 func ShouldRunOnce(phase Phase) bool {
 	scope := GetPhaseScope(phase)
+
 	return scope == ScopeConfig || scope == ScopeFlake
 }

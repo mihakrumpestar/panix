@@ -41,6 +41,7 @@ func (p *PlainFileOrDirToTransfer) GetPermissions() os.FileMode {
 	if p.PermissionsRaw == nil {
 		return 0700
 	}
+
 	return *p.PermissionsRaw
 }
 

@@ -51,9 +51,11 @@ func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	for i := range p.Phases {
 		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, i)); z != nil && z.InBounds(msg) {
 			p.SelectedPhase = map[bool]int{true: -1, false: i}[p.SelectedPhase == i]
+
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -67,13 +69,16 @@ func (p *PhaseStatus) HandleNavigation(key string, hasActiveInnerViewport bool) 
 		if p.SelectedPhase > 0 {
 			p.SelectedPhase--
 		}
+
 		return true
 	case "right":
 		if p.SelectedPhase < len(p.Phases)-1 {
 			p.SelectedPhase++
 		}
+
 		return true
 	}
+
 	return false
 }
 
@@ -81,6 +86,7 @@ func (p *PhaseStatus) GetSelectedPhase() phases.Phase {
 	if p.SelectedPhase < 0 || p.SelectedPhase >= len(p.Phases) {
 		return ""
 	}
+
 	return p.Phases[p.SelectedPhase]
 }
 
@@ -124,6 +130,7 @@ func (m *model) renderPhaseFlow() string {
 			if (col+1)%2 == 0 {
 				return m.conf.ColorScheme.TableBorder.Width(1).Align(lipgloss.Center)
 			}
+
 			return lipgloss.NewStyle().Align(lipgloss.Center)
 		}).
 		Row(row...).String() + "\n"
@@ -152,6 +159,7 @@ func (m *model) createPhaseGroup(name string, running, failed, done []attributes
 	if phaseIdx >= 0 {
 		return zone.Mark(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, phaseIdx), content)
 	}
+
 	return content
 }
 
@@ -184,6 +192,7 @@ func createAnimatedGradient(text string, stats *stats.StatsPack, colors *config.
 
 	c := colors.PhaseColorPairs[state]
 	finalColor := c[0].BlendLuv(c[1], progress)
+
 	return cachedPhaseStyle.Background(lipgloss.Color(finalColor.Hex())).Render(text)
 }
 

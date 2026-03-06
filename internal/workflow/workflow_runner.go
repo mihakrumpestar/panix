@@ -6,6 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 // runner handles phase execution with once-per-scope semantics
@@ -97,9 +98,15 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	// If this phase should only run once per scope, use OnceAsync
 	if phases.ShouldRunOnce(phase) {
 		once := pr.r.getOrCreateOnceAsync(xpath.String())
-		return once.Do(func() error {
+
+		err := once.Do(func() error {
 			return workflow.NewTaskWithRetry(phase, xpath, execFn)
 		})
+		if err != nil {
+			return errors.Wrap(err, "failed to run once-per-scope phase")
+		}
+
+		return nil
 	}
 
 	// Otherwise, run directly
