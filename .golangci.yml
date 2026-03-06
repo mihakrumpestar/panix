@@ -11,6 +11,7 @@ linters:
     - tagliatelle # Bad check
     - tagalign # Bad check
     - ireturn # A lot of bubbletea is based on interfaces
+    - goconst # Just some same strings across codebase
 
   enable:
     - nilaway
