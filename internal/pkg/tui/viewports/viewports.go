@@ -25,10 +25,10 @@ const (
 	mouseScrollAmount = 3
 )
 
-// Dimensions represents terminal size
+// Dimensions represents terminal size.
 type Dimensions struct{ Width, Height int }
 
-// Viewports manages all viewport instances
+// Viewports manages all viewport instances.
 type Viewports struct {
 	viewports              *omap.Omap[attributes.Xpath, *Viewport]
 	dimensions             *Dimensions
@@ -40,7 +40,7 @@ type Viewports struct {
 	footerHeight           int
 }
 
-// Viewport wraps a bubbletea viewport with additional state
+// Viewport wraps a bubbletea viewport with additional state.
 type Viewport struct {
 	model         viewport.Model
 	active        bool
@@ -48,7 +48,7 @@ type Viewport struct {
 	scrollbarZone attributes.Xpath
 }
 
-// NewViewports creates a new viewport manager
+// NewViewports creates a new viewport manager.
 func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, dbg *strings.Builder, maxHeight int) *Viewports {
 	viewportsMap, _ := omap.New[attributes.Xpath, *Viewport]()
 	// Ensure minimum height of 1
@@ -67,12 +67,13 @@ func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, dbg *strin
 }
 
 // Fullscreen management
+
 func (v *Viewports) IsFullscreen() bool                   { return v.fullscreenXpath.Depth() > 0 }
 func (v *Viewports) GetFullscreenXpath() attributes.Xpath { return v.fullscreenXpath }
 func (v *Viewports) SetFullscreen(xpath attributes.Xpath) { v.fullscreenXpath = xpath }
 func (v *Viewports) ExitFullscreen()                      { v.fullscreenXpath = attributes.Xpath{} }
 
-// ContentWidth returns available width accounting for scrollbar
+// ContentWidth returns available width accounting for scrollbar.
 func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWidth }
 
 // Viewport factory methods
@@ -177,7 +178,7 @@ func (v *Viewports) GetActiveViewportScrollPercent() float64 {
 	return 0.0
 }
 
-// Update handles messages for all viewports
+// Update handles messages for all viewports.
 func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	if v == nil {
 		return nil
@@ -224,7 +225,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// Debug returns debug info about all viewports
+// Debug returns debug info about all viewports.
 func (v *Viewports) Debug() string {
 	var builder strings.Builder
 
@@ -247,7 +248,7 @@ func (v *Viewports) Debug() string {
 	return builder.String()
 }
 
-// resizeAllViewports updates all viewport dimensions when terminal resizes
+// resizeAllViewports updates all viewport dimensions when terminal resizes.
 func (v *Viewports) resizeAllViewports() {
 	for xpath, viewport := range v.viewports.Records() {
 		width := max(1, v.dimensions.Width-scrollbarWidth)
@@ -506,7 +507,7 @@ func (v *Viewports) HasActiveInner() bool {
 	return v.hasActiveInner()
 }
 
-// DeselectAll activates only the main viewport
+// DeselectAll activates only the main viewport.
 func (v *Viewports) DeselectAll() {
 	for xpath, vp := range v.viewports.Records() {
 		vp.active = xpath == v.mainXpath
@@ -552,7 +553,7 @@ func truncateLines(content string, maxWidth int) string {
 	return strings.Join(lines, "\n")
 }
 
-// truncateToRuneWidth truncates a string to fit within maxWidth runes,
+// truncateToRuneWidth truncates a string to fit within maxWidth runes
 // using lipgloss.Width for accurate display width measurement.
 func truncateToRuneWidth(str string, maxWidth int) string {
 	width := lipgloss.Width(str)

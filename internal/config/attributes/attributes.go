@@ -108,7 +108,7 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) e
 	return nil
 }
 
-// PassAttributesInto has to be run before rest of the Init
+// PassAttributesInto has to be run before rest of the Init.
 func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) error {
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
 	if err != nil {

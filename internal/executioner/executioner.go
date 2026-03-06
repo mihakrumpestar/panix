@@ -63,14 +63,14 @@ func OnSuccess(f func(*logs_command.CommandLog) error) ExecOption {
 	}
 }
 
-// OnDryRun is mandatory - every command that has OnSuccess must also provide OnDryRun
+// OnDryRun is mandatory - every command that has OnSuccess must also provide OnDryRun.
 func OnDryRun(f func()) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.onDryRun = f
 	}
 }
 
-// Slice of "key=value" entrys
+// Env takes a slice of "key=value" entrys.
 func Env(env []string) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.env = env
