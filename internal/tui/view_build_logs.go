@@ -27,6 +27,7 @@ var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 // - Otherwise: show default view (Inspect + remaining phases per scope)
 func (m *model) ViewBuildLogs() string {
 	var b strings.Builder
+
 	b.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
 
 	r := m.resetable.Load()
@@ -105,6 +106,7 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 			if pm.Scope == phases.ScopeConfig {
 				attr = &cfg.Attributes
 			}
+
 			m.addPhases(node, attr, indent+treeStep, true, pm.Phase)
 		}
 	}
@@ -137,6 +139,7 @@ func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, indent int, allowed ...phases.Phase) {
 	node := m.createNode(indent, m.conf.ColorScheme.Machine, &machine.Attributes, false)
 	m.addPhases(node, &machine.Attributes, indent+treeStep, false, allowed...)
+
 	if node.Children().Length() > 0 {
 		parent.Child(node)
 	}
@@ -167,6 +170,7 @@ func (m *model) addPhases(parent *tree.Tree, attr *config_attributes.Attributes,
 		if !slices.Contains(allowed, entry.Key) {
 			continue
 		}
+
 		if m.addPhase(parent, attr, entry.Key, entry.Value, indent) && stopAtError {
 			return true
 		}
@@ -184,6 +188,7 @@ func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, 
 	tas := phaseLog.TimeAndState()
 	hideable := slices.Contains(hideablePhases, phase)
 	shouldHide := (!m.conf.Flags.Tui.ShowAllBuildLogs && hideable) || m.conf.Flags.Tui.ShowActiveOnly
+
 	if shouldHide && tas.IsFinished() && tas.GetEndError() == nil {
 		return false
 	}
@@ -197,14 +202,17 @@ func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, 
 
 	cmds := phaseLog.CommandLogs()
 	hasError := tas.GetEndError() != nil
+
 	for i, cmd := range cmds {
 		if m.conf.Flags.Tui.ShowAllBuildLogs || !hideable || i == len(cmds)-1 {
 			m.addCommand(phaseNode, cmd, i, phaseXpath, indent)
+
 			if cmd.TimeAndState.GetEndError() != nil {
 				hasError = true
 			}
 		}
 	}
+
 	parent.Child(phaseNode)
 	return hasError
 }
@@ -271,9 +279,11 @@ func (m *model) spinnerOrIcon(xpath config_attributes.Xpath, icon string, tas *t
 	if !tas.HasStarted() {
 		return ""
 	}
+
 	if tas.IsFinished() {
 		return icon
 	}
+
 	return m.resetable.Load().spinners.GetOrCreateSpinner(xpath).View()
 }
 

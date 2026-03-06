@@ -173,6 +173,7 @@ func (ts *TargetsLogs) Debug() string {
 			builder.WriteString(child.xpath.String())
 			builder.WriteByte(',')
 		}
+
 		children := builder.String()
 
 		str += fmt.Sprintf("  '%s' parent:%s children:%v, len:%d\n", pair.Key, parent, children, pair.Value.PhaseLogs.Len())

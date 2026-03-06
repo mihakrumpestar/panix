@@ -81,7 +81,9 @@ func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error)
 	}
 
 	firstPhase := phases[0]
+
 	validFirst := []Phase{Inspect, Build, Secrets}
+
 	if !slices.Contains(validFirst, firstPhase) {
 		return nil, fmt.Errorf("phase %s can't be first, allowed: %v", firstPhase, validFirst)
 	}

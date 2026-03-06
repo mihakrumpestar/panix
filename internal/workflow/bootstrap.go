@@ -132,11 +132,13 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 			RemotePath: "/tmp/kexec/kexec.tar",
 		}, "kexec tarball", false)
 	}
+
 	if err != nil {
 		return err
 	}
 
 	var tarArgs []string
+
 	switch {
 	case strings.HasSuffix(kexecURL, ".tar.gz") || strings.HasSuffix(kexecURL, ".tgz"):
 		tarArgs = []string{"-xvzf", "/tmp/kexec/kexec.tar"}
@@ -147,6 +149,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 	default:
 		tarArgs = []string{"-xvf", "/tmp/kexec/kexec.tar"}
 	}
+
 	tarArgs = append(tarArgs, "-C", "/tmp/kexec")
 
 	err = exc.Exec(
@@ -179,6 +182,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 
 	activeSSH := machine.MetaInspect.GetActiveSSH()
 	err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
+
 	if err != nil {
 		return err
 	}

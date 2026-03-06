@@ -30,6 +30,7 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 
 	conf := &Config{}
 	decoder := yaml.NewDecoder(file)
+
 	err = decoder.Decode(conf)
 	if err != nil {
 		return nil, errors.New(yaml.FormatError(err, true, false))
@@ -144,6 +145,7 @@ func (c *Config) filterRoot() error {
 						Bool("disabled", machine.Disabled).
 						Strs("machine.Tags", machine.Tags).
 						Msgf("deleting machine %s", strconv.Quote(machinePair.Key))
+
 					_, _ = config.Machines.Omap.Del(machinePair.Key)
 				}
 			}

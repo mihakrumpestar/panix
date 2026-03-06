@@ -90,9 +90,11 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					if architecture == "" {
 						return fmt.Errorf("architecture output was empty")
 					}
+
 					if !slices.Contains(KexecSupportedPlatforms, architecture) {
 						return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
 					}
+
 					mms.Architecture.Store(architecture)
 					return nil
 				}),
@@ -115,9 +117,11 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				executioner.OnSuccess(func(log *logs_command.CommandLog) error {
 					output := strings.Trim(log.String(), "\n ")
 					parsedOutput, err := strconv.ParseUint(output, 10, 64)
+
 					if err != nil {
 						return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
 					}
+
 					mms.IsRoot.Store(parsedOutput == 0)
 					return nil
 				}),
@@ -223,6 +227,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					if idx := strings.Index(date, "."); idx != -1 {
 						date = date[:idx]
 					}
+
 					mms.Date.Store(date)
 					return nil
 				}),

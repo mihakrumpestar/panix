@@ -32,6 +32,7 @@ func GetCachedSshConfig() (*SshConfig, error) {
 		}
 
 		cfgPath := filepath.Join(home, ".ssh", "config")
+
 		sshCfgRaw, err := os.Open(cfgPath)
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to open SSH config")
@@ -58,20 +59,24 @@ func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error
 	if err != nil {
 		return fmt.Errorf("failed to get HostName for alias %q: %w", alias, err)
 	}
+
 	if hostname == "" {
 		return fmt.Errorf("ssh config for alias %q has empty or missing HostName", alias)
 	}
+
 	sshClient.Hostname = hostname
 
 	portRaw, err := sc.sc.Get(alias, "Port")
 	if err != nil {
 		log.Warn().Err(err).Str("alias", alias).Msg("failed to read Port from SSH config")
 	}
+
 	if portRaw != "" {
 		port64, err := strconv.ParseUint(portRaw, 10, 16)
 		if err != nil {
 			return fmt.Errorf("failed to parse Port for alias %q: %w", alias, err)
 		}
+
 		sshClient.Port = uint16(port64)
 	} else {
 		sshClient.Port = DefaultSSHPort
@@ -81,6 +86,7 @@ func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error
 	if err != nil {
 		log.Warn().Err(err).Str("alias", alias).Msg("failed to read User from SSH config")
 	}
+
 	if username != "" {
 		sshClient.Username = username
 	} else {

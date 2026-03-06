@@ -104,6 +104,7 @@ func (m *model) ViewStatsTable() string {
 	}
 
 	var builder strings.Builder
+
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
 	usableWidth := max(r.viewports.ContentWidth(), 40)
@@ -232,13 +233,17 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 		if row == table.HeaderRow {
 			return colors.TableRow
 		}
+
 		if col >= 0 && col < len(columns) {
 			style := columns[col].style(colors)
+
 			if row == selectedRow {
 				style = style.Background(colors.SelectionHighlightBackground.GetBackground())
 			}
+
 			return style
 		}
+
 		return colors.TableRow
 	}
 }

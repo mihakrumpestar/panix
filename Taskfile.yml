@@ -56,9 +56,12 @@ tasks:
     - nix-update --flake --version=skip default
 
   golangci:
+    vars:
+      CUSTOM_GCL: .devbox/bin/custom-gcl
     cmds:
-      - if [ ! -f .devbox/bin/custom-gcl ]; then golangci-lint custom; fi # Build linter
-      - custom-gcl run ./...
+      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination {{.CUSTOM_GCL}}; fi # Build linter
+      - |
+        {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   release:

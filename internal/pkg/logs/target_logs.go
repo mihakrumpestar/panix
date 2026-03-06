@@ -101,6 +101,7 @@ func (ts *TargetLogs) GetCurrentTargetLog() *logs_phase.PhaseLog {
 	for _, phaseLogPair := range ts.PhaseLogs.All() {
 		phaseLog := phaseLogPair.Value
 		err := phaseLog.TimeAndState().GetEndError()
+
 		if err != nil {
 			return phaseLog
 		}
