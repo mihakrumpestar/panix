@@ -17,7 +17,7 @@ type resetable struct {
 	phaseStatus *PhaseStatus
 }
 
-// workflowDoneMsg signals the workflow has completed
+// workflowDoneMsg signals the workflow has completed.
 type workflowDoneMsg struct{}
 
 func (m *model) startWorkflow() tea.Cmd {

@@ -24,11 +24,11 @@ const (
 
 var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 
-// ViewBuildLogs generates a tree view of all build logs
+// ViewBuildLogs generates a tree view of all build logs.
 // The tree structure adapts based on what's selected:
 // - If a machine is selected in stats table: show that machine's logs
 // - If a phase is selected: show that phase across all machines
-// - Otherwise: show default view (Inspect + remaining phases per scope)
+// - Otherwise: show default view (Inspect + remaining phases per scope).
 func (m *model) ViewBuildLogs() string {
 	var builder strings.Builder
 
@@ -97,8 +97,8 @@ func (m *model) addPhaseToTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	}
 }
 
-// addMachineTree adds a machine and all its phases to the config node
-// Used when a specific machine is selected in the stats table
+// addMachineTree adds a machine and all its phases to the config node.
+// Used when a specific machine is selected in the stats table.
 func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, machine *config.Machine) {
 	indent := treeStep * indentStep
 	node := m.createNode(indent, m.conf.ColorScheme.Machine, &machine.Attributes, false)
@@ -122,8 +122,8 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	}
 }
 
-// addDefaultTree adds all phases in order from PhaseRegistry to the tree
-// Respects scope: ScopeConfig phases at config level, ScopeMachine per machine
+// addDefaultTree adds all phases in order from PhaseRegistry to the tree.
+// Respects scope: ScopeConfig phases at config level, ScopeMachine per machine.
 func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine]) {
 	indent := treeStep * indentStep
 
@@ -140,8 +140,8 @@ func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	}
 }
 
-// addMachinePhases adds a machine node with specific phases to the parent tree
-// Used when showing a specific phase or default view across all machines
+// addMachinePhases adds a machine node with specific phases to the parent tree.
+// Used when showing a specific phase or default view across all machines.
 func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, indent int, allowed ...phases.Phase) {
 	node := m.createNode(indent, m.conf.ColorScheme.Machine, &machine.Attributes, false)
 	m.addPhases(node, &machine.Attributes, indent+treeStep, false, allowed...)
@@ -151,8 +151,8 @@ func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, ind
 	}
 }
 
-// createNode creates a tree node for an entity (flake/config/machine)
-// Each node shows: icon + name + message (left aligned) and duration (right aligned)
+// createNode creates a tree node for an entity (flake/config/machine).
+// Each node shows: icon + name + message (left aligned) and duration (right aligned).
 func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *attributes.Attributes, isRoot bool) *tree.Tree {
 	duration := m.resetable.Load().workflow.State().TargetsLogs.MustGet(attr.Xpath).GetCachedDurationAndError().Duration
 	line := m.layoutLine(indent,
@@ -169,8 +169,8 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 	return treeInst
 }
 
-// addPhases adds phase nodes to a parent tree for specific phases
-// Returns true if an error was encountered (for stopAtError logic)
+// addPhases adds phase nodes to a parent tree for specific phases.
+// Returns true if an error was encountered (for stopAtError logic).
 func (m *model) addPhases(parent *tree.Tree, attr *attributes.Attributes, indent int, stopAtError bool, allowed ...phases.Phase) bool {
 	logs := m.resetable.Load().workflow.State().TargetsLogs.MustGetLogs(attr.Xpath)
 	for _, entry := range logs.All() {
@@ -186,8 +186,8 @@ func (m *model) addPhases(parent *tree.Tree, attr *attributes.Attributes, indent
 	return false
 }
 
-// addPhase adds a single phase node with its commands to the parent tree
-// Hides successful hideable phases unless ShowAllBuildLogs is true
+// addPhase adds a single phase node with its commands to the parent tree.
+// Hides successful hideable phases unless ShowAllBuildLogs is true.
 func (m *model) addPhase(parent *tree.Tree, attr *attributes.Attributes, phase phases.Phase, phaseLog *phase.PhaseLog, indent int) bool {
 	if phaseLog == nil {
 		return false
@@ -226,9 +226,9 @@ func (m *model) addPhase(parent *tree.Tree, attr *attributes.Attributes, phase p
 	return hasError
 }
 
-// addCommand adds a command node with its output and errors to the phase tree
-// Each command shows: index + description/command + duration
-// If output exists, it wraps in a scrollable viewport
+// addCommand adds a command node with its output and errors to the phase tree.
+// Each command shows: index + description/command + duration.
+// If output exists, it wraps in a scrollable viewport.
 func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, phaseXpath attributes.Xpath, indent int) {
 	colors := m.conf.ColorScheme
 	cmdIndent := indent + treeStep
@@ -274,8 +274,8 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	parent.Child(cmdNode)
 }
 
-// layoutLine creates a line with left-aligned content and right-aligned duration
-// Calculates available width minus indent and timer indent
+// layoutLine creates a line with left-aligned content and right-aligned duration.
+// Calculates available width minus indent and timer indent.
 func (m *model) layoutLine(indent int, left, right string) string {
 	timerIndentCorrection := max(0, timerIndent-indent/treeStep)
 	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndentCorrection
@@ -286,8 +286,8 @@ func (m *model) layoutLine(indent int, left, right string) string {
 		right)
 }
 
-// spinnerOrIcon returns an icon or spinner based on execution state
-// Shows spinner if running, icon if finished, empty string if not started
+// spinnerOrIcon returns an icon or spinner based on execution state.
+// Shows spinner if running, icon if finished, empty string if not started.
 func (m *model) spinnerOrIcon(xpath attributes.Xpath, icon string, tas *timeandstate.TimeAndState) string {
 	if !tas.HasStarted() {
 		return ""
@@ -300,8 +300,8 @@ func (m *model) spinnerOrIcon(xpath attributes.Xpath, icon string, tas *timeands
 	return m.resetable.Load().spinners.GetOrCreateSpinner(xpath).View()
 }
 
-// durationText formats duration text with proper styling
-// Returns empty string if execution hasn't started
+// durationText formats duration text with proper styling.
+// Returns empty string if execution hasn't started.
 func (m *model) durationText(style config.ColorSchemeLogEntity, tas *timeandstate.TimeAndState) string {
 	if d, err := tas.DurationOrElapsedTime(); err == nil {
 		return style.Color.PaddingLeft(1).Render(fmt.Sprintf("(%.2fs)", d.Seconds()))

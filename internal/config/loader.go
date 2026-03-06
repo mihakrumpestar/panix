@@ -121,7 +121,7 @@ func (c *Config) initRoot() error {
 	return nil
 }
 
-// FilterConfigEntries filters the configuration based on command-line or global selections
+// FilterConfigEntries filters the configuration based on command-line or global selections.
 func (c *Config) filterRoot() error {
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value

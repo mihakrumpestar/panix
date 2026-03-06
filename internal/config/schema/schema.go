@@ -14,13 +14,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Generator holds the state for schema generation
+// Generator holds the state for schema generation.
 type Generator struct {
 	visited map[reflect.Type]bool
 }
 
-// RequiredList is a list of required fields that always serializes properly
-// even when empty (unlike []string with omitempty)
+// RequiredList is a list of required fields that always serializes properly,
+// even when empty (unlike []string with omitempty).
 type RequiredList []string
 
 func (r RequiredList) MarshalYAML() (interface{}, error) {
@@ -31,7 +31,7 @@ func (r RequiredList) MarshalYAML() (interface{}, error) {
 	return []string(r), nil
 }
 
-// TypeDefinition represents a schema type definition
+// TypeDefinition represents a schema type definition.
 type TypeDefinition struct {
 	Type                 string                 `yaml:"type,omitempty"`
 	Description          string                 `yaml:"description,omitempty"`
@@ -52,7 +52,7 @@ type TypeDefinition struct {
 	MaxLength            *int                   `yaml:"maxLength,omitempty"`
 }
 
-// Schema represents the root YAML schema document
+// Schema represents the root YAML schema document.
 type Schema struct {
 	Schema               string                 `yaml:"$schema"`
 	ID                   string                 `yaml:"$id,omitempty"`
@@ -67,14 +67,14 @@ type Schema struct {
 	AllOf                []interface{}          `yaml:"allOf,omitempty"`
 }
 
-// NewGenerator creates a new schema generator
+// NewGenerator creates a new schema generator.
 func NewGenerator() *Generator {
 	return &Generator{
 		visited: make(map[reflect.Type]bool),
 	}
 }
 
-// Generate creates a YAML schema from the config.Config type
+// Generate creates a YAML schema from the config.Config type.
 func (g *Generator) Generate() (*Schema, error) {
 	schema := &Schema{
 		Schema:               "http://json-schema.org/draft-07/schema#",
@@ -103,7 +103,7 @@ func (g *Generator) Generate() (*Schema, error) {
 	return schema, nil
 }
 
-// processStruct processes a struct type and returns its properties and required fields
+// processStruct processes a struct type and returns its properties and required fields.
 func (g *Generator) hasExactValidateTag(validateTag, tag string) bool {
 	tags := strings.Split(validateTag, ",")
 	for _, t := range tags {
@@ -200,7 +200,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 	return properties, required, nil
 }
 
-// processType processes a type and returns its schema definition
+// processType processes a type and returns its schema definition.
 func (g *Generator) processType(t reflect.Type, field reflect.StructField) (interface{}, error) {
 	// Handle pointers
 	if t.Kind() == reflect.Ptr {
@@ -292,7 +292,7 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 	}
 }
 
-// applyValidateConstraints applies validation tag constraints to the type definition
+// applyValidateConstraints applies validation tag constraints to the type definition.
 func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, baseType string) {
 	if validateTag == "" {
 		return
@@ -357,7 +357,6 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 	}
 }
 
-// parseInt parses a string to an integer
 func parseInt(s string) (int, error) {
 	var parsed int
 
@@ -369,7 +368,7 @@ func parseInt(s string) (int, error) {
 	return parsed, nil
 }
 
-// isOrderedMap checks if a type is an OrderedMap
+// isOrderedMap checks if a type is an OrderedMap.
 func (g *Generator) isOrderedMap(typ reflect.Type) bool {
 	// OrderedMap is a struct with an embedded *omap.Omap field
 	if typ.Kind() != reflect.Struct {
@@ -382,9 +381,9 @@ func (g *Generator) isOrderedMap(typ reflect.Type) bool {
 	return hasOmap
 }
 
-// processOrderedMap processes an OrderedMap type and returns its schema definition
+// processOrderedMap processes an OrderedMap type and returns its schema definition.
 // Since Go doesn't provide access to generic type parameters at runtime via reflection,
-// we manually handle the known OrderedMap types based on their field names
+// we manually handle the known OrderedMap types based on their field names.
 func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinition, error) {
 	// Get the field name from the yaml tag or struct field name
 	yamlTag := field.Tag.Get("yaml")
@@ -446,7 +445,7 @@ func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinitio
 	}, nil
 }
 
-// getSpecialTypeDefinition returns special type definitions for known types
+// getSpecialTypeDefinition returns special type definitions for known types.
 func (g *Generator) getSpecialTypeDefinition(t reflect.Type) *TypeDefinition {
 	// Handle time.Duration
 	if t.String() == "time.Duration" {
@@ -459,7 +458,7 @@ func (g *Generator) getSpecialTypeDefinition(t reflect.Type) *TypeDefinition {
 	return nil
 }
 
-// getYAMLFieldName extracts the field name from yaml tag or returns the struct field name
+// getYAMLFieldName extracts the field name from yaml tag or returns the struct field name.
 func (g *Generator) getYAMLFieldName(field reflect.StructField, yamlTag string) string {
 	if yamlTag == "" {
 		return strings.ToLower(field.Name)
@@ -474,7 +473,7 @@ func (g *Generator) getYAMLFieldName(field reflect.StructField, yamlTag string) 
 	return parts[0]
 }
 
-// GenerateYAML generates the schema and returns it as YAML bytes
+// GenerateYAML generates the schema and returns it as YAML bytes.
 func GenerateYAML() ([]byte, error) {
 	gen := NewGenerator()
 
@@ -491,7 +490,7 @@ func GenerateYAML() ([]byte, error) {
 	return data, nil
 }
 
-// GenerateYAMLString generates the schema and returns it as a YAML string
+// GenerateYAMLString generates the schema and returns it as a YAML string.
 func GenerateYAMLString() (string, error) {
 	bytes, err := GenerateYAML()
 	if err != nil {

@@ -9,15 +9,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// runner handles phase execution with once-per-scope semantics
-// It is bound to a Workflow instance to avoid global state issues
+// runner handles phase execution with once-per-scope semantics.
+// It is bound to a Workflow instance to avoid global state issues.
 type runner struct {
 	workflow     *Workflow
 	onceRegistry *omap.Omap[string, *onceasync.OnceAsync]
 }
 
-// phaseRunner handles the execution of a single phase for a specific machine
-// It is created per-machine to hold the context for that machine's execution
+// phaseRunner handles the execution of a single phase for a specific machine.
+// It is created per-machine to hold the context for that machine's execution.
 type phaseRunner struct {
 	r       *runner
 	flake   *config.Flake
@@ -37,8 +37,8 @@ func newRunner(workflow *Workflow) (*runner, error) {
 	}, nil
 }
 
-// getOrCreateOnceAsync returns a OnceAsync for the given xpath
-// This ensures that phases with ScopeConfig or ScopeFlake only run once
+// getOrCreateOnceAsync returns a OnceAsync for the given xpath.
+// This ensures that phases with ScopeConfig or ScopeFlake only run once.
 func (r *runner) getOrCreateOnceAsync(xpath string) *onceasync.OnceAsync {
 	once, ok := r.onceRegistry.Get(xpath)
 	if ok {
@@ -60,7 +60,7 @@ func (r *runner) getOrCreateOnceAsync(xpath string) *onceasync.OnceAsync {
 	return newOnce
 }
 
-// run executes a phase with automatic once-per-scope semantics
+// run executes a phase with automatic once-per-scope semantics.
 func (pr *phaseRunner) run(phase phases.Phase) error {
 	workflow := pr.r.workflow
 

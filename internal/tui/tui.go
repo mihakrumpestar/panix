@@ -125,7 +125,7 @@ func (m *model) Init() tea.Cmd {
 	)
 }
 
-// restartMsg signals the workflow should be restarted
+// restartMsg signals the workflow should be restarted.
 type restartMsg struct{}
 
 func (m *model) workflowUpdateHook() tea.Cmd {
