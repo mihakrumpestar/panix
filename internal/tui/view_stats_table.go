@@ -5,10 +5,10 @@ import (
 	"slices"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
-	zone "github.com/lrstanley/bubblezone"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
@@ -34,11 +34,7 @@ func (s *StatsTable) Reset() {
 	s.MachineXpaths = nil
 }
 
-func (s *StatsTable) HandleMouseClick(msg tea.MouseMsg) bool {
-	if msg.Action != tea.MouseActionRelease {
-		return false
-	}
-
+func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	z := zone.Get(statsTableZonePrefix)
 	if z == nil || !z.InBounds(msg) {
 		return false
@@ -49,7 +45,8 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseMsg) bool {
 		return false
 	}
 
-	relY := msg.Y - z.StartY
+	mouse := msg.Mouse()
+	relY := mouse.Y - z.StartY
 	headerLines := 3
 
 	if relY < headerLines {

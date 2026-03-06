@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_clipboard"
 	"github.com/pkg/errors"
 	zerolog "github.com/rs/zerolog/log"
@@ -56,7 +56,7 @@ type Keymap struct{}
 func (k Keymap) ShortHelp() []key.Binding  { return keyBindings }
 func (k Keymap) FullHelp() [][]key.Binding { return [][]key.Binding{keyBindings} }
 
-func (m *model) HandleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
@@ -129,7 +129,7 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 		r.err = err
 	}
 	zerolog.Debug().Msg("Context done, exiting TUI")
-	return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+	return m, tea.Quit
 }
 
 func (m *model) handleToggle() (tea.Model, tea.Cmd) {
