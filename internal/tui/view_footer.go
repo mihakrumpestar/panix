@@ -17,22 +17,9 @@ import (
 
 var (
 	notificationBaseStyle = lipgloss.NewStyle().Bold(true)
-	keymapHelp            = help.New()
+	keymapHelp            = initKeymapHelp()
+	keyBindings           = initKeyBindings()
 )
-
-func init() {
-	keymapHelp.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-	keymapHelp.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-
-	keyBindings = make([]key.Binding, len(keyDefs))
-
-	for i, kd := range keyDefs {
-		keyBindings[i] = key.NewBinding(
-			key.WithKeys(kd.keys...),
-			key.WithHelp(kd.keys[0], kd.help),
-		)
-	}
-}
 
 type keyDef struct {
 	keys    []string
@@ -51,7 +38,25 @@ var keyDefs = []keyDef{
 	{[]string{"m"}, "fullscreen", (*model).handleFullscreen},
 }
 
-var keyBindings []key.Binding
+func initKeymapHelp() help.Model {
+	h := help.New()
+	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+	h.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
+
+	return h
+}
+
+func initKeyBindings() []key.Binding {
+	bindings := make([]key.Binding, len(keyDefs))
+	for i, kd := range keyDefs {
+		bindings[i] = key.NewBinding(
+			key.WithKeys(kd.keys...),
+			key.WithHelp(kd.keys[0], kd.help),
+		)
+	}
+
+	return bindings
+}
 
 type Keymap struct{}
 
