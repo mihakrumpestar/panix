@@ -104,7 +104,7 @@ func (m *model) renderPhaseFlow() string {
 	}
 
 	r := m.resetable.Load()
-	r.phaseStatus.Phases = phasesList[:]
+	r.phaseStatus.Phases = phasesList
 	termWidth := r.viewports.ContentWidth()
 	statistics := r.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
 
