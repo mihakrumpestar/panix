@@ -158,20 +158,20 @@ func (g *Generator) isFieldRequired(field reflect.StructField, yamlTag string) b
 	return yamlHasRequired || validateHasRequired
 }
 
-func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []string, error) {
+func (g *Generator) processStruct(structType reflect.Type) (map[string]interface{}, []string, error) {
 	properties := make(map[string]interface{})
 	required := []string{}
 
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	if structType.Kind() == reflect.Ptr {
+		structType = structType.Elem()
 	}
 
-	if t.Kind() != reflect.Struct {
-		return nil, nil, fmt.Errorf("expected struct type, got %v", t.Kind())
+	if structType.Kind() != reflect.Struct {
+		return nil, nil, fmt.Errorf("expected struct type, got %v", structType.Kind())
 	}
 
-	for i := range t.NumField() {
-		field := t.Field(i)
+	for i := range structType.NumField() {
+		field := structType.Field(i)
 
 		if g.shouldSkipField(field) {
 			continue
@@ -215,8 +215,8 @@ func (g *Generator) setFieldDescription(prop interface{}, field reflect.StructFi
 		return
 	}
 
-	if td, ok := prop.(*TypeDefinition); ok {
-		td.Description = desc
+	if typeDef, ok := prop.(*TypeDefinition); ok {
+		typeDef.Description = desc
 	}
 }
 
@@ -240,22 +240,22 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		td := &TypeDefinition{Type: "integer"}
-		g.applyValidateConstraints(td, validateTag, "integer")
+		typeDef := &TypeDefinition{Type: "integer"}
+		g.applyValidateConstraints(typeDef, validateTag, "integer")
 
-		return td, nil
+		return typeDef, nil
 
 	case reflect.Float32, reflect.Float64:
-		td := &TypeDefinition{Type: "number"}
-		g.applyValidateConstraints(td, validateTag, "number")
+		typeDef := &TypeDefinition{Type: "number"}
+		g.applyValidateConstraints(typeDef, validateTag, "number")
 
-		return td, nil
+		return typeDef, nil
 
 	case reflect.String:
-		td := &TypeDefinition{Type: "string"}
-		g.applyValidateConstraints(td, validateTag, "string")
+		typeDef := &TypeDefinition{Type: "string"}
+		g.applyValidateConstraints(typeDef, validateTag, "string")
 
-		return td, nil
+		return typeDef, nil
 
 	case reflect.Slice, reflect.Array:
 		itemType, err := g.processType(t.Elem(), field)
@@ -263,14 +263,14 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 			return nil, err
 		}
 
-		td := &TypeDefinition{
+		typeDef := &TypeDefinition{
 			Type:  "array",
 			Items: itemType,
 		}
 
-		g.applyValidateConstraints(td, validateTag, "array")
+		g.applyValidateConstraints(typeDef, validateTag, "array")
 
-		return td, nil
+		return typeDef, nil
 
 	case reflect.Map:
 		// Handle regular maps
@@ -313,7 +313,7 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 }
 
 // applyValidateConstraints applies validation tag constraints to the type definition.
-func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, baseType string) {
+func (g *Generator) applyValidateConstraints(typeDef *TypeDefinition, validateTag, baseType string) {
 	if validateTag == "" {
 		return
 	}
@@ -325,60 +325,60 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 			continue
 		}
 
-		g.applyConstraintTag(td, tag, baseType)
+		g.applyConstraintTag(typeDef, tag, baseType)
 	}
 }
 
-func (g *Generator) applyConstraintTag(td *TypeDefinition, tag, baseType string) {
+func (g *Generator) applyConstraintTag(typeDef *TypeDefinition, tag, baseType string) {
 	switch {
 	case strings.HasPrefix(tag, "min="):
-		g.applyMinConstraint(td, tag, baseType)
+		g.applyMinConstraint(typeDef, tag, baseType)
 	case strings.HasPrefix(tag, "max="):
-		g.applyMaxConstraint(td, tag, baseType)
+		g.applyMaxConstraint(typeDef, tag, baseType)
 	case strings.HasPrefix(tag, "len="):
-		g.applyLenConstraint(td, tag, baseType)
+		g.applyLenConstraint(typeDef, tag, baseType)
 	default:
-		g.applyFormatConstraint(td, tag)
+		g.applyFormatConstraint(typeDef, tag)
 	}
 }
 
-func (g *Generator) applyMinConstraint(td *TypeDefinition, tag, baseType string) {
+func (g *Generator) applyMinConstraint(typeDef *TypeDefinition, tag, baseType string) {
 	val := strings.TrimPrefix(tag, "min=")
 	if v, err := parseInt(val); err == nil {
 		switch baseType {
 		case "integer":
-			td.Minimum = &v
+			typeDef.Minimum = &v
 		case "string":
-			td.MinLength = &v
+			typeDef.MinLength = &v
 		}
 	}
 }
 
-func (g *Generator) applyMaxConstraint(td *TypeDefinition, tag, baseType string) {
+func (g *Generator) applyMaxConstraint(typeDef *TypeDefinition, tag, baseType string) {
 	val := strings.TrimPrefix(tag, "max=")
 	if v, err := parseInt(val); err == nil {
 		switch baseType {
 		case "integer":
-			td.Maximum = &v
+			typeDef.Maximum = &v
 		case "string":
-			td.MaxLength = &v
+			typeDef.MaxLength = &v
 		}
 	}
 }
 
-func (g *Generator) applyLenConstraint(td *TypeDefinition, tag, baseType string) {
+func (g *Generator) applyLenConstraint(typeDef *TypeDefinition, tag, baseType string) {
 	if baseType != "string" {
 		return
 	}
 
 	val := strings.TrimPrefix(tag, "len=")
 	if v, err := parseInt(val); err == nil {
-		td.MinLength = &v
-		td.MaxLength = &v
+		typeDef.MinLength = &v
+		typeDef.MaxLength = &v
 	}
 }
 
-func (g *Generator) applyFormatConstraint(td *TypeDefinition, tag string) {
+func (g *Generator) applyFormatConstraint(typeDef *TypeDefinition, tag string) {
 	formats := map[string]struct {
 		format  string
 		pattern string
@@ -393,9 +393,9 @@ func (g *Generator) applyFormatConstraint(td *TypeDefinition, tag string) {
 	}
 
 	if f, ok := formats[tag]; ok {
-		td.Format = f.format
+		typeDef.Format = f.format
 		if f.pattern != "" {
-			td.Pattern = f.pattern
+			typeDef.Pattern = f.pattern
 		}
 	}
 }
