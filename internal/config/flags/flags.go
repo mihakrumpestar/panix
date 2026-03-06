@@ -9,6 +9,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	defaultTimeout              = 2 * time.Hour
+	defaultCommandOutputMaxSize = 8
+)
+
 type Flags struct {
 	Config               string         `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
 	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)"`
@@ -50,8 +55,8 @@ func (f *Flags) SetDefault(reverse bool) {
 
 	toggle(reverse, &f.Config, "panix.yml", "")
 	toggle(reverse, &f.OverrideLocalMachine, defaultHostname, "")
-	toggle(reverse, &f.Timeout, 2*time.Hour, 0)
-	toggle(reverse, &f.Tui.CommandOutputMaxHeight, 8, 0)
+	toggle(reverse, &f.Timeout, defaultTimeout, 0)
+	toggle(reverse, &f.Tui.CommandOutputMaxHeight, defaultCommandOutputMaxSize, 0)
 	toggle(reverse, &f.LogFile, "panix.log", "")
 }
 

@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const defaultFilePermissions os.FileMode = 0700
+
 // Flake, Configuration, and Machine Attributes
 
 type Attributes struct {
@@ -39,7 +41,7 @@ type PlainFileOrDirToTransfer struct {
 
 func (p *PlainFileOrDirToTransfer) GetPermissions() os.FileMode {
 	if p.PermissionsRaw == nil {
-		return 0700
+		return defaultFilePermissions
 	}
 
 	return *p.PermissionsRaw

@@ -21,6 +21,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	initialWidth  = 80
+	initialHeight = 24
+
+	workflowUpdateHookPollInterval  = 20 * time.Millisecond
+	workflowUpdateHookThrottleDelay = 100 * time.Millisecond
+)
+
 type workflowUpdateHookMsg struct{}
 
 type errMsg struct{ err error }
@@ -47,8 +55,8 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	defer setupSIGINTHandler(ctx)()
 
 	dimensions := &viewports.Dimensions{
-		Width:  80,
-		Height: 24,
+		Width:  initialWidth,
+		Height: initialHeight,
 	}
 
 	cpuProfile := conf.Flags.Logging.CPUProfile
@@ -124,7 +132,7 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 	return func() tea.Msg {
 		resetable := m.resetable.Load()
 		if resetable == nil || resetable.workflow == nil {
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(workflowUpdateHookPollInterval)
 			log.Debug().Msg("workflowUpdateHook was nil")
 
 			return workflowUpdateHookMsg{}
@@ -135,8 +143,8 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 		now := time.Now()
 		elapsed := now.Sub(m.lastWorkflowUpdate)
 
-		if elapsed < 100*time.Millisecond {
-			time.Sleep(100*time.Millisecond - elapsed)
+		if elapsed < workflowUpdateHookThrottleDelay {
+			time.Sleep(workflowUpdateHookThrottleDelay - elapsed)
 		}
 
 		m.lastWorkflowUpdate = time.Now()
@@ -189,7 +197,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleMouseClick(msg)
 
 	case tea.WindowSizeMsg:
-		m.dimensions.Width = max(msg.Width, 40)
+		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
 	}
 
