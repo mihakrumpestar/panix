@@ -70,69 +70,93 @@ type keyValueExtractor[K comparable, V any] struct {
 }
 
 func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
-	if mapping, ok := node.(*ast.MappingNode); ok {
-		valueType := reflect.TypeOf((*V)(nil)).Elem()
-		isPtr := valueType.Kind() == reflect.Ptr
+	mapping, ok := node.(*ast.MappingNode)
+	if !ok {
+		return e
+	}
 
-		elemType := valueType
-		if isPtr {
-			elemType = valueType.Elem()
+	valueType := reflect.TypeOf((*V)(nil)).Elem()
+	elemType := valueType
+
+	isPtr := valueType.Kind() == reflect.Ptr
+	if isPtr {
+		elemType = valueType.Elem()
+	}
+
+	for _, val := range mapping.Values {
+		key, value, err := e.processMappingValue(val, valueType, isPtr, elemType)
+		if err != nil {
+			e.err = err
+
+			return nil
 		}
 
-		for _, val := range mapping.Values {
-			var key K
-			if err := yaml.NodeToValue(val.Key, &key); err != nil {
-				e.err = fmt.Errorf("failed to unmarshal key: %w", err)
+		e.om.Omap.Set(key, value)
+	}
 
-				return nil
-			}
+	return nil
+}
 
-			var value V
+func (e *keyValueExtractor[K, V]) processMappingValue(val *ast.MappingValueNode, valueType reflect.Type, isPtr bool, elemType reflect.Type) (K, V, error) {
+	var (
+		key   K
+		value V
+	)
 
-			// Check if value is a NullNode (key without value)
-			if _, isNull := val.Value.(*ast.NullNode); isNull {
-				// Key has no value - for pointer types, create new instance
-				// For non-pointer types, value remains as zero value
-				if isPtr && elemType.Kind() == reflect.Struct {
-					newPtr := reflect.New(elemType)
-					value = newPtr.Interface().(V)
-				}
-			} else {
-				// Value exists in YAML, unmarshal it
-				if isPtr {
-					// For pointer types, allocate a new struct first, then unmarshal into it
-					if elemType.Kind() == reflect.Struct {
-						newPtr := reflect.New(elemType)
-						if err := yaml.NodeToValue(val.Value, newPtr.Interface()); err != nil {
-							e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+	if err := yaml.NodeToValue(val.Key, &key); err != nil {
+		return key, value, fmt.Errorf("failed to unmarshal key: %w", err)
+	}
 
-							return nil
-						}
-						value = newPtr.Interface().(V)
-					} else {
-						// Pointer to non-struct (e.g., *string, *int)
-						if err := yaml.NodeToValue(val.Value, &value); err != nil {
-							e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+	if _, isNull := val.Value.(*ast.NullNode); isNull {
+		value = e.createNullValue(isPtr, elemType)
 
-							return nil
-						}
-					}
-				} else {
-					// Non-pointer type, unmarshal directly
-					if err := yaml.NodeToValue(val.Value, &value); err != nil {
-						e.err = fmt.Errorf("failed to unmarshal %v: %w", key, err)
+		return key, value, nil
+	}
 
-						return nil
-					}
-				}
-			}
+	if err := e.unmarshalValue(val.Value, &value, isPtr, elemType, key); err != nil {
+		return key, value, err
+	}
 
-			e.om.Omap.Set(key, value)
+	return key, value, nil
+}
+
+func (e *keyValueExtractor[K, V]) createNullValue(isPtr bool, elemType reflect.Type) V {
+	var value V
+
+	if isPtr && elemType.Kind() == reflect.Struct {
+		newPtr := reflect.New(elemType)
+		value = newPtr.Interface().(V)
+	}
+
+	return value
+}
+
+func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr bool, elemType reflect.Type, key K) error {
+	if !isPtr {
+		if err := yaml.NodeToValue(node, value); err != nil {
+			return fmt.Errorf("failed to unmarshal %v: %w", key, err)
 		}
-		// Don't recurse into values
 
 		return nil
 	}
 
-	return e
+	if elemType.Kind() == reflect.Struct {
+		return e.unmarshalStructPtr(node, value, elemType, key)
+	}
+
+	if err := yaml.NodeToValue(node, value); err != nil {
+		return fmt.Errorf("failed to unmarshal %v: %w", key, err)
+	}
+
+	return nil
+}
+
+func (e *keyValueExtractor[K, V]) unmarshalStructPtr(node ast.Node, value *V, elemType reflect.Type, key K) error {
+	newPtr := reflect.New(elemType)
+	if err := yaml.NodeToValue(node, newPtr.Interface()); err != nil {
+		return fmt.Errorf("failed to unmarshal %v: %w", key, err)
+	}
+	*value = newPtr.Interface().(V)
+
+	return nil
 }
