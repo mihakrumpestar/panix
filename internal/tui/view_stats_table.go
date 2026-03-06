@@ -10,8 +10,8 @@ import (
 	"charm.land/lipgloss/v2/table"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -20,7 +20,7 @@ const rowSpanMarker = " 󱞩"
 
 type StatsTable struct {
 	SelectedMachine int
-	MachineXpaths   []config_attributes.Xpath
+	MachineXpaths   []attributes.Xpath
 }
 
 func NewStatsTable() *StatsTable {
@@ -86,9 +86,9 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 	return false
 }
 
-func (s *StatsTable) GetSelectedXpath() config_attributes.Xpath {
+func (s *StatsTable) GetSelectedXpath() attributes.Xpath {
 	if s.SelectedMachine < 0 || s.SelectedMachine >= len(s.MachineXpaths) {
-		return config_attributes.Xpath{}
+		return attributes.Xpath{}
 	}
 	return s.MachineXpaths[s.SelectedMachine]
 }
@@ -248,7 +248,7 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 	}
 }
 
-func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phase.PhaseLog) string {
+func (m *model) getStatusIcon(xpath attributes.Xpath, phaseLog *phase.PhaseLog) string {
 	resetable := m.resetable.Load()
 	if phaseLog == nil {
 		return resetable.spinners.GetOrCreateSpinner(xpath).View()
@@ -266,7 +266,7 @@ func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phas
 	return "✅"
 }
 
-func (m *model) getStatusText(phaseLog *logs_phase.PhaseLog, colors *config.ColorScheme) string {
+func (m *model) getStatusText(phaseLog *phase.PhaseLog, colors *config.ColorScheme) string {
 	if phaseLog == nil {
 		return ""
 	}

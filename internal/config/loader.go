@@ -8,13 +8,13 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
-	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
-func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config, error) {
+func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
 		d.SkipNilField = true
@@ -22,9 +22,9 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 	})
 
 	// Load YAML config file using streaming
-	file, err := os.Open(flags.Config)
+	file, err := os.Open(parsedFlags.Config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(flags.Config))
+		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(parsedFlags.Config))
 	}
 	defer file.Close()
 
@@ -36,21 +36,21 @@ func LoadConfig(flags config_flags.Flags, commandPhases []phases.Phase) (*Config
 		return nil, errors.New(yaml.FormatError(err, true, false))
 	}
 
-	err = conf.Flags.MergeConfWithCliFlags(flags)
+	err = conf.Flags.MergeConfWithCliFlags(parsedFlags)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed merging config with cli flags")
 	}
 
 	// Apply defaults
 	if conf.Flags == nil {
-		conf.Flags = &config_flags.Flags{}
+		conf.Flags = &flags.Flags{}
 	}
 
 	if conf.ColorScheme == nil {
 		conf.ColorScheme = defaultColorScheme()
 	}
 
-	err = config_flags.InitLogging(conf.Flags.Logging)
+	err = flags.InitLogging(conf.Flags.Logging)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize logging")
 	}

@@ -11,8 +11,8 @@ import (
 	"charm.land/lipgloss/v2/table"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_stats"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"go.uber.org/atomic"
 )
@@ -96,24 +96,24 @@ func (m *model) renderPhaseFlow() string {
 	r := m.resetable.Load()
 	r.phaseStatus.Phases = phasesList[:]
 	termWidth := r.viewports.ContentWidth()
-	stats := r.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
+	statistics := r.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
 
 	row := make([]string, 0, len(phasesList)*2+1)
 
 	for idx, phase := range phasesList {
-		sp := stats.GetPack(phase)
+		sp := statistics.GetPack(phase)
 		if sp == nil {
-			sp = &logs_stats.StatsPack{}
+			sp = &stats.StatsPack{}
 		}
-		phaseStats := &logs_stats.StatsPack{Running: sp.Running, Failed: sp.Failed}
+		phaseStats := &stats.StatsPack{Running: sp.Running, Failed: sp.Failed}
 		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, termWidth, idx), phaseArrow)
 	}
 
-	lastStats := stats.GetPack(phasesList[len(phasesList)-1])
+	lastStats := statistics.GetPack(phasesList[len(phasesList)-1])
 	if lastStats == nil {
-		lastStats = &logs_stats.StatsPack{}
+		lastStats = &stats.StatsPack{}
 	}
-	doneStats := &logs_stats.StatsPack{Done: lastStats.Done}
+	doneStats := &stats.StatsPack{Done: lastStats.Done}
 	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, doneStats, termWidth, -1))
 
 	return table.New().
@@ -128,7 +128,7 @@ func (m *model) renderPhaseFlow() string {
 		Row(row...).String() + "\n"
 }
 
-func (m *model) createPhaseGroup(name string, running, failed, done []config_attributes.Xpath, stats *logs_stats.StatsPack, termWidth int, phaseIdx int) string {
+func (m *model) createPhaseGroup(name string, running, failed, done []attributes.Xpath, stats *stats.StatsPack, termWidth int, phaseIdx int) string {
 	if len(name) == 0 {
 		name = "unnamed"
 	}
@@ -154,7 +154,7 @@ func (m *model) createPhaseGroup(name string, running, failed, done []config_att
 	return content
 }
 
-func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *config.ColorScheme, anim *animationState) string {
+func createAnimatedGradient(text string, stats *stats.StatsPack, colors *config.ColorScheme, anim *animationState) string {
 	now := time.Now()
 	nowNano := now.UnixNano()
 
@@ -188,7 +188,7 @@ func createAnimatedGradient(text string, stats *logs_stats.StatsPack, colors *co
 
 var cachedPhaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 1)
 
-func buildStatusLine(running, failed, done []config_attributes.Xpath, colors *config.ColorScheme) string {
+func buildStatusLine(running, failed, done []attributes.Xpath, colors *config.ColorScheme) string {
 	var parts []string
 
 	if n := len(running); n > 0 {

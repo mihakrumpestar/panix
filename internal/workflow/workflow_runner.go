@@ -3,8 +3,8 @@ package workflow
 import (
 	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
-	"github.com/mihakrumpestar/panix/internal/pkg/once_async"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
@@ -12,7 +12,7 @@ import (
 // It is bound to a Workflow instance to avoid global state issues
 type runner struct {
 	workflow     *Workflow
-	onceRegistry *omap.Omap[string, *once_async.OnceAsync]
+	onceRegistry *omap.Omap[string, *onceasync.OnceAsync]
 }
 
 // phaseRunner handles the execution of a single phase for a specific machine
@@ -25,7 +25,7 @@ type phaseRunner struct {
 }
 
 func newRunner(workflow *Workflow) (*runner, error) {
-	onceRegistry, err := omap.New[string, *once_async.OnceAsync]()
+	onceRegistry, err := omap.New[string, *onceasync.OnceAsync]()
 	if err != nil {
 		return nil, err
 	}
@@ -38,13 +38,13 @@ func newRunner(workflow *Workflow) (*runner, error) {
 
 // getOrCreateOnceAsync returns a OnceAsync for the given xpath
 // This ensures that phases with ScopeConfig or ScopeFlake only run once
-func (r *runner) getOrCreateOnceAsync(xpath string) *once_async.OnceAsync {
+func (r *runner) getOrCreateOnceAsync(xpath string) *onceasync.OnceAsync {
 	once, ok := r.onceRegistry.Get(xpath)
 	if ok {
 		return once
 	}
 
-	newOnce := once_async.NewOnceAsync()
+	newOnce := onceasync.NewOnceAsync()
 
 	existing, ok := r.onceRegistry.Get(xpath)
 	if ok {
@@ -77,7 +77,7 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 
 	// Determine the xpath and execution function based on scope
 	var (
-		xpath  config_attributes.Xpath
+		xpath  attributes.Xpath
 		execFn func() error
 	)
 

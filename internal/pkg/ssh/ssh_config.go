@@ -12,17 +12,17 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type SshConfig struct {
+type SSHConfig struct {
 	sc *ssh_config.Config
 }
 
 var (
-	cachedSshConfig *SshConfig
+	cachedSSHConfig *SSHConfig
 	cachedError     error
 	once            sync.Once
 )
 
-func GetCachedSshConfig() (*SshConfig, error) {
+func GetCachedSSHConfig() (*SSHConfig, error) {
 	once.Do(func() {
 		// Load SSH config using secure home directory resolution
 		home, err := os.UserHomeDir()
@@ -46,13 +46,13 @@ func GetCachedSshConfig() (*SshConfig, error) {
 			return
 		}
 
-		cachedSshConfig = &SshConfig{sshCfg}
+		cachedSSHConfig = &SSHConfig{sshCfg}
 	})
 
-	return cachedSshConfig, cachedError
+	return cachedSSHConfig, cachedError
 }
 
-func (sc *SshConfig) RetrieveFullParamsFromSshConfig(sshClient *SshClient) error {
+func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error {
 	alias := sshClient.Hostname
 
 	hostname, err := sc.sc.Get(alias, "HostName")

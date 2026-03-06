@@ -9,10 +9,10 @@ import (
 
 	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -23,7 +23,7 @@ var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
-		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			if machine.MetaInspect.RequiresKexec.Load() {
 				if err := w.executeKexec(exc, machine); err != nil {
 					return err
@@ -51,7 +51,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 			// Upload disk encryption keys BEFORE running disko
 			// Keys must be available for LUKS unlocking during partitioning
 			if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-				if err := w.executeDiskEncryptionKeys(exc, machine, phaseLog); err != nil {
+				if err := w.executeDiskEncryptionKeys(exc, machine); err != nil {
 					return err
 				}
 			}
@@ -76,7 +76,6 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 func (w *Workflow) executeDiskEncryptionKeys(
 	exc *executioner.Executioner,
 	machine *config.Machine,
-	phaseLog *logs_phase.PhaseLog,
 ) error {
 	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
 		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key", false)
@@ -126,7 +125,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 			[]string{"curl", "--fail", "-#", "-L", "-C", "-", "-o", "/tmp/kexec/kexec.tar", kexecURL},
 		)
 	} else {
-		err = w.transferPlainFileOrDir(exc, machine, &config_attributes.PlainFileOrDirToTransfer{
+		err = w.transferPlainFileOrDir(exc, machine, &attributes.PlainFileOrDirToTransfer{
 			LocalPath:  kexecURL,
 			RemotePath: "/tmp/kexec/kexec.tar",
 		}, "kexec tarball", false)
@@ -206,7 +205,7 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 		"verifying NixOS installer",
 		"not in NixOS installer",
 		[]string{"cat", "/etc/os-release"},
-		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+		executioner.OnSuccess(func(log *command.CommandLog) error {
 			output := log.String()
 
 			osRelease, err := osrelease.ReadString(output)

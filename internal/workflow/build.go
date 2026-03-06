@@ -10,8 +10,8 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -20,7 +20,7 @@ import (
 
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
 	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
-		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			if configuration.MetaBuild == nil {
 				configuration.MetaBuild = &config.MetaBuild{}
 			}
@@ -44,8 +44,8 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 		})
 }
 
-func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string, whatIsBuilding string) (BuildOutputJson, error) {
-	var parsedOutput BuildOutputJson
+func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Executioner, phaseLog *phase.PhaseLog, flake *config.Flake, configuration *config.Configuration, installables []string, whatIsBuilding string) (BuildOutputJSON, error) {
+	var parsedOutput BuildOutputJSON
 
 	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
 
@@ -54,8 +54,8 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		fmt.Sprintf("building %s", whatIsBuilding),
 		fmt.Sprintf("%s build failed", whatIsBuilding),
 		commandWithArgs,
-		executioner.DisableAutoSshCommand(),
-		executioner.OnSuccess(func(log *logs_command.CommandLog) error {
+		executioner.DisableAutoSSHCommand(),
+		executioner.OnSuccess(func(log *command.CommandLog) error {
 			output := lastNonEmptyLine(log.Bytes())
 
 			err := json.Unmarshal(output, &parsedOutput)
@@ -66,7 +66,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			parsedOutput = BuildOutputJson{{Outputs: struct {
+			parsedOutput = BuildOutputJSON{{Outputs: struct {
 				Out string `json:"out"`
 			}{Out: strcase.SnakeCase(whatIsBuilding) + "_BUILD_OUTPUT_PATH_PLACEHOLDER"}}}
 		}),
@@ -84,7 +84,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 	return parsedOutput, nil
 }
 
-type BuildOutputJson []struct {
+type BuildOutputJSON []struct {
 	Outputs struct {
 		Out string `json:"out"`
 	} `json:"outputs"`

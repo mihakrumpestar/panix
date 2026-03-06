@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (conf *Config) ValidateStructTags() error {
+func (c *Config) ValidateStructTags() error {
 	validate := validator.New()
 
 	validate.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {
@@ -16,5 +16,5 @@ func (conf *Config) ValidateStructTags() error {
 		return filepath.IsAbs(val)
 	})
 
-	return errors.Wrap(validate.Struct(conf), "validation failed")
+	return errors.Wrap(validate.Struct(c), "validation failed")
 }

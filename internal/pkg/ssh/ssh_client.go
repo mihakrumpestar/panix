@@ -11,7 +11,7 @@ const (
 	DefaultSSHUsername string = "root"
 )
 
-type SshClient struct {
+type SSHClient struct {
 	Hostname              string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
 	Port                  uint16 `yaml:"port" desc:"SSH port number"`
 	Username              string `yaml:"username" desc:"SSH username"`
@@ -23,9 +23,9 @@ type SshClient struct {
 	HostnameIsAlias bool `yaml:"-" json:"-" validate:"-" mergo:"-"`
 }
 
-func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachine string) error {
+func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, overrideLocalMachine string) error {
 	if sC == nil {
-		return errors.New("internal error: SshClient is nil")
+		return errors.New("internal error: SSHClient is nil")
 	}
 
 	if machineName == "" {
@@ -39,7 +39,7 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 	}
 
 	if sC.HostnameIsAlias {
-		if err := sshConfig.RetrieveFullParamsFromSshConfig(sC); err != nil {
+		if err := sshConfig.RetrieveFullParamsFromSSHConfig(sC); err != nil {
 			return err
 		}
 	}
@@ -62,7 +62,7 @@ func (sC *SshClient) Init(sshConfig *SshConfig, machineName, overrideLocalMachin
 	return nil
 }
 
-func (sC *SshClient) MaybeSshCommandArguments() []string {
+func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 	var sshArgs []string
 
 	if !sC.HostnameIsAlias {
@@ -82,8 +82,8 @@ func (sC *SshClient) MaybeSshCommandArguments() []string {
 	return sshArgs
 }
 
-func (sC *SshClient) MaybeSshEnvOpts() []string {
-	sshArgs := sC.MaybeSshCommandArguments()
+func (sC *SSHClient) MaybeSSHEnvOpts() []string {
+	sshArgs := sC.MaybeSSHCommandArguments()
 	if len(sshArgs) == 0 {
 		return nil
 	}
