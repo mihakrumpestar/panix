@@ -14,7 +14,7 @@ func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
-			err := executeTransferPhaseMachineWrapper(exc, phaseLog, machine, []string{systemClosure}, true)
+			err := executeTransferPhaseMachineWrapper(exc, machine, []string{systemClosure}, true)
 			if err != nil {
 				return err
 			}
@@ -23,7 +23,12 @@ func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 		})
 }
 
-func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *phase.PhaseLog, machine *config.Machine, toTransfer []string, transferClosure bool) error {
+func executeTransferPhaseMachineWrapper(
+	exc *executioner.Executioner,
+	machine *config.Machine,
+	toTransfer []string,
+	transferClosure bool,
+) error {
 	storeArgs := ""
 	if !machine.MetaInspect.Bootstrapped.Load() && transferClosure {
 		storeArgs += "?remote-store=local?root=/mnt"

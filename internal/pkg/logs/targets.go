@@ -181,7 +181,10 @@ func (ts *TargetsLogs) Debug() string {
 		str += fmt.Sprintf("  '%s' parent:%s children:%v, len:%d\n", pair.Key, parent, children, pair.Value.PhaseLogs.Len())
 
 		for _, logPair := range pair.Value.PhaseLogs.All() {
-			str += fmt.Sprintf("    %s finished:%v err:%v len:%d\n", logPair.Key, logPair.Value.TimeAndState().IsFinished(), logPair.Value.TimeAndState().GetEndError(), len(logPair.Value.CommandLogs()))
+			finished := logPair.Value.TimeAndState().IsFinished()
+			err := logPair.Value.TimeAndState().GetEndError()
+			cmdLen := len(logPair.Value.CommandLogs())
+			str += fmt.Sprintf("    %s finished:%v err:%v len:%d\n", logPair.Key, finished, err, cmdLen)
 
 			for _, log := range logPair.Value.CommandLogs() {
 				str += fmt.Sprintf("      '%s' finished:%v, err:%v\n", log.Description, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())

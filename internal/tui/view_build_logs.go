@@ -245,7 +245,8 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	duration := m.durationText(colors.Command, cmd.TimeAndState)
 
 	// Create label viewport for wrapping long labels
-	labelViewport := resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, cmdIndent+lipgloss.Width(icon)+lipgloss.Width(duration))
+	labelWidth := cmdIndent + lipgloss.Width(icon) + lipgloss.Width(duration)
+	labelViewport := resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, labelWidth)
 
 	// If label wraps multiple lines, extend icon with tree lines for alignment
 	output := strings.TrimSpace(cmd.String())
@@ -254,7 +255,9 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 			slices.Repeat([]string{colors.TreeEnumerator.Render("│")}, lipgloss.Height(labelViewport)-1)...)...)
 	}
 
-	cmdNode := tree.New().Root(colors.Command.Color.Render(lipgloss.JoinHorizontal(lipgloss.Top, icon, colors.Command.Color.Render(labelViewport), duration)))
+	cmdNode := tree.New().Root(colors.Command.Color.Render(
+		lipgloss.JoinHorizontal(lipgloss.Top, icon, colors.Command.Color.Render(labelViewport), duration),
+	))
 
 	// Add command output in a viewport if it exists
 	if len(output) > 0 {
