@@ -385,7 +385,8 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 	endPos := pos + thumb
 
 	var builder strings.Builder
-	for i := 0; i < visible; i++ {
+
+	for i := range visible {
 		if i > 0 {
 			builder.WriteByte('\n')
 		}

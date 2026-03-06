@@ -57,7 +57,7 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg str
 		statusMsg,
 		"failed to wait for disconnect",
 		func() error {
-			for i := 0; i < WaitForDisconnectTimeoutTimes; i++ {
+			for range WaitForDisconnectTimeoutTimes {
 				select {
 				case <-exc.ctx.Done():
 					return exc.ctx.Err()
@@ -81,7 +81,7 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, fai
 		statusMsg,
 		failMsg,
 		func() error {
-			for i := 0; i < WaitForReconnectTimeoutTimes; i++ {
+			for range WaitForReconnectTimeoutTimes {
 				select {
 				case <-exc.ctx.Done():
 					return exc.ctx.Err()
