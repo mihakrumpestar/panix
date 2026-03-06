@@ -115,6 +115,49 @@ func (g *Generator) hasExactValidateTag(validateTag, tag string) bool {
 	return false
 }
 
+func (g *Generator) shouldSkipField(field reflect.StructField) bool {
+	if !field.IsExported() {
+		return true
+	}
+
+	if strings.Contains(field.Tag.Get("desc"), "CLI-only") {
+		return true
+	}
+
+	if strings.Contains(field.Tag.Get("flag"), " ") && field.Name == "Config" {
+		return true
+	}
+
+	if field.Tag.Get("yaml") == "-" {
+		return true
+	}
+
+	return false
+}
+
+func (g *Generator) processInlineField(field reflect.StructField, properties map[string]interface{}, required *[]string) error {
+	inlineProps, inlineRequired, err := g.processStruct(field.Type)
+	if err != nil {
+		return fmt.Errorf("failed to process inline field %s: %w", field.Name, err)
+	}
+
+	for name, prop := range inlineProps {
+		properties[name] = prop
+	}
+
+	*required = append(*required, inlineRequired...)
+
+	return nil
+}
+
+func (g *Generator) isFieldRequired(field reflect.StructField, yamlTag string) bool {
+	validateTag := field.Tag.Get("validate")
+	yamlHasRequired := strings.Contains(yamlTag, ",required")
+	validateHasRequired := g.hasExactValidateTag(validateTag, "required")
+
+	return yamlHasRequired || validateHasRequired
+}
+
 func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []string, error) {
 	properties := make(map[string]interface{})
 	required := []string{}
@@ -130,74 +173,51 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 	for i := range t.NumField() {
 		field := t.Field(i)
 
-		// Skip unexported fields
-		if !field.IsExported() {
+		if g.shouldSkipField(field) {
 			continue
 		}
 
-		// Skip CLI-only fields (marked with comment "CLI-only")
-		// These should not appear in the YAML schema
-		if strings.Contains(field.Tag.Get("desc"), "CLI-only") ||
-			strings.Contains(field.Tag.Get("flag"), " ") && field.Name == "Config" {
-			continue
-		}
-
-		// Skip internal fields (marked with yaml:"-")
 		yamlTag := field.Tag.Get("yaml")
-		if yamlTag == "-" {
-			continue
-		}
 
-		// Handle inline embedded structs - flatten their properties into parent
 		if strings.Contains(yamlTag, ",inline") {
-			inlineProps, inlineRequired, err := g.processStruct(field.Type)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to process inline field %s: %w", field.Name, err)
+			if err := g.processInlineField(field, properties, &required); err != nil {
+				return nil, nil, err
 			}
-
-			for name, prop := range inlineProps {
-				properties[name] = prop
-			}
-
-			required = append(required, inlineRequired...)
 
 			continue
 		}
 
-		// Get the field name from yaml tag or use the struct field name
 		fieldName := g.getYAMLFieldName(field, yamlTag)
 
-		// Process the field type
 		prop, err := g.processType(field.Type, field)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to process field %s: %w", field.Name, err)
 		}
 
-		// Add description from desc tag, falling back to help tag
-		desc := field.Tag.Get("desc")
-		if desc == "" {
-			desc = field.Tag.Get("help")
-		}
-
-		if desc != "" {
-			if td, ok := prop.(*TypeDefinition); ok {
-				td.Description = desc
-			}
-		}
-
+		g.setFieldDescription(prop, field)
 		properties[fieldName] = prop
 
-		// Check if field is required based on yaml or validate tags
-		validateTag := field.Tag.Get("validate")
-		yamlHasRequired := strings.Contains(yamlTag, ",required")
-		validateHasRequired := g.hasExactValidateTag(validateTag, "required")
-
-		if yamlHasRequired || validateHasRequired {
+		if g.isFieldRequired(field, yamlTag) {
 			required = append(required, fieldName)
 		}
 	}
 
 	return properties, required, nil
+}
+
+func (g *Generator) setFieldDescription(prop interface{}, field reflect.StructField) {
+	desc := field.Tag.Get("desc")
+	if desc == "" {
+		desc = field.Tag.Get("help")
+	}
+
+	if desc == "" {
+		return
+	}
+
+	if td, ok := prop.(*TypeDefinition); ok {
+		td.Description = desc
+	}
 }
 
 // processType processes a type and returns its schema definition.
@@ -305,54 +325,77 @@ func (g *Generator) applyValidateConstraints(td *TypeDefinition, validateTag, ba
 			continue
 		}
 
-		switch {
-		case strings.HasPrefix(tag, "min="):
-			val := strings.TrimPrefix(tag, "min=")
-			if v, err := parseInt(val); err == nil {
-				switch baseType {
-				case "integer":
-					td.Minimum = &v
-				case "string":
-					td.MinLength = &v
-				}
-			}
-		case strings.HasPrefix(tag, "max="):
-			val := strings.TrimPrefix(tag, "max=")
-			if v, err := parseInt(val); err == nil {
-				switch baseType {
-				case "integer":
-					td.Maximum = &v
-				case "string":
-					td.MaxLength = &v
-				}
-			}
-		case strings.HasPrefix(tag, "len="):
-			val := strings.TrimPrefix(tag, "len=")
-			if v, err := parseInt(val); err == nil {
-				if baseType == "string" {
-					td.MinLength = &v
-					td.MaxLength = &v
-				}
-			}
-		default:
-			// Handle format tags
-			switch tag {
-			case "filepath":
-				td.Format = "file-path"
-			case "abspath":
-				td.Format = "uri-reference"
-				td.Pattern = "^/.*"
-			case "uri":
-				td.Format = "uri"
-			case "email":
-				td.Format = "email"
-			case "url":
-				td.Format = "uri"
-			case "uuid":
-				td.Format = "uuid"
-			case "datetime":
-				td.Format = "date-time"
-			}
+		g.applyConstraintTag(td, tag, baseType)
+	}
+}
+
+func (g *Generator) applyConstraintTag(td *TypeDefinition, tag, baseType string) {
+	switch {
+	case strings.HasPrefix(tag, "min="):
+		g.applyMinConstraint(td, tag, baseType)
+	case strings.HasPrefix(tag, "max="):
+		g.applyMaxConstraint(td, tag, baseType)
+	case strings.HasPrefix(tag, "len="):
+		g.applyLenConstraint(td, tag, baseType)
+	default:
+		g.applyFormatConstraint(td, tag)
+	}
+}
+
+func (g *Generator) applyMinConstraint(td *TypeDefinition, tag, baseType string) {
+	val := strings.TrimPrefix(tag, "min=")
+	if v, err := parseInt(val); err == nil {
+		switch baseType {
+		case "integer":
+			td.Minimum = &v
+		case "string":
+			td.MinLength = &v
+		}
+	}
+}
+
+func (g *Generator) applyMaxConstraint(td *TypeDefinition, tag, baseType string) {
+	val := strings.TrimPrefix(tag, "max=")
+	if v, err := parseInt(val); err == nil {
+		switch baseType {
+		case "integer":
+			td.Maximum = &v
+		case "string":
+			td.MaxLength = &v
+		}
+	}
+}
+
+func (g *Generator) applyLenConstraint(td *TypeDefinition, tag, baseType string) {
+	if baseType != "string" {
+		return
+	}
+
+	val := strings.TrimPrefix(tag, "len=")
+	if v, err := parseInt(val); err == nil {
+		td.MinLength = &v
+		td.MaxLength = &v
+	}
+}
+
+func (g *Generator) applyFormatConstraint(td *TypeDefinition, tag string) {
+	formats := map[string]struct {
+		format  string
+		pattern string
+	}{
+		"filepath": {format: "file-path"},
+		"abspath":  {format: "uri-reference", pattern: "^/.*"},
+		"uri":      {format: "uri"},
+		"email":    {format: "email"},
+		"url":      {format: "uri"},
+		"uuid":     {format: "uuid"},
+		"datetime": {format: "date-time"},
+	}
+
+	if f, ok := formats[tag]; ok {
+		td.Format = f.format
+		if f.pattern != "" {
+			td.Pattern = f.pattern
 		}
 	}
 }
