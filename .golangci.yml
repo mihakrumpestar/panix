@@ -7,16 +7,30 @@ issues:
 linters:
   default: all
 
-  #disable:
+  disable:
+    - tagliatelle # Bad check
+    - tagalign # Bad check
 
   enable:
     - nilaway
 
   settings:
+    varnamelen:
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-names:
+        - ok
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+
     staticcheck:
       checks:
         - all
         - -QF1008 # could remove embedded field from selector
+        - -ST1000 # at least one file in a package should have a package comment
 
     custom:
       nilaway:

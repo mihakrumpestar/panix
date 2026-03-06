@@ -4,19 +4,19 @@ import (
 	"context"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 )
 
 type Executioner struct {
 	ctx          context.Context
 	dryRun       bool
 	machine      *config.Machine
-	phaseLog     *logs_phase.PhaseLog
+	phaseLog     *log_sphase.PhaseLog
 	onUpdateHook func()
 }
 
-func NewExecutioner(ctx context.Context, dryRun bool, machine *config.Machine, phaseLog *logs_phase.PhaseLog, onUpdateHook func()) *Executioner {
+func NewExecutioner(ctx context.Context, dryRun bool, machine *config.Machine, phaseLog *log_sphase.PhaseLog, onUpdateHook func()) *Executioner {
 	return &Executioner{
 		ctx:          ctx,
 		dryRun:       dryRun,
@@ -30,7 +30,7 @@ func NewExecutioner(ctx context.Context, dryRun bool, machine *config.Machine, p
 
 type ExecOptions struct {
 	skipIfLocal           bool
-	disableAutoSshCommand bool
+	disableAutoSSHCommand bool
 	onFailure             func(*logs_command.CommandLog, error) error
 	onSuccess             func(*logs_command.CommandLog) error
 	onDryRun              func()
@@ -45,9 +45,9 @@ func SkipIfLocal() ExecOption {
 	}
 }
 
-func DisableAutoSshCommand() ExecOption {
+func DisableAutoSSHCommand() ExecOption {
 	return func(excOpt *ExecOptions) {
-		excOpt.disableAutoSshCommand = true
+		excOpt.disableAutoSSHCommand = true
 	}
 }
 
@@ -97,14 +97,14 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 		return nil
 	}
 
-	if noMachineOrLocal || excOpt.disableAutoSshCommand {
+	if noMachineOrLocal || excOpt.disableAutoSSHCommand {
 		return ex.shellStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
 	}
 
 	return ex.sshStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
 }
 
-func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, fn func() error) error {
+func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func() error) error {
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 
 	commandLog.TimeAndState.StartTimer()
@@ -122,7 +122,7 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 		return nil
 	}
 
-	execErr = fn()
+	execErr = execFunc()
 	if execErr != nil {
 		return execErr
 	}

@@ -7,15 +7,15 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_flags"
-	"github.com/mihakrumpestar/panix/internal/config/config_schema"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/schema"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
 type CLI struct {
-	config_flags.Flags
+	flags.Flags
 
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
@@ -81,5 +81,5 @@ func (c *CLI) runTui(commandPhases []phases.Phase, modifiers ...func(conf *confi
 }
 
 func (c *CLI) runSchemaCommand(outputPath string) error {
-	return errors.Wrap(config_schema.GenerateSchema(outputPath), "failed to generate schema")
+	return errors.Wrap(schema.GenerateSchema(outputPath), "failed to generate schema")
 }

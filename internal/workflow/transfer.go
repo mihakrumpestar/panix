@@ -3,7 +3,7 @@ package workflow
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -11,7 +11,7 @@ import (
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 	return w.Phase(machine.Attributes.Xpath, phases.Transfer, machine,
-		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
 			err := executeTransferPhaseMachineWrapper(exc, phaseLog, machine, []string{systemClosure}, true)
@@ -23,7 +23,7 @@ func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
 		})
 }
 
-func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog, machine *config.Machine, toTransfer []string, transferClosure bool) error {
+func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *phase.PhaseLog, machine *config.Machine, toTransfer []string, transferClosure bool) error {
 	storeArgs := ""
 	if !machine.MetaInspect.Bootstrapped.Load() && transferClosure {
 		storeArgs += "?remote-store=local?root=/mnt"
@@ -37,8 +37,8 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 		"closure copy failed",
 		commandWithArgs,
 		executioner.SkipIfLocal(),
-		executioner.DisableAutoSshCommand(),
-		executioner.Env(activeSSH.MaybeSshEnvOpts()),
+		executioner.DisableAutoSSHCommand(),
+		executioner.Env(activeSSH.MaybeSSHEnvOpts()),
 	)
 	if err != nil {
 		return errors.Wrap(err, "transfer failed")

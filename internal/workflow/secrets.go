@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -20,7 +20,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 	}
 
 	return w.Phase(machine.Attributes.Xpath, phases.Secrets, nil,
-		func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error {
+		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			for _, secret := range secrets {
 				err = w.transferPlainFileOrDir(exc, machine, secret, "secrets", true)
 				if err != nil {
@@ -32,7 +32,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err erro
 		})
 }
 
-func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine *config.Machine, plainFileOrDir *config_attributes.PlainFileOrDirToTransfer, transferOfWhat string, transferOSSecrets bool) error {
+func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine *config.Machine, plainFileOrDir *attributes.PlainFileOrDirToTransfer, transferOfWhat string, transferOSSecrets bool) error {
 	commandWithArgs := []string{"rsync", "-rcPEx", "--mkpath"}
 
 	maybeSudo := machine.MaybeSudo()
@@ -58,7 +58,7 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 	if activeSSH.IsLocal {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {
-		sshArgs := activeSSH.MaybeSshCommandArguments()
+		sshArgs := activeSSH.MaybeSSHCommandArguments()
 		if len(sshArgs) != 0 {
 			commandWithArgs = append(commandWithArgs, "-e=ssh "+strings.Join(sshArgs, " "))
 		}
@@ -71,7 +71,7 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 		fmt.Sprintf("transferring %s", transferOfWhat),
 		fmt.Sprintf("%s transfer failed", transferOfWhat),
 		commandWithArgs,
-		executioner.DisableAutoSshCommand(),
+		executioner.DisableAutoSSHCommand(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "transfer failed")

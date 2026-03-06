@@ -4,7 +4,7 @@ func (ex *Executioner) sshStream(description, statusIfRunning, statusIfFailed st
 	ssh := ex.machine.MetaInspect.GetActiveSSH()
 
 	sshCommandWithArgs := []string{"ssh", "-q", "-t"} // Silence banners, make interactive
-	sshCommandWithArgs = append(sshCommandWithArgs, ssh.MaybeSshCommandArguments()...)
+	sshCommandWithArgs = append(sshCommandWithArgs, ssh.MaybeSSHCommandArguments()...)
 	sshCommandWithArgs = append(sshCommandWithArgs, ssh.Hostname)
 
 	sshCommandWithArgs = append(sshCommandWithArgs, commandWithArgs...)

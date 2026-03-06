@@ -15,10 +15,10 @@ import (
 	"charm.land/lipgloss/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/pkg/errors"
-	zerolog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 type workflowUpdateHookMsg struct{}
@@ -31,10 +31,10 @@ func (e errMsg) Error() string { return e.err.Error() }
 type model struct {
 	ctx                context.Context
 	conf               *config.Config
-	dimensions         *tui_viewports.Dimensions
+	dimensions         *viewports.Dimensions
 	quitting           bool
 	resetable          atomic.Pointer[resetable]
-	notification       *tui_notifications.Notification
+	notification       *notifications.Notification
 	lastWorkflowUpdate time.Time
 }
 
@@ -46,7 +46,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	// Handle SIGINT as a keybinding instead of terminating the process
 	defer setupSIGINTHandler(ctx)()
 
-	dimensions := &tui_viewports.Dimensions{
+	dimensions := &viewports.Dimensions{
 		Width:  80,
 		Height: 24,
 	}
@@ -64,7 +64,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		ctx:          ctx,
 		conf:         conf,
 		dimensions:   dimensions,
-		notification: tui_notifications.New(),
+		notification: notifications.New(),
 	})
 
 	m, err := p.Run()
@@ -123,7 +123,7 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 		resetable := m.resetable.Load()
 		if resetable == nil || resetable.workflow == nil {
 			time.Sleep(20 * time.Millisecond)
-			zerolog.Debug().Msg("workflowUpdateHook was nil")
+			log.Debug().Msg("workflowUpdateHook was nil")
 			return workflowUpdateHookMsg{}
 		}
 
@@ -160,7 +160,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case workflowDoneMsg:
-		zerolog.Debug().Msg("workflowDoneMsg")
+		log.Debug().Msg("workflowDoneMsg")
 
 		// Only exit automatically if exitOnComplete flag is set
 		if m.conf.Flags.ExitOnComplete {

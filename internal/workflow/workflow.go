@@ -6,11 +6,11 @@ import (
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -86,7 +86,7 @@ func (w *Workflow) Cancel() error {
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
-func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.Xpath, f func() error) error {
+func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath attributes.Xpath, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
@@ -111,7 +111,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 	}
 }
 
-func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *logs_phase.PhaseLog) error) (err error) {
+func (w *Workflow) Phase(xpath attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error) (err error) {
 	phaseLog := w.state.TargetsLogs.MustGetOrCreateLog(xpath, phase)
 
 	phaseLog.TimeAndState().StartTimer()
@@ -175,9 +175,11 @@ func (w *Workflow) CreateWorkflow() error {
 
 func (w *Workflow) MachineCount() int {
 	count := 0
+
 	w.RootTree(func(i int, machine *config.Machine) {
 		count++
 	})
+
 	return count
 }
 
