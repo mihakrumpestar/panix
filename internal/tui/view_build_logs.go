@@ -256,7 +256,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 
 	// Add error message if command failed
 	if err := cmd.TimeAndState.GetEndError(); err != nil {
-		cmdNode.Child(colors.Error.Color.Render(fmt.Sprintf("✗ Command failed: %s", err.Error())))
+		cmdNode.Child(colors.Error.Color.Render("✗ Command failed: " + err.Error()))
 	}
 
 	parent.Child(cmdNode)

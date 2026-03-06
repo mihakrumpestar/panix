@@ -39,7 +39,7 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 			err := ex.Exec(
 				fmt.Sprintf("%s %d", hookType, idx+1),
 				fmt.Sprintf("running %s: %s", hookType, hook),
-				fmt.Sprintf("%s failed", hookType),
+				hookType+" failed",
 				[]string{string(hook)},
 			)
 			if err != nil {

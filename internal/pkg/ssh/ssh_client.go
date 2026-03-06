@@ -2,7 +2,7 @@ package ssh
 
 import (
 	"errors"
-	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -62,11 +62,15 @@ func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, overrideLocalMachin
 	return nil
 }
 
+func (sC *SSHClient) PortString() string {
+	return strconv.Itoa(int(sC.Port))
+}
+
 func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 	var sshArgs []string
 
 	if !sC.HostnameIsAlias {
-		sshArgs = []string{"-p", fmt.Sprintf("%d", sC.Port), "-l", sC.Username}
+		sshArgs = []string{"-p", sC.PortString(), "-l", sC.Username}
 
 		if sC.IdentityFile != "" {
 			sshArgs = append(sshArgs, "-i", sC.IdentityFile, "-o", "IdentitiesOnly=yes")
