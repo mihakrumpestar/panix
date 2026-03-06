@@ -97,7 +97,10 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 	return nil
 }
 
-func (e *keyValueExtractor[K, V]) processMappingValue(val *ast.MappingValueNode, valueType reflect.Type, isPtr bool, elemType reflect.Type) (K, V, error) {
+func (e *keyValueExtractor[K, V]) processMappingValue(
+	val *ast.MappingValueNode,
+	valueType reflect.Type, isPtr bool,
+	elemType reflect.Type) (K, V, error) {
 	var (
 		key   K
 		value V

@@ -127,7 +127,7 @@ func (g *Generator) processStruct(t reflect.Type) (map[string]interface{}, []str
 		return nil, nil, fmt.Errorf("expected struct type, got %v", t.Kind())
 	}
 
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		field := t.Field(i)
 
 		// Skip unexported fields

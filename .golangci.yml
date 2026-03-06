@@ -10,6 +10,7 @@ linters:
   disable:
     - tagliatelle # Bad check
     - tagalign # Bad check
+    - ireturn # A lot of bubbletea is based on interfaces
 
   enable:
     - nilaway
