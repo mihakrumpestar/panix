@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
-	zone "github.com/lrstanley/bubblezone"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_stats"
@@ -46,10 +46,7 @@ func (p *PhaseStatus) Reset() {
 	p.Phases = nil
 }
 
-func (p *PhaseStatus) HandleMouseClick(msg tea.MouseMsg) bool {
-	if msg.Action != tea.MouseActionRelease {
-		return false
-	}
+func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	for i := range p.Phases {
 		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, i)); z != nil && z.InBounds(msg) {
 			p.SelectedPhase = map[bool]int{true: -1, false: i}[p.SelectedPhase == i]

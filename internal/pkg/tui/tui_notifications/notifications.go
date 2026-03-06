@@ -2,10 +2,11 @@ package tui_notifications
 
 import (
 	"fmt"
+	"image/color"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 const (
@@ -64,7 +65,7 @@ func (n *Notification) isExpired() bool {
 	return n.text == "" || time.Since(n.started) >= duration
 }
 
-func (n *Notification) fadedColor() lipgloss.TerminalColor {
+func (n *Notification) fadedColor() color.Color {
 	elapsed := time.Since(n.started)
 	if elapsed < fadeStart {
 		return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))

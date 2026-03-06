@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	zone "github.com/lrstanley/bubblezone"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
@@ -64,10 +64,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		conf:         conf,
 		dimensions:   dimensions,
 		notification: tui_notifications.New(),
-	},
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	})
 
 	m, err := p.Run()
 	if err != nil {
@@ -109,7 +106,7 @@ func startCPUProfile(path string) (func(), error) {
 
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(
-		tea.WindowSize(),
+		func() tea.Msg { return tea.RequestWindowSize() },
 		m.startWorkflow(),
 		m.workflowUpdateHook(),
 	)
@@ -155,7 +152,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		r.err = msg.err
 		m.quitting = true
-		return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+		return m, tea.Quit
 
 	case workflowDoneMsg:
 		zerolog.Debug().Msg("workflowDoneMsg")
@@ -163,7 +160,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Only exit automatically if exitOnComplete flag is set
 		if m.conf.Flags.ExitOnComplete {
 			m.quitting = true
-			return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+			return m, tea.Quit
 		}
 		// Stay open — user can press 'q' to quit or 'r' to retry
 		return m, nil
@@ -174,10 +171,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case workflowUpdateHookMsg:
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.HandleKeyInput(msg)
 
-	case tea.MouseMsg:
+	case tea.MouseClickMsg:
 		m.handleMouseClick(msg)
 
 	case tea.WindowSizeMsg:
@@ -188,22 +185,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *model) View() string {
+func (m *model) View() tea.View {
+	v := tea.NewView("")
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+
 	r := m.resetable.Load()
 	if r == nil || r.workflow == nil {
-		return ""
+		return v
 	}
 
 	mainContent := m.ViewMainContent()
 
 	if m.quitting {
-		return ""
+		return v
 	}
 
 	if r.viewports.IsFullscreen() {
 		result := m.renderFullscreen()
 		if result != "" {
-			return result
+			v.SetContent(result)
+			return v
 		}
 	}
 
@@ -215,7 +217,8 @@ func (m *model) View() string {
 	builder.WriteString(mainViewport)
 	builder.WriteString(footer)
 
-	return zone.Scan(builder.String())
+	v.SetContent(zone.Scan(builder.String()))
+	return v
 }
 
 func (m *model) renderFullscreen() string {
@@ -264,11 +267,7 @@ func (m *model) ViewMainContent() string {
 	return builder.String()
 }
 
-func (m *model) handleMouseClick(msg tea.MouseMsg) {
-	if msg.Action != tea.MouseActionRelease {
-		return
-	}
-
+func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
 	r := m.resetable.Load()
 	if r.statsTable.HandleMouseClick(msg) {
 		r.phaseStatus.Reset()
