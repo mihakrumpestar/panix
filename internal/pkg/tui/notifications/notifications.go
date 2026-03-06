@@ -13,6 +13,10 @@ const (
 	duration     = 3 * time.Second
 	fadeStart    = 1 * time.Second
 	tickInterval = 250 * time.Millisecond
+
+	fadeFactor  = 0.4
+	boxPaddingX = 2
+	rgbaShift   = 8
 )
 
 type notificationTickMsg struct{}
@@ -33,7 +37,7 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 
 	if fg := color.GetForeground(); fg != nil {
 		r, g, b, _ := fg.RGBA()
-		n.fgR, n.fgG, n.fgB = uint8(r>>8), uint8(g>>8), uint8(b>>8)
+		n.fgR, n.fgG, n.fgB = uint8(r>>rgbaShift), uint8(g>>rgbaShift), uint8(b>>rgbaShift)
 	}
 
 	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return notificationTickMsg{} })
@@ -73,7 +77,7 @@ func (n *Notification) fadedColor() color.Color {
 	}
 
 	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
-	factor := 1.0 - (progress * 0.4)
+	factor := 1.0 - (progress * fadeFactor)
 
 	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
 		uint8(float64(n.fgR)*factor),
@@ -96,7 +100,7 @@ func (n *Notification) RenderBox(baseStyle lipgloss.Style) (string, int) {
 
 	fg := n.fadedColor()
 	box := lipgloss.NewStyle().
-		Padding(0, 2).
+		Padding(0, boxPaddingX).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(fg).
 		Render(n.Render(baseStyle))

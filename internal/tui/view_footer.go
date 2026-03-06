@@ -267,5 +267,5 @@ func renderScrollPercent(m *model) string {
 
 	return lipgloss.NewStyle().PaddingLeft(1).
 		Foreground(m.conf.ColorScheme.TableBorder.GetForeground()).
-		Render(fmt.Sprintf("%3d%%", int(pct*100)))
+		Render(fmt.Sprintf("%3d%%", int(pct*100))) //nolint:mnd
 }

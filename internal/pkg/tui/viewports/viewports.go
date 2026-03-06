@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	scrollThumb      = "█"
-	scrollTrack      = "│"
-	scrollbarWidth   = 2
-	borderHeight     = 2
-	borderWidth      = 2
-	minTerminalWidth = 40
+	scrollThumb       = "█"
+	scrollTrack       = "│"
+	scrollbarWidth    = 2
+	borderHeight      = 2
+	borderWidth       = 2
+	mouseScrollAmount = 3
 )
 
 // Dimensions represents terminal size
@@ -194,7 +194,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		// Update dimensions and resize all viewports
-		v.dimensions.Width = max(msgVal.Width, minTerminalWidth)
+		v.dimensions.Width = msgVal.Width
 		v.dimensions.Height = msgVal.Height
 		v.resizeAllViewports()
 
@@ -283,7 +283,7 @@ type viewportOptions struct {
 func (v *Viewports) createViewport(xpath attributes.Xpath, content string, indent int, opts viewportOptions) string {
 	width := opts.availableWidth
 	if width == 0 {
-		width = max(10, v.dimensions.Width-indent-scrollbarWidth)
+		width = v.dimensions.Width - indent - scrollbarWidth
 	}
 
 	height := max(1, opts.height)
@@ -428,9 +428,9 @@ func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
 		if vp := v.getActiveViewport(); vp != nil {
 			if wheel.Button == tea.MouseWheelUp {
-				vp.model.ScrollUp(3)
+				vp.model.ScrollUp(mouseScrollAmount)
 			} else {
-				vp.model.ScrollDown(3)
+				vp.model.ScrollDown(mouseScrollAmount)
 			}
 		}
 
@@ -562,7 +562,7 @@ func truncateToRuneWidth(str string, maxWidth int) string {
 	// Binary search for the correct truncation point
 	low, high := 0, len(str)
 	for low < high {
-		mid := (low + high) / 2
+		mid := (low + high) / 2 //nolint:mnd
 		// Find the previous valid UTF-8 boundary
 		for mid > low && !utf8.ValidString(str[:mid]) {
 			mid--

@@ -71,7 +71,7 @@ func (tas *TimeAndState) IsFinished() bool {
 func (tas *TimeAndState) GetEndError() error {
 	err := tas.endErr.Load()
 	if err != nil {
-		return errors.Wrap(err, "end error")
+		return err //nolint:wrapcheck
 	}
 
 	return nil
