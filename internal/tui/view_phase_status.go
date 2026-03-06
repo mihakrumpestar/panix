@@ -99,13 +99,14 @@ func (m *model) renderPhaseFlow() string {
 	stats := r.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
 
 	row := make([]string, 0, len(phasesList)*2+1)
-	for i, phase := range phasesList {
+
+	for idx, phase := range phasesList {
 		sp := stats.GetPack(phase)
 		if sp == nil {
 			sp = &logs_stats.StatsPack{}
 		}
 		phaseStats := &logs_stats.StatsPack{Running: sp.Running, Failed: sp.Failed}
-		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, termWidth, i), phaseArrow)
+		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, termWidth, idx), phaseArrow)
 	}
 
 	lastStats := stats.GetPack(phasesList[len(phasesList)-1])

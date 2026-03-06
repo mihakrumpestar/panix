@@ -63,16 +63,16 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleEsc()
 	}
 
-	r := m.resetable.Load()
-	hasActiveInner := r.viewports.HasActiveInner()
+	resetable := m.resetable.Load()
+	hasActiveInner := resetable.viewports.HasActiveInner()
 
-	if r.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		r.phaseStatus.Reset()
+	if resetable.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
+		resetable.phaseStatus.Reset()
 		return m, nil
 	}
 
-	if r.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
-		r.statsTable.Reset()
+	if resetable.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
+		resetable.statsTable.Reset()
 		return m, nil
 	}
 
@@ -109,9 +109,9 @@ func (m *model) ViewFooter() string {
 // Handlers
 
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
-	r := m.resetable.Load()
+	resetable := m.resetable.Load()
 
-	content, isInner := r.viewports.GetActiveInnerViewportContent()
+	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
 		return m, m.notification.Set("Select an inner viewport to copy", m.conf.ColorScheme.StatusWarning)
 	}
@@ -128,12 +128,13 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	m.quitting = true
-	r := m.resetable.Load()
-	err := r.workflow.Cancel()
-	if r.err != nil && err != nil && !errors.Is(err, context.Canceled) {
-		r.err = errors.Wrap(r.err, err.Error())
+	resetable := m.resetable.Load()
+
+	err := resetable.workflow.Cancel()
+	if resetable.err != nil && err != nil && !errors.Is(err, context.Canceled) {
+		resetable.err = errors.Wrap(resetable.err, err.Error())
 	} else if err != nil && !errors.Is(err, context.Canceled) {
-		r.err = err
+		resetable.err = err
 	}
 
 	zerolog.Debug().Msg("Context done, exiting TUI")
@@ -168,16 +169,16 @@ func (m *model) handleRestart() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
-	r := m.resetable.Load()
-	if r.viewports.IsFullscreen() {
-		r.viewports.ExitFullscreen()
+	resetable := m.resetable.Load()
+	if resetable.viewports.IsFullscreen() {
+		resetable.viewports.ExitFullscreen()
 		return m, nil
 	}
 
-	activeInnerXpath := r.viewports.GetActiveInnerViewportXpath()
+	activeInnerXpath := resetable.viewports.GetActiveInnerViewportXpath()
 
 	if activeInnerXpath.Depth() > 0 {
-		r.viewports.SetFullscreen(activeInnerXpath)
+		resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
 		return m, m.notification.Set("Select a viewport first", m.conf.ColorScheme.StatusWarning)
 	}
@@ -185,28 +186,28 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleEsc() (tea.Model, tea.Cmd) {
-	r := m.resetable.Load()
-	if r.viewports.IsFullscreen() {
-		r.viewports.ExitFullscreen()
-	} else if r.viewports.HasActiveInner() {
-		r.viewports.DeselectAll()
-	} else if r.statsTable.SelectedMachine >= 0 {
-		r.statsTable.Reset()
-	} else if r.phaseStatus.SelectedPhase >= 0 {
-		r.phaseStatus.Reset()
+	resetable := m.resetable.Load()
+	if resetable.viewports.IsFullscreen() {
+		resetable.viewports.ExitFullscreen()
+	} else if resetable.viewports.HasActiveInner() {
+		resetable.viewports.DeselectAll()
+	} else if resetable.statsTable.SelectedMachine >= 0 {
+		resetable.statsTable.Reset()
+	} else if resetable.phaseStatus.SelectedPhase >= 0 {
+		resetable.phaseStatus.Reset()
 	}
 	return m, nil
 }
 
 // Utility functions
 
-func wrapKeybindingsByPair(h help.Model, k help.KeyMap, maxWidth int) string {
-	bindings := k.ShortHelp()
+func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth int) string {
+	bindings := keyMap.ShortHelp()
 	if len(bindings) == 0 {
 		return ""
 	}
 
-	separator := h.Styles.ShortSeparator.Inline(true).Render(h.ShortSeparator)
+	separator := helpModel.Styles.ShortSeparator.Inline(true).Render(helpModel.ShortSeparator)
 	sepWidth := lipgloss.Width(separator)
 
 	var lines []string
@@ -215,13 +216,13 @@ func wrapKeybindingsByPair(h help.Model, k help.KeyMap, maxWidth int) string {
 
 	var currentWidth int
 
-	for _, kb := range bindings {
-		if !kb.Enabled() {
+	for _, binding := range bindings {
+		if !binding.Enabled() {
 			continue
 		}
 
-		item := h.Styles.ShortKey.Inline(true).Render(kb.Help().Key) + " " +
-			h.Styles.ShortDesc.Inline(true).Render(kb.Help().Desc)
+		item := helpModel.Styles.ShortKey.Inline(true).Render(binding.Help().Key) + " " +
+			helpModel.Styles.ShortDesc.Inline(true).Render(binding.Help().Desc)
 		itemWidth := lipgloss.Width(item)
 
 		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {

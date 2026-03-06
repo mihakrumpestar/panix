@@ -66,14 +66,14 @@ func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 	return nil
 }
 
-func toggle[T comparable](reverse bool, p *T, def, zero T) {
+func toggle[T comparable](reverse bool, ptr *T, def, zero T) {
 	if reverse {
-		if *p == def {
-			*p = zero
+		if *ptr == def {
+			*ptr = zero
 		}
 	} else {
-		if *p == zero {
-			*p = def
+		if *ptr == zero {
+			*ptr = def
 		}
 	}
 }

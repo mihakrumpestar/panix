@@ -79,7 +79,6 @@ func (w *Workflow) executeDiskEncryptionKeys(
 	phaseLog *logs_phase.PhaseLog,
 ) error {
 	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
-
 		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key", false)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transfer disk encryption key to %s", diskEncryptionKey.RemotePath)
@@ -230,11 +229,11 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 // Helpers
 
 func isURL(s string) bool {
-	u, err := url.Parse(s)
+	parsedURL, err := url.Parse(s)
 	if err != nil {
 		return false
 	}
 
 	// Ensure it has a valid scheme (http or https) and a host
-	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+	return (parsedURL.Scheme == "http" || parsedURL.Scheme == "https") && parsedURL.Host != ""
 }

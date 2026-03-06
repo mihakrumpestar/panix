@@ -120,14 +120,14 @@ type restartMsg struct{}
 
 func (m *model) workflowUpdateHook() tea.Cmd {
 	return func() tea.Msg {
-		r := m.resetable.Load()
-		if r == nil || r.workflow == nil {
+		resetable := m.resetable.Load()
+		if resetable == nil || resetable.workflow == nil {
 			time.Sleep(20 * time.Millisecond)
 			zerolog.Debug().Msg("workflowUpdateHook was nil")
 			return workflowUpdateHookMsg{}
 		}
 
-		<-r.workflow.WaitForUpdate()
+		<-resetable.workflow.WaitForUpdate()
 
 		now := time.Now()
 		elapsed := now.Sub(m.lastWorkflowUpdate)
@@ -145,17 +145,17 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	r := m.resetable.Load()
-	if r != nil {
-		cmd = tea.Batch(cmd, r.spinners.ProcessPendingTicks())
-		cmd = tea.Batch(cmd, r.viewports.Update(msg))
+	resetable := m.resetable.Load()
+	if resetable != nil {
+		cmd = tea.Batch(cmd, resetable.spinners.ProcessPendingTicks())
+		cmd = tea.Batch(cmd, resetable.viewports.Update(msg))
 		cmd = tea.Batch(cmd, m.notification.Update(msg))
-		cmd = tea.Batch(cmd, r.spinners.Update(msg))
+		cmd = tea.Batch(cmd, resetable.spinners.Update(msg))
 	}
 
 	switch msg := msg.(type) {
 	case errMsg:
-		r.err = msg.err
+		resetable.err = msg.err
 		m.quitting = true
 		return m, tea.Quit
 
@@ -191,55 +191,55 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) View() tea.View {
-	v := tea.NewView("")
-	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	view := tea.NewView("")
+	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 
-	r := m.resetable.Load()
-	if r == nil || r.workflow == nil {
-		return v
+	resetable := m.resetable.Load()
+	if resetable == nil || resetable.workflow == nil {
+		return view
 	}
 
 	mainContent := m.ViewMainContent()
 
 	if m.quitting {
-		return v
+		return view
 	}
 
-	if r.viewports.IsFullscreen() {
+	if resetable.viewports.IsFullscreen() {
 		result := m.renderFullscreen()
 		if result != "" {
-			v.SetContent(result)
-			return v
+			view.SetContent(result)
+			return view
 		}
 	}
 
 	footer := m.ViewFooter()
 	footerHeight := lipgloss.Height(footer)
-	mainViewport := r.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
+	mainViewport := resetable.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
 
 	var builder strings.Builder
 
 	builder.WriteString(mainViewport)
 	builder.WriteString(footer)
 
-	v.SetContent(zone.Scan(builder.String()))
-	return v
+	view.SetContent(zone.Scan(builder.String()))
+	return view
 }
 
 func (m *model) renderFullscreen() string {
-	r := m.resetable.Load()
-	fullscreenXpath := r.viewports.GetFullscreenXpath()
-	content := r.viewports.GetViewportContent(fullscreenXpath)
+	resetable := m.resetable.Load()
+	fullscreenXpath := resetable.viewports.GetFullscreenXpath()
+	content := resetable.viewports.GetViewportContent(fullscreenXpath)
 
 	if content == "" {
-		r.viewports.ExitFullscreen()
+		resetable.viewports.ExitFullscreen()
 		return ""
 	}
 
 	footer := m.ViewFooter()
 	footerHeight := lipgloss.Height(footer)
-	fullscreenViewport := r.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
+	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
 
 	var builder strings.Builder
 
@@ -256,18 +256,18 @@ func (m *model) ViewMainContent() string {
 	builder.WriteString(m.ViewPhaseStatus())
 	builder.WriteString(m.ViewBuildLogs())
 
-	r := m.resetable.Load()
-	if r.err != nil {
+	resetable := m.resetable.Load()
+	if resetable.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
-		errorContent := fmt.Sprintf("\n%s\n", r.err.Error())
+		errorContent := fmt.Sprintf("\n%s\n", resetable.err.Error())
 		builder.WriteString(m.conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
 	if m.conf.Flags.Logging.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
-		debugContent := r.spinners.Debug()
-		debugContent += r.viewports.Debug()
-		debugContent += r.workflow.State().TargetsLogs.Debug()
+		debugContent := resetable.spinners.Debug()
+		debugContent += resetable.viewports.Debug()
+		debugContent += resetable.workflow.State().TargetsLogs.Debug()
 		builder.WriteString(debugHeader + debugContent)
 	}
 
@@ -275,14 +275,14 @@ func (m *model) ViewMainContent() string {
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
-	r := m.resetable.Load()
-	if r.statsTable.HandleMouseClick(msg) {
-		r.phaseStatus.Reset()
+	resetable := m.resetable.Load()
+	if resetable.statsTable.HandleMouseClick(msg) {
+		resetable.phaseStatus.Reset()
 		return
 	}
 
-	if r.phaseStatus.HandleMouseClick(msg) {
-		r.statsTable.Reset()
+	if resetable.phaseStatus.HandleMouseClick(msg) {
+		resetable.statsTable.Reset()
 	}
 }
 
