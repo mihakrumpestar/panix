@@ -90,16 +90,16 @@ func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *logs_command.
 		case <-ex.ctx.Done():
 			return errors.Wrap(ex.ctx.Err(), "context canceled")
 		default:
-			n, err := ptyFile.Read(buf)
+			bytesRead, err := ptyFile.Read(buf)
 			if err != nil {
 				return ex.handleReadError(err, commandLog)
 			}
 
-			if n == 0 {
+			if bytesRead == 0 {
 				continue
 			}
 
-			err = processTerminalOutput(buf[:n], commandLog)
+			err = processTerminalOutput(buf[:bytesRead], commandLog)
 			if err != nil {
 				commandLog.WriteLineString("processTerminalOutput write error: " + err.Error())
 				commandLog.WriteLineString("")

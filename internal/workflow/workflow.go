@@ -83,7 +83,7 @@ func (w *Workflow) Cancel() error {
 
 	w.updateHook.Close() // If we don't close it, WaitForUpdate will wait beyond the restart
 
-	return w.ctx.Err()
+	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
 func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.Xpath, f func() error) error {
@@ -141,10 +141,10 @@ func (w *Workflow) Phase(xpath config_attributes.Xpath, phase phases.Phase, mach
 func (w *Workflow) CreateWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
-	w.RootTree(func(i int, machine *config.Machine) {
+	w.RootTree(func(idx int, machine *config.Machine) {
 		subPool.SubmitErr(func() error {
 			// Create a shared phaseRunner for this machine
-			pr := &phaseRunner{
+			phaseRunnerInstance := &phaseRunner{
 				r:       w.runner,
 				flake:   machine.ParentConfiguration.ParentFlake,
 				config:  machine.ParentConfiguration,
@@ -153,7 +153,7 @@ func (w *Workflow) CreateWorkflow() error {
 
 			// Execute each phase in order
 			for _, phase := range w.conf.Phases {
-				if err := pr.run(phase); err != nil {
+				if err := phaseRunnerInstance.run(phase); err != nil {
 					return err
 				}
 			}
@@ -181,8 +181,8 @@ func (w *Workflow) MachineCount() int {
 	return count
 }
 
-func (w *Workflow) RootTree(function func(i int, machine *config.Machine)) {
-	i := 0
+func (w *Workflow) RootTree(function func(idx int, machine *config.Machine)) {
+	idx := 0
 
 	for _, flakePair := range w.conf.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
@@ -190,9 +190,9 @@ func (w *Workflow) RootTree(function func(i int, machine *config.Machine)) {
 			configuration := configPair.Value
 			for _, machinePair := range configuration.Machines.Omap.Pairs() {
 				machine := machinePair.Value
-				function(i, machine)
+				function(idx, machine)
 
-				i++
+				idx++
 			}
 		}
 	}

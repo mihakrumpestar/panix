@@ -75,7 +75,7 @@ func (cl *CommandLog) WriteString(s string) (int, error) {
 }
 
 // Write writes bytes to the last line in StdInOutErr.
-func (cl *CommandLog) Write(p []byte) (int, error) {
+func (cl *CommandLog) Write(data []byte) (int, error) {
 	length := cl.stdInOutErr.Length()
 	if length == 0 {
 		cl.stdInOutErr.Append(safe_buffer.NewBuffer(nil))
@@ -89,7 +89,7 @@ func (cl *CommandLog) Write(p []byte) (int, error) {
 		panic(fmt.Sprintf("internal error: command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
 	}
 
-	n, err := stdInOutErr.Write(p)
+	n, err := stdInOutErr.Write(data)
 	if err != nil {
 		return n, errors.Wrap(err, "failed to write to command log")
 	}
@@ -108,14 +108,14 @@ func (cl *CommandLog) WriteLine(p []byte) {
 }
 
 // ReplaceLastLine replaces the content of the last line in StdInOutErr.
-func (cl *CommandLog) ReplaceLastLine(p []byte) {
+func (cl *CommandLog) ReplaceLastLine(data []byte) {
 	if cl.stdInOutErr.Length() == 0 {
-		cl.WriteLine(p)
+		cl.WriteLine(data)
 		return
 	}
 
 	index := cl.stdInOutErr.Length() - 1
-	ok := cl.stdInOutErr.Set(index, safe_buffer.NewBuffer(p))
+	ok := cl.stdInOutErr.Set(index, safe_buffer.NewBuffer(data))
 
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.stdInOutErr.Length()))

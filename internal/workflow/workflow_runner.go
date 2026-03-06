@@ -11,7 +11,7 @@ import (
 // runner handles phase execution with once-per-scope semantics
 // It is bound to a Workflow instance to avoid global state issues
 type runner struct {
-	w            *Workflow
+	workflow     *Workflow
 	onceRegistry *omap.Omap[string, *once_async.OnceAsync]
 }
 
@@ -24,14 +24,14 @@ type phaseRunner struct {
 	machine *config.Machine
 }
 
-func newRunner(w *Workflow) (*runner, error) {
+func newRunner(workflow *Workflow) (*runner, error) {
 	onceRegistry, err := omap.New[string, *once_async.OnceAsync]()
 	if err != nil {
 		return nil, err
 	}
 
 	return &runner{
-		w:            w,
+		workflow:     workflow,
 		onceRegistry: onceRegistry,
 	}, nil
 }
@@ -61,7 +61,7 @@ func (r *runner) getOrCreateOnceAsync(xpath string) *once_async.OnceAsync {
 
 // run executes a phase with automatic once-per-scope semantics
 func (pr *phaseRunner) run(phase phases.Phase) error {
-	w := pr.r.w
+	workflow := pr.r.workflow
 
 	// Check bootstrap status - skip bootstrap phase if already bootstrapped
 	if phase == phases.Bootstrap && pr.machine.MetaInspect.Bootstrapped.Load() {
@@ -69,7 +69,7 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	}
 
 	// If in Bootstrap.Only mode and machine is already bootstrapped, skip all phases
-	if w.conf.Flags.Bootstrap.Only && pr.machine.MetaInspect.Bootstrapped.Load() {
+	if workflow.conf.Flags.Bootstrap.Only && pr.machine.MetaInspect.Bootstrapped.Load() {
 		return nil
 	}
 
@@ -91,17 +91,17 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	}
 
 	execFn = func() error {
-		return w.executePhase(phase, pr.flake, pr.config, pr.machine)
+		return workflow.executePhase(phase, pr.flake, pr.config, pr.machine)
 	}
 
 	// If this phase should only run once per scope, use OnceAsync
 	if phases.ShouldRunOnce(phase) {
 		once := pr.r.getOrCreateOnceAsync(xpath.String())
 		return once.Do(func() error {
-			return w.NewTaskWithRetry(phase, xpath, execFn)
+			return workflow.NewTaskWithRetry(phase, xpath, execFn)
 		})
 	}
 
 	// Otherwise, run directly
-	return w.NewTaskWithRetry(phase, xpath, execFn)
+	return workflow.NewTaskWithRetry(phase, xpath, execFn)
 }

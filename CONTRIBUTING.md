@@ -19,6 +19,9 @@ task
 
 for usage.
 
+Code has to pass:
+
+- all checks in `task golangci`
 
 The following packages were inadequate for use for Panix:
 

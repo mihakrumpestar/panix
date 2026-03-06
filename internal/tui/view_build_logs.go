@@ -26,15 +26,15 @@ var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 // - If a phase is selected: show that phase across all machines
 // - Otherwise: show default view (Inspect + remaining phases per scope)
 func (m *model) ViewBuildLogs() string {
-	var b strings.Builder
+	var builder strings.Builder
 
-	b.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
+	builder.WriteString(m.conf.ColorScheme.HeaderTitle.Render("=== Build Logs ===\n"))
 
-	r := m.resetable.Load()
-	r.workflow.State().TargetsLogs.CalculateDurationAndError()
+	resetable := m.resetable.Load()
+	resetable.workflow.State().TargetsLogs.CalculateDurationAndError()
 
-	selectedXpath := r.statsTable.GetSelectedXpath()
-	selectedPhase := r.phaseStatus.GetSelectedPhase()
+	selectedXpath := resetable.statsTable.GetSelectedXpath()
+	selectedPhase := resetable.phaseStatus.GetSelectedPhase()
 	colors := m.conf.ColorScheme
 
 	// Build tree for each flake
@@ -72,10 +72,10 @@ func (m *model) ViewBuildLogs() string {
 		}
 
 		if flakeNode.Children().Length() > 0 {
-			b.WriteString("\n" + flakeNode.String())
+			builder.WriteString("\n" + flakeNode.String())
 		}
 	}
-	return b.String()
+	return builder.String()
 }
 
 func (m *model) addPhaseToTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine], phase phases.Phase) {
@@ -101,13 +101,13 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	errored := m.addPhases(node, &machine.Attributes, indent+treeStep, true, phases.Inspect)
 	if !errored {
 		// Add remaining phases after Inspect, using appropriate attributes based on scope
-		for _, pm := range phases.PhaseRegistry[1:] {
+		for _, phaseMeta := range phases.PhaseRegistry[1:] {
 			attr := &machine.Attributes
-			if pm.Scope == phases.ScopeConfig {
+			if phaseMeta.Scope == phases.ScopeConfig {
 				attr = &cfg.Attributes
 			}
 
-			m.addPhases(node, attr, indent+treeStep, true, pm.Phase)
+			m.addPhases(node, attr, indent+treeStep, true, phaseMeta.Phase)
 		}
 	}
 
@@ -121,14 +121,14 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine]) {
 	indent := treeStep * 2
 
-	for _, pm := range phases.PhaseRegistry {
-		if pm.Scope == phases.ScopeConfig {
+	for _, phaseMeta := range phases.PhaseRegistry {
+		if phaseMeta.Scope == phases.ScopeConfig {
 			// Config-scoped phase (like Build): use config attributes
-			m.addPhases(cfgNode, &cfg.Attributes, indent, false, pm.Phase)
+			m.addPhases(cfgNode, &cfg.Attributes, indent, false, phaseMeta.Phase)
 		} else {
 			// Machine-scoped phase: add for each machine
 			for _, pair := range machines {
-				m.addMachinePhases(cfgNode, pair.Value, indent, pm.Phase)
+				m.addMachinePhases(cfgNode, pair.Value, indent, phaseMeta.Phase)
 			}
 		}
 	}
@@ -153,13 +153,13 @@ func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *
 		style.Color.Render(fmt.Sprintf("%s %s %s", string(style.Icon), attr.Name, attr.Message)),
 		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))
 
-	t := tree.New().Root(line)
+	treeInst := tree.New().Root(line)
 	if isRoot {
-		t = t.Enumerator(tree.RoundedEnumerator).
+		treeInst = treeInst.Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(m.conf.ColorScheme.TreeEnumerator).
 			IndenterStyle(m.conf.ColorScheme.TreeEnumerator)
 	}
-	return t
+	return treeInst
 }
 
 // addPhases adds phase nodes to a parent tree for specific phases
@@ -223,7 +223,7 @@ func (m *model) addPhase(parent *tree.Tree, attr *config_attributes.Attributes, 
 func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx int, phaseXpath config_attributes.Xpath, indent int) {
 	colors := m.conf.ColorScheme
 	cmdIndent := indent + treeStep
-	r := m.resetable.Load()
+	resetable := m.resetable.Load()
 
 	// Use command or description based on flag
 	label := cmd.Description
@@ -236,7 +236,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 	duration := m.durationText(colors.Command, cmd.TimeAndState)
 
 	// Create label viewport for wrapping long labels
-	labelViewport := r.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, cmdIndent+lipgloss.Width(icon)+lipgloss.Width(duration))
+	labelViewport := resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, cmdIndent+lipgloss.Width(icon)+lipgloss.Width(duration))
 
 	// If label wraps multiple lines, extend icon with tree lines for alignment
 	output := strings.TrimSpace(cmd.String())
@@ -249,9 +249,9 @@ func (m *model) addCommand(parent *tree.Tree, cmd *logs_command.CommandLog, idx 
 
 	// Add command output in a viewport if it exists
 	if len(output) > 0 {
-		cmdNode.Child(r.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
+		cmdNode.Child(resetable.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
 	} else {
-		r.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("output"))
+		resetable.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("output"))
 	}
 
 	// Add error message if command failed

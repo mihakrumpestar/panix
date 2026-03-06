@@ -48,16 +48,16 @@ type Viewport struct {
 }
 
 // NewViewports creates a new viewport manager
-func NewViewports(d *Dimensions, c *config.ColorScheme, dbg *strings.Builder, maxHeight int) *Viewports {
-	v, _ := omap.New[config_attributes.Xpath, *Viewport]()
+func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, dbg *strings.Builder, maxHeight int) *Viewports {
+	viewportsMap, _ := omap.New[config_attributes.Xpath, *Viewport]()
 	// Ensure minimum height of 1
 	if maxHeight < 1 {
 		maxHeight = 1
 	}
 	return &Viewports{
-		viewports:              v,
-		dimensions:             d,
-		colors:                 c,
+		viewports:              viewportsMap,
+		dimensions:             dimensions,
+		colors:                 colors,
 		debug:                  dbg,
 		commandOutputMaxHeight: maxHeight,
 		mainXpath:              config_attributes.NewXpath("main"),
@@ -99,26 +99,26 @@ func (v *Viewports) GetOrCreateMainViewport(content string, footerHeight int) st
 
 func (v *Viewports) RenderFullscreenViewport(xpath config_attributes.Xpath, content string, footerHeight int) string {
 	v.footerHeight = footerHeight
-	h := max(1, v.dimensions.Height-footerHeight-borderHeight)
-	w := max(1, v.dimensions.Width-scrollbarWidth-borderWidth)
+	height := max(1, v.dimensions.Height-footerHeight-borderHeight)
+	width := max(1, v.dimensions.Width-scrollbarWidth-borderWidth)
 
-	vp, exists := v.viewports.Get(xpath)
+	viewport, exists := v.viewports.Get(xpath)
 	if !exists {
 		return v.createViewport(xpath, content, 0, viewportOptions{
-			availableWidth: w, height: h, maxHeight: h,
+			availableWidth: width, height: height, maxHeight: height,
 			wrapContent: true, useBorder: true, full: true,
 		})
 	}
 
-	yOffset := vp.model.YOffset()
-	vp.model.SetWidth(w)
-	vp.model.SetHeight(h)
-	vp.content = content
-	proc := lipgloss.NewStyle().Width(w).Render(content)
-	vp.model.SetContent(proc)
-	vp.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-h)))
+	yOffset := viewport.model.YOffset()
+	viewport.model.SetWidth(width)
+	viewport.model.SetHeight(height)
+	viewport.content = content
+	proc := lipgloss.NewStyle().Width(width).Render(content)
+	viewport.model.SetContent(proc)
+	viewport.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-height)))
 
-	return v.renderViewport(vp, h, true, false)
+	return v.renderViewport(viewport, height, true, false)
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xpath config_attributes.Xpath) { v.viewports.Del(xpath) }
@@ -178,26 +178,26 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 
 	var cmds []tea.Cmd
 
-	switch m := msg.(type) {
+	switch msgVal := msg.(type) {
 	case tea.MouseMsg:
-		v.handleMouse(m)
+		v.handleMouse(msgVal)
 	case tea.KeyPressMsg:
-		v.handleKey(m)
+		v.handleKey(msgVal)
 		return tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		// Update dimensions and resize all viewports
-		v.dimensions.Width = max(m.Width, minTerminalWidth)
-		v.dimensions.Height = m.Height
+		v.dimensions.Width = max(msgVal.Width, minTerminalWidth)
+		v.dimensions.Height = msgVal.Height
 		v.resizeAllViewports()
 		return tea.Batch(cmds...)
 	}
 
 	hasActiveInner := v.hasActiveInner()
 
-	for _, vp := range v.viewports.Records() {
-		if vp.active {
-			if updated, cmd := vp.model.Update(msg); cmd != nil {
-				vp.model = updated
+	for _, viewport := range v.viewports.Records() {
+		if viewport.active {
+			if updated, cmd := viewport.model.Update(msg); cmd != nil {
+				viewport.model = updated
 
 				cmds = append(cmds, cmd)
 			}
@@ -217,42 +217,42 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 
 // Debug returns debug info about all viewports
 func (v *Viewports) Debug() string {
-	var sb strings.Builder
+	var builder strings.Builder
 
-	sb.WriteString(fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height))
+	builder.WriteString(fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height))
 
-	for xpath, vp := range v.viewports.Records() {
-		sb.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, vp.model.Width, vp.model.Height, lipgloss.Height(vp.content)))
+	for xpath, viewport := range v.viewports.Records() {
+		builder.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, viewport.model.Width, viewport.model.Height, lipgloss.Height(viewport.content)))
 
-		if vp.active {
-			sb.WriteString(" [A]")
+		if viewport.active {
+			builder.WriteString(" [A]")
 		}
 
-		if vp.model.ScrollPercent() == 1 {
-			sb.WriteString(" @btm")
+		if viewport.model.ScrollPercent() == 1 {
+			builder.WriteString(" @btm")
 		}
 
-		sb.WriteString("\n")
+		builder.WriteString("\n")
 	}
-	return sb.String()
+	return builder.String()
 }
 
 // resizeAllViewports updates all viewport dimensions when terminal resizes
 func (v *Viewports) resizeAllViewports() {
-	for xpath, vp := range v.viewports.Records() {
-		w := max(1, v.dimensions.Width-scrollbarWidth)
-		h := max(1, v.dimensions.Height-v.footerHeight)
+	for xpath, viewport := range v.viewports.Records() {
+		width := max(1, v.dimensions.Width-scrollbarWidth)
+		height := max(1, v.dimensions.Height-v.footerHeight)
 
 		if xpath == v.mainXpath {
 			// Main viewport gets full height minus footer
-			vp.model.SetWidth(w)
-			vp.model.SetHeight(h)
+			viewport.model.SetWidth(width)
+			viewport.model.SetHeight(height)
 		} else {
 			// Inner viewports: update width, keep existing height or use max height
-			vp.model.SetWidth(w)
+			viewport.model.SetWidth(width)
 
-			if v.commandOutputMaxHeight > 0 && vp.model.Height() > v.commandOutputMaxHeight {
-				vp.model.SetHeight(v.commandOutputMaxHeight)
+			if v.commandOutputMaxHeight > 0 && viewport.model.Height() > v.commandOutputMaxHeight {
+				viewport.model.SetHeight(v.commandOutputMaxHeight)
 			}
 		}
 	}
@@ -271,32 +271,33 @@ type viewportOptions struct {
 }
 
 func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string, indent int, opts viewportOptions) string {
-	w := opts.availableWidth
-	if w == 0 {
-		w = max(10, v.dimensions.Width-indent-scrollbarWidth)
+	width := opts.availableWidth
+	if width == 0 {
+		width = max(10, v.dimensions.Width-indent-scrollbarWidth)
 	}
-	h := max(1, opts.height)
 
-	vp, exists := v.viewports.Get(xpath)
+	height := max(1, opts.height)
+
+	viewportInstance, exists := v.viewports.Get(xpath)
 	if !exists {
-		vp = &Viewport{
-			model:         viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		viewportInstance = &Viewport{
+			model:         viewport.New(viewport.WithWidth(width), viewport.WithHeight(height)),
 			scrollbarZone: xpath.NewXpathWithAppend("scrollbar"),
 			content:       content,
 			active:        xpath == v.mainXpath,
 		}
-		vp.model.GotoBottom()
-		v.viewports.Set(xpath, vp)
+		viewportInstance.model.GotoBottom()
+		v.viewports.Set(xpath, viewportInstance)
 	} else {
-		vp.content = content
+		viewportInstance.content = content
 	}
 
-	proc := v.processContent(content, w, opts.wrapContent, opts.noPadding)
+	proc := v.processContent(content, width, opts.wrapContent, opts.noPadding)
 	contentHeight := lipgloss.Height(proc)
 
 	if contentHeight > opts.maxHeight && opts.maxHeight > 0 && !opts.full {
-		w = max(1, w-scrollbarWidth)
-		proc = v.processContent(content, w, opts.wrapContent, opts.noPadding)
+		width = max(1, width-scrollbarWidth)
+		proc = v.processContent(content, width, opts.wrapContent, opts.noPadding)
 		contentHeight = lipgloss.Height(proc)
 	}
 
@@ -304,23 +305,23 @@ func (v *Viewports) createViewport(xpath config_attributes.Xpath, content string
 	if !opts.full && opts.maxHeight > 0 && contentHeight > opts.maxHeight {
 		finalHeight = opts.maxHeight
 	} else if opts.full {
-		finalHeight = h
+		finalHeight = height
 	}
 
-	vp.model.SetWidth(w)
-	vp.model.SetHeight(finalHeight)
+	viewportInstance.model.SetWidth(width)
+	viewportInstance.model.SetHeight(finalHeight)
 
-	yOffset, pct := vp.model.YOffset(), vp.model.ScrollPercent()
-	vp.model.SetContent(proc)
+	yOffset, pct := viewportInstance.model.YOffset(), viewportInstance.model.ScrollPercent()
+	viewportInstance.model.SetContent(proc)
 
 	if pct == 1 {
-		vp.model.GotoBottom()
+		viewportInstance.model.GotoBottom()
 	} else {
 		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
-		vp.model.SetYOffset(min(yOffset, maxOffset))
+		viewportInstance.model.SetYOffset(min(yOffset, maxOffset))
 	}
 
-	return zone.Mark(xpath.String(), v.renderViewport(vp, finalHeight, opts.useBorder, opts.noPadding))
+	return zone.Mark(xpath.String(), v.renderViewport(viewportInstance, finalHeight, opts.useBorder, opts.noPadding))
 }
 
 func (v *Viewports) processContent(content string, width int, wrap bool, noPadding bool) string {
@@ -333,13 +334,13 @@ func (v *Viewports) processContent(content string, width int, wrap bool, noPaddi
 	return truncateLines(content, width)
 }
 
-func (v *Viewports) renderViewport(vp *Viewport, height int, useBorder bool, noPadding bool) string {
-	contentHeight := lipgloss.Height(vp.content)
-	scrollbar, _ := v.renderScrollbar(vp.model.ScrollPercent(), contentHeight, height)
-	combined := v.combineWithScrollbar(vp.model.View(), scrollbar, vp.scrollbarZone)
+func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder bool, noPadding bool) string {
+	contentHeight := lipgloss.Height(viewport.content)
+	scrollbar, _ := v.renderScrollbar(viewport.model.ScrollPercent(), contentHeight, height)
+	combined := v.combineWithScrollbar(viewport.model.View(), scrollbar, viewport.scrollbarZone)
 
 	if noPadding {
-		if vp.active {
+		if viewport.active {
 			combined = v.colors.SelectionHighlightBackground.Render(combined)
 		}
 		return combined
@@ -350,7 +351,7 @@ func (v *Viewports) renderViewport(vp *Viewport, height int, useBorder bool, noP
 	}
 
 	borderColor := v.colors.TableBorder.GetForeground()
-	if vp.active {
+	if viewport.active {
 		borderColor = v.colors.TableBorder.GetBackground()
 	}
 
@@ -409,9 +410,9 @@ func (v *Viewports) combineWithScrollbar(view, bar string, barZone config_attrib
 	return strings.Join(result, "\n")
 }
 
-func (v *Viewports) handleMouse(m tea.MouseMsg) {
+func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 	// Handle mouse wheel scrolling first
-	if wheel, ok := m.(tea.MouseWheelMsg); ok {
+	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
 		if vp := v.getActiveViewport(); vp != nil {
 			if wheel.Button == tea.MouseWheelUp {
 				vp.model.ScrollUp(3)
@@ -423,7 +424,7 @@ func (v *Viewports) handleMouse(m tea.MouseMsg) {
 	}
 
 	// Handle click-to-activate (only on click messages)
-	click, ok := m.(tea.MouseClickMsg)
+	click, ok := msg.(tea.MouseClickMsg)
 	if !ok {
 		return
 	}
@@ -442,21 +443,22 @@ func (v *Viewports) handleMouse(m tea.MouseMsg) {
 	}
 }
 
-func (v *Viewports) handleKey(m tea.KeyPressMsg) {
-	if vp := v.getActiveViewport(); vp != nil {
-		switch m.String() {
+func (v *Viewports) handleKey(msg tea.KeyPressMsg) {
+	viewport := v.getActiveViewport()
+	if viewport != nil {
+		switch msg.String() {
 		case "up", "k":
-			vp.model.ScrollUp(1)
+			viewport.model.ScrollUp(1)
 		case "down", "j":
-			vp.model.ScrollDown(1)
+			viewport.model.ScrollDown(1)
 		case "pgup":
-			vp.model.HalfPageUp()
+			viewport.model.HalfPageUp()
 		case "pgdown", "space":
-			vp.model.HalfPageDown()
+			viewport.model.HalfPageDown()
 		case "home", "g":
-			vp.model.GotoTop()
+			viewport.model.GotoTop()
 		case "end", "G":
-			vp.model.GotoBottom()
+			viewport.model.GotoBottom()
 		}
 	}
 }
@@ -511,7 +513,7 @@ func (v *Viewports) mostSpecific(xpaths []config_attributes.Xpath) config_attrib
 		return config_attributes.Xpath{}
 	}
 
-	sort.Slice(xpaths, func(i, j int) bool { return xpaths[i].Depth() > xpaths[j].Depth() })
+	sort.Slice(xpaths, func(idx, j int) bool { return xpaths[idx].Depth() > xpaths[j].Depth() })
 	return xpaths[0]
 }
 
@@ -533,18 +535,18 @@ func truncateLines(content string, maxWidth int) string {
 
 // truncateToRuneWidth truncates a string to fit within maxWidth runes,
 // using lipgloss.Width for accurate display width measurement.
-func truncateToRuneWidth(s string, maxWidth int) string {
-	width := lipgloss.Width(s)
+func truncateToRuneWidth(str string, maxWidth int) string {
+	width := lipgloss.Width(str)
 	if width <= maxWidth {
-		return s
+		return str
 	}
 
 	// Binary search for the correct truncation point
-	low, high := 0, len(s)
+	low, high := 0, len(str)
 	for low < high {
 		mid := (low + high) / 2
 		// Find the previous valid UTF-8 boundary
-		for mid > low && !utf8.ValidString(s[:mid]) {
+		for mid > low && !utf8.ValidString(str[:mid]) {
 			mid--
 		}
 
@@ -552,21 +554,21 @@ func truncateToRuneWidth(s string, maxWidth int) string {
 			break
 		}
 
-		w := lipgloss.Width(s[:mid])
+		w := lipgloss.Width(str[:mid])
 		if w > maxWidth {
 			high = mid
 		} else if w < maxWidth {
 			low = mid + 1
 		} else {
-			return s[:mid]
+			return str[:mid]
 		}
 	}
 
 	// Final adjustment to ensure valid UTF-8
-	for low > 0 && !utf8.ValidString(s[:low]) {
+	for low > 0 && !utf8.ValidString(str[:low]) {
 		low--
 	}
-	return s[:low]
+	return str[:low]
 }
 
 func clamp(val, min, max float64) float64 {

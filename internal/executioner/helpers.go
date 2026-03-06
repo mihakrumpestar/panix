@@ -19,7 +19,7 @@ const (
 )
 
 func (ex *Executioner) ExecuteHooks(hooks []config_attributes.PostBootstrapHookCommand, hookType string) error {
-	for i, hook := range hooks {
+	for idx, hook := range hooks {
 		switch hook {
 		case config_attributes.PostBootstrapHookWaitForOnline:
 			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
@@ -37,7 +37,7 @@ func (ex *Executioner) ExecuteHooks(hooks []config_attributes.PostBootstrapHookC
 			}
 		default:
 			err := ex.Exec(
-				fmt.Sprintf("%s %d", hookType, i+1),
+				fmt.Sprintf("%s %d", hookType, idx+1),
 				fmt.Sprintf("running %s: %s", hookType, hook),
 				fmt.Sprintf("%s failed", hookType),
 				[]string{string(hook)},
