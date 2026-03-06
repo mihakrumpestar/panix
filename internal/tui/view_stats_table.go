@@ -35,8 +35,8 @@ func (s *StatsTable) Reset() {
 }
 
 func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
-	z := zone.Get(statsTableZonePrefix)
-	if z == nil || !z.InBounds(msg) {
+	zoneInfo := zone.Get(statsTableZonePrefix)
+	if zoneInfo == nil || !zoneInfo.InBounds(msg) {
 		return false
 	}
 
@@ -46,7 +46,7 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	}
 
 	mouse := msg.Mouse()
-	relY := mouse.Y - z.StartY
+	relY := mouse.Y - zoneInfo.StartY
 	headerLines := 3
 
 	if relY < headerLines {
@@ -94,8 +94,8 @@ func (s *StatsTable) GetSelectedXpath() config_attributes.Xpath {
 }
 
 func (m *model) ViewStatsTable() string {
-	r := m.resetable.Load()
-	state := r.workflow.State()
+	resetable := m.resetable.Load()
+	state := resetable.workflow.State()
 	phasesList := m.conf.Phases
 	colors := m.conf.ColorScheme
 
@@ -107,16 +107,16 @@ func (m *model) ViewStatsTable() string {
 
 	builder.WriteString(colors.HeaderTitle.Render("=== Stats table ===\n"))
 
-	usableWidth := max(r.viewports.ContentWidth(), 40)
-	machineCount := r.workflow.MachineCount()
+	usableWidth := max(resetable.viewports.ContentWidth(), 40)
+	machineCount := resetable.workflow.MachineCount()
 	indexWidth := len(fmt.Sprintf("%d", machineCount))
 
-	statsTable := r.statsTable
+	statsTable := resetable.statsTable
 	statsTable.MachineXpaths = nil
 
 	headers, styleFunc := makeTableColumns(colors, indexWidth, statsTable.SelectedMachine)
 
-	t := table.New().
+	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colors.TableBorder).
 		Headers(headers...).
@@ -126,14 +126,14 @@ func (m *model) ViewStatsTable() string {
 
 	var prevFlakeName, prevConfigName string
 
-	r.workflow.RootTree(func(i int, machine *config.Machine) {
+	resetable.workflow.RootTree(func(idx int, machine *config.Machine) {
 		configuration := machine.ParentConfiguration
 		flake := configuration.ParentFlake
 		xpath := machine.Xpath
 
 		statsTable.MachineXpaths = append(statsTable.MachineXpaths, xpath)
 
-		ps := machine.MetaInspect
+		metaInspect := machine.MetaInspect
 		phaseLog := state.TargetsLogs.MustGetFirstLogErrorOrLastLog(machine.Xpath)
 
 		showFlake := flake.Name != prevFlakeName
@@ -157,26 +157,26 @@ func (m *model) ViewStatsTable() string {
 		}
 
 		generationString := ""
-		if generation := ps.Generation.Load(); generation != 0 {
+		if generation := metaInspect.Generation.Load(); generation != 0 {
 			generationString = fmt.Sprintf("%d", generation)
 		}
 
-		t.Row(
-			fmt.Sprintf("%d", i+1),
+		tbl.Row(
+			fmt.Sprintf("%d", idx+1),
 			m.getStatusIcon(xpath, phaseLog),
 			flakeDisplay,
 			configDisplay,
 			machine.Name,
-			ps.Architecture.Load(),
+			metaInspect.Architecture.Load(),
 			m.getStatusText(phaseLog, colors),
 			generationString,
-			ps.Date.Load(),
-			ps.Nixos.Load(),
-			ps.Kernel.Load(),
+			metaInspect.Date.Load(),
+			metaInspect.Nixos.Load(),
+			metaInspect.Kernel.Load(),
 		)
 	})
 
-	tableContent := zone.Mark(statsTableZonePrefix, t.String())
+	tableContent := zone.Mark(statsTableZonePrefix, tbl.String())
 	builder.WriteString("\n" + tableContent + "\n\n")
 
 	return builder.String()
@@ -249,14 +249,14 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 }
 
 func (m *model) getStatusIcon(xpath config_attributes.Xpath, phaseLog *logs_phase.PhaseLog) string {
-	r := m.resetable.Load()
+	resetable := m.resetable.Load()
 	if phaseLog == nil {
-		return r.spinners.GetOrCreateSpinner(xpath).View()
+		return resetable.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
 	tas := phaseLog.TimeAndState()
 	if !tas.IsFinished() {
-		return r.spinners.GetOrCreateSpinner(xpath).View()
+		return resetable.spinners.GetOrCreateSpinner(xpath).View()
 	}
 
 	if tas.GetEndError() != nil {

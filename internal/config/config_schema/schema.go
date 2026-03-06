@@ -355,14 +355,14 @@ func parseInt(s string) (int, error) {
 }
 
 // isOrderedMap checks if a type is an OrderedMap
-func (g *Generator) isOrderedMap(t reflect.Type) bool {
+func (g *Generator) isOrderedMap(typ reflect.Type) bool {
 	// OrderedMap is a struct with an embedded *omap.Omap field
-	if t.Kind() != reflect.Struct {
+	if typ.Kind() != reflect.Struct {
 		return false
 	}
 
 	// Check if it has the Omap field which is characteristic of OrderedMap
-	_, hasOmap := t.FieldByName("Omap")
+	_, hasOmap := typ.FieldByName("Omap")
 	return hasOmap
 }
 
