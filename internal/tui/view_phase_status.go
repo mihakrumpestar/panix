@@ -116,7 +116,7 @@ func (m *model) renderPhaseFlow() string {
 			sp = &stats.StatsPack{}
 		}
 		phaseStats := &stats.StatsPack{Running: sp.Running, Failed: sp.Failed}
-		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, termWidth, idx), phaseArrow)
+		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, idx), phaseArrow)
 	}
 
 	lastStats := statistics.GetPack(phasesList[len(phasesList)-1])
@@ -124,7 +124,7 @@ func (m *model) renderPhaseFlow() string {
 		lastStats = &stats.StatsPack{}
 	}
 	doneStats := &stats.StatsPack{Done: lastStats.Done}
-	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, doneStats, termWidth, -1))
+	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, doneStats, -1))
 
 	return table.New().
 		Width(termWidth).
@@ -139,7 +139,7 @@ func (m *model) renderPhaseFlow() string {
 		Row(row...).String() + "\n"
 }
 
-func (m *model) createPhaseGroup(name string, running, failed, done []attributes.Xpath, stats *stats.StatsPack, termWidth int, phaseIdx int) string {
+func (m *model) createPhaseGroup(name string, running, failed, done []attributes.Xpath, stats *stats.StatsPack, phaseIdx int) string {
 	if len(name) == 0 {
 		name = "unnamed"
 	}

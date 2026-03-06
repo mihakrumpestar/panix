@@ -16,7 +16,7 @@ const (
 
 type Flags struct {
 	Config               string         `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
-	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configurations and machine names are already registered as tags, children inherit all parent tags)"`
+	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configs and names are already registered as tags)"`
 	Bootstrap            Bootstrap      `yaml:"bootstrap" embed:"" prefix:"bootstrap."`
 	RequireAllSuccess    bool           `yaml:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
 	OverrideLocalMachine string         `yaml:"override_local_machine" help:"Hostname of the machine that is local (won't use ssh to connect to it)"`
@@ -24,7 +24,7 @@ type Flags struct {
 	DryRunWithInspect    bool           `yaml:"dry_run_with_inspect" help:"Show what would be done without executing, but with real inspect query"`
 	Timeout              time.Duration  `yaml:"timeout" help:"Timeout for workflow (eg. '1h', '1m15s')" default:"2h"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
-	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI immediately when workflow completes (otherwise stays open until user quits); 'retry' and 'restart' do not work in this mode"`
+	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."`
 	Logging `yaml:"logging"`

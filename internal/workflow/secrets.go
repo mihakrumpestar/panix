@@ -32,7 +32,13 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) error {
 		})
 }
 
-func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine *config.Machine, plainFileOrDir *attributes.PlainFileOrDirToTransfer, transferOfWhat string, transferOSSecrets bool) error {
+func (w *Workflow) transferPlainFileOrDir(
+	exc *executioner.Executioner,
+	machine *config.Machine,
+	plainFileOrDir *attributes.PlainFileOrDirToTransfer,
+	transferOfWhat string,
+	transferOSSecrets bool,
+) error {
 	commandWithArgs := []string{"rsync", "-rcPEx", "--mkpath"}
 
 	maybeSudo := machine.MaybeSudo()

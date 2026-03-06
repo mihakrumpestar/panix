@@ -113,7 +113,14 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath attributes.Xpath, 
 	}
 }
 
-func (w *Workflow) Phase(xpath attributes.Xpath, phase phases.Phase, machine *config.Machine, phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error) (err error) {
+func (w *Workflow) Phase(
+	xpath attributes.Xpath,
+	phase phases.Phase,
+	machine *config.Machine,
+	phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error,
+) error {
+	var err error
+
 	phaseLog := w.state.TargetsLogs.MustGetOrCreateLog(xpath, phase)
 
 	phaseLog.TimeAndState().StartTimer()
