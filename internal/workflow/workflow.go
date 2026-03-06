@@ -77,7 +77,7 @@ func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
 
-// Cancel cancels the context and waits for it's completion
+// Cancel cancels the context and waits for it's completion.
 func (w *Workflow) Cancel() error {
 	w.cancel()
 	<-w.ctx.Done() // Wait to fully finish context (this also stops and cancels pool)
@@ -146,7 +146,7 @@ func (w *Workflow) Phase(
 	return err
 }
 
-// CreateWorkflow orchestrates the execution of all phases
+// CreateWorkflow orchestrates the execution of all phases.
 func (w *Workflow) CreateWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
@@ -209,7 +209,7 @@ func (w *Workflow) RootTree(function func(idx int, machine *config.Machine)) {
 	}
 }
 
-// executePhase executes a phase by dispatching to the appropriate handler
+// executePhase executes a phase by dispatching to the appropriate handler.
 func (w *Workflow) executePhase(phase phases.Phase, flake *config.Flake, config *config.Configuration, machine *config.Machine) error {
 	switch phase {
 	case phases.Inspect:

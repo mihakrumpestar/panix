@@ -1,4 +1,4 @@
-// Partially from: https://gist.github.com/arkan/5924e155dbb4254b64614069ba0afd81
+// Partially from: https://gist.github.com/arkan/5924e155dbb4254b64614069ba0afd81.
 
 package safebuffer
 
@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Buffer is a goroutine safe bytes.Buffer
+// Buffer is a goroutine safe bytes.Buffer.
 type Buffer struct {
 	mutex  sync.Mutex
 	buffer *bytes.Buffer

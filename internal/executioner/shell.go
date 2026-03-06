@@ -18,9 +18,9 @@ const (
 	ptyBufferSize = 8192
 )
 
-// ANSI escape sequence regex pattern - matches common escape sequences
+// ANSI escape sequence regex pattern - matches common escape sequences.
 // Handles: \x1b[K (erase line), \x1b[...m (colors), \x1b[...A/B/C/D (cursor), etc.
-// Also handles OSC (Operating System Command) sequences like \x1b]0;...BEL
+// Also handles OSC (Operating System Command) sequences like \x1b]0;...BEL.
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][0-9;]*;[^\x07\x1b]*[\x07\x1b\\]`)
 
 func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) error {
@@ -171,7 +171,7 @@ func consolidateErrors(waitErr, readErr error) error {
 // https://github.com/owenthereal/upterm/pull/11/files
 // Linux kernel return EIO when attempting to read from a master pseudo
 // terminal which no longer has an open slave. So ignore error here.
-// See https://github.com/creack/pty/issues/21
+// See https://github.com/creack/pty/issues/21.
 func ptyError(err error) error {
 	pathErr, ok := err.(*os.PathError)
 	if !ok || pathErr.Err != syscall.EIO {
@@ -182,7 +182,7 @@ func ptyError(err error) error {
 }
 
 // processTerminalOutput processes terminal output to handle control sequences
-// like a real terminal would, but in a way that's safe for TUI display
+// like a real terminal would, but in a way that's safe for TUI display.
 func processTerminalOutput(buf []byte, exm *command.CommandLog) error {
 	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), nil)
 	sequences := bytes.Split(buf, []byte("\r"))

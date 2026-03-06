@@ -71,8 +71,8 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 	)
 }
 
-// executeDiskEncryptionKeys transfers disk encryption keys to the target machine
-// Must be called BEFORE disko runs, so keys are available for LUKS unlocking
+// executeDiskEncryptionKeys transfers disk encryption keys to the target machine.
+// Must be called BEFORE disko runs, so keys are available for LUKS unlocking.
 func (w *Workflow) executeDiskEncryptionKeys(
 	exc *executioner.Executioner,
 	machine *config.Machine,
@@ -227,7 +227,7 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 	return errors.Wrap(err, "failed to verify installer")
 }
 
-// Helpers
+// Helpers.
 
 func isURL(s string) bool {
 	parsedURL, err := url.Parse(s)

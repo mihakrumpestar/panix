@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	// 5 min disconnect timeout
+	// 5 min disconnect timeout.
 	WaitForDisconnectTimeoutTimes = 300
 	WaitForDisconnectInterval     = time.Second
 
-	// 10 min reconnect timeout
+	// 10 min reconnect timeout.
 	WaitForReconnectTimeoutTimes  = 300
 	WaitForReconnectCheckInterval = 2 * time.Second
 )

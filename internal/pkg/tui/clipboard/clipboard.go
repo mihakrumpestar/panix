@@ -17,15 +17,15 @@ import (
 
 const cmdTimeout = 5 * time.Second
 
-// ansiRegex matches ANSI escape sequences
+// ansiRegex matches ANSI escape sequences.
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-// stripANSI removes ANSI escape sequences from text
+// stripANSI removes ANSI escape sequences from text.
 func stripANSI(text string) string {
 	return ansiRegex.ReplaceAllString(text, "")
 }
 
-// normalizeText prepares text for clipboard by stripping ANSI and trimming
+// normalizeText prepares text for clipboard by stripping ANSI and trimming.
 func normalizeText(text string) string {
 	text = strings.TrimSpace(text)
 	text = stripANSI(text)
@@ -33,13 +33,13 @@ func normalizeText(text string) string {
 	return text
 }
 
-// envCache caches environment checks to avoid repeated lookups
+// envCache caches environment checks to avoid repeated lookups.
 var envCache = struct {
 	sync.Once
 	isWayland bool
 }{}
 
-// isWayland returns true if running under Wayland
+// isWayland returns true if running under Wayland.
 func isWayland() bool {
 	envCache.Do(func() {
 		envCache.isWayland = os.Getenv("WAYLAND_DISPLAY") != "" ||
@@ -49,7 +49,7 @@ func isWayland() bool {
 	return envCache.isWayland
 }
 
-// copyWithCommand tries to copy using system clipboard commands
+// copyWithCommand tries to copy using system clipboard commands.
 func copyWithCommand(ctx context.Context, text string) bool {
 	// Try Wayland native tool first if on Wayland
 	if isWayland() {
@@ -79,7 +79,7 @@ func copyWithCommand(ctx context.Context, text string) bool {
 	return err == nil
 }
 
-// copyWithLibrary tries to copy using atotto/clipboard library
+// copyWithLibrary tries to copy using atotto/clipboard library.
 func copyWithLibrary(text string) bool {
 	if err := clipboard.WriteAll(text); err == nil {
 		return true
@@ -88,7 +88,7 @@ func copyWithLibrary(text string) bool {
 	return false
 }
 
-// copyWithOSC52 copies using OSC52 terminal escape sequences
+// copyWithOSC52 copies using OSC52 terminal escape sequences.
 func copyWithOSC52(text string) error {
 	_, err := osc52.New(text).WriteTo(os.Stdout)
 	if err != nil {
@@ -98,8 +98,8 @@ func copyWithOSC52(text string) error {
 	return nil
 }
 
-// CopyToClipboard copies the given text to the system clipboard
-// It tries multiple methods in order: system commands, library, OSC52
+// CopyToClipboard copies the given text to the system clipboard.
+// It tries multiple methods in order: system commands, library, OSC52.
 func CopyToClipboard(text string) error {
 	normalized := normalizeText(text)
 

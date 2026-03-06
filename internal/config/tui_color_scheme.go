@@ -12,7 +12,7 @@ type ColorSchemeLogEntity struct {
 	Icon  rune
 }
 
-// ColorScheme defines a reusable color scheme for the TUI
+// ColorScheme defines a reusable color scheme for the TUI.
 type ColorScheme struct {
 	// Header colors
 	HeaderTitle  lipgloss.Style
@@ -53,7 +53,7 @@ type ColorScheme struct {
 	PhaseColorPairs map[PhaseState][2]colorful.Color
 }
 
-// PhaseState represents the visual state of a phase
+// PhaseState represents the visual state of a phase.
 type PhaseState int
 
 const (
@@ -63,7 +63,7 @@ const (
 	PhaseStateCompleted
 )
 
-// DefaultColorScheme returns the default color scheme
+// DefaultColorScheme returns the default color scheme.
 func defaultColorScheme() *ColorScheme {
 	return &ColorScheme{
 		// Header colors
