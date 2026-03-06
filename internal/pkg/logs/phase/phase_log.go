@@ -57,6 +57,10 @@ func (pLog *PhaseLog) CommandLogs() []*command.CommandLog {
 }
 
 func (pLog *PhaseLog) Clear() {
+	if pLog == nil {
+		return
+	}
+
 	pLog.commandLogs.Clear()
 	pLog.timeAndState.Clear()
 }

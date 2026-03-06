@@ -13,7 +13,7 @@ import (
 )
 
 type SSHConfig struct {
-	sc *ssh_config.Config
+	sshConfig *ssh_config.Config
 }
 
 var (
@@ -52,13 +52,21 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		cachedSSHConfig = &SSHConfig{sshCfg}
 	})
 
-	return cachedSSHConfig, cachedError
+	if cachedError != nil {
+		return nil, cachedError
+	}
+
+	return cachedSSHConfig, nil
 }
 
 func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error {
+	if sc == nil {
+		return nil
+	}
+
 	alias := sshClient.Hostname
 
-	hostname, err := sc.sc.Get(alias, "HostName")
+	hostname, err := sc.sshConfig.Get(alias, "HostName")
 	if err != nil {
 		return fmt.Errorf("failed to get HostName for alias %q: %w", alias, err)
 	}
@@ -69,7 +77,7 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 
 	sshClient.Hostname = hostname
 
-	portRaw, err := sc.sc.Get(alias, "Port")
+	portRaw, err := sc.sshConfig.Get(alias, "Port")
 	if err != nil {
 		log.Warn().Err(err).Str("alias", alias).Msg("failed to read Port from SSH config")
 	}
@@ -85,7 +93,7 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 		sshClient.Port = DefaultSSHPort
 	}
 
-	username, err := sc.sc.Get(alias, "User")
+	username, err := sc.sshConfig.Get(alias, "User")
 	if err != nil {
 		log.Warn().Err(err).Str("alias", alias).Msg("failed to read User from SSH config")
 	}
