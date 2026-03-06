@@ -9,6 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) (err error) {
@@ -73,7 +74,7 @@ func (w *Workflow) transferPlainFileOrDir(exc *executioner.Executioner, machine 
 		executioner.DisableAutoSshCommand(),
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "transfer failed")
 	}
 
 	return nil

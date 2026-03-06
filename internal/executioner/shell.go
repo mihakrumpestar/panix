@@ -49,7 +49,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 
 	ptyFile, err := pty.Start(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to start pty")
 	}
 
 	defer func() { _ = ptyFile.Close() }()
@@ -88,7 +88,7 @@ func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *logs_command.
 	for {
 		select {
 		case <-ex.ctx.Done():
-			return ex.ctx.Err()
+			return errors.Wrap(ex.ctx.Err(), "context canceled")
 		default:
 			n, err := ptyFile.Read(buf)
 			if err != nil {

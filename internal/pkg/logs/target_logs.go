@@ -25,7 +25,7 @@ type DurationAndError struct {
 func NewTargetLogs(xpath config_attributes.Xpath, flags config_flags.Logging) (*TargetLogs, error) {
 	phaseLogs, err := logs_phase.NewPhaseLogs(xpath, flags)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create phase logs")
 	}
 
 	return &TargetLogs{

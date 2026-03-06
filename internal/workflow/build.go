@@ -13,6 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/stoewer/go-strcase"
 )
@@ -71,7 +72,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(exc *executioner.Execut
 		}),
 	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to execute build phase")
 	}
 
 	log.Info().

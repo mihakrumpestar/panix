@@ -5,6 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 )
 
 func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
@@ -20,13 +21,13 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 					[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
 				)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "nixos-install failed")
 				}
 
 				if len(machine.Bootstrap.PostBootstrapInstallHooks) > 0 {
 					err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapInstallHooks, "post bootstrap install hook")
 					if err != nil {
-						return err
+						return errors.Wrap(err, "post bootstrap install hooks failed")
 					}
 				}
 
@@ -38,7 +39,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 						[]string{"reboot"},
 					)
 					if err != nil {
-						return err
+						return errors.Wrap(err, "reboot failed")
 					}
 				}
 
@@ -48,7 +49,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 						err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to reboot")
 
 						if err != nil {
-							return err
+							return errors.Wrap(err, "wait for disconnect failed")
 						}
 
 						machine.SwitchToRegularSSH()
@@ -56,7 +57,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 
 						err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to come back online", "machine did not reconnect after reboot")
 						if err != nil {
-							return err
+							return errors.Wrap(err, "wait for reconnect failed")
 						}
 					}
 
@@ -70,7 +71,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 					append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure),
 				)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "nix-env set system profile failed")
 				}
 
 				binPath := systemClosure + "/bin/switch-to-configuration"
@@ -82,7 +83,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 					append(machine.MaybeSudo(), binPath, "switch"),
 				)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "activation failed")
 				}
 			}
 

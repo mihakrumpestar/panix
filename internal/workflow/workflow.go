@@ -13,6 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
@@ -39,7 +40,7 @@ type WorkflowState struct {
 func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 	targetsLogs, err := logs.InitBuildLogs(conf.Root, conf.Flags.Logging)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to initialize build logs")
 	}
 
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Flags.Timeout)
@@ -100,7 +101,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath config_attributes.
 
 			err = w.state.Retry.Wait(w.ctx)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "retry wait failed")
 			}
 
 			w.state.TargetsLogs.MustGet(xpath).PhaseLogs.Get(phase).Clear()
@@ -161,9 +162,15 @@ func (w *Workflow) CreateWorkflow() error {
 		})
 	})
 
+	err := subPool.Wait()
+
 	w.updateHook.Close()
 
-	return subPool.Wait()
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return errors.Wrap(err, "workflow execution failed")
+	}
+
+	return nil
 }
 
 func (w *Workflow) MachineCount() int {
