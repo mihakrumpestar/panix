@@ -37,7 +37,7 @@ func NewSpinners() (*Spinners, error) {
 
 func (s *Spinners) GetOrCreateSpinner(xpath attributes.Xpath) *spinner.Model {
 	h := fnv.New32a()
-	h.Write([]byte(xpath.String()))
+	_, _ = h.Write([]byte(xpath.String()))
 	hashKey := int(h.Sum32() % maxSpinners)
 
 	spnr, ok := s.spinners.Get(hashKey)
