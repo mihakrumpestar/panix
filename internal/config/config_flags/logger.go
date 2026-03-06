@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -29,14 +30,14 @@ func InitLogging(flags Logging) error {
 	dir := filepath.Dir(flags.LogFile)
 	if dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, DefaultDirPermissions); err != nil {
-			return err
+			return errors.Wrap(err, "failed to create log directory")
 		}
 	}
 
 	// Open log file (we don't close it, and that is ok)
 	file, err := os.OpenFile(flags.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, DefaultLogFilePermissions)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to open log file")
 	}
 
 	// Set global log level

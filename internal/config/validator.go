@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/pkg/errors"
 )
 
 func (conf *Config) ValidateStructTags() error {
@@ -15,5 +16,5 @@ func (conf *Config) ValidateStructTags() error {
 		return filepath.IsAbs(val)
 	})
 
-	return v.Struct(conf)
+	return errors.Wrap(v.Struct(conf), "validation failed")
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 )
 
@@ -37,7 +38,7 @@ type Flake struct {
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
-	return f.Attributes.Init(name, attr, false)
+	return errors.Wrap(f.Attributes.Init(name, attr, false), "failed to initialize flake")
 }
 
 // Configuration
@@ -93,7 +94,7 @@ func (m *MetaInspect) SetActiveSSH(sshClient *ssh.SshClient) {
 func (m *Machine) Init(name string, parent *Configuration) error {
 	err := m.Attributes.Init(name, &parent.Attributes, true)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to initialize machine")
 	}
 
 	m.ParentConfiguration = parent

@@ -5,6 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/logs_phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
@@ -40,7 +41,7 @@ func executeTransferPhaseMachineWrapper(exc *executioner.Executioner, phaseLog *
 		executioner.Env(activeSSH.MaybeSshEnvOpts()),
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "transfer failed")
 	}
 
 	log.Info().

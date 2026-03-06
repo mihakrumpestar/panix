@@ -1,9 +1,9 @@
 package time_and_state
 
 import (
-	"errors"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 )
 
@@ -68,7 +68,11 @@ func (tas *TimeAndState) IsFinished() bool {
 }
 
 func (tas *TimeAndState) GetEndError() error {
-	return tas.endErr.Load()
+	err := tas.endErr.Load()
+	if err != nil {
+		return errors.Wrap(err, "end error")
+	}
+	return nil
 }
 
 func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {

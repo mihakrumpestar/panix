@@ -77,9 +77,9 @@ func (c *CLI) runTui(commandPhases []phases.Phase, modifiers ...func(conf *confi
 		modifier(conf)
 	}
 
-	return tui.NewTui(context.Background(), conf)
+	return errors.Wrap(tui.NewTui(context.Background(), conf), "TUI error")
 }
 
 func (c *CLI) runSchemaCommand(outputPath string) error {
-	return config_schema.GenerateSchema(outputPath)
+	return errors.Wrap(config_schema.GenerateSchema(outputPath), "failed to generate schema")
 }

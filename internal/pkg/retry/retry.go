@@ -1,6 +1,10 @@
 package retry
 
-import "context"
+import (
+	"context"
+
+	"github.com/pkg/errors"
+)
 
 // Retry provides a mechanism for goroutines to wait and be signaled to retry.
 // It is safe for concurrent use by multiple goroutines.
@@ -23,7 +27,7 @@ func (r *Retry) Wait(ctx context.Context) error {
 	case <-r.trigger:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Wrap(ctx.Err(), "context canceled")
 	}
 }
 

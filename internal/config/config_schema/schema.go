@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/config_flags"
+	"github.com/pkg/errors"
 )
 
 // Generator holds the state for schema generation
@@ -463,10 +464,15 @@ func GenerateYAML() ([]byte, error) {
 
 	schema, err := gen.Generate()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to generate schema")
 	}
 
-	return yaml.Marshal(schema)
+	data, err := yaml.Marshal(schema)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal schema to YAML")
+	}
+
+	return data, nil
 }
 
 // GenerateYAMLString generates the schema and returns it as a YAML string

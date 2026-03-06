@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"context"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
@@ -45,9 +43,7 @@ func (m *model) startWorkflow() tea.Cmd {
 		err = workflow.CreateWorkflow()
 		if err != nil {
 			zerolog.Error().Err(err).Msg("Workflow execution failed")
-			if err != context.Canceled {
-				return errMsg{err}
-			}
+			return errMsg{err}
 		} else {
 			zerolog.Info().Msg("Workflow completed successfully")
 		}

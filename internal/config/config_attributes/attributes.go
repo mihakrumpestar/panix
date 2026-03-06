@@ -109,7 +109,7 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) e
 func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) error {
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to merge attributes")
 	}
 
 	// Deep copy SSH pointers to avoid sharing between machines

@@ -104,10 +104,6 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	return ex.sshStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
 }
 
-func (ex *Executioner) ExecLocal(description, statusIfRunning, statusIfFailed string, commandWithArgs []string) error {
-	return ex.Exec(description, statusIfRunning, statusIfFailed, commandWithArgs, DisableAutoSshCommand())
-}
-
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, fn func() error) error {
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 

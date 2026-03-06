@@ -55,7 +55,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 					},
 				)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "reachability check failed")
 				}
 			}
 
@@ -77,7 +77,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "SSH connect failed")
 			}
 
 			err = exc.Exec(
@@ -103,7 +103,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "architecture detection failed")
 			}
 
 			err = exc.Exec(
@@ -130,7 +130,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "superuser check failed")
 			}
 
 			err = exc.Exec(
@@ -176,7 +176,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "bootstrap detection failed")
 			}
 
 			if !mms.Bootstrapped.Load() {
@@ -188,7 +188,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 						append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath),
 					)
 					if err != nil {
-						return err
+						return errors.Wrap(err, "hardware config generation failed")
 					}
 				}
 				return nil
@@ -214,7 +214,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "failed to get generation")
 			}
 
 			err = exc.Exec(
@@ -236,7 +236,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				}),
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "failed to get generation date")
 			}
 
 			return exc.Exec(

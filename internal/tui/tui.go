@@ -17,6 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tui_viewports"
+	"github.com/pkg/errors"
 	zerolog "github.com/rs/zerolog/log"
 )
 
@@ -68,7 +69,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 
 	m, err := p.Run()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "TUI runtime error")
 	}
 
 	finalModel, ok := m.(*model)
@@ -90,7 +91,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 func startCPUProfile(path string) (func(), error) {
 	f, err := os.Create(path)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create CPU profile file")
 	}
 
 	err = pprof.StartCPUProfile(f)

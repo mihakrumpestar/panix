@@ -63,7 +63,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 				[]string{diskoScript},
 			)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "disko failed")
 			}
 
 			return exc.ExecuteHooks(machine.Bootstrap.PostBootstrapHooks, "post bootstrap hook")
@@ -116,7 +116,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		append(machine.MaybeSudo(), "mkdir", "-p", "/tmp/kexec"),
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create kexec directory")
 	}
 
 	if isURL(kexecURL) {
@@ -159,7 +159,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		append(append(machine.MaybeSudo(), "tar"), tarArgs...),
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to extract kexec tarball")
 	}
 
 	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
@@ -177,19 +177,19 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		executioner.OnDryRun(func() {}),
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "kexec failed")
 	}
 
 	activeSSH := machine.MetaInspect.GetActiveSSH()
 	err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
 	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
 	if err != nil {
-		return err
+		return errors.Wrap(err, "wait for reconnect failed")
 	}
 
 	err = w.verifyInstaller(exc)
@@ -202,7 +202,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 }
 
 func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
-	return exc.Exec(
+	err := exc.Exec(
 		"verify installer",
 		"verifying NixOS installer",
 		"not in NixOS installer",
@@ -223,6 +223,8 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 		}),
 		executioner.OnDryRun(func() {}),
 	)
+
+	return errors.Wrap(err, "failed to verify installer")
 }
 
 // Helpers

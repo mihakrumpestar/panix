@@ -47,7 +47,7 @@ func (ts *TargetsLogs) Add(xpath config_attributes.Xpath) (*TargetLogs, error) {
 
 	err = ts.logs.Set(xpath, targetLogs)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to set target logs for %s", xpath.String())
 	}
 
 	return targetLogs, nil
