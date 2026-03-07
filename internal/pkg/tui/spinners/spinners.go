@@ -55,7 +55,7 @@ func (s *Spinners) GetOrCreateSpinner(xpath attributes.Xpath) *spinner.Model {
 
 	err := s.spinners.Set(hashKey, spnr)
 	if err != nil {
-		return nil
+		panic(fmt.Sprintf("failed to set spinner: %v", err))
 	}
 
 	s.pendingCmd = tea.Batch(s.pendingCmd, spnr.model.Tick)
