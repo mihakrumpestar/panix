@@ -21,6 +21,16 @@ linters:
     - nilaway
 
   settings:
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          files:
+            - $all
+          deny:
+            - pkg: errors
+              desc: use github.com/pkg/errors instead
+
     lll:
       line-length: 150
 
