@@ -128,7 +128,8 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 		return m, m.notification.Set("No content to copy", m.conf.ColorScheme.Status.Warning)
 	}
 
-	if err := clipboard.CopyToClipboard(content); err != nil {
+	err := clipboard.CopyToClipboard(content)
+	if err != nil {
 		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Error)
 	}
 

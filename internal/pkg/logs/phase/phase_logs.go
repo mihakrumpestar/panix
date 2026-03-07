@@ -74,7 +74,8 @@ func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *Pha
 		phaseLog = NewPhaseLog(pl.xpath, phase, pl.flags)
 	}
 
-	if err := pl.logs.Set(phase, phaseLog); err != nil {
+	err := pl.logs.Set(phase, phaseLog)
+	if err != nil {
 		panic(fmt.Sprintf("failed to set phase log: %v", err))
 	}
 
