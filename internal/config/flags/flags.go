@@ -63,7 +63,8 @@ func (f *Flags) SetDefault(reverse bool) {
 func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 	f.SetDefault(true)
 
-	if err := mergo.Merge(f, cli); err != nil {
+	err := mergo.Merge(f, cli)
+	if err != nil {
 		return errors.Wrap(err, "failed to merge flags")
 	}
 

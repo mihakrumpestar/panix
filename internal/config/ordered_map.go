@@ -113,7 +113,8 @@ func (e *keyValueExtractor[K, V]) processMappingValue(
 		value V
 	)
 
-	if err := yaml.NodeToValue(val.Key, &key); err != nil {
+	err := yaml.NodeToValue(val.Key, &key)
+	if err != nil {
 		return key, value, errors.Wrap(err, "failed to unmarshal key")
 	}
 
@@ -123,7 +124,8 @@ func (e *keyValueExtractor[K, V]) processMappingValue(
 		return key, value, nil
 	}
 
-	if err := e.unmarshalValue(val.Value, &value, isPtr, elemType, key); err != nil {
+	err = e.unmarshalValue(val.Value, &value, isPtr, elemType, key)
+	if err != nil {
 		return key, value, err
 	}
 
@@ -149,7 +151,8 @@ func (e *keyValueExtractor[K, V]) createNullValue(isPtr bool, elemType reflect.T
 
 func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr bool, elemType reflect.Type, key K) error {
 	if !isPtr {
-		if err := yaml.NodeToValue(node, value); err != nil {
+		err := yaml.NodeToValue(node, value)
+		if err != nil {
 			return errors.Wrapf(err, "failed to unmarshal %v", key)
 		}
 
@@ -160,7 +163,8 @@ func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr 
 		return e.unmarshalStructPtr(node, value, elemType, key)
 	}
 
-	if err := yaml.NodeToValue(node, value); err != nil {
+	err := yaml.NodeToValue(node, value)
+	if err != nil {
 		return errors.Wrapf(err, "failed to unmarshal %v", key)
 	}
 
@@ -169,7 +173,9 @@ func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr 
 
 func (e *keyValueExtractor[K, V]) unmarshalStructPtr(node ast.Node, value *V, elemType reflect.Type, key K) error {
 	newPtr := reflect.New(elemType)
-	if err := yaml.NodeToValue(node, newPtr.Interface()); err != nil {
+
+	err := yaml.NodeToValue(node, newPtr.Interface())
+	if err != nil {
 		return errors.Wrapf(err, "failed to unmarshal %v", key)
 	}
 

@@ -193,7 +193,8 @@ func processTerminalOutput(buf []byte, exm *command.CommandLog) error {
 	sequences := bytes.Split(buf, []byte("\r"))
 
 	for i, seq := range sequences {
-		if err := processSequence(seq, i == 0, exm); err != nil {
+		err := processSequence(seq, i == 0, exm)
+		if err != nil {
 			return err
 		}
 	}

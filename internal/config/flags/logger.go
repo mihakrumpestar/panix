@@ -29,7 +29,8 @@ func InitLogging(flags Logging) error {
 	// Ensure directory exists
 	dir := filepath.Dir(flags.LogFile)
 	if dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, DefaultDirPermissions); err != nil {
+		err := os.MkdirAll(dir, DefaultDirPermissions)
+		if err != nil {
 			return errors.Wrap(err, "failed to create log directory")
 		}
 	}

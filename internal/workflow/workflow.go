@@ -162,7 +162,8 @@ func (w *Workflow) CreateWorkflow() error {
 
 			// Execute each phase in order
 			for _, phase := range w.conf.Phases {
-				if err := phaseRunnerInstance.run(phase); err != nil {
+				err := phaseRunnerInstance.run(phase)
+				if err != nil {
 					return err
 				}
 			}

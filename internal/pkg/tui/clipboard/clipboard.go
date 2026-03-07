@@ -81,11 +81,9 @@ func copyWithCommand(ctx context.Context, text string) bool {
 
 // copyWithLibrary tries to copy using atotto/clipboard library.
 func copyWithLibrary(text string) bool {
-	if err := clipboard.WriteAll(text); err == nil {
-		return true
-	}
+	err := clipboard.WriteAll(text)
 
-	return false
+	return err == nil
 }
 
 // copyWithOSC52 copies using OSC52 terminal escape sequences.
@@ -117,7 +115,8 @@ func CopyToClipboard(text string) error {
 	}
 
 	// Fall back to OSC52 terminal-based clipboard
-	if err := copyWithOSC52(normalized); err != nil {
+	err := copyWithOSC52(normalized)
+	if err != nil {
 		return errors.New("failed to copy to clipboard: no clipboard method available (tried wl-copy, xclip, xsel, atotto/clipboard, and OSC52)")
 	}
 

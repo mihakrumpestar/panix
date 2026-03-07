@@ -195,16 +195,26 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 
 		return tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
-		// Update dimensions and resize all viewports
-		v.dimensions.Width = msgVal.Width
-		v.dimensions.Height = msgVal.Height
-		v.resizeAllViewports()
+		v.handleResize(msgVal)
 
 		return tea.Batch(cmds...)
 	}
 
-	hasActiveInner := v.hasActiveInner()
+	cmds = v.updateActiveViewports(msg, cmds)
+	cmds = v.updateMainViewport(msg, cmds)
 
+	return tea.Batch(cmds...)
+}
+
+// handleResize updates dimensions and resizes all viewports when terminal size changes.
+func (v *Viewports) handleResize(msg tea.WindowSizeMsg) {
+	v.dimensions.Width = msg.Width
+	v.dimensions.Height = msg.Height
+	v.resizeAllViewports()
+}
+
+// updateActiveViewports updates all active viewports with the given message.
+func (v *Viewports) updateActiveViewports(msg tea.Msg, cmds []tea.Cmd) []tea.Cmd {
 	for _, viewport := range v.viewports.Records() {
 		if viewport.active {
 			if updated, cmd := viewport.model.Update(msg); cmd != nil {
@@ -215,15 +225,27 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		}
 	}
 
-	if mainVpr, ok := v.viewports.Get(v.mainXpath); ok && !hasActiveInner {
-		if updated, cmd := mainVpr.model.Update(msg); cmd != nil {
-			mainVpr.model = updated
+	return cmds
+}
 
-			cmds = append(cmds, cmd)
-		}
+// updateMainViewport updates the main viewport if no inner viewport is active.
+func (v *Viewports) updateMainViewport(msg tea.Msg, cmds []tea.Cmd) []tea.Cmd {
+	if v.hasActiveInner() {
+		return cmds
 	}
 
-	return tea.Batch(cmds...)
+	mainVpr, ok := v.viewports.Get(v.mainXpath)
+	if !ok {
+		return cmds
+	}
+
+	if updated, cmd := mainVpr.model.Update(msg); cmd != nil {
+		mainVpr.model = updated
+
+		cmds = append(cmds, cmd)
+	}
+
+	return cmds
 }
 
 // Debug returns debug info about all viewports.
@@ -283,13 +305,33 @@ type viewportOptions struct {
 }
 
 func (v *Viewports) createViewport(xpath attributes.Xpath, content string, indent int, opts viewportOptions) string {
-	width := opts.availableWidth
-	if width == 0 {
-		width = v.dimensions.Width - indent - scrollbarWidth
-	}
-
+	width := v.calculateViewportWidth(opts, indent)
 	height := max(1, opts.height)
 
+	viewportInstance := v.getOrCreateViewportInstance(xpath, content, width, height)
+	if viewportInstance == nil {
+		return ""
+	}
+
+	proc, contentHeight, finalWidth := v.processViewportContent(content, width, opts)
+
+	finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
+	v.configureViewportModel(viewportInstance, proc, finalWidth, finalHeight)
+
+	return zone.Mark(xpath.String(), v.renderViewport(viewportInstance, finalHeight, opts.useBorder, opts.noPadding))
+}
+
+// calculateViewportWidth determines the available width for a viewport.
+func (v *Viewports) calculateViewportWidth(opts viewportOptions, indent int) int {
+	if opts.availableWidth != 0 {
+		return opts.availableWidth
+	}
+
+	return v.dimensions.Width - indent - scrollbarWidth
+}
+
+// getOrCreateViewportInstance retrieves an existing viewport or creates a new one.
+func (v *Viewports) getOrCreateViewportInstance(xpath attributes.Xpath, content string, width, height int) *Viewport {
 	viewportInstance, exists := v.viewports.Get(xpath)
 	if !exists {
 		viewportInstance = &Viewport{
@@ -302,28 +344,45 @@ func (v *Viewports) createViewport(xpath attributes.Xpath, content string, inden
 
 		err := v.viewports.Set(xpath, viewportInstance)
 		if err != nil {
-			return ""
+			return nil
 		}
 	} else {
 		viewportInstance.content = content
 	}
 
+	return viewportInstance
+}
+
+// processViewportContent processes content and returns it with its calculated height and final width.
+func (v *Viewports) processViewportContent(content string, width int, opts viewportOptions) (string, int, int) {
 	proc := v.processContent(content, width, opts.wrapContent, opts.noPadding)
 	contentHeight := lipgloss.Height(proc)
 
+	finalWidth := width
 	if contentHeight > opts.maxHeight && opts.maxHeight > 0 && !opts.full {
-		width = max(1, width-scrollbarWidth)
-		proc = v.processContent(content, width, opts.wrapContent, opts.noPadding)
+		finalWidth = max(1, width-scrollbarWidth)
+		proc = v.processContent(content, finalWidth, opts.wrapContent, opts.noPadding)
 		contentHeight = lipgloss.Height(proc)
 	}
 
-	finalHeight := contentHeight
+	return proc, contentHeight, finalWidth
+}
+
+// calculateFinalHeight determines the final height for a viewport.
+func (v *Viewports) calculateFinalHeight(contentHeight int, opts viewportOptions, height int) int {
 	if !opts.full && opts.maxHeight > 0 && contentHeight > opts.maxHeight {
-		finalHeight = opts.maxHeight
-	} else if opts.full {
-		finalHeight = height
+		return opts.maxHeight
 	}
 
+	if opts.full {
+		return height
+	}
+
+	return contentHeight
+}
+
+// configureViewportModel configures the viewport model with processed content.
+func (v *Viewports) configureViewportModel(viewportInstance *Viewport, proc string, width, finalHeight int) {
 	viewportInstance.model.SetWidth(width)
 	viewportInstance.model.SetHeight(finalHeight)
 
@@ -336,8 +395,6 @@ func (v *Viewports) createViewport(xpath attributes.Xpath, content string, inden
 		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
 		viewportInstance.model.SetYOffset(min(yOffset, maxOffset))
 	}
-
-	return zone.Mark(xpath.String(), v.renderViewport(viewportInstance, finalHeight, opts.useBorder, opts.noPadding))
 }
 
 func (v *Viewports) processContent(content string, width int, wrap bool, noPadding bool) string {
@@ -570,11 +627,8 @@ func truncateToRuneWidth(str string, maxWidth int) string {
 	low, high := 0, len(str)
 	for low < high {
 		mid := (low + high) / 2 //nolint:mnd
-		// Find the previous valid UTF-8 boundary
-		for mid > low && !utf8.ValidString(str[:mid]) {
-			mid--
-		}
 
+		mid = adjustToUTF8Boundary(str, low, mid)
 		if mid <= low {
 			break
 		}
@@ -592,11 +646,27 @@ func truncateToRuneWidth(str string, maxWidth int) string {
 	}
 
 	// Final adjustment to ensure valid UTF-8
-	for low > 0 && !utf8.ValidString(str[:low]) {
-		low--
-	}
+	low = ensureValidUTF8(str, low)
 
 	return str[:low]
+}
+
+// adjustToUTF8Boundary adjusts the midpoint to a valid UTF-8 boundary.
+func adjustToUTF8Boundary(str string, low, mid int) int {
+	for mid > low && !utf8.ValidString(str[:mid]) {
+		mid--
+	}
+
+	return mid
+}
+
+// ensureValidUTF8 ensures the position is at a valid UTF-8 boundary.
+func ensureValidUTF8(str string, pos int) int {
+	for pos > 0 && !utf8.ValidString(str[:pos]) {
+		pos--
+	}
+
+	return pos
 }
 
 func clamp(val, minimum, maximum float64) float64 {

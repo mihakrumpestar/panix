@@ -186,30 +186,46 @@ func (m *model) addPhases(parent *tree.Tree, attr *attributes.Attributes, indent
 	return false
 }
 
-// addPhase adds a single phase node with its commands to the parent tree.
-// Hides successful hideable phases unless ShowAllBuildLogs is true.
 func (m *model) addPhase(parent *tree.Tree, attr *attributes.Attributes, phase phases.Phase, phaseLog *phase.PhaseLog, indent int) bool {
 	if phaseLog == nil {
 		return false
 	}
 
-	tas := phaseLog.TimeAndState()
-	hideable := slices.Contains(hideablePhases, phase)
-	shouldHide := (!m.conf.Flags.Tui.ShowAllBuildLogs && hideable) || m.conf.Flags.Tui.ShowActiveOnly
-
-	if shouldHide && tas.IsFinished() && tas.GetEndError() == nil {
+	if m.shouldHidePhase(phase, phaseLog) {
 		return false
 	}
 
+	phaseNode := m.createPhaseNode(attr, phase, phaseLog, indent)
+	hasError := m.addCommandsToPhase(phaseNode, phaseLog, phase, attr, indent)
+	parent.Child(phaseNode)
+
+	return hasError
+}
+
+func (m *model) shouldHidePhase(phase phases.Phase, phaseLog *phase.PhaseLog) bool {
+	hideable := slices.Contains(hideablePhases, phase)
+	shouldHide := (!m.conf.Flags.Tui.ShowAllBuildLogs && hideable) || m.conf.Flags.Tui.ShowActiveOnly
+
+	return shouldHide && phaseLog.TimeAndState().IsFinished() && phaseLog.TimeAndState().GetEndError() == nil
+}
+
+func (m *model) createPhaseNode(attr *attributes.Attributes, phase phases.Phase, phaseLog *phase.PhaseLog, indent int) *tree.Tree {
 	colors := m.conf.ColorScheme
 	phaseXpath := attr.Xpath.NewXpathWithAppend(string(phase))
+	tas := phaseLog.TimeAndState()
+
 	icon := m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), tas)
 	duration := m.durationText(colors.Phase, tas)
 	line := m.layoutLine(indent, colors.Phase.Color.Render(icon+" "+strings.ToUpper(string(phase))), duration)
-	phaseNode := tree.New().Root(colors.Phase.Color.Render(line))
 
+	return tree.New().Root(colors.Phase.Color.Render(line))
+}
+
+func (m *model) addCommandsToPhase(phaseNode *tree.Tree, phaseLog *phase.PhaseLog, phase phases.Phase, attr *attributes.Attributes, indent int) bool {
+	hideable := slices.Contains(hideablePhases, phase)
+	phaseXpath := attr.Xpath.NewXpathWithAppend(string(phase))
 	cmds := phaseLog.CommandLogs()
-	hasError := tas.GetEndError() != nil
+	hasError := phaseLog.TimeAndState().GetEndError() != nil
 
 	for i, cmd := range cmds {
 		if m.conf.Flags.Tui.ShowAllBuildLogs || !hideable || i == len(cmds)-1 {
@@ -220,8 +236,6 @@ func (m *model) addPhase(parent *tree.Tree, attr *attributes.Attributes, phase p
 			}
 		}
 	}
-
-	parent.Child(phaseNode)
 
 	return hasError
 }
@@ -267,7 +281,8 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	}
 
 	// Add error message if command failed
-	if err := cmd.TimeAndState.GetEndError(); err != nil {
+	err := cmd.TimeAndState.GetEndError()
+	if err != nil {
 		cmdNode.Child(colors.Error.Color.Render("✗ Command failed: " + err.Error()))
 	}
 

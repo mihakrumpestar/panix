@@ -62,6 +62,13 @@ tasks:
       - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination {{.CUSTOM_GCL}}; fi # Build linter
       - |
         {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
+      - |
+        echo "Checking for 'if err :=' pattern (should use 'err :=' followed by 'if err != nil')..."
+        if grep -rn "if err :=" internal/ --include="*.go"; then
+          echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
+          exit 1
+        fi
+        echo "✓ No 'if err :=' patterns found"
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   release:

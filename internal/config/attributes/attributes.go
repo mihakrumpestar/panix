@@ -78,31 +78,58 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) e
 		return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 	}
 
+	// Initialize regular SSH with defaults: strict key checking enabled, auto-add disabled
+	err = a.initRegularSSH(sshConfig, name)
+	if err != nil {
+		return err
+	}
+
+	// Initialize bootstrap SSH with defaults: strict key checking disabled, auto-add enabled
+	err = a.initBootstrapSSH(sshConfig, name)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// initRegularSSH initializes the regular SSH configuration for this machine.
+// Sets defaults when both StrictKeyChecking and DisableAutoAddHostKey are unset.
+func (a *Attributes) initRegularSSH(sshConfig *ssh.SSHConfig, name string) error {
 	if a.SSH == nil {
 		a.SSH = &ssh.SSHClient{}
 	}
+
 	// Set defaults for regular SSH: strict key checking enabled, auto-add disabled
 	// This runs when both fields are unset (false from YAML parsing)
 	if !a.SSH.StrictKeyChecking && !a.SSH.DisableAutoAddHostKey {
 		a.SSH.StrictKeyChecking = true
 	}
 
-	err = a.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
+	err := a.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
 	}
 
-	if a.Bootstrap.SSH != nil {
-		// Set defaults for bootstrap SSH: strict key checking disabled, auto-add enabled
-		// This runs when both fields are unset (false from YAML parsing)
-		if !a.Bootstrap.SSH.StrictKeyChecking && !a.Bootstrap.SSH.DisableAutoAddHostKey {
-			a.Bootstrap.SSH.DisableAutoAddHostKey = true
-		}
+	return nil
+}
 
-		err = a.Bootstrap.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
-		if err != nil {
-			return errors.Wrapf(errors.Wrap(err, "bootstrap ssh"), "%s", strconv.Quote(a.Xpath.String()))
-		}
+// initBootstrapSSH initializes the bootstrap SSH configuration if present.
+// Sets defaults when both StrictKeyChecking and DisableAutoAddHostKey are unset.
+func (a *Attributes) initBootstrapSSH(sshConfig *ssh.SSHConfig, name string) error {
+	if a.Bootstrap.SSH == nil {
+		return nil
+	}
+
+	// Set defaults for bootstrap SSH: strict key checking disabled, auto-add enabled
+	// This runs when both fields are unset (false from YAML parsing)
+	if !a.Bootstrap.SSH.StrictKeyChecking && !a.Bootstrap.SSH.DisableAutoAddHostKey {
+		a.Bootstrap.SSH.DisableAutoAddHostKey = true
+	}
+
+	err := a.Bootstrap.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
+	if err != nil {
+		return errors.Wrapf(errors.Wrap(err, "bootstrap ssh"), "%s", strconv.Quote(a.Xpath.String()))
 	}
 
 	return nil
