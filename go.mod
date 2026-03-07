@@ -1,6 +1,6 @@
 module github.com/mihakrumpestar/panix
 
-go 1.25.5
+go 1.26.0
 
 require (
 	charm.land/bubbles/v2 v2.0.0
@@ -9,7 +9,7 @@ require (
 	dario.cat/mergo v1.0.2
 	github.com/acobaugh/osrelease v0.1.0
 	github.com/alecthomas/kong v1.14.0
-	github.com/alitto/pond/v2 v2.6.2
+	github.com/alitto/pond/v2 v2.7.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/creack/pty v1.1.24
@@ -44,7 +44,7 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
