@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var ErrTypeAssertionFailed = errors.New("type assertion failed")
+
 // OrderedMap is a wrapper around omap.Omap that provides YAML unmarshaling support
 // compatible with github.com/goccy/go-yaml.
 type OrderedMap[K comparable, V any] struct {
@@ -47,7 +49,7 @@ func (om *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 	// Parse the YAML to extract keys and values in order
 	file, err := parser.ParseBytes(data, parser.ParseComments)
 	if err != nil {
-		return fmt.Errorf("failed to parse YAML: %w", err)
+		return errors.Wrap(err, "failed to parse YAML")
 	}
 
 	// Walk the AST and extract key-value pairs
@@ -112,7 +114,7 @@ func (e *keyValueExtractor[K, V]) processMappingValue(
 	)
 
 	if err := yaml.NodeToValue(val.Key, &key); err != nil {
-		return key, value, fmt.Errorf("failed to unmarshal key: %w", err)
+		return key, value, errors.Wrap(err, "failed to unmarshal key")
 	}
 
 	if _, isNull := val.Value.(*ast.NullNode); isNull {
@@ -148,7 +150,7 @@ func (e *keyValueExtractor[K, V]) createNullValue(isPtr bool, elemType reflect.T
 func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr bool, elemType reflect.Type, key K) error {
 	if !isPtr {
 		if err := yaml.NodeToValue(node, value); err != nil {
-			return fmt.Errorf("failed to unmarshal %v: %w", key, err)
+			return errors.Wrapf(err, "failed to unmarshal %v", key)
 		}
 
 		return nil
@@ -159,7 +161,7 @@ func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr 
 	}
 
 	if err := yaml.NodeToValue(node, value); err != nil {
-		return fmt.Errorf("failed to unmarshal %v: %w", key, err)
+		return errors.Wrapf(err, "failed to unmarshal %v", key)
 	}
 
 	return nil
@@ -168,12 +170,12 @@ func (e *keyValueExtractor[K, V]) unmarshalValue(node ast.Node, value *V, isPtr 
 func (e *keyValueExtractor[K, V]) unmarshalStructPtr(node ast.Node, value *V, elemType reflect.Type, key K) error {
 	newPtr := reflect.New(elemType)
 	if err := yaml.NodeToValue(node, newPtr.Interface()); err != nil {
-		return fmt.Errorf("failed to unmarshal %v: %w", key, err)
+		return errors.Wrapf(err, "failed to unmarshal %v", key)
 	}
 
 	v, ok := newPtr.Interface().(V)
 	if !ok {
-		return fmt.Errorf("type assertion failed: expected %T, got %T", value, newPtr.Interface())
+		return errors.Wrapf(ErrTypeAssertionFailed, "expected %T, got %T", value, newPtr.Interface())
 	}
 
 	*value = v

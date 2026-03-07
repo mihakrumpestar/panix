@@ -2,7 +2,6 @@ package executioner
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/pkg/errors"
 )
+
+var ErrWaitAndReadError = errors.New("wait and read error")
 
 const (
 	ptyBufferSize = 8192
@@ -158,7 +159,7 @@ func validateExecOptions(excOpt *ExecOptions) error {
 func consolidateErrors(waitErr, readErr error) error {
 	switch {
 	case waitErr != nil && readErr != nil:
-		return fmt.Errorf("wait error: %v; read error: %v", waitErr, readErr)
+		return errors.Wrapf(ErrWaitAndReadError, "wait=%v, read=%v", waitErr, readErr)
 	case readErr != nil:
 		return readErr
 	default:
@@ -174,7 +175,11 @@ func consolidateErrors(waitErr, readErr error) error {
 // See https://github.com/creack/pty/issues/21.
 func ptyError(err error) error {
 	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) || pathErr.Err != syscall.EIO {
+	if !errors.As(err, &pathErr) || pathErr == nil {
+		return err
+	}
+
+	if !errors.Is(pathErr.Err, syscall.EIO) {
 		return err
 	}
 

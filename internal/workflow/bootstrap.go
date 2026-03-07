@@ -17,6 +17,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	ErrDiskoNoOutputPaths       = errors.New("disko build output did not contain any output paths")
+	ErrArchitectureNotSupported = errors.New("architecture not supported by default kexec")
+	ErrKexecBootFailed          = errors.New("kexec did not boot into NixOS installer")
+)
+
 const KexecURL = "https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"
 
 var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
@@ -38,7 +44,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 			}
 
 			if len(parsedOutput) == 0 {
-				return fmt.Errorf("disko build output did not contain any output paths")
+				return ErrDiskoNoOutputPaths
 			}
 
 			diskoScript := parsedOutput[0].Outputs.Out
@@ -100,7 +106,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 	kexecURL := machine.Bootstrap.KexecURL
 	if kexecURL == "" {
 		if !slices.Contains(KexecSupportedPlatforms, arch) {
-			return fmt.Errorf("arch %s is not supported by default kexec, supported are %s", strconv.Quote(arch), KexecSupportedPlatforms)
+			return errors.Wrapf(ErrArchitectureNotSupported, "%s (supported: %s)", strconv.Quote(arch), KexecSupportedPlatforms)
 		}
 
 		kexecURL = KexecURL
@@ -216,7 +222,7 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 			}
 
 			if osRelease["ID"] != "nixos" || osRelease["VARIANT_ID"] != "installer" {
-				return fmt.Errorf("kexec did not boot into NixOS installer")
+				return ErrKexecBootFailed
 			}
 
 			return nil

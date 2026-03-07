@@ -21,6 +21,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var ErrTypeAssertionFinalModel = errors.New("internal error: type assertion failed for finalModel")
+
 const (
 	initialWidth  = 80
 	initialHeight = 24
@@ -86,7 +88,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 
 	finalModel, ok := m.(*model)
 	if !ok {
-		return fmt.Errorf("internal error: type assertion failed for finalModel")
+		return ErrTypeAssertionFinalModel
 	}
 
 	if finalModel.quitting {
