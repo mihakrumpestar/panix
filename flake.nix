@@ -17,14 +17,14 @@
       version = builtins.readFile ./gen/VERSION;
     in {
       packages = {
-        default = pkgs.buildGoModule {
+        default = pkgs.buildGoLatestModule {
           pname = "panix";
           inherit version;
 
           src = ./.;
           subPackages = ["cmd/panix"];
 
-          vendorHash = "sha256-pL4jrFJI1AQJR4/ifX3PP0rV2fyzTlC9lLwwnti19VE=";
+          vendorHash = "sha256-/4W6Pe5HkRYhW2orZBBm9B7F+xHTG35s5sHIzzuRXCY=";
 
           meta = with pkgs.lib; {
             description = "A TUI application for Nix deployment workflows";
