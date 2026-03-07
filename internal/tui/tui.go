@@ -109,7 +109,10 @@ func startCPUProfile(path string) (func(), error) {
 
 	err = pprof.StartCPUProfile(file)
 	if err != nil {
-		file.Close()
+		err := file.Close()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to close CPU profile file")
+		}
 
 		return nil, errors.Wrap(err, "failed to start CPU profile")
 	}
@@ -117,7 +120,10 @@ func startCPUProfile(path string) (func(), error) {
 	return func() {
 		pprof.StopCPUProfile()
 
-		_ = file.Close()
+		err := file.Close()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to close CPU profile file")
+		}
 	}, nil
 }
 

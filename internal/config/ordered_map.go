@@ -91,7 +91,12 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 			return nil
 		}
 
-		e.om.Omap.Set(key, value)
+		err = e.om.Omap.Set(key, value)
+		if err != nil {
+			e.err = errors.Wrapf(err, "failed to set key %v", key)
+
+			return nil
+		}
 	}
 
 	return nil
