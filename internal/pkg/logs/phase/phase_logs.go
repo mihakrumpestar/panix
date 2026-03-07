@@ -73,7 +73,7 @@ func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *Pha
 	}
 
 	if err := pl.logs.Set(phase, phaseLog); err != nil {
-		return nil
+		panic(fmt.Sprintf("failed to set phase log: %v", err))
 	}
 
 	return phaseLog
