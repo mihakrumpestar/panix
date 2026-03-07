@@ -31,7 +31,8 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			if machine.MetaInspect.RequiresKexec.Load() {
-				if err := w.executeKexec(exc, machine); err != nil {
+				err := w.executeKexec(exc, machine)
+				if err != nil {
 					return err
 				}
 			}
@@ -57,7 +58,8 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 			// Upload disk encryption keys BEFORE running disko
 			// Keys must be available for LUKS unlocking during partitioning
 			if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-				if err := w.executeDiskEncryptionKeys(exc, machine); err != nil {
+				err := w.executeDiskEncryptionKeys(exc, machine)
+				if err != nil {
 					return err
 				}
 			}
@@ -102,18 +104,59 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Ma
 	return w.executeKexecReal(exc, machine, arch)
 }
 
+// executeKexecReal performs the actual kexec bootstrap process.
 func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *config.Machine, arch string) error {
+	kexecURL, err := resolveKexecURL(machine, arch)
+	if err != nil {
+		return err
+	}
+
+	err = w.createKexecDirectory(exc, machine)
+	if err != nil {
+		return err
+	}
+
+	err = w.downloadOrTransferKexec(exc, machine, kexecURL)
+	if err != nil {
+		return err
+	}
+
+	err = w.extractKexecTarball(exc, machine, kexecURL)
+	if err != nil {
+		return err
+	}
+
+	err = w.runKexecCommand(exc, machine)
+	if err != nil {
+		return err
+	}
+
+	err = w.waitForKexecReboot(exc, machine)
+	if err != nil {
+		return err
+	}
+
+	machine.MetaInspect.RequiresKexec.Store(false)
+
+	return nil
+}
+
+// resolveKexecURL returns the kexec URL, using default if not configured.
+func resolveKexecURL(machine *config.Machine, arch string) (string, error) {
 	kexecURL := machine.Bootstrap.KexecURL
 	if kexecURL == "" {
 		if !slices.Contains(KexecSupportedPlatforms, arch) {
-			return errors.Wrapf(ErrArchitectureNotSupported, "%s (supported: %s)", strconv.Quote(arch), KexecSupportedPlatforms)
+			return "", errors.Wrapf(ErrArchitectureNotSupported, "%s (supported: %s)", strconv.Quote(arch), KexecSupportedPlatforms)
 		}
 
 		kexecURL = KexecURL
 	}
 
-	kexecURL = strings.ReplaceAll(kexecURL, "<arch>", arch)
+	return strings.ReplaceAll(kexecURL, "<arch>", arch), nil
+}
 
+// createKexecDirectory creates the temporary directory for kexec files.
+func (w *Workflow) createKexecDirectory(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.Exec(
 		"create kexec directory",
 		"creating kexec directory",
@@ -124,6 +167,12 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		return errors.Wrap(err, "failed to create kexec directory")
 	}
 
+	return nil
+}
+
+// downloadOrTransferKexec downloads the kexec tarball from URL or transfers it from local path.
+func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine *config.Machine, kexecURL string) error {
+	var err error
 	if isURL(kexecURL) {
 		err = exc.Exec(
 			"download kexec tarball",
@@ -138,26 +187,15 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		}, "kexec tarball", false)
 	}
 
-	if err != nil {
-		return err
-	}
+	return err
+}
 
-	var tarArgs []string
-
-	switch {
-	case strings.HasSuffix(kexecURL, ".tar.gz") || strings.HasSuffix(kexecURL, ".tgz"):
-		tarArgs = []string{"-xvzf", "/tmp/kexec/kexec.tar"}
-	case strings.HasSuffix(kexecURL, ".tar.xz"):
-		tarArgs = []string{"-xvJf", "/tmp/kexec/kexec.tar"}
-	case strings.HasSuffix(kexecURL, ".tar.zst"):
-		tarArgs = []string{"--use-compress-program=zstd", "-xvf", "/tmp/kexec/kexec.tar"}
-	default:
-		tarArgs = []string{"-xvf", "/tmp/kexec/kexec.tar"}
-	}
-
+// extractKexecTarball extracts the kexec tarball to the temporary directory.
+func (w *Workflow) extractKexecTarball(exc *executioner.Executioner, machine *config.Machine, kexecURL string) error {
+	tarArgs := getTarArgs(kexecURL)
 	tarArgs = append(tarArgs, "-C", "/tmp/kexec")
 
-	err = exc.Exec(
+	err := exc.Exec(
 		"extract kexec tarball",
 		"extracting kexec tarball",
 		"failed to extract kexec tarball",
@@ -167,14 +205,32 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		return errors.Wrap(err, "failed to extract kexec tarball")
 	}
 
+	return nil
+}
+
+// getTarArgs returns the appropriate tar extraction arguments based on file extension.
+func getTarArgs(kexecURL string) []string {
+	switch {
+	case strings.HasSuffix(kexecURL, ".tar.gz") || strings.HasSuffix(kexecURL, ".tgz"):
+		return []string{"-xvzf", "/tmp/kexec/kexec.tar"}
+	case strings.HasSuffix(kexecURL, ".tar.xz"):
+		return []string{"-xvJf", "/tmp/kexec/kexec.tar"}
+	case strings.HasSuffix(kexecURL, ".tar.zst"):
+		return []string{"--use-compress-program=zstd", "-xvf", "/tmp/kexec/kexec.tar"}
+	default:
+		return []string{"-xvf", "/tmp/kexec/kexec.tar"}
+	}
+}
+
+// runKexecCommand executes the kexec script to boot into the NixOS installer.
+func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *config.Machine) error {
 	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
 
-	kexecExtraFlags := machine.Bootstrap.KexecExtraFlags
-	if kexecExtraFlags != "" {
+	if kexecExtraFlags := machine.Bootstrap.KexecExtraFlags; kexecExtraFlags != "" {
 		kexecCmd = append(kexecCmd, "--kexec-extra-flags", kexecExtraFlags)
 	}
 
-	err = exc.Exec(
+	err := exc.Exec(
 		"run kexec",
 		"executing kexec into NixOS installer",
 		"kexec failed",
@@ -185,9 +241,14 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		return errors.Wrap(err, "kexec failed")
 	}
 
-	activeSSH := machine.MetaInspect.GetActiveSSH()
-	err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
+	return nil
+}
 
+// waitForKexecReboot waits for the machine to disconnect and reconnect after kexec.
+func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machine *config.Machine) error {
+	activeSSH := machine.MetaInspect.GetActiveSSH()
+
+	err := executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
 	if err != nil {
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
@@ -197,14 +258,7 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		return errors.Wrap(err, "wait for reconnect failed")
 	}
 
-	err = w.verifyInstaller(exc)
-	if err != nil {
-		return err
-	}
-
-	machine.MetaInspect.RequiresKexec.Store(false)
-
-	return nil
+	return w.verifyInstaller(exc)
 }
 
 func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {

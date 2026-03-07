@@ -23,9 +23,48 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	})
 
 	// Load YAML config file using streaming
-	file, err := os.Open(parsedFlags.Config)
+	conf, err := decodeConfigFile(parsedFlags.Config)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(parsedFlags.Config))
+		return nil, err
+	}
+
+	// Apply defaults and merge with CLI flags
+	err = applyConfigDefaults(conf, parsedFlags)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate and initialize configuration
+	err = validateAndInitConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter based on tags and disabled flags
+	err = conf.filterRoot()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to filter config")
+	}
+
+	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid phases")
+	}
+
+	if conf.Flags.Logging.Debug {
+		dump.P(conf.Flags)
+		dump.P(conf.Root)
+	}
+
+	return conf, nil
+}
+
+// decodeConfigFile opens and decodes the YAML configuration file.
+func decodeConfigFile(configPath string) (*Config, error) {
+	//nolint:gosec // Config path is user-provided configuration file path by design
+	file, err := os.Open(configPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(configPath))
 	}
 
 	defer func() {
@@ -43,9 +82,14 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 		return nil, errors.New(yaml.FormatError(err, true, false))
 	}
 
-	err = conf.Flags.MergeConfWithCliFlags(parsedFlags)
+	return conf, nil
+}
+
+// applyConfigDefaults merges configuration with CLI flags and applies defaults.
+func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
+	err := conf.Flags.MergeConfWithCliFlags(parsedFlags)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed merging config with cli flags")
+		return errors.Wrap(err, "failed merging config with cli flags")
 	}
 
 	// Apply defaults
@@ -59,35 +103,25 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 
 	err = flags.InitLogging(conf.Flags.Logging)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to initialize logging")
+		return errors.Wrap(err, "failed to initialize logging")
 	}
 
-	err = conf.ValidateStructTags()
+	return nil
+}
+
+// validateAndInitConfig validates the configuration and initializes all entities.
+func validateAndInitConfig(conf *Config) error {
+	err := conf.ValidateStructTags()
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid configuration")
+		return errors.Wrap(err, "invalid configuration")
 	}
 
 	err = conf.initRoot()
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid configuration")
+		return errors.Wrap(err, "invalid configuration")
 	}
 
-	err = conf.filterRoot()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to filter config")
-	}
-
-	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid phases")
-	}
-
-	if conf.Flags.Logging.Debug {
-		dump.P(conf.Flags)
-		dump.P(conf.Root)
-	}
-
-	return conf, nil
+	return nil
 }
 
 // Helper functions
@@ -128,7 +162,7 @@ func (c *Config) initRoot() error {
 	return nil
 }
 
-// FilterConfigEntries filters the configuration based on command-line or global selections.
+// filterRoot filters the configuration based on command-line or global selections.
 func (c *Config) filterRoot() error {
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
@@ -138,32 +172,7 @@ func (c *Config) filterRoot() error {
 			continue
 		}
 
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			config := configPair.Value
-			if config == nil || config.Disabled || config.Machines == nil {
-				_, _ = flake.Configurations.Omap.Del(configPair.Key)
-
-				continue
-			}
-
-			// Filter machines
-			for _, machinePair := range config.Machines.Omap.Pairs() {
-				machine := machinePair.Value
-				if machine == nil || machine.Disabled || !machineContainsTags(machine.Tags, c.Flags.Tags) {
-					log.Debug().Bool("machine == nil", machine == nil).
-						Bool("disabled", machine.Disabled).
-						Strs("machine.Tags", machine.Tags).
-						Msgf("deleting machine %s", strconv.Quote(machinePair.Key))
-
-					_, _ = config.Machines.Omap.Del(machinePair.Key)
-				}
-			}
-
-			// Delete config if no machines left
-			if config.Machines.Omap.Len() == 0 {
-				_, _ = flake.Configurations.Omap.Del(configPair.Key)
-			}
-		}
+		c.filterFlakeConfigurations(flake)
 
 		// Delete flake if no configs left
 		if flake.Configurations.Omap.Len() == 0 {
@@ -176,6 +185,40 @@ func (c *Config) filterRoot() error {
 	}
 
 	return nil
+}
+
+// filterFlakeConfigurations removes disabled or empty configurations from a flake.
+func (c *Config) filterFlakeConfigurations(flake *Flake) {
+	for _, configPair := range flake.Configurations.Omap.Pairs() {
+		config := configPair.Value
+		if config == nil || config.Disabled || config.Machines == nil {
+			_, _ = flake.Configurations.Omap.Del(configPair.Key)
+
+			continue
+		}
+
+		c.filterConfigurationMachines(config)
+
+		// Delete config if no machines left
+		if config.Machines.Omap.Len() == 0 {
+			_, _ = flake.Configurations.Omap.Del(configPair.Key)
+		}
+	}
+}
+
+// filterConfigurationMachines removes disabled or untagged machines from a configuration.
+func (c *Config) filterConfigurationMachines(config *Configuration) {
+	for _, machinePair := range config.Machines.Omap.Pairs() {
+		machine := machinePair.Value
+		if machine == nil || machine.Disabled || !machineContainsTags(machine.Tags, c.Flags.Tags) {
+			log.Debug().Bool("machine == nil", machine == nil).
+				Bool("disabled", machine.Disabled).
+				Strs("machine.Tags", machine.Tags).
+				Msgf("deleting machine %s", strconv.Quote(machinePair.Key))
+
+			_, _ = config.Machines.Omap.Del(machinePair.Key)
+		}
+	}
 }
 
 // Helpers

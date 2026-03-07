@@ -45,7 +45,8 @@ func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, overrideLocalMachin
 	}
 
 	if sC.HostnameIsAlias {
-		if err := sshConfig.RetrieveFullParamsFromSSHConfig(sC); err != nil {
+		err := sshConfig.RetrieveFullParamsFromSSHConfig(sC)
+		if err != nil {
 			return err
 		}
 	}

@@ -185,7 +185,8 @@ func (g *Generator) processStruct(structType reflect.Type) (map[string]interface
 		yamlTag := field.Tag.Get("yaml")
 
 		if strings.Contains(yamlTag, ",inline") {
-			if err := g.processInlineField(field, properties, &required); err != nil {
+			err := g.processInlineField(field, properties, &required)
+			if err != nil {
 				return nil, nil, err
 			}
 
@@ -226,95 +227,112 @@ func (g *Generator) setFieldDescription(prop interface{}, field reflect.StructFi
 }
 
 // processType processes a type and returns its schema definition.
-func (g *Generator) processType(t reflect.Type, field reflect.StructField) (interface{}, error) {
+func (g *Generator) processType(typ reflect.Type, field reflect.StructField) (interface{}, error) {
 	// Handle pointers
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
 	}
 
 	// Check for special types first
-	if def := g.getSpecialTypeDefinition(t); def != nil {
+	if def := g.getSpecialTypeDefinition(typ); def != nil {
 		return def, nil
 	}
 
 	validateTag := field.Tag.Get("validate")
 
-	switch t.Kind() {
+	return g.processTypeByKind(typ.Kind(), typ, field, validateTag)
+}
+
+// processTypeByKind dispatches type processing based on the kind of type.
+func (g *Generator) processTypeByKind(kind reflect.Kind, typ reflect.Type, field reflect.StructField, validateTag string) (interface{}, error) {
+	switch kind {
 	case reflect.Bool:
 		return &TypeDefinition{Type: "boolean"}, nil
-
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		typeDef := &TypeDefinition{Type: "integer"}
-		g.applyValidateConstraints(typeDef, validateTag, "integer")
-
-		return typeDef, nil
-
+		return g.processNumericType("integer", validateTag), nil
 	case reflect.Float32, reflect.Float64:
-		typeDef := &TypeDefinition{Type: "number"}
-		g.applyValidateConstraints(typeDef, validateTag, "number")
-
-		return typeDef, nil
-
+		return g.processNumericType("number", validateTag), nil
 	case reflect.String:
-		typeDef := &TypeDefinition{Type: "string"}
-		g.applyValidateConstraints(typeDef, validateTag, "string")
-
-		return typeDef, nil
-
+		return g.processNumericType("string", validateTag), nil
 	case reflect.Slice, reflect.Array:
-		itemType, err := g.processType(t.Elem(), field)
-		if err != nil {
-			return nil, err
-		}
-
-		typeDef := &TypeDefinition{
-			Type:  "array",
-			Items: itemType,
-		}
-
-		g.applyValidateConstraints(typeDef, validateTag, "array")
-
-		return typeDef, nil
-
+		return g.processSliceType(typ, field, validateTag)
 	case reflect.Map:
 		// Handle regular maps
-		valueType, err := g.processType(t.Elem(), field)
-		if err != nil {
-			return nil, err
-		}
-
-		return &TypeDefinition{
-			Type:                 "object",
-			AdditionalProperties: valueType,
-		}, nil
-
+		return g.processMapType(typ, field)
 	case reflect.Struct:
-		// Check if this is an OrderedMap
-		if g.isOrderedMap(t) {
-			return g.processOrderedMap(field)
-		}
-
-		// Process as regular struct
-		properties, required, err := g.processStruct(t)
-		if err != nil {
-			return nil, err
-		}
-
-		return &TypeDefinition{
-			Type:                 "object",
-			Properties:           properties,
-			Required:             RequiredList(required),
-			AdditionalProperties: false,
-		}, nil
-
+		return g.processStructOrOrderedMap(typ, field)
 	case reflect.Interface:
 		// Interfaces can be any type
 		return &TypeDefinition{}, nil
-
 	default:
-		return nil, errors.Wrapf(ErrUnsupportedTypeKind, "%v", t.Kind())
+		return nil, errors.Wrapf(ErrUnsupportedTypeKind, "%v", kind)
 	}
+}
+
+// processStructOrOrderedMap handles struct types, checking for OrderedMap first.
+func (g *Generator) processStructOrOrderedMap(typ reflect.Type, field reflect.StructField) (interface{}, error) {
+	// Check if this is an OrderedMap
+	if g.isOrderedMap(typ) {
+		return g.processOrderedMap(field)
+	}
+
+	// Process as regular struct
+	return g.processStructType(typ)
+}
+
+// processNumericType creates a type definition for basic numeric or string types.
+func (g *Generator) processNumericType(typeName string, validateTag string) *TypeDefinition {
+	typeDef := &TypeDefinition{Type: typeName}
+	g.applyValidateConstraints(typeDef, validateTag, typeName)
+
+	return typeDef
+}
+
+// processSliceType processes slice/array types and returns their schema definition.
+func (g *Generator) processSliceType(typ reflect.Type, field reflect.StructField, validateTag string) (*TypeDefinition, error) {
+	itemType, err := g.processType(typ.Elem(), field)
+	if err != nil {
+		return nil, err
+	}
+
+	typeDef := &TypeDefinition{
+		Type:  "array",
+		Items: itemType,
+	}
+
+	g.applyValidateConstraints(typeDef, validateTag, "array")
+
+	return typeDef, nil
+}
+
+// processMapType processes map types and returns their schema definition.
+func (g *Generator) processMapType(typ reflect.Type, field reflect.StructField) (*TypeDefinition, error) {
+	valueType, err := g.processType(typ.Elem(), field)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TypeDefinition{
+		Type:                 "object",
+		AdditionalProperties: valueType,
+	}, nil
+}
+
+// processStructType processes struct types and returns their schema definition.
+func (g *Generator) processStructType(typ reflect.Type) (*TypeDefinition, error) {
+	// Process as regular struct
+	properties, required, err := g.processStruct(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TypeDefinition{
+		Type:                 "object",
+		Properties:           properties,
+		Required:             RequiredList(required),
+		AdditionalProperties: false,
+	}, nil
 }
 
 // applyValidateConstraints applies validation tag constraints to the type definition.
@@ -562,12 +580,14 @@ func GenerateSchema(outputPath string) error {
 
 	dir := filepath.Dir(outputPath)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, flags.DefaultDirPermissions); err != nil {
+		err := os.MkdirAll(dir, flags.DefaultDirPermissions)
+		if err != nil {
 			return errors.Wrapf(err, "failed to create directory %s", dir)
 		}
 	}
 
-	if err := os.WriteFile(outputPath, schemaYAML, flags.DefaultLogFilePermissions); err != nil {
+	err = os.WriteFile(outputPath, schemaYAML, flags.DefaultLogFilePermissions)
+	if err != nil {
 		return errors.Wrapf(err, "failed to write schema to %s", outputPath)
 	}
 
