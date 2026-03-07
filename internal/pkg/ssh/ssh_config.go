@@ -40,7 +40,13 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 
 			return
 		}
-		defer sshCfgRaw.Close()
+
+		defer func() {
+			err := sshCfgRaw.Close()
+			if err != nil {
+				log.Error().Err(err).Msg("failed to close SSH config file")
+			}
+		}()
 
 		sshCfg, err := ssh_config.Decode(sshCfgRaw)
 		if err != nil {

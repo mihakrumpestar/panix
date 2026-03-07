@@ -53,7 +53,11 @@ func (s *Spinners) GetOrCreateSpinner(xpath attributes.Xpath) *spinner.Model {
 		model:    &spnrRaw,
 	}
 
-	s.spinners.Set(hashKey, spnr)
+	err := s.spinners.Set(hashKey, spnr)
+	if err != nil {
+		return nil
+	}
+
 	s.pendingCmd = tea.Batch(s.pendingCmd, spnr.model.Tick)
 
 	return spnr.model

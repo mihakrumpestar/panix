@@ -50,7 +50,11 @@ func (pl *PhaseLogs) GetOrCreate(phase phases.Phase) *PhaseLog {
 	}
 
 	phaseLog = NewPhaseLog(pl.xpath, phase, pl.flags)
-	pl.logs.Set(phase, phaseLog)
+
+	err := pl.logs.Set(phase, phaseLog)
+	if err != nil {
+		return nil
+	}
 
 	return phaseLog
 }
@@ -68,7 +72,9 @@ func (pl *PhaseLogs) SetIfNotExists(phase phases.Phase, phaseLog *PhaseLog) *Pha
 		phaseLog = NewPhaseLog(pl.xpath, phase, pl.flags)
 	}
 
-	pl.logs.Set(phase, phaseLog)
+	if err := pl.logs.Set(phase, phaseLog); err != nil {
+		return nil
+	}
 
 	return phaseLog
 }

@@ -12,7 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
 	"github.com/pkg/errors"
-	zerolog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -146,7 +146,7 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 		resetable.err = err
 	}
 
-	zerolog.Debug().Msg("Context done, exiting TUI")
+	log.Debug().Msg("Context done, exiting TUI")
 
 	return m, tea.Quit
 }
