@@ -26,7 +26,10 @@ type Root struct {
 }
 
 func (r *Root) Init(flags *config_flags.Flags) error {
-	return r.Attributes.Init("root", &config_attributes.Attributes{Flags: flags}, false)
+	return errors.Wrap(
+		r.Attributes.Init("root", &config_attributes.Attributes{Flags: flags}, false),
+		"failed to initialize root attributes",
+	)
 }
 
 // Flake
