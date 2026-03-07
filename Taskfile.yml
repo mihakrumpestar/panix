@@ -39,6 +39,7 @@ tasks:
     desc: Build the package using nix
     cmds:
       - nix build path:$(pwd)#default --extra-experimental-features "nix-command flakes"
+      - ls -sh result/bin/panix
 
   nix:run:
     desc: Run the application using nix
@@ -63,12 +64,11 @@ tasks:
       - |
         {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
       - |
-        echo "Checking for 'if err :=' pattern (should use 'err :=' followed by 'if err != nil')..."
         if grep -rn "if err :=" internal/ --include="*.go"; then
           echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
           exit 1
         fi
-        echo "✓ No 'if err :=' patterns found"
+        echo "0 issues"
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   release:

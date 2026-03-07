@@ -15,7 +15,8 @@ linters:
     - gochecknoglobals # constants are ok
     - forbidigo # We don't use print statements for debugging
     - exhaustruct # Structs are generally initialized empty
-    - exhaustive # NOt necessery as we use default
+    - exhaustive # Not necessery as we use default
+    - containedctx # We use ctx to check if it is done
 
   enable:
     - nilaway
