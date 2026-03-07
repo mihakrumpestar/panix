@@ -111,18 +111,20 @@ func (m *model) renderPhaseFlow() string {
 	row := make([]string, 0, len(phasesList)*2+1)
 
 	for idx, phase := range phasesList {
-		sp := statistics.GetPack(phase)
-		if sp == nil {
-			sp = &stats.StatsPack{}
+		statsPack := statistics.GetPack(phase)
+		if statsPack == nil {
+			statsPack = &stats.StatsPack{}
 		}
-		phaseStats := &stats.StatsPack{Running: sp.Running, Failed: sp.Failed}
-		row = append(row, m.createPhaseGroup(string(phase), sp.Running, sp.Failed, nil, phaseStats, idx), phaseArrow)
+
+		phaseStats := &stats.StatsPack{Running: statsPack.Running, Failed: statsPack.Failed}
+		row = append(row, m.createPhaseGroup(string(phase), statsPack.Running, statsPack.Failed, nil, phaseStats, idx), phaseArrow)
 	}
 
 	lastStats := statistics.GetPack(phasesList[len(phasesList)-1])
 	if lastStats == nil {
 		lastStats = &stats.StatsPack{}
 	}
+
 	doneStats := &stats.StatsPack{Done: lastStats.Done}
 	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, doneStats, -1))
 

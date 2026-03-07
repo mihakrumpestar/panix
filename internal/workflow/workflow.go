@@ -45,7 +45,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Flags.Timeout)
 
-	wf := &Workflow{
+	workflow := &Workflow{
 		ctx:    ctxWithTimeout,
 		cancel: cancel,
 		conf:   conf,
@@ -57,16 +57,16 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		updateHook: hook.NewHook(),
 	}
 
-	runner, err := newRunner(wf)
+	runner, err := newRunner(workflow)
 	if err != nil {
 		cancel()
 
 		return nil, err
 	}
 
-	wf.runner = runner
+	workflow.runner = runner
 
-	return wf, nil
+	return workflow, nil
 }
 
 func (w *Workflow) State() *WorkflowState {
