@@ -14,6 +14,8 @@ linters:
     - goconst # Just some same strings across codebase
     - gochecknoglobals # constants are ok
     - forbidigo # We don't use print statements for debugging
+    - exhaustruct # Structs are generally initialized empty
+    - exhaustive # NOt necessery as we use default
 
   enable:
     - nilaway

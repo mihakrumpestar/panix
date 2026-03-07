@@ -93,6 +93,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath attributes.Xpath, content str
 func (v *Viewports) GetOrCreateMainViewport(content string, footerHeight int) string {
 	v.footerHeight = footerHeight
 	h := v.dimensions.Height - footerHeight
+
 	return v.createViewport(v.mainXpath, content, 0, viewportOptions{
 		height:    h,
 		maxHeight: h,

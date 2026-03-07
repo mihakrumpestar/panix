@@ -68,14 +68,14 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		defer stopCPUProfile()
 	}
 
-	p := tea.NewProgram(&model{
+	program := tea.NewProgram(&model{
 		ctx:          ctx,
 		conf:         conf,
 		dimensions:   dimensions,
 		notification: notifications.New(),
 	})
 
-	m, err := p.Run()
+	m, err := program.Run()
 	if err != nil {
 		return errors.Wrap(err, "TUI runtime error")
 	}
