@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
+
+var ErrSSHConfigMissingHostname = errors.New("ssh config has empty or missing HostName")
 
 type SSHConfig struct {
 	sshConfig *ssh_config.Config
@@ -74,11 +75,11 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 
 	hostname, err := sc.sshConfig.Get(alias, "HostName")
 	if err != nil {
-		return fmt.Errorf("failed to get HostName for alias %q: %w", alias, err)
+		return errors.Wrapf(err, "failed to get HostName for alias %q", alias)
 	}
 
 	if hostname == "" {
-		return fmt.Errorf("ssh config for alias %q has empty or missing HostName", alias)
+		return errors.Wrapf(ErrSSHConfigMissingHostname, "alias %q", alias)
 	}
 
 	sshClient.Hostname = hostname
@@ -91,7 +92,7 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 	if portRaw != "" {
 		port64, err := strconv.ParseUint(portRaw, 10, 16)
 		if err != nil {
-			return fmt.Errorf("failed to parse Port for alias %q: %w", alias, err)
+			return errors.Wrapf(err, "failed to parse Port for alias %q", alias)
 		}
 
 		sshClient.Port = uint16(port64)

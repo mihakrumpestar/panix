@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -13,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
+
+var ErrNoFlakesAfterFilter = errors.New("no flakes left after filtering")
 
 func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
@@ -63,17 +64,17 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 
 	err = conf.ValidateStructTags()
 	if err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
+		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
 	err = conf.initRoot()
 	if err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
+		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
 	err = conf.filterRoot()
 	if err != nil {
-		return nil, fmt.Errorf("failed to filter config: %w", err)
+		return nil, errors.Wrap(err, "failed to filter config")
 	}
 
 	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
@@ -171,7 +172,7 @@ func (c *Config) filterRoot() error {
 	}
 
 	if c.Root.Flakes.Omap.Len() == 0 {
-		return fmt.Errorf("no flakes left after filtering")
+		return ErrNoFlakesAfterFilter
 	}
 
 	return nil

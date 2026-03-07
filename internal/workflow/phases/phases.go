@@ -1,8 +1,14 @@
 package phases
 
 import (
-	"fmt"
 	"slices"
+
+	"github.com/pkg/errors"
+)
+
+var (
+	ErrAllPhasesSkipped  = errors.New("all phases skipped")
+	ErrInvalidFirstPhase = errors.New("phase can't be first")
 )
 
 type Phase string
@@ -79,7 +85,7 @@ func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error)
 
 	// Validation
 	if len(phases) == 0 {
-		return nil, fmt.Errorf("all phases skipped")
+		return nil, ErrAllPhasesSkipped
 	}
 
 	firstPhase := phases[0]
@@ -87,7 +93,7 @@ func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error)
 	validFirst := []Phase{Inspect, Build, Secrets}
 
 	if !slices.Contains(validFirst, firstPhase) {
-		return nil, fmt.Errorf("phase %s can't be first, allowed: %v", firstPhase, validFirst)
+		return nil, errors.Wrapf(ErrInvalidFirstPhase, "%s (allowed: %v)", firstPhase, validFirst)
 	}
 
 	return phases, nil

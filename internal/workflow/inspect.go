@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +12,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
+)
+
+var (
+	ErrBothSSHUnreachable       = errors.New("both bootstrap SSH and regular SSH are unreachable")
+	ErrArchitectureOutputEmpty  = errors.New("architecture output was empty")
+	ErrPlatformUnsupported      = errors.New("platform unsupported, kexec supports limited platforms")
+	ErrKexecRequiredButDisabled = errors.New("machine requires kexec but automatic bootstrap is disabled")
 )
 
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
@@ -92,7 +98,7 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 			}
 
 			if !bootstrapSSHReachable && !regularSSHReachable {
-				return fmt.Errorf("both bootstrap SSH and regular SSH are unreachable")
+				return ErrBothSSHUnreachable
 			}
 
 			mms.Reachable.Store(true)
@@ -142,11 +148,11 @@ func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) e
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			architecture := strings.Trim(log.String(), "\n")
 			if architecture == "" {
-				return fmt.Errorf("architecture output was empty")
+				return ErrArchitectureOutputEmpty
 			}
 
 			if !slices.Contains(KexecSupportedPlatforms, architecture) {
-				return fmt.Errorf("platform %s is unsupported, kexec currently only supports %s platforms", strconv.Quote(architecture), KexecSupportedPlatforms)
+				return errors.Wrapf(ErrPlatformUnsupported, "%s (supported: %s)", strconv.Quote(architecture), KexecSupportedPlatforms)
 			}
 
 			mms.Architecture.Store(architecture)
@@ -224,7 +230,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 				mms.Bootstrapped.Store(false)
 
 				if machine.Flags.Bootstrap.DisableAuto {
-					return fmt.Errorf("machine requires kexec but automatic bootstrap is disabled")
+					return ErrKexecRequiredButDisabled
 				}
 
 				return nil
