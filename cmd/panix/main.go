@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/alecthomas/kong"
 	"github.com/mihakrumpestar/panix/gen"
@@ -13,6 +12,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
+
+var ErrUnknownCommand = errors.New("unknown command")
 
 type CLI struct {
 	flags.Flags
@@ -63,7 +64,7 @@ func main() {
 	case "schema":
 		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.Schema.Output))
 	default:
-		ctx.FatalIfErrorf(fmt.Errorf("unknown command: %s", ctx.Command()))
+		ctx.FatalIfErrorf(errors.Wrapf(ErrUnknownCommand, "%s", ctx.Command()))
 	}
 }
 

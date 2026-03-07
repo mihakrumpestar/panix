@@ -14,6 +14,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	ErrExpectedStructType  = errors.New("expected struct type")
+	ErrUnsupportedTypeKind = errors.New("unsupported type kind")
+)
+
 // Generator holds the state for schema generation.
 type Generator struct {
 	visited map[reflect.Type]bool
@@ -94,7 +99,7 @@ func (g *Generator) Generate() (*Schema, error) {
 
 	properties, required, err := g.processStruct(cfgType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process Config struct: %w", err)
+		return nil, errors.Wrap(err, "failed to process Config struct")
 	}
 
 	schema.Properties = properties
@@ -138,7 +143,7 @@ func (g *Generator) shouldSkipField(field reflect.StructField) bool {
 func (g *Generator) processInlineField(field reflect.StructField, properties map[string]interface{}, required *[]string) error {
 	inlineProps, inlineRequired, err := g.processStruct(field.Type)
 	if err != nil {
-		return fmt.Errorf("failed to process inline field %s: %w", field.Name, err)
+		return errors.Wrapf(err, "failed to process inline field %s", field.Name)
 	}
 
 	for name, prop := range inlineProps {
@@ -167,7 +172,7 @@ func (g *Generator) processStruct(structType reflect.Type) (map[string]interface
 	}
 
 	if structType.Kind() != reflect.Struct {
-		return nil, nil, fmt.Errorf("expected struct type, got %v", structType.Kind())
+		return nil, nil, errors.Wrapf(ErrExpectedStructType, "got %v", structType.Kind())
 	}
 
 	for i := range structType.NumField() {
@@ -191,7 +196,7 @@ func (g *Generator) processStruct(structType reflect.Type) (map[string]interface
 
 		prop, err := g.processType(field.Type, field)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to process field %s: %w", field.Name, err)
+			return nil, nil, errors.Wrapf(err, "failed to process field %s", field.Name)
 		}
 
 		g.setFieldDescription(prop, field)
@@ -308,7 +313,7 @@ func (g *Generator) processType(t reflect.Type, field reflect.StructField) (inte
 		return &TypeDefinition{}, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported type kind: %v", t.Kind())
+		return nil, errors.Wrapf(ErrUnsupportedTypeKind, "%v", t.Kind())
 	}
 }
 
@@ -546,7 +551,7 @@ func GenerateYAMLString() (string, error) {
 func GenerateSchema(outputPath string) error {
 	schemaYAML, err := GenerateYAML()
 	if err != nil {
-		return fmt.Errorf("failed to generate schema: %w", err)
+		return errors.Wrap(err, "failed to generate schema")
 	}
 
 	if outputPath == "-" {
@@ -558,12 +563,12 @@ func GenerateSchema(outputPath string) error {
 	dir := filepath.Dir(outputPath)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, flags.DefaultDirPermissions); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+			return errors.Wrapf(err, "failed to create directory %s", dir)
 		}
 	}
 
 	if err := os.WriteFile(outputPath, schemaYAML, flags.DefaultLogFilePermissions); err != nil {
-		return fmt.Errorf("failed to write schema to %s: %w", outputPath, err)
+		return errors.Wrapf(err, "failed to write schema to %s", outputPath)
 	}
 
 	fmt.Printf("Schema written to: %s\n", outputPath)

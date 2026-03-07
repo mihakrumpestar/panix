@@ -6,6 +6,12 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
+	"github.com/pkg/errors"
+)
+
+var (
+	ErrHostDisconnectTimeout = errors.New("host did not disconnect within timeout")
+	ErrHostReconnectTimeout  = errors.New("host did not reconnect within timeout")
 )
 
 const (
@@ -70,7 +76,7 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg str
 				}
 			}
 
-			return fmt.Errorf("host %s:%d did not disconnect within 5 minutes", sshClient.Hostname, sshClient.Port)
+			return errors.Wrapf(ErrHostDisconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port)
 		},
 	)
 }
@@ -92,7 +98,7 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, fai
 				}
 			}
 
-			return fmt.Errorf("host %s:%d did not reconnect within 10 minutes", sshClient.Hostname, sshClient.Port)
+			return errors.Wrapf(ErrHostReconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port)
 		},
 	)
 }

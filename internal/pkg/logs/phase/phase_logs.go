@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var ErrPhaseNotFound = errors.New("key for del does not exist")
+
 // PhaseLogs manages a collection of PhaseLog instances indexed by phase.
 type PhaseLogs struct {
 	logs  *omap.Omap[phases.Phase, *PhaseLog]
@@ -129,7 +131,7 @@ func (pl *PhaseLogs) Len() int {
 func (pl *PhaseLogs) Del(phase phases.Phase) error {
 	_, ok := pl.logs.Del(phase)
 	if !ok {
-		return fmt.Errorf("key for del does not exist: %v", phase)
+		return errors.Wrapf(ErrPhaseNotFound, "%v", phase)
 	}
 
 	return nil

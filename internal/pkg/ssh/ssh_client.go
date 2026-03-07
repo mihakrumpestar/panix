@@ -1,14 +1,20 @@
 package ssh
 
 import (
-	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
 	DefaultSSHPort     uint16 = 22
 	DefaultSSHUsername string = "root"
+)
+
+var (
+	ErrSSHClientNil     = errors.New("internal error: SSHClient is nil")
+	ErrMachineNameEmpty = errors.New("machine name is empty")
 )
 
 type SSHClient struct {
@@ -25,11 +31,11 @@ type SSHClient struct {
 
 func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, overrideLocalMachine string) error {
 	if sC == nil {
-		return errors.New("internal error: SSHClient is nil")
+		return ErrSSHClientNil
 	}
 
 	if machineName == "" {
-		return errors.New("machine name is empty")
+		return ErrMachineNameEmpty
 	}
 
 	// Use machineName as Hostname if Hostname is empty (indicates SSH config alias usage)

@@ -18,6 +18,11 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
+var (
+	ErrInvalidBuildOutput = errors.New("invalid build output")
+	ErrNoBuildOutputs     = errors.New("invalid build output: no outputs")
+)
+
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
 	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
@@ -66,7 +71,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 
 			err := json.Unmarshal(output, &parsedOutput)
 			if err != nil || len(parsedOutput) == 0 {
-				return fmt.Errorf("invalid build output for %s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
+				return errors.Wrapf(ErrInvalidBuildOutput, "%s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
 			}
 
 			return nil
@@ -82,7 +87,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 	}
 
 	if len(parsedOutput) == 0 {
-		return nil, fmt.Errorf("invalid build output for %s/%s: no outputs", flake.Name, configuration.Name)
+		return nil, errors.Wrapf(ErrNoBuildOutputs, "%s/%s", flake.Name, configuration.Name)
 	}
 
 	log.Info().
