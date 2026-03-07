@@ -119,7 +119,7 @@ func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *command.Comma
 
 func (ex *Executioner) handleReadError(err error, commandLog *command.CommandLog) error {
 	err = ptyError(err)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		commandLog.WriteLineString("PTY read error: " + err.Error())
 		commandLog.WriteLineString("")
 	}
@@ -173,8 +173,8 @@ func consolidateErrors(waitErr, readErr error) error {
 // terminal which no longer has an open slave. So ignore error here.
 // See https://github.com/creack/pty/issues/21.
 func ptyError(err error) error {
-	pathErr, ok := err.(*os.PathError)
-	if !ok || pathErr.Err != syscall.EIO {
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || pathErr.Err != syscall.EIO {
 		return err
 	}
 

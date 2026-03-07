@@ -31,9 +31,13 @@ const (
 
 type workflowUpdateHookMsg struct{}
 
-type errMsg struct{ err error }
+type errMsg struct { //nolint:errname
+	err error
+}
 
-func (e errMsg) Error() string { return e.err.Error() }
+func (e errMsg) Error() string {
+	return e.err.Error()
+}
 
 // Model holds the complete TUI state.
 type model struct {

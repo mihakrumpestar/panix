@@ -18,7 +18,7 @@ type SSHConfig struct {
 
 var (
 	cachedSSHConfig *SSHConfig
-	cachedError     error
+	cachedError     error //nolint:errname
 	once            sync.Once
 )
 
