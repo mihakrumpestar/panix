@@ -26,7 +26,13 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(parsedFlags.Config))
 	}
-	defer file.Close()
+
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to close config file")
+		}
+	}()
 
 	conf := &Config{}
 	decoder := yaml.NewDecoder(file)

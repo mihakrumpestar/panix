@@ -299,7 +299,11 @@ func (v *Viewports) createViewport(xpath attributes.Xpath, content string, inden
 			active:        xpath == v.mainXpath,
 		}
 		viewportInstance.model.GotoBottom()
-		v.viewports.Set(xpath, viewportInstance)
+
+		err := v.viewports.Set(xpath, viewportInstance)
+		if err != nil {
+			return ""
+		}
 	} else {
 		viewportInstance.content = content
 	}

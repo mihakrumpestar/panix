@@ -10,11 +10,14 @@ import (
 func (c *Config) ValidateStructTags() error {
 	validate := validator.New()
 
-	validate.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {
+	err := validate.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {
 		val := fl.Field().String()
 
 		return filepath.IsAbs(val)
 	})
+	if err != nil {
+		return errors.Wrap(err, "failed to register abspath validation")
+	}
 
 	return errors.Wrap(validate.Struct(c), "validation failed")
 }

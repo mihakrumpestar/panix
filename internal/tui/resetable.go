@@ -5,7 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	zerolog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
 type resetable struct {
@@ -42,11 +42,11 @@ func (m *model) startWorkflow() tea.Cmd {
 
 		err = workflow.CreateWorkflow()
 		if err != nil {
-			zerolog.Error().Err(err).Msg("Workflow execution failed")
+			log.Error().Err(err).Msg("Workflow execution failed")
 
 			return errMsg{err}
 		} else {
-			zerolog.Info().Msg("Workflow completed successfully")
+			log.Info().Msg("Workflow completed successfully")
 		}
 
 		return workflowDoneMsg{}
@@ -55,7 +55,10 @@ func (m *model) startWorkflow() tea.Cmd {
 
 func (m *model) restartWorkflow() tea.Cmd {
 	if r := m.resetable.Load(); r != nil {
-		r.workflow.Cancel()
+		err := r.workflow.Cancel()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to cancel workflow")
+		}
 	}
 
 	return m.startWorkflow()
