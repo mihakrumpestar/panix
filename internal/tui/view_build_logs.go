@@ -283,7 +283,11 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	// Add error message if command failed
 	err := cmd.TimeAndState.GetEndError()
 	if err != nil {
-		cmdNode.Child(colors.Error.Color.Render("✗ Command failed: " + err.Error()))
+		errMsg := "✗ Command failed: " + err.Error()
+		errViewport := resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("error"), errMsg, cmdIndent+treeStep)
+		cmdNode.Child(colors.Error.Color.Render(errViewport))
+	} else {
+		resetable.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("error"))
 	}
 
 	parent.Child(cmdNode)
