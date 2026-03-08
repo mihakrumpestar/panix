@@ -22,6 +22,11 @@ const (
 	statsTableZonePrefix    = "stats-table"
 	rowSpanMarker           = " 󱞩"
 	statusIconReservedWidth = 3
+
+	stateRunning    byte = 0
+	stateDone       byte = 1
+	stateError      byte = 2
+	stateNotStarted byte = 3
 )
 
 type StatsTable struct {
@@ -137,7 +142,7 @@ func (m *model) ViewStatsTable() string {
 	return result
 }
 
-// buildStatsTable builds the stats table from scratch and updates cache
+// buildStatsTable builds the stats table from scratch and updates cache.
 func (m *model) buildStatsTable(resetable *resetable, statsTable *StatsTable, usableWidth int, hash uint64) string {
 	var builder strings.Builder
 
@@ -171,11 +176,11 @@ func (m *model) buildStatsTable(resetable *resetable, statsTable *StatsTable, us
 }
 
 func (m *model) computeStatsTableHash(targetsLogs *logs.TargetsLogs, usableWidth int, selectedMachine int) uint64 {
-	h := fnv.New64a()
+	hasher := fnv.New64a()
 
-	// Hash layout and selection
-	binary.Write(h, binary.LittleEndian, uint32(usableWidth))
-	binary.Write(h, binary.LittleEndian, int32(selectedMachine))
+	// Hash layout and selection (int conversions are safe for TUI dimensions which are always positive and reasonable)
+	_ = binary.Write(hasher, binary.LittleEndian, uint32(usableWidth))    //nolint:gosec // G115: TUI width always fits in uint32
+	_ = binary.Write(hasher, binary.LittleEndian, int32(selectedMachine)) //nolint:gosec // G115: selectedMachine index fits in int32
 
 	// Ensure metadata is calculated
 	targetsLogs.CalculateDurationAndError()
@@ -183,43 +188,52 @@ func (m *model) computeStatsTableHash(targetsLogs *logs.TargetsLogs, usableWidth
 	// Hash each machine's state
 	m.resetable.Load().workflow.RootTree(func(idx int, machine *config.Machine) {
 		// Separator to prevent collisions between machines
-		h.Write([]byte{0xFF})
+		_, _ = hasher.Write([]byte{0xFF})
 
 		// Machine identifier
-		h.Write([]byte(machine.Xpath.String()))
+		_, _ = hasher.Write([]byte(machine.Xpath.String()))
 
 		// State (running=0, done=1, error=2, notstarted=3)
 		phaseLog := targetsLogs.MustGetFirstLogErrorOrLastLog(machine.Xpath)
-		state := byte(3) // not started
+		state := stateNotStarted
 		statusText := ""
-		if phaseLog != nil {
-			tas := phaseLog.TimeAndState()
-			if tas.IsFinished() {
-				if tas.GetEndError() != nil {
-					state = 2 // error
-				} else {
-					state = 1 // done
-				}
-			} else {
-				state = 0 // running
-				if cmd := phaseLog.Last(); cmd != nil {
-					statusText = cmd.StatusIfRunning
-				}
+
+		if phaseLog == nil {
+			_, _ = hasher.Write([]byte{state})
+			_, _ = hasher.Write([]byte(statusText))
+
+			return
+		}
+
+		tas := phaseLog.TimeAndState()
+		if tas.IsFinished() {
+			state = stateError
+
+			if tas.GetEndError() == nil {
+				state = stateDone
+			}
+		} else {
+			state = stateRunning
+
+			cmd := phaseLog.Last()
+			if cmd != nil {
+				statusText = cmd.StatusIfRunning
 			}
 		}
-		h.Write([]byte{state})
-		h.Write([]byte(statusText))
+
+		_, _ = hasher.Write([]byte{state})
+		_, _ = hasher.Write([]byte(statusText))
 
 		// Metadata
 		meta := machine.MetaInspect
-		binary.Write(h, binary.LittleEndian, meta.Generation.Load())
-		h.Write([]byte(meta.Architecture.Load()))
-		h.Write([]byte(meta.Date.Load()))
-		h.Write([]byte(meta.Nixos.Load()))
-		h.Write([]byte(meta.Kernel.Load()))
+		_ = binary.Write(hasher, binary.LittleEndian, meta.Generation.Load())
+		_, _ = hasher.Write([]byte(meta.Architecture.Load()))
+		_, _ = hasher.Write([]byte(meta.Date.Load()))
+		_, _ = hasher.Write([]byte(meta.Nixos.Load()))
+		_, _ = hasher.Write([]byte(meta.Kernel.Load()))
 	})
 
-	return h.Sum64()
+	return hasher.Sum64()
 }
 
 func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targetsLogs *logs.TargetsLogs) {
