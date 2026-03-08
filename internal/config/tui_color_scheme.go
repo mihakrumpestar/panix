@@ -77,7 +77,7 @@ func defaultColorScheme() *ColorScheme {
 			OK:      makeForegroundStyle("#50FA7B"),
 			Warning: makeForegroundStyle("#FFB86C"),
 			Error:   makeForegroundStyle("#FF5555"),
-			Running: makeForegroundStyle("#3b6bec"),
+			Running: makeForegroundStyle("#0077ff"),
 		},
 		Table: ColorSchemeTable{
 			Header:                       makeBoldForegroundStyle("#F8F8F2"),
