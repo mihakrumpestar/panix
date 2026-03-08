@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"encoding/binary"
+	"hash/fnv"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +27,12 @@ const (
 type StatsTable struct {
 	SelectedMachine int
 	MachineXpaths   []attributes.Xpath
+	cache           statsTableCache
+}
+
+type statsTableCache struct {
+	contentHash  uint64
+	tableContent string
 }
 
 func NewStatsTable() *StatsTable {
@@ -36,6 +44,7 @@ func NewStatsTable() *StatsTable {
 func (s *StatsTable) Reset() {
 	s.SelectedMachine = -1
 	s.MachineXpaths = nil
+	s.cache = statsTableCache{}
 }
 
 func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
@@ -110,13 +119,32 @@ func (m *model) ViewStatsTable() string {
 		return ""
 	}
 
+	// Get current state for cache key
+	statsTable := resetable.statsTable
+	usableWidth := resetable.viewports.ContentWidth()
+
+	// Compute hash of current state
+	currentHash := m.computeStatsTableHash(state.TargetsLogs, usableWidth, statsTable.SelectedMachine)
+
+	// Check if cache is valid
+	if statsTable.cache.contentHash == currentHash {
+		return statsTable.cache.tableContent
+	}
+
+	// Cache miss - rebuild table
+	result := m.buildStatsTable(resetable, statsTable, usableWidth, currentHash)
+
+	return result
+}
+
+// buildStatsTable builds the stats table from scratch and updates cache
+func (m *model) buildStatsTable(resetable *resetable, statsTable *StatsTable, usableWidth int, hash uint64) string {
 	var builder strings.Builder
 
 	builder.WriteString(m.conf.ColorScheme.Header.Title.Render("=== Stats table ===\n"))
 
-	usableWidth := resetable.viewports.ContentWidth()
+	state := resetable.workflow.State()
 	indexWidth := len(strconv.Itoa(resetable.workflow.MachineCount()))
-	statsTable := resetable.statsTable
 	statsTable.MachineXpaths = nil
 
 	headers, styleFunc := makeTableColumns(m.conf.ColorScheme, indexWidth, statsTable.SelectedMachine)
@@ -133,7 +161,65 @@ func (m *model) ViewStatsTable() string {
 	tableContent := zone.Mark(statsTableZonePrefix, tbl.String())
 	builder.WriteString("\n" + tableContent + "\n\n")
 
-	return builder.String()
+	result := builder.String()
+
+	// Update cache
+	statsTable.cache.contentHash = hash
+	statsTable.cache.tableContent = result
+
+	return result
+}
+
+func (m *model) computeStatsTableHash(targetsLogs *logs.TargetsLogs, usableWidth int, selectedMachine int) uint64 {
+	h := fnv.New64a()
+
+	// Hash layout and selection
+	binary.Write(h, binary.LittleEndian, uint32(usableWidth))
+	binary.Write(h, binary.LittleEndian, int32(selectedMachine))
+
+	// Ensure metadata is calculated
+	targetsLogs.CalculateDurationAndError()
+
+	// Hash each machine's state
+	m.resetable.Load().workflow.RootTree(func(idx int, machine *config.Machine) {
+		// Separator to prevent collisions between machines
+		h.Write([]byte{0xFF})
+
+		// Machine identifier
+		h.Write([]byte(machine.Xpath.String()))
+
+		// State (running=0, done=1, error=2, notstarted=3)
+		phaseLog := targetsLogs.MustGetFirstLogErrorOrLastLog(machine.Xpath)
+		state := byte(3) // not started
+		statusText := ""
+		if phaseLog != nil {
+			tas := phaseLog.TimeAndState()
+			if tas.IsFinished() {
+				if tas.GetEndError() != nil {
+					state = 2 // error
+				} else {
+					state = 1 // done
+				}
+			} else {
+				state = 0 // running
+				if cmd := phaseLog.Last(); cmd != nil {
+					statusText = cmd.StatusIfRunning
+				}
+			}
+		}
+		h.Write([]byte{state})
+		h.Write([]byte(statusText))
+
+		// Metadata
+		meta := machine.MetaInspect
+		binary.Write(h, binary.LittleEndian, meta.Generation.Load())
+		h.Write([]byte(meta.Architecture.Load()))
+		h.Write([]byte(meta.Date.Load()))
+		h.Write([]byte(meta.Nixos.Load()))
+		h.Write([]byte(meta.Kernel.Load()))
+	})
+
+	return h.Sum64()
 }
 
 func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targetsLogs *logs.TargetsLogs) {
@@ -176,7 +262,7 @@ func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targ
 
 		tbl.Row(
 			strconv.Itoa(idx+1),
-			m.getStatusIcon(xpath, phaseLog),
+			m.getStatusIcon(phaseLog),
 			flakeDisplay,
 			configDisplay,
 			machine.Name,
@@ -256,22 +342,21 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 	}
 }
 
-func (m *model) getStatusIcon(xpath attributes.Xpath, phaseLog *phase.PhaseLog) string {
-	resetable := m.resetable.Load()
+func (m *model) getStatusIcon(phaseLog *phase.PhaseLog) string {
 	if phaseLog == nil {
-		return resetable.spinners.GetOrCreateSpinner(xpath).View()
+		return "🔄" // Running/waiting
 	}
 
 	tas := phaseLog.TimeAndState()
 	if !tas.IsFinished() {
-		return resetable.spinners.GetOrCreateSpinner(xpath).View()
+		return "🔄" // Running
 	}
 
 	if tas.GetEndError() != nil {
-		return "🔴"
+		return "🔴" // Error
 	}
 
-	return "✅"
+	return "✅" // Success
 }
 
 func (m *model) getStatusText(phaseLog *phase.PhaseLog, colors *config.ColorScheme) string {
