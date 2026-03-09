@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"hash/fnv"
 	"math"
 	"strconv"
 	"strings"
@@ -33,12 +34,19 @@ type PhaseStatus struct {
 	SelectedPhase int
 	Phases        []phases.Phase
 	anim          animationState
+	cache         phaseStatusCache
+}
+
+type phaseStatusCache struct {
+	width         int
+	selectedPhase int
+	stateHash     uint64
+	rendered      string
 }
 
 type animationState struct {
-	progress    atomic.Uint64
-	lastTime    atomic.Int64
-	initialized atomic.Bool
+	progress atomic.Uint64
+	lastTime atomic.Time
 }
 
 func NewPhaseStatus() *PhaseStatus {
@@ -103,42 +111,88 @@ func (m *model) renderPhaseFlow() string {
 		return m.conf.ColorScheme.Table.Row.Render("No phases to display")
 	}
 
-	r := m.resetable.Load()
-	r.phaseStatus.Phases = phasesList
-	termWidth := r.viewports.ContentWidth()
-	statistics := r.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
+	resetable := m.resetable.Load()
+	resetable.phaseStatus.Phases = phasesList
+	termWidth := resetable.viewports.ContentWidth()
+	statistics := resetable.workflow.State().TargetsLogs.ComputeStatisticsPerPhase()
+	stateHash := computeStateHash(phasesList, statistics)
 
-	row := make([]string, 0, len(phasesList)*2+1)
-
-	for idx, phase := range phasesList {
-		statsPack := statistics.GetPack(phase)
-		if statsPack == nil {
-			statsPack = &stats.StatsPack{}
-		}
-
-		phaseStats := &stats.StatsPack{Running: statsPack.Running, Failed: statsPack.Failed}
-		row = append(row, m.createPhaseGroup(string(phase), statsPack.Running, statsPack.Failed, nil, phaseStats, idx), phaseArrow)
+	if !m.animationNeedsUpdate(&resetable.phaseStatus.anim) && resetable.phaseStatus.cache.width == termWidth &&
+		resetable.phaseStatus.cache.selectedPhase == resetable.phaseStatus.SelectedPhase && resetable.phaseStatus.cache.stateHash == stateHash {
+		return resetable.phaseStatus.cache.rendered
 	}
 
-	lastStats := statistics.GetPack(phasesList[len(phasesList)-1])
-	if lastStats == nil {
-		lastStats = &stats.StatsPack{}
-	}
-
-	doneStats := &stats.StatsPack{Done: lastStats.Done}
-	row = append(row, m.createPhaseGroup("Done", nil, nil, lastStats.Done, doneStats, -1))
-
-	return table.New().
-		Width(termWidth).
-		Border(lipgloss.HiddenBorder()).
+	row := m.buildPhaseRows(phasesList, statistics)
+	result := table.New().Width(termWidth).Border(lipgloss.HiddenBorder()).
 		StyleFunc(func(_, col int) lipgloss.Style {
 			if (col+1)%2 == 0 {
 				return m.conf.ColorScheme.Table.Border.Width(1).Align(lipgloss.Center)
 			}
 
 			return lipgloss.NewStyle().Align(lipgloss.Center)
-		}).
-		Row(row...).String() + "\n"
+		}).Row(row...).String() + "\n"
+
+	phaseStatus := resetable.phaseStatus
+
+	phaseStatus.cache = phaseStatusCache{
+		width:         termWidth,
+		selectedPhase: phaseStatus.SelectedPhase,
+		stateHash:     stateHash,
+		rendered:      result,
+	}
+
+	return result
+}
+
+func (m *model) buildPhaseRows(phasesList []phases.Phase, statistics *stats.StatisticsPerPhase) []string {
+	row := make([]string, 0, len(phasesList)*2+1)
+
+	for idx, phase := range phasesList {
+		statpack := statistics.GetPack(phase)
+		if statpack == nil {
+			statpack = &stats.StatsPack{}
+		}
+
+		row = append(row, m.createPhaseGroup(
+			string(phase),
+			statpack.Running,
+			statpack.Failed,
+			nil,
+			&stats.StatsPack{Running: statpack.Running, Failed: statpack.Failed},
+			idx),
+			phaseArrow)
+	}
+
+	ls := statistics.GetPack(phasesList[len(phasesList)-1])
+	if ls == nil {
+		ls = &stats.StatsPack{}
+	}
+
+	row = append(row, m.createPhaseGroup("Done", nil, nil, ls.Done, &stats.StatsPack{Done: ls.Done}, -1))
+
+	return row
+}
+
+func computeStateHash(phasesList []phases.Phase, statistics *stats.StatisticsPerPhase) uint64 {
+	hash := fnv.New64a()
+
+	for _, phase := range phasesList {
+		statsPack := statistics.GetPack(phase)
+		if statsPack != nil {
+			_, _ = fmt.Fprintf(hash, "%v", statsPack)
+		}
+	}
+
+	return hash.Sum64()
+}
+
+func (m *model) animationNeedsUpdate(anim *animationState) bool {
+	lastTime := anim.lastTime.Load()
+	if lastTime.IsZero() {
+		return true
+	}
+
+	return time.Since(lastTime) >= animationCacheInterval
 }
 
 func (m *model) createPhaseGroup(name string, running, failed, done []attributes.Xpath, stats *stats.StatsPack, phaseIdx int) string {
@@ -170,12 +224,12 @@ func (m *model) createPhaseGroup(name string, running, failed, done []attributes
 
 func createAnimatedGradient(text string, stats *stats.StatsPack, colors *config.ColorScheme, anim *animationState) string {
 	now := time.Now()
-	nowNano := now.UnixNano()
 
-	if !anim.initialized.Load() || now.Sub(time.Unix(0, anim.lastTime.Load())) >= animationCacheInterval {
-		anim.initialized.Store(true)
-		anim.lastTime.Store(nowNano)
+	lastTime := anim.lastTime.Load()
+	if lastTime.IsZero() || now.Sub(lastTime) >= animationCacheInterval {
+		anim.lastTime.Store(now)
 
+		nowNano := now.UnixNano()
 		p := float64(nowNano%int64(gradientAnimationCycleTime)) / float64(gradientAnimationCycleTime)
 		progress := math.Sin(p*2*math.Pi)*animationAmplitude + animationAmplitude
 
