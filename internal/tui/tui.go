@@ -50,6 +50,7 @@ type model struct {
 	resetable          atomic.Pointer[resetable]
 	notification       *notifications.Notification
 	lastWorkflowUpdate time.Time
+	footer             *Footer
 }
 
 // NewTui initializes and runs the TUI application.
@@ -79,6 +80,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		conf:         conf,
 		dimensions:   dimensions,
 		notification: notifications.New(),
+		footer:       newFooter(),
 	})
 
 	m, err := program.Run()
