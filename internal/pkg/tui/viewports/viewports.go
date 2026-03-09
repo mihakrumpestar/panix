@@ -2,6 +2,7 @@ package viewports
 
 import (
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,14 +31,12 @@ type Dimensions struct{ Width, Height int }
 
 // Viewports manages all viewport instances.
 type Viewports struct {
-	viewports              *omap.Omap[attributes.Xpath, *Viewport]
-	dimensions             *Dimensions
-	colors                 *config.ColorScheme
-	debug                  *strings.Builder
-	fullscreenXpath        attributes.Xpath
-	commandOutputMaxHeight int
-	mainXpath              attributes.Xpath
-	footerHeight           int
+	viewports       *omap.Omap[attributes.Xpath, *Viewport]
+	dimensions      *Dimensions
+	conf            *config.Config
+	fullscreenXpath attributes.Xpath
+	mainXpath       attributes.Xpath
+	footerHeight    int
 }
 
 // Viewport wraps a bubbletea viewport with additional state.
@@ -46,23 +45,47 @@ type Viewport struct {
 	active        bool
 	content       string
 	scrollbarZone attributes.Xpath
+	cache         viewportCache
+}
+
+// viewportCache stores rendered output to avoid redundant rendering.
+type viewportCache struct {
+	width       int
+	height      int
+	contentHash uint64
+	scrollPct   float64
+	active      bool
+	render      string
+}
+
+// hashContent generates a fast hash for content comparison.
+func hashContent(content string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(content))
+
+	return h.Sum64()
+}
+
+// isCacheValid checks if the cached render is still valid.
+// Dimensions and state are checked first (O(1)) before content hash (O(n)) due to && short-circuit.
+func (v *Viewports) isCacheValid(viewport *Viewport, width, height int, content string) bool {
+	return viewport.cache.width == width &&
+		viewport.cache.height == height &&
+		viewport.cache.scrollPct == viewport.model.ScrollPercent() &&
+		viewport.cache.active == viewport.active &&
+		viewport.cache.contentHash == hashContent(content) &&
+		viewport.cache.render != ""
 }
 
 // NewViewports creates a new viewport manager.
-func NewViewports(dimensions *Dimensions, colors *config.ColorScheme, dbg *strings.Builder, maxHeight int) *Viewports {
+func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
 	viewportsMap, _ := omap.New[attributes.Xpath, *Viewport]()
-	// Ensure minimum height of 1
-	if maxHeight < 1 {
-		maxHeight = 1
-	}
 
 	return &Viewports{
-		viewports:              viewportsMap,
-		dimensions:             dimensions,
-		colors:                 colors,
-		debug:                  dbg,
-		commandOutputMaxHeight: maxHeight,
-		mainXpath:              attributes.NewXpath("main"),
+		viewports:  viewportsMap,
+		dimensions: dimensions,
+		conf:       conf,
+		mainXpath:  attributes.NewXpath("main"),
 	}
 }
 
@@ -80,7 +103,7 @@ func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWi
 
 func (v *Viewports) GetOrCreateViewport(xpath attributes.Xpath, content string, indent int) string {
 	return v.createViewport(xpath, content, indent, viewportOptions{
-		maxHeight:   v.commandOutputMaxHeight,
+		maxHeight:   v.conf.Flags.Tui.CommandOutputMaxHeight,
 		wrapContent: true,
 		useBorder:   true,
 	})
@@ -114,6 +137,12 @@ func (v *Viewports) RenderFullscreenViewport(xpath attributes.Xpath, content str
 		})
 	}
 
+	if v.isCacheValid(viewport, width, height, content) {
+		return viewport.cache.render
+	}
+
+	contentHash := hashContent(content)
+
 	yOffset := viewport.model.YOffset()
 	viewport.model.SetWidth(width)
 	viewport.model.SetHeight(height)
@@ -122,7 +151,17 @@ func (v *Viewports) RenderFullscreenViewport(xpath attributes.Xpath, content str
 	viewport.model.SetContent(proc)
 	viewport.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-height)))
 
-	return v.renderViewport(viewport, height, true, false)
+	rendered := v.renderViewport(viewport, height, true, false)
+	viewport.cache = viewportCache{
+		width:       width,
+		height:      height,
+		contentHash: contentHash,
+		scrollPct:   viewport.model.ScrollPercent(),
+		active:      viewport.active,
+		render:      rendered,
+	}
+
+	return rendered
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xpath attributes.Xpath) { v.viewports.Del(xpath) }
@@ -206,11 +245,10 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// handleResize updates dimensions and resizes all viewports when terminal size changes.
+// handleResize updates dimensions when terminal size changes.
 func (v *Viewports) handleResize(msg tea.WindowSizeMsg) {
 	v.dimensions.Width = msg.Width
 	v.dimensions.Height = msg.Height
-	v.resizeAllViewports()
 }
 
 // updateActiveViewports updates all active viewports with the given message.
@@ -271,27 +309,6 @@ func (v *Viewports) Debug() string {
 	return builder.String()
 }
 
-// resizeAllViewports updates all viewport dimensions when terminal resizes.
-func (v *Viewports) resizeAllViewports() {
-	for xpath, viewport := range v.viewports.Records() {
-		width := max(1, v.dimensions.Width-scrollbarWidth)
-		height := max(1, v.dimensions.Height-v.footerHeight)
-
-		if xpath == v.mainXpath {
-			// Main viewport gets full height minus footer
-			viewport.model.SetWidth(width)
-			viewport.model.SetHeight(height)
-		} else {
-			// Inner viewports: update width, keep existing height or use max height
-			viewport.model.SetWidth(width)
-
-			if v.commandOutputMaxHeight > 0 && viewport.model.Height() > v.commandOutputMaxHeight {
-				viewport.model.SetHeight(v.commandOutputMaxHeight)
-			}
-		}
-	}
-}
-
 // Internal types and helpers
 
 type viewportOptions struct {
@@ -313,12 +330,30 @@ func (v *Viewports) createViewport(xpath attributes.Xpath, content string, inden
 		return ""
 	}
 
+	if v.isCacheValid(viewportInstance, width, height, content) {
+		return viewportInstance.cache.render
+	}
+
+	contentHash := hashContent(content)
+
 	proc, contentHeight, finalWidth := v.processViewportContent(content, width, opts)
 
 	finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
 	v.configureViewportModel(viewportInstance, proc, finalWidth, finalHeight)
 
-	return zone.Mark(xpath.String(), v.renderViewport(viewportInstance, finalHeight, opts.useBorder, opts.noPadding))
+	rendered := v.renderViewport(viewportInstance, finalHeight, opts.useBorder, opts.noPadding)
+	rendered = zone.Mark(xpath.String(), rendered)
+
+	viewportInstance.cache = viewportCache{
+		width:       width,
+		height:      height,
+		contentHash: contentHash,
+		scrollPct:   viewportInstance.model.ScrollPercent(),
+		active:      viewportInstance.active,
+		render:      rendered,
+	}
+
+	return rendered
 }
 
 // calculateViewportWidth determines the available width for a viewport.
@@ -416,7 +451,7 @@ func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder boo
 
 	if noPadding {
 		if viewport.active {
-			combined = v.colors.Table.SelectionHighlightBackground.Render(combined)
+			combined = v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(combined)
 		}
 
 		return combined
@@ -426,9 +461,9 @@ func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder boo
 		return combined
 	}
 
-	borderColor := v.colors.Table.Border.GetForeground()
+	borderColor := v.conf.ColorScheme.Table.Border.GetForeground()
 	if viewport.active {
-		borderColor = v.colors.Table.Border.GetBackground()
+		borderColor = v.conf.ColorScheme.Table.Border.GetBackground()
 	}
 
 	return lipgloss.NewStyle().
@@ -462,7 +497,7 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 	}
 
 	return lipgloss.NewStyle().
-		Foreground(v.colors.Table.Border.GetForeground()).
+		Foreground(v.conf.ColorScheme.Table.Border.GetForeground()).
 		Render(builder.String()), 1
 }
 

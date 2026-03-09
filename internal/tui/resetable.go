@@ -35,7 +35,7 @@ func (m *model) startWorkflow() tea.Cmd {
 		m.resetable.Store(&resetable{
 			workflow:    workflow,
 			spinners:    spinners,
-			viewports:   viewports.NewViewports(m.dimensions, m.conf.ColorScheme, nil, m.conf.Flags.Tui.CommandOutputMaxHeight),
+			viewports:   viewports.NewViewports(m.dimensions, m.conf),
 			statsTable:  NewStatsTable(),
 			phaseStatus: NewPhaseStatus(),
 		})
