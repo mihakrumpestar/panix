@@ -68,6 +68,10 @@ func (n *Notification) Clear() {
 	n.started = time.Time{}
 }
 
+func (n *Notification) GetTextAndStarted() (string, int64) {
+	return n.text, n.started.UnixMilli()
+}
+
 func (n *Notification) isExpired() bool {
 	return n.text == "" || time.Since(n.started) >= duration
 }
