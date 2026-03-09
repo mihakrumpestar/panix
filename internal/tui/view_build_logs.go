@@ -155,9 +155,14 @@ func (m *model) addMachinePhases(parent *tree.Tree, machine *config.Machine, ind
 // Each node shows: icon + name + message (left aligned) and duration (right aligned).
 func (m *model) createNode(indent int, style config.ColorSchemeLogEntity, attr *attributes.Attributes, isRoot bool) *tree.Tree {
 	duration := m.resetable.Load().workflow.State().TargetsLogs.MustGet(attr.Xpath).GetCachedDurationAndError().Duration
-	line := m.layoutLine(indent,
-		style.Color.Render(fmt.Sprintf("%s %s %s", string(style.Icon), attr.Name, attr.Message)),
-		style.Color.Render(fmt.Sprintf("(%.2fs)", duration.Seconds())))
+
+	leftRaw := fmt.Sprintf("%s %s %s", string(style.Icon), attr.Name, attr.Message)
+	rightRaw := fmt.Sprintf(" (%.2fs)", duration.Seconds())
+
+	left := style.Color.Render(leftRaw)
+	right := style.Color.Render(rightRaw)
+
+	line := m.layoutLine(indent, left, right, len(leftRaw), len(rightRaw))
 
 	treeInst := tree.New().Root(line)
 	if isRoot {
@@ -215,8 +220,12 @@ func (m *model) createPhaseNode(attr *attributes.Attributes, phase phases.Phase,
 	tas := phaseLog.TimeAndState()
 
 	icon := m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), tas)
-	duration := m.durationText(colors.Phase, tas)
-	line := m.layoutLine(indent, colors.Phase.Color.Render(icon+" "+strings.ToUpper(string(phase))), duration)
+	durationStyled, durationWidth := m.durationText(colors.Phase, tas)
+
+	leftRaw := icon + " " + strings.ToUpper(string(phase))
+	left := colors.Phase.Color.Render(leftRaw)
+
+	line := m.layoutLine(indent, left, durationStyled, len(leftRaw), durationWidth)
 
 	return tree.New().Root(colors.Phase.Color.Render(line))
 }
@@ -248,32 +257,35 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	cmdIndent := indent + treeStep
 	resetable := m.resetable.Load()
 
-	// Use command or description based on flag
 	label := cmd.Description
-	if m.conf.Flags.Tui.ShowCommandsInLabels {
-		label = cmd.Command
+
+	// Use command or description based on flag
+	command := cmd.Command
+	if m.conf.Flags.Tui.ShowCommandsInLabels && len(command) > 2 { // Don't show "command" if it is implemented in Golang instead of shell
+		label = command
 	}
 
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
 	icon := m.spinnerOrIcon(cmdXpath, fmt.Sprintf("%d ", idx+1), cmd.TimeAndState)
-	duration := m.durationText(colors.Command, cmd.TimeAndState)
+	durationStyled, durationWidth := m.durationText(colors.Command, cmd.TimeAndState)
 
 	// Create label viewport for wrapping long labels
-	labelWidth := cmdIndent + lipgloss.Width(icon) + lipgloss.Width(duration)
+	labelWidth := cmdIndent + lipgloss.Width(icon) + durationWidth
 	labelViewport := resetable.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, labelWidth)
+	labelViewportHeight := lipgloss.Height(labelViewport)
 
 	// If label wraps multiple lines, extend icon with tree lines for alignment
-	output := strings.TrimSpace(cmd.String())
-	if len(output) > 0 && lipgloss.Height(labelViewport) > 1 {
-		icon = lipgloss.JoinVertical(lipgloss.Left, append([]string{icon},
-			slices.Repeat([]string{colors.Tree.Enumerator.Render("│")}, lipgloss.Height(labelViewport)-1)...)...)
+	if labelViewportHeight > 1 {
+		treeLine := "\n" + colors.Tree.Enumerator.Render("│")
+		icon += strings.Repeat(treeLine, labelViewportHeight-1)
 	}
 
 	cmdNode := tree.New().Root(colors.Command.Color.Render(
-		lipgloss.JoinHorizontal(lipgloss.Top, icon, colors.Command.Color.Render(labelViewport), duration),
+		lipgloss.JoinHorizontal(lipgloss.Top, icon, colors.Command.Color.Render(labelViewport), durationStyled),
 	))
 
 	// Add command output in a viewport if it exists
+	output := strings.TrimRight(cmd.String(), "\n")
 	if len(output) > 0 {
 		cmdNode.Child(resetable.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
 	} else {
@@ -295,14 +307,12 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 
 // layoutLine creates a line with left-aligned content and right-aligned duration.
 // Calculates available width minus indent and timer indent.
-func (m *model) layoutLine(indent int, left, right string) string {
+func (m *model) layoutLine(indent int, left, right string, leftWidth, rightWidth int) string {
 	timerIndentCorrection := max(0, timerIndent-indent/treeStep)
 	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndentCorrection
-	rightWidth := lipgloss.Width(right)
+	centerSpace := strings.Repeat(" ", max(available-rightWidth-leftWidth, leftWidth))
 
-	return lipgloss.JoinHorizontal(lipgloss.Left,
-		lipgloss.NewStyle().Width(max(available-rightWidth, lipgloss.Width(left))).Render(left),
-		right)
+	return left + centerSpace + right
 }
 
 // spinnerOrIcon returns an icon or spinner based on execution state.
@@ -320,11 +330,15 @@ func (m *model) spinnerOrIcon(xpath attributes.Xpath, icon string, tas *timeands
 }
 
 // durationText formats duration text with proper styling.
-// Returns empty string if execution hasn't started.
-func (m *model) durationText(style config.ColorSchemeLogEntity, tas *timeandstate.TimeAndState) string {
-	if d, err := tas.DurationOrElapsedTime(); err == nil {
-		return style.Color.PaddingLeft(1).Render(fmt.Sprintf("(%.2fs)", d.Seconds()))
+// Returns the styled string and its width.
+func (m *model) durationText(style config.ColorSchemeLogEntity, tas *timeandstate.TimeAndState) (string, int) {
+	duration, err := tas.DurationOrElapsedTime()
+	if err == nil {
+		text := fmt.Sprintf(" (%.2fs)", duration.Seconds())
+		styled := style.Color.Render(text)
+
+		return styled, len(text)
 	}
 
-	return ""
+	return "", 0
 }
