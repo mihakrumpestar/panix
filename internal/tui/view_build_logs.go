@@ -124,20 +124,36 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 
 // addDefaultTree adds all phases in order from PhaseRegistry to the tree.
 // Respects scope: ScopeConfig phases at config level, ScopeMachine per machine.
+// Consecutive machine-scoped phases are grouped under the same machine node.
+// When a config-scoped phase appears, it breaks the grouping, and subsequent
+// machine-scoped phases create new machine nodes.
 func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []omap.Pair[string, *config.Machine]) {
 	indent := treeStep * indentStep
 
+	var pendingMachinePhases []phases.Phase
+
+	flushMachinePhases := func() {
+		if len(pendingMachinePhases) == 0 {
+			return
+		}
+
+		for _, pair := range machines {
+			m.addMachinePhases(cfgNode, pair.Value, indent, pendingMachinePhases...)
+		}
+
+		pendingMachinePhases = nil
+	}
+
 	for _, phaseMeta := range phases.PhaseRegistry {
 		if phaseMeta.Scope == phases.ScopeConfig {
-			// Config-scoped phase (like Build): use config attributes
+			flushMachinePhases()
 			m.addPhases(cfgNode, &cfg.Attributes, indent, false, phaseMeta.Phase)
 		} else {
-			// Machine-scoped phase: add for each machine
-			for _, pair := range machines {
-				m.addMachinePhases(cfgNode, pair.Value, indent, phaseMeta.Phase)
-			}
+			pendingMachinePhases = append(pendingMachinePhases, phaseMeta.Phase)
 		}
 	}
+
+	flushMachinePhases()
 }
 
 // addMachinePhases adds a machine node with specific phases to the parent tree.
@@ -306,10 +322,14 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 }
 
 // layoutLine creates a line with left-aligned content and right-aligned duration.
-// Calculates available width minus indent and timer indent.
+// Timer indentation from right: flake=4, config=3, machine=2, phase=1, command=0.
+// indent accounts for the tree prefix width added by the tree library.
 func (m *model) layoutLine(indent int, left, right string, leftWidth, rightWidth int) string {
-	timerIndentCorrection := max(0, timerIndent-indent/treeStep)
-	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndentCorrection
+	leftWidth -= 2 // Due to miscalculation with emoji chars
+
+	level := indent / treeStep
+	timerIndentFromRight := timerIndent - level
+	available := m.resetable.Load().viewports.ContentWidth() - indent - timerIndentFromRight
 	centerSpace := strings.Repeat(" ", max(available-rightWidth-leftWidth, leftWidth))
 
 	return left + centerSpace + right
