@@ -301,7 +301,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	))
 
 	// Add command output in a viewport if it exists
-	output := strings.TrimRight(cmd.String(), "\n")
+	output := cmd.StringForBuildLogs()
 	if len(output) > 0 {
 		cmdNode.Child(resetable.viewports.GetOrCreateViewport(cmdXpath.NewXpathWithAppend("output"), output, cmdIndent+treeStep*2-1))
 	} else {
