@@ -13,13 +13,13 @@ body = """
     {% for commit in commits %}
         - {% if commit.scope %}({{ commit.scope }}) {% endif %}\
             {% if commit.breaking %}[**breaking**] {% endif %}\
-            {{ commit.message | upper_first }}\
-            {% if commit.remote.pr_number %} \
-                ([#{{ commit.remote.pr_number }}](https://github.com/mihakrumpestar/panix/pull/{{ commit.remote.pr_number }}))\
+            {{ commit.message | upper_first }} \
+            {% if commit.remote.pr_number %}\
+                ([#{{ commit.remote.pr_number }}](https://github.com/mihakrumpestar/panix/pull/{{ commit.remote.pr_number }})) \
             {% endif %}\
             {% if commit.links %}\
-                {% for link in commit.links %} \
-                    ([{{ link.text }}]({{ link.href }}))\
+                {% for link in commit.links %}\
+                    ([{{ link.text }}]({{ link.href }})) \
                 {% endfor %}\
             {% endif %}\
             ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/mihakrumpestar/panix/commit/{{ commit.id }}))\
