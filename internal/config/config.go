@@ -2,7 +2,7 @@ package config
 
 import (
 	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
-	config_flags "github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	Flags       *config_flags.Flags `yaml:"flags"`
-	Root        *Root               `yaml:"root,required" validate:"required"`
-	ColorScheme *ColorScheme        `yaml:"-" validate:"-"`
+	Flags       *flags.Flags `yaml:"flags"`
+	Root        *Root        `yaml:"root,required" validate:"required"`
+	ColorScheme *ColorScheme `yaml:"-" validate:"-"`
 
 	// Internal
 	Phases []phases.Phase `yaml:"-" validate:"-"`
@@ -25,9 +25,9 @@ type Root struct {
 	config_attributes.Attributes `yaml:",inline"`
 }
 
-func (r *Root) Init(flags *config_flags.Flags) error {
+func (r *Root) Init(f *flags.Flags) error {
 	return errors.Wrap(
-		r.Attributes.Init("root", &config_attributes.Attributes{Flags: flags}, false),
+		r.Attributes.Init("root", &config_attributes.Attributes{Flags: f}, false),
 		"failed to initialize root attributes",
 	)
 }

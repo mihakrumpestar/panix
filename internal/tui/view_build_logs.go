@@ -42,15 +42,15 @@ func (m *model) ViewBuildLogs() string {
 	colors := m.conf.ColorScheme
 
 	// Build tree for each flake
-	for _, flakePair := range m.conf.Root.Flakes.Omap.Pairs() {
+	for _, flakePair := range m.conf.Root.Flakes.Pairs() {
 		flake := flakePair.Value
 		flakeNode := m.createNode(0, colors.Flake, &flake.Attributes, true)
 
 		// Add configurations under flake
-		for _, cfgPair := range flake.Configurations.Omap.Pairs() {
+		for _, cfgPair := range flake.Configurations.Pairs() {
 			cfg := cfgPair.Value
 			cfgNode := m.createNode(treeStep, colors.Configuration, &cfg.Attributes, false)
-			machines := cfg.Machines.Omap.Pairs()
+			machines := cfg.Machines.Pairs()
 
 			// Determine what to show based on selection
 			switch {

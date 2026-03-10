@@ -53,7 +53,7 @@ func main() {
 		}))
 	case "bootstrap":
 		ctx.FatalIfErrorf(cli.runTui(phases.PhasesInOrder(), func(conf *config.Config) {
-			conf.Flags.Bootstrap.Only = true
+			conf.Flags.Bootstrap.OnlyBootstrap = true
 		}))
 	case "build":
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Build}))

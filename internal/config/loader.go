@@ -87,14 +87,14 @@ func decodeConfigFile(configPath string) (*Config, error) {
 
 // applyConfigDefaults merges configuration with CLI flags and applies defaults.
 func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
-	err := conf.Flags.MergeConfWithCliFlags(parsedFlags)
-	if err != nil {
-		return errors.Wrap(err, "failed merging config with cli flags")
-	}
-
 	// Apply defaults
 	if conf.Flags == nil {
 		conf.Flags = &flags.Flags{}
+	}
+
+	err := conf.Flags.MergeConfWithCliFlags(parsedFlags)
+	if err != nil {
+		return errors.Wrap(err, "failed merging config with cli flags")
 	}
 
 	if conf.ColorScheme == nil {
