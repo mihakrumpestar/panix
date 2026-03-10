@@ -31,6 +31,7 @@ root:
         server-01:
           machines:
             server-01:
+
         server-03:
           machines:
             server-03:
@@ -41,7 +42,7 @@ root:
                 post_bootstrap_hooks:
                   - systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all /dev/sda2
                 ssh:
-                  hostname: 10.0.200.222
+                  hostname: 10.0.200.223
                   username: root
                   port: 22
                   identity_file: temp_key
