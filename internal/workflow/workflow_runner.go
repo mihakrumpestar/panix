@@ -64,34 +64,13 @@ func (r *runner) getOrCreateOnceAsync(xpath string) *onceasync.OnceAsync {
 func (pr *phaseRunner) run(phase phases.Phase) error {
 	workflow := pr.r.workflow
 
-	// Check bootstrap status - skip bootstrap phase if already bootstrapped
-	if phase == phases.Bootstrap && pr.machine.MetaInspect.Bootstrapped.Load() {
+	if shouldSkipPhase(phase, workflow.conf.Flags.Bootstrap.OnlyBootstrap, pr.machine) {
 		return nil
 	}
 
-	// If in Bootstrap.Only mode and machine is already bootstrapped, skip all phases
-	if workflow.conf.Flags.Bootstrap.Only && pr.machine.MetaInspect.Bootstrapped.Load() {
-		return nil
-	}
+	xpath := getXpathForScope(phase, pr.flake, pr.config, pr.machine)
 
-	scope := phases.GetPhaseScope(phase)
-
-	// Determine the xpath and execution function based on scope
-	var (
-		xpath  attributes.Xpath
-		execFn func() error
-	)
-
-	switch scope {
-	case phases.ScopeFlake:
-		xpath = pr.flake.Xpath
-	case phases.ScopeConfig:
-		xpath = pr.config.Xpath
-	default: // ScopeMachine
-		xpath = pr.machine.Xpath
-	}
-
-	execFn = func() error {
+	execFn := func() error {
 		return workflow.executePhase(phase, pr.flake, pr.config, pr.machine)
 	}
 
@@ -111,4 +90,27 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 
 	// Otherwise, run directly
 	return workflow.NewTaskWithRetry(phase, xpath, execFn)
+}
+
+func shouldSkipPhase(phase phases.Phase, onlyBootstrap bool, machine *config.Machine) bool {
+	if phase == phases.Bootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap {
+		return true
+	}
+
+	if onlyBootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap {
+		return true
+	}
+
+	return false
+}
+
+func getXpathForScope(phase phases.Phase, flake *config.Flake, cfg *config.Configuration, machine *config.Machine) attributes.Xpath {
+	switch phases.GetPhaseScope(phase) {
+	case phases.ScopeFlake:
+		return flake.Xpath
+	case phases.ScopeConfig:
+		return cfg.Xpath
+	default:
+		return machine.Xpath
+	}
 }

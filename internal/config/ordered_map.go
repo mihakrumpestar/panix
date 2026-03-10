@@ -7,7 +7,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
-	omap "github.com/kirill-scherba/omap"
+	"github.com/kirill-scherba/omap"
 	"github.com/pkg/errors"
 )
 

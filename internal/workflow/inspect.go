@@ -236,6 +236,13 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 				return nil
 			}
 
+			if machine.Bootstrap.ForceBootstrap {
+				mms.Bootstrapped.Store(false)
+				mms.RequiresKexec.Store(machine.Bootstrap.ForceBootstrapKexec)
+
+				return nil
+			}
+
 			mms.Bootstrapped.Store(true)
 			mms.Nixos.Store(osrelease["BUILD_ID"])
 

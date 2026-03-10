@@ -91,6 +91,9 @@ properties:
       bootstrap:
         type: object
         properties:
+          allow_destructive_actions:
+            type: boolean
+            description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
           disable_automatic_reboot:
             type: boolean
             description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
@@ -122,6 +125,12 @@ properties:
               - local_path
               - remote_path
               additionalProperties: false
+          force_bootstrap:
+            type: boolean
+            description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
+          force_bootstrap_kexec:
+            type: boolean
+            description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
           kexec_extra_flags:
             type: string
             description: Extra flags to pass to kexec (e.g. '--no-sync')
@@ -178,6 +187,9 @@ properties:
             bootstrap:
               type: object
               properties:
+                allow_destructive_actions:
+                  type: boolean
+                  description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
                 disable_automatic_reboot:
                   type: boolean
                   description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
@@ -209,6 +221,12 @@ properties:
                     - local_path
                     - remote_path
                     additionalProperties: false
+                force_bootstrap:
+                  type: boolean
+                  description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
+                force_bootstrap_kexec:
+                  type: boolean
+                  description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
                 kexec_extra_flags:
                   type: string
                   description: Extra flags to pass to kexec (e.g. '--no-sync')
@@ -263,6 +281,9 @@ properties:
                   bootstrap:
                     type: object
                     properties:
+                      allow_destructive_actions:
+                        type: boolean
+                        description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
                       disable_automatic_reboot:
                         type: boolean
                         description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
@@ -294,6 +315,12 @@ properties:
                           - local_path
                           - remote_path
                           additionalProperties: false
+                      force_bootstrap:
+                        type: boolean
+                        description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
+                      force_bootstrap_kexec:
+                        type: boolean
+                        description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
                       kexec_extra_flags:
                         type: string
                         description: Extra flags to pass to kexec (e.g. '--no-sync')
@@ -356,6 +383,9 @@ properties:
                           bootstrap:
                             type: object
                             properties:
+                              allow_destructive_actions:
+                                type: boolean
+                                description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
                               disable_automatic_reboot:
                                 type: boolean
                                 description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
@@ -387,6 +417,12 @@ properties:
                                   - local_path
                                   - remote_path
                                   additionalProperties: false
+                              force_bootstrap:
+                                type: boolean
+                                description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
+                              force_bootstrap_kexec:
+                                type: boolean
+                                description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
                               kexec_extra_flags:
                                 type: string
                                 description: Extra flags to pass to kexec (e.g. '--no-sync')
