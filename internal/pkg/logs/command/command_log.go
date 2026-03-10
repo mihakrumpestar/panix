@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var nixBuildOutputPrefix = []byte(`[{"drvPath":"/nix/store/`)
+
 type CommandLog struct {
 	Description     string
 	StatusIfRunning string
@@ -38,8 +40,22 @@ func (cl *CommandLog) String() string {
 	return string(cl.Bytes())
 }
 
+func (cl *CommandLog) StringForBuildLogs() string {
+	return string(cl.BytesForBuildLogs())
+}
+
 // Bytes returns the byte representation of all lines in StdInOutErr.
 func (cl *CommandLog) Bytes() []byte {
+	return cl.filterBytes(nil)
+}
+
+func (cl *CommandLog) BytesForBuildLogs() []byte {
+	filtered := cl.filterBytes(nixBuildOutputPrefix)
+
+	return bytes.TrimRight(filtered, "\n")
+}
+
+func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
 	values := cl.stdInOutErr.Values()
 	if len(values) == 0 {
 		return nil
@@ -49,12 +65,25 @@ func (cl *CommandLog) Bytes() []byte {
 
 	result.Grow(estimateSize(values))
 
-	for i, buf := range values {
-		if i > 0 {
+	first := true
+
+	for _, buf := range values {
+		data := buf.Bytes()
+		if skipPrefix != nil && bytes.HasPrefix(data, skipPrefix) {
+			continue
+		}
+
+		if !first {
 			result.WriteByte('\n')
 		}
 
-		result.Write(buf.Bytes())
+		first = false
+
+		result.Write(data)
+	}
+
+	if result.Len() == 0 {
+		return nil
 	}
 
 	return result.Bytes()
