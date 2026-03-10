@@ -30,3 +30,11 @@ The following packages were inadequate for use for Panix:
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
+
+## Demo video
+
+Convert using:
+
+```sh
+nix-shell -p ffmpeg.bin --run 'ffmpeg -i <source>.mp4 -lavfi "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" demo.gif'
+```
