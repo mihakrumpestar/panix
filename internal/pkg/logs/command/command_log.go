@@ -52,7 +52,7 @@ func (cl *CommandLog) Bytes() []byte {
 func (cl *CommandLog) BytesForBuildLogs() []byte {
 	filtered := cl.filterBytes(nixBuildOutputPrefix)
 
-	return bytes.TrimRight(filtered, "\n")
+	return bytes.TrimSpace(filtered) // Both prefix and suffix whitespace characters appear
 }
 
 func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
