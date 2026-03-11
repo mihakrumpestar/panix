@@ -6,9 +6,11 @@
 
 *A stateless TUI-driven orchestrator for bootstrapping and deploying multi-flake NixOS systems*
 
-[![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version)](https://github.com/mihakrumpestar/panix/releases)
+[![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
 [![License](https://img.shields.io/github/license/mihakrumpestar/panix)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
+[![Scc Count Badge](https://sloc.xyz/github/mihakrumpestar/panix?category=code)](https://github.com/boyter/scc/)
 [![NixOS](https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white)](https://nixos.org)
 
 </div>
