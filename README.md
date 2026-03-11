@@ -44,11 +44,11 @@ Some machines already run NixOS. Others are bare metal, cloud instances, or lega
 
 The ecosystem has tools for pieces of this puzzle. **nixos-anywhere** handles bootstrap. **deploy-rs**, **Colmena** (and many others) manage deployments. Each excels at its domain. But orchestration across these concerns - bootstrap, deploy, secrets, visibility, recovery - remains manual.
 
-A lot of the tools that manage deployments also introduce themselves as a dependancy in your flake, making it possible to deploy only with their tool (without at least some caviats to get the system closure path). Panix intentionaly does not require you to modify your flake for it.
+A lot of the tools that manage deployments also introduce themselves as **a dependancy** in your flake, making it possible to deploy only with their tool (without at least some caviats to get the system closure path out of it). Panix intentionaly does not require you to modify your flake for it.
 
 **The missing piece: an operator-focused interface.**
 
-Not a script that runs and exits. Not a single command whose output you scroll through (or it might not even provide them) to find the relevant information after it already failed. But an interactive, real-time view into your deployment pipeline - where you can see every phase, every machine, every failure, and act on them immediately.
+Not a script that runs and exits. Not a single command whose output you scroll through (or it might not even provide them) to find the relevant information after it already failed. But **an interactive, real-time view into your deployment pipeline - where you can see every phase, every machine, every failure, and act on them immediately**.
 
 This is the gap Panix fills.
 
@@ -56,7 +56,7 @@ This is the gap Panix fills.
 
 ## What Panix Actually Is
 
-Panix is a **stateless, phase-oriented deployment orchestrator** with a real-time TUI. Stateless means it holds no persistent state of its own - everything derives from your flake, your configuration file and actual state of the machines.
+Panix is a **stateless, phase-oriented flake deployment orchestrator** with a real-time TUI. Stateless means it holds no persistent state of its own - everything derives from your flake, your configuration file and actual state of the machines.
 
 The TUI isn't a gimmick. It's a recognition that deployments are **interactive processes**. Things fail, networks hiccup, builds take time, etc. Having visibility into every phase of every machine - seeing the architecture detection, watching the closure transfer, observing the activation - transforms deployment from a "*blindly run and pray*" operation into a controlled, observable process.
 
@@ -64,7 +64,7 @@ The TUI isn't a gimmick. It's a recognition that deployments are **interactive p
 
 ## The Phase Pipeline
 
-Panix doesn't just "*run a deployment*". It executes a carefully ordered pipeline of phases, each with a specific scope and purpose:
+Panix doesn't just "*run a deployment*". It executes an ordered pipeline of phases, each with a specific scope and purpose:
 
 <div align="center">
 
@@ -162,7 +162,7 @@ machines:
         - systemd-cryptenroll --tpm2-device=auto /dev/nvme0n1p2
 ```
 
-#### Bootstrap Hooks
+### Bootstrap Hooks
 
 Panix provides multiple hook points during bootstrap:
 
@@ -173,6 +173,7 @@ Panix provides multiple hook points during bootstrap:
 | `post_bootstrap_provisioned_hooks` | After reboot into new system | Regular SSH |
 
 Special hook commands:
+
 - `waitForOnline` - Wait for machine to become reachable (useful after reboot)
 - `waitForOffline` - Wait for machine to become unreachable (useful during reboot)
 
@@ -220,6 +221,7 @@ ssh:
 ```
 
 Defaults:
+
 - **Regular SSH**: `strict_key_checking: true`, `disable_auto_add_host_key: false` (secure by default)
 - **Bootstrap SSH**: `strict_key_checking: false`, `disable_auto_add_host_key: true` (permissive for new machines)
 
@@ -339,8 +341,8 @@ machines:
       port: 2222
       username: admin
       identity_file: ./keys/server.key
-      strict_key_checking: false      # Disable strict host key checking
-      disable_auto_add_host_key: true  # Prevent auto-adding host keys
+      strict_key_checking: true      # Disable strict host key checking
+      disable_auto_add_host_key: false  # Prevent auto-adding host keys
 ```
 
 </details>
@@ -348,7 +350,7 @@ machines:
 <details>
 <summary><strong>Local Machine Detection</strong></summary>
 
-Deploying to the machine you're on? If the machine name matches the system hostname, Panix skips SSH entirely - executing commands directly via shell:
+Deploying to the machine you're on? If the machine name matches the system hostname, Panix skips SSH entirely - executing commands directly via local shell:
 
 ```yaml
 # On a machine with hostname "workstation"
@@ -359,7 +361,7 @@ machines:
 </details>
 
 <details>
-<summary><strong>CI/CD Ready</strong></summary>
+<summary><strong>CI/CD Ready and Dry Run</strong></summary>
 
 ```bash
 # Exit when complete, fail fast on any error
@@ -414,13 +416,27 @@ nix run github:mihakrumpestar/panix -- deploy
 Add to your flake:
 
 ```nix
-inputs.panix.url = "github:mihakrumpestar/panix";
-```
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-and then reference it as:
+    panix.url = "github:mihakrumpestar/panix";
+  };
 
-```nix
-panix.packages."${system}".panix
+  outputs = { self, nixpkgs, panix, ... }@inputs: {
+    nixosConfigurations.my-server = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        {
+          environment.systemPackages = [
+            panix.packages.${system}.default
+          ];
+        }
+      ];
+    };
+  };
+}
 ```
 
 ---
@@ -431,7 +447,7 @@ Note: Remote requires SSH key authentication (key file must be without password,
 
 ### 1. Remote
 
-Boot into NixOS installer, any Linux live ISO (note that it might be missing packages needed to start Kexec) or your already provisioned NixOS
+Boot into NixOS installer, any Linux live ISO (note that it might be missing packages needed to start kexec) or your already provisioned NixOS.
 
 ### 2. SSH Authentication
 
@@ -485,8 +501,14 @@ root:
 ### 4. Deploy
 
 ```bash
-panix
+panix deploy
 ```
+
+---
+
+## Configuration Reference
+
+### CLI
 
 ```sh
 > panix --help
@@ -497,12 +519,13 @@ Universal NixOS Deployment Tool
 Flags:
   -h, --help                               Show context-sensitive help.
   -c, --config="panix.yml"                 Config file ($PANIX_CONFIG)
-  -t, --tags=TAGS,...                      Filter machines by tags (flakes, configurations and machine names are already registered as
-                                           tags, children inherit all parent tags) ($PANIX_TAGS)
-      --bootstrap.only                     Only initializes uninitialized machines ($PANIX_BOOTSTRAP_ONLY)
-      --bootstrap.disable-auto             Disable automatic bootstrap (even if target machine does not have NixOS installed)
-                                           ($PANIX_BOOTSTRAP_DISABLE_AUTO)
-      --bootstrap.disable-disko            Disables building, transfer and bootstrap of disko tool ($PANIX_BOOTSTRAP_DISABLE_DISKO)
+  -t, --tags=TAGS,...                      Filter machines by tags (flakes, configs and names are already registered as
+                                           tags) ($PANIX_TAGS)
+      --bootstrap.only-bootstrap           Only initializes uninitialized machines ($PANIX_BOOTSTRAP_ONLY_BOOTSTRAP)
+      --bootstrap.disable-auto             Disable automatic bootstrap (even if target machine does not have NixOS
+                                           installed) ($PANIX_BOOTSTRAP_DISABLE_AUTO)
+      --bootstrap.disable-disko            Disables building, transfer and bootstrap of disko tool
+                                           ($PANIX_BOOTSTRAP_DISABLE_DISKO)
       --require-all-success                Abort if any task fails, primarily for CI/CD ($PANIX_REQUIRE_ALL_SUCCESS)
       --override-local-machine=STRING      Hostname of the machine that is local (won't use ssh to connect to it)
                                            ($PANIX_OVERRIDE_LOCAL_MACHINE)
@@ -511,8 +534,8 @@ Flags:
                                            ($PANIX_DRY_RUN_WITH_INSPECT)
       --timeout=2h                         Timeout for workflow (eg. '1h', '1m15s') ($PANIX_TIMEOUT)
   -s, --skip-phases=SKIP-PHASES,...        Declare phases to skip (not all phases can be skipped) ($PANIX_SKIP_PHASES)
-      --exit-on-complete                   Exit TUI immediately when workflow completes (otherwise stays open until user quits);
-                                           'retry' and 'restart' do not work in this mode ($PANIX_EXIT_ON_COMPLETE)
+      --exit-on-complete                   Exit TUI on completion; 'retry' and 'restart' are disabled in this mode
+                                           ($PANIX_EXIT_ON_COMPLETE)
       --tui.show-all-build-logs            Show all build logs in TUI (keybind h) ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
       --tui.show-active-only               Show only running or errored logs in TUI build logs (keybind a)
                                            ($PANIX_TUI_SHOW_ACTIVE_ONLY)
@@ -548,65 +571,197 @@ Commands:
 Run "panix <command> --help" for more information on a command.
 ```
 
----
+### YAML
 
-## Configuration Reference
+For the complete schema, see [panix-schema.yaml](./gen/panix-schema.yaml).
 
-Here is an example, but for all options check [panix-schema.yaml](./gen/panix-schema.yaml):
+#### Minimal Example
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
-flags:
-  config: panix.yml                    # Config file path
-  tags: []                             # Filter machines by tags
-  timeout: 2h
-  exit_on_complete: false
-  require_all_success: false
-  skip_phases: []
-  override_local_machine: my-laptop   # Override which machine is considered local
-  dry_run: false                      # Show what would happen without executing
-  dry_run_with_inspect: false         # Dry run but with real inspect queries
+root:
+  flakes:
+    my-config: # A name for your flake
+      url: path:./my-nixos-flake
+      configurations:
+        my-server: # Matches "my-server" in nixosConfigurations
+          machines:
+            my-server: # Matches "my-server" in SSH config
+```
+
+#### Full Example
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
+
+flags: # Listed are default values, all also overridable using CLI arguments
+  tags: []                             # Filter machines by tags (flakes, configs, machine names are auto-registered as tags)
+  timeout: 2h                          # Workflow timeout (e.g. '1h', '1m15s')
+  exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
+  require_all_success: false           # Abort if any task fails (for CI/CD)
+  skip_phases: []                      # Phases to skip (not all phases can be skipped)
+  override_local_machine: my-laptop    # Override which machine is considered local (no SSH)
+  dry_run: false                       # Show what would happen without executing
+  dry_run_with_inspect: false          # Dry run but with real inspect queries
   bootstrap:
-    only: false                       # Only bootstrap uninitialized machines
-    disable_auto: false               # Disable automatic bootstrap
-    disable_disko: false              # Disable disko tool
+    only: false                        # Only bootstrap uninitialized machines
+    disable_auto: false                # Disable automatic bootstrap
+    disable_disko: false               # Disable disko tool build/transfer/bootstrap
   tui:
-    show_all_build_logs: false        # Show inspect/secrets phases in build logs
-    show_active_only: false           # Show only running/errored logs
-    show_commands_in_labels: false    # Show raw commands instead of descriptions
-    command_output_max_height: 8      # Max height for command output viewports
+    show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)
+    show_active_only: false            # Show only running/errored logs (keybind a)
+    show_commands_in_labels: false     # Show raw commands instead of descriptions (keybind c)
+    command_output_max_height: 8       # Max height for command output viewports
   logging:
-    log: false                        # Enable logging to file
-    log_file: panix.log               # Log file path
-    debug: false                      # Enable debug output
-    cpu_profile: ""                   # Path for CPU profiling
+    log: false                         # Enable logging to file
+    log_file: panix.log                # Log file path
+    debug: false                       # Enable debug output (enables logging)
+    cpu_profile: ""                    # Path for CPU profiling file
 
 root:
-  tags: [production]
-  secrets:
+  disabled: false                      # Disable this entire root configuration
+  tags: [production]                   # Tags inherited by all descendants
+  hardware_config_path: ./hardware     # Path for hardware config generation
+  override_sudo_program: doas          # Override sudo program (default: sudo)
+  ssh:                                 # SSH config inherited by all machines (machine-level overrides)
+    hostname: ""                       # SSH hostname or IP address
+    port: 22                           # SSH port number
+    username: root                     # SSH username
+    identity_file: ./keys/default.key  # Path to SSH private key
+    strict_key_checking: true          # Enable strict host key checking
+    disable_auto_add_host_key: false   # Disable auto-adding host keys on first connection
+  secrets:                             # Secrets transferred to all machines
     - local_path: ./secrets/common.key
       remote_path: /var/secrets/common.key
-      uid: 0
-      gid: 0
+      uid: 0                           # User ID for remote file
+      gid: 0                           # Group ID for remote file
+      permissions: 0600                # File permissions (default: 0700)
   
   flakes:
     infrastructure:
-      url: path:../infra-flake
-      tags: [critical]
+      url: path:../infra-flake         # Flake path or URL (e.g. 'github:...', 'git+ssh://...')
+      disabled: false                  # Disable this flake
+      tags: [critical]                 # Additional tags (accumulated: [production, critical])
+      hardware_config_path: ./hw-config
+      override_sudo_program: sudo
+      ssh:                             # SSH config for all machines in this flake
+        hostname: ""
+        port: 22
+        username: admin
+        identity_file: ./keys/infra.key
+        strict_key_checking: true
+        disable_auto_add_host_key: false
+      secrets:                         # APPENDED to inherited secrets
+        - local_path: ./secrets/infra.key
+          remote_path: /var/secrets/infra.key
+          uid: 0
+          gid: 0
+          permissions: 0600
+      bootstrap:                       # Bootstrap config inherited by machines
+        ssh:                           # Bootstrap SSH (used during initial provisioning)
+          hostname: ""
+          port: 22
+          username: root
+          identity_file: ./keys/bootstrap.key
+          strict_key_checking: false   # Default: false for bootstrap SSH
+          disable_auto_add_host_key: true  # Default: true for bootstrap SSH
+        kexec_url: ""                  # Custom kexec tarball URL
+        kexec_extra_flags: ""          # Extra flags for kexec (e.g. '--no-sync')
+        disk_encryption_keys:          # Transferred BEFORE disko runs
+          - local_path: ./secrets/luks.key
+            remote_path: /tmp/luks-key
+            uid: 0
+            gid: 0
+            permissions: 0700
+        allow_destructive_actions: false  # Required for force_bootstrap options
+        force_bootstrap: false         # Force bootstrap even if already NixOS
+        force_bootstrap_kexec: false   # Force kexec even if in NixOS installer (requires force_bootstrap)
+        disable_automatic_reboot: false  # Disable auto-reboot after nixos-install
+        post_bootstrap_hooks: []       # Commands after disko partitioning
+        post_bootstrap_install_hooks: []  # Commands after nixos-install, before reboot
+        post_bootstrap_provisioned_hooks: []  # Commands after reboot (uses regular SSH)
       
       configurations:
         webserver:
-          tags:
-            - web
+          disabled: false
+          tags: [web]                  # Accumulated: [production, critical, web]
+          flake_output: nixosConfigurations.webserver.config.system.build.toplevel  # Override flake output
+          hardware_config_path: ./hardware
+          override_sudo_program: sudo
+          ssh:
+            hostname: ""
+            port: 22
+            username: root
+            identity_file: ./keys/web.key
+            strict_key_checking: true
+            disable_auto_add_host_key: false
+          secrets:
+            - local_path: ./secrets/web.key
+              remote_path: /var/secrets/web.key
+              uid: 0
+              gid: 0
+              permissions: 0600
+          bootstrap:
+            ssh:
+              hostname: ""
+              port: 22
+              username: root
+              identity_file: ./keys/web-bootstrap.key
+              strict_key_checking: false
+              disable_auto_add_host_key: true
+            kexec_url: ""
+            kexec_extra_flags: ""
+            disk_encryption_keys: []
+            allow_destructive_actions: false
+            force_bootstrap: false
+            force_bootstrap_kexec: false
+            disable_automatic_reboot: false
+            post_bootstrap_hooks: []
+            post_bootstrap_install_hooks: []
+            post_bootstrap_provisioned_hooks: []
+          
           machines:
             web-01:
+              disabled: false
+              tags: [web-01]           # Accumulated: [production, critical, web, web-01]
+              hardware_config_path: ./hardware/web-01
+              override_sudo_program: sudo
               ssh:
                 hostname: 10.0.0.1
-            web-02:
+                port: 22
+                username: root
+                identity_file: ./keys/web-01.key
+                strict_key_checking: true
+                disable_auto_add_host_key: false
+              secrets:
+                - local_path: ./secrets/web-01.key
+                  remote_path: /var/secrets/web-01.key
+                  uid: 0
+                  gid: 0
+                  permissions: 0600
+              bootstrap:
+                ssh:
+                  hostname: 10.0.0.1
+                  port: 22
+                  username: root
+                  identity_file: ./keys/web-01-bootstrap.key
+                  strict_key_checking: false
+                  disable_auto_add_host_key: true
+                kexec_url: ""
+                kexec_extra_flags: ""
+                disk_encryption_keys: []
+                allow_destructive_actions: false
+                force_bootstrap: false
+                force_bootstrap_kexec: false
+                disable_automatic_reboot: false
+                post_bootstrap_hooks: []
+                post_bootstrap_install_hooks: []
+                post_bootstrap_provisioned_hooks: []
+            
+            web-02:                    # Minimal machine entry
               ssh:
                 hostname: web-02.example.com
-                identity_file: ./keys/web-02.key
         
         database:
           machines:
@@ -614,7 +769,7 @@ root:
               ssh:
                 hostname: 10.0.1.50
               bootstrap:
-                ssh:                        # Bootstrap SSH for initial provisioning
+                ssh:
                   hostname: 10.0.1.50
                   identity_file: ./keys/bootstrap.key
                 disk_encryption_keys:
