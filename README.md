@@ -24,6 +24,12 @@
 
 ![Demo](./assets/demo.gif)
 
+Full demo of the bootstrap process with kexec over Arch:
+
+<div style="position: relative; padding-top: 56.25%;"><iframe title="Panix bootstrap with kexec" width="100%" height="100%" src="https://spectra.video/videos/embed/t2j1bDbQGS2TgLGm1RqfPH?warningTitle=0" style="border: 0px; position: absolute; inset: 0px;" allow="fullscreen" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe></div>
+
+> It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot.
+
 ---
 
 ## The Problem
