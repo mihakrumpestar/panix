@@ -33,8 +33,25 @@ Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
 ## Demo video
 
+### GIF
+
 Convert using:
 
 ```sh
-nix-shell -p ffmpeg.bin --run 'ffmpeg -i <source>.mp4 -lavfi "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" demo.gif'
+nix run nixpkgs#ffmpeg-full -- -i <source>.mp4 -lavfi "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" demo.gif'
+```
+
+### MP4
+
+Convert using:
+
+```sh
+INPUT="panix kexec.mp4"
+OUTPUT="output-variable35.mp4"
+
+nix run nixpkgs#ffmpeg-full -- -hide_banner -loglevel error -stats -i "$INPUT" \
+  -vf "scale=-2:1080,fps=24" \
+  -c:v libsvtav1 -crf 35 \
+  -an \
+  "$OUTPUT"
 ```
