@@ -18,7 +18,7 @@
 ---
 
 > [!WARNING]
-> The tool is currently in beta stage. Expect breaking changes.
+> The tool is currently in beta stage. There might be breaking changes. There is slight possibility that your NixOS installation might get unintentionally wiped.
 
 ## Demo
 
@@ -26,7 +26,7 @@
 
 Full demo of the bootstrap process with kexec over Arch:
 
-![Kexec demo](https://spectra.video/download/streaming-playlists/hls/videos/dad5951a-58b1-4cc8-b3c1-f774569abd97-1080-fragmented.mp4)
+[![Kexec demo](assets/kexec-demo-thumbnail.png)](https://spectra.video/w/t2j1bDbQGS2TgLGm1RqfPH)
 
 > It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot.
 
