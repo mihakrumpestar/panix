@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"slices"
+
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
@@ -35,7 +37,12 @@ func executeTransferPhaseMachineWrapper(
 	}
 
 	activeSSH := machine.MetaInspect.GetActiveSSH()
-	commandWithArgs := append([]string{"nix", "copy", "--to", "ssh://" + activeSSH.Hostname + storeArgs}, toTransfer...)
+	commandWithArgs := slices.Concat(
+		[]string{"nix"},
+		nixExperimentalFeatures,
+		[]string{"copy", "--to", "ssh://" + activeSSH.Hostname + storeArgs},
+		toTransfer,
+	)
 
 	err := exc.Exec("nix copy",
 		"copying closure",
