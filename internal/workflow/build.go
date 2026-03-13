@@ -23,6 +23,8 @@ var (
 	ErrNoBuildOutputs     = errors.New("invalid build output: no outputs")
 )
 
+var nixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
+
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
 	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
@@ -58,7 +60,12 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 ) (BuildOutputJSON, error) {
 	var parsedOutput BuildOutputJSON
 
-	commandWithArgs := append([]string{"nix", "build", "--no-link", "--no-update-lock-file", "--json"}, installables...)
+	commandWithArgs := slices.Concat(
+		[]string{"nix"},
+		nixExperimentalFeatures,
+		[]string{"build", "--no-link", "--no-update-lock-file", "--json"},
+		installables,
+	)
 
 	err := exc.Exec(
 		"build "+whatIsBuilding,
