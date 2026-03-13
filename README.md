@@ -28,7 +28,7 @@ Full demo of the bootstrap process with kexec over Arch:
 
 [![Kexec demo](assets/kexec-demo-thumbnail.png)](https://spectra.video/w/t2j1bDbQGS2TgLGm1RqfPH)
 
-> It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot.
+> It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot in BIOS.
 
 ---
 

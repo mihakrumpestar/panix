@@ -24,7 +24,7 @@
           src = ./.;
           subPackages = ["cmd/panix"];
 
-          vendorHash = "sha256-/4W6Pe5HkRYhW2orZBBm9B7F+xHTG35s5sHIzzuRXCY=";
+          vendorHash = "sha256-pDOye5L7SX1YB1aFRrvJ817Ab0YhhAV2X+o/SIQgCgA=";
 
           meta = with pkgs.lib; {
             description = "A TUI application for Nix deployment workflows";
