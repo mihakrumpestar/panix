@@ -245,6 +245,52 @@ machines:
 </details>
 
 <details>
+<summary><strong>Secrets Management</strong></summary>
+
+Deploy sensitive files and directories to your machines with proper ownership and permissions. The secrets phase handles the transfer of plain files/directories via `rsync` with configurable user/group ownership and file permissions:
+
+```yaml
+root:
+  secrets:                              # Inherited by all machines
+    - local_path: ./secrets/common.key
+      remote_path: /var/secrets/common.key
+      permissions: 0600                # File permissions (default: 0700)
+  
+  flakes:
+    my-flake:
+      secrets:                         # APPENDED to inherited secrets
+        - local_path: ./secrets/api.key
+          remote_path: /var/secrets/api.key
+      
+      configurations:
+        webserver:
+          machines:
+            web-01:
+              secrets:                  # Further appended secrets
+                - local_path: ./secrets/web-01/cert.pem
+                  remote_path: /etc/ssl/cert.pem
+                  uid: 1000            # User ID (default: SSH user's uid)
+                  gid: 1000            # Group ID (default: SSH user's gid)
+                  permissions: 0644
+```
+
+Key features:
+
+- **Inheritance**: Secrets defined at root/flake/configuration levels accumulate down to machines
+- **Ownership control**: Optionaly set `uid` and `gid` for remote file ownership. Default are the SSH user's `uid` and `gid`.
+- **Permission control**: Optionaly set `permissions` using octal notation (e.g., `0600`, `0644`). Default is `0700`.
+- **Directory support**: Transfer entire directories by pointing `local_path` to a directory
+- **Bootstrap awareness**: Secrets are transferred to the correct path whether targeting a running NixOS system or a bootstrapped machine. During bootstrap, the target root is mounted at `/mnt`, so Panix automatically prefixes paths (e.g., `/var/secrets/key` becomes `/mnt/var/secrets/key`) to place files in the correct location.
+
+**Security advantage**: Secrets are transferred directly to the target machine via `rsync` and are never committed to the Nix store. This means you can safely deploy **unencrypted** secrets without them being stored in `/nix/store` (which is world-readable by default). This is fundamentally different from tools like `agenix` or `sops-nix`, which require secrets to be encrypted before they enter the Nix store.
+
+**When secrets are transferred:**
+
+Regular secrets are transferred during the Secrets phase (after Transfer, before Activate). Disk encryption keys have a special timing - they're transferred during Bootstrap, **before** `disko` runs, so they're available for disk encryption setup.
+
+</details>
+
+<details>
 <summary><strong>Multi-Flake Deployments</strong></summary>
 
 Your infrastructure may span multiple flakes/repositories. Panix treats this as a first-class concern:
