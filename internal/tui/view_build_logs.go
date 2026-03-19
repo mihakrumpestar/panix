@@ -238,7 +238,7 @@ func (m *model) createPhaseNode(attr *attributes.Attributes, phase phases.Phase,
 	icon := m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), tas)
 	durationStyled, durationWidth := m.durationText(colors.Phase, tas)
 
-	leftRaw := icon + " " + strings.ToUpper(string(phase))
+	leftRaw := icon + strings.ToUpper(string(phase))
 	left := colors.Phase.Color.Render(leftRaw)
 
 	line := m.layoutLine(indent, left, durationStyled, len(leftRaw), durationWidth)
@@ -282,7 +282,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	}
 
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
-	icon := m.spinnerOrIcon(cmdXpath, fmt.Sprintf("%d ", idx+1), cmd.TimeAndState)
+	icon := m.spinnerOrIcon(cmdXpath, fmt.Sprintf("%d", idx+1), cmd.TimeAndState)
 	durationStyled, durationWidth := m.durationText(colors.Command, cmd.TimeAndState)
 
 	// Create label viewport for wrapping long labels
@@ -343,7 +343,7 @@ func (m *model) spinnerOrIcon(xpath attributes.Xpath, icon string, tas *timeands
 	}
 
 	if tas.IsFinished() {
-		return icon
+		return icon + " " // Spinner seems to add this by itself
 	}
 
 	return m.resetable.Load().spinners.GetOrCreateSpinner(xpath).View()
