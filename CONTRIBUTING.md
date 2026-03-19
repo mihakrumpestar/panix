@@ -23,11 +23,17 @@ Code has to pass:
 
 - all checks in `task golangci`
 
+## Past
+
 The following packages were inadequate for use for Panix:
 
 - [Koanf link to issue](https://github.com/knadh/koanf/issues/221)
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
+
+## Future
+
+Potentialy replace bubbletea with [tview](https://github.com/rivo/tview) for reduced binary size and improved performance.
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 

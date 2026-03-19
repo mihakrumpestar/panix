@@ -151,7 +151,8 @@ func (v *Viewports) RenderFullscreenViewport(xpath attributes.Xpath, content str
 	viewport.model.SetContent(proc)
 	viewport.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-height)))
 
-	rendered := v.renderViewport(viewport, height, true, false)
+	rendered := v.renderViewport(viewport, lipgloss.Height(proc), height, true, false)
+	rendered = zone.Mark(xpath.String(), rendered)
 	viewport.cache = viewportCache{
 		width:       width,
 		height:      height,
@@ -341,7 +342,7 @@ func (v *Viewports) createViewport(xpath attributes.Xpath, content string, inden
 	finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
 	v.configureViewportModel(viewportInstance, proc, finalWidth, finalHeight)
 
-	rendered := v.renderViewport(viewportInstance, finalHeight, opts.useBorder, opts.noPadding)
+	rendered := v.renderViewport(viewportInstance, contentHeight, finalHeight, opts.useBorder, opts.noPadding)
 	rendered = zone.Mark(xpath.String(), rendered)
 
 	viewportInstance.cache = viewportCache{
@@ -444,9 +445,8 @@ func (v *Viewports) processContent(content string, width int, wrap bool, noPaddi
 	return truncateLines(content, width)
 }
 
-func (v *Viewports) renderViewport(viewport *Viewport, height int, useBorder bool, noPadding bool) string {
-	contentHeight := lipgloss.Height(viewport.content)
-	scrollbar, _ := v.renderScrollbar(viewport.model.ScrollPercent(), contentHeight, height)
+func (v *Viewports) renderViewport(viewport *Viewport, wrappedContentHeight int, height int, useBorder bool, noPadding bool) string {
+	scrollbar, _ := v.renderScrollbar(viewport.model.ScrollPercent(), wrappedContentHeight, height)
 	combined := v.combineWithScrollbar(viewport.model.View(), scrollbar, viewport.scrollbarZone)
 
 	if noPadding {
