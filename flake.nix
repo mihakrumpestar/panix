@@ -24,6 +24,9 @@
           src = ./.;
           subPackages = ["cmd/panix"];
 
+          flags = ["-trimpath"];
+          ldflags = ["-s" "-w"];
+
           vendorHash = "sha256-pDOye5L7SX1YB1aFRrvJ817Ab0YhhAV2X+o/SIQgCgA=";
 
           meta = with pkgs.lib; {

@@ -19,9 +19,8 @@ import (
 )
 
 const (
-	statsTableZonePrefix    = "stats-table"
-	rowSpanMarker           = " 󱞩"
-	statusIconReservedWidth = 3
+	statsTableZonePrefix = "stats-table"
+	rowSpanMarker        = " 󱞩"
 
 	stateRunning    byte = 0
 	stateDone       byte = 1
@@ -301,7 +300,7 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 			return c.Table.Row.Width(indexWidth).Align(lipgloss.Right)
 		}},
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.Table.Row.Width(statusIconReservedWidth).Align(lipgloss.Center)
+			return c.Table.Row
 		}},
 		{header: string(colors.Flake.Icon) + " FLAKE", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.Flake.Color
