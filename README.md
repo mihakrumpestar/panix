@@ -535,6 +535,13 @@ nixos-generate-config --no-filesystems --show-hardware-config
 nix-shell -p nixos-install-tools --command "nixos-generate-config --no-filesystems --show-hardware-config"
 ```
 
+You can also create an encryption password:
+
+```sh
+# `-n` prevents adding newline, which is a problem for password enrolnment
+echo -n "test" > /tmp/disko-encryption-password.txt
+```
+
 ### 3. Create panix.yml
 
 ```yaml

@@ -28,6 +28,16 @@ root:
         personal-laptop:
           machines:
             personal-laptop:
+              bootstrap:
+                ssh:
+                  hostname: 10.0.200.226
+                  identity_file: temp_key
+                disk_encryption_keys:
+                  - local_path: /tmp/disko-encryption-password.txt
+                    remote_path: /tmp/disko-encryption-password.txt
+                # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
+                # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
+
         server-01:
           machines:
             server-01:
