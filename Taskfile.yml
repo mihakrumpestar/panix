@@ -57,6 +57,7 @@ tasks:
     - nix-update --flake --version=skip default
 
   golangci:
+    desc: Run checks
     vars:
       CUSTOM_GCL: .devbox/bin/custom-gcl
     cmds:

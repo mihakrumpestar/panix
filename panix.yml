@@ -29,9 +29,9 @@ root:
           machines:
             personal-laptop:
               bootstrap:
-                ssh:
-                  hostname: 10.0.200.226
-                  identity_file: temp_key
+                #ssh:
+                #  hostname: 10.0.200.226
+                #  identity_file: temp_key
                 disk_encryption_keys:
                   - local_path: /tmp/disko-encryption-password.txt
                     remote_path: /tmp/disko-encryption-password.txt
