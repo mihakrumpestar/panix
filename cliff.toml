@@ -45,6 +45,7 @@ commit_parsers = [
     { message = "^style", group = "Styling" },
     { message = "^test", group = "Testing" },
     { message = "^chore\\(release\\):", skip = true },
+    { message = "^chore: bump version", skip = true },
     { message = "^chore|^ci", group = "Miscellaneous" },
 ]
 protect_breaking_commits = false
