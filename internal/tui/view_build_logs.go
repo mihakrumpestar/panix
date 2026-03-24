@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -282,7 +283,7 @@ func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, 
 	}
 
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
-	icon := m.spinnerOrIcon(cmdXpath, fmt.Sprintf("%d", idx+1), cmd.TimeAndState)
+	icon := m.spinnerOrIcon(cmdXpath, strconv.Itoa(idx+1), cmd.TimeAndState)
 	durationStyled, durationWidth := m.durationText(colors.Command, cmd.TimeAndState)
 
 	// Create label viewport for wrapping long labels

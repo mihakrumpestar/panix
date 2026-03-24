@@ -300,7 +300,7 @@ func makeTableColumns(colors *config.ColorScheme, indexWidth int, selectedRow in
 			return c.Table.Row.Width(indexWidth).Align(lipgloss.Right)
 		}},
 		{header: "", style: func(c *config.ColorScheme) lipgloss.Style {
-			return c.Table.Row.Width(2)
+			return c.Table.Row.Width(2) //nolint:mnd
 		}},
 		{header: string(colors.Flake.Icon) + " FLAKE", style: func(c *config.ColorScheme) lipgloss.Style {
 			return c.Flake.Color
