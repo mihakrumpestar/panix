@@ -28,7 +28,13 @@ root:
         personal-laptop:
           machines:
             personal-laptop:
+              ssh:
+                hostname: 10.0.200.21
+                port: 22222
               bootstrap:
+                force_bootstrap: true
+                force_bootstrap_kexec: true
+                allow_destructive_actions: true
                 #ssh:
                 #  hostname: 10.0.200.226
                 #  identity_file: temp_key
