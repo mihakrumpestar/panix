@@ -95,6 +95,8 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, fai
 					if sshClient.ReachabilityCheck(WaitForReconnectCheckInterval) {
 						return nil
 					}
+
+					time.Sleep(WaitForReconnectCheckInterval)
 				}
 			}
 
