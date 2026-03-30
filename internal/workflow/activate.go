@@ -96,29 +96,40 @@ func performReboot(exc *executioner.Executioner, machine *config.Machine) error 
 }
 
 func executeActivation(exc *executioner.Executioner, machine *config.Machine, systemClosure string) error {
-	if machine.ActivationMode != flags.ActivationModeTest {
-		err := exc.Exec(
-			"add system closure to profiles",
-			"updating system profile",
-			"setting system closure to profiles failed",
-			append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure),
-		)
+	mode := machine.ActivationMode
+
+	if mode != flags.ActivationModeTest {
+		err := setSystemProfile(exc, machine, systemClosure)
 		if err != nil {
-			return errors.Wrap(err, "nix-env set system profile failed")
+			return errors.Wrap(err, "failed to set system profile")
 		}
 	}
 
-	binPath := systemClosure + "/bin/switch-to-configuration"
+	return activateConfiguration(exc, machine, systemClosure, mode)
+}
+
+// Helpers
+
+func setSystemProfile(exc *executioner.Executioner, machine *config.Machine, closurePath string) error {
+	err := exc.Exec(
+		"set system profile",
+		"setting system profile",
+		"failed to set system profile",
+		append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", closurePath),
+	)
+
+	return errors.Wrap(err, "failed to set system profile")
+}
+
+func activateConfiguration(exc *executioner.Executioner, machine *config.Machine, closurePath string, mode flags.ActivationMode) error {
+	binPath := closurePath + "/bin/switch-to-configuration"
 
 	err := exc.Exec(
 		"activate",
 		"activating configuration",
 		"activation failed",
-		append(machine.MaybeSudo(), binPath, string(machine.ActivationMode)),
+		append(machine.MaybeSudo(), binPath, string(mode)),
 	)
-	if err != nil {
-		return errors.Wrap(err, "activation failed")
-	}
 
-	return nil
+	return errors.Wrap(err, "failed to activate configuration")
 }

@@ -20,6 +20,9 @@ const (
 	Transfer  Phase = "transfer"
 	Secrets   Phase = "secrets"
 	Activate  Phase = "activate"
+
+	// Stand-alone phases.
+	Rollback Phase = "rollback"
 )
 
 // PhaseScope defines at what level a phase should execute.
@@ -41,11 +44,14 @@ type PhaseMetadata struct {
 // they are defined in execution order.
 var PhaseRegistry = []PhaseMetadata{
 	{Phase: Inspect, Scope: ScopeMachine},
-	{Phase: Build, Scope: ScopeConfig}, // Once per config
+	{Phase: Build, Scope: ScopeConfig},
 	{Phase: Bootstrap, Scope: ScopeMachine},
 	{Phase: Transfer, Scope: ScopeMachine},
 	{Phase: Secrets, Scope: ScopeMachine},
 	{Phase: Activate, Scope: ScopeMachine},
+
+	// Stand-alone phases
+	{Phase: Rollback, Scope: ScopeMachine},
 }
 
 // GetPhaseMetadata returns metadata for a specific phase.
@@ -90,7 +96,7 @@ func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error)
 
 	firstPhase := phases[0]
 
-	validFirst := []Phase{Inspect, Build, Secrets}
+	validFirst := []Phase{Inspect, Build, Secrets, Rollback}
 
 	if !slices.Contains(validFirst, firstPhase) {
 		return nil, errors.Wrapf(ErrInvalidFirstPhase, "%s (allowed: %v)", firstPhase, validFirst)

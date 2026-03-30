@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/kirill-scherba/omap"
 	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
@@ -15,7 +16,8 @@ type Config struct {
 	ColorScheme *ColorScheme `yaml:"-" validate:"-"`
 
 	// Internal
-	Phases []phases.Phase `yaml:"-" validate:"-"`
+	Phases             []phases.Phase `yaml:"-" validate:"-"`
+	RollbackGeneration int            `yaml:"-" validate:"-"`
 }
 
 // Root
@@ -85,11 +87,22 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	IsRoot         atomic.Bool
 	Bootstrapped   atomic.Bool
 	RequiresKexec  atomic.Bool
-	Generation     atomic.Uint32
-	Date           atomic.String
-	Nixos          atomic.String
-	Kernel         atomic.String
-	activeSSH      atomic.Pointer[ssh.SSHClient]
+	Generations    atomic.Pointer[GenerationsData]
+
+	// Internal
+	activeSSH atomic.Pointer[ssh.SSHClient]
+}
+
+type GenerationsData struct {
+	Current     uint
+	Generations *omap.Omap[uint, *GenerationInfo]
+}
+
+type GenerationInfo struct {
+	Date    string
+	Nixos   string
+	Kernel  string
+	Current bool
 }
 
 func (m *MetaInspect) GetActiveSSH() *ssh.SSHClient {
