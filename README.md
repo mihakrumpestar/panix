@@ -661,41 +661,61 @@ Usage: panix <command> [flags]
 Universal NixOS Deployment Tool
 
 Flags:
-  -h, --help                               Show context-sensitive help.
-  -c, --config="panix.yml"                 Config file ($PANIX_CONFIG)
-  -t, --tags=TAGS,...                      Filter machines by tags (flakes, configs and names are already registered as
-                                           tags) ($PANIX_TAGS)
-      --bootstrap.only-bootstrap           Only initializes uninitialized machines ($PANIX_BOOTSTRAP_ONLY_BOOTSTRAP)
-      --bootstrap.disable-auto             Disable automatic bootstrap (even if target machine does not have NixOS
-                                           installed) ($PANIX_BOOTSTRAP_DISABLE_AUTO)
-      --bootstrap.disable-disko            Disables building, transfer and bootstrap of disko tool
-                                           ($PANIX_BOOTSTRAP_DISABLE_DISKO)
-      --require-all-success                Abort if any task fails, primarily for CI/CD ($PANIX_REQUIRE_ALL_SUCCESS)
-      --override-local-machine=STRING      Hostname of the machine that is local (won't use ssh to connect to it)
-                                           ($PANIX_OVERRIDE_LOCAL_MACHINE)
-      --dry-run                            Show what would be done without executing ($PANIX_DRY_RUN)
-      --dry-run-with-inspect               Show what would be done without executing, but with real inspect query
-                                           ($PANIX_DRY_RUN_WITH_INSPECT)
-      --timeout=2h                         Timeout for workflow (eg. '1h', '1m15s') ($PANIX_TIMEOUT)
-  -s, --skip-phases=SKIP-PHASES,...        Declare phases to skip (not all phases can be skipped) ($PANIX_SKIP_PHASES)
-      --exit-on-complete                   Exit TUI on completion; 'retry' and 'restart' are disabled in this mode
-                                           ($PANIX_EXIT_ON_COMPLETE)
-      --tui.show-all-build-logs            Show all build logs in TUI (keybind h) ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
-      --tui.show-active-only               Show only running or errored logs in TUI build logs (keybind a)
-                                           ($PANIX_TUI_SHOW_ACTIVE_ONLY)
-      --tui.show-commands-in-labels        Show raw commands instead of descriptions as labels in build logs (keybind c)
-                                           ($PANIX_TUI_SHOW_COMMANDS_IN_LABELS)
-      --tui.command-output-max-height=8    Maximum height for command labels and outputs viewports in TUI
-                                           ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
-  -l, --log                                Enable logging to file ($PANIX_LOG)
-      --log-file="panix.log"               Log file path ($PANIX_LOG_FILE)
-  -d, --debug                              Debug output (enables logging) ($PANIX_DEBUG)
-      --cpu-profile=STRING                 Path for cpu profiling to file, declaring it enables it ($PANIX_CPU_PROFILE)
-      --version                            Show version ($PANIX_VERSION)
+  -h, --help                       Show context-sensitive help.
+  -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
+  -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
+                                   and names are already registered as tags)
+                                   ($PANIX_TAGS)
+      --bootstrap.only-bootstrap
+                                   Only initializes uninitialized machines
+                                   ($PANIX_BOOTSTRAP_ONLY_BOOTSTRAP)
+      --bootstrap.disable-auto     Disable automatic bootstrap (even if target
+                                   machine does not have NixOS installed)
+                                   ($PANIX_BOOTSTRAP_DISABLE_AUTO)
+      --bootstrap.disable-disko    Disables building, transfer and bootstrap of
+                                   disko tool ($PANIX_BOOTSTRAP_DISABLE_DISKO)
+      --require-all-success        Abort if any task fails, primarily for CI/CD
+                                   ($PANIX_REQUIRE_ALL_SUCCESS)
+      --override-local-machine=STRING
+                                   Hostname of the machine that is local
+                                   (won't use ssh to connect to it)
+                                   ($PANIX_OVERRIDE_LOCAL_MACHINE)
+      --dry-run                    Show what would be done without executing
+                                   ($PANIX_DRY_RUN)
+      --dry-run-with-inspect       Show what would be done without
+                                   executing, but with real inspect query
+                                   ($PANIX_DRY_RUN_WITH_INSPECT)
+      --timeout=2h                 Timeout for workflow (eg. '1h', '1m15s')
+                                   ($PANIX_TIMEOUT)
+  -s, --skip-phases=SKIP-PHASES,...
+                                   Declare phases to skip (not all phases can be
+                                   skipped) ($PANIX_SKIP_PHASES)
+      --exit-on-complete           Exit TUI on completion; 'retry' and
+                                   'restart' are disabled in this mode
+                                   ($PANIX_EXIT_ON_COMPLETE)
+      --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
+                                   ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
+      --tui.show-active-only       Show only running or errored logs
+                                   in TUI build logs (keybind a)
+                                   ($PANIX_TUI_SHOW_ACTIVE_ONLY)
+      --tui.show-commands-in-labels
+                                   Show raw commands instead of descriptions
+                                   as labels in build logs (keybind c)
+                                   ($PANIX_TUI_SHOW_COMMANDS_IN_LABELS)
+      --tui.command-output-max-height=8
+                                   Maximum height for command labels
+                                   and outputs viewports in TUI
+                                   ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+  -l, --log                        Enable logging to file ($PANIX_LOG)
+      --log-file="panix.log"       Log file path ($PANIX_LOG_FILE)
+  -d, --debug                      Debug output (enables logging) ($PANIX_DEBUG)
+      --cpu-profile=STRING         Path for cpu profiling to file, declaring it
+                                   enables it ($PANIX_CPU_PROFILE)
+      --version                    Show version ($PANIX_VERSION)
 
 Commands:
   inspect [flags]
-    Inspect machine per host (automatic bootstrapping is disabled here)
+    Inspect machine per host
 
   bootstrap [flags]
     Explicit bootstrap phase
@@ -704,7 +724,8 @@ Commands:
     Build all selected closures
 
   deploy [flags]
-    Do full workflow (inspect -> bootstrap -> secrets -> build -> push -> activate)
+    Do full workflow (inspect -> bootstrap -> secrets -> build -> push ->
+    activate)
 
   secrets [flags]
     Deploy secrets to all machines

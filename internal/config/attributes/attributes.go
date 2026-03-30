@@ -63,7 +63,7 @@ type Bootstrap struct {
 type KexecConfig struct {
 	URL        string `yaml:"url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"`
 	ExtraFlags string `yaml:"extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
-	SSHPort    uint16 `yaml:"ssh_port" desc:"SSH port for kexec installer (default: 22)"` //nolint:lll
+	SSHPort    uint16 `yaml:"ssh_port" desc:"SSH port for kexec installer (default: 22)"`
 }
 
 type PostBootstrapHookCommand string
