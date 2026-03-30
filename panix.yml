@@ -29,12 +29,14 @@ root:
           machines:
             personal-laptop:
               ssh:
-                hostname: 10.0.200.21
+                hostname: 10.0.200.19
                 port: 22222
               bootstrap:
-                force_bootstrap: true
-                force_bootstrap_kexec: true
-                allow_destructive_actions: true
+                #kexec:
+                #  url: ./kexec-<arch>.tar.gz
+                #force_bootstrap: true
+                #force_bootstrap_kexec: true
+                #allow_destructive_actions: true
                 #ssh:
                 #  hostname: 10.0.200.226
                 #  identity_file: temp_key
