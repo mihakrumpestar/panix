@@ -131,12 +131,20 @@ properties:
           force_bootstrap_kexec:
             type: boolean
             description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-          kexec_extra_flags:
-            type: string
-            description: Extra flags to pass to kexec (e.g. '--no-sync')
-          kexec_url:
-            type: string
-            description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+          kexec:
+            type: object
+            description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
+            properties:
+              extra_flags:
+                type: string
+                description: Extra flags to pass to kexec (e.g. '--no-sync')
+              ssh_port:
+                type: integer
+                description: "SSH port for kexec installer (default: 22)"
+              url:
+                type: string
+                description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+            additionalProperties: false
           post_bootstrap_hooks:
             type: array
             description: Commands to run after disko partitioning
@@ -227,12 +235,20 @@ properties:
                 force_bootstrap_kexec:
                   type: boolean
                   description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-                kexec_extra_flags:
-                  type: string
-                  description: Extra flags to pass to kexec (e.g. '--no-sync')
-                kexec_url:
-                  type: string
-                  description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+                kexec:
+                  type: object
+                  description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
+                  properties:
+                    extra_flags:
+                      type: string
+                      description: Extra flags to pass to kexec (e.g. '--no-sync')
+                    ssh_port:
+                      type: integer
+                      description: "SSH port for kexec installer (default: 22)"
+                    url:
+                      type: string
+                      description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+                  additionalProperties: false
                 post_bootstrap_hooks:
                   type: array
                   description: Commands to run after disko partitioning
@@ -321,12 +337,20 @@ properties:
                       force_bootstrap_kexec:
                         type: boolean
                         description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-                      kexec_extra_flags:
-                        type: string
-                        description: Extra flags to pass to kexec (e.g. '--no-sync')
-                      kexec_url:
-                        type: string
-                        description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+                      kexec:
+                        type: object
+                        description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
+                        properties:
+                          extra_flags:
+                            type: string
+                            description: Extra flags to pass to kexec (e.g. '--no-sync')
+                          ssh_port:
+                            type: integer
+                            description: "SSH port for kexec installer (default: 22)"
+                          url:
+                            type: string
+                            description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+                        additionalProperties: false
                       post_bootstrap_hooks:
                         type: array
                         description: Commands to run after disko partitioning
@@ -423,12 +447,20 @@ properties:
                               force_bootstrap_kexec:
                                 type: boolean
                                 description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-                              kexec_extra_flags:
-                                type: string
-                                description: Extra flags to pass to kexec (e.g. '--no-sync')
-                              kexec_url:
-                                type: string
-                                description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+                              kexec:
+                                type: object
+                                description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
+                                properties:
+                                  extra_flags:
+                                    type: string
+                                    description: Extra flags to pass to kexec (e.g. '--no-sync')
+                                  ssh_port:
+                                    type: integer
+                                    description: "SSH port for kexec installer (default: 22)"
+                                  url:
+                                    type: string
+                                    description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+                                additionalProperties: false
                               post_bootstrap_hooks:
                                 type: array
                                 description: Commands to run after disko partitioning

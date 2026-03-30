@@ -51,14 +51,19 @@ type Bootstrap struct {
 	SSH                           *ssh.SSHClient              `yaml:"ssh,omitempty" desc:"Bootstrap SSH configuration (used during initial provisioning)"`                                                                                                               //nolint:lll
 	DiskEncryptionKeys            []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'"` //nolint:lll
 	PostBootstrapHooks            []PostBootstrapHookCommand  `yaml:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning"`
-	PostBootstrapInstallHooks     []PostBootstrapHookCommand  `yaml:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`                    //nolint:lll
-	PostBootstrapProvisionedHooks []PostBootstrapHookCommand  `yaml:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`                    //nolint:lll
-	KexecURL                      string                      `yaml:"kexec_url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"` //nolint:lll
-	KexecExtraFlags               string                      `yaml:"kexec_extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
+	PostBootstrapInstallHooks     []PostBootstrapHookCommand  `yaml:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`                                                                                                             //nolint:lll
+	PostBootstrapProvisionedHooks []PostBootstrapHookCommand  `yaml:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`                                                                                                             //nolint:lll
+	Kexec                         *KexecConfig                `yaml:"kexec,omitempty" desc:"Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation"`                                                                                     //nolint:lll
 	DisableAutomaticReboot        bool                        `yaml:"disable_automatic_reboot" desc:"Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)"`                                                                         //nolint:lll
 	ForceBootstrap                bool                        `yaml:"force_bootstrap" desc:"Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)" validate:"required_if=ForceBootstrapKexec true"`                                                  //nolint:lll
 	ForceBootstrapKexec           bool                        `yaml:"force_bootstrap_kexec" desc:"Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)"`                                                                   //nolint:lll
 	AllowDestructiveActions       bool                        `yaml:"allow_destructive_actions" desc:"Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)" validate:"required_if=ForceBootstrap true,required_if=ForceBootstrapKexec true"` //nolint:lll
+}
+
+type KexecConfig struct {
+	URL        string `yaml:"url" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath"`
+	ExtraFlags string `yaml:"extra_flags" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
+	SSHPort    uint16 `yaml:"ssh_port" desc:"SSH port for kexec installer (default: 22)"` //nolint:lll
 }
 
 type PostBootstrapHookCommand string

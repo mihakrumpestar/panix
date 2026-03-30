@@ -143,7 +143,11 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 
 // resolveKexecURL returns the kexec URL, using default if not configured.
 func resolveKexecURL(machine *config.Machine, arch string) (string, error) {
-	kexecURL := machine.Bootstrap.KexecURL
+	kexecURL := ""
+	if machine.Bootstrap.Kexec != nil {
+		kexecURL = machine.Bootstrap.Kexec.URL
+	}
+
 	if kexecURL == "" {
 		if !slices.Contains(KexecSupportedPlatforms, arch) {
 			return "", errors.Wrapf(ErrArchitectureNotSupported, "%s (supported: %s)", strconv.Quote(arch), KexecSupportedPlatforms)
@@ -226,8 +230,8 @@ func getTarArgs(kexecURL string) []string {
 func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *config.Machine) error {
 	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
 
-	if kexecExtraFlags := machine.Bootstrap.KexecExtraFlags; kexecExtraFlags != "" {
-		kexecCmd = append(kexecCmd, "--kexec-extra-flags", kexecExtraFlags)
+	if machine.Bootstrap.Kexec != nil && machine.Bootstrap.Kexec.ExtraFlags != "" {
+		kexecCmd = append(kexecCmd, "--kexec-extra-flags", machine.Bootstrap.Kexec.ExtraFlags)
 	}
 
 	err := exc.Exec(
@@ -253,10 +257,16 @@ func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machine *con
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
-	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
+	// After kexec, use the kexec SSH config (default: same hostname, port 22)
+	kexecSSH := machine.GetKexecSSH()
+
+	err = executioner.WaitForReconnect(exc, kexecSSH, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
 	if err != nil {
 		return errors.Wrap(err, "wait for reconnect failed")
 	}
+
+	// Update active SSH to kexec SSH for subsequent commands
+	machine.MetaInspect.SetActiveSSH(kexecSSH)
 
 	return w.verifyInstaller(exc)
 }

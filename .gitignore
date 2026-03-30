@@ -34,6 +34,7 @@ result
 temp_key
 temp_key.pub
 
+*.tar.gz
+
 panix
 panix.log
-TODO.md
