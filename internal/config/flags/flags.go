@@ -22,7 +22,7 @@ type Flags struct {
 	OverrideLocalMachine string         `yaml:"override_local_machine" help:"Hostname of the machine that is local (won't use ssh to connect to it)"`
 	DryRun               bool           `yaml:"dry_run" help:"Show what would be done without executing"`
 	DryRunWithInspect    bool           `yaml:"dry_run_with_inspect" help:"Show what would be done without executing, but with real inspect query"`
-	Timeout              time.Duration  `yaml:"timeout" help:"Timeout for workflow (eg. '1h', '1m15s')" default:"2h"`
+	Timeout              time.Duration  `yaml:"timeout" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
 

@@ -43,14 +43,14 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		return nil, errors.Wrap(err, "failed to initialize build logs")
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, conf.Flags.Timeout)
+	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	workflow := &Workflow{
-		ctx:    ctxWithTimeout,
+		ctx:    ctxWithCancel,
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
-			Pool:        pond.NewPool(WorkerPoolMaxConcurrency, pond.WithContext(ctxWithTimeout)),
+			Pool:        pond.NewPool(WorkerPoolMaxConcurrency, pond.WithContext(ctxWithCancel)),
 			Retry:       retry.NewTaskRetry(),
 			TargetsLogs: targetsLogs,
 		},
@@ -135,7 +135,7 @@ func (w *Workflow) Phase(
 		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
 
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phase != phases.Inspect)
-	exc := executioner.NewExecutioner(w.ctx, dryRun, machine, phaseLog, w.updateHook.Signal)
+	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	log.Info().

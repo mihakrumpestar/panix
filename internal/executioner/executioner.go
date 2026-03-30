@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"context"
+	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
@@ -10,15 +11,24 @@ import (
 
 type Executioner struct {
 	ctx          context.Context
+	timeout      time.Duration
 	dryRun       bool
 	machine      *config.Machine
 	phaseLog     *log_sphase.PhaseLog
 	onUpdateHook func()
 }
 
-func NewExecutioner(ctx context.Context, dryRun bool, machine *config.Machine, phaseLog *log_sphase.PhaseLog, onUpdateHook func()) *Executioner {
+func NewExecutioner(
+	ctx context.Context,
+	timeout time.Duration,
+	dryRun bool,
+	machine *config.Machine,
+	phaseLog *log_sphase.PhaseLog,
+	onUpdateHook func(),
+) *Executioner {
 	return &Executioner{
 		ctx:          ctx,
+		timeout:      timeout,
 		dryRun:       dryRun,
 		machine:      machine,
 		phaseLog:     phaseLog,
