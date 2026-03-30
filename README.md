@@ -245,6 +245,61 @@ machines:
 </details>
 
 <details>
+<summary><strong>Reinstalling a Live NixOS Installation</strong></summary>
+
+Panix can force a reinstall of an already running NixOS system. This is useful when you want to completely wipe and reinstall a machine from scratch.
+
+```yaml
+machines:
+  existing-nixos:
+    ssh:
+      hostname: 192.168.1.100
+    bootstrap:
+      allow_destructive_actions: true    # Required for force_bootstrap
+      force_bootstrap: true              # Force bootstrap even if NixOS detected
+      force_bootstrap_kexec: true        # Use kexec to boot into installer first
+      kexec:
+        ssh_port: 22                     # SSH port for kexec installer (default: 22)
+```
+
+### How it works
+
+Kexec allows detaching from your running NixOS by loading a new kernel and initramfs directly into memory, bypassing the BIOS/UEFI boot process. This means Panix can boot into a NixOS installer image without requiring physical access to reboot the machine. Once in the installer environment, disko can repartition the disks, and the standard bootstrap flow continues - transfer the closure (kexec does not reuse the previous one), run `nixos-install`, and reboot into the freshly installed system.
+
+### SSH after kexec starts
+
+After kexec starts, Panix reconnects using:
+
+- Same SSH settings from previously used SSH method (hostname, username, identity_file)
+- Port from `kexec.ssh_port` (default: 22 for the default kexec image)
+
+If your custom kexec installer uses a different SSH port, configure it:
+
+```yaml
+bootstrap:
+  kexec:
+    ssh_port: 22222  # Custom SSH port for kexec installer
+```
+
+</details>
+
+<details>
+<summary><strong>Custom kexec image</strong></summary>
+
+You can provide a custom kexec tarball:
+
+```yaml
+bootstrap:
+  kexec:
+    url: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
+    # <arch> placeholder replaced with detected architecture
+    extra_flags: "--no-sync"  # Optional flags passed to kexec (default: "")
+    ssh_port: 22 # Optional kexec ssh port (default: 22)
+```
+
+</details>
+
+<details>
 <summary><strong>Secrets Management</strong></summary>
 
 Deploy sensitive files and directories to your machines with proper ownership and permissions. The secrets phase handles the transfer of plain files/directories via `rsync` with configurable user/group ownership and file permissions:
@@ -287,6 +342,36 @@ Key features:
 **When secrets are transferred:**
 
 Regular secrets are transferred during the Secrets phase (after Transfer, before Activate). Disk encryption keys have a special timing - they're transferred during Bootstrap, **before** `disko` runs, so they're available for disk encryption setup.
+
+</details>
+
+<details>
+<summary><strong>Local Kexec Tarball</strong></summary>
+
+For machines without internet access or for faster deployments, download the kexec tarball locally and Panix will transfer it instead of downloading it remotely.
+
+**Download locally:**
+
+```bash
+export ARCH=x86_64  # or aarch64
+
+curl -L -o ./kexec-$ARCH.tar.gz \
+  https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$ARCH-linux.tar.gz
+```
+
+**Configure in `panix.yaml`:**
+
+```yaml
+machines:
+  my-machine:
+    ssh:
+      hostname: 192.168.1.100
+    bootstrap:
+      kexec:
+        url: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
+```
+
+The `<arch>` placeholder is automatically replaced with the detected architecture (eg. `x86_64`). Panix detects whether `url` is a local path or HTTP URL - local paths are transferred via `rsync`, URLs trigger remote download with `curl`.
 
 </details>
 
@@ -725,8 +810,10 @@ root:
           identity_file: ./keys/bootstrap.key
           strict_key_checking: false   # Default: false for bootstrap SSH
           disable_auto_add_host_key: true  # Default: true for bootstrap SSH
-        kexec_url: ""                  # Custom kexec tarball URL
-        kexec_extra_flags: ""          # Extra flags for kexec (e.g. '--no-sync')
+        kexec:                         # Kexec configuration for non-NixOS machines
+          url: ""                      # Custom kexec tarball URL (default: nix-community image)
+          extra_flags: ""              # Extra flags for kexec (e.g. '--no-sync')
+          ssh_port: 22                 # SSH port for kexec installer (default: 22)
         disk_encryption_keys:          # Transferred BEFORE disko runs
           - local_path: ./secrets/luks.key
             remote_path: /tmp/luks-key
@@ -769,8 +856,10 @@ root:
               identity_file: ./keys/web-bootstrap.key
               strict_key_checking: false
               disable_auto_add_host_key: true
-            kexec_url: ""
-            kexec_extra_flags: ""
+            kexec:
+              url: ""
+              extra_flags: ""
+              ssh_port: 22
             disk_encryption_keys: []
             allow_destructive_actions: false
             force_bootstrap: false
@@ -807,8 +896,10 @@ root:
                   identity_file: ./keys/web-01-bootstrap.key
                   strict_key_checking: false
                   disable_auto_add_host_key: true
-                kexec_url: ""
-                kexec_extra_flags: ""
+                kexec:
+                  url: ""
+                  extra_flags: ""
+                  ssh_port: 22
                 disk_encryption_keys: []
                 allow_destructive_actions: false
                 force_bootstrap: false

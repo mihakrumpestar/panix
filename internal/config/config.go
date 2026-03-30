@@ -147,3 +147,24 @@ func (m *Machine) SwitchToBootstrapSSH() {
 func (m *Machine) SwitchToRegularSSH() {
 	m.MetaInspect.SetActiveSSH(m.SSH)
 }
+
+// GetKexecSSH returns the SSH configuration to use after kexec.
+// Inherits all settings from current active SSH, overriding only the port.
+func (m *Machine) GetKexecSSH() *ssh.SSHClient {
+	activeSSH := m.MetaInspect.GetActiveSSH()
+
+	port := ssh.DefaultSSHPort // default port 22
+	if m.Bootstrap.Kexec != nil && m.Bootstrap.Kexec.SSHPort != 0 {
+		port = m.Bootstrap.Kexec.SSHPort
+	}
+
+	return &ssh.SSHClient{
+		Hostname:              activeSSH.Hostname,
+		Port:                  port,
+		Username:              activeSSH.Username,
+		IdentityFile:          activeSSH.IdentityFile,
+		StrictKeyChecking:     false,
+		DisableAutoAddHostKey: true,
+		IsLocal:               activeSSH.IsLocal,
+	}
+}
