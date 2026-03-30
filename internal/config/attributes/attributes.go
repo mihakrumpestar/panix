@@ -19,9 +19,10 @@ type Attributes struct {
 	Tags    []string                    `yaml:"tags"`
 	Secrets []*PlainFileOrDirToTransfer `yaml:"secrets,omitempty"`
 
-	Disabled            bool   `yaml:"disabled"`
-	OverrideSudoProgram string `yaml:"override_sudo_program"`
-	HardwareConfigPath  string `yaml:"hardware_config_path"`
+	Disabled            bool                        `yaml:"disabled"`
+	OverrideSudoProgram string                      `yaml:"override_sudo_program"`
+	HardwareConfigPath  string                      `yaml:"hardware_config_path"`
+	ActivationMode      config_flags.ActivationMode `yaml:"activation_mode" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 
 	Bootstrap Bootstrap `yaml:"bootstrap"`
 
@@ -36,7 +37,7 @@ type PlainFileOrDirToTransfer struct {
 	RemotePath     string       `yaml:"remote_path,required" desc:"Absolute path on remote machine" validate:"required,abspath"`
 	UID            *uint        `yaml:"uid,omitempty" desc:"Optional User ID for remote" validate:"required_with=GID"`
 	GID            *uint        `yaml:"gid,omitempty" desc:"Optional Group ID for remote" validate:"required_with=UID"`
-	PermissionsRaw *os.FileMode `yaml:"permissions,omitempty" desc:"Optional file permissions (default: 0700)"`
+	PermissionsRaw *os.FileMode `yaml:"permissions,omitempty" desc:"Optional file permissions" default:"0700"`
 }
 
 func (p *PlainFileOrDirToTransfer) GetPermissions() os.FileMode {
@@ -165,6 +166,10 @@ func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) err
 	a.Name = name
 	a.Tags = append(a.Tags, name)
 	a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
+
+	if parentAttr.ActivationMode == "" {
+		a.ActivationMode = config_flags.ActivationModeSwitch
+	}
 
 	return nil
 }
