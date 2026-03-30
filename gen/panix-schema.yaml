@@ -17,9 +17,6 @@ properties:
           disable_disko:
             type: boolean
             description: Disables building, transfer and bootstrap of disko tool
-          only:
-            type: boolean
-            description: Only initializes uninitialized machines
         additionalProperties: false
       config:
         type: string

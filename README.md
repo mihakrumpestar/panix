@@ -666,9 +666,6 @@ Flags:
   -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
                                    and names are already registered as tags)
                                    ($PANIX_TAGS)
-      --bootstrap.only-bootstrap
-                                   Only initializes uninitialized machines
-                                   ($PANIX_BOOTSTRAP_ONLY_BOOTSTRAP)
       --bootstrap.disable-auto     Disable automatic bootstrap (even if target
                                    machine does not have NixOS installed)
                                    ($PANIX_BOOTSTRAP_DISABLE_AUTO)
@@ -716,9 +713,6 @@ Flags:
 Commands:
   inspect [flags]
     Inspect machine per host
-
-  bootstrap [flags]
-    Explicit bootstrap phase
 
   build [flags]
     Build all selected closures
@@ -770,7 +764,6 @@ flags: # Listed are default values, all also overridable using CLI arguments
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
   bootstrap:
-    only: false                        # Only bootstrap uninitialized machines
     disable_auto: false                # Disable automatic bootstrap
     disable_disko: false               # Disable disko tool build/transfer/bootstrap
   tui:

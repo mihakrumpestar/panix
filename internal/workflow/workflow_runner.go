@@ -62,11 +62,11 @@ func (r *runner) getOrCreateOnceAsync(xpath string) *onceasync.OnceAsync {
 
 // run executes a phase with automatic once-per-scope semantics.
 func (pr *phaseRunner) run(phase phases.Phase) error {
-	workflow := pr.r.workflow
-
-	if shouldSkipPhase(phase, workflow.conf.Flags.Bootstrap.OnlyBootstrap, pr.machine) {
+	if shouldSkipPhase(phase, pr.machine) {
 		return nil
 	}
+
+	workflow := pr.r.workflow
 
 	xpath := getXpathForScope(phase, pr.flake, pr.config, pr.machine)
 
@@ -92,16 +92,8 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	return workflow.NewTaskWithRetry(phase, xpath, execFn)
 }
 
-func shouldSkipPhase(phase phases.Phase, onlyBootstrap bool, machine *config.Machine) bool {
-	if phase == phases.Bootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap {
-		return true
-	}
-
-	if onlyBootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap {
-		return true
-	}
-
-	return false
+func shouldSkipPhase(phase phases.Phase, machine *config.Machine) bool {
+	return phase == phases.Bootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap
 }
 
 func getXpathForScope(phase phases.Phase, flake *config.Flake, cfg *config.Configuration, machine *config.Machine) attributes.Xpath {

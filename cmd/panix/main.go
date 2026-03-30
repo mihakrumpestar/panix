@@ -22,8 +22,6 @@ type CLI struct {
 
 	Inspect struct{} `cmd:"" help:"Inspect machine per host"`
 
-	Bootstrap struct{} `cmd:"" help:"Explicit bootstrap phase"`
-
 	Build struct{} `cmd:"" help:"Build all selected closures"`
 
 	Deploy struct{} `cmd:"" help:"Do full workflow (inspect -> bootstrap -> secrets -> build -> push -> activate)"`
@@ -50,10 +48,6 @@ func main() {
 	case "inspect":
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Inspect}, func(conf *config.Config) {
 			conf.Flags.Bootstrap.DisableAuto = true
-		}))
-	case "bootstrap":
-		ctx.FatalIfErrorf(cli.runTui(phases.PhasesInOrder(), func(conf *config.Config) {
-			conf.Flags.Bootstrap.OnlyBootstrap = true
 		}))
 	case "build":
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Build}))
