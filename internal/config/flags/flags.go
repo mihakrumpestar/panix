@@ -1,7 +1,6 @@
 package flags
 
 import (
-	"os"
 	"time"
 
 	"dario.cat/mergo"
@@ -9,9 +8,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+type ActivationMode string
+
 const (
-	defaultTimeout              = 2 * time.Hour
-	defaultCommandOutputMaxSize = 8
+	ActivationModeCheck       ActivationMode = "check"        // run pre-switch checks and exit
+	ActivationModeSwitch      ActivationMode = "switch"       // make the configuration the boot default and activate now
+	ActivationModeBoot        ActivationMode = "boot"         // make the configuration the boot default
+	ActivationModeTest        ActivationMode = "test"         // activate the configuration, but don't make it the boot default
+	ActivationModeDryActivate ActivationMode = "dry-activate" // show what would be done if this configuration were activated
 )
 
 type Flags struct {
@@ -25,6 +29,7 @@ type Flags struct {
 	Timeout              time.Duration  `yaml:"timeout" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
 	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
+	ActivationMode       ActivationMode `yaml:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."`
 	Logging `yaml:"logging"`
@@ -49,37 +54,11 @@ type Logging struct {
 	CPUProfile string `yaml:"cpu_profile" help:"Path for cpu profiling to file, declaring it enables it"`
 }
 
-func (f *Flags) SetDefault(reverse bool) {
-	defaultHostname, _ := os.Hostname()
-
-	toggle(reverse, &f.Config, "panix.yml", "")
-	toggle(reverse, &f.OverrideLocalMachine, defaultHostname, "")
-	toggle(reverse, &f.Timeout, defaultTimeout, 0)
-	toggle(reverse, &f.Tui.CommandOutputMaxHeight, defaultCommandOutputMaxSize, 0)
-	toggle(reverse, &f.LogFile, "panix.log", "")
-}
-
 func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
-	f.SetDefault(true)
-
 	err := mergo.Merge(f, cli)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge flags")
 	}
 
-	f.SetDefault(false)
-
 	return nil
-}
-
-func toggle[T comparable](reverse bool, ptr *T, def, zero T) {
-	if reverse {
-		if *ptr == def {
-			*ptr = zero
-		}
-	} else {
-		if *ptr == zero {
-			*ptr = def
-		}
-	}
 }

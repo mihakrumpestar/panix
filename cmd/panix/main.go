@@ -35,7 +35,6 @@ type CLI struct {
 
 func main() {
 	cli := CLI{}
-	cli.Flags.SetDefault(false)
 
 	ctx := kong.Parse(&cli,
 		kong.Name("panix"),

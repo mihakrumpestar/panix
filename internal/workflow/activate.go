@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -95,23 +96,25 @@ func performReboot(exc *executioner.Executioner, machine *config.Machine) error 
 }
 
 func executeActivation(exc *executioner.Executioner, machine *config.Machine, systemClosure string) error {
-	err := exc.Exec(
-		"add system closure to profiles",
-		"updating system profile",
-		"setting system closure to profiles failed",
-		append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure),
-	)
-	if err != nil {
-		return errors.Wrap(err, "nix-env set system profile failed")
+	if machine.ActivationMode != flags.ActivationModeTest {
+		err := exc.Exec(
+			"add system closure to profiles",
+			"updating system profile",
+			"setting system closure to profiles failed",
+			append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", systemClosure),
+		)
+		if err != nil {
+			return errors.Wrap(err, "nix-env set system profile failed")
+		}
 	}
 
 	binPath := systemClosure + "/bin/switch-to-configuration"
 
-	err = exc.Exec(
+	err := exc.Exec(
 		"activate",
 		"activating configuration",
 		"activation failed",
-		append(machine.MaybeSudo(), binPath, "switch"),
+		append(machine.MaybeSudo(), binPath, string(machine.ActivationMode)),
 	)
 	if err != nil {
 		return errors.Wrap(err, "activation failed")

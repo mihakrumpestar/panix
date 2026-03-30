@@ -690,6 +690,9 @@ Flags:
       --exit-on-complete           Exit TUI on completion; 'retry' and
                                    'restart' are disabled in this mode
                                    ($PANIX_EXIT_ON_COMPLETE)
+      --activation-mode="switch"
+                                   Activation mode: check, switch, boot, test,
+                                   dry-activate ($PANIX_ACTIVATION_MODE)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
                                    ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
       --tui.show-active-only       Show only running or errored logs

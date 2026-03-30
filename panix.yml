@@ -3,7 +3,6 @@
 flags:
   timeout: 5500s
   override_local_machine: tmp
-  
 
 root:
   flakes:

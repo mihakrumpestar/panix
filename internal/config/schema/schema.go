@@ -40,6 +40,7 @@ func (r RequiredList) MarshalYAML() (interface{}, error) {
 type TypeDefinition struct {
 	Type                 string                 `yaml:"type,omitempty"`
 	Description          string                 `yaml:"description,omitempty"`
+	Default              interface{}            `yaml:"default,omitempty"`
 	Properties           map[string]interface{} `yaml:"properties,omitempty"`
 	Items                interface{}            `yaml:"items,omitempty"`
 	Required             RequiredList           `yaml:"required,omitempty"`
@@ -217,12 +218,42 @@ func (g *Generator) setFieldDescription(prop interface{}, field reflect.StructFi
 		desc = field.Tag.Get("help")
 	}
 
-	if desc == "" {
-		return
-	}
+	defaultVal := field.Tag.Get("default")
 
 	if typeDef, ok := prop.(*TypeDefinition); ok {
-		typeDef.Description = desc
+		if defaultVal != "" {
+			typeDef.Default = g.parseDefaultValue(defaultVal, field.Type)
+
+			if desc != "" {
+				desc = desc + " (default: " + defaultVal + ")"
+			}
+		}
+
+		if desc != "" {
+			typeDef.Description = desc
+		}
+	}
+}
+
+func (g *Generator) parseDefaultValue(val string, typ reflect.Type) interface{} {
+	// Handle time.Duration as string
+	if typ.String() == "time.Duration" {
+		return val
+	}
+
+	kind := typ.Kind()
+	switch kind {
+	case reflect.Bool:
+		return val == "true"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if intVal, err := parseInt(val); err == nil {
+			return intVal
+		}
+
+		return val
+	default:
+		return val
 	}
 }
 
@@ -354,6 +385,8 @@ func (g *Generator) applyValidateConstraints(typeDef *TypeDefinition, validateTa
 
 func (g *Generator) applyConstraintTag(typeDef *TypeDefinition, tag, baseType string) {
 	switch {
+	case strings.HasPrefix(tag, "oneof="):
+		g.applyOneofConstraint(typeDef, tag)
 	case strings.HasPrefix(tag, "min="):
 		g.applyMinConstraint(typeDef, tag, baseType)
 	case strings.HasPrefix(tag, "max="):
@@ -362,6 +395,15 @@ func (g *Generator) applyConstraintTag(typeDef *TypeDefinition, tag, baseType st
 		g.applyLenConstraint(typeDef, tag, baseType)
 	default:
 		g.applyFormatConstraint(typeDef, tag)
+	}
+}
+
+func (g *Generator) applyOneofConstraint(typeDef *TypeDefinition, tag string) {
+	val := strings.TrimPrefix(tag, "oneof=")
+	values := strings.Fields(val)
+
+	if len(values) > 0 {
+		typeDef.Enum = values
 	}
 }
 
