@@ -31,6 +31,10 @@ type CLI struct {
 	Schema struct {
 		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"panix-schema.yaml"`
 	} `cmd:"" help:"Generate YAML schema for configuration files"`
+
+	Rollback struct {
+		Generation int `arg:"" name:"generation" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
+	} `cmd:"" help:"Rollback to a previous generation"`
 }
 
 func main() {
@@ -56,6 +60,10 @@ func main() {
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Inspect, phases.Secrets}))
 	case "schema":
 		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.Schema.Output))
+	case "rollback", "rollback <generation>":
+		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Inspect, phases.Rollback}, func(conf *config.Config) {
+			conf.RollbackGeneration = cli.Rollback.Generation
+		}))
 	default:
 		ctx.FatalIfErrorf(errors.Wrapf(ErrUnknownCommand, "%s", ctx.Command()))
 	}

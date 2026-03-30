@@ -66,6 +66,8 @@ Panix is a **stateless, phase-oriented flake deployment orchestrator** with a re
 
 The TUI isn't a gimmick. It's a recognition that deployments are **interactive processes**. Things fail, networks hiccup, builds take time, etc. Having visibility into every phase of every machine - seeing the architecture detection, watching the closure transfer, observing the activation - transforms deployment from a "*blindly run and pray*" operation into a controlled, observable process.
 
+TLDR: Without visibility, deployment is faith. With visibility, deployment is engineering.
+
 ---
 
 ## The Phase Pipeline
@@ -443,6 +445,31 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 </details>
 
 <details>
+<summary><strong>Maximizing Visibility for Large Fleets</strong></summary>
+
+When deploying to many machines, maximize visibility with:
+
+- Show only active/errored build logs: `a` keybind or `--tui.show-active-only` flag
+- Reduce build log viewport height: `--tui.command-output-max-height=N` (default: 8)
+
+Example for minimal build logs, maximum space for machine stats:
+
+```bash
+panix deploy --tui.show-active-only --tui.command-output-max-height=2
+```
+
+Or in config:
+
+```yaml
+flags:
+  tui:
+    show_active_only: true
+    command_output_max_height: 2
+```
+
+</details>
+
+<details>
 <summary><strong>Tag-Based Filtering</strong></summary>
 
 Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through inheritance. Deploy subsets of your infrastructure:
@@ -730,6 +757,9 @@ Commands:
   schema [flags]
     Generate YAML schema for configuration files
 
+  rollback [<generation>] [flags]
+    Rollback to a previous generation
+
 Run "panix <command> --help" for more information on a command.
 ```
 
@@ -959,10 +989,11 @@ The one used for testing to deploy [infrastructure](https://github.com/mihakrump
 
 ## Requirements & Caveats
 
-- **nix**: Panix uses `nix` that it finds in PATH, it also uses commands like `uname`, `id`, `echo`, `cat`, `readlink`, `stat`, `curl` and `tar`
+- **Nix**: Panix uses `nix` that it finds in PATH, it also uses commands like `uname`, `id`, `echo`, `cat`, `readlink`, `stat`, `curl` and `tar`
 - **rsync**: Required on both local and remote for file transfers (included in `kexec` images)
 - **kexec memory**: Minimum 1GB RAM without swap for `kexec` bootstrap
-- **nix store locking**: nix does not allow writing to store by more than one at a time, so some builds may have a `waiting for store lock` warning for a brief time until the lock is lifted
+- **Nix store location**: Panix expects Nix store to be in standard location
+- **Nix store locking**: Nix does not allow writing to store by more than one at a time, so some builds may have a `waiting for store lock` warning for a brief time until the lock is lifted
 - **ssh key auth**: only ssh key auth is supported, no password auth
 - **flake only**: only flakes are supported
 

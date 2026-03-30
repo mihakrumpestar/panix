@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/acobaugh/osrelease"
+	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
@@ -61,17 +62,7 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				return handleUnbootstrapped(exc, machine)
 			}
 
-			err = readGenerationInfo(exc, mms)
-			if err != nil {
-				return err
-			}
-
-			err = readGenerationDate(exc, mms)
-			if err != nil {
-				return err
-			}
-
-			return readKernelVersion(exc, mms)
+			return readGenerations(exc, mms)
 		})
 }
 
@@ -244,7 +235,6 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 			}
 
 			mms.Bootstrapped.Store(true)
-			mms.Nixos.Store(osrelease["BUILD_ID"])
 
 			return nil
 		}),
@@ -278,79 +268,102 @@ func handleUnbootstrapped(exc *executioner.Executioner, machine *config.Machine)
 	return nil
 }
 
-func readGenerationInfo(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) error {
 	err := exc.Exec(
-		"get generation",
-		"reading generation info",
-		"failed to read generation symlink",
-		[]string{"readlink", "/nix/var/nix/profiles/system"},
+		"list generations",
+		"listing generations",
+		"failed to list generations",
+		[]string{"nixos-rebuild", "list-generations"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			link := strings.TrimSpace(log.String())
-			if strings.HasPrefix(link, "system-") && strings.HasSuffix(link, "-link") {
-				genStr := strings.TrimSuffix(strings.TrimPrefix(link, "system-"), "-link")
-				if gen, err := strconv.ParseUint(genStr, 10, 32); err == nil {
-					mms.Generation.Store(uint32(gen))
-				}
+			genData, err := parseGenerationsOutput(log.String())
+			if err != nil {
+				return err
 			}
 
+			mms.Generations.Store(genData)
+
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.Generation.Store(1)
+			generations, _ := omap.New[uint, *config.GenerationInfo]()
+
+			_ = generations.Set(1, &config.GenerationInfo{Date: "DRY_RUN", Nixos: "DRY_RUN", Kernel: "DRY_RUN", Current: true})
+
+			mms.Generations.Store(&config.GenerationsData{
+				Current:     1,
+				Generations: generations,
+			})
 		}),
 	)
-	if err != nil {
-		return errors.Wrap(err, "failed to get generation")
-	}
 
-	return nil
+	return errors.Wrap(err, "failed to list generations")
 }
 
-func readGenerationDate(exc *executioner.Executioner, mms *config.MetaInspect) error {
-	err := exc.Exec(
-		"get generation date",
-		"reading generation date",
-		"failed to stat system profile",
-		[]string{"stat", "-c", "%y", "/nix/var/nix/profiles/system"},
-		executioner.OnSuccess(func(log *command.CommandLog) error {
-			date := strings.TrimSpace(log.String())
-			if idx := strings.Index(date, "."); idx != -1 {
-				date = date[:idx]
-			}
+func parseGenerationsOutput(output string) (*config.GenerationsData, error) {
+	lines := strings.Split(output, "\n")
 
-			mms.Date.Store(date)
-
-			return nil
-		}),
-		executioner.OnDryRun(func() {
-			mms.Date.Store("DRY_RUN")
-		}),
-	)
+	generations, err := omap.New[uint, *config.GenerationInfo]()
 	if err != nil {
-		return errors.Wrap(err, "failed to get generation date")
+		return nil, errors.Wrap(err, "failed to create generations map")
 	}
 
-	return nil
+	var currentGenNum uint
+
+	for i, line := range lines {
+		genNum, gen, ok := parseGenerationLine(i, line)
+		if !ok {
+			continue
+		}
+
+		if gen.Current {
+			currentGenNum = genNum
+		}
+
+		err = generations.Set(genNum, gen)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to set generation")
+		}
+	}
+
+	if generations.Len() == 0 {
+		return nil, errors.New("no generations found - ensure this is a NixOS system with system profiles")
+	}
+
+	return &config.GenerationsData{
+		Current:     currentGenNum,
+		Generations: generations,
+	}, nil
 }
 
-func readKernelVersion(exc *executioner.Executioner, mms *config.MetaInspect) error {
-	err := exc.Exec(
-		"get kernel version",
-		"reading kernel version",
-		"uname failed",
-		[]string{"uname", "-r"},
-		executioner.OnSuccess(func(log *command.CommandLog) error {
-			mms.Kernel.Store(strings.TrimSpace(log.String()))
+func parseGenerationLine(idx int, line string) (uint, *config.GenerationInfo, bool) {
+	const minFields = 5
 
-			return nil
-		}),
-		executioner.OnDryRun(func() {
-			mms.Kernel.Store("DRY_RUN")
-		}),
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to read kernel version")
+	line = strings.TrimSpace(line)
+	if line == "" || idx == 0 {
+		return 0, nil, false
 	}
 
-	return nil
+	fields := strings.Fields(line)
+	if len(fields) < minFields {
+		return 0, nil, false
+	}
+
+	parsedNum, err := strconv.ParseUint(fields[0], 10, 0)
+	if err != nil {
+		return 0, nil, false
+	}
+
+	gen := &config.GenerationInfo{
+		Date:   fields[1] + " " + fields[2],
+		Nixos:  fields[3],
+		Kernel: fields[4],
+	}
+
+	const currentFieldIdx = 6
+
+	if len(fields) > currentFieldIdx && fields[len(fields)-1] == "True" {
+		gen.Current = true
+	}
+
+	return uint(parsedNum), gen, true
 }
