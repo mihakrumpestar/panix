@@ -225,6 +225,8 @@ func (w *Workflow) executePhase(phase phases.Phase, flake *config.Flake, config 
 		return w.executeSecretsPhaseMachine(machine)
 	case phases.Activate:
 		return w.executeActivatePhaseMachine(machine)
+	case phases.Rollback:
+		return w.executeRollbackPhaseMachine(machine)
 	default:
 		return nil
 	}

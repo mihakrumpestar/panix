@@ -225,11 +225,19 @@ func (m *model) computeStatsTableHash(targetsLogs *logs.TargetsLogs, usableWidth
 
 		// Metadata
 		meta := machine.MetaInspect
-		_ = binary.Write(hasher, binary.LittleEndian, meta.Generation.Load())
+		if genData := meta.Generations.Load(); genData != nil {
+			_ = binary.Write(hasher, binary.LittleEndian, uint64(genData.Current))
+		}
+
 		_, _ = hasher.Write([]byte(meta.Architecture.Load()))
-		_, _ = hasher.Write([]byte(meta.Date.Load()))
-		_, _ = hasher.Write([]byte(meta.Nixos.Load()))
-		_, _ = hasher.Write([]byte(meta.Kernel.Load()))
+
+		if genData := meta.Generations.Load(); genData != nil {
+			if gen, ok := genData.Generations.Get(genData.Current); ok {
+				_, _ = hasher.Write([]byte(gen.Date))
+				_, _ = hasher.Write([]byte(gen.Nixos))
+				_, _ = hasher.Write([]byte(gen.Kernel))
+			}
+		}
 	})
 
 	return hasher.Sum64()
@@ -268,9 +276,16 @@ func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targ
 			configDisplay = configuration.Name
 		}
 
-		generationString := ""
-		if generation := metaInspect.Generation.Load(); generation != 0 {
-			generationString = strconv.FormatUint(uint64(generation), 10)
+		var generationString, date, nixos, kernel string
+
+		if genData := metaInspect.Generations.Load(); genData != nil {
+			generationString = strconv.FormatUint(uint64(genData.Current), 10)
+
+			if gen, ok := genData.Generations.Get(genData.Current); ok {
+				date = gen.Date
+				nixos = gen.Nixos
+				kernel = gen.Kernel
+			}
 		}
 
 		tbl.Row(
@@ -282,9 +297,9 @@ func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targ
 			metaInspect.Architecture.Load(),
 			m.getStatusText(phaseLog, m.conf.ColorScheme),
 			generationString,
-			metaInspect.Date.Load(),
-			metaInspect.Nixos.Load(),
-			metaInspect.Kernel.Load(),
+			date,
+			nixos,
+			kernel,
 		)
 	})
 }

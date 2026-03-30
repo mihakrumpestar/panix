@@ -21,7 +21,9 @@ for usage.
 
 Code has to pass:
 
-- all checks in `task golangci`
+- all checks in `pre-commit run`: most importantly `task golangci`
+
+Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
 ## Past
 
@@ -33,9 +35,10 @@ The following packages were inadequate for use for Panix:
 
 ## Future
 
-Potentialy replace bubbletea with [tview](https://github.com/rivo/tview) for reduced binary size and improved performance.
+Future potential:
 
-Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
+- replace bubbletea with [tview](https://github.com/rivo/tview) for reduced binary size and improved performance
+- [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`
 
 ## Demo video
 
