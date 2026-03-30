@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -41,7 +42,10 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		ex.onUpdateHook()
 	}()
 
-	cmd := ex.prepareCommandWithEnv(commandWithArgs, excOpt)
+	cmdCtx, cancel := context.WithTimeout(ex.ctx, ex.timeout)
+	defer cancel()
+
+	cmd := ex.prepareCommandWithEnv(cmdCtx, commandWithArgs, excOpt)
 	ex.onUpdateHook()
 
 	if ex.dryRun {
@@ -55,7 +59,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 
 	defer func() { _ = ptyFile.Close() }()
 
-	readErr := ex.readPTYOutput(ptyFile, commandLog)
+	readErr := ex.readPTYOutput(cmdCtx, ptyFile, commandLog)
 	execErr = ex.finalizeExecution(cmd, readErr, commandLog, excOpt)
 
 	if execErr != nil {
@@ -65,9 +69,9 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	return nil
 }
 
-func (ex *Executioner) prepareCommandWithEnv(commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
+func (ex *Executioner) prepareCommandWithEnv(ctx context.Context, commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
 	// #nosec G204 -- commandWithArgs comes from internal configuration, not user input
-	cmd := exec.CommandContext(ex.ctx, commandWithArgs[0], commandWithArgs[1:]...)
+	cmd := exec.CommandContext(ctx, commandWithArgs[0], commandWithArgs[1:]...)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, excOpt.env...)
 
@@ -88,13 +92,13 @@ func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
 	return nil
 }
 
-func (ex *Executioner) readPTYOutput(ptyFile *os.File, commandLog *command.CommandLog) error {
+func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *os.File, commandLog *command.CommandLog) error {
 	buf := make([]byte, ptyBufferSize)
 
 	for {
 		select {
-		case <-ex.ctx.Done():
-			return errors.Wrap(ex.ctx.Err(), "context canceled")
+		case <-ctx.Done():
+			return errors.Wrap(ctx.Err(), "context canceled")
 		default:
 			bytesRead, err := ptyFile.Read(buf)
 			if err != nil {

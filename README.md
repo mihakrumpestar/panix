@@ -682,7 +682,7 @@ Flags:
       --dry-run-with-inspect       Show what would be done without
                                    executing, but with real inspect query
                                    ($PANIX_DRY_RUN_WITH_INSPECT)
-      --timeout=2h                 Timeout for workflow (eg. '1h', '1m15s')
+      --timeout=2h                 Timeout per command (eg. '1h', '1m15s')
                                    ($PANIX_TIMEOUT)
   -s, --skip-phases=SKIP-PHASES,...
                                    Declare phases to skip (not all phases can be

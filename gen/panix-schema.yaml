@@ -64,7 +64,7 @@ properties:
           type: string
       timeout:
         type: string
-        description: Timeout for workflow (eg. '1h', '1m15s')
+        description: Timeout per command (eg. '1h', '1m15s')
       tui:
         type: object
         properties:
