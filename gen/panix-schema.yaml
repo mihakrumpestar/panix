@@ -8,6 +8,16 @@ properties:
   flags:
     type: object
     properties:
+      activation_mode:
+        type: string
+        description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
+        default: switch
+        enum:
+        - check
+        - switch
+        - boot
+        - test
+        - dry-activate
       bootstrap:
         type: object
         properties:
@@ -20,7 +30,8 @@ properties:
         additionalProperties: false
       config:
         type: string
-        description: Config file
+        description: "Config file (default: panix.yml)"
+        default: panix.yml
       dry_run:
         type: boolean
         description: Show what would be done without executing
@@ -44,7 +55,8 @@ properties:
             description: Enable logging to file
           log_file:
             type: string
-            description: Log file path
+            description: "Log file path (default: panix.log)"
+            default: panix.log
         additionalProperties: false
       override_local_machine:
         type: string
@@ -64,13 +76,15 @@ properties:
           type: string
       timeout:
         type: string
-        description: Timeout per command (eg. '1h', '1m15s')
+        description: "Timeout per command (eg. '1h', '1m15s') (default: 2h)"
+        default: 2h
       tui:
         type: object
         properties:
           command_output_max_height:
             type: integer
-            description: Maximum height for command labels and outputs viewports in TUI
+            description: "Maximum height for command labels and outputs viewports in TUI (default: 8)"
+            default: 8
           show_active_only:
             type: boolean
             description: Show only running or errored logs in TUI build logs (keybind a)
@@ -85,6 +99,16 @@ properties:
   root:
     type: object
     properties:
+      activation_mode:
+        type: string
+        description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
+        default: switch
+        enum:
+        - check
+        - switch
+        - boot
+        - test
+        - dry-activate
       bootstrap:
         type: object
         properties:
@@ -110,6 +134,7 @@ properties:
                 permissions:
                   type: integer
                   description: "Optional file permissions (default: 0700)"
+                  default: "0700"
                 remote_path:
                   type: string
                   description: Absolute path on remote machine
@@ -189,6 +214,16 @@ properties:
         additionalProperties:
           type: object
           properties:
+            activation_mode:
+              type: string
+              description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
+              default: switch
+              enum:
+              - check
+              - switch
+              - boot
+              - test
+              - dry-activate
             bootstrap:
               type: object
               properties:
@@ -214,6 +249,7 @@ properties:
                       permissions:
                         type: integer
                         description: "Optional file permissions (default: 0700)"
+                        default: "0700"
                       remote_path:
                         type: string
                         description: Absolute path on remote machine
@@ -291,6 +327,16 @@ properties:
               additionalProperties:
                 type: object
                 properties:
+                  activation_mode:
+                    type: string
+                    description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
+                    default: switch
+                    enum:
+                    - check
+                    - switch
+                    - boot
+                    - test
+                    - dry-activate
                   bootstrap:
                     type: object
                     properties:
@@ -316,6 +362,7 @@ properties:
                             permissions:
                               type: integer
                               description: "Optional file permissions (default: 0700)"
+                              default: "0700"
                             remote_path:
                               type: string
                               description: Absolute path on remote machine
@@ -401,6 +448,16 @@ properties:
                       anyOf:
                       - type: object
                         properties:
+                          activation_mode:
+                            type: string
+                            description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
+                            default: switch
+                            enum:
+                            - check
+                            - switch
+                            - boot
+                            - test
+                            - dry-activate
                           bootstrap:
                             type: object
                             properties:
@@ -426,6 +483,7 @@ properties:
                                     permissions:
                                       type: integer
                                       description: "Optional file permissions (default: 0700)"
+                                      default: "0700"
                                     remote_path:
                                       type: string
                                       description: Absolute path on remote machine
@@ -519,6 +577,7 @@ properties:
                                 permissions:
                                   type: integer
                                   description: "Optional file permissions (default: 0700)"
+                                  default: "0700"
                                 remote_path:
                                   type: string
                                   description: Absolute path on remote machine
@@ -577,6 +636,7 @@ properties:
                         permissions:
                           type: integer
                           description: "Optional file permissions (default: 0700)"
+                          default: "0700"
                         remote_path:
                           type: string
                           description: Absolute path on remote machine
@@ -640,6 +700,7 @@ properties:
                   permissions:
                     type: integer
                     description: "Optional file permissions (default: 0700)"
+                    default: "0700"
                   remote_path:
                     type: string
                     description: Absolute path on remote machine
@@ -706,6 +767,7 @@ properties:
             permissions:
               type: integer
               description: "Optional file permissions (default: 0700)"
+              default: "0700"
             remote_path:
               type: string
               description: Absolute path on remote machine

@@ -110,6 +110,10 @@ func (m *Machine) Init(name string, parent *Configuration) error {
 	m.MetaInspect = &MetaInspect{}
 	m.MetaInspect.SetActiveSSH(m.SSH)
 
+	if m.Flags.ActivationMode != flags.ActivationModeSwitch {
+		m.ActivationMode = m.Flags.ActivationMode
+	}
+
 	return nil
 }
 
