@@ -3,3 +3,17 @@ repos:
     rev: v8.30.0
     hooks:
       - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: generate
+        name: generate
+        entry: task generate
+        language: system
+        pass_filenames: false
+
+      - id: golangci
+        name: golangci
+        entry: task golangci
+        language: system
+        pass_filenames: false
