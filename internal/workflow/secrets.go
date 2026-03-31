@@ -15,12 +15,12 @@ import (
 func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) error {
 	secrets := machine.Secrets
 
-	if len(secrets) == 0 {
-		return nil
-	}
-
 	return w.Phase(machine.Attributes.Xpath, phases.Secrets, nil,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+			if len(secrets) == 0 {
+				return nil
+			}
+
 			for _, secret := range secrets {
 				err := w.transferPlainFileOrDir(exc, machine, secret, "secrets", true)
 				if err != nil {
