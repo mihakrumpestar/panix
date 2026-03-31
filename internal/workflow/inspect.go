@@ -71,7 +71,7 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 		"SSH reachability check",
 		"checking SSH reachability",
 		"SSH unreachable",
-		func() error {
+		func(_ *command.CommandLog) error {
 			bootstrapSSHReachable := false
 			regularSSHReachable := false
 

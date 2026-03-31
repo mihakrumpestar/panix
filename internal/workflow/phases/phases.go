@@ -74,17 +74,22 @@ func PhasesInOrder() []Phase {
 func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error) {
 	phases := PhasesInOrder()
 
-	// Keep only required phases
+	standalonePhases := []Phase{Rollback}
+
 	phases = slices.DeleteFunc(phases, func(phase Phase) bool {
 		return !slices.Contains(requiredPhases, phase)
 	})
 
-	// Remove skipped phases
+	for _, sp := range standalonePhases {
+		if slices.Contains(requiredPhases, sp) && !slices.Contains(phases, sp) {
+			phases = append(phases, sp)
+		}
+	}
+
 	phases = slices.DeleteFunc(phases, func(phase Phase) bool {
 		return slices.Contains(skipPhases, phase)
 	})
 
-	// Validation
 	if len(phases) == 0 {
 		return nil, ErrAllPhasesSkipped
 	}
