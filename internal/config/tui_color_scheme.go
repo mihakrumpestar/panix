@@ -134,7 +134,7 @@ func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
 
 func makePhaseColorPairs() map[PhaseState][2]colorful.Color {
 	return map[PhaseState][2]colorful.Color{
-		PhaseStateActive:    {mustColorfulHex("#275368"), mustColorfulHex("#217793")},
+		PhaseStateActive:    {mustColorfulHex("#01536e"), mustColorfulHex("#007da7")},
 		PhaseStateFailed:    {mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")},
 		PhaseStateCompleted: {mustColorfulHex("#14532D"), mustColorfulHex("#11883d")},
 		PhaseStateDefault:   {mustColorfulHex("#535862"), mustColorfulHex("#6B7280")},
