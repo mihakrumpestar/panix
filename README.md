@@ -2,9 +2,9 @@
 
 # Panix
 
-**The NixOS Deployment Experience You've Been Waiting For**
+**A Deployment Orchestrator for NixOS**
 
-*A stateless TUI-driven orchestrator for bootstrapping and deploying multi-flake NixOS systems*
+*Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
 
 [![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
 [![License](https://img.shields.io/github/license/mihakrumpestar/panix)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
@@ -34,39 +34,26 @@ Full demo of the bootstrap process with kexec over Arch:
 
 ## The Problem
 
-NixOS promises a world where system configuration is declarative, reproducible, and version-controlled. A world where rollback is trivial - just switch a symlink. Where your development machine and production servers share the same configuration DNA.
+Deploying NixOS at scale introduces operational challenges that existing tools address partially but not holistically:
 
-This promise holds beautifully for a single machine. `nixos-rebuild switch` works. Your flake builds. Everything is good.
+- **Fragmented tooling**: `nixos-anywhere` handles bootstrapping bare-metal machines, while `deploy-rs` and `Colmena` manage deployment orchestration. Each tool excels within its domain, but integration between bootstrap and ongoing deployment cycles remains manual.
+- **Missing visibility**: Deployment failures require parsing scrollback logs after execution completes. There's no unified view of what phase failed, which machine is affected, or the current state across a heterogeneous fleet.
+- **Implicit dependencies**: Most deployment tools require modifying your flake to include their module or output, creating a dependency that complicates using alternative tools later.
+- **No retry mechanism**: When a phase fails mid-execution, the typical workflow is to restart from scratch. Partial progress is discarded rather than preserved and recoverable.
 
-**Then you need to deploy to a fleet.**
-
-Some machines already run NixOS. Others are bare metal, cloud instances, or legacy systems waiting to be converted. And suddenly you're not in the elegant world of Nix anymore - you're in the messy world of operations:
-
-- **Bootstrap complexity**: Each non-NixOS machine needs kexec, disko, partitioning - orchestrated manually or via fragile scripts
-- **Visibility gaps**: Is that build still running? Did kexec succeed? Which machine failed? The answers are buried in scrollback
-- **Secrets sprawl**: Deploying sensitive files becomes an afterthought, handled via ad-hoc `rsync` or `scp` commands
-- **No recovery path**: When something fails halfway through, you're left reconnecting manually, parsing logs, guessing what went wrong
-- **Fleet heterogeneity**: Multiple flakes, multiple configurations, machines in different states - no unified view
-
-The ecosystem has tools for pieces of this puzzle. **nixos-anywhere** handles bootstrap. **deploy-rs**, **Colmena** (and many others) manage deployments. Each excels at its domain. But orchestration across these concerns - bootstrap, deploy, secrets, visibility, recovery - remains manual.
-
-A lot of the tools that manage deployments also introduce themselves as **a dependancy** in your flake, making it possible to deploy only with their tool (without at least some caviats to get the system closure path out of it). Panix intentionaly does not require you to modify your flake for it.
-
-**The missing piece: an operator-focused interface.**
-
-Not a script that runs and exits. Not a single command whose output you scroll through (or it might not even provide them) to find the relevant information after it already failed. But **an interactive, real-time view into your deployment pipeline - where you can see every phase, every machine, every failure, and act on them immediately**.
-
-This is the gap Panix fills.
+Panix addresses these problems by providing deployment orchestration with built-in visibility and interactivity.
 
 ---
 
-## What Panix Actually Is
+## What Panix Is
 
-Panix is a **stateless, phase-oriented flake deployment orchestrator** with a real-time TUI. Stateless means it holds no persistent state of its own - everything derives from your flake, your configuration file and actual state of the machines.
+Panix is a deployment orchestrator for NixOS flakes. It provides:
 
-The TUI isn't a gimmick. It's a recognition that deployments are **interactive processes**. Things fail, networks hiccup, builds take time, etc. Having visibility into every phase of every machine - seeing the architecture detection, watching the closure transfer, observing the activation - transforms deployment from a "*blindly run and pray*" operation into a controlled, observable process.
-
-TLDR: Without visibility, deployment is faith. With visibility, deployment is engineering.
+- **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
+- **Phase-oriented execution**: Six sequential phases - Inspect, Build, Bootstrap, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
+- **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
+- **Bootstrap support**: Non-NixOS machines can be converted to NixOS via kexec and `disko`, with full support for disk encryption, TPM enrolment, and custom hooks at multiple stages.
+- **Flake-agnostic configuration**: The deployment configuration is separate from your flake. No modifications to your flake are required to use Panix.
 
 ---
 
