@@ -24,7 +24,7 @@ type CLI struct {
 
 	Build struct{} `cmd:"" help:"Build all selected closures"`
 
-	Deploy struct{} `cmd:"" help:"Do full workflow (inspect -> bootstrap -> secrets -> build -> push -> activate)"`
+	Deploy struct{} `cmd:"" help:"Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets -> activate)"`
 
 	Secrets struct{} `cmd:"" help:"Deploy secrets to all machines"`
 
