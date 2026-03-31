@@ -784,7 +784,7 @@ Commands:
     Build all selected closures
 
   deploy [flags]
-    Do full workflow (inspect -> bootstrap -> secrets -> build -> push ->
+    Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
     activate)
 
   secrets [flags]
