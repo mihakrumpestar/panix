@@ -77,7 +77,7 @@ func defaultColorScheme() *ColorScheme {
 			OK:      makeForegroundStyle("#50FA7B"),
 			Warning: makeForegroundStyle("#FFB86C"),
 			Error:   makeForegroundStyle("#FF5555"),
-			Running: makeForegroundStyle("#0077ff"),
+			Running: makeForegroundStyle("#00BFFF"),
 		},
 		Table: ColorSchemeTable{
 			Header:                       makeBoldForegroundStyle("#F8F8F2"),
@@ -134,7 +134,7 @@ func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
 
 func makePhaseColorPairs() map[PhaseState][2]colorful.Color {
 	return map[PhaseState][2]colorful.Color{
-		PhaseStateActive:    {mustColorfulHex("#2952c3"), mustColorfulHex("#3b6bec")},
+		PhaseStateActive:    {mustColorfulHex("#275368"), mustColorfulHex("#217793")},
 		PhaseStateFailed:    {mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")},
 		PhaseStateCompleted: {mustColorfulHex("#14532D"), mustColorfulHex("#11883d")},
 		PhaseStateDefault:   {mustColorfulHex("#535862"), mustColorfulHex("#6B7280")},

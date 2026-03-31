@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
@@ -62,7 +63,7 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg str
 		"wait for disconnect",
 		statusMsg,
 		"failed to wait for disconnect",
-		func() error {
+		func(_ *logs_command.CommandLog) error {
 			for range WaitForDisconnectTimeoutTimes {
 				select {
 				case <-exc.ctx.Done():
@@ -86,7 +87,7 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, fai
 		"wait for reconnect",
 		statusMsg,
 		failMsg,
-		func() error {
+		func(_ *logs_command.CommandLog) error {
 			for range WaitForReconnectTimeoutTimes {
 				select {
 				case <-exc.ctx.Done():

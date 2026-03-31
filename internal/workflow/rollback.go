@@ -33,11 +33,17 @@ func (w *Workflow) executeRollbackPhaseMachine(machine *config.Machine) error {
 				"validate generation",
 				"validating generation number",
 				"generation validation failed",
-				func() error {
+				func(log *command.CommandLog) error {
 					var err error
-					targetGenNum, err = validateAndGetTargetGen(genData, w.conf.RollbackGeneration)
 
-					return err
+					targetGenNum, err = validateAndGetTargetGen(genData, w.conf.RollbackGeneration)
+					if err != nil {
+						return err
+					}
+
+					log.WriteLineString(fmt.Sprintf("target generation: %d", targetGenNum))
+
+					return nil
 				},
 			)
 			if err != nil {

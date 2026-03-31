@@ -113,7 +113,7 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	return ex.sshStream(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt)
 }
 
-func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func() error) error {
+func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 
 	commandLog.TimeAndState.StartTimer()
@@ -131,7 +131,7 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 		return nil
 	}
 
-	execErr = execFunc()
+	execErr = execFunc(commandLog)
 	if execErr != nil {
 		return execErr
 	}
