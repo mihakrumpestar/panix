@@ -65,15 +65,10 @@ func GetPhaseMetadata(phase Phase) (PhaseMetadata, bool) {
 	return PhaseMetadata{}, false
 }
 
-// PhasesInOrder returns phases in their defined order.
-// PhaseRegistry is already defined in execution order.
+// PhasesInOrder returns the deploy workflow phases in execution order.
+// Stand-alone phases (like Rollback) are not included.
 func PhasesInOrder() []Phase {
-	result := make([]Phase, len(PhaseRegistry))
-	for i, pm := range PhaseRegistry {
-		result[i] = pm.Phase
-	}
-
-	return result
+	return []Phase{Inspect, Build, Bootstrap, Transfer, Secrets, Activate}
 }
 
 func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error) {
