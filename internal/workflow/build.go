@@ -64,6 +64,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 		[]string{"nix"},
 		nixExperimentalFeatures,
 		[]string{"build", "--no-link", "--no-update-lock-file", "--json"},
+		slices.Concat(configuration.Nix.ExtraFlags, configuration.Nix.BuildFlags),
 		installables,
 	)
 

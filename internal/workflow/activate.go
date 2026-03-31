@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"slices"
+
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -32,7 +34,10 @@ func executeBootstrap(exc *executioner.Executioner, machine *config.Machine, sys
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
-		[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
+		slices.Concat(
+			[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
+			machine.Nix.NixosInstallFlags,
+		),
 	)
 	if err != nil {
 		return errors.Wrap(err, "nixos-install failed")
