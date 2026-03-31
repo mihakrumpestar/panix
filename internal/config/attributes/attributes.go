@@ -25,6 +25,7 @@ type Attributes struct {
 	ActivationMode      config_flags.ActivationMode `yaml:"activation_mode" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 
 	Bootstrap Bootstrap `yaml:"bootstrap"`
+	Nix       NixConfig `yaml:"nix"`
 
 	Name    string              `yaml:"-" validate:"-"`
 	Xpath   Xpath               `yaml:"-" validate:"-"`
@@ -71,6 +72,13 @@ type PostBootstrapHookCommand string
 
 const PostBootstrapHookWaitForOnline PostBootstrapHookCommand = "waitForOnline"
 const PostBootstrapHookWaitForOffline PostBootstrapHookCommand = "waitForOffline"
+
+type NixConfig struct {
+	ExtraFlags        []string `yaml:"extra_flags" desc:"Extra flags applied to both 'nix build' and 'nix copy'"`
+	BuildFlags        []string `yaml:"build_flags" desc:"Extra flags for 'nix build' command (e.g. '--max-jobs', '4')"`
+	CopyFlags         []string `yaml:"copy_flags" desc:"Extra flags for 'nix copy' command (e.g. '--compress')"`
+	NixosInstallFlags []string `yaml:"nixos_install_flags" desc:"Extra flags for 'nixos-install' command (e.g. '--no-bootloader')"`
+}
 
 func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) error {
 	err := a.PassAttributesInto(name, parentAttr)

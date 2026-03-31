@@ -378,6 +378,42 @@ The `<arch>` placeholder is automatically replaced with the detected architectur
 </details>
 
 <details>
+<summary><strong>Nix Command Flags</strong></summary>
+
+Pass additional flags to nix commands (`nix build`, `nix copy`, `nixos-install`) through configuration:
+
+```yaml
+root:
+  nix:
+    extra_flags: ["--option", "sandbox", "false"]  # Applied to both build and copy
+  
+  flakes:
+    my-flake:
+      configurations:
+        webserver:
+          nix:
+            build_flags: ["--max-jobs", "8"]       # nix build only
+            copy_flags: ["--compress"]             # nix copy only
+            extra_flags: []                        # Inherits + appends from parent
+          
+          machines:
+            web-01:
+              nix:
+                copy_flags: ["--compress"]         # Inherits + appends from parent
+                nixos_install_flags: ["--no-bootloader"]  # nixos-install only
+```
+
+**Inheritance**: Flags accumulate down the hierarchy (root → flake → configuration → machine). Slices are appended, not replaced.
+
+**Scope matters**:
+
+- `build_flags` and `extra_flags` for `nix build` should be set at **configuration** level (build runs once per configuration)
+- `copy_flags` for `nix copy` can be set at **machine** level (transfer runs per machine)
+- `nixos_install_flags` for `nixos-install` can be set at **machine** level (bootstrap runs per machine)
+
+</details>
+
+<details>
 <summary><strong>Multi-Flake Deployments</strong></summary>
 
 Your infrastructure may span multiple flakes/repositories. Panix treats this as a first-class concern:
@@ -815,6 +851,11 @@ root:
   tags: [production]                   # Tags inherited by all descendants
   hardware_config_path: ./hardware     # Path for hardware config generation
   override_sudo_program: doas          # Override sudo program (default: sudo)
+  nix:                                 # Nix command flags inherited by all descendants
+    extra_flags: []                    # Flags for both nix build and nix copy
+    build_flags: []                    # Flags for nix build only
+    copy_flags: []                     # Flags for nix copy only
+    nixos_install_flags: []            # Flags for nixos-install only
   ssh:                                 # SSH config inherited by all machines (machine-level overrides)
     hostname: ""                       # SSH hostname or IP address
     port: 22                           # SSH port number
@@ -882,6 +923,11 @@ root:
           flake_output: nixosConfigurations.webserver.config.system.build.toplevel  # Override flake output
           hardware_config_path: ./hardware
           override_sudo_program: sudo
+          nix:                         # Nix flags for this configuration
+            extra_flags: []            # Inherits + appends from parent
+            build_flags: ["--max-jobs", "4"]  # Flags for nix build
+            copy_flags: []             # Flags for nix copy
+            nixos_install_flags: []    # Flags for nixos-install
           ssh:
             hostname: ""
             port: 22
@@ -922,6 +968,11 @@ root:
               tags: [web-01]           # Accumulated: [production, critical, web, web-01]
               hardware_config_path: ./hardware/web-01
               override_sudo_program: sudo
+              nix:                     # Nix flags for this machine
+                extra_flags: []        # Inherits + appends from parent
+                build_flags: []        # Inherits + appends from parent
+                copy_flags: ["--compress"]  # Flags for nix copy (machine-level)
+                nixos_install_flags: []    # Flags for nixos-install (machine-level)
               ssh:
                 hostname: 10.0.0.1
                 port: 22

@@ -560,6 +560,30 @@ properties:
                             type: boolean
                           hardware_config_path:
                             type: string
+                          nix:
+                            type: object
+                            properties:
+                              build_flags:
+                                type: array
+                                description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+                                items:
+                                  type: string
+                              copy_flags:
+                                type: array
+                                description: Extra flags for 'nix copy' command (e.g. '--compress')
+                                items:
+                                  type: string
+                              extra_flags:
+                                type: array
+                                description: Extra flags applied to both 'nix build' and 'nix copy'
+                                items:
+                                  type: string
+                              nixos_install_flags:
+                                type: array
+                                description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+                                items:
+                                  type: string
+                            additionalProperties: false
                           override_sudo_program:
                             type: string
                           secrets:
@@ -619,6 +643,30 @@ properties:
                               type: string
                         additionalProperties: false
                       - type: "null"
+                  nix:
+                    type: object
+                    properties:
+                      build_flags:
+                        type: array
+                        description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+                        items:
+                          type: string
+                      copy_flags:
+                        type: array
+                        description: Extra flags for 'nix copy' command (e.g. '--compress')
+                        items:
+                          type: string
+                      extra_flags:
+                        type: array
+                        description: Extra flags applied to both 'nix build' and 'nix copy'
+                        items:
+                          type: string
+                      nixos_install_flags:
+                        type: array
+                        description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+                        items:
+                          type: string
+                    additionalProperties: false
                   override_sudo_program:
                     type: string
                   secrets:
@@ -683,6 +731,30 @@ properties:
               type: boolean
             hardware_config_path:
               type: string
+            nix:
+              type: object
+              properties:
+                build_flags:
+                  type: array
+                  description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+                  items:
+                    type: string
+                copy_flags:
+                  type: array
+                  description: Extra flags for 'nix copy' command (e.g. '--compress')
+                  items:
+                    type: string
+                extra_flags:
+                  type: array
+                  description: Extra flags applied to both 'nix build' and 'nix copy'
+                  items:
+                    type: string
+                nixos_install_flags:
+                  type: array
+                  description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+                  items:
+                    type: string
+              additionalProperties: false
             override_sudo_program:
               type: string
             secrets:
@@ -750,6 +822,30 @@ properties:
           additionalProperties: false
       hardware_config_path:
         type: string
+      nix:
+        type: object
+        properties:
+          build_flags:
+            type: array
+            description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+            items:
+              type: string
+          copy_flags:
+            type: array
+            description: Extra flags for 'nix copy' command (e.g. '--compress')
+            items:
+              type: string
+          extra_flags:
+            type: array
+            description: Extra flags applied to both 'nix build' and 'nix copy'
+            items:
+              type: string
+          nixos_install_flags:
+            type: array
+            description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+            items:
+              type: string
+        additionalProperties: false
       override_sudo_program:
         type: string
       secrets:
