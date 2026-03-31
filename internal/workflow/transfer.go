@@ -41,6 +41,7 @@ func executeTransferPhaseMachineWrapper(
 		[]string{"nix"},
 		nixExperimentalFeatures,
 		[]string{"copy", "--to", "ssh://" + activeSSH.Hostname + storeArgs},
+		slices.Concat(machine.Nix.ExtraFlags, machine.Nix.CopyFlags),
 		toTransfer,
 	)
 

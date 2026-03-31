@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/hayageek/threadsafe"
@@ -27,7 +28,7 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
-		Command:         strings.Join(env, " ") + " " + strings.Join(command, " "),
+		Command:         strings.Join(slices.Concat(env, command), " "),
 		stdInOutErr:     threadsafe.NewSlice[*safebuffer.Buffer](),
 		TimeAndState:    timeandstate.NewTimeAndState(),
 	}
