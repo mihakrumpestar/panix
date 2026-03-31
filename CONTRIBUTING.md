@@ -44,10 +44,10 @@ Future potential:
 
 ### GIF
 
-Convert using:
+Convert using ([article](https://www.ffmpeg.media/articles/working-with-gifs-convert-optimize)):
 
 ```sh
-nix run nixpkgs#ffmpeg-full -- -i <source>.mp4 -lavfi "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" demo.gif'
+ffmpeg -i demo.mp4 -vf "fps=10,scale=iw*0.8:-1:flags=lanczos,format=rgba,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0 demo.gif
 ```
 
 ### MP4
