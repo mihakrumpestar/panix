@@ -22,7 +22,7 @@ tasks:
     env:
       GORACE: log_path={{.DEBUG_DIR}}/race.log
     cmds:
-      - go run --race cmd/panix/main.go {{.CLI_ARGS}}
+      - CGO_ENABLED=1 go run --race cmd/panix/main.go {{.CLI_ARGS}}
 
   run:profile:
     desc: Run the application with go run
