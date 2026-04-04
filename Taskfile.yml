@@ -76,9 +76,10 @@ tasks:
   golangci:
     desc: Run checks
     vars:
-      CUSTOM_GCL: .devbox/bin/custom-gcl
+      DEVBOX_BINS: .devbox/bin
+      CUSTOM_GCL: "{{.DEVBOX_BINS}}/custom-gcl"
     cmds:
-      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination {{.CUSTOM_GCL}}; fi # Build linter
+      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination {{.DEVBOX_BINS}}; fi # Build linter
       - |
         {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
       - |
