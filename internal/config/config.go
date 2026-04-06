@@ -11,50 +11,33 @@ import (
 )
 
 type Config struct {
-	Flags       *flags.Flags `yaml:"flags"`
-	Root        *Root        `yaml:"root,required" validate:"required"`
-	ColorScheme *ColorScheme `yaml:"-" validate:"-"`
+	Flags       *flags.Flags `json:"flags"`
+	Flakes      []*Flake     `json:"flakes" validate:"required,dive"`
+	ColorScheme *ColorScheme `json:"-" validate:"-"`
 
-	// Internal
-	Phases             []phases.Phase `yaml:"-" validate:"-"`
-	RollbackGeneration int            `yaml:"-" validate:"-"`
+	Phases             []phases.Phase `json:"-" validate:"-"`
+	RollbackGeneration int            `json:"-" validate:"-"`
 }
-
-// Root
-
-type Root struct {
-	Flakes                       *OrderedMap[string, *Flake] `yaml:"flakes,required"`
-	config_attributes.Attributes `yaml:",inline"`
-}
-
-func (r *Root) Init(f *flags.Flags) error {
-	return errors.Wrap(
-		r.Attributes.Init("root", &config_attributes.Attributes{Flags: f}, false),
-		"failed to initialize root attributes",
-	)
-}
-
-// Flake
 
 type Flake struct {
-	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
-	config_attributes.Attributes `yaml:",inline"`
-	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
+	Name                         string           `json:"name"`
+	URL                          string           `json:"url" validate:"required"`
+	Configurations               []*Configuration `json:"configurations,omitempty" validate:"dive"`
+	config_attributes.Attributes `json:",inline"`
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
+	f.Name = name
 	return errors.Wrap(f.Attributes.Init(name, attr, false), "failed to initialize flake")
 }
 
-// Configuration
-
 type Configuration struct {
-	Machines                     *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
-	config_attributes.Attributes `yaml:",inline"`
-	FlakeOutput                  string `yaml:"flake_output" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
-	// Internal
-	ParentFlake *Flake     `yaml:"-" validate:"-"`
-	MetaBuild   *MetaBuild `yaml:"-" validate:"-"`
+	Name                         string     `json:"name"`
+	Machines                     []*Machine `json:"machines" validate:"required,dive"`
+	FlakeOutput                  string     `json:"flake_output,omitempty"`
+	config_attributes.Attributes `json:",inline"`
+	ParentFlake                  *Flake     `json:"-" validate:"-"`
+	MetaBuild                    *MetaBuild `json:"-" validate:"-"`
 }
 
 type MetaBuild struct {
@@ -62,6 +45,7 @@ type MetaBuild struct {
 }
 
 func (c *Configuration) Init(name string, parent *Flake) error {
+	c.Name = name
 	c.ParentFlake = parent
 
 	err := c.Attributes.Init(name, &parent.Attributes, false)
@@ -72,15 +56,14 @@ func (c *Configuration) Init(name string, parent *Flake) error {
 	return nil
 }
 
-// Machine
-
 type Machine struct {
-	config_attributes.Attributes `yaml:",inline"`
-	ParentConfiguration          *Configuration `yaml:"-" validate:"-"`
-	MetaInspect                  *MetaInspect   `yaml:"-" validate:"-"`
+	Name                         string `json:"name"`
+	config_attributes.Attributes `json:",inline"`
+	ParentConfiguration          *Configuration `json:"-" validate:"-"`
+	MetaInspect                  *MetaInspect   `json:"-" validate:"-"`
 }
 
-type MetaInspect struct { // Atomic due to being read and write at the same time
+type MetaInspect struct {
 	Reachable      atomic.Bool
 	SSHConnectable atomic.Bool
 	Architecture   atomic.String
@@ -89,7 +72,6 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	RequiresKexec  atomic.Bool
 	Generations    atomic.Pointer[GenerationsData]
 
-	// Internal
 	activeSSH atomic.Pointer[ssh.SSHClient]
 }
 
@@ -114,6 +96,7 @@ func (m *MetaInspect) SetActiveSSH(sshClient *ssh.SSHClient) {
 }
 
 func (m *Machine) Init(name string, parent *Configuration) error {
+	m.Name = name
 	err := m.Attributes.Init(name, &parent.Attributes, true)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize machine")
@@ -165,12 +148,10 @@ func (m *Machine) SwitchToRegularSSH() {
 	m.MetaInspect.SetActiveSSH(m.SSH)
 }
 
-// GetKexecSSH returns the SSH configuration to use after kexec.
-// Inherits all settings from current active SSH, overriding only the port.
 func (m *Machine) GetKexecSSH() *ssh.SSHClient {
 	activeSSH := m.MetaInspect.GetActiveSSH()
 
-	port := ssh.DefaultSSHPort // default port 22
+	port := ssh.DefaultSSHPort
 	if m.Bootstrap.Kexec != nil && m.Bootstrap.Kexec.SSHPort != 0 {
 		port = m.Bootstrap.Kexec.SSHPort
 	}

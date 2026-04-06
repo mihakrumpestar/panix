@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"encoding/json"
 	"time"
 
 	"dario.cat/mergo"
@@ -18,21 +19,63 @@ const (
 	ActivationModeDryActivate ActivationMode = "dry-activate" // show what would be done if this configuration were activated
 )
 
-type Flags struct {
-	Config               string         `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
-	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configs and names are already registered as tags)"`
-	Bootstrap            Bootstrap      `yaml:"bootstrap" embed:"" prefix:"bootstrap."`
-	RequireAllSuccess    bool           `yaml:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
-	OverrideLocalMachine string         `yaml:"override_local_machine" help:"Hostname of the machine that is local (won't use ssh to connect to it)"`
-	DryRun               bool           `yaml:"dry_run" help:"Show what would be done without executing"`
-	DryRunWithInspect    bool           `yaml:"dry_run_with_inspect" help:"Show what would be done without executing, but with real inspect query"`
-	Timeout              time.Duration  `yaml:"timeout" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
-	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
-	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
-	ActivationMode       ActivationMode `yaml:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
+type Duration struct {
+	time.Duration
+}
 
-	Tui     `yaml:"tui" embed:"" prefix:"tui."`
-	Logging `yaml:"logging"`
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+
+	switch value := v.(type) {
+	case float64:
+		d.Duration = time.Duration(value)
+	case string:
+		var err error
+		d.Duration, err = time.ParseDuration(value)
+		if err != nil {
+			return err
+		}
+	default:
+		return errors.New("invalid duration type")
+	}
+	return nil
+}
+
+func (d *Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Duration.String())
+}
+
+func (d *Duration) UnmarshalText(text []byte) error {
+	var err error
+	d.Duration, err = time.ParseDuration(string(text))
+	return err
+}
+
+func (d *Duration) MarshalText() ([]byte, error) {
+	return []byte(d.Duration.String()), nil
+}
+
+type Flags struct {
+	Config               string            `json:"config" short:"c" help:"Nix config file" default:"panix.nix"`
+	Env                  string            `json:"env" help:"Environment name (passed to Nix)"`
+	NoValidatePaths      bool              `json:"no_validate_paths" help:"Skip path existence validation"`
+	NixArgs              map[string]string `json:"-" help:"Additional args passed to nix eval"`
+	Tags                 []string          `json:"tags" short:"t" help:"Filter machines by tags (flakes, configs and names are already registered as tags)"`
+	Bootstrap            Bootstrap         `json:"bootstrap" embed:"" prefix:"bootstrap."`
+	RequireAllSuccess    bool              `json:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
+	OverrideLocalMachine string            `json:"override_local_machine" help:"Hostname of the machine that is local (won't use ssh to connect to it)"`
+	DryRun               bool              `json:"dry_run" help:"Show what would be done without executing"`
+	DryRunWithInspect    bool              `json:"dry_run_with_inspect" help:"Show what would be done without executing, but with real inspect query"`
+	Timeout              Duration          `json:"timeout" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
+	SkipPhases           []phases.Phase    `json:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
+	ExitOnComplete       bool              `json:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
+	ActivationMode       ActivationMode    `json:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
+
+	Tui     `json:"tui" embed:"" prefix:"tui."`
+	Logging `json:"logging"`
 }
 
 type Bootstrap struct {

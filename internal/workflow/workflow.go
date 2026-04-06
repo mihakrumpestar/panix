@@ -38,7 +38,7 @@ type WorkflowState struct {
 }
 
 func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
-	targetsLogs, err := logs.InitBuildLogs(conf.Root, conf.Flags.Logging)
+	targetsLogs, err := logs.InitBuildLogs(conf.Flakes, conf.Flags.Logging)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize build logs")
 	}
@@ -135,7 +135,7 @@ func (w *Workflow) Phase(
 		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
 
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phase != phases.Inspect)
-	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, machine, phaseLog, w.updateHook.Signal)
+	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout.Duration, dryRun, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	log.Info().
@@ -196,12 +196,9 @@ func (w *Workflow) MachineCount() int {
 func (w *Workflow) RootTree(function func(idx int, machine *config.Machine)) {
 	idx := 0
 
-	for _, flakePair := range w.conf.Root.Flakes.Omap.Pairs() {
-		flake := flakePair.Value
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			configuration := configPair.Value
-			for _, machinePair := range configuration.Machines.Omap.Pairs() {
-				machine := machinePair.Value
+	for _, flake := range w.conf.Flakes {
+		for _, configuration := range flake.Configurations {
+			for _, machine := range configuration.Machines {
 				function(idx, machine)
 
 				idx++

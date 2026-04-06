@@ -5,30 +5,27 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 )
 
-func InitBuildLogs(root *config.Root, logging flags.Logging) (*TargetsLogs, error) {
+func InitBuildLogs(flakes []*config.Flake, logging flags.Logging) (*TargetsLogs, error) {
 	targetsLogs, err := NewTargetsLogs(logging)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, pair := range root.Flakes.Omap.Pairs() {
-		flake := pair.Value
+	for _, flake := range flakes {
 		flakeLogs, err := targetsLogs.Add(flake.Xpath)
 
 		if err != nil {
 			return nil, err
 		}
 
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			configuration := configPair.Value
+		for _, configuration := range flake.Configurations {
 			configurationLogs, err := targetsLogs.AddWithParent(configuration.Xpath, flakeLogs)
 
 			if err != nil {
 				return nil, err
 			}
 
-			for _, machinePair := range configuration.Machines.Omap.Pairs() {
-				machine := machinePair.Value
+			for _, machine := range configuration.Machines {
 				_, err := targetsLogs.AddWithParent(machine.Xpath, configurationLogs)
 
 				if err != nil {
