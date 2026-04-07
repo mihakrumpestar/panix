@@ -77,7 +77,7 @@ func (e *keyValueExtractor[K, V]) Visit(node ast.Node) ast.Visitor {
 		return e
 	}
 
-	valueType := reflect.TypeOf((*V)(nil)).Elem()
+	valueType := reflect.TypeFor[V]()
 	elemType := valueType
 
 	isPtr := valueType.Kind() == reflect.Ptr

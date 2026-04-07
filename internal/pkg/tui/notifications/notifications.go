@@ -72,25 +72,6 @@ func (n *Notification) GetTextAndStarted() (string, int64) {
 	return n.text, n.started.UnixMilli()
 }
 
-func (n *Notification) isExpired() bool {
-	return n.text == "" || time.Since(n.started) >= duration
-}
-
-func (n *Notification) fadedColor() color.Color {
-	elapsed := time.Since(n.started)
-	if elapsed < fadeStart {
-		return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))
-	}
-
-	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
-	factor := 1.0 - (progress * fadeFactor)
-
-	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
-		uint8(float64(n.fgR)*factor),
-		uint8(float64(n.fgG)*factor),
-		uint8(float64(n.fgB)*factor)))
-}
-
 func (n *Notification) Render(baseStyle lipgloss.Style) string {
 	if n.isExpired() {
 		return ""
@@ -112,4 +93,23 @@ func (n *Notification) RenderBox(baseStyle lipgloss.Style) (string, int) {
 		Render(n.Render(baseStyle))
 
 	return box, lipgloss.Width(box)
+}
+
+func (n *Notification) isExpired() bool {
+	return n.text == "" || time.Since(n.started) >= duration
+}
+
+func (n *Notification) fadedColor() color.Color {
+	elapsed := time.Since(n.started)
+	if elapsed < fadeStart {
+		return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))
+	}
+
+	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
+	factor := 1.0 - (progress * fadeFactor)
+
+	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
+		uint8(float64(n.fgR)*factor),
+		uint8(float64(n.fgG)*factor),
+		uint8(float64(n.fgB)*factor)))
 }

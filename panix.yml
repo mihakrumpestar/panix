@@ -1,5 +1,15 @@
 # yaml-language-server: $schema=./gen/panix-schema.yaml
 
+# Below is not a comment, it is go template function definition
+# {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
+
+bootstrap_defaults: &bootstrap_defaults
+  kexec:
+    url: ./kexec-<arch>.tar.gz
+  disk_encryption_keys:
+    - local_path: /tmp/disko-encryption-password.txt
+      remote_path: /tmp/disko-encryption-password.txt
+
 flags:
   timeout: 5500s
   override_local_machine: tmp
@@ -9,19 +19,11 @@ root:
     infrastructure:
       url: path:../infrastructure
       configurations:
-        #server-03:
-        #  machines:
-        #    server-03:
-        #      tags:
-        #        - test
-        #    docker-swarm:
         personal-workstation:
           machines:
             personal-workstation:
               bootstrap:
-                disk_encryption_keys:
-                  - local_path: /tmp/disko-encryption-password.txt
-                    remote_path: /tmp/disko-encryption-password.txt
+                <<: *bootstrap_defaults
                 # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
                 # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
 
@@ -35,51 +37,37 @@ root:
           machines:
             personal-laptop:
               bootstrap:
-                #kexec:
-                #  url: ./kexec-<arch>.tar.gz
-                #force_bootstrap: true
-                #force_bootstrap_kexec: true
-                #allow_destructive_actions: true
-                #ssh:
-                #  hostname: 10.0.200.226
-                #  identity_file: temp_key
-                disk_encryption_keys:
-                  - local_path: /tmp/disko-encryption-password.txt
-                    remote_path: /tmp/disko-encryption-password.txt
+                <<: *bootstrap_defaults
                 # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
                 # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
 
         server-01:
           machines:
             server-01:
+              bootstrap:
+                <<: *bootstrap_defaults
+                post_bootstrap_hooks:
+                  - |
+                    {{template "cryptenroll" "/dev/sda2"}}
 
         server-03:
           machines:
             server-03:
               bootstrap:
-                disk_encryption_keys:
-                  - local_path: /tmp/disko-encryption-password.txt
-                    remote_path: /tmp/disko-encryption-password.txt
+                <<: *bootstrap_defaults
                 post_bootstrap_hooks:
-                  - systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all /dev/sda2
-                #ssh:
-                #  hostname: 10.0.200.223
-                #  username: root
-                #  port: 22
-                #  identity_file: temp_key
+                  - |
+                    {{template "cryptenroll" "/dev/sda2"}}
 
         vps-02:
           machines:
             vps-02:
+
         kiosk:
           machines:
             kiosk:
-              ssh:
-                hostname: 10.0.200.212
-                #hostname: 10.0.60.2
-                username: root
-                port: 22222
-                #identity_file: temp_key
               bootstrap:
+                <<: *bootstrap_defaults
                 post_bootstrap_hooks:
-                  - systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin=no /dev/mmcblk1p2
+                  - |
+                    {{template "cryptenroll" "/dev/mmcblk1p2"}}

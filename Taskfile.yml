@@ -12,38 +12,60 @@ tasks:
     cmds:
       - task --list
 
-  run:
+  go:run:
     desc: Run the application with go run
     cmds:
       - go run cmd/panix/main.go {{.CLI_ARGS}}
 
-  run:race:
+  go:run:race:
     desc: Run the application with go run + race check
     env:
       GORACE: log_path={{.DEBUG_DIR}}/race.log
     cmds:
       - CGO_ENABLED=1 go run --race cmd/panix/main.go {{.CLI_ARGS}}
 
-  run:profile:
+  go:run:profile:
     desc: Run the application with go run
     cmds:
-      - go run cmd/panix/main.go --cpu-profile={{.DEBUG_DIR}}/profile.prof {{.CLI_ARGS}}
+      - go run cmd/panix/main.go --cpu-profile={{.DEBUG_DIR}}/profile.prof
+        {{.CLI_ARGS}}
 
-  profile-ui:
+  go:profile-ui:
     cmds:
       # https://ksysoev.github.io/posts/go-cpu-profile/
       - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/profile.prof
 
+  go:check:
+    desc: Run checks
+    vars:
+      DEVBOX_BINS: .devbox/bin
+      CUSTOM_GCL: "{{.DEVBOX_BINS}}/custom-gcl"
+    cmds:
+      - go mod tidy
+      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination
+        {{.DEVBOX_BINS}}; fi # Build linter
+      - |
+        {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
+      - |
+        if grep -rn "if err :=" internal/ --include="*.go"; then
+          echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
+          exit 1
+        fi
+        echo "0 issues"
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
   nix:build:
     desc: Build the package using nix
     cmds:
-      - nix build path:$(pwd)#default --extra-experimental-features "nix-command flakes"
+      - nix build path:$(pwd)#default --extra-experimental-features "nix-command
+        flakes"
       - ls -sh result/bin/panix
 
   nix:run:
     desc: Run the application using nix
     cmds:
-      - nix run path:$(pwd)#default --extra-experimental-features "nix-command flakes" -- {{.CLI_ARGS}}
+      - nix run path:$(pwd)#default --extra-experimental-features "nix-command
+        flakes" -- {{.CLI_ARGS}}
 
   nix:update:
     desc: Update flake
@@ -51,9 +73,9 @@ tasks:
       - nix flake update
 
   nix:vendor:
-   desc: Update vendor hash
-   cmds:
-    - nix-update --flake --version=skip default
+    desc: Update vendor hash
+    cmds:
+      - nix-update --flake --version=skip default
 
   generate:
     desc: Run go generate and update README CLI section
@@ -73,22 +95,13 @@ tasks:
             f.write(content)
         EOF
 
-  golangci:
-    desc: Run checks
-    vars:
-      DEVBOX_BINS: .devbox/bin
-      CUSTOM_GCL: "{{.DEVBOX_BINS}}/custom-gcl"
+  ci:
+    desc: Run all CI checks
     cmds:
-      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination {{.DEVBOX_BINS}}; fi # Build linter
-      - |
-        {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
-      - |
-        if grep -rn "if err :=" internal/ --include="*.go"; then
-          echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
-          exit 1
-        fi
-        echo "0 issues"
-      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - task: generate
+      - task: go:check
+      - task: nix:vendor
+      - task: nix:build
 
   release:
     desc: Create a new GitHub release
@@ -105,12 +118,12 @@ tasks:
         ${EDITOR:-vi} "$VERSION_TMP"
         NEW_VERSION=$(cat "$VERSION_TMP" | tr -d '\n' | sed 's/^v//')
         rm "$VERSION_TMP"
-        
+
         if [ -z "$NEW_VERSION" ]; then
           echo "Error: Version cannot be empty"
           exit 1
         fi
-        
+
         if [ "$NEW_VERSION" != "$CURRENT" ]; then
           echo "$NEW_VERSION" > {{.VERSION_FILE}}
 
@@ -118,11 +131,11 @@ tasks:
           git add -A
           git commit -m "chore: bump version to $NEW_VERSION"
         fi
-        
+
         git push
         git tag "v$NEW_VERSION"
         git push --tags
-        
+
         NOTES_TMP=$(mktemp)
         git-cliff --latest > "$NOTES_TMP"
         echo "Generated release notes:"

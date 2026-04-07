@@ -172,8 +172,8 @@ func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			output := strings.Trim(log.String(), "\n ")
-			parsedOutput, err := strconv.ParseUint(output, 10, 64)
 
+			parsedOutput, err := strconv.ParseUint(output, 10, 64)
 			if err != nil {
 				return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
 			}

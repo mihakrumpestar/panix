@@ -43,7 +43,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		}
 
 		defer func() {
-			err := sshCfgRaw.Close()
+			err = sshCfgRaw.Close()
 			if err != nil {
 				log.Error().Err(err).Msg("failed to close SSH config file")
 			}
@@ -90,7 +90,9 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 	}
 
 	if portRaw != "" {
-		port64, err := strconv.ParseUint(portRaw, 10, 16)
+		var port64 uint64
+
+		port64, err = strconv.ParseUint(portRaw, 10, 16)
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse Port for alias %q", alias)
 		}

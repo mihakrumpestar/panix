@@ -60,8 +60,8 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	defer func() { _ = ptyFile.Close() }()
 
 	readErr := ex.readPTYOutput(cmdCtx, ptyFile, commandLog)
-	execErr = ex.finalizeExecution(cmd, readErr, commandLog, excOpt)
 
+	execErr = ex.finalizeExecution(cmd, readErr, commandLog, excOpt)
 	if execErr != nil {
 		return errors.Wrap(execErr, statusIfFailed)
 	}
