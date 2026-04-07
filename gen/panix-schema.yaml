@@ -21,12 +21,9 @@ properties:
       bootstrap:
         type: object
         properties:
-          disable_auto:
-            type: boolean
-            description: Disable automatic bootstrap (even if target machine does not have NixOS installed)
           disable_disko:
             type: boolean
-            description: Disables building, transfer and bootstrap of disko tool
+            description: Disables building, transfer and execution of disko tool
         additionalProperties: false
       config:
         type: string

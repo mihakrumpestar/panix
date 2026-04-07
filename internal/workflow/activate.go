@@ -16,11 +16,12 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
-			// Run bootstrap if: not bootstrapped, or force bootstrap is set (and disable_auto is not set)
-			shouldBootstrap := !machine.MetaInspect.Bootstrapped.Load() ||
-				(machine.Bootstrap.ForceBootstrap && !machine.Flags.Bootstrap.DisableAuto)
+			isBootstrapped := machine.MetaInspect.Bootstrapped.Load()
 
-			if shouldBootstrap && !w.conf.Flags.Bootstrap.DisableAuto {
+			// Run bootstrap if not bootstrapped, or force bootstrap is set
+			shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
+
+			if shouldBootstrap {
 				return executeBootstrap(exc, machine, systemClosure)
 			}
 

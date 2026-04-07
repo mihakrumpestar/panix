@@ -73,9 +73,7 @@ func main() {
 
 	// Wokflow commands
 	case "inspect":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Inspect.WorkflowFlags, []phases.Phase{phases.Inspect}, func(conf *config.Config) {
-			conf.Flags.Bootstrap.DisableAuto = true
-		}))
+		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Inspect.WorkflowFlags, []phases.Phase{phases.Inspect}))
 	case "build":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Build.WorkflowFlags, []phases.Phase{phases.Build}))
 	case "deploy":
