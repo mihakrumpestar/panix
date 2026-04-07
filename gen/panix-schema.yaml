@@ -110,103 +110,7 @@ properties:
         - test
         - dry-activate
       bootstrap:
-        type: object
-        properties:
-          allow_destructive_actions:
-            type: boolean
-            description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
-          disable_automatic_reboot:
-            type: boolean
-            description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
-          disk_encryption_keys:
-            type: array
-            description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
-            items:
-              type: object
-              properties:
-                gid:
-                  type: integer
-                  description: Optional Group ID for remote
-                local_path:
-                  type: string
-                  description: Path to a local file or dir
-                  format: file-path
-                permissions:
-                  type: integer
-                  description: "Optional file permissions (default: 0700)"
-                  default: "0700"
-                remote_path:
-                  type: string
-                  description: Absolute path on remote machine
-                  pattern: ^/.*
-                  format: uri-reference
-                uid:
-                  type: integer
-                  description: Optional User ID for remote
-              required:
-              - local_path
-              - remote_path
-              additionalProperties: false
-          force_bootstrap:
-            type: boolean
-            description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
-          force_bootstrap_kexec:
-            type: boolean
-            description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-          kexec:
-            type: object
-            description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
-            properties:
-              extra_flags:
-                type: string
-                description: Extra flags to pass to kexec (e.g. '--no-sync')
-              ssh_port:
-                type: integer
-                description: "SSH port for kexec installer (default: 22)"
-              url:
-                type: string
-                description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-            additionalProperties: false
-          post_bootstrap_hooks:
-            type: array
-            description: Commands to run after disko partitioning
-            items:
-              type: string
-          post_bootstrap_install_hooks:
-            type: array
-            description: Commands to run after nixos-install (before reboot)
-            items:
-              type: string
-          post_bootstrap_provisioned_hooks:
-            type: array
-            description: Commands to run after reboot (uses regular SSH)
-            items:
-              type: string
-          ssh:
-            type: object
-            description: Bootstrap SSH configuration (used during initial provisioning)
-            properties:
-              disable_auto_add_host_key:
-                type: boolean
-                description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-              hostname:
-                type: string
-                description: SSH hostname or IP address
-              identity_file:
-                type: string
-                description: Path to SSH private key
-                format: file-path
-              port:
-                type: integer
-                description: SSH port number
-              strict_key_checking:
-                type: boolean
-                description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-              username:
-                type: string
-                description: SSH username
-            additionalProperties: false
-        additionalProperties: false
+        $ref: "#/definitions/Bootstrap"
       disabled:
         type: boolean
       flakes:
@@ -225,103 +129,7 @@ properties:
               - test
               - dry-activate
             bootstrap:
-              type: object
-              properties:
-                allow_destructive_actions:
-                  type: boolean
-                  description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
-                disable_automatic_reboot:
-                  type: boolean
-                  description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
-                disk_encryption_keys:
-                  type: array
-                  description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
-                  items:
-                    type: object
-                    properties:
-                      gid:
-                        type: integer
-                        description: Optional Group ID for remote
-                      local_path:
-                        type: string
-                        description: Path to a local file or dir
-                        format: file-path
-                      permissions:
-                        type: integer
-                        description: "Optional file permissions (default: 0700)"
-                        default: "0700"
-                      remote_path:
-                        type: string
-                        description: Absolute path on remote machine
-                        pattern: ^/.*
-                        format: uri-reference
-                      uid:
-                        type: integer
-                        description: Optional User ID for remote
-                    required:
-                    - local_path
-                    - remote_path
-                    additionalProperties: false
-                force_bootstrap:
-                  type: boolean
-                  description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
-                force_bootstrap_kexec:
-                  type: boolean
-                  description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-                kexec:
-                  type: object
-                  description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
-                  properties:
-                    extra_flags:
-                      type: string
-                      description: Extra flags to pass to kexec (e.g. '--no-sync')
-                    ssh_port:
-                      type: integer
-                      description: "SSH port for kexec installer (default: 22)"
-                    url:
-                      type: string
-                      description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-                  additionalProperties: false
-                post_bootstrap_hooks:
-                  type: array
-                  description: Commands to run after disko partitioning
-                  items:
-                    type: string
-                post_bootstrap_install_hooks:
-                  type: array
-                  description: Commands to run after nixos-install (before reboot)
-                  items:
-                    type: string
-                post_bootstrap_provisioned_hooks:
-                  type: array
-                  description: Commands to run after reboot (uses regular SSH)
-                  items:
-                    type: string
-                ssh:
-                  type: object
-                  description: Bootstrap SSH configuration (used during initial provisioning)
-                  properties:
-                    disable_auto_add_host_key:
-                      type: boolean
-                      description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-                    hostname:
-                      type: string
-                      description: SSH hostname or IP address
-                    identity_file:
-                      type: string
-                      description: Path to SSH private key
-                      format: file-path
-                    port:
-                      type: integer
-                      description: SSH port number
-                    strict_key_checking:
-                      type: boolean
-                      description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-                    username:
-                      type: string
-                      description: SSH username
-                  additionalProperties: false
-              additionalProperties: false
+              $ref: "#/definitions/Bootstrap"
             configurations:
               type: object
               additionalProperties:
@@ -338,103 +146,7 @@ properties:
                     - test
                     - dry-activate
                   bootstrap:
-                    type: object
-                    properties:
-                      allow_destructive_actions:
-                        type: boolean
-                        description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
-                      disable_automatic_reboot:
-                        type: boolean
-                        description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
-                      disk_encryption_keys:
-                        type: array
-                        description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
-                        items:
-                          type: object
-                          properties:
-                            gid:
-                              type: integer
-                              description: Optional Group ID for remote
-                            local_path:
-                              type: string
-                              description: Path to a local file or dir
-                              format: file-path
-                            permissions:
-                              type: integer
-                              description: "Optional file permissions (default: 0700)"
-                              default: "0700"
-                            remote_path:
-                              type: string
-                              description: Absolute path on remote machine
-                              pattern: ^/.*
-                              format: uri-reference
-                            uid:
-                              type: integer
-                              description: Optional User ID for remote
-                          required:
-                          - local_path
-                          - remote_path
-                          additionalProperties: false
-                      force_bootstrap:
-                        type: boolean
-                        description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
-                      force_bootstrap_kexec:
-                        type: boolean
-                        description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-                      kexec:
-                        type: object
-                        description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
-                        properties:
-                          extra_flags:
-                            type: string
-                            description: Extra flags to pass to kexec (e.g. '--no-sync')
-                          ssh_port:
-                            type: integer
-                            description: "SSH port for kexec installer (default: 22)"
-                          url:
-                            type: string
-                            description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-                        additionalProperties: false
-                      post_bootstrap_hooks:
-                        type: array
-                        description: Commands to run after disko partitioning
-                        items:
-                          type: string
-                      post_bootstrap_install_hooks:
-                        type: array
-                        description: Commands to run after nixos-install (before reboot)
-                        items:
-                          type: string
-                      post_bootstrap_provisioned_hooks:
-                        type: array
-                        description: Commands to run after reboot (uses regular SSH)
-                        items:
-                          type: string
-                      ssh:
-                        type: object
-                        description: Bootstrap SSH configuration (used during initial provisioning)
-                        properties:
-                          disable_auto_add_host_key:
-                            type: boolean
-                            description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-                          hostname:
-                            type: string
-                            description: SSH hostname or IP address
-                          identity_file:
-                            type: string
-                            description: Path to SSH private key
-                            format: file-path
-                          port:
-                            type: integer
-                            description: SSH port number
-                          strict_key_checking:
-                            type: boolean
-                            description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-                          username:
-                            type: string
-                            description: SSH username
-                        additionalProperties: false
-                    additionalProperties: false
+                    $ref: "#/definitions/Bootstrap"
                   disabled:
                     type: boolean
                   flake_output:
@@ -459,184 +171,21 @@ properties:
                             - test
                             - dry-activate
                           bootstrap:
-                            type: object
-                            properties:
-                              allow_destructive_actions:
-                                type: boolean
-                                description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
-                              disable_automatic_reboot:
-                                type: boolean
-                                description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
-                              disk_encryption_keys:
-                                type: array
-                                description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
-                                items:
-                                  type: object
-                                  properties:
-                                    gid:
-                                      type: integer
-                                      description: Optional Group ID for remote
-                                    local_path:
-                                      type: string
-                                      description: Path to a local file or dir
-                                      format: file-path
-                                    permissions:
-                                      type: integer
-                                      description: "Optional file permissions (default: 0700)"
-                                      default: "0700"
-                                    remote_path:
-                                      type: string
-                                      description: Absolute path on remote machine
-                                      pattern: ^/.*
-                                      format: uri-reference
-                                    uid:
-                                      type: integer
-                                      description: Optional User ID for remote
-                                  required:
-                                  - local_path
-                                  - remote_path
-                                  additionalProperties: false
-                              force_bootstrap:
-                                type: boolean
-                                description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
-                              force_bootstrap_kexec:
-                                type: boolean
-                                description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
-                              kexec:
-                                type: object
-                                description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
-                                properties:
-                                  extra_flags:
-                                    type: string
-                                    description: Extra flags to pass to kexec (e.g. '--no-sync')
-                                  ssh_port:
-                                    type: integer
-                                    description: "SSH port for kexec installer (default: 22)"
-                                  url:
-                                    type: string
-                                    description: URL or path to kexec tarball for bootstrapping non-NixOS machines
-                                additionalProperties: false
-                              post_bootstrap_hooks:
-                                type: array
-                                description: Commands to run after disko partitioning
-                                items:
-                                  type: string
-                              post_bootstrap_install_hooks:
-                                type: array
-                                description: Commands to run after nixos-install (before reboot)
-                                items:
-                                  type: string
-                              post_bootstrap_provisioned_hooks:
-                                type: array
-                                description: Commands to run after reboot (uses regular SSH)
-                                items:
-                                  type: string
-                              ssh:
-                                type: object
-                                description: Bootstrap SSH configuration (used during initial provisioning)
-                                properties:
-                                  disable_auto_add_host_key:
-                                    type: boolean
-                                    description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-                                  hostname:
-                                    type: string
-                                    description: SSH hostname or IP address
-                                  identity_file:
-                                    type: string
-                                    description: Path to SSH private key
-                                    format: file-path
-                                  port:
-                                    type: integer
-                                    description: SSH port number
-                                  strict_key_checking:
-                                    type: boolean
-                                    description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-                                  username:
-                                    type: string
-                                    description: SSH username
-                                additionalProperties: false
-                            additionalProperties: false
+                            $ref: "#/definitions/Bootstrap"
                           disabled:
                             type: boolean
                           hardware_config_path:
                             type: string
                           nix:
-                            type: object
-                            properties:
-                              build_flags:
-                                type: array
-                                description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
-                                items:
-                                  type: string
-                              copy_flags:
-                                type: array
-                                description: Extra flags for 'nix copy' command (e.g. '--compress')
-                                items:
-                                  type: string
-                              extra_flags:
-                                type: array
-                                description: Extra flags applied to both 'nix build' and 'nix copy'
-                                items:
-                                  type: string
-                              nixos_install_flags:
-                                type: array
-                                description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
-                                items:
-                                  type: string
-                            additionalProperties: false
+                            $ref: "#/definitions/NixConfig"
                           override_sudo_program:
                             type: string
                           secrets:
                             type: array
                             items:
-                              type: object
-                              properties:
-                                gid:
-                                  type: integer
-                                  description: Optional Group ID for remote
-                                local_path:
-                                  type: string
-                                  description: Path to a local file or dir
-                                  format: file-path
-                                permissions:
-                                  type: integer
-                                  description: "Optional file permissions (default: 0700)"
-                                  default: "0700"
-                                remote_path:
-                                  type: string
-                                  description: Absolute path on remote machine
-                                  pattern: ^/.*
-                                  format: uri-reference
-                                uid:
-                                  type: integer
-                                  description: Optional User ID for remote
-                              required:
-                              - local_path
-                              - remote_path
-                              additionalProperties: false
+                              $ref: "#/definitions/FileTransfer"
                           ssh:
-                            type: object
-                            properties:
-                              disable_auto_add_host_key:
-                                type: boolean
-                                description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-                              hostname:
-                                type: string
-                                description: SSH hostname or IP address
-                              identity_file:
-                                type: string
-                                description: Path to SSH private key
-                                format: file-path
-                              port:
-                                type: integer
-                                description: SSH port number
-                              strict_key_checking:
-                                type: boolean
-                                description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-                              username:
-                                type: string
-                                description: SSH username
-                            additionalProperties: false
+                            $ref: "#/definitions/SSH"
                           tags:
                             type: array
                             items:
@@ -644,82 +193,15 @@ properties:
                         additionalProperties: false
                       - type: "null"
                   nix:
-                    type: object
-                    properties:
-                      build_flags:
-                        type: array
-                        description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
-                        items:
-                          type: string
-                      copy_flags:
-                        type: array
-                        description: Extra flags for 'nix copy' command (e.g. '--compress')
-                        items:
-                          type: string
-                      extra_flags:
-                        type: array
-                        description: Extra flags applied to both 'nix build' and 'nix copy'
-                        items:
-                          type: string
-                      nixos_install_flags:
-                        type: array
-                        description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
-                        items:
-                          type: string
-                    additionalProperties: false
+                    $ref: "#/definitions/NixConfig"
                   override_sudo_program:
                     type: string
                   secrets:
                     type: array
                     items:
-                      type: object
-                      properties:
-                        gid:
-                          type: integer
-                          description: Optional Group ID for remote
-                        local_path:
-                          type: string
-                          description: Path to a local file or dir
-                          format: file-path
-                        permissions:
-                          type: integer
-                          description: "Optional file permissions (default: 0700)"
-                          default: "0700"
-                        remote_path:
-                          type: string
-                          description: Absolute path on remote machine
-                          pattern: ^/.*
-                          format: uri-reference
-                        uid:
-                          type: integer
-                          description: Optional User ID for remote
-                      required:
-                      - local_path
-                      - remote_path
-                      additionalProperties: false
+                      $ref: "#/definitions/FileTransfer"
                   ssh:
-                    type: object
-                    properties:
-                      disable_auto_add_host_key:
-                        type: boolean
-                        description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-                      hostname:
-                        type: string
-                        description: SSH hostname or IP address
-                      identity_file:
-                        type: string
-                        description: Path to SSH private key
-                        format: file-path
-                      port:
-                        type: integer
-                        description: SSH port number
-                      strict_key_checking:
-                        type: boolean
-                        description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-                      username:
-                        type: string
-                        description: SSH username
-                    additionalProperties: false
+                    $ref: "#/definitions/SSH"
                   tags:
                     type: array
                     items:
@@ -732,82 +214,15 @@ properties:
             hardware_config_path:
               type: string
             nix:
-              type: object
-              properties:
-                build_flags:
-                  type: array
-                  description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
-                  items:
-                    type: string
-                copy_flags:
-                  type: array
-                  description: Extra flags for 'nix copy' command (e.g. '--compress')
-                  items:
-                    type: string
-                extra_flags:
-                  type: array
-                  description: Extra flags applied to both 'nix build' and 'nix copy'
-                  items:
-                    type: string
-                nixos_install_flags:
-                  type: array
-                  description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
-                  items:
-                    type: string
-              additionalProperties: false
+              $ref: "#/definitions/NixConfig"
             override_sudo_program:
               type: string
             secrets:
               type: array
               items:
-                type: object
-                properties:
-                  gid:
-                    type: integer
-                    description: Optional Group ID for remote
-                  local_path:
-                    type: string
-                    description: Path to a local file or dir
-                    format: file-path
-                  permissions:
-                    type: integer
-                    description: "Optional file permissions (default: 0700)"
-                    default: "0700"
-                  remote_path:
-                    type: string
-                    description: Absolute path on remote machine
-                    pattern: ^/.*
-                    format: uri-reference
-                  uid:
-                    type: integer
-                    description: Optional User ID for remote
-                required:
-                - local_path
-                - remote_path
-                additionalProperties: false
+                $ref: "#/definitions/FileTransfer"
             ssh:
-              type: object
-              properties:
-                disable_auto_add_host_key:
-                  type: boolean
-                  description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-                hostname:
-                  type: string
-                  description: SSH hostname or IP address
-                identity_file:
-                  type: string
-                  description: Path to SSH private key
-                  format: file-path
-                port:
-                  type: integer
-                  description: SSH port number
-                strict_key_checking:
-                  type: boolean
-                  description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-                username:
-                  type: string
-                  description: SSH username
-              additionalProperties: false
+              $ref: "#/definitions/SSH"
             tags:
               type: array
               items:
@@ -823,82 +238,15 @@ properties:
       hardware_config_path:
         type: string
       nix:
-        type: object
-        properties:
-          build_flags:
-            type: array
-            description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
-            items:
-              type: string
-          copy_flags:
-            type: array
-            description: Extra flags for 'nix copy' command (e.g. '--compress')
-            items:
-              type: string
-          extra_flags:
-            type: array
-            description: Extra flags applied to both 'nix build' and 'nix copy'
-            items:
-              type: string
-          nixos_install_flags:
-            type: array
-            description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
-            items:
-              type: string
-        additionalProperties: false
+        $ref: "#/definitions/NixConfig"
       override_sudo_program:
         type: string
       secrets:
         type: array
         items:
-          type: object
-          properties:
-            gid:
-              type: integer
-              description: Optional Group ID for remote
-            local_path:
-              type: string
-              description: Path to a local file or dir
-              format: file-path
-            permissions:
-              type: integer
-              description: "Optional file permissions (default: 0700)"
-              default: "0700"
-            remote_path:
-              type: string
-              description: Absolute path on remote machine
-              pattern: ^/.*
-              format: uri-reference
-            uid:
-              type: integer
-              description: Optional User ID for remote
-          required:
-          - local_path
-          - remote_path
-          additionalProperties: false
+          $ref: "#/definitions/FileTransfer"
       ssh:
-        type: object
-        properties:
-          disable_auto_add_host_key:
-            type: boolean
-            description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
-          hostname:
-            type: string
-            description: SSH hostname or IP address
-          identity_file:
-            type: string
-            description: Path to SSH private key
-            format: file-path
-          port:
-            type: integer
-            description: SSH port number
-          strict_key_checking:
-            type: boolean
-            description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
-          username:
-            type: string
-            description: SSH username
-        additionalProperties: false
+        $ref: "#/definitions/SSH"
       tags:
         type: array
         items:
@@ -909,3 +257,132 @@ properties:
 required:
 - root
 additionalProperties: true
+definitions:
+  Bootstrap:
+    type: object
+    properties:
+      allow_destructive_actions:
+        type: boolean
+        description: Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)
+      disable_automatic_reboot:
+        type: boolean
+        description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
+      disk_encryption_keys:
+        type: array
+        description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
+        items:
+          $ref: "#/definitions/FileTransfer"
+      force_bootstrap:
+        type: boolean
+        description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
+      force_bootstrap_kexec:
+        type: boolean
+        description: Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)
+      kexec:
+        description: Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation
+        $ref: "#/definitions/KexecConfig"
+      post_bootstrap_hooks:
+        type: array
+        description: Commands to run after disko partitioning
+        items:
+          type: string
+      post_bootstrap_install_hooks:
+        type: array
+        description: Commands to run after nixos-install (before reboot)
+        items:
+          type: string
+      post_bootstrap_provisioned_hooks:
+        type: array
+        description: Commands to run after reboot (uses regular SSH)
+        items:
+          type: string
+      ssh:
+        description: Bootstrap SSH configuration (used during initial provisioning)
+        $ref: "#/definitions/SSH"
+    additionalProperties: false
+  FileTransfer:
+    type: object
+    properties:
+      gid:
+        type: integer
+        description: Optional Group ID for remote
+      local_path:
+        type: string
+        description: Path to a local file or dir
+        format: file-path
+      permissions:
+        type: integer
+        description: "Optional file permissions (default: 0700)"
+        default: "0700"
+      remote_path:
+        type: string
+        description: Absolute path on remote machine
+        pattern: ^/.*
+        format: uri-reference
+      uid:
+        type: integer
+        description: Optional User ID for remote
+    required:
+    - local_path
+    - remote_path
+    additionalProperties: false
+  KexecConfig:
+    type: object
+    properties:
+      extra_flags:
+        type: string
+        description: Extra flags to pass to kexec (e.g. '--no-sync')
+      ssh_port:
+        type: integer
+        description: "SSH port for kexec installer (default: 22)"
+      url:
+        type: string
+        description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+    additionalProperties: false
+  NixConfig:
+    type: object
+    properties:
+      build_flags:
+        type: array
+        description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+        items:
+          type: string
+      copy_flags:
+        type: array
+        description: Extra flags for 'nix copy' command (e.g. '--compress')
+        items:
+          type: string
+      extra_flags:
+        type: array
+        description: Extra flags applied to both 'nix build' and 'nix copy'
+        items:
+          type: string
+      nixos_install_flags:
+        type: array
+        description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+        items:
+          type: string
+    additionalProperties: false
+  SSH:
+    type: object
+    properties:
+      disable_auto_add_host_key:
+        type: boolean
+        description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+      hostname:
+        type: string
+        description: SSH hostname or IP address
+      identity_file:
+        type: string
+        description: Path to SSH private key
+        format: file-path
+      port:
+        type: integer
+        description: SSH port number
+      strict_key_checking:
+        type: boolean
+        description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
+      username:
+        type: string
+        description: SSH username
+    additionalProperties: false

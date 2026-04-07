@@ -11,18 +11,23 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
+	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
 
 var (
 	ErrExpectedStructType  = errors.New("expected struct type")
 	ErrUnsupportedTypeKind = errors.New("unsupported type kind")
+	ErrNilValue            = errors.New("nil value")
 )
 
 // Generator holds the state for schema generation.
 type Generator struct {
-	visited map[reflect.Type]bool
+	visited     map[reflect.Type]bool
+	definitions map[string]any
+	defTypes    map[reflect.Type]string
 }
 
 // RequiredList is a list of required fields that always serializes properly,
@@ -37,26 +42,46 @@ func (r RequiredList) MarshalYAML() (any, error) {
 	return []string(r), nil
 }
 
+// AdditionalPropertiesWrapper handles YAML marshaling of additionalProperties
+// which can be false, a schema object, or nil.
+type AdditionalPropertiesWrapper struct {
+	Value any
+}
+
+// MarshalYAML implements yaml.Marshaler for AdditionalPropertiesWrapper.
+func (ap *AdditionalPropertiesWrapper) MarshalYAML() (any, error) {
+	if ap == nil {
+		return nil, ErrNilValue
+	}
+
+	return ap.Value, nil
+}
+
+// FalseAdditionalProperties returns AdditionalProperties set to false.
+func FalseAdditionalProperties() *AdditionalPropertiesWrapper {
+	return &AdditionalPropertiesWrapper{Value: false}
+}
+
 // TypeDefinition represents a schema type definition.
 type TypeDefinition struct {
-	Type                 string         `yaml:"type,omitempty"`
-	Description          string         `yaml:"description,omitempty"`
-	Default              any            `yaml:"default,omitempty"`
-	Properties           map[string]any `yaml:"properties,omitempty"`
-	Items                any            `yaml:"items,omitempty"`
-	Required             RequiredList   `yaml:"required,omitempty"`
-	Enum                 []string       `yaml:"enum,omitempty"`
-	Pattern              string         `yaml:"pattern,omitempty"`
-	Example              any            `yaml:"example,omitempty"`
-	AdditionalProperties any            `yaml:"additionalProperties,omitempty"`
-	AnyOf                []any          `yaml:"anyOf,omitempty"`
-	AllOf                []any          `yaml:"allOf,omitempty"`
-	Ref                  string         `yaml:"$ref,omitempty"`
-	Format               string         `yaml:"format,omitempty"`
-	Minimum              *int           `yaml:"minimum,omitempty"`
-	Maximum              *int           `yaml:"maximum,omitempty"`
-	MinLength            *int           `yaml:"minLength,omitempty"`
-	MaxLength            *int           `yaml:"maxLength,omitempty"`
+	Type                 string                       `yaml:"type,omitempty"`
+	Description          string                       `yaml:"description,omitempty"`
+	Default              any                          `yaml:"default,omitempty"`
+	Properties           map[string]any               `yaml:"properties,omitempty"`
+	Items                any                          `yaml:"items,omitempty"`
+	Required             RequiredList                 `yaml:"required,omitempty"`
+	Enum                 []string                     `yaml:"enum,omitempty"`
+	Pattern              string                       `yaml:"pattern,omitempty"`
+	Example              any                          `yaml:"example,omitempty"`
+	AdditionalProperties *AdditionalPropertiesWrapper `yaml:"additionalProperties,omitempty"`
+	AnyOf                []any                        `yaml:"anyOf,omitempty"`
+	AllOf                []any                        `yaml:"allOf,omitempty"`
+	Ref                  string                       `yaml:"$ref,omitempty"`
+	Format               string                       `yaml:"format,omitempty"`
+	Minimum              *int                         `yaml:"minimum,omitempty"`
+	Maximum              *int                         `yaml:"maximum,omitempty"`
+	MinLength            *int                         `yaml:"minLength,omitempty"`
+	MaxLength            *int                         `yaml:"maxLength,omitempty"`
 }
 
 // Schema represents the root YAML schema document.
@@ -76,9 +101,15 @@ type Schema struct {
 
 // NewGenerator creates a new schema generator.
 func NewGenerator() *Generator {
-	return &Generator{
-		visited: make(map[reflect.Type]bool),
+	generator := &Generator{
+		visited:     make(map[reflect.Type]bool),
+		definitions: make(map[string]any),
+		defTypes:    make(map[reflect.Type]string),
 	}
+
+	generator.initDefinitionTypes()
+
+	return generator
 }
 
 // Generate creates a YAML schema from the config.Config type.
@@ -93,7 +124,6 @@ func (g *Generator) Generate() (*Schema, error) {
 		Properties:           make(map[string]any),
 		Required:             RequiredList{},
 		AdditionalProperties: true, // Required to allow anchors
-		Definitions:          make(map[string]any),
 	}
 
 	// Generate schema from config.Config
@@ -107,7 +137,22 @@ func (g *Generator) Generate() (*Schema, error) {
 	schema.Properties = properties
 	schema.Required = required
 
+	// Add collected definitions
+	if len(g.definitions) > 0 {
+		schema.Definitions = g.definitions
+	}
+
 	return schema, nil
+}
+
+// initDefinitionTypes registers types that should be defined once and referenced via $ref.
+func (g *Generator) initDefinitionTypes() {
+	// Register types that appear multiple times in the schema
+	g.defTypes[reflect.TypeFor[config_attributes.Bootstrap]()] = "Bootstrap"
+	g.defTypes[reflect.TypeFor[config_attributes.NixConfig]()] = "NixConfig"
+	g.defTypes[reflect.TypeFor[config_attributes.PlainFileOrDirToTransfer]()] = "FileTransfer"
+	g.defTypes[reflect.TypeFor[config_attributes.KexecConfig]()] = "KexecConfig"
+	g.defTypes[reflect.TypeFor[ssh.SSHClient]()] = "SSH"
 }
 
 // processStruct processes a struct type and returns its properties and required fields.
@@ -262,6 +307,11 @@ func (g *Generator) processType(typ reflect.Type, field reflect.StructField) (an
 		typ = typ.Elem()
 	}
 
+	// Check if this type should use a $ref definition
+	if defName, ok := g.defTypes[typ]; ok {
+		return g.processDefinitionType(typ, defName, field)
+	}
+
 	// Check for special types first
 	if def := g.getSpecialTypeDefinition(typ); def != nil {
 		return def, nil
@@ -270,6 +320,33 @@ func (g *Generator) processType(typ reflect.Type, field reflect.StructField) (an
 	validateTag := field.Tag.Get("validate")
 
 	return g.processTypeByKind(typ.Kind(), typ, field, validateTag)
+}
+
+// processDefinitionType handles types that should be defined once and referenced.
+func (g *Generator) processDefinitionType(typ reflect.Type, defName string, _ reflect.StructField) (any, error) {
+	// If definition already exists, return a $ref
+	if _, exists := g.definitions[defName]; exists {
+		return &TypeDefinition{Ref: "#/definitions/" + defName}, nil
+	}
+
+	// Generate the definition
+	props, required, err := g.processStruct(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	def := &TypeDefinition{
+		Type:                 "object",
+		Properties:           props,
+		Required:             RequiredList(required),
+		AdditionalProperties: FalseAdditionalProperties(),
+	}
+
+	// Store in definitions
+	g.definitions[defName] = def
+
+	// Return a $ref
+	return &TypeDefinition{Ref: "#/definitions/" + defName}, nil
 }
 
 // processTypeByKind dispatches type processing based on the kind of type.
@@ -344,7 +421,7 @@ func (g *Generator) processMapType(typ reflect.Type, field reflect.StructField) 
 
 	return &TypeDefinition{
 		Type:                 "object",
-		AdditionalProperties: valueType,
+		AdditionalProperties: &AdditionalPropertiesWrapper{Value: valueType},
 	}, nil
 }
 
@@ -360,7 +437,7 @@ func (g *Generator) processStructType(typ reflect.Type) (*TypeDefinition, error)
 		Type:                 "object",
 		Properties:           properties,
 		Required:             RequiredList(required),
-		AdditionalProperties: false,
+		AdditionalProperties: FalseAdditionalProperties(),
 	}, nil
 }
 
@@ -531,18 +608,20 @@ func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinitio
 			return nil, err
 		}
 
-		var additionalProps any
+		var additionalProps *AdditionalPropertiesWrapper
 		if allowNull {
 			// Allow null/empty values for machines (key-only is valid)
-			additionalProps = map[string]any{
-				"anyOf": []any{
-					valueSchema,
-					map[string]any{"type": "null"},
+			additionalProps = &AdditionalPropertiesWrapper{
+				Value: map[string]any{
+					"anyOf": []any{
+						valueSchema,
+						map[string]any{"type": "null"},
+					},
 				},
 			}
 		} else {
 			// Flakes and configurations require a value
-			additionalProps = valueSchema
+			additionalProps = &AdditionalPropertiesWrapper{Value: valueSchema}
 		}
 
 		return &TypeDefinition{
@@ -553,7 +632,7 @@ func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinitio
 
 	return &TypeDefinition{
 		Type:                 "object",
-		AdditionalProperties: &TypeDefinition{Type: "object"},
+		AdditionalProperties: &AdditionalPropertiesWrapper{Value: &TypeDefinition{Type: "object"}},
 	}, nil
 }
 
