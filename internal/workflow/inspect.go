@@ -16,10 +16,8 @@ import (
 )
 
 var (
-	ErrBothSSHUnreachable       = errors.New("both bootstrap SSH and regular SSH are unreachable")
-	ErrArchitectureOutputEmpty  = errors.New("architecture output was empty")
-	ErrPlatformUnsupported      = errors.New("platform unsupported, kexec supports limited platforms")
-	ErrKexecRequiredButDisabled = errors.New("machine requires kexec but automatic bootstrap is disabled")
+	ErrArchitectureOutputEmpty = errors.New("architecture output was empty")
+	ErrPlatformUnsupported     = errors.New("platform unsupported, kexec supports limited platforms")
 )
 
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
@@ -58,6 +56,11 @@ func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
 				return err
 			}
 
+			err = validateSSHMachineState(exc, machine, mms)
+			if err != nil {
+				return err
+			}
+
 			if !mms.Bootstrapped.Load() {
 				return handleUnbootstrapped(exc, machine)
 			}
@@ -72,24 +75,22 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 		"checking SSH reachability",
 		"SSH unreachable",
 		func(_ *command.CommandLog) error {
-			bootstrapSSHReachable := false
-			regularSSHReachable := false
-
 			if machine.Bootstrap.SSH != nil {
-				bootstrapSSHReachable = machine.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
-			}
+				bootstrapSSHReachable := machine.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
-			if bootstrapSSHReachable {
+				if !bootstrapSSHReachable {
+					return errors.New("bootstrap SSH is configured but unreachable")
+				}
+
 				machine.SwitchToBootstrapSSH()
 			} else {
-				regularSSHReachable = machine.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
-				if regularSSHReachable {
-					machine.SwitchToRegularSSH()
-				}
-			}
+				regularSSHReachable := machine.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
-			if !bootstrapSSHReachable && !regularSSHReachable {
-				return ErrBothSSHUnreachable
+				if !regularSSHReachable {
+					return errors.New("regular SSH is unreachable")
+				}
+
+				machine.SwitchToRegularSSH()
 			}
 
 			mms.Reachable.Store(true)
@@ -220,10 +221,6 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 				mms.RequiresKexec.Store(true)
 				mms.Bootstrapped.Store(false)
 
-				if machine.Flags.Bootstrap.DisableAuto {
-					return ErrKexecRequiredButDisabled
-				}
-
 				return nil
 			}
 
@@ -297,6 +294,29 @@ func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) erro
 	)
 
 	return errors.Wrap(err, "failed to list generations")
+}
+
+func validateSSHMachineState(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
+	isBootstrapped := mms.Bootstrapped.Load()
+
+	err := exc.ExecFn(
+		"validate SSH config upon detected machine state",
+		"validating SSH config",
+		"SSH config invalid for detected machine state",
+		func(_ *command.CommandLog) error {
+			if machine.Bootstrap.SSH != nil && isBootstrapped && !machine.Bootstrap.ForceBootstrap {
+				return errors.New("bootstrap SSH is configured but machine is already bootstrapped; set \"force_bootstrap\" to re-bootstrap, or remove bootstrap SSH configuration") //nolint:lll
+			}
+
+			if !isBootstrapped && machine.Bootstrap.SSH == nil && !machine.Bootstrap.ForceBootstrap {
+				return errors.New("bootstrapping requires bootstrap SSH to be configured (or set \"force_bootstrap\" to re-bootstrap with regular SSH)")
+			}
+
+			return nil
+		},
+	)
+
+	return errors.Wrap(err, "SSH config validation failed upon detected machine state")
 }
 
 func parseGenerationsOutput(output string) (*config.GenerationsData, error) {

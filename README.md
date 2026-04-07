@@ -18,7 +18,7 @@
 ---
 
 > [!WARNING]
-> The tool is currently in beta stage. There might be breaking changes. There is slight possibility that your NixOS installation might get unintentionally wiped.
+> The tool is currently in beta stage. There might be breaking changes.
 
 ## Demo
 
@@ -30,7 +30,7 @@ Full demo of the bootstrap process with kexec over Arch:
 
 [![Kexec demo](assets/kexec-demo-thumbnail.png)](https://spectra.video/w/t2j1bDbQGS2TgLGm1RqfPH)
 
-> It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot in BIOS.
+> It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot in BIOS. Note that it was made with an older version of TUI, and therefore looks slightly different.
 
 ---
 
@@ -191,21 +191,36 @@ machines:
 
 #### Bootstrap SSH
 
-For machines that need different SSH credentials during initial provisioning (e.g., before vs after bootstrap), you can specify a separate bootstrap SSH configuration:
+For machines that need initial provisioning (eg. bootstrap) you **must specify** SSH credentials.
 
 ```yaml
 machines:
   server:
     ssh:                          # Regular SSH (after bootstrap)
       hostname: 192.168.1.100
+      port: 9999
       identity_file: ./keys/prod.key
     bootstrap:
-      ssh:                        # Bootstrap SSH (during provisioning)
+      ssh:                        # Bootstrap SSH (during bootstrap)
         hostname: 192.168.1.100
         identity_file: ./keys/temp.key
 ```
 
-During the **Inspect** phase, Panix checks which SSH configuration is reachable and uses it for subsequent operations. After reboot, it automatically switches to the regular SSH configuration for `post_bootstrap_provisioned_hooks`.
+Important requirements:
+
+- **Unbootstrapped machines**: must have bootstrap SSH configured (unless `force_bootstrap: true`)
+- **Bootstrapped machines**: must not have bootstrap SSH configured (unless `force_bootstrap: true`)
+- The `force_bootstrap` option explicitly allows bypassing these requirements
+- **Inspect** phase will error if you will try to use bootstrap SSH config on an already bootstrapped machine and vice versa (regular SSH config will error on an un-bootstrapped machine)
+
+**Workflow:**
+
+1. During **Inspect** phase: Panix validates SSH configuration matches machine state
+2. Later phases:
+
+   - If bootstrapping: Uses bootstrap SSH for all bootstrap operations; after reboot: automatically switches to regular SSH
+
+   - If already bootstrapped: uses regular SSH
 
 #### SSH Key Checking Options
 
@@ -219,8 +234,8 @@ ssh:
 
 Defaults:
 
-- **Regular SSH**: `strict_key_checking: true`, `disable_auto_add_host_key: false` (secure by default)
-- **Bootstrap SSH**: `strict_key_checking: false`, `disable_auto_add_host_key: true` (permissive for new machines)
+- **Regular SSH**: `strict_key_checking: true`, `disable_auto_add_host_key: false` (automatically trusts new machines, but checks public key if they were already added before)
+- **Bootstrap SSH**: `strict_key_checking: false`, `disable_auto_add_host_key: true` (don't check anything and don't add machines public keys to trusted known ones)
 
 #### Disable Automatic Reboot
 
@@ -545,6 +560,13 @@ Deploying to the machine you're on? If the machine name matches the system hostn
 # On a machine with hostname "workstation"
 machines:
   workstation:              # Detected as local, no SSH
+```
+
+This can be overriden (if you want to prevent this, or if hostname detecton does not work):
+
+```yaml
+flags:
+  override_local_machine: my-local-machine
 ```
 
 </details>
@@ -879,10 +901,7 @@ Flags:
   -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
                                    and names are already registered as tags)
                                    ($PANIX_TAGS)
-      --bootstrap.disable-auto     Disable automatic bootstrap (even if target
-                                   machine does not have NixOS installed)
-                                   ($PANIX_BOOTSTRAP_DISABLE_AUTO)
-      --bootstrap.disable-disko    Disables building, transfer and bootstrap of
+      --bootstrap.disable-disko    Disables building, transfer and execution of
                                    disko tool ($PANIX_BOOTSTRAP_DISABLE_DISKO)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
@@ -962,7 +981,6 @@ flags: # Listed are default values, all also overridable using CLI arguments
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
   bootstrap:
-    disable_auto: false                # Disable automatic bootstrap
     disable_disko: false               # Disable disko tool build/transfer/bootstrap
   tui:
     show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)

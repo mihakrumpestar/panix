@@ -152,7 +152,7 @@ func (m *Machine) MaybeSudo() []string {
 }
 
 func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
-	if m.Flags.Bootstrap.DisableAuto || m.MetaInspect.Bootstrapped.Load() {
+	if m.MetaInspect.Bootstrapped.Load() {
 		return restOfPath
 	}
 

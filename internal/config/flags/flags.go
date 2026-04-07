@@ -44,8 +44,7 @@ type Flags struct {
 }
 
 type Bootstrap struct {
-	DisableAuto  bool `yaml:"disable_auto" help:"Disable automatic bootstrap (even if target machine does not have NixOS installed)"`
-	DisableDisko bool `yaml:"disable_disko" help:"Disables building, transfer and bootstrap of disko tool"`
+	DisableDisko bool `yaml:"disable_disko" help:"Disables building, transfer and execution of disko tool"`
 }
 
 type Tui struct {
