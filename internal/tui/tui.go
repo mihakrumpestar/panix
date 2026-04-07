@@ -31,7 +31,12 @@ const (
 	workflowUpdateHookThrottleDelay = 100 * time.Millisecond
 )
 
-type workflowUpdateHookMsg struct{}
+type (
+	workflowUpdateHookMsg struct{}
+
+	// restartMsg signals the workflow should be restarted.
+	restartMsg struct{}
+)
 
 type errMsg struct { //nolint:errname
 	err error
@@ -56,6 +61,7 @@ type model struct {
 // NewTui initializes and runs the TUI application.
 func NewTui(ctx context.Context, conf *config.Config) error {
 	zone.NewGlobal()
+
 	defer zone.Close()
 
 	// Handle SIGINT as a keybinding instead of terminating the process
@@ -94,7 +100,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 	}
 
 	if finalModel.quitting {
-		content := finalModel.ViewMainContent()
+		content := finalModel.viewMainContent()
 		fmt.Println(content)
 	}
 
@@ -113,7 +119,7 @@ func startCPUProfile(path string) (func(), error) {
 
 	err = pprof.StartCPUProfile(file)
 	if err != nil {
-		err := file.Close()
+		err = file.Close()
 		if err != nil {
 			log.Error().Err(err).Msg("failed to close CPU profile file")
 		}
@@ -124,7 +130,7 @@ func startCPUProfile(path string) (func(), error) {
 	return func() {
 		pprof.StopCPUProfile()
 
-		err := file.Close()
+		err = file.Close()
 		if err != nil {
 			log.Error().Err(err).Msg("failed to close CPU profile file")
 		}
@@ -137,34 +143,6 @@ func (m *model) Init() tea.Cmd {
 		m.startWorkflow(),
 		m.workflowUpdateHook(),
 	)
-}
-
-// restartMsg signals the workflow should be restarted.
-type restartMsg struct{}
-
-func (m *model) workflowUpdateHook() tea.Cmd {
-	return func() tea.Msg {
-		resetable := m.resetable.Load()
-		if resetable == nil || resetable.workflow == nil {
-			time.Sleep(workflowUpdateHookPollInterval)
-			log.Debug().Msg("workflowUpdateHook was nil")
-
-			return workflowUpdateHookMsg{}
-		}
-
-		<-resetable.workflow.WaitForUpdate()
-
-		now := time.Now()
-		elapsed := now.Sub(m.lastWorkflowUpdate)
-
-		if elapsed < workflowUpdateHookThrottleDelay {
-			time.Sleep(workflowUpdateHookThrottleDelay - elapsed)
-		}
-
-		m.lastWorkflowUpdate = time.Now()
-
-		return workflowUpdateHookMsg{}
-	}
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -228,7 +206,7 @@ func (m *model) View() tea.View {
 		return view
 	}
 
-	mainContent := m.ViewMainContent()
+	mainContent := m.viewMainContent()
 
 	if m.quitting {
 		return view
@@ -257,30 +235,7 @@ func (m *model) View() tea.View {
 	return view
 }
 
-func (m *model) renderFullscreen() string {
-	resetable := m.resetable.Load()
-	fullscreenXpath := resetable.viewports.GetFullscreenXpath()
-	content := resetable.viewports.GetViewportContent(fullscreenXpath)
-
-	if content == "" {
-		resetable.viewports.ExitFullscreen()
-
-		return ""
-	}
-
-	footer := m.ViewFooter()
-	footerHeight := lipgloss.Height(footer)
-	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
-
-	var builder strings.Builder
-
-	builder.WriteString(fullscreenViewport)
-	builder.WriteString(footer)
-
-	return zone.Scan(builder.String())
-}
-
-func (m *model) ViewMainContent() string {
+func (m *model) viewMainContent() string {
 	var builder strings.Builder
 
 	builder.WriteString(m.ViewStatsTable())
@@ -303,6 +258,54 @@ func (m *model) ViewMainContent() string {
 	}
 
 	return builder.String()
+}
+
+func (m *model) workflowUpdateHook() tea.Cmd {
+	return func() tea.Msg {
+		resetable := m.resetable.Load()
+		if resetable == nil || resetable.workflow == nil {
+			time.Sleep(workflowUpdateHookPollInterval)
+			log.Debug().Msg("workflowUpdateHook was nil")
+
+			return workflowUpdateHookMsg{}
+		}
+
+		<-resetable.workflow.WaitForUpdate()
+
+		now := time.Now()
+		elapsed := now.Sub(m.lastWorkflowUpdate)
+
+		if elapsed < workflowUpdateHookThrottleDelay {
+			time.Sleep(workflowUpdateHookThrottleDelay - elapsed)
+		}
+
+		m.lastWorkflowUpdate = time.Now()
+
+		return workflowUpdateHookMsg{}
+	}
+}
+
+func (m *model) renderFullscreen() string {
+	resetable := m.resetable.Load()
+	fullscreenXpath := resetable.viewports.GetFullscreenXpath()
+	content := resetable.viewports.GetViewportContent(fullscreenXpath)
+
+	if content == "" {
+		resetable.viewports.ExitFullscreen()
+
+		return ""
+	}
+
+	footer := m.ViewFooter()
+	footerHeight := lipgloss.Height(footer)
+	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
+
+	var builder strings.Builder
+
+	builder.WriteString(fullscreenViewport)
+	builder.WriteString(footer)
+
+	return zone.Scan(builder.String())
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"slices"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -62,20 +64,19 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 // decodeConfigFile opens and decodes the YAML configuration file.
 func decodeConfigFile(configPath string) (*Config, error) {
 	//nolint:gosec // Config path is user-provided configuration file path by design
-	file, err := os.Open(configPath)
+	rawYAML, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed opening config %s", strconv.Quote(configPath))
+		return nil, errors.Wrapf(err, "failed reading config %s", strconv.Quote(configPath))
 	}
 
-	defer func() {
-		err := file.Close()
-		if err != nil {
-			log.Error().Err(err).Msg("failed to close config file")
-		}
-	}()
+	// Process templates before decoding
+	processedYAML, err := template.ProcessTemplate(rawYAML)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to process templates in config")
+	}
 
 	conf := &Config{}
-	decoder := yaml.NewDecoder(file)
+	decoder := yaml.NewDecoder(bytes.NewReader(processedYAML))
 
 	err = decoder.Decode(conf)
 	if err != nil {
@@ -135,7 +136,7 @@ func (c *Config) initRoot() error {
 	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
 		flakeName, flake := flakePair.Key, flakePair.Value
 
-		err := flake.Init(flakeName, &c.Root.Attributes)
+		err = flake.Init(flakeName, &c.Root.Attributes)
 		if err != nil {
 			return err
 		}
@@ -143,7 +144,7 @@ func (c *Config) initRoot() error {
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			configurationName, configuration := configPair.Key, configPair.Value
 
-			err := configuration.Init(configurationName, flake)
+			err = configuration.Init(configurationName, flake)
 			if err != nil {
 				return err
 			}

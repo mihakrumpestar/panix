@@ -8,6 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/schema"
+	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -20,6 +21,15 @@ type CLI struct {
 
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
+	Schema struct {
+		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"panix-schema.yaml"`
+	} `cmd:"" help:"Generate YAML schema for configuration files"`
+
+	Eval struct {
+		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"-"`
+	} `cmd:"" help:"Evaluate config (process templates and anchors) and output result"`
+
+	// Workflow commands
 	Inspect struct{} `cmd:"" help:"Inspect machine per host"`
 
 	Build struct{} `cmd:"" help:"Build all selected closures"`
@@ -27,10 +37,6 @@ type CLI struct {
 	Deploy struct{} `cmd:"" help:"Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets -> activate)"`
 
 	Secrets struct{} `cmd:"" help:"Deploy secrets to all machines"`
-
-	Schema struct {
-		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"panix-schema.yaml"`
-	} `cmd:"" help:"Generate YAML schema for configuration files"`
 
 	Rollback struct {
 		Generation int `arg:"" name:"generation" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
@@ -48,6 +54,12 @@ func main() {
 	)
 
 	switch ctx.Command() {
+	case "schema":
+		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.Schema.Output))
+	case "eval":
+		ctx.FatalIfErrorf(cli.runEvalCommand(cli.Eval.Output))
+
+	// Wokflow commands
 	case "inspect":
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Inspect}, func(conf *config.Config) {
 			conf.Flags.Bootstrap.DisableAuto = true
@@ -58,8 +70,6 @@ func main() {
 		ctx.FatalIfErrorf(cli.runTui(phases.PhasesInOrder()))
 	case "secrets":
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Inspect, phases.Secrets}))
-	case "schema":
-		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.Schema.Output))
 	case "rollback", "rollback <generation>":
 		ctx.FatalIfErrorf(cli.runTui([]phases.Phase{phases.Inspect, phases.Rollback}, func(conf *config.Config) {
 			conf.RollbackGeneration = cli.Rollback.Generation
@@ -80,6 +90,10 @@ func (c *CLI) runTui(commandPhases []phases.Phase, modifiers ...func(conf *confi
 	}
 
 	return errors.Wrap(tui.NewTui(context.Background(), conf), "TUI error")
+}
+
+func (c *CLI) runEvalCommand(outputPath string) error {
+	return errors.Wrap(template.EvalConfig(c.Flags.Config, outputPath), "failed to evaluate config")
 }
 
 func (c *CLI) runSchemaCommand(outputPath string) error {

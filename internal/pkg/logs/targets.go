@@ -53,10 +53,6 @@ func (ts *TargetsLogs) Add(xpath attributes.Xpath) (*TargetLogs, error) {
 	return targetLogs, nil
 }
 
-func (ts *TargetsLogs) get(xpath attributes.Xpath) (*TargetLogs, bool) {
-	return ts.logs.Get(xpath)
-}
-
 func (ts *TargetsLogs) MustGet(xpath attributes.Xpath) *TargetLogs {
 	targetLogs, ok := ts.get(xpath)
 	if !ok {
@@ -81,18 +77,6 @@ func (ts *TargetsLogs) MustGetOrCreateLog(xpath attributes.Xpath, phase phases.P
 	}
 
 	return ts.getOrCreateLog(targetLogs, phase, nil)
-}
-
-func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase, log *phase.PhaseLog) *phase.PhaseLog {
-	if log == nil || len(targetLogs.children) == 0 {
-		log = targetLogs.PhaseLogs.SetIfNotExists(phase, log)
-	}
-
-	for _, child := range targetLogs.children {
-		ts.getOrCreateLog(child, phase, log)
-	}
-
-	return log
 }
 
 func (ts *TargetsLogs) MustGetLogs(xpath attributes.Xpath) *phase.PhaseLogs {
@@ -156,9 +140,10 @@ func (ts *TargetsLogs) ComputeStatisticsPerPhase() *stats.StatisticsPerPhase {
 }
 
 func (ts *TargetsLogs) Debug() string {
-	str := fmt.Sprintf("\nLogs: %d\n", ts.logs.Len())
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "\nLogs: %d\n", ts.logs.Len())
 
-	str += fmt.Sprintf("\n  Stats: %v\n\n", ts.ComputeStatisticsPerPhase())
+	fmt.Fprintf(&builder, "\n  Stats: %v\n\n", ts.ComputeStatisticsPerPhase())
 
 	for _, pair := range ts.logs.Pairs() {
 		var parent attributes.Xpath
@@ -166,27 +151,43 @@ func (ts *TargetsLogs) Debug() string {
 			parent = pair.Value.parent.xpath
 		}
 
-		var builder strings.Builder
+		var childrenBuilder strings.Builder
 		for _, child := range pair.Value.children {
-			builder.WriteString(child.xpath.String())
-			builder.WriteByte(',')
+			childrenBuilder.WriteString(child.xpath.String())
+			childrenBuilder.WriteByte(',')
 		}
 
-		children := builder.String()
+		children := childrenBuilder.String()
 
-		str += fmt.Sprintf("  '%s' parent:%s children:%v, len:%d\n", pair.Key, parent, children, pair.Value.PhaseLogs.Len())
+		fmt.Fprintf(&builder, "  '%s' parent:%s children:%v, len:%d\n", pair.Key, parent, children, pair.Value.PhaseLogs.Len())
 
 		for _, logPair := range pair.Value.PhaseLogs.All() {
 			finished := logPair.Value.TimeAndState().IsFinished()
 			err := logPair.Value.TimeAndState().GetEndError()
 			cmdLen := len(logPair.Value.CommandLogs())
-			str += fmt.Sprintf("    %s finished:%v err:%v len:%d\n", logPair.Key, finished, err, cmdLen)
+			fmt.Fprintf(&builder, "    %s finished:%v err:%v len:%d\n", logPair.Key, finished, err, cmdLen)
 
 			for _, log := range logPair.Value.CommandLogs() {
-				str += fmt.Sprintf("      '%s' finished:%v, err:%v\n", log.Description, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())
+				fmt.Fprintf(&builder, "      '%s' finished:%v, err:%v\n", log.Description, log.TimeAndState.IsFinished(), log.TimeAndState.GetEndError())
 			}
 		}
 	}
 
-	return str
+	return builder.String()
+}
+
+func (ts *TargetsLogs) get(xpath attributes.Xpath) (*TargetLogs, bool) {
+	return ts.logs.Get(xpath)
+}
+
+func (ts *TargetsLogs) getOrCreateLog(targetLogs *TargetLogs, phase phases.Phase, log *phase.PhaseLog) *phase.PhaseLog {
+	if log == nil || len(targetLogs.children) == 0 {
+		log = targetLogs.PhaseLogs.SetIfNotExists(phase, log)
+	}
+
+	for _, child := range targetLogs.children {
+		ts.getOrCreateLog(child, phase, log)
+	}
+
+	return log
 }

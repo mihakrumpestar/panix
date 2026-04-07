@@ -36,6 +36,7 @@ func normalizeText(text string) string {
 // envCache caches environment checks to avoid repeated lookups.
 var envCache = struct {
 	sync.Once
+
 	isWayland bool
 }{}
 
@@ -53,7 +54,7 @@ func isWayland() bool {
 func copyWithCommand(ctx context.Context, text string) bool {
 	// Try Wayland native tool first if on Wayland
 	if isWayland() {
-		cmd := exec.CommandContext(ctx, "wl-copy", "--", text)
+		cmd := exec.CommandContext(ctx, "wl-copy", "--", text) //nolint:gosec
 
 		err := cmd.Run()
 		if err == nil {

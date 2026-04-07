@@ -58,7 +58,7 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 			// Upload disk encryption keys BEFORE running disko
 			// Keys must be available for LUKS unlocking during partitioning
 			if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-				err := w.executeDiskEncryptionKeys(exc, machine)
+				err = w.executeDiskEncryptionKeys(exc, machine)
 				if err != nil {
 					return err
 				}

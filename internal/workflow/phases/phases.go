@@ -22,6 +22,7 @@ const (
 	Activate  Phase = "activate"
 
 	// Stand-alone phases.
+
 	Rollback Phase = "rollback"
 )
 

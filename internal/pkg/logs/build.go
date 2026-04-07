@@ -13,24 +13,28 @@ func InitBuildLogs(root *config.Root, logging flags.Logging) (*TargetsLogs, erro
 
 	for _, pair := range root.Flakes.Omap.Pairs() {
 		flake := pair.Value
-		flakeLogs, err := targetsLogs.Add(flake.Xpath)
 
+		var flakeLogs *TargetLogs
+
+		flakeLogs, err = targetsLogs.Add(flake.Xpath)
 		if err != nil {
 			return nil, err
 		}
 
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			configuration := configPair.Value
-			configurationLogs, err := targetsLogs.AddWithParent(configuration.Xpath, flakeLogs)
 
+			var configurationLogs *TargetLogs
+
+			configurationLogs, err = targetsLogs.AddWithParent(configuration.Xpath, flakeLogs)
 			if err != nil {
 				return nil, err
 			}
 
 			for _, machinePair := range configuration.Machines.Omap.Pairs() {
 				machine := machinePair.Value
-				_, err := targetsLogs.AddWithParent(machine.Xpath, configurationLogs)
 
+				_, err = targetsLogs.AddWithParent(machine.Xpath, configurationLogs)
 				if err != nil {
 					return nil, err
 				}

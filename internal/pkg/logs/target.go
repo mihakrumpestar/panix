@@ -10,8 +10,9 @@ import (
 )
 
 type TargetLogs struct {
-	xpath attributes.Xpath
 	*phase.PhaseLogs
+
+	xpath    attributes.Xpath
 	parent   *TargetLogs
 	children []*TargetLogs
 	cache    DurationAndError
@@ -49,6 +50,24 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 
 func (ts *TargetLogs) GetCachedDurationAndError() DurationAndError {
 	return ts.cache
+}
+
+func (ts *TargetLogs) GetCurrentTargetLog() *phase.PhaseLog {
+	for _, phaseLogPair := range ts.PhaseLogs.All() {
+		phaseLog := phaseLogPair.Value
+
+		err := phaseLog.TimeAndState().GetEndError()
+		if err != nil {
+			return phaseLog
+		}
+	}
+
+	return ts.PhaseLogs.Last()
+}
+
+// Clear deletes/resets phases logs and timer.
+func (ts *TargetLogs) Clear() {
+	ts.PhaseLogs.Clear()
 }
 
 func (ts *TargetLogs) calculateDurationAndError() DurationAndError {
@@ -98,22 +117,4 @@ func (ts *TargetLogs) calculateFromPhases() DurationAndError {
 	}
 
 	return dae
-}
-
-func (ts *TargetLogs) GetCurrentTargetLog() *phase.PhaseLog {
-	for _, phaseLogPair := range ts.PhaseLogs.All() {
-		phaseLog := phaseLogPair.Value
-
-		err := phaseLog.TimeAndState().GetEndError()
-		if err != nil {
-			return phaseLog
-		}
-	}
-
-	return ts.PhaseLogs.Last()
-}
-
-// Clear deletes/resets phases logs and timer.
-func (ts *TargetLogs) Clear() {
-	ts.PhaseLogs.Clear()
 }

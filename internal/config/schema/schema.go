@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -28,7 +29,7 @@ type Generator struct {
 // even when empty (unlike []string with omitempty).
 type RequiredList []string
 
-func (r RequiredList) MarshalYAML() (interface{}, error) {
+func (r RequiredList) MarshalYAML() (any, error) {
 	if len(r) == 0 {
 		return []string{}, nil
 	}
@@ -38,39 +39,39 @@ func (r RequiredList) MarshalYAML() (interface{}, error) {
 
 // TypeDefinition represents a schema type definition.
 type TypeDefinition struct {
-	Type                 string                 `yaml:"type,omitempty"`
-	Description          string                 `yaml:"description,omitempty"`
-	Default              interface{}            `yaml:"default,omitempty"`
-	Properties           map[string]interface{} `yaml:"properties,omitempty"`
-	Items                interface{}            `yaml:"items,omitempty"`
-	Required             RequiredList           `yaml:"required,omitempty"`
-	Enum                 []string               `yaml:"enum,omitempty"`
-	Pattern              string                 `yaml:"pattern,omitempty"`
-	Example              interface{}            `yaml:"example,omitempty"`
-	AdditionalProperties interface{}            `yaml:"additionalProperties,omitempty"`
-	AnyOf                []interface{}          `yaml:"anyOf,omitempty"`
-	AllOf                []interface{}          `yaml:"allOf,omitempty"`
-	Ref                  string                 `yaml:"$ref,omitempty"`
-	Format               string                 `yaml:"format,omitempty"`
-	Minimum              *int                   `yaml:"minimum,omitempty"`
-	Maximum              *int                   `yaml:"maximum,omitempty"`
-	MinLength            *int                   `yaml:"minLength,omitempty"`
-	MaxLength            *int                   `yaml:"maxLength,omitempty"`
+	Type                 string         `yaml:"type,omitempty"`
+	Description          string         `yaml:"description,omitempty"`
+	Default              any            `yaml:"default,omitempty"`
+	Properties           map[string]any `yaml:"properties,omitempty"`
+	Items                any            `yaml:"items,omitempty"`
+	Required             RequiredList   `yaml:"required,omitempty"`
+	Enum                 []string       `yaml:"enum,omitempty"`
+	Pattern              string         `yaml:"pattern,omitempty"`
+	Example              any            `yaml:"example,omitempty"`
+	AdditionalProperties any            `yaml:"additionalProperties,omitempty"`
+	AnyOf                []any          `yaml:"anyOf,omitempty"`
+	AllOf                []any          `yaml:"allOf,omitempty"`
+	Ref                  string         `yaml:"$ref,omitempty"`
+	Format               string         `yaml:"format,omitempty"`
+	Minimum              *int           `yaml:"minimum,omitempty"`
+	Maximum              *int           `yaml:"maximum,omitempty"`
+	MinLength            *int           `yaml:"minLength,omitempty"`
+	MaxLength            *int           `yaml:"maxLength,omitempty"`
 }
 
 // Schema represents the root YAML schema document.
 type Schema struct {
-	Schema               string                 `yaml:"$schema"`
-	ID                   string                 `yaml:"$id,omitempty"`
-	Version              string                 `yaml:"version,omitempty"`
-	Title                string                 `yaml:"title,omitempty"`
-	Description          string                 `yaml:"description,omitempty"`
-	Type                 string                 `yaml:"type,omitempty"`
-	Properties           map[string]interface{} `yaml:"properties,omitempty"`
-	Required             RequiredList           `yaml:"required,omitempty"`
-	AdditionalProperties interface{}            `yaml:"additionalProperties,omitempty"`
-	Definitions          map[string]interface{} `yaml:"definitions,omitempty"`
-	AllOf                []interface{}          `yaml:"allOf,omitempty"`
+	Schema               string         `yaml:"$schema"`
+	ID                   string         `yaml:"$id,omitempty"`
+	Version              string         `yaml:"version,omitempty"`
+	Title                string         `yaml:"title,omitempty"`
+	Description          string         `yaml:"description,omitempty"`
+	Type                 string         `yaml:"type,omitempty"`
+	Properties           map[string]any `yaml:"properties,omitempty"`
+	Required             RequiredList   `yaml:"required,omitempty"`
+	AdditionalProperties any            `yaml:"additionalProperties,omitempty"`
+	Definitions          map[string]any `yaml:"definitions,omitempty"`
+	AllOf                []any          `yaml:"allOf,omitempty"`
 }
 
 // NewGenerator creates a new schema generator.
@@ -89,14 +90,14 @@ func (g *Generator) Generate() (*Schema, error) {
 		Title:                "Panix Configuration Schema",
 		Description:          "Schema for Panix NixOS deployment configuration files",
 		Type:                 "object",
-		Properties:           make(map[string]interface{}),
+		Properties:           make(map[string]any),
 		Required:             RequiredList{},
-		AdditionalProperties: false,
-		Definitions:          make(map[string]interface{}),
+		AdditionalProperties: true, // Required to allow anchors
+		Definitions:          make(map[string]any),
 	}
 
 	// Generate schema from config.Config
-	cfgType := reflect.TypeOf(config.Config{})
+	cfgType := reflect.TypeFor[config.Config]()
 
 	properties, required, err := g.processStruct(cfgType)
 	if err != nil {
@@ -111,8 +112,8 @@ func (g *Generator) Generate() (*Schema, error) {
 
 // processStruct processes a struct type and returns its properties and required fields.
 func (g *Generator) hasExactValidateTag(validateTag, tag string) bool {
-	tags := strings.Split(validateTag, ",")
-	for _, t := range tags {
+	tags := strings.SplitSeq(validateTag, ",")
+	for t := range tags {
 		if strings.TrimSpace(t) == tag {
 			return true
 		}
@@ -141,15 +142,13 @@ func (g *Generator) shouldSkipField(field reflect.StructField) bool {
 	return false
 }
 
-func (g *Generator) processInlineField(field reflect.StructField, properties map[string]interface{}, required *[]string) error {
+func (g *Generator) processInlineField(field reflect.StructField, properties map[string]any, required *[]string) error {
 	inlineProps, inlineRequired, err := g.processStruct(field.Type)
 	if err != nil {
 		return errors.Wrapf(err, "failed to process inline field %s", field.Name)
 	}
 
-	for name, prop := range inlineProps {
-		properties[name] = prop
-	}
+	maps.Copy(properties, inlineProps)
 
 	*required = append(*required, inlineRequired...)
 
@@ -164,11 +163,11 @@ func (g *Generator) isFieldRequired(field reflect.StructField, yamlTag string) b
 	return yamlHasRequired || validateHasRequired
 }
 
-func (g *Generator) processStruct(structType reflect.Type) (map[string]interface{}, []string, error) {
-	properties := make(map[string]interface{})
+func (g *Generator) processStruct(structType reflect.Type) (map[string]any, []string, error) {
+	properties := make(map[string]any)
 	required := []string{}
 
-	if structType.Kind() == reflect.Ptr {
+	if structType.Kind() == reflect.Pointer {
 		structType = structType.Elem()
 	}
 
@@ -176,9 +175,7 @@ func (g *Generator) processStruct(structType reflect.Type) (map[string]interface
 		return nil, nil, errors.Wrapf(ErrExpectedStructType, "got %v", structType.Kind())
 	}
 
-	for i := range structType.NumField() {
-		field := structType.Field(i)
-
+	for field := range structType.Fields() {
 		if g.shouldSkipField(field) {
 			continue
 		}
@@ -212,7 +209,7 @@ func (g *Generator) processStruct(structType reflect.Type) (map[string]interface
 	return properties, required, nil
 }
 
-func (g *Generator) setFieldDescription(prop interface{}, field reflect.StructField) {
+func (g *Generator) setFieldDescription(prop any, field reflect.StructField) {
 	desc := field.Tag.Get("desc")
 	if desc == "" {
 		desc = field.Tag.Get("help")
@@ -235,7 +232,7 @@ func (g *Generator) setFieldDescription(prop interface{}, field reflect.StructFi
 	}
 }
 
-func (g *Generator) parseDefaultValue(val string, typ reflect.Type) interface{} {
+func (g *Generator) parseDefaultValue(val string, typ reflect.Type) any {
 	// Handle time.Duration as string
 	if typ.String() == "time.Duration" {
 		return val
@@ -247,7 +244,8 @@ func (g *Generator) parseDefaultValue(val string, typ reflect.Type) interface{} 
 		return val == "true"
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if intVal, err := parseInt(val); err == nil {
+		intVal, err := parseInt(val)
+		if err == nil {
 			return intVal
 		}
 
@@ -258,7 +256,7 @@ func (g *Generator) parseDefaultValue(val string, typ reflect.Type) interface{} 
 }
 
 // processType processes a type and returns its schema definition.
-func (g *Generator) processType(typ reflect.Type, field reflect.StructField) (interface{}, error) {
+func (g *Generator) processType(typ reflect.Type, field reflect.StructField) (any, error) {
 	// Handle pointers
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
@@ -275,7 +273,7 @@ func (g *Generator) processType(typ reflect.Type, field reflect.StructField) (in
 }
 
 // processTypeByKind dispatches type processing based on the kind of type.
-func (g *Generator) processTypeByKind(kind reflect.Kind, typ reflect.Type, field reflect.StructField, validateTag string) (interface{}, error) {
+func (g *Generator) processTypeByKind(kind reflect.Kind, typ reflect.Type, field reflect.StructField, validateTag string) (any, error) {
 	switch kind {
 	case reflect.Bool:
 		return &TypeDefinition{Type: "boolean"}, nil
@@ -302,7 +300,7 @@ func (g *Generator) processTypeByKind(kind reflect.Kind, typ reflect.Type, field
 }
 
 // processStructOrOrderedMap handles struct types, checking for OrderedMap first.
-func (g *Generator) processStructOrOrderedMap(typ reflect.Type, field reflect.StructField) (interface{}, error) {
+func (g *Generator) processStructOrOrderedMap(typ reflect.Type, field reflect.StructField) (any, error) {
 	// Check if this is an OrderedMap
 	if g.isOrderedMap(typ) {
 		return g.processOrderedMap(field)
@@ -372,8 +370,8 @@ func (g *Generator) applyValidateConstraints(typeDef *TypeDefinition, validateTa
 		return
 	}
 
-	tags := strings.Split(validateTag, ",")
-	for _, tag := range tags {
+	tags := strings.SplitSeq(validateTag, ",")
+	for tag := range tags {
 		tag = strings.TrimSpace(tag)
 		if tag == "" || tag == "required" || tag == "omitempty" {
 			continue
@@ -409,24 +407,28 @@ func (g *Generator) applyOneofConstraint(typeDef *TypeDefinition, tag string) {
 
 func (g *Generator) applyMinConstraint(typeDef *TypeDefinition, tag, baseType string) {
 	val := strings.TrimPrefix(tag, "min=")
-	if v, err := parseInt(val); err == nil {
+
+	intValue, err := parseInt(val)
+	if err == nil {
 		switch baseType {
 		case "integer":
-			typeDef.Minimum = &v
+			typeDef.Minimum = &intValue
 		case "string":
-			typeDef.MinLength = &v
+			typeDef.MinLength = &intValue
 		}
 	}
 }
 
 func (g *Generator) applyMaxConstraint(typeDef *TypeDefinition, tag, baseType string) {
 	val := strings.TrimPrefix(tag, "max=")
-	if v, err := parseInt(val); err == nil {
+
+	intValue, err := parseInt(val)
+	if err == nil {
 		switch baseType {
 		case "integer":
-			typeDef.Maximum = &v
+			typeDef.Maximum = &intValue
 		case "string":
-			typeDef.MaxLength = &v
+			typeDef.MaxLength = &intValue
 		}
 	}
 }
@@ -437,7 +439,9 @@ func (g *Generator) applyLenConstraint(typeDef *TypeDefinition, tag, baseType st
 	}
 
 	val := strings.TrimPrefix(tag, "len=")
-	if v, err := parseInt(val); err == nil {
+
+	v, err := parseInt(val)
+	if err == nil {
 		typeDef.MinLength = &v
 		typeDef.MaxLength = &v
 	}
@@ -511,13 +515,13 @@ func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinitio
 
 	switch fieldName {
 	case "flakes":
-		valueType = reflect.TypeOf(&config.Flake{})
+		valueType = reflect.TypeFor[*config.Flake]()
 		allowNull = false
 	case "configurations":
-		valueType = reflect.TypeOf(&config.Configuration{})
+		valueType = reflect.TypeFor[*config.Configuration]()
 		allowNull = false
 	case "machines":
-		valueType = reflect.TypeOf(&config.Machine{})
+		valueType = reflect.TypeFor[*config.Machine]()
 		allowNull = true
 	}
 
@@ -527,13 +531,13 @@ func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinitio
 			return nil, err
 		}
 
-		var additionalProps interface{}
+		var additionalProps any
 		if allowNull {
 			// Allow null/empty values for machines (key-only is valid)
-			additionalProps = map[string]interface{}{
-				"anyOf": []interface{}{
+			additionalProps = map[string]any{
+				"anyOf": []any{
 					valueSchema,
-					map[string]interface{}{"type": "null"},
+					map[string]any{"type": "null"},
 				},
 			}
 		} else {
@@ -622,7 +626,7 @@ func GenerateSchema(outputPath string) error {
 
 	dir := filepath.Dir(outputPath)
 	if dir != "" && dir != "." {
-		err := os.MkdirAll(dir, flags.DefaultDirPermissions)
+		err = os.MkdirAll(dir, flags.DefaultDirPermissions)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create directory %s", dir)
 		}

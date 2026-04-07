@@ -566,6 +566,124 @@ panix --dry-run-with-inspect
 </details>
 
 <details>
+<summary><strong>Template Engine</strong></summary>
+
+Panix includes a powerful template engine for dynamic YAML configuration. Templates use standard Go template syntax with `{{` and `}}` delimiters and support 100+ built-in functions from the [Sprout](https://github.com/go-sprout/sprout) library.
+
+### Basic Syntax
+
+Environment variables and dynamic values:
+
+```yaml
+root:
+  flakes:
+    my-flake:
+      url: {{ env "MY_FLAKE_URL" }}
+      configurations:
+        server:
+          machines:
+            server-01:
+              ssh:
+                hostname: {{ env "SERVER_HOST" | default "192.168.1.100" }}
+                port: {{ env "SSH_PORT" | default "22" }}
+```
+
+### Conditional Logic
+
+Use conditionals for environment-specific configurations:
+
+```yaml
+root:
+  flakes:
+    {{if eq (env "ENV") "production"}}
+    prod-flake:
+      url: github:myorg/prod-config
+    {{else}}
+    dev-flake:
+      url: github:myorg/dev-config
+    {{end}}
+```
+
+### Template Definitions
+
+Define reusable templates with `{{define}}` and invoke them with `{{template}}`:
+
+```yaml
+# Define template (in YAML comment to avoid LSP errors)
+# {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
+
+root:
+  flakes:
+    infrastructure:
+      configurations:
+        server:
+          machines:
+            server-01:
+              bootstrap:
+                post_bootstrap_hooks:
+                  - |
+                    {{template "cryptenroll" "/dev/sda2"}}
+            
+            server-02:
+              bootstrap:
+                post_bootstrap_hooks:
+                  - |
+                    {{template "cryptenroll" "/dev/nvme0n1p2"}}
+```
+
+### Built-in Functions
+
+Panix provides 100+ functions from Sprout, documentaion is available in [Sprout docs](https://docs.atom.codes/sprout/registries/list-of-all-registries).
+
+### YAML Anchors
+
+Use YAML anchors for reusable blocks alongside templates:
+
+```yaml
+bootstrap_defaults: &bootstrap_defaults
+  disk_encryption_keys:
+    - local_path: /tmp/disko-encryption-password.txt
+      remote_path: /tmp/disko-encryption-password.txt
+
+root:
+  flakes:
+    infrastructure:
+      configurations:
+        server:
+          machines:
+            server-01:
+              bootstrap:
+                <<: *bootstrap_defaults
+                post_bootstrap_hooks:
+                  - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+```
+
+### Eval Command
+
+Preview the processed YAML with templates evaluated and anchors resolved:
+
+```bash
+panix eval                    # Output to stdout (colorized)
+panix eval -o processed.yaml  # Output to file (plain YAML)
+```
+
+The `eval` command:
+
+- Resolves all `{{...}}` template expressions
+- Merges YAML anchors
+- Preserves original key order
+- Filters anchor-only definitions (keeps only `flags` and `root`)
+
+### Notes
+
+- Template definitions (`{{define}}`) work inside YAML comments
+- Standard Go template syntax with `{{` and `}}` delimiters
+- YAML LSP may complain about template syntax - this is cosmetic
+- For complex multiline templates, use block scalars (`|`) in hooks
+
+</details>
+
+<details>
 <summary><strong>IDE Support</strong></summary>
 
 You can directly reference the YAML schema for autocompletion and validation:
@@ -766,6 +884,12 @@ Flags:
       --version                    Show version ($PANIX_VERSION)
 
 Commands:
+  schema [flags]
+    Generate YAML schema for configuration files
+
+  eval [flags]
+    Evaluate config (process templates and anchors) and output result
+
   inspect [flags]
     Inspect machine per host
 
@@ -778,9 +902,6 @@ Commands:
 
   secrets [flags]
     Deploy secrets to all machines
-
-  schema [flags]
-    Generate YAML schema for configuration files
 
   rollback [<generation>] [flags]
     Rollback to a previous generation

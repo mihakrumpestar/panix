@@ -23,8 +23,9 @@ type Config struct {
 // Root
 
 type Root struct {
-	Flakes                       *OrderedMap[string, *Flake] `yaml:"flakes,required"`
 	config_attributes.Attributes `yaml:",inline"`
+
+	Flakes *OrderedMap[string, *Flake] `yaml:"flakes,required"`
 }
 
 func (r *Root) Init(f *flags.Flags) error {
@@ -37,9 +38,10 @@ func (r *Root) Init(f *flags.Flags) error {
 // Flake
 
 type Flake struct {
-	Configurations               *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	URL                          string `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
+
+	Configurations *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
+	URL            string                              `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
@@ -49,9 +51,10 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
 // Configuration
 
 type Configuration struct {
-	Machines                     *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
 	config_attributes.Attributes `yaml:",inline"`
-	FlakeOutput                  string `yaml:"flake_output" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
+
+	Machines    *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
+	FlakeOutput string                        `yaml:"flake_output" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
 	// Internal
 	ParentFlake *Flake     `yaml:"-" validate:"-"`
 	MetaBuild   *MetaBuild `yaml:"-" validate:"-"`
@@ -76,8 +79,9 @@ func (c *Configuration) Init(name string, parent *Flake) error {
 
 type Machine struct {
 	config_attributes.Attributes `yaml:",inline"`
-	ParentConfiguration          *Configuration `yaml:"-" validate:"-"`
-	MetaInspect                  *MetaInspect   `yaml:"-" validate:"-"`
+
+	ParentConfiguration *Configuration `yaml:"-" validate:"-"`
+	MetaInspect         *MetaInspect   `yaml:"-" validate:"-"`
 }
 
 type MetaInspect struct { // Atomic due to being read and write at the same time

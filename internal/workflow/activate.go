@@ -51,14 +51,14 @@ func executeBootstrap(exc *executioner.Executioner, machine *config.Machine, sys
 	}
 
 	if !machine.Bootstrap.DisableAutomaticReboot {
-		err := performReboot(exc, machine)
+		err = performReboot(exc, machine)
 		if err != nil {
 			return err
 		}
 	}
 
 	if len(machine.Bootstrap.PostBootstrapProvisionedHooks) > 0 {
-		err := exc.ExecuteHooks(machine.Bootstrap.PostBootstrapProvisionedHooks, "post bootstrap provisioned hook")
+		err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapProvisionedHooks, "post bootstrap provisioned hook")
 		if err != nil {
 			return errors.Wrap(err, "post bootstrap provisioned hooks failed")
 		}

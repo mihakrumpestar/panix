@@ -16,12 +16,10 @@ var (
 )
 
 const (
-	// 5 min disconnect timeout.
-	WaitForDisconnectTimeoutTimes = 300
+	WaitForDisconnectTimeoutTimes = 300 // 5 min disconnect timeout
 	WaitForDisconnectInterval     = time.Second
 
-	// 10 min reconnect timeout.
-	WaitForReconnectTimeoutTimes  = 300
+	WaitForReconnectTimeoutTimes  = 300 // 10 min reconnect timeout
 	WaitForReconnectCheckInterval = 2 * time.Second
 )
 

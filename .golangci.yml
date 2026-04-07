@@ -1,11 +1,9 @@
 version: "2"
 
-issues:
-  max-issues-per-linter: 1000
-  max-same-issues: 100
-
 linters:
   default: all
+  exclusions:
+    warn-unused: true
 
   disable:
     - tagliatelle # Bad check
@@ -17,11 +15,24 @@ linters:
     - exhaustruct # Structs are generally initialized empty
     - exhaustive # Not necessery as we use default
     - containedctx # We use ctx to check if it is done
+    - wsl # Replaced by wsl_v5
 
   enable:
     - nilaway
 
   settings:
+    govet:
+      enable:
+        - shadow
+        - atomicalign
+        - deepequalerrors
+        #- fieldalignment # struct with 24 pointer bytes could be 16
+        - nilness
+        - reflectvaluecompare
+      settings:
+        shadow:
+          strict: true
+
     depguard:
       rules:
         main:
@@ -59,5 +70,14 @@ linters:
         settings:
           # Settings must be a "map from string to string" to mimic command line flags: the keys are
           # flag names and the values are the values to the particular flags.
-          #include-pkgs: "<YOUR_PACKAGE_PREFIXES>"
-          exclude-pkgs: "" # Exclude generated code
+          include-pkgs: "github.com/mihakrumpestar/panix"
+          exclude-pkgs: ""
+
+formatters:
+  exclusions:
+    warn-unused: true
+    generated: strict
+
+issues:
+  max-issues-per-linter: 1000
+  max-same-issues: 100
