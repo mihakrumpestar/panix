@@ -12,7 +12,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 )
 
 var ErrNoFlakesAfterFilter = errors.New("no flakes left after filtering")
@@ -37,9 +36,14 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	}
 
 	// Validate and initialize configuration
-	err = validateAndInitConfig(conf)
+	err = conf.ValidateStructTags()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "invalid configuration")
+	}
+
+	err = conf.initRoot()
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
 	// Filter based on tags and disabled flags
@@ -52,6 +56,8 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid phases")
 	}
+
+	conf.filterUnusedPhases()
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
@@ -110,23 +116,6 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 	return nil
 }
 
-// validateAndInitConfig validates the configuration and initializes all entities.
-func validateAndInitConfig(conf *Config) error {
-	err := conf.ValidateStructTags()
-	if err != nil {
-		return errors.Wrap(err, "invalid configuration")
-	}
-
-	err = conf.initRoot()
-	if err != nil {
-		return errors.Wrap(err, "invalid configuration")
-	}
-
-	return nil
-}
-
-// Helper functions
-
 func (c *Config) initRoot() error {
 	err := c.Root.Init(c.Flags)
 	if err != nil {
@@ -161,65 +150,6 @@ func (c *Config) initRoot() error {
 	}
 
 	return nil
-}
-
-// filterRoot filters the configuration based on command-line or global selections.
-func (c *Config) filterRoot() error {
-	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
-		flake := flakePair.Value
-		if flake == nil || flake.Disabled || flake.Configurations == nil {
-			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
-
-			continue
-		}
-
-		c.filterFlakeConfigurations(flake)
-
-		// Delete flake if no configs left
-		if flake.Configurations.Omap.Len() == 0 {
-			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
-		}
-	}
-
-	if c.Root.Flakes.Omap.Len() == 0 {
-		return ErrNoFlakesAfterFilter
-	}
-
-	return nil
-}
-
-// filterFlakeConfigurations removes disabled or empty configurations from a flake.
-func (c *Config) filterFlakeConfigurations(flake *Flake) {
-	for _, configPair := range flake.Configurations.Omap.Pairs() {
-		config := configPair.Value
-		if config == nil || config.Disabled || config.Machines == nil {
-			_, _ = flake.Configurations.Omap.Del(configPair.Key)
-
-			continue
-		}
-
-		c.filterConfigurationMachines(config)
-
-		// Delete config if no machines left
-		if config.Machines.Omap.Len() == 0 {
-			_, _ = flake.Configurations.Omap.Del(configPair.Key)
-		}
-	}
-}
-
-// filterConfigurationMachines removes disabled or untagged machines from a configuration.
-func (c *Config) filterConfigurationMachines(config *Configuration) {
-	for _, machinePair := range config.Machines.Omap.Pairs() {
-		machine := machinePair.Value
-		if machine == nil || machine.Disabled || !machineContainsTags(machine.Tags, c.Flags.Tags) {
-			log.Debug().Bool("machine == nil", machine == nil).
-				Bool("disabled", machine.Disabled).
-				Strs("machine.Tags", machine.Tags).
-				Msgf("deleting machine %s", strconv.Quote(machinePair.Key))
-
-			_, _ = config.Machines.Omap.Del(machinePair.Key)
-		}
-	}
 }
 
 // Helpers

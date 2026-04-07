@@ -4,6 +4,7 @@ import (
 	"github.com/kirill-scherba/omap"
 	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -25,7 +26,7 @@ type Config struct {
 type Root struct {
 	config_attributes.Attributes `yaml:",inline"`
 
-	Flakes *OrderedMap[string, *Flake] `yaml:"flakes,required"`
+	Flakes *orderedmap.OrderedMap[string, *Flake] `yaml:"flakes,required"`
 }
 
 func (r *Root) Init(f *flags.Flags) error {
@@ -40,8 +41,8 @@ func (r *Root) Init(f *flags.Flags) error {
 type Flake struct {
 	config_attributes.Attributes `yaml:",inline"`
 
-	Configurations *OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
-	URL            string                              `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
+	Configurations *orderedmap.OrderedMap[string, *Configuration] `yaml:"configurations,required" validate:"required"`
+	URL            string                                         `yaml:"url,required" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
 }
 
 func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
@@ -53,8 +54,8 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
 type Configuration struct {
 	config_attributes.Attributes `yaml:",inline"`
 
-	Machines    *OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
-	FlakeOutput string                        `yaml:"flake_output" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
+	Machines    *orderedmap.OrderedMap[string, *Machine] `yaml:"machines,required" validate:"required"`
+	FlakeOutput string                                   `yaml:"flake_output" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
 	// Internal
 	ParentFlake *Flake     `yaml:"-" validate:"-"`
 	MetaBuild   *MetaBuild `yaml:"-" validate:"-"`
