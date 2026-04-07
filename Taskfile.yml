@@ -116,6 +116,11 @@ tasks:
       VERSION_FILE: gen/VERSION
     cmds:
       - |
+        if [ -z "$GH_TOKEN" ]; then
+          echo "Error: GH_TOKEN is not set"
+          exit 1
+        fi
+      - |
         CURRENT=$(cat {{.VERSION_FILE}})
         SUGGESTED=$(git-cliff --bumped-version 2>/dev/null | sed 's/^v//' || echo "$CURRENT")
         echo "Current version: $CURRENT"
