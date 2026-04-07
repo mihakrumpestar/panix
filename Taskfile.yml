@@ -95,13 +95,19 @@ tasks:
             f.write(content)
         EOF
 
+  update:
+    desc: Update all deps
+    cmds:
+      - go get -u all
+      - go mod tidy
+      - task: nix:update
+
   ci:
     desc: Run all CI checks
     cmds:
       - task: generate
       - task: go:check
       - task: nix:vendor
-      - task: nix:build
 
   release:
     desc: Create a new GitHub release
