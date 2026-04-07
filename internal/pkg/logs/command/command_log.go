@@ -56,50 +56,6 @@ func (cl *CommandLog) BytesForBuildLogs() []byte {
 	return bytes.TrimSpace(filtered) // Both prefix and suffix whitespace characters appear
 }
 
-func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
-	values := cl.stdInOutErr.Values()
-	if len(values) == 0 {
-		return nil
-	}
-
-	var result bytes.Buffer
-
-	result.Grow(estimateSize(values))
-
-	first := true
-
-	for _, buf := range values {
-		data := buf.Bytes()
-		if skipPrefix != nil && bytes.HasPrefix(data, skipPrefix) {
-			continue
-		}
-
-		if !first {
-			result.WriteByte('\n')
-		}
-
-		first = false
-
-		result.Write(data)
-	}
-
-	if result.Len() == 0 {
-		return nil
-	}
-
-	return result.Bytes()
-}
-
-// estimateSize approximates the total size needed for all buffers.
-func estimateSize(buffers []*safebuffer.Buffer) int {
-	total := 0
-	for _, buf := range buffers {
-		total += buf.Len() + 1 // +1 for potential newline
-	}
-
-	return total
-}
-
 // WriteString writes a string to the last line in StdInOutErr.
 func (cl *CommandLog) WriteString(s string) (int, error) {
 	return cl.Write([]byte(s))
@@ -151,4 +107,48 @@ func (cl *CommandLog) ReplaceLastLine(data []byte) {
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.stdInOutErr.Length()))
 	}
+}
+
+func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
+	values := cl.stdInOutErr.Values()
+	if len(values) == 0 {
+		return nil
+	}
+
+	var result bytes.Buffer
+
+	result.Grow(estimateSize(values))
+
+	first := true
+
+	for _, buf := range values {
+		data := buf.Bytes()
+		if skipPrefix != nil && bytes.HasPrefix(data, skipPrefix) {
+			continue
+		}
+
+		if !first {
+			result.WriteByte('\n')
+		}
+
+		first = false
+
+		result.Write(data)
+	}
+
+	if result.Len() == 0 {
+		return nil
+	}
+
+	return result.Bytes()
+}
+
+// estimateSize approximates the total size needed for all buffers.
+func estimateSize(buffers []*safebuffer.Buffer) int {
+	total := 0
+	for _, buf := range buffers {
+		total += buf.Len() + 1 // +1 for potential newline
+	}
+
+	return total
 }

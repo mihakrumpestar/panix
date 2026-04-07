@@ -6,14 +6,8 @@ repos:
 
   - repo: local
     hooks:
-      - id: generate
-        name: generate
-        entry: task generate
-        language: system
-        pass_filenames: false
-
-      - id: golangci
-        name: golangci
-        entry: task golangci
+      - id: ci
+        name: ci
+        entry: task ci
         language: system
         pass_filenames: false

@@ -1,4 +1,6 @@
-version: v2.0.0
+# Note: you have to update this version to keep up
+# https://github.com/golangci/golangci-lint/releases
+version: v2.11.4
 
 name: custom-gcl
 

@@ -908,4 +908,4 @@ properties:
     additionalProperties: false
 required:
 - root
-additionalProperties: false
+additionalProperties: true

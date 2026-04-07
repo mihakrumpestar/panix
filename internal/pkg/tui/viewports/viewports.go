@@ -66,17 +66,6 @@ func hashContent(content string) uint64 {
 	return h.Sum64()
 }
 
-// isCacheValid checks if the cached render is still valid.
-// Dimensions and state are checked first (O(1)) before content hash (O(n)) due to && short-circuit.
-func (v *Viewports) isCacheValid(viewport *Viewport, width, height int, content string) bool {
-	return viewport.cache.width == width &&
-		viewport.cache.height == height &&
-		viewport.cache.scrollPct == viewport.model.ScrollPercent() &&
-		viewport.cache.active == viewport.active &&
-		viewport.cache.contentHash == hashContent(content) &&
-		viewport.cache.render != ""
-}
-
 // NewViewports creates a new viewport manager.
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
 	viewportsMap, _ := omap.New[attributes.Xpath, *Viewport]()
@@ -246,6 +235,57 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Debug returns debug info about all viewports.
+func (v *Viewports) Debug() string {
+	var builder strings.Builder
+
+	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height)
+
+	for xpath, viewport := range v.viewports.Records() {
+		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", xpath, viewport.model.Width(), viewport.model.Height(), lipgloss.Height(viewport.content))
+
+		if viewport.active {
+			builder.WriteString(" [A]")
+		}
+
+		if viewport.model.ScrollPercent() == 1 {
+			builder.WriteString(" @btm")
+		}
+
+		builder.WriteString("\n")
+	}
+
+	return builder.String()
+}
+
+func (v *Viewports) HasActiveInner() bool {
+	for xpath, vp := range v.viewports.Records() {
+		if xpath != v.mainXpath && vp.active {
+			return true
+		}
+	}
+
+	return false
+}
+
+// DeselectAll activates only the main viewport.
+func (v *Viewports) DeselectAll() {
+	for xpath, vp := range v.viewports.Records() {
+		vp.active = xpath == v.mainXpath
+	}
+}
+
+// isCacheValid checks if the cached render is still valid.
+// Dimensions and state are checked first (O(1)) before content hash (O(n)) due to && short-circuit.
+func (v *Viewports) isCacheValid(viewport *Viewport, width, height int, content string) bool {
+	return viewport.cache.width == width &&
+		viewport.cache.height == height &&
+		viewport.cache.scrollPct == viewport.model.ScrollPercent() &&
+		viewport.cache.active == viewport.active &&
+		viewport.cache.contentHash == hashContent(content) &&
+		viewport.cache.render != ""
+}
+
 // handleResize updates dimensions when terminal size changes.
 func (v *Viewports) handleResize(msg tea.WindowSizeMsg) {
 	v.dimensions.Width = msg.Width
@@ -269,7 +309,7 @@ func (v *Viewports) updateActiveViewports(msg tea.Msg, cmds []tea.Cmd) []tea.Cmd
 
 // updateMainViewport updates the main viewport if no inner viewport is active.
 func (v *Viewports) updateMainViewport(msg tea.Msg, cmds []tea.Cmd) []tea.Cmd {
-	if v.hasActiveInner() {
+	if v.HasActiveInner() {
 		return cmds
 	}
 
@@ -285,29 +325,6 @@ func (v *Viewports) updateMainViewport(msg tea.Msg, cmds []tea.Cmd) []tea.Cmd {
 	}
 
 	return cmds
-}
-
-// Debug returns debug info about all viewports.
-func (v *Viewports) Debug() string {
-	var builder strings.Builder
-
-	builder.WriteString(fmt.Sprintf("\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height))
-
-	for xpath, viewport := range v.viewports.Records() {
-		builder.WriteString(fmt.Sprintf("  '%s': %dx%d c:%d", xpath, viewport.model.Width(), viewport.model.Height(), lipgloss.Height(viewport.content)))
-
-		if viewport.active {
-			builder.WriteString(" [A]")
-		}
-
-		if viewport.model.ScrollPercent() == 1 {
-			builder.WriteString(" @btm")
-		}
-
-		builder.WriteString("\n")
-	}
-
-	return builder.String()
 }
 
 // Internal types and helpers
@@ -550,7 +567,10 @@ func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 	}
 
 	if !hasClick {
-		if mainVp, ok := v.viewports.Get(v.mainXpath); ok {
+		var mainVp *Viewport
+
+		mainVp, ok = v.viewports.Get(v.mainXpath)
+		if ok {
 			mainVp.active = true
 		}
 	}
@@ -588,27 +608,6 @@ func (v *Viewports) getActiveViewport() *Viewport {
 	}
 
 	return nil
-}
-
-func (v *Viewports) hasActiveInner() bool {
-	for xpath, vp := range v.viewports.Records() {
-		if xpath != v.mainXpath && vp.active {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (v *Viewports) HasActiveInner() bool {
-	return v.hasActiveInner()
-}
-
-// DeselectAll activates only the main viewport.
-func (v *Viewports) DeselectAll() {
-	for xpath, vp := range v.viewports.Records() {
-		vp.active = xpath == v.mainXpath
-	}
 }
 
 func (v *Viewports) underMouse(m tea.MouseMsg) []attributes.Xpath {

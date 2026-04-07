@@ -81,7 +81,7 @@ type NixConfig struct {
 }
 
 func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) error {
-	err := a.PassAttributesInto(name, parentAttr)
+	err := a.passAttributesInto(name, parentAttr)
 	if err != nil {
 		return err
 	}
@@ -152,8 +152,8 @@ func (a *Attributes) initBootstrapSSH(sshConfig *ssh.SSHConfig, name string) err
 	return nil
 }
 
-// PassAttributesInto has to be run before rest of the Init.
-func (a *Attributes) PassAttributesInto(name string, parentAttr *Attributes) error {
+// passAttributesInto has to be run before rest of the Init.
+func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) error {
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge attributes")

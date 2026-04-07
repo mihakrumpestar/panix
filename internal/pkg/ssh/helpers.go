@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"net"
 	"time"
 )
@@ -8,7 +9,11 @@ import (
 func (sC *SSHClient) ReachabilityCheck(timeout time.Duration) bool {
 	address := net.JoinHostPort(sC.Hostname, sC.PortString())
 
-	conn, err := net.DialTimeout("tcp", address, timeout)
+	dialer := &net.Dialer{
+		Timeout: timeout,
+	}
+
+	conn, err := dialer.DialContext(context.Background(), "tcp", address)
 	if err != nil {
 		return false
 	}

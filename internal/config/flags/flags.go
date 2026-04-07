@@ -31,8 +31,8 @@ type Flags struct {
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
 	ActivationMode       ActivationMode `yaml:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 
-	Tui     `yaml:"tui" embed:"" prefix:"tui."`
-	Logging `yaml:"logging"`
+	Tui     `yaml:"tui" embed:"" prefix:"tui."` //nolint:embeddedstructfieldcheck
+	Logging `yaml:"logging"`                    //nolint:embeddedstructfieldcheck
 }
 
 type Bootstrap struct {
