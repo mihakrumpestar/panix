@@ -18,8 +18,11 @@ const (
 	ActivationModeDryActivate ActivationMode = "dry-activate" // show what would be done if this configuration were activated
 )
 
-type Flags struct {
-	Config               string         `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
+type GlobalFlags struct {
+	Config string `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
+}
+
+type WorkflowFlags struct {
 	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configs and names are already registered as tags)"`
 	Bootstrap            Bootstrap      `yaml:"bootstrap" embed:"" prefix:"bootstrap."`
 	RequireAllSuccess    bool           `yaml:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
@@ -33,6 +36,11 @@ type Flags struct {
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."` //nolint:embeddedstructfieldcheck
 	Logging `yaml:"logging"`                    //nolint:embeddedstructfieldcheck
+}
+
+type Flags struct {
+	GlobalFlags   `yaml:",inline"`
+	WorkflowFlags `yaml:",inline"`
 }
 
 type Bootstrap struct {
