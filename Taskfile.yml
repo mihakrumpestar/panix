@@ -38,14 +38,12 @@ tasks:
   go:check:
     desc: Run checks
     vars:
-      DEVBOX_BINS: .devbox/bin
-      CUSTOM_GCL: "{{.DEVBOX_BINS}}/custom-gcl"
+      CUSTOM_GCL: ".devbox/bin/custom-gcl"
     cmds:
       - go mod tidy
-      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom --destination
-        {{.DEVBOX_BINS}}; fi # Build linter
+      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom; fi # Build linter
       - |
-        {{.CUSTOM_GCL}} run {{.CLI_ARGS}} ./...
+        {{.CUSTOM_GCL}} run ./...
       - |
         if grep -rn "if err :=" internal/ --include="*.go"; then
           echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
@@ -86,10 +84,13 @@ tasks:
         import subprocess
         import re
         help_output = subprocess.run(['go', 'run', 'cmd/panix/main.go', '--help'], capture_output=True, text=True).stdout
+        deploy_help = subprocess.run(['go', 'run', 'cmd/panix/main.go', 'deploy', '--help'], capture_output=True, text=True).stdout
         with open('README.md', 'r') as f:
             content = f.read()
-        cli_section = f"\n### CLI\n\n```sh\n> panix --help\n{help_output}```\n"
-        pattern = r'\n### CLI\n\n```sh\n.*?```\n'
+        cli_section = f"\n### CLI\n\n```sh\n> panix --help\n{help_output}```\n\n<details>\n<summary>Deploy command flags</summary>\n\n```sh\n> panix deploy --help\n{deploy_help}```\n\n</details>\n"
+        pattern = r'\n### CLI\n\n```sh\n.*?```\n\n<details>\n<summary>Deploy command flags</summary>\n\n```sh\n.*?```\n\n</details>\n'
+        if not re.search(pattern, content, flags=re.DOTALL):
+            pattern = r'\n### CLI\n\n```sh\n.*?```\n'
         content = re.sub(pattern, cli_section, content, flags=re.DOTALL)
         with open('README.md', 'w') as f:
             f.write(content)

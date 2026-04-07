@@ -831,8 +831,51 @@ Usage: panix <command> [flags]
 Universal NixOS Deployment Tool
 
 Flags:
+  -h, --help                  Show context-sensitive help.
+  -c, --config="panix.yml"    Config file ($PANIX_CONFIG)
+      --version               Show version ($PANIX_VERSION)
+
+Commands:
+  schema [flags]
+    Generate YAML schema for configuration files
+
+  eval [flags]
+    Evaluate config (process templates and anchors) and output result
+
+  inspect [flags]
+    Inspect machine per host
+
+  build [flags]
+    Build all selected closures
+
+  deploy [flags]
+    Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
+    activate)
+
+  secrets [flags]
+    Deploy secrets to all machines
+
+  rollback [<generation>] [flags]
+    Rollback to a previous generation
+
+Run "panix <command> --help" for more information on a command.
+```
+
+<details>
+<summary>Deploy command flags</summary>
+
+```sh
+> panix deploy --help
+Usage: panix deploy [flags]
+
+Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
+activate)
+
+Flags:
   -h, --help                       Show context-sensitive help.
   -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
+      --version                    Show version ($PANIX_VERSION)
+
   -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
                                    and names are already registered as tags)
                                    ($PANIX_TAGS)
@@ -881,33 +924,9 @@ Flags:
   -d, --debug                      Debug output (enables logging) ($PANIX_DEBUG)
       --cpu-profile=STRING         Path for cpu profiling to file, declaring it
                                    enables it ($PANIX_CPU_PROFILE)
-      --version                    Show version ($PANIX_VERSION)
-
-Commands:
-  schema [flags]
-    Generate YAML schema for configuration files
-
-  eval [flags]
-    Evaluate config (process templates and anchors) and output result
-
-  inspect [flags]
-    Inspect machine per host
-
-  build [flags]
-    Build all selected closures
-
-  deploy [flags]
-    Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
-    activate)
-
-  secrets [flags]
-    Deploy secrets to all machines
-
-  rollback [<generation>] [flags]
-    Rollback to a previous generation
-
-Run "panix <command> --help" for more information on a command.
 ```
+
+</details>
 
 ### YAML
 
