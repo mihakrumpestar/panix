@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
 	"github.com/pkg/errors"
 )
 
@@ -20,9 +21,9 @@ func (c *Config) ValidateStructTags() error {
 		return errors.Wrap(err, "failed to register abspath validation")
 	}
 
-	validate.RegisterStructValidation(validateOrderedMap[string, *Flake], OrderedMap[string, *Flake]{})
-	validate.RegisterStructValidation(validateOrderedMap[string, *Configuration], OrderedMap[string, *Configuration]{})
-	validate.RegisterStructValidation(validateOrderedMap[string, *Machine], OrderedMap[string, *Machine]{})
+	validate.RegisterStructValidation(validateOrderedMap[string, *Flake], orderedmap.OrderedMap[string, *Flake]{})
+	validate.RegisterStructValidation(validateOrderedMap[string, *Configuration], orderedmap.OrderedMap[string, *Configuration]{})
+	validate.RegisterStructValidation(validateOrderedMap[string, *Machine], orderedmap.OrderedMap[string, *Machine]{})
 
 	err = validate.Struct(c)
 	if err != nil {
