@@ -1,9 +1,11 @@
 package flags
 
 import (
+	"os"
 	"time"
 
 	"dario.cat/mergo"
+	"github.com/mattn/go-isatty"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -16,6 +18,14 @@ const (
 	ActivationModeBoot        ActivationMode = "boot"         // make the configuration the boot default
 	ActivationModeTest        ActivationMode = "test"         // activate the configuration, but don't make it the boot default
 	ActivationModeDryActivate ActivationMode = "dry-activate" // show what would be done if this configuration were activated
+)
+
+type OutputMode string
+
+const (
+	OutputModeTui     OutputMode = "tui"     // interactive TUI
+	OutputModeConsole OutputMode = "console" // human-readable log output to stdout
+	OutputModeJSON    OutputMode = "json"    // JSON log output to stdout
 )
 
 type GlobalFlags struct {
@@ -33,6 +43,7 @@ type WorkflowFlags struct {
 	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
 	ActivationMode       ActivationMode `yaml:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
+	Output               OutputMode     `yaml:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json"`                                                         //nolint:lll
 
 	Tui     `yaml:"tui" embed:"" prefix:"tui."` //nolint:embeddedstructfieldcheck
 	Logging `yaml:"logging"`                    //nolint:embeddedstructfieldcheck
@@ -56,9 +67,23 @@ type Tui struct {
 
 type Logging struct {
 	Log        bool   `yaml:"log" short:"l" help:"Enable logging to file"`
-	LogFile    string `yaml:"log_file" help:"Log file path" default:"panix.log"`
+	LogFile    string `yaml:"log_file" help:"Log file path (epoch timestamp appended before .log)" default:"panix.log"`
 	Debug      bool   `yaml:"debug" short:"d" help:"Debug output (enables logging)"`
 	CPUProfile string `yaml:"cpu_profile" help:"Path for cpu profiling to file, declaring it enables it"`
+}
+
+func (f *Flags) DefautlIfNoTTY() {
+	if f.Output == "" {
+		if !IsTerminal() {
+			f.Output = OutputModeConsole
+		} else {
+			f.Output = OutputModeTui
+		}
+	}
+
+	if f.Output != OutputModeTui {
+		f.ExitOnComplete = true
+	}
 }
 
 func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
@@ -68,4 +93,12 @@ func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
 	}
 
 	return nil
+}
+
+// Helpers
+
+func IsTerminal() bool {
+	fd := os.Stdout.Fd()
+
+	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
 }

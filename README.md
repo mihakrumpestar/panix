@@ -572,16 +572,77 @@ flags:
 </details>
 
 <details>
-<summary><strong>CI/CD Ready and Dry Run</strong></summary>
+<summary><strong>Output Modes, Logging, and CI/CD</strong></summary>
+
+Panix supports three output modes via the `--output` flag:
+
+| Mode | Description |
+|------|-------------|
+| `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
+| `console` | Human-readable log output to stdout (auto-selected when no TTY detected) |
+| `json` | JSON-structured log output to stdout |
 
 ```bash
-# Exit when complete, fail fast on any error
-panix --exit-on-complete --require-all-success
+# Interactive TUI (default)
+panix deploy
 
+# Human-readable output (no TUI)
+panix deploy --output console
+
+# JSON output (for piping to tools)
+panix deploy --output json
+
+# JSON output with file logging
+panix deploy --output json --log
+```
+
+When no TTY is detected, `--output console` is automatically selected since the TUI cannot render without a terminal.
+
+**File logging** is enabled with `--log` and writes structured JSON to a file with an epoch timestamp in the name (e.g. `panix.1746565600.log`):
+
+```bash
+panix deploy --log                        # Log to panix.<epoch>.log
+panix deploy --log --log-file deploy.log  # Log to deploy.<epoch>.log
+```
+
+Console/JSON output includes:
+
+- Structured fields: xpath, phase, description, command, duration, status, output
+- `command_start` / `command_end` events per command with duration in seconds
+- `phase_start` / `phase_end` events per phase
+- `workflow_end` with final state of all machines (status, phase, total duration, error)
+- Failed events are logged at `ERROR` level, successful ones at `INFO`
+
+Example:
+
+```json
+...
+{"level":"info","xpath":"root/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh -q -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/pari6y3138wfwhc5ayyhs4m28h7qyhv2-nixos-system-personal-workstation-26.05.20260405.68d8aa3/bin/switch-to-configuration switch","event":"command_start","status_running":"activating configuration","time":"2026-04-08T23:58:59+02:00","message":"command started"}
+{"level":"info","xpath":"root/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh -q -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/pari6y3138wfwhc5ayyhs4m28h7qyhv2-nixos-system-personal-workstation-26.05.20260405.68d8aa3/bin/switch-to-configuration switch","event":"command_end","duration":1.941539447,"output":"Checking switch inhibitors... done\nInstalling Lanzaboote to \"/boot\"...\nCollecting garbage...\nSuccessfully installed Lanzaboote.\nactivating the configuration...\nsetting up /etc...\nreloading user units for krumpy-miha...\nreloading user units for root...\nrestarting sysinit-reactivation.target\nthe following new units were started: NetworkManager-dispatcher.service","status":"success","time":"2026-04-08T23:59:01+02:00","message":"command finished"}
+{"level":"info","phase":"activate","xpath":"root/infrastructure/personal-workstation/personal-workstation","event":"phase_end","duration":2.074027147,"status":"success","time":"2026-04-08T23:59:01+02:00","message":"Finished activate of root/infrastructure/personal-workstation/personal-workstation"}
+{"level":"error","event":"workflow_end","machines":{"root/infrastructure/personal-workstation/fake":{"status":"failed","phase":"inspect","duration":0.065123731,"error":"reachability check failed: regular SSH is unreachable"},"root/infrastructure/personal-workstation/personal-workstation":{"status":"done","phase":"activate","duration":6.746481573}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
+```
+
+**CI/CD** usage:
+
+```bash
+# Fail immediately on first error
+panix deploy --require-all-success
+
+# In TUI mode (console mode does this automatically), you can force it exit when workflow finishes (default is that it stays open)
+panix deploy --exit-on-complete
+```
+
+</details>
+
+<details>
+<summary><strong>Dry Run</strong></summary>
+
+```bash
 # Dry run: show what would happen
 panix --dry-run
 
-# Dry run with real status queries (inspects machines, doesn't build/transfer)
+# Dry run with real status queries (only inspects machines so that it presents what would happen based on machines state)
 panix --dry-run-with-inspect
 ```
 
@@ -925,6 +986,8 @@ Flags:
       --activation-mode="switch"
                                    Activation mode: check, switch, boot, test,
                                    dry-activate ($PANIX_ACTIVATION_MODE)
+      --output="tui"               Output mode: tui, console, json
+                                   ($PANIX_OUTPUT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
                                    ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
       --tui.show-active-only       Show only running or errored logs
@@ -939,7 +1002,8 @@ Flags:
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
   -l, --log                        Enable logging to file ($PANIX_LOG)
-      --log-file="panix.log"       Log file path ($PANIX_LOG_FILE)
+      --log-file="panix.log"       Log file path (epoch timestamp appended
+                                   before .log) ($PANIX_LOG_FILE)
   -d, --debug                      Debug output (enables logging) ($PANIX_DEBUG)
       --cpu-profile=STRING         Path for cpu profiling to file, declaring it
                                    enables it ($PANIX_CPU_PROFILE)
@@ -980,6 +1044,7 @@ flags: # Listed are default values, all also overridable using CLI arguments
   override_local_machine: my-laptop    # Override which machine is considered local (no SSH)
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
+  output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
   bootstrap:
     disable_disko: false               # Disable disko tool build/transfer/bootstrap
   tui:
@@ -988,7 +1053,7 @@ flags: # Listed are default values, all also overridable using CLI arguments
     show_commands_in_labels: false     # Show raw commands instead of descriptions (keybind c)
     command_output_max_height: 8       # Max height for command output viewports
   logging:
-    log: false                         # Enable logging to file
+    log: false                         # Enable logging to file (epoch timestamp appended before .log)
     log_file: panix.log                # Log file path
     debug: false                       # Enable debug output (enables logging)
     cpu_profile: ""                    # Path for CPU profiling file

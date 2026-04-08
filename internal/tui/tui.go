@@ -140,7 +140,7 @@ func startCPUProfile(path string) (func(), error) {
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		tea.RequestWindowSize,
-		m.startWorkflow(),
+		m.startResetableWorkflow(),
 		m.workflowUpdateHook(),
 	)
 }
@@ -159,6 +159,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case errMsg:
 		resetable.err = msg.err
+
+		log.Error().Err(msg.err).Msg("errMsg")
+
 		m.quitting = true
 
 		return m, tea.Quit
@@ -253,7 +256,7 @@ func (m *model) viewMainContent() string {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := resetable.spinners.Debug()
 		debugContent += resetable.viewports.Debug()
-		debugContent += resetable.workflow.State().TargetsLogs.Debug()
+		debugContent += resetable.workflow.State().TargetsLogs.Debug(m.conf.Phases)
 		builder.WriteString(debugHeader + debugContent)
 	}
 

@@ -5,7 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/rs/zerolog/log"
+	"github.com/pkg/errors"
 )
 
 type resetable struct {
@@ -20,7 +20,7 @@ type resetable struct {
 // workflowDoneMsg signals the workflow has completed.
 type workflowDoneMsg struct{}
 
-func (m *model) startWorkflow() tea.Cmd {
+func (m *model) startResetableWorkflow() tea.Cmd {
 	return func() tea.Msg {
 		workflow, err := workflow.NewWorkflow(m.ctx, m.conf)
 		if err != nil {
@@ -40,26 +40,29 @@ func (m *model) startWorkflow() tea.Cmd {
 			phaseStatus: NewPhaseStatus(),
 		})
 
-		err = workflow.CreateWorkflow()
+		err = workflow.StartWorkflow()
 		if err != nil {
-			log.Error().Err(err).Msg("Workflow execution failed")
+			logFinalState(workflow)
 
 			return errMsg{err}
-		} else {
-			log.Info().Msg("Workflow completed successfully")
 		}
+
+		logFinalState(workflow)
 
 		return workflowDoneMsg{}
 	}
 }
 
 func (m *model) restartWorkflow() tea.Cmd {
-	if r := m.resetable.Load(); r != nil {
+	r := m.resetable.Load()
+	if r != nil {
 		err := r.workflow.Cancel()
 		if err != nil {
-			log.Error().Err(err).Msg("failed to cancel workflow")
+			return func() tea.Msg {
+				return errMsg{errors.Wrap(err, "failed to cancel workflow")}
+			}
 		}
 	}
 
-	return m.startWorkflow()
+	return m.startResetableWorkflow()
 }

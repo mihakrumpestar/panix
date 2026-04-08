@@ -2,18 +2,21 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -73,6 +76,10 @@ func (w *Workflow) State() *WorkflowState {
 	return w.state
 }
 
+func (w *Workflow) WorkflowPhases() []phases.Phase {
+	return w.conf.Phases
+}
+
 func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
@@ -125,29 +132,32 @@ func (w *Workflow) Phase(
 
 	phaseLog.TimeAndState().StartTimer()
 
-	defer func() {
-		phaseLog.TimeAndState().EndTimerWithError(err)
-	}()
-
-	log.Info().
-		Str("phase", string(phaseLog.Phase())).
+	sublog := log.With().
+		Str("phase", string(phase)).
 		Str("xpath", xpath.String()).
-		Msgf("Started %s of %s", phaseLog.Phase(), xpath)
+		Logger()
+
+	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", phase, xpath)
 
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phase != phases.Inspect)
 	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, machine, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
-	log.Info().
-		Str("phase", string(phaseLog.Phase())).
-		Str("xpath", xpath.String()).
-		Msgf("Finished %s of %s", phaseLog.Phase(), xpath)
+	phaseLog.TimeAndState().EndTimerWithError(err)
+	duration, _ := phaseLog.TimeAndState().Duration()
+
+	logger.ResultEvent(sublog,
+		fmt.Sprintf("Finished %s of %s", phase, xpath),
+		err,
+		func(event *zerolog.Event) {
+			event.Str("event", "phase_end").Dur("duration", duration)
+		})
 
 	return err
 }
 
-// CreateWorkflow orchestrates the execution of all phases.
-func (w *Workflow) CreateWorkflow() error {
+// StartWorkflow orchestrates the execution of all phases.
+func (w *Workflow) StartWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
 	w.RootTree(func(idx int, machine *config.Machine) {

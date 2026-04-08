@@ -31,6 +31,10 @@ func (pLog *PhaseLog) Phase() phases.Phase {
 	return pLog.phase
 }
 
+func (pLog *PhaseLog) CreatorXpath() attributes.Xpath {
+	return pLog.creatorXpath
+}
+
 func (pLog *PhaseLog) Last() *command.CommandLog {
 	length := pLog.commandLogs.Length()
 	if length == 0 {
