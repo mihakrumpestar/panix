@@ -47,8 +47,8 @@ type CLI struct {
 	Rollback struct {
 		flags.WorkflowFlags
 
-		Generation int `arg:"" name:"generation" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
-	} `cmd:"" help:"Rollback to a previous generation"`
+		Generation int `name:"gen" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
+	} `cmd:"" help:"Rollback to a previous generation, use --gen=<number> flag, default is -1"`
 }
 
 func main() {
@@ -80,7 +80,7 @@ func main() {
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Deploy.WorkflowFlags, phases.PhasesInOrder()))
 	case "secrets":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Secrets.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Secrets}))
-	case "rollback", "rollback <generation>":
+	case "rollback":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Rollback.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Rollback},
 			func(conf *config.Config) {
 				conf.RollbackGeneration = cli.Rollback.Generation
