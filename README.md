@@ -938,8 +938,8 @@ Commands:
   secrets [flags]
     Deploy secrets to all machines
 
-  rollback [<generation>] [flags]
-    Rollback to a previous generation
+  rollback [flags]
+    Rollback to a previous generation, use --gen=<number> flag, default is -1
 
 Run "panix <command> --help" for more information on a command.
 ```
