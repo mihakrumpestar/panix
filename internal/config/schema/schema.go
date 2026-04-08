@@ -12,7 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
 	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
@@ -705,13 +705,13 @@ func GenerateSchema(outputPath string) error {
 
 	dir := filepath.Dir(outputPath)
 	if dir != "" && dir != "." {
-		err = os.MkdirAll(dir, flags.DefaultDirPermissions)
+		err = os.MkdirAll(dir, filepermissions.DefaultDirPermissions)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create directory %s", dir)
 		}
 	}
 
-	err = os.WriteFile(outputPath, schemaYAML, flags.DefaultLogFilePermissions)
+	err = os.WriteFile(outputPath, schemaYAML, filepermissions.DefaultFilePermissions)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write schema to %s", outputPath)
 	}

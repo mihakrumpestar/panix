@@ -100,6 +100,10 @@ func (c *CLI) runTui(gf flags.GlobalFlags, wf flags.WorkflowFlags, commandPhases
 		modifier(conf)
 	}
 
+	if conf.Flags.Output != flags.OutputModeTui {
+		return errors.Wrap(tui.NewHeadless(context.Background(), conf), "headless error")
+	}
+
 	return errors.Wrap(tui.NewTui(context.Background(), conf), "TUI error")
 }
 

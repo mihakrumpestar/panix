@@ -33,13 +33,12 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt.env)
 
-	commandLog.TimeAndState.StartTimer()
+	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
 
 	var execErr error
 
 	defer func() {
-		commandLog.TimeAndState.EndTimerWithError(execErr)
-		ex.onUpdateHook()
+		endLog(execErr, commandLog)
 	}()
 
 	cmdCtx, cancel := context.WithTimeout(ex.ctx, ex.timeout)

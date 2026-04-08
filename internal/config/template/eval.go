@@ -9,13 +9,13 @@ import (
 	"github.com/goccy/go-yaml/lexer"
 	"github.com/goccy/go-yaml/parser"
 	"github.com/goccy/go-yaml/printer"
+	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
 const (
-	yamlIndent                             = 2
-	DefaultEvalFilePermissions os.FileMode = 0600
+	yamlIndent = 2
 )
 
 func EvalConfig(configPath string, outputPath string) error {
@@ -79,7 +79,7 @@ func writeOutput(data []byte, outputPath string) error {
 		outputPath = "evaluated.yaml"
 	}
 
-	err := os.WriteFile(outputPath, data, DefaultEvalFilePermissions)
+	err := os.WriteFile(outputPath, data, filepermissions.DefaultFilePermissions)
 	if err != nil {
 		return errors.Wrap(err, "failed to write output file")
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/gookit/goutil/dump"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
+	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -61,7 +62,6 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
-		dump.P(conf.Root)
 	}
 
 	return conf, nil
@@ -108,7 +108,9 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 		conf.ColorScheme = defaultColorScheme()
 	}
 
-	err = flags.InitLogging(conf.Flags.Logging)
+	conf.Flags.DefautlIfNoTTY()
+
+	err = logger.InitLogging(conf.Flags.Logging, conf.Flags.Output)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize logging")
 	}
