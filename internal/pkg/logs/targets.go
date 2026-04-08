@@ -104,46 +104,28 @@ func (ts *TargetsLogs) Clear() {
 	}
 }
 
-func (ts *TargetsLogs) ComputeStatisticsPerPhase() *stats.StatisticsPerPhase {
+func (ts *TargetsLogs) ComputeStatisticsPerPhase(workflowPhases []phases.Phase) *stats.StatisticsPerPhase {
 	statistics := stats.NewStatisticsPerPhase()
 
 	for _, pair := range ts.logs.Pairs() {
 		targetLogs := pair.Value
 
-		if len(targetLogs.children) != 0 {
+		ms := targetLogs.ComputeMachineState(workflowPhases)
+		if ms.Status == "" {
 			continue
 		}
 
-		log := targetLogs.GetCurrentTargetLog()
-		if log == nil {
-			continue
-		}
-
-		timeAndState := log.TimeAndState()
-
-		if !timeAndState.IsFinished() {
-			statistics.Add(log.Phase(), stats.Running, pair.Key)
-
-			continue
-		}
-
-		if timeAndState.GetEndError() != nil {
-			statistics.Add(log.Phase(), stats.Failed, pair.Key)
-
-			continue
-		}
-
-		statistics.Add(log.Phase(), stats.Done, pair.Key)
+		statistics.Add(ms.Phase, ms.Status, pair.Key)
 	}
 
 	return statistics
 }
 
-func (ts *TargetsLogs) Debug() string {
+func (ts *TargetsLogs) Debug(workflowPhases []phases.Phase) string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "\nLogs: %d\n", ts.logs.Len())
 
-	fmt.Fprintf(&builder, "\n  Stats: %v\n\n", ts.ComputeStatisticsPerPhase())
+	fmt.Fprintf(&builder, "\n  Stats: %v\n\n", ts.ComputeStatisticsPerPhase(workflowPhases))
 
 	for _, pair := range ts.logs.Pairs() {
 		var parent attributes.Xpath

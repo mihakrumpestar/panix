@@ -22,6 +22,7 @@ require (
 	github.com/kirill-scherba/omap v0.1.0
 	github.com/lrstanley/bubblezone/v2 v2.0.0
 	github.com/lucasb-eyer/go-colorful v1.4.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.35.0
 	github.com/stoewer/go-strcase v1.3.1
@@ -46,7 +47,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.22 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect

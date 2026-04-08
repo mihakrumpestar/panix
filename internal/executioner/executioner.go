@@ -5,8 +5,11 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type Executioner struct {
@@ -116,25 +119,52 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
 	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 
-	commandLog.TimeAndState.StartTimer()
+	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, "")
 
 	var execErr error
 
 	defer func() {
-		commandLog.TimeAndState.EndTimerWithError(execErr)
-		ex.onUpdateHook()
+		endLog(execErr, commandLog)
 	}()
-
-	ex.onUpdateHook()
 
 	if ex.dryRun {
 		return nil
 	}
 
 	execErr = execFunc(commandLog)
-	if execErr != nil {
-		return execErr
+
+	return execErr
+}
+
+func (ex *Executioner) startCommandLog(
+	commandLog *logs_command.CommandLog,
+	description,
+	statusIfRunning,
+	command string,
+) func(error, *logs_command.CommandLog) {
+	commandLog.TimeAndState.StartTimer()
+
+	ctx := log.With().
+		Str("xpath", ex.phaseLog.CreatorXpath().String()).
+		Str("phase", string(ex.phaseLog.Phase())).
+		Str("description", description)
+	if command != "" {
+		ctx = ctx.Str("command", command)
 	}
 
-	return nil
+	sublog := ctx.Logger()
+
+	sublog.Info().Str("event", "command_start").Str("status_running", statusIfRunning).Msg("command started")
+
+	return func(err error, commandLog *logs_command.CommandLog) {
+		commandLog.TimeAndState.EndTimerWithError(err)
+		duration, _ := commandLog.TimeAndState.Duration()
+
+		logger.ResultEvent(sublog, "command finished", err, func(event *zerolog.Event) {
+			event.Str("event", "command_end").Dur("duration", duration).
+				Str("output", string(CleanAnsiAndSpace(commandLog.Bytes())))
+		})
+
+		ex.onUpdateHook()
+	}
 }

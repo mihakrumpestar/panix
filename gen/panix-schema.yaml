@@ -52,9 +52,17 @@ properties:
             description: Enable logging to file
           log_file:
             type: string
-            description: "Log file path (default: panix.log)"
+            description: "Log file path (epoch timestamp appended before .log) (default: panix.log)"
             default: panix.log
         additionalProperties: false
+      output:
+        type: string
+        description: "Output mode: tui, console, json (default: tui)"
+        default: tui
+        enum:
+        - tui
+        - console
+        - json
       override_local_machine:
         type: string
         description: Hostname of the machine that is local (won't use ssh to connect to it)

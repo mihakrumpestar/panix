@@ -6,6 +6,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
@@ -46,6 +48,53 @@ func (ts *TargetLogs) AddParent(parent *TargetLogs) error {
 	parent.children = append(parent.children, ts)
 
 	return nil
+}
+
+type MachineState struct {
+	Status   stats.StatsState
+	Phase    phases.Phase
+	Duration time.Duration
+	Error    error
+}
+
+func (ts *TargetLogs) ComputeMachineState(orderedPhases []phases.Phase) MachineState {
+	if len(ts.children) != 0 {
+		return MachineState{}
+	}
+
+	machineState := MachineState{}
+
+	for _, phase := range orderedPhases {
+		pl := ts.PhaseLogs.Get(phase)
+		if pl == nil {
+			continue
+		}
+
+		tas := pl.TimeAndState()
+		machineState.Phase = phase
+
+		if !tas.IsFinished() {
+			machineState.Status = stats.Running
+			machineState.Duration, _ = tas.DurationOrElapsedTime()
+
+			return machineState
+		}
+
+		duration, _ := tas.DurationOrElapsedTime()
+		machineState.Duration += duration
+
+		endErr := tas.GetEndError()
+		if endErr != nil {
+			machineState.Status = stats.Failed
+			machineState.Error = endErr
+
+			return machineState
+		}
+	}
+
+	machineState.Status = stats.Done
+
+	return machineState
 }
 
 func (ts *TargetLogs) GetCachedDurationAndError() DurationAndError {
