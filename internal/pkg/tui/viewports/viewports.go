@@ -357,7 +357,7 @@ func (v *Viewports) createViewport(xpath attributes.Xpath, content string, inden
 	proc, contentHeight, finalWidth := v.processViewportContent(content, width, opts)
 
 	finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
-	v.configureViewportModel(viewportInstance, proc, finalWidth, finalHeight)
+	v.configureViewportModel(xpath, viewportInstance, proc, finalWidth, finalHeight)
 
 	rendered := v.renderViewport(viewportInstance, contentHeight, finalHeight, opts.useBorder, opts.noPadding)
 	rendered = zone.Mark(xpath.String(), rendered)
@@ -435,14 +435,14 @@ func (v *Viewports) calculateFinalHeight(contentHeight int, opts viewportOptions
 }
 
 // configureViewportModel configures the viewport model with processed content.
-func (v *Viewports) configureViewportModel(viewportInstance *Viewport, proc string, width, finalHeight int) {
+func (v *Viewports) configureViewportModel(xpath attributes.Xpath, viewportInstance *Viewport, proc string, width, finalHeight int) {
 	viewportInstance.model.SetWidth(width)
 	viewportInstance.model.SetHeight(finalHeight)
 
 	yOffset, pct := viewportInstance.model.YOffset(), viewportInstance.model.ScrollPercent()
 	viewportInstance.model.SetContent(proc)
 
-	if pct == 1 {
+	if pct == 1 && xpath != v.mainXpath {
 		viewportInstance.model.GotoBottom()
 	} else {
 		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
