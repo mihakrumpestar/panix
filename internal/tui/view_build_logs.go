@@ -43,7 +43,7 @@ func (m *model) ViewBuildLogs() string {
 	colors := m.conf.ColorScheme
 
 	// Build tree for each flake
-	for _, flakePair := range m.conf.Root.Flakes.Pairs() {
+	for _, flakePair := range m.conf.Fleet.Flakes.Pairs() {
 		flake := flakePair.Value
 		flakeNode := m.createNode(0, colors.Flake, &flake.Attributes, true)
 

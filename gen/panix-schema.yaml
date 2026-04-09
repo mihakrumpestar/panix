@@ -101,7 +101,7 @@ properties:
             description: Show raw commands instead of descriptions as labels in build logs (keybind c)
         additionalProperties: false
     additionalProperties: false
-  root:
+  fleet:
     type: object
     properties:
       activation_mode:
@@ -260,7 +260,7 @@ properties:
     - flakes
     additionalProperties: false
 required:
-- root
+- fleet
 additionalProperties: true
 definitions:
   Bootstrap:
