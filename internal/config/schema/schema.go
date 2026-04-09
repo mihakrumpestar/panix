@@ -84,7 +84,7 @@ type TypeDefinition struct {
 	MaxLength            *int                         `yaml:"maxLength,omitempty"`
 }
 
-// Schema represents the root YAML schema document.
+// Schema represents the YAML schema document.
 type Schema struct {
 	Schema               string         `yaml:"$schema"`
 	ID                   string         `yaml:"$id,omitempty"`

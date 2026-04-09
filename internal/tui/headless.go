@@ -58,7 +58,7 @@ func logFinalState(workflow *workflow.Workflow) {
 	targetsLogs := workflow.State().TargetsLogs
 	workflowPhases := workflow.WorkflowPhases()
 
-	workflow.RootTree(func(_ int, machine *config.Machine) {
+	workflow.FleetTree(func(_ int, machine *config.Machine) {
 		machineStateI := targetsLogs.MustGet(machine.Xpath).ComputeMachineState(workflowPhases)
 		if machineStateI.Status == "" {
 			return

@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
+
+fleet:
+  flakes:
+    # An arbitrary name for your flake
+    my-config:
+      url: path:./my-nixos-flake # Path to your NixOS flake or Git repo link
+      configurations:
+        # Matches "my-server" in nixosConfigurations
+        my-server:
+          machines:
+            # Matches "my-server" in SSH config
+            my-server:
+              # Or if it is not in SSH config, specify SSH parameters
+              ssh:
+                hostname: my-hostname

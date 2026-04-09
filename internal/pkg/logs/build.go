@@ -5,13 +5,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 )
 
-func InitBuildLogs(root *config.Fleet, logging flags.Logging) (*TargetsLogs, error) {
+func InitBuildLogs(fleet *config.Fleet, logging flags.Logging) (*TargetsLogs, error) {
 	targetsLogs, err := NewTargetsLogs(logging)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, pair := range root.Flakes.Omap.Pairs() {
+	for _, pair := range fleet.Flakes.Omap.Pairs() {
 		flake := pair.Value
 
 		var flakeLogs *TargetLogs

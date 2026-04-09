@@ -42,13 +42,13 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
-	err = conf.initRoot()
+	err = conf.initFleet()
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
 	// Filter based on tags and disabled flags
-	err = conf.filterRoot()
+	err = conf.filterFleet()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
@@ -118,7 +118,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 	return nil
 }
 
-func (c *Config) initRoot() error {
+func (c *Config) initFleet() error {
 	err := c.Fleet.Init(c.Flags)
 	if err != nil {
 		return err

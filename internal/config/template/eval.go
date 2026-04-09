@@ -118,7 +118,7 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 
 	for _, mappingValue := range mappingNode.Values {
 		key := mappingValue.Key.GetToken().Value
-		if key == "flags" || key == "root" {
+		if key == "flags" || key == "fleet" {
 			if val, exists := decodedMap[key]; exists {
 				result = append(result, yaml.MapItem{
 					Key:   key,

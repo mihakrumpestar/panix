@@ -33,9 +33,6 @@ type ColorSchemeTable struct {
 }
 
 type ColorSchemeTree struct {
-	Root       lipgloss.Style
-	Node       lipgloss.Style
-	Leaf       lipgloss.Style
 	Enumerator lipgloss.Style
 }
 
@@ -87,9 +84,6 @@ func defaultColorScheme() *ColorScheme {
 			SelectionHighlightBackground: makeBackgroundStyle("#444444"),
 		},
 		Tree: ColorSchemeTree{
-			Root:       makeBoldForegroundStyle("#F1FA8C"),
-			Node:       makeForegroundStyle("#8BE9FD"),
-			Leaf:       makeForegroundStyle("#50FA7B"),
 			Enumerator: borderStyle,
 		},
 		Spinner:         makeForegroundStyle("#8BE9FD"),
