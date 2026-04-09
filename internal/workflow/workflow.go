@@ -41,7 +41,7 @@ type WorkflowState struct {
 }
 
 func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
-	targetsLogs, err := logs.InitBuildLogs(conf.Root, conf.Flags.Logging)
+	targetsLogs, err := logs.InitBuildLogs(conf.Fleet, conf.Flags.Logging)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize build logs")
 	}
@@ -206,7 +206,7 @@ func (w *Workflow) MachineCount() int {
 func (w *Workflow) RootTree(function func(idx int, machine *config.Machine)) {
 	idx := 0
 
-	for _, flakePair := range w.conf.Root.Flakes.Omap.Pairs() {
+	for _, flakePair := range w.conf.Fleet.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		for _, configPair := range flake.Configurations.Omap.Pairs() {
 			configuration := configPair.Value

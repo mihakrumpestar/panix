@@ -23,7 +23,7 @@ func (c *Config) filterUnusedPhases() {
 func (c *Config) hasRequiredPhases() hasPhases {
 	var has hasPhases
 
-	for _, flakePair := range c.Root.Flakes.Pairs() {
+	for _, flakePair := range c.Fleet.Flakes.Pairs() {
 		for _, cfgPair := range flakePair.Value.Configurations.Pairs() {
 			for _, machinePair := range cfgPair.Value.Machines.Pairs() {
 				machine := machinePair.Value
