@@ -185,7 +185,7 @@ func (m *model) computeStatsTableHash(targetsLogs *logs.TargetsLogs, usableWidth
 	targetsLogs.CalculateDurationAndError()
 
 	// Hash each machine's state
-	m.resetable.Load().workflow.RootTree(func(idx int, machine *config.Machine) {
+	m.resetable.Load().workflow.FleetTree(func(idx int, machine *config.Machine) {
 		// Separator to prevent collisions between machines
 		_, _ = hasher.Write([]byte{0xFF})
 
@@ -246,7 +246,7 @@ func (m *model) computeStatsTableHash(targetsLogs *logs.TargetsLogs, usableWidth
 func (m *model) populateTableRows(tbl *table.Table, statsTable *StatsTable, targetsLogs *logs.TargetsLogs) {
 	var prevFlakeName, prevConfigName string
 
-	m.resetable.Load().workflow.RootTree(func(idx int, machine *config.Machine) {
+	m.resetable.Load().workflow.FleetTree(func(idx int, machine *config.Machine) {
 		configuration := machine.ParentConfiguration
 		flake := configuration.ParentFlake
 		xpath := machine.Xpath
