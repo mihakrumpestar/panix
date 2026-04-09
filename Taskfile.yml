@@ -92,6 +92,21 @@ tasks:
         if not re.search(pattern, content, flags=re.DOTALL):
             pattern = r'\n### CLI\n\n```sh\n.*?```\n'
         content = re.sub(pattern, cli_section, content, flags=re.DOTALL)
+        with open('examples/panix.yml', 'r') as f:
+            panix_yml = f.read()
+        panix_yml_section = "```yaml\n" + panix_yml + "\n```\n"
+        content = re.sub(
+            r'(### 3\. Create panix\.yml\n\n).*?(\n### 4\.)',
+            lambda m: m.group(1) + panix_yml_section + m.group(2),
+            content,
+            flags=re.DOTALL,
+        )
+        content = re.sub(
+            r'(#### Minimal Example\n\n).*?(\n#### Full Example)',
+            lambda m: m.group(1) + panix_yml_section + m.group(2),
+            content,
+            flags=re.DOTALL,
+        )
         with open('README.md', 'w') as f:
             f.write(content)
         EOF

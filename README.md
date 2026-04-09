@@ -54,7 +54,7 @@ Panix is a deployment orchestrator for NixOS flakes. It provides:
 - **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
 - **Phase-oriented execution**: Six sequential phases - Inspect, Build, Bootstrap, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
 - **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
-- **Bootstrap support**: Non-NixOS machines can be converted to NixOS via kexec and `disko`, with full support for disk encryption, TPM enrolment, and custom hooks at multiple stages.
+- **Bootstrap support**: machines can be converted to NixOS via NixOS live install or any live install or previusly installed distro using kexec and `disko`, with full support for custom hooks and secrets at multiple stages.
 - **Flake-agnostic configuration**: The deployment configuration is separate from your flake. No modifications to your flake are required to use Panix.
 
 ---
@@ -101,14 +101,14 @@ Your infrastructure has natural hierarchies: flakes contain configurations, conf
 
 <div align="center">
 
-Root → Flake → Configuration → Machine
+Fleet → Flake → Configuration → Machine
 
 </div>
 
-Attributes at each level cascade down, without overriding child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the root, extend at any level:
+Attributes at each level cascade down, without overriding child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the fleet, extend at any level:
 
 ```yaml
-root:
+fleet:
   tags: [production]              # Inherited by all descendants
   secrets:                        # Inherited by all descendants
     - local_path: ./secrets/common.key
@@ -311,7 +311,7 @@ bootstrap:
 Deploy sensitive files and directories to your machines with proper ownership and permissions. The secrets phase handles the transfer of plain files/directories via `rsync` with configurable user/group ownership and file permissions:
 
 ```yaml
-root:
+fleet:
   secrets:                              # Inherited by all machines
     - local_path: ./secrets/common.key
       remote_path: /var/secrets/common.key
@@ -337,7 +337,7 @@ root:
 
 Key features:
 
-- **Inheritance**: Secrets defined at root/flake/configuration levels accumulate down to machines
+- **Inheritance**: Secrets defined at fleet/flake/configuration levels accumulate down to machines
 - **Ownership control**: Optionaly set `uid` and `gid` for remote file ownership. Default are the SSH user's `uid` and `gid`.
 - **Permission control**: Optionaly set `permissions` using octal notation (e.g., `0600`, `0644`). Default is `0700`.
 - **Directory support**: Transfer entire directories by pointing `local_path` to a directory
@@ -387,7 +387,7 @@ The `<arch>` placeholder is automatically replaced with the detected architectur
 Pass additional flags to nix commands (`nix build`, `nix copy`, `nixos-install`) through configuration:
 
 ```yaml
-root:
+fleet:
   nix:
     extra_flags: ["--option", "sandbox", "false"]  # Applied to both build and copy
   
@@ -407,7 +407,7 @@ root:
                 nixos_install_flags: ["--no-bootloader"]  # nixos-install only
 ```
 
-**Inheritance**: Flags accumulate down the hierarchy (root → flake → configuration → machine). Slices are appended, not replaced.
+**Inheritance**: Flags accumulate down the hierarchy (fleet → flake → configuration → machine). Slices are appended, not replaced.
 
 **Scope matters**:
 
@@ -423,7 +423,7 @@ root:
 Your infrastructure may span multiple flakes/repositories. Panix treats this as a first-class concern:
 
 ```yaml
-root:
+fleet:
   flakes:
     infrastructure:
       url: path:../infra-flake
@@ -617,10 +617,10 @@ Example:
 
 ```json
 ...
-{"level":"info","xpath":"root/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh -q -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/pari6y3138wfwhc5ayyhs4m28h7qyhv2-nixos-system-personal-workstation-26.05.20260405.68d8aa3/bin/switch-to-configuration switch","event":"command_start","status_running":"activating configuration","time":"2026-04-08T23:58:59+02:00","message":"command started"}
-{"level":"info","xpath":"root/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh -q -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/pari6y3138wfwhc5ayyhs4m28h7qyhv2-nixos-system-personal-workstation-26.05.20260405.68d8aa3/bin/switch-to-configuration switch","event":"command_end","duration":1.941539447,"output":"Checking switch inhibitors... done\nInstalling Lanzaboote to \"/boot\"...\nCollecting garbage...\nSuccessfully installed Lanzaboote.\nactivating the configuration...\nsetting up /etc...\nreloading user units for krumpy-miha...\nreloading user units for root...\nrestarting sysinit-reactivation.target\nthe following new units were started: NetworkManager-dispatcher.service","status":"success","time":"2026-04-08T23:59:01+02:00","message":"command finished"}
-{"level":"info","phase":"activate","xpath":"root/infrastructure/personal-workstation/personal-workstation","event":"phase_end","duration":2.074027147,"status":"success","time":"2026-04-08T23:59:01+02:00","message":"Finished activate of root/infrastructure/personal-workstation/personal-workstation"}
-{"level":"error","event":"workflow_end","machines":{"root/infrastructure/personal-workstation/fake":{"status":"failed","phase":"inspect","duration":0.065123731,"error":"reachability check failed: regular SSH is unreachable"},"root/infrastructure/personal-workstation/personal-workstation":{"status":"done","phase":"activate","duration":6.746481573}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
+{"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh -q -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/pari6y3138wfwhc5ayyhs4m28h7qyhv2-nixos-system-personal-workstation-26.05.20260405.68d8aa3/bin/switch-to-configuration switch","event":"command_start","status_running":"activating configuration","time":"2026-04-08T23:58:59+02:00","message":"command started"}
+{"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh -q -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/pari6y3138wfwhc5ayyhs4m28h7qyhv2-nixos-system-personal-workstation-26.05.20260405.68d8aa3/bin/switch-to-configuration switch","event":"command_end","duration":1.941539447,"output":"Checking switch inhibitors... done\nInstalling Lanzaboote to \"/boot\"...\nCollecting garbage...\nSuccessfully installed Lanzaboote.\nactivating the configuration...\nsetting up /etc...\nreloading user units for krumpy-miha...\nreloading user units for root...\nrestarting sysinit-reactivation.target\nthe following new units were started: NetworkManager-dispatcher.service","status":"success","time":"2026-04-08T23:59:01+02:00","message":"command finished"}
+{"level":"info","phase":"activate","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","event":"phase_end","duration":2.074027147,"status":"success","time":"2026-04-08T23:59:01+02:00","message":"Finished activate of fleet/infrastructure/personal-workstation/personal-workstation"}
+{"level":"error","event":"workflow_end","machines":{"fleet/infrastructure/personal-workstation/fake":{"status":"failed","phase":"inspect","duration":0.065123731,"error":"reachability check failed: regular SSH is unreachable"},"fleet/infrastructure/personal-workstation/personal-workstation":{"status":"done","phase":"activate","duration":6.746481573}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
 ```
 
 **CI/CD** usage:
@@ -658,7 +658,7 @@ Panix includes a powerful template engine for dynamic YAML configuration. Templa
 Environment variables and dynamic values:
 
 ```yaml
-root:
+fleet:
   flakes:
     my-flake:
       url: {{ env "MY_FLAKE_URL" }}
@@ -676,7 +676,7 @@ root:
 Use conditionals for environment-specific configurations:
 
 ```yaml
-root:
+fleet:
   flakes:
     {{if eq (env "ENV") "production"}}
     prod-flake:
@@ -695,7 +695,7 @@ Define reusable templates with `{{define}}` and invoke them with `{{template}}`:
 # Define template (in YAML comment to avoid LSP errors)
 # {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
 
-root:
+fleet:
   flakes:
     infrastructure:
       configurations:
@@ -728,7 +728,7 @@ bootstrap_defaults: &bootstrap_defaults
     - local_path: /tmp/disko-encryption-password.txt
       remote_path: /tmp/disko-encryption-password.txt
 
-root:
+fleet:
   flakes:
     infrastructure:
       configurations:
@@ -883,16 +883,23 @@ echo -n "test" > /tmp/disko-encryption-password.txt
 ### 3. Create panix.yml
 
 ```yaml
-root:
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
+
+fleet:
   flakes:
+    # An arbitrary name for your flake
     my-config:
-      url: path:./my-nixos-flake
+      url: path:./my-nixos-flake # Path to your NixOS flake or Git repo link
       configurations:
+        # Matches "my-server" in nixosConfigurations
         my-server:
           machines:
+            # Matches "my-server" in SSH config
             my-server:
+              # Or if it is not in SSH config, specify SSH parameters
               ssh:
-                hostname: 192.168.1.100
+                hostname: my-hostname
+
 ```
 
 ### 4. Deploy
@@ -919,6 +926,9 @@ Flags:
       --version               Show version ($PANIX_VERSION)
 
 Commands:
+  init [flags]
+    Initialize a new panix configuration file
+
   schema [flags]
     Generate YAML schema for configuration files
 
@@ -1020,14 +1030,21 @@ For the complete schema, see [panix-schema.yaml](./gen/panix-schema.yaml).
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
-root:
+fleet:
   flakes:
-    my-config: # A name for your flake
-      url: path:./my-nixos-flake
+    # An arbitrary name for your flake
+    my-config:
+      url: path:./my-nixos-flake # Path to your NixOS flake or Git repo link
       configurations:
-        my-server: # Matches "my-server" in nixosConfigurations
+        # Matches "my-server" in nixosConfigurations
+        my-server:
           machines:
-            my-server: # Matches "my-server" in SSH config
+            # Matches "my-server" in SSH config
+            my-server:
+              # Or if it is not in SSH config, specify SSH parameters
+              ssh:
+                hostname: my-hostname
+
 ```
 
 #### Full Example
@@ -1058,8 +1075,8 @@ flags: # Listed are default values, all also overridable using CLI arguments
     debug: false                       # Enable debug output (enables logging)
     cpu_profile: ""                    # Path for CPU profiling file
 
-root:
-  disabled: false                      # Disable this entire root configuration
+fleet:
+  disabled: false                      # Disable this entire fleet
   tags: [production]                   # Tags inherited by all descendants
   hardware_config_path: ./hardware     # Path for hardware config generation
   override_sudo_program: doas          # Override sudo program (default: sudo)
@@ -1246,7 +1263,7 @@ root:
             prom-01:
 ```
 
-The one used for testing to deploy [infrastructure](https://github.com/mihakrumpestar/infrastructure) is at [panix.yml](panix.yml).
+The one used for testing to deploy [infrastructure](https://github.com/mihakrumpestar/infrastructure) is at [examples/panix.deploy.yml](examples/panix.deploy.yml).
 
 ---
 

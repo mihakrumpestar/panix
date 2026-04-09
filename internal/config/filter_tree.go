@@ -6,8 +6,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// filterRoot filters the configuration based on command-line or global selections.
-func (c *Config) filterRoot() error {
+// filterFleet filters the configuration based on command-line or global selections.
+func (c *Config) filterFleet() error {
 	for _, flakePair := range c.Fleet.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		if flake == nil || flake.Disabled || flake.Configurations == nil {

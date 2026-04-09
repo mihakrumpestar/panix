@@ -64,7 +64,7 @@ func (ts *TargetsLogs) MustGet(xpath attributes.Xpath) *TargetLogs {
 
 func (ts *TargetsLogs) CalculateDurationAndError() {
 	for _, pair := range ts.logs.Pairs() {
-		if pair.Value.parent == nil { // Calculate only root nodes - flakes
+		if pair.Value.parent == nil { // Calculate only fleet nodes - flakes
 			pair.Value.calculateDurationAndError()
 		}
 	}

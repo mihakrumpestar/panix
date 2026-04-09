@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=./gen/panix-schema.yaml
+# yaml-language-server: $schema=../gen/panix-schema.yaml
 
 # Below is not a comment, it is Golang template function definition
 # {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}

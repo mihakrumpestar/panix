@@ -160,7 +160,7 @@ func (w *Workflow) Phase(
 func (w *Workflow) StartWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
-	w.RootTree(func(idx int, machine *config.Machine) {
+	w.FleetTree(func(idx int, machine *config.Machine) {
 		subPool.SubmitErr(func() error {
 			// Create a shared phaseRunner for this machine
 			phaseRunnerInstance := &phaseRunner{
@@ -196,14 +196,14 @@ func (w *Workflow) StartWorkflow() error {
 func (w *Workflow) MachineCount() int {
 	count := 0
 
-	w.RootTree(func(i int, machine *config.Machine) {
+	w.FleetTree(func(i int, machine *config.Machine) {
 		count++
 	})
 
 	return count
 }
 
-func (w *Workflow) RootTree(function func(idx int, machine *config.Machine)) {
+func (w *Workflow) FleetTree(function func(idx int, machine *config.Machine)) {
 	idx := 0
 
 	for _, flakePair := range w.conf.Fleet.Flakes.Omap.Pairs() {
