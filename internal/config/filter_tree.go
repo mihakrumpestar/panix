@@ -8,10 +8,10 @@ import (
 
 // filterRoot filters the configuration based on command-line or global selections.
 func (c *Config) filterRoot() error {
-	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
+	for _, flakePair := range c.Fleet.Flakes.Omap.Pairs() {
 		flake := flakePair.Value
 		if flake == nil || flake.Disabled || flake.Configurations == nil {
-			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
+			_, _ = c.Fleet.Flakes.Omap.Del(flakePair.Key)
 
 			continue
 		}
@@ -20,11 +20,11 @@ func (c *Config) filterRoot() error {
 
 		// Delete flake if no configs left
 		if flake.Configurations.Omap.Len() == 0 {
-			_, _ = c.Root.Flakes.Omap.Del(flakePair.Key)
+			_, _ = c.Fleet.Flakes.Omap.Del(flakePair.Key)
 		}
 	}
 
-	if c.Root.Flakes.Omap.Len() == 0 {
+	if c.Fleet.Flakes.Omap.Len() == 0 {
 		return ErrNoFlakesAfterFilter
 	}
 

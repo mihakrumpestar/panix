@@ -119,15 +119,15 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 }
 
 func (c *Config) initRoot() error {
-	err := c.Root.Init(c.Flags)
+	err := c.Fleet.Init(c.Flags)
 	if err != nil {
 		return err
 	}
 
-	for _, flakePair := range c.Root.Flakes.Omap.Pairs() {
+	for _, flakePair := range c.Fleet.Flakes.Omap.Pairs() {
 		flakeName, flake := flakePair.Key, flakePair.Value
 
-		err = flake.Init(flakeName, &c.Root.Attributes)
+		err = flake.Init(flakeName, &c.Fleet.Attributes)
 		if err != nil {
 			return err
 		}

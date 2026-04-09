@@ -13,7 +13,7 @@ import (
 
 type Config struct {
 	Flags       *flags.Flags `yaml:"flags"`
-	Root        *Root        `yaml:"root,required" validate:"required"`
+	Fleet       *Fleet       `yaml:"fleet,required" validate:"required"`
 	ColorScheme *ColorScheme `yaml:"-" validate:"-"`
 
 	// Internal
@@ -21,18 +21,18 @@ type Config struct {
 	RollbackGeneration int            `yaml:"-" validate:"-"`
 }
 
-// Root
+// Fleet
 
-type Root struct {
+type Fleet struct {
 	config_attributes.Attributes `yaml:",inline"`
 
 	Flakes *orderedmap.OrderedMap[string, *Flake] `yaml:"flakes,required"`
 }
 
-func (r *Root) Init(f *flags.Flags) error {
+func (r *Fleet) Init(f *flags.Flags) error {
 	return errors.Wrap(
-		r.Attributes.Init("root", &config_attributes.Attributes{Flags: f}, false),
-		"failed to initialize root attributes",
+		r.Attributes.Init("fleet", &config_attributes.Attributes{Flags: f}, false),
+		"failed to initialize fleet attributes",
 	)
 }
 
@@ -89,7 +89,7 @@ type MetaInspect struct { // Atomic due to being read and write at the same time
 	Reachable      atomic.Bool
 	SSHConnectable atomic.Bool
 	Architecture   atomic.String
-	IsRoot         atomic.Bool
+	IsRoot         atomic.Bool // UID 0
 	Bootstrapped   atomic.Bool
 	RequiresKexec  atomic.Bool
 	Generations    atomic.Pointer[GenerationsData]

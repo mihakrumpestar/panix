@@ -5,7 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 )
 
-func InitBuildLogs(root *config.Root, logging flags.Logging) (*TargetsLogs, error) {
+func InitBuildLogs(root *config.Fleet, logging flags.Logging) (*TargetsLogs, error) {
 	targetsLogs, err := NewTargetsLogs(logging)
 	if err != nil {
 		return nil, err

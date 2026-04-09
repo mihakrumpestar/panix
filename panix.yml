@@ -14,7 +14,7 @@ flags:
   timeout: 5500s
   override_local_machine: tmp
 
-root:
+fleet:
   flakes:
     infrastructure:
       url: path:../infrastructure
