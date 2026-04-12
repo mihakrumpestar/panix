@@ -9,6 +9,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
 	"github.com/mihakrumpestar/panix/gen"
+	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/logger"
@@ -107,7 +108,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 	}
 
 	if conf.ColorScheme == nil {
-		conf.ColorScheme = DefaultColorScheme()
+		conf.ColorScheme = colorscheme.DefaultColorScheme()
 	}
 
 	conf.Flags.DefautlIfNoTTY()

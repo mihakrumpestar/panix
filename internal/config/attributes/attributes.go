@@ -7,6 +7,7 @@ import (
 	"dario.cat/mergo"
 	config_flags "github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/pkg/errors"
 )
 
@@ -28,7 +29,7 @@ type Attributes struct {
 	Nix       NixConfig `yaml:"nix"`
 
 	Name    string              `yaml:"-" json:"name" validate:"-"`
-	Xpath   Xpath               `yaml:"-" json:"xpath" validate:"-"`
+	Xpath   xpath.Xpath         `yaml:"-" json:"xpath" validate:"-"`
 	Message string              `yaml:"-" json:"message" validate:"-"`
 	Flags   *config_flags.Flags `yaml:"-" validate:"-"`
 }

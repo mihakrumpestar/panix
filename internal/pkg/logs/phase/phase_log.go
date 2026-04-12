@@ -1,7 +1,7 @@
 package phase
 
 import (
-	"github.com/mihakrumpestar/panix/internal/pkg/atomicslice"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicslice"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
 )

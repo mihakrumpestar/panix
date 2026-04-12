@@ -1,4 +1,4 @@
-package config
+package colorscheme
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ type ColorSchemeHeader struct {
 type ColorSchemeStatus struct {
 	OK      lipgloss.Style
 	Warning lipgloss.Style
-	Error   lipgloss.Style
+	Failed  lipgloss.Style
 	Running lipgloss.Style
 }
 
@@ -37,9 +37,11 @@ type ColorSchemeTree struct {
 }
 
 type ColorScheme struct {
-	Header  ColorSchemeHeader
-	Status  ColorSchemeStatus
-	Table   ColorSchemeTable
+	Header      ColorSchemeHeader
+	Status      ColorSchemeStatus
+	Table       ColorSchemeTable
+	PhaseStatus ColorSchemePhaseStatus
+
 	Tree    ColorSchemeTree
 	Spinner lipgloss.Style
 
@@ -49,18 +51,14 @@ type ColorScheme struct {
 	Phase         ColorSchemeLogEntity
 	Command       ColorSchemeLogEntity
 	Error         ColorSchemeLogEntity
-
-	PhaseColorPairs map[PhaseState][2]colorful.Color
 }
 
-type PhaseState int
-
-const (
-	PhaseStateDefault PhaseState = iota
-	PhaseStateActive
-	PhaseStateFailed
-	PhaseStateCompleted
-)
+type ColorSchemePhaseStatus struct {
+	Running [2]colorful.Color
+	Failed  [2]colorful.Color
+	Done    [2]colorful.Color
+	Default [2]colorful.Color
+}
 
 func DefaultColorScheme() *ColorScheme {
 	borderStyle := makeBorderStyle()
@@ -73,7 +71,7 @@ func DefaultColorScheme() *ColorScheme {
 		Status: ColorSchemeStatus{
 			OK:      makeForegroundStyle("#50FA7B"),
 			Warning: makeForegroundStyle("#FFB86C"),
-			Error:   makeForegroundStyle("#FF5555"),
+			Failed:  makeForegroundStyle("#FF5555"),
 			Running: makeForegroundStyle("#00BFFF"),
 		},
 		Table: ColorSchemeTable{
@@ -83,17 +81,22 @@ func DefaultColorScheme() *ColorScheme {
 			RowAlt:                       makeForegroundStyle("#BFBFBF"),
 			SelectionHighlightBackground: makeBackgroundStyle("#444444"),
 		},
+		PhaseStatus: ColorSchemePhaseStatus{
+			Running: [2]colorful.Color{mustColorfulHex("#01536e"), mustColorfulHex("#007da7")},
+			Failed:  [2]colorful.Color{mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")},
+			Done:    [2]colorful.Color{mustColorfulHex("#14532D"), mustColorfulHex("#11883d")},
+			Default: [2]colorful.Color{mustColorfulHex("#535862"), mustColorfulHex("#6B7280")},
+		},
 		Tree: ColorSchemeTree{
 			Enumerator: borderStyle,
 		},
-		Spinner:         makeForegroundStyle("#8BE9FD"),
-		Flake:           makeLogEntity("#F1FA8C", '📁', true),
-		Configuration:   makeLogEntity("#FFB86C", '📦', false),
-		Machine:         makeLogEntity("#8BE9FD", '💻', false),
-		Phase:           makeLogEntity("#FF79C6", '📋', false),
-		Command:         makeLogEntity("#BD93F9", '⚙', false),
-		Error:           makeLogEntity("#FF5555", '✗', false),
-		PhaseColorPairs: makePhaseColorPairs(),
+		Spinner:       makeForegroundStyle("#8BE9FD"),
+		Flake:         makeLogEntity("#F1FA8C", '📁', true),
+		Configuration: makeLogEntity("#FFB86C", '📦', false),
+		Machine:       makeLogEntity("#8BE9FD", '💻', false),
+		Phase:         makeLogEntity("#FF79C6", '📋', false),
+		Command:       makeLogEntity("#BD93F9", '⚙', false),
+		Error:         makeLogEntity("#FF5555", '✗', false),
 	}
 }
 
@@ -124,15 +127,6 @@ func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
 	}
 
 	return ColorSchemeLogEntity{Color: style, Icon: icon}
-}
-
-func makePhaseColorPairs() map[PhaseState][2]colorful.Color {
-	return map[PhaseState][2]colorful.Color{
-		PhaseStateActive:    {mustColorfulHex("#01536e"), mustColorfulHex("#007da7")},
-		PhaseStateFailed:    {mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")},
-		PhaseStateCompleted: {mustColorfulHex("#14532D"), mustColorfulHex("#11883d")},
-		PhaseStateDefault:   {mustColorfulHex("#535862"), mustColorfulHex("#6B7280")},
-	}
 }
 
 func mustColorfulHex(hex string) colorful.Color {

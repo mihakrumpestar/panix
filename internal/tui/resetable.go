@@ -11,12 +11,10 @@ import (
 )
 
 type resetable struct {
-	err         error
-	workflow    *workflow.Workflow
-	spinners    *spinners.Spinners
-	viewports   *viewports.Viewports
-	statsTable  *StatsTable
-	phaseStatus *PhaseStatus
+	err       error
+	workflow  *workflow.Workflow
+	spinners  *spinners.Spinners
+	viewports *viewports.Viewports
 }
 
 // workflowDoneMsg signals the workflow has completed.
@@ -35,11 +33,9 @@ func (m *model) startResetableWorkflow() tea.Cmd {
 		}
 
 		m.resetable.Store(&resetable{
-			workflow:    workflow,
-			spinners:    spinners,
-			viewports:   viewports.NewViewports(m.dimensions, m.conf),
-			statsTable:  NewStatsTable(),
-			phaseStatus: NewPhaseStatus(),
+			workflow:  workflow,
+			spinners:  spinners,
+			viewports: viewports.NewViewports(m.dimensions, m.conf),
 		})
 
 		err = workflow.StartWorkflow()

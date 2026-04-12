@@ -7,7 +7,6 @@ import (
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -15,6 +14,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -122,7 +122,7 @@ func (w *Workflow) NewTaskWithRetry(p phases.Phase, logs *logs.Logs, f func() er
 func (w *Workflow) Phase(p phases.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error) error {
 	var (
 		logs  *logs.Logs
-		xpath attributes.Xpath
+		xpath xpath.Xpath
 		err   error
 	)
 

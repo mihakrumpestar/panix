@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -18,7 +18,7 @@ type Executioner struct {
 	ctx          context.Context
 	timeout      time.Duration
 	dryRun       bool
-	xpath        attributes.Xpath
+	xpath        xpath.Xpath
 	machine      *machine.Machine
 	phase        phases.Phase
 	phaseLog     *log_sphase.PhaseLog
@@ -29,7 +29,7 @@ func NewExecutioner(
 	ctx context.Context,
 	timeout time.Duration,
 	dryRun bool,
-	xpath attributes.Xpath,
+	xpath xpath.Xpath,
 	machine *machine.Machine,
 	phase phases.Phase,
 	phaseLog *log_sphase.PhaseLog,

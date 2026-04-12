@@ -1,4 +1,4 @@
-package attributes
+package xpath
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ type Xpath struct {
 	path string
 }
 
-func NewXpath(xpath ...string) Xpath {
+func New(xpath ...string) Xpath {
 	return Xpath{
 		path: strings.Join(xpath, "/"),
 	}
@@ -29,7 +29,7 @@ func (x Xpath) Depth() int {
 // If current Xpath is nil, resulting Xpath consists only of appendXpath.
 func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 	if x.path == "" {
-		return NewXpath(appendXpath...)
+		return New(appendXpath...)
 	}
 
 	var builder strings.Builder
@@ -53,6 +53,47 @@ func (x Xpath) IsParent(xpath Xpath) bool {
 	// Check if xpath.path is a prefix of x.path
 	// Must be prefix AND current path must be deeper than the potential parent
 	return strings.HasPrefix(x.path, xpath.path+"/") && len(x.path) > len(xpath.path)
+}
+
+// Element returns the xpath element at the given index.
+// 0 returns the first element, 1 returns the second, etc.
+// -1 returns the last element, -2 returns the second-to-last, etc.
+// Returns empty string if the index is out of range.
+func (x Xpath) Element(index int) string {
+	if x.path == "" {
+		return ""
+	}
+
+	parts := strings.Split(x.path, "/")
+
+	if index < 0 {
+		index += len(parts)
+	}
+
+	if index < 0 || index >= len(parts) {
+		return ""
+	}
+
+	return parts[index]
+}
+
+// FleetLeaf returns the last 3 elements of the path as strings.
+func (x Xpath) FleetLeaf() (string, string, string) {
+	if x.path == "" {
+		return "", "", ""
+	}
+
+	parts := strings.Split(x.path, "/")
+	n := len(parts)
+
+	switch n {
+	case 1:
+		return "", "", parts[0]
+	case 2:
+		return "", parts[0], parts[1]
+	default:
+		return parts[n-3], parts[n-2], parts[n-1]
+	}
 }
 
 func (x Xpath) String() string {

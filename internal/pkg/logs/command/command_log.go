@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/atomicslice"
-	"github.com/mihakrumpestar/panix/internal/pkg/safebuffer"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicbuffer"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicslice"
 	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
 	"github.com/pkg/errors"
 )
@@ -22,8 +22,8 @@ type CommandLog struct {
 	Command         string `json:"command"`
 
 	// Mutate
-	Output       *atomicslice.AtomicSlice[*safebuffer.Buffer] `json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
-	TimeAndState *timeandstate.AtomicTimeAndState             `json:"time_and_state"`
+	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
+	TimeAndState *timeandstate.AtomicTimeAndState                     `json:"time_and_state"`
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
@@ -32,7 +32,7 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
 		Command:         strings.Join(slices.Concat(env, command), " "),
-		Output:          atomicslice.New[*safebuffer.Buffer](),
+		Output:          atomicslice.New[*atomicbuffer.AtomicBuffer](),
 		TimeAndState:    timeandstate.New(),
 	}
 
@@ -68,7 +68,7 @@ func (cl *CommandLog) WriteString(s string) (int, error) {
 func (cl *CommandLog) Write(data []byte) (int, error) {
 	length := cl.Output.Length()
 	if length == 0 {
-		cl.Output.Append(safebuffer.NewBuffer(nil))
+		cl.Output.Append(atomicbuffer.New(nil))
 
 		length = 1
 	}
@@ -93,7 +93,7 @@ func (cl *CommandLog) WriteLineString(s string) {
 
 // WriteLine writes bytes as a new line to StdInOutErr.
 func (cl *CommandLog) WriteLine(p []byte) {
-	cl.Output.Append(safebuffer.NewBuffer(p))
+	cl.Output.Append(atomicbuffer.New(p))
 }
 
 // ReplaceLastLine replaces the content of the last line in StdInOutErr.
@@ -105,7 +105,7 @@ func (cl *CommandLog) ReplaceLastLine(data []byte) {
 	}
 
 	index := cl.Output.Length() - 1
-	ok := cl.Output.Set(index, safebuffer.NewBuffer(data))
+	ok := cl.Output.Set(index, atomicbuffer.New(data))
 
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.Output.Length()))
@@ -149,7 +149,7 @@ func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
 // Helpers
 
 // estimateSize approximates the total size needed for all buffers.
-func estimateSize(buffers []*safebuffer.Buffer) int {
+func estimateSize(buffers []*atomicbuffer.AtomicBuffer) int {
 	total := 0
 	for _, buf := range buffers {
 		total += buf.Len() + 1 // +1 for potential newline

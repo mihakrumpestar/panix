@@ -3,7 +3,7 @@ package timeandstate
 import (
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/atomicpointer"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
 	"github.com/pkg/errors"
 )
 

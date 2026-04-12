@@ -13,6 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -27,17 +28,8 @@ type Fleet struct {
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 
 	// For TUI representation
-	StatsTable  *StatsTable      `yaml:"-" json:"stats_table"`
-	PhaseStatus *tui.PhaseStatus `yaml:"-" json:"phase_status"`
-}
-
-type StatsTable struct {
-	MachineInfos    []MachineInfo `json:"-"`
-	SelectedMachine int           `json:"selected_machine"`
-
-	CacheFlattenedLogs []*logs.Logs `json:"-"`
-	CacheHash          uint64       `json:"-"`
-	CacheTableContent  string       `json:"-"`
+	StatsTable  *statstable.StatsTable `yaml:"-" json:"stats_table"`
+	PhaseStatus *tui.PhaseStatus       `yaml:"-" json:"phase_status"`
 }
 
 func (r *Fleet) Init(f *flags.Flags) error {
@@ -123,9 +115,15 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 
 		machineState.Phase = machineLastPhaseLog.Key
 
+		lastCommandLog, ok := machineLastPhaseLog.Value.CommandLogs.Last()
+		if !ok {
+			continue
+		}
+
 		tas := machineLastPhaseLog.Value.TimeAndState.Load()
 		if !tas.IsFinished() {
 			machineState.Status = stats.Running
+			machineState.StatusMsg = lastCommandLog.StatusIfRunning
 			continue
 		}
 
@@ -133,12 +131,15 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 		if endErr != nil {
 			machineState.Status = stats.Failed
 			machineState.Error = endErr
+
+			machineState.StatusMsg = lastCommandLog.StatusIfFailed
 			continue
 		}
 
 		// Last phase completed without error, mark machine as done
 		if workflowPhases[len(workflowPhases)-1] == machineState.Phase {
 			machineState.Status = stats.Done
+			machineState.StatusMsg = "done"
 		}
 	}
 }
@@ -199,7 +200,7 @@ func (f *Fleet) AllMachines() iter.Seq2[int, FleetLeaf] {
 }
 
 func (f *Fleet) RecalculatePhaseStatus() *stats.StatisticsPerPhase {
-	statisticsPerPhase := stats.NewStatisticsPerPhase()
+	statisticsPerPhase := stats.New()
 
 	for _, treeLeaf := range f.AllMachines() {
 		ms := treeLeaf.Machine
@@ -212,18 +213,13 @@ func (f *Fleet) RecalculatePhaseStatus() *stats.StatisticsPerPhase {
 	return statisticsPerPhase
 }
 
-type MachineInfo struct {
-	*machine.MetaInspect
-	*machine.State
-}
-
 func (f *Fleet) RefreshStatsTable() {
-	machineInfos := make([]MachineInfo, 0)
+	machineInfos := make([]statstable.MachineInfo, 0)
 
 	for _, treeLeaf := range f.AllMachines() {
 		m := treeLeaf.Machine
 
-		machineInfos = append(machineInfos, MachineInfo{m.MetaInspect.Load(), m.State})
+		machineInfos = append(machineInfos, statstable.MachineInfo{m.MetaInspect.Load(), m.State})
 	}
 
 	f.StatsTable.MachineInfos = machineInfos

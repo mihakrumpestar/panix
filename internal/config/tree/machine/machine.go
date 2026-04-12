@@ -4,7 +4,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomicpointer"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
@@ -46,8 +46,9 @@ type MetaInspect struct {
 
 // State does not need to be atomic (updates with UI)
 type State struct {
-	Status stats.StatsState `json:"status"`
-	Phase  phases.Phase     `json:"phase"`
+	Status    stats.StatsState `json:"status"`
+	StatusMsg string           `json:"status_msg"`
+	Phase     phases.Phase     `json:"phase"`
 	//Duration  time.Duration    `json:"duration"`
 	Error     error   `json:"error,omitempty"`
 	ActiveSSH SSHType `json:"active_ssh"`

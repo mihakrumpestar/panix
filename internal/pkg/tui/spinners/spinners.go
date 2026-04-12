@@ -9,7 +9,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/kirill-scherba/omap"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
 const maxSpinners = 5
@@ -35,7 +35,7 @@ func NewSpinners() (*Spinners, error) {
 	}, nil
 }
 
-func (s *Spinners) GetOrCreateSpinner(xpath attributes.Xpath) *spinner.Model {
+func (s *Spinners) GetOrCreateSpinner(xpath xpath.Xpath) *spinner.Model {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(xpath.String()))
 	hashKey := int(h.Sum32() % maxSpinners)

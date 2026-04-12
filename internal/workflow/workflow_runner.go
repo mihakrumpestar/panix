@@ -2,11 +2,11 @@ package workflow
 
 import (
 	"github.com/kirill-scherba/omap"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -39,7 +39,7 @@ func newRunner(workflow *Workflow) (*runner, error) {
 
 // getOrCreateOnceAsync returns a OnceAsync for the given xpath.
 // This ensures that phases with ScopeConfig or ScopeFlake only run once.
-func (r *runner) getOrCreateOnceAsync(xpath attributes.Xpath) *onceasync.OnceAsync {
+func (r *runner) getOrCreateOnceAsync(xpath xpath.Xpath) *onceasync.OnceAsync {
 	xpathS := xpath.String()
 
 	once, ok := r.onceRegistry.Get(xpathS)
@@ -107,7 +107,7 @@ func shouldSkipPhase(phase phases.Phase, machine *machine.Machine) bool {
 	return mi != nil && mi.Bootstrapped && !machine.Bootstrap.ForceBootstrap
 }
 
-func getXpathAndLogsForScope(phase phases.Phase, fleetLeaf *fleet.FleetLeaf) (attributes.Xpath, *logs.Logs, error) {
+func getXpathAndLogsForScope(phase phases.Phase, fleetLeaf *fleet.FleetLeaf) (xpath.Xpath, *logs.Logs, error) {
 	switch phases.GetPhaseScope(phase) {
 	case phases.ScopeFlake:
 		return fleetLeaf.Flake.Xpath, fleetLeaf.Flake.Logs, nil
@@ -116,6 +116,6 @@ func getXpathAndLogsForScope(phase phases.Phase, fleetLeaf *fleet.FleetLeaf) (at
 	case phases.ScopeMachine:
 		return fleetLeaf.Machine.Xpath, fleetLeaf.Machine.Logs, nil
 	default:
-		return attributes.NewXpath(), nil, errors.New("getLogsForScope invalid scope")
+		return xpath.New(), nil, errors.New("getLogsForScope invalid scope")
 	}
 }

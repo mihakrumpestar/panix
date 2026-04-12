@@ -18,6 +18,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -268,10 +269,18 @@ func (m *model) View() tea.View {
 }
 
 func (m *model) viewMainContent() string {
+	resetable := m.resetable.Load()
+	if resetable == nil {
+		return ""
+	}
+
 	var builder strings.Builder
 
-	builder.WriteString(m.ViewStatsTable())
-	builder.WriteString(m.ViewPhaseStatus())
+	if !m.conf.Flags.DryRun && slices.Contains(m.conf.Phases, phases.Inspect) {
+		builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width))
+		builder.WriteString(m.ViewPhaseStatus())
+	}
+
 	builder.WriteString(m.ViewBuildLogs())
 
 	resetable := m.resetable.Load()

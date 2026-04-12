@@ -3,15 +3,16 @@ package config
 import (
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
 type Config struct {
-	Flags       *flags.Flags `yaml:"flags" json:"flags"`
-	Fleet       *fleet.Fleet `yaml:"fleet,required" json:"fleet" validate:"required"`
-	ColorScheme *ColorScheme `yaml:"-" json:"-" validate:"-"`
+	Flags       *flags.Flags             `yaml:"flags" json:"flags"`
+	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required"`
+	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-" validate:"-"`
 
 	// Internal - exportable
 	PanixVersion string    `yaml:"-" json:"panix_version" validate:"-"`

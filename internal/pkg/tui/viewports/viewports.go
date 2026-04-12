@@ -14,7 +14,7 @@ import (
 	"github.com/kirill-scherba/omap"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
 const (
@@ -31,11 +31,11 @@ type Dimensions struct{ Width, Height int }
 
 // Viewports manages all viewport instances.
 type Viewports struct {
-	viewports       *omap.Omap[attributes.Xpath, *Viewport]
+	viewports       *omap.Omap[xpath.Xpath, *Viewport]
 	dimensions      *Dimensions
 	conf            *config.Config
-	fullscreenXpath attributes.Xpath
-	mainXpath       attributes.Xpath
+	fullscreenXpath xpath.Xpath
+	mainXpath       xpath.Xpath
 	footerHeight    int
 }
 
@@ -44,7 +44,7 @@ type Viewport struct {
 	model         viewport.Model
 	active        bool
 	content       string
-	scrollbarZone attributes.Xpath
+	scrollbarZone xpath.Xpath
 	cache         viewportCache
 }
 
@@ -68,29 +68,29 @@ func hashContent(content string) uint64 {
 
 // NewViewports creates a new viewport manager.
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
-	viewportsMap, _ := omap.New[attributes.Xpath, *Viewport]()
+	viewportsMap, _ := omap.New[xpath.Xpath, *Viewport]()
 
 	return &Viewports{
 		viewports:  viewportsMap,
 		dimensions: dimensions,
 		conf:       conf,
-		mainXpath:  attributes.NewXpath("main"),
+		mainXpath:  xpath.New("main"),
 	}
 }
 
 // Fullscreen management
 
-func (v *Viewports) IsFullscreen() bool                   { return v.fullscreenXpath.Depth() > 0 }
-func (v *Viewports) GetFullscreenXpath() attributes.Xpath { return v.fullscreenXpath }
-func (v *Viewports) SetFullscreen(xpath attributes.Xpath) { v.fullscreenXpath = xpath }
-func (v *Viewports) ExitFullscreen()                      { v.fullscreenXpath = attributes.Xpath{} }
+func (v *Viewports) IsFullscreen() bool              { return v.fullscreenXpath.Depth() > 0 }
+func (v *Viewports) GetFullscreenXpath() xpath.Xpath { return v.fullscreenXpath }
+func (v *Viewports) SetFullscreen(xpath xpath.Xpath) { v.fullscreenXpath = xpath }
+func (v *Viewports) ExitFullscreen()                 { v.fullscreenXpath = xpath.Xpath{} }
 
 // ContentWidth returns available width accounting for scrollbar.
 func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWidth }
 
 // Viewport factory methods
 
-func (v *Viewports) GetOrCreateViewport(xpath attributes.Xpath, content string, indent int) string {
+func (v *Viewports) GetOrCreateViewport(xpath xpath.Xpath, content string, indent int) string {
 	return v.createViewport(xpath, content, indent, viewportOptions{
 		maxHeight:   v.conf.Flags.Tui.CommandOutputMaxHeight,
 		wrapContent: true,
@@ -98,7 +98,7 @@ func (v *Viewports) GetOrCreateViewport(xpath attributes.Xpath, content string, 
 	})
 }
 
-func (v *Viewports) GetOrCreateLabelViewport(xpath attributes.Xpath, content string, indent int) string {
+func (v *Viewports) GetOrCreateLabelViewport(xpath xpath.Xpath, content string, indent int) string {
 	return v.createViewport(xpath, content, indent, viewportOptions{wrapContent: true, noPadding: true})
 }
 
@@ -113,7 +113,7 @@ func (v *Viewports) GetOrCreateMainViewport(content string, footerHeight int) st
 	})
 }
 
-func (v *Viewports) RenderFullscreenViewport(xpath attributes.Xpath, content string, footerHeight int) string {
+func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, footerHeight int) string {
 	v.footerHeight = footerHeight
 	height := max(1, v.dimensions.Height-footerHeight-borderHeight)
 	width := max(1, v.dimensions.Width-scrollbarWidth-borderWidth)
@@ -154,7 +154,7 @@ func (v *Viewports) RenderFullscreenViewport(xpath attributes.Xpath, content str
 	return rendered
 }
 
-func (v *Viewports) RemoveIfExistsViewport(xpath attributes.Xpath) { v.viewports.Del(xpath) }
+func (v *Viewports) RemoveIfExistsViewport(xpath xpath.Xpath) { v.viewports.Del(xpath) }
 
 // Active viewport queries
 
@@ -176,17 +176,17 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 	return "", false
 }
 
-func (v *Viewports) GetActiveInnerViewportXpath() attributes.Xpath {
+func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 	for xpath, vp := range v.viewports.Records() {
 		if vp.active && xpath != v.mainXpath {
 			return xpath
 		}
 	}
 
-	return attributes.Xpath{}
+	return xpath.Xpath{}
 }
 
-func (v *Viewports) GetViewportContent(xpath attributes.Xpath) string {
+func (v *Viewports) GetViewportContent(xpath xpath.Xpath) string {
 	if vp, ok := v.viewports.Get(xpath); ok {
 		return vp.content
 	}
@@ -339,7 +339,7 @@ type viewportOptions struct {
 	noPadding      bool
 }
 
-func (v *Viewports) createViewport(xpath attributes.Xpath, content string, indent int, opts viewportOptions) string {
+func (v *Viewports) createViewport(xpath xpath.Xpath, content string, indent int, opts viewportOptions) string {
 	width := v.calculateViewportWidth(opts, indent)
 	height := max(1, opts.height)
 
@@ -384,7 +384,7 @@ func (v *Viewports) calculateViewportWidth(opts viewportOptions, indent int) int
 }
 
 // getOrCreateViewportInstance retrieves an existing viewport or creates a new one.
-func (v *Viewports) getOrCreateViewportInstance(xpath attributes.Xpath, content string, width, height int) *Viewport {
+func (v *Viewports) getOrCreateViewportInstance(xpath xpath.Xpath, content string, width, height int) *Viewport {
 	viewportInstance, exists := v.viewports.Get(xpath)
 	if !exists {
 		viewportInstance = &Viewport{
@@ -435,7 +435,7 @@ func (v *Viewports) calculateFinalHeight(contentHeight int, opts viewportOptions
 }
 
 // configureViewportModel configures the viewport model with processed content.
-func (v *Viewports) configureViewportModel(xpath attributes.Xpath, viewportInstance *Viewport, proc string, width, finalHeight int) {
+func (v *Viewports) configureViewportModel(xpath xpath.Xpath, viewportInstance *Viewport, proc string, width, finalHeight int) {
 	viewportInstance.model.SetWidth(width)
 	viewportInstance.model.SetHeight(finalHeight)
 
@@ -518,7 +518,7 @@ func (v *Viewports) renderScrollbar(pct float64, total, visible int) (string, in
 		Render(builder.String()), 1
 }
 
-func (v *Viewports) combineWithScrollbar(view, bar string, barZone attributes.Xpath) string {
+func (v *Viewports) combineWithScrollbar(view, bar string, barZone xpath.Xpath) string {
 	if bar == "" {
 		return view
 	}
@@ -610,8 +610,8 @@ func (v *Viewports) getActiveViewport() *Viewport {
 	return nil
 }
 
-func (v *Viewports) underMouse(m tea.MouseMsg) []attributes.Xpath {
-	var result []attributes.Xpath
+func (v *Viewports) underMouse(m tea.MouseMsg) []xpath.Xpath {
+	var result []xpath.Xpath
 
 	for xpath := range v.viewports.Records() {
 		if zone.Get(xpath.String()).InBounds(m) {
@@ -622,9 +622,9 @@ func (v *Viewports) underMouse(m tea.MouseMsg) []attributes.Xpath {
 	return result
 }
 
-func (v *Viewports) mostSpecific(xpaths []attributes.Xpath) attributes.Xpath {
+func (v *Viewports) mostSpecific(xpaths []xpath.Xpath) xpath.Xpath {
 	if len(xpaths) == 0 {
-		return attributes.Xpath{}
+		return xpath.Xpath{}
 	}
 
 	sort.Slice(xpaths, func(idx, j int) bool { return xpaths[idx].Depth() > xpaths[j].Depth() })
