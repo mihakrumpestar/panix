@@ -3,7 +3,6 @@ package workflow
 import (
 	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -68,7 +67,7 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 
 	workflow := pr.r.workflow
 
-	xpath := getXpathForScope(phase, pr.flake, pr.config, pr.machine)
+	logNode := getLogNodeForScope(phase, pr.flake, pr.config, pr.machine)
 
 	execFn := func() error {
 		return workflow.executePhase(phase, pr.flake, pr.config, pr.machine)
@@ -76,10 +75,10 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 
 	// If this phase should only run once per scope, use OnceAsync
 	if phases.ShouldRunOnce(phase) {
-		once := pr.r.getOrCreateOnceAsync(xpath.String())
+		once := pr.r.getOrCreateOnceAsync(logNodeMustGetXpath(logNode))
 
 		err := once.Do(func() error {
-			return workflow.NewTaskWithRetry(phase, xpath, execFn)
+			return workflow.NewTaskWithRetry(phase, logNode, execFn)
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to run once-per-scope phase")
@@ -89,20 +88,41 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	}
 
 	// Otherwise, run directly
-	return workflow.NewTaskWithRetry(phase, xpath, execFn)
+	return workflow.NewTaskWithRetry(phase, logNode, execFn)
 }
 
 func shouldSkipPhase(phase phases.Phase, machine *config.Machine) bool {
-	return phase == phases.Bootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap
+	if phase != phases.Bootstrap {
+		return false
+	}
+
+	mi := machine.MetaInspect.Load()
+
+	return mi != nil && mi.Bootstrapped && !machine.Bootstrap.ForceBootstrap
 }
 
-func getXpathForScope(phase phases.Phase, flake *config.Flake, cfg *config.Configuration, machine *config.Machine) attributes.Xpath {
+func getLogNodeForScope(phase phases.Phase, flake *config.Flake, cfg *config.Configuration, machine *config.Machine) config.LogNode {
 	switch phases.GetPhaseScope(phase) {
 	case phases.ScopeFlake:
-		return flake.Xpath
+		return flake
 	case phases.ScopeConfig:
-		return cfg.Xpath
+		return cfg
 	default:
-		return machine.Xpath
+		return machine
+	}
+}
+
+func logNodeMustGetXpath(node config.LogNode) string {
+	switch n := node.(type) {
+	case *config.Fleet:
+		return n.Xpath.String()
+	case *config.Flake:
+		return n.Xpath.String()
+	case *config.Configuration:
+		return n.Xpath.String()
+	case *config.Machine:
+		return n.Xpath.String()
+	default:
+		return ""
 	}
 }

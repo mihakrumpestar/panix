@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/acobaugh/osrelease"
-	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
@@ -21,55 +21,56 @@ var (
 )
 
 func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
+	return w.Phase(machine, phases.Inspect, machine,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			mms := machine.MetaInspect
-
 			if machine.SSH.IsLocal {
-				machine.SwitchToRegularSSH()
-				mms.Reachable.Store(true)
-				mms.SSHConnectable.Store(true)
+				machine.State.ActiveSSH = machine.SSHTypeRegular
+				machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+					mi.Reachable = true
+					mi.SSHConnectable = true
+				})
 			} else {
-				err := checkSSHReachability(exc, machine, mms)
+				err := checkSSHReachability(exc, machine)
 				if err != nil {
 					return err
 				}
 			}
 
-			err := checkSSHConnection(exc, mms)
+			err := checkSSHConnection(exc, machine)
 			if err != nil {
 				return err
 			}
 
-			err = detectArchitecture(exc, mms)
+			err = detectArchitecture(exc, machine)
 			if err != nil {
 				return err
 			}
 
-			err = checkSuperuser(exc, mms)
+			err = checkSuperuser(exc, machine)
 			if err != nil {
 				return err
 			}
 
-			err = detectBootstrapStatus(exc, machine, mms)
+			err = detectBootstrapStatus(exc, machine)
 			if err != nil {
 				return err
 			}
 
-			err = validateSSHMachineState(exc, machine, mms)
+			err = validateSSHMachineState(exc, machine)
 			if err != nil {
 				return err
 			}
 
-			if !mms.Bootstrapped.Load() {
+			mi := machine.MetaInspect.Load()
+			if mi != nil && !mi.Bootstrapped {
 				return handleUnbootstrapped(exc, machine)
 			}
 
-			return readGenerations(exc, mms)
+			return readGenerations(exc, machine)
 		})
 }
 
-func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
+func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.ExecFn(
 		"SSH reachability check",
 		"checking SSH reachability",
@@ -82,7 +83,7 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 					return errors.New("bootstrap SSH is configured but unreachable")
 				}
 
-				machine.SwitchToBootstrapSSH()
+				machine.State.ActiveSSH = machine.SSHTypeBootstrap
 			} else {
 				regularSSHReachable := machine.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
@@ -90,10 +91,12 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 					return errors.New("regular SSH is unreachable")
 				}
 
-				machine.SwitchToRegularSSH()
+				machine.State.ActiveSSH = machine.SSHTypeRegular
 			}
 
-			mms.Reachable.Store(true)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Reachable = true
+			})
 
 			return nil
 		},
@@ -105,7 +108,7 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 	return nil
 }
 
-func checkSSHConnection(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func checkSSHConnection(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.Exec(
 		"SSH connect",
 		"connecting via SSH",
@@ -116,12 +119,16 @@ func checkSSHConnection(exc *executioner.Executioner, mms *config.MetaInspect) e
 			return errors.Wrap(err, log.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			mms.SSHConnectable.Store(true)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.SSHConnectable = true
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.SSHConnectable.Store(true)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.SSHConnectable = true
+			})
 		}),
 	)
 	if err != nil {
@@ -131,7 +138,7 @@ func checkSSHConnection(exc *executioner.Executioner, mms *config.MetaInspect) e
 	return nil
 }
 
-func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func detectArchitecture(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.Exec(
 		"architecture",
 		"detecting architecture",
@@ -147,12 +154,16 @@ func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) e
 				return errors.Wrapf(ErrPlatformUnsupported, "%s (supported: %s)", strconv.Quote(architecture), KexecSupportedPlatforms)
 			}
 
-			mms.Architecture.Store(architecture)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Architecture = architecture
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.Architecture.Store("DRY_RUN")
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Architecture = "DRY_RUN"
+			})
 		}),
 	)
 	if err != nil {
@@ -162,7 +173,7 @@ func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) e
 	return nil
 }
 
-func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func checkSuperuser(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.Exec(
 		"superuser check",
 		"checking superuser privileges",
@@ -179,12 +190,16 @@ func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error
 				return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
 			}
 
-			mms.IsRoot.Store(parsedOutput == 0)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.IsRoot = parsedOutput == 0
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.IsRoot.Store(true)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.IsRoot = true
+			})
 		}),
 	)
 	if err != nil {
@@ -194,7 +209,7 @@ func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error
 	return nil
 }
 
-func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
+func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.Exec(
 		"bootstrap detection",
 		"detecting bootstrap status",
@@ -212,32 +227,42 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 			}
 
 			if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
-				mms.Bootstrapped.Store(false)
+				machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+					mi.Bootstrapped = false
+				})
 
 				return nil
 			}
 
 			if osrelease["ID"] != "nixos" {
-				mms.RequiresKexec.Store(true)
-				mms.Bootstrapped.Store(false)
+				machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+					mi.RequiresKexec = true
+					mi.Bootstrapped = false
+				})
 
 				return nil
 			}
 
 			if machine.Bootstrap.ForceBootstrap {
-				mms.Bootstrapped.Store(false)
-				mms.RequiresKexec.Store(machine.Bootstrap.ForceBootstrapKexec)
+				machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+					mi.Bootstrapped = false
+					mi.RequiresKexec = machine.Bootstrap.ForceBootstrapKexec
+				})
 
 				return nil
 			}
 
-			mms.Bootstrapped.Store(true)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Bootstrapped = true
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.Bootstrapped.Store(false)
-			mms.RequiresKexec.Store(true)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Bootstrapped = false
+				mi.RequiresKexec = true
+			})
 		}),
 	)
 	if err != nil {
@@ -265,7 +290,7 @@ func handleUnbootstrapped(exc *executioner.Executioner, machine *config.Machine)
 	return nil
 }
 
-func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func readGenerations(exc *executioner.Executioner, machine *config.Machine) error {
 	err := exc.Exec(
 		"list generations",
 		"listing generations",
@@ -277,18 +302,26 @@ func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) erro
 				return err
 			}
 
-			mms.Generations.Store(genData)
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Generations = genData
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			generations, _ := omap.New[uint, *config.GenerationInfo]()
-
-			_ = generations.Set(1, &config.GenerationInfo{Date: "DRY_RUN", Nixos: "DRY_RUN", Kernel: "DRY_RUN", Current: true})
-
-			mms.Generations.Store(&config.GenerationsData{
-				Current:     1,
-				Generations: generations,
+			machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+				mi.Generations = &config.GenerationsData{
+					Current: 1,
+					Generations: []*config.GenerationInfo{
+						{
+							Number:  1,
+							Date:    "DRY_RUN",
+							Nixos:   "DRY_RUN",
+							Kernel:  "DRY_RUN",
+							Current: true,
+						},
+					},
+				}
 			})
 		}),
 	)
@@ -296,8 +329,9 @@ func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) erro
 	return errors.Wrap(err, "failed to list generations")
 }
 
-func validateSSHMachineState(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
-	isBootstrapped := mms.Bootstrapped.Load()
+func validateSSHMachineState(exc *executioner.Executioner, machine *config.Machine) error {
+	mi := machine.MetaInspect.Load()
+	isBootstrapped := mi != nil && mi.Bootstrapped
 
 	err := exc.ExecFn(
 		"validate SSH config upon detected machine state",
@@ -319,71 +353,52 @@ func validateSSHMachineState(exc *executioner.Executioner, machine *config.Machi
 	return errors.Wrap(err, "SSH config validation failed upon detected machine state")
 }
 
-func parseGenerationsOutput(output string) (*config.GenerationsData, error) {
+func parseGenerationsOutput(output string) (*machine.GenerationsData, error) {
 	lines := strings.Split(output, "\n")
 
-	generations, err := omap.New[uint, *config.GenerationInfo]()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create generations map")
-	}
-
-	var currentGenNum uint
+	generationsData := &machine.GenerationsData{}
 
 	for i, line := range lines {
-		genNum, gen, ok := parseGenerationLine(i, line)
+		genNum, isCurrent, ok := parseGenerationLine(i, line)
 		if !ok {
 			continue
 		}
 
-		if gen.Current {
-			currentGenNum = genNum
+		if isCurrent {
+			generationsData.Current = genNum
 		}
 
-		err = generations.Set(genNum, gen)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to set generation")
-		}
+		generationsData.Generations = append(generationsData.Generations, genNum)
 	}
 
-	if generations.Len() == 0 {
+	if len(generationsData.Generations) == 0 {
 		return nil, errors.New("no generations found - ensure this is a NixOS system with system profiles")
 	}
 
-	return &config.GenerationsData{
-		Current:     currentGenNum,
-		Generations: generations,
-	}, nil
+	return generationsData, nil
 }
 
-func parseGenerationLine(idx int, line string) (uint, *config.GenerationInfo, bool) {
-	const minFields = 5
+func parseGenerationLine(idx int, line string) (uint, bool, bool) {
+	const minFields = 1
 
 	line = strings.TrimSpace(line)
 	if line == "" || idx == 0 {
-		return 0, nil, false
+		return 0, false, false
 	}
 
 	fields := strings.Fields(line)
 	if len(fields) < minFields {
-		return 0, nil, false
+		return 0, false, false
 	}
 
 	parsedNum, err := strconv.ParseUint(fields[0], 10, 0)
 	if err != nil {
-		return 0, nil, false
-	}
-
-	gen := &config.GenerationInfo{
-		Date:   fields[1] + " " + fields[2],
-		Nixos:  fields[3],
-		Kernel: fields[4],
+		return 0, false, false
 	}
 
 	const currentFieldIdx = 6
 
-	if len(fields) > currentFieldIdx && fields[len(fields)-1] == "True" {
-		gen.Current = true
-	}
+	isCurrent := len(fields) > currentFieldIdx && fields[len(fields)-1] == "True"
 
-	return uint(parsedNum), gen, true
+	return uint(parsedNum), isCurrent, true
 }

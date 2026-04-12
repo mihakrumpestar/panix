@@ -3,19 +3,18 @@ package config
 import (
 	"bytes"
 	"os"
-	"slices"
 	"strconv"
+	"time"
 
 	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
+	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
-
-var ErrNoFlakesAfterFilter = errors.New("no flakes left after filtering")
 
 func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
@@ -48,7 +47,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	}
 
 	// Filter based on tags and disabled flags
-	err = conf.filterFleet()
+	err = conf.Fleet.Filter()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
@@ -63,6 +62,9 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
 	}
+
+	conf.StartTime = time.Now()
+	conf.PanixVersion = gen.Version()
 
 	return conf, nil
 }
@@ -105,7 +107,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 	}
 
 	if conf.ColorScheme == nil {
-		conf.ColorScheme = defaultColorScheme()
+		conf.ColorScheme = DefaultColorScheme()
 	}
 
 	conf.Flags.DefautlIfNoTTY()
@@ -124,26 +126,20 @@ func (c *Config) initFleet() error {
 		return err
 	}
 
-	for _, flakePair := range c.Fleet.Flakes.Omap.Pairs() {
-		flakeName, flake := flakePair.Key, flakePair.Value
-
-		err = flake.Init(flakeName, &c.Fleet.Attributes)
+	for _, flake := range c.Fleet.Flakes.Pairs() {
+		err = flake.Value.Init(flake.Key, &c.Fleet.Attributes)
 		if err != nil {
 			return err
 		}
 
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			configurationName, configuration := configPair.Key, configPair.Value
-
-			err = configuration.Init(configurationName, flake)
+		for _, cfg := range flake.Value.Configurations.Pairs() {
+			err = cfg.Value.Init(cfg.Key, &flake.Value.Attributes)
 			if err != nil {
 				return err
 			}
 
-			for _, machinePair := range configuration.Machines.Omap.Pairs() {
-				machineName, machine := machinePair.Key, machinePair.Value
-
-				err = machine.Init(machineName, configuration)
+			for _, machine := range cfg.Value.Machines.Pairs() {
+				err = machine.Value.Init(machine.Key, &cfg.Value.Attributes)
 				if err != nil {
 					return err
 				}
@@ -152,20 +148,4 @@ func (c *Config) initFleet() error {
 	}
 
 	return nil
-}
-
-// Helpers
-
-func machineContainsTags(tags, filterTags []string) bool {
-	if len(filterTags) == 0 {
-		return true
-	}
-
-	for _, filterTag := range filterTags {
-		if slices.Contains(tags, filterTag) {
-			return true
-		}
-	}
-
-	return false
 }

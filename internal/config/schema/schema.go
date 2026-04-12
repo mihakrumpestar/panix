@@ -13,6 +13,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	config_attributes "github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
+	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
+	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
@@ -397,6 +400,47 @@ func (g *Generator) processNumericType(typeName string, validateTag string) *Typ
 
 // processSliceType processes slice/array types and returns their schema definition.
 func (g *Generator) processSliceType(typ reflect.Type, field reflect.StructField, validateTag string) (*TypeDefinition, error) {
+	// Check if this slice should be treated as a YAML key-value object
+	// (flakes, configurations, machines are key-value in YAML but slice internally)
+	if g.isYAMLKeyedSlice(field) {
+		// Get the element type to determine the value schema
+		elemType := typ.Elem()
+		if elemType.Kind() == reflect.Ptr {
+			elemType = elemType.Elem()
+		}
+
+		valueSchema, err := g.processType(typ.Elem(), field)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if this field allows null values (machines does, flakes/configurations don't)
+		yamlTag := field.Tag.Get("yaml")
+		parts := strings.Split(yamlTag, ",")
+		fieldName := parts[0]
+
+		allowNull := fieldName == "machines"
+
+		var additionalProps *AdditionalPropertiesWrapper
+		if allowNull {
+			additionalProps = &AdditionalPropertiesWrapper{
+				Value: map[string]any{
+					"anyOf": []any{
+						valueSchema,
+						map[string]any{"type": "null"},
+					},
+				},
+			}
+		} else {
+			additionalProps = &AdditionalPropertiesWrapper{Value: valueSchema}
+		}
+
+		return &TypeDefinition{
+			Type:                 "object",
+			AdditionalProperties: additionalProps,
+		}, nil
+	}
+
 	itemType, err := g.processType(typ.Elem(), field)
 	if err != nil {
 		return nil, err
@@ -570,6 +614,22 @@ func (g *Generator) isOrderedMap(typ reflect.Type) bool {
 	return hasOmap
 }
 
+// isYAMLKeyedSlice checks if a slice field should be treated as a YAML object
+// (key-value format) for schema generation, even though it's internally stored as a slice.
+func (g *Generator) isYAMLKeyedSlice(field reflect.StructField) bool {
+	yamlTag := field.Tag.Get("yaml")
+	if yamlTag == "" {
+		return false
+	}
+
+	// Check field name from yaml tag
+	parts := strings.Split(yamlTag, ",")
+	fieldName := parts[0]
+
+	// These fields are YAML key-value objects but stored as slices internally
+	return fieldName == "flakes" || fieldName == "configurations" || fieldName == "machines"
+}
+
 // processOrderedMap processes an OrderedMap type and returns its schema definition.
 // Since Go doesn't provide access to generic type parameters at runtime via reflection,
 // we manually handle the known OrderedMap types based on their field names.
@@ -592,13 +652,13 @@ func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinitio
 
 	switch fieldName {
 	case "flakes":
-		valueType = reflect.TypeFor[*config.Flake]()
+		valueType = reflect.TypeFor[*flake.Flake]()
 		allowNull = false
 	case "configurations":
-		valueType = reflect.TypeFor[*config.Configuration]()
+		valueType = reflect.TypeFor[*configuration.Configuration]()
 		allowNull = false
 	case "machines":
-		valueType = reflect.TypeFor[*config.Machine]()
+		valueType = reflect.TypeFor[*machine.Machine]()
 		allowNull = true
 	}
 

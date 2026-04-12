@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
@@ -16,7 +17,8 @@ type Executioner struct {
 	ctx          context.Context
 	timeout      time.Duration
 	dryRun       bool
-	machine      *config.Machine
+	machine      *machine.Machine
+	xpath        attributes.Xpath
 	phaseLog     *log_sphase.PhaseLog
 	onUpdateHook func()
 }
@@ -25,8 +27,9 @@ func NewExecutioner(
 	ctx context.Context,
 	timeout time.Duration,
 	dryRun bool,
-	machine *config.Machine,
+	machine *machine.Machine,
 	phaseLog *log_sphase.PhaseLog,
+	xpath attributes.Xpath,
 	onUpdateHook func(),
 ) *Executioner {
 	return &Executioner{
@@ -34,6 +37,7 @@ func NewExecutioner(
 		timeout:      timeout,
 		dryRun:       dryRun,
 		machine:      machine,
+		xpath:        xpath,
 		phaseLog:     phaseLog,
 		onUpdateHook: onUpdateHook,
 	}
@@ -99,7 +103,7 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	var isLocal bool
 
 	if ex.machine != nil {
-		if ssh := ex.machine.MetaInspect.GetActiveSSH(); ssh != nil {
+		if ssh := ex.machine.GetActiveSSH(); ssh != nil {
 			isLocal = ssh.IsLocal
 		}
 	}
@@ -145,7 +149,7 @@ func (ex *Executioner) startCommandLog(
 	commandLog.TimeAndState.StartTimer()
 
 	ctx := log.With().
-		Str("xpath", ex.phaseLog.CreatorXpath().String()).
+		Str("xpath", ex.xpath.String()).
 		Str("phase", string(ex.phaseLog.Phase())).
 		Str("description", description)
 	if command != "" {

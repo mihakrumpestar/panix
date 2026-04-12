@@ -55,11 +55,10 @@ func logFinalState(workflow *workflow.Workflow) {
 	anyFailed := false
 	states := make(map[string]machineState)
 
-	targetsLogs := workflow.State().TargetsLogs
 	workflowPhases := workflow.WorkflowPhases()
 
 	workflow.FleetTree(func(_ int, machine *config.Machine) {
-		machineStateI := targetsLogs.MustGet(machine.Xpath).ComputeMachineState(workflowPhases)
+		machineStateI := machine.ComputeMachineState(workflowPhases)
 		if machineStateI.Status == "" {
 			return
 		}
@@ -72,7 +71,7 @@ func logFinalState(workflow *workflow.Workflow) {
 
 		if machineStateI.Status == "failed" {
 			anyFailed = true
-			entry.Error = machineStateI.Error.Error()
+			entry.Error = machineStateI.Error
 		}
 
 		states[machine.Xpath.String()] = entry

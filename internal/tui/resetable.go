@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
@@ -57,12 +59,14 @@ func (m *model) restartWorkflow() tea.Cmd {
 	r := m.resetable.Load()
 	if r != nil {
 		err := r.workflow.Cancel()
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			return func() tea.Msg {
 				return errMsg{errors.Wrap(err, "failed to cancel workflow")}
 			}
 		}
 	}
+
+	m.conf.Fleet.ResetState()
 
 	return m.startResetableWorkflow()
 }

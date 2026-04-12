@@ -27,14 +27,14 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 	for idx, hook := range hooks {
 		switch hook {
 		case attributes.PostBootstrapHookWaitForOnline:
-			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
+			activeSSH := ex.machine.GetActiveSSH()
 
 			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), hookType+" did not come online")
 			if err != nil {
 				return err
 			}
 		case attributes.PostBootstrapHookWaitForOffline:
-			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
+			activeSSH := ex.machine.GetActiveSSH()
 
 			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
 			if err != nil {

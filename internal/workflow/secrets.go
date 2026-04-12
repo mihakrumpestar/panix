@@ -15,7 +15,7 @@ import (
 func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) error {
 	secrets := machine.Secrets
 
-	return w.Phase(machine.Attributes.Xpath, phases.Secrets, nil,
+	return w.Phase(machine, phases.Secrets, nil,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			if len(secrets) == 0 {
 				return nil
@@ -60,7 +60,7 @@ func (w *Workflow) transferPlainFileOrDir(
 		secretRemotePath = machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
 	}
 
-	activeSSH := machine.MetaInspect.GetActiveSSH()
+	activeSSH := machine.GetActiveSSH()
 	if activeSSH.IsLocal {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {

@@ -12,7 +12,7 @@ import (
 )
 
 func (w *Workflow) executeTransferPhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Transfer, machine,
+	return w.Phase(machine, phases.Transfer, machine,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
@@ -32,11 +32,12 @@ func executeTransferPhaseMachineWrapper(
 	transferClosure bool,
 ) error {
 	storeArgs := ""
-	if !machine.MetaInspect.Bootstrapped.Load() && transferClosure {
+	mi := machine.MetaInspect.Load()
+	if mi != nil && !mi.Bootstrapped && transferClosure {
 		storeArgs += "?remote-store=local?root=/mnt"
 	}
 
-	activeSSH := machine.MetaInspect.GetActiveSSH()
+	activeSSH := machine.GetActiveSSH()
 	commandWithArgs := slices.Concat(
 		[]string{"nix"},
 		nixExperimentalFeatures,

@@ -12,11 +12,15 @@ import (
 )
 
 func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Activate, machine,
+	return w.Phase(machine, phases.Activate, machine,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
 
-			isBootstrapped := machine.MetaInspect.Bootstrapped.Load()
+			isBootstrapped := false
+			mi := machine.MetaInspect.Load()
+			if mi != nil {
+				isBootstrapped = mi.Bootstrapped
+			}
 
 			// Run bootstrap if not bootstrapped, or force bootstrap is set
 			shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
@@ -83,15 +87,15 @@ func performReboot(exc *executioner.Executioner, machine *config.Machine) error 
 		return nil
 	}
 
-	activeSSH := machine.MetaInspect.GetActiveSSH()
+	activeSSH := machine.GetActiveSSH()
 
 	err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to reboot")
 	if err != nil {
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
-	machine.SwitchToRegularSSH()
-	activeSSH = machine.MetaInspect.GetActiveSSH()
+	machine.State.ActiveSSH = machine.SSHTypeRegular
+	activeSSH = machine.GetActiveSSH()
 
 	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to come back online", "machine did not reconnect after reboot")
 	if err != nil {

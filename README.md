@@ -935,6 +935,9 @@ Commands:
   eval [flags]
     Evaluate config (process templates and anchors) and output result
 
+  snapshot [flags]
+    View snapshot in TUI
+
   inspect [flags]
     Inspect machine per host
 
@@ -1011,6 +1014,12 @@ Flags:
                                    Maximum height for command labels
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+      --snapshot.dir="."           Directory to save snapshots
+                                   ($PANIX_SNAPSHOT_DIR)
+      --snapshot.on-retry          Take snapshot before retry
+                                   ($PANIX_SNAPSHOT_ON_RETRY)
+      --snapshot.on-exit           Take snapshot on exit
+                                   ($PANIX_SNAPSHOT_ON_EXIT)
   -l, --log                        Enable logging to file ($PANIX_LOG)
       --log-file="panix.log"       Log file path (epoch timestamp appended
                                    before .log) ($PANIX_LOG_FILE)

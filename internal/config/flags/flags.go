@@ -29,7 +29,11 @@ const (
 )
 
 type GlobalFlags struct {
-	Config string `yaml:"config" short:"c" help:"Config file" default:"panix.yml"`
+	Config string `yaml:"config" json:"config" short:"c" help:"Config file" default:"panix.yml"`
+}
+
+type RollbackFlags struct {
+	Generation int `name:"gen" yaml:"rollback_generation" json:"rollback_generation" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
 }
 
 type WorkflowFlags struct {
@@ -45,12 +49,14 @@ type WorkflowFlags struct {
 	ActivationMode       ActivationMode `yaml:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 	Output               OutputMode     `yaml:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json"`                                                         //nolint:lll
 
-	Tui     `yaml:"tui" embed:"" prefix:"tui."` //nolint:embeddedstructfieldcheck
-	Logging `yaml:"logging"`                    //nolint:embeddedstructfieldcheck
+	Tui      `yaml:"tui" embed:"" prefix:"tui."`           //nolint:embeddedstructfieldcheck
+	Snapshot `yaml:"snapshot" embed:"" prefix:"snapshot."` //nolint:embeddedstructfieldcheck
+	Logging  `yaml:"logging"`                              //nolint:embeddedstructfieldcheck
 }
 
 type Flags struct {
 	GlobalFlags   `yaml:",inline"`
+	RollbackFlags `yaml:",inline"`
 	WorkflowFlags `yaml:",inline"`
 }
 
@@ -63,6 +69,12 @@ type Tui struct {
 	ShowActiveOnly         bool `yaml:"show_active_only" help:"Show only running or errored logs in TUI build logs (keybind a)"`
 	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" help:"Show raw commands instead of descriptions as labels in build logs (keybind c)"`
 	CommandOutputMaxHeight int  `yaml:"command_output_max_height" help:"Maximum height for command labels and outputs viewports in TUI" default:"8"`
+}
+
+type Snapshot struct {
+	Dir     string `yaml:"snapshot_dir" help:"Directory to save snapshots" default:"."`
+	OnRetry bool   `yaml:"snapshot_on_retry" help:"Take snapshot before retry"`
+	OnExit  bool   `yaml:"snapshot_on_exit" help:"Take snapshot on exit"`
 }
 
 type Logging struct {

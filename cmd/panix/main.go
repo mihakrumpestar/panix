@@ -12,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/schema"
 	"github.com/mihakrumpestar/panix/internal/config/template"
+	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -35,6 +36,10 @@ type CLI struct {
 		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"-"`
 	} `cmd:"" help:"Evaluate config (process templates and anchors) and output result"`
 
+	Snapshot struct {
+		Path string `name:"path" short:"p" help:"Snapshot file or directory" default:"."`
+	} `cmd:"" help:"View snapshot in TUI"`
+
 	Inspect struct {
 		flags.WorkflowFlags
 	} `cmd:"" help:"Inspect machine per host"`
@@ -52,9 +57,8 @@ type CLI struct {
 	} `cmd:"" help:"Deploy secrets to all machines"`
 
 	Rollback struct {
+		flags.RollbackFlags
 		flags.WorkflowFlags
-
-		Generation int `name:"gen" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
 	} `cmd:"" help:"Rollback to a previous generation, use --gen=<number> flag, default is -1"`
 }
 
@@ -80,6 +84,8 @@ func main() {
 		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.GlobalFlags, cli.Schema.Output))
 	case "eval":
 		ctx.FatalIfErrorf(cli.runEvalCommand(cli.GlobalFlags, cli.Eval.Output))
+	case "snapshot":
+		ctx.FatalIfErrorf(cli.runSnapshot(cli.Snapshot.Path))
 
 	// Wokflow commands
 	case "inspect":
@@ -93,7 +99,7 @@ func main() {
 	case "rollback":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Rollback.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Rollback},
 			func(conf *config.Config) {
-				conf.RollbackGeneration = cli.Rollback.Generation
+				//conf.Flags.RollbackFlags.Generation = cli.Rollback.Generation
 			}))
 	default:
 		// Kong handles unknown commands, this should never be reached
@@ -122,6 +128,38 @@ func (c *CLI) runEvalCommand(gf flags.GlobalFlags, outputPath string) error {
 
 func (c *CLI) runSchemaCommand(_ flags.GlobalFlags, outputPath string) error {
 	return errors.Wrap(schema.GenerateSchema(outputPath), "failed to generate schema")
+}
+
+func (c *CLI) runSnapshot(path string) error {
+	stat, err := os.Stat(path)
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat %s", path)
+	}
+
+	var snapshots []*snapshot.Snapshot
+
+	if stat.IsDir() {
+		snapshots, err = snapshot.ReadDir(path)
+		if err != nil {
+			return errors.Wrap(err, "failed to read snapshots from directory")
+		}
+	} else {
+		var s *snapshot.Snapshot
+
+		s, err = snapshot.Read(path)
+		if err != nil {
+			return errors.Wrap(err, "failed to read snapshot file")
+		}
+
+		snapshots = []*snapshot.Snapshot{s}
+	}
+
+	if len(snapshots) == 0 {
+		return errors.New("no snapshots found")
+	}
+
+	// Use the first snapshot for TUI display
+	return errors.Wrap(tui.NewSnapshotTui(context.Background(), snapshots[0]), "snapshot TUI error")
 }
 
 // Wokflow

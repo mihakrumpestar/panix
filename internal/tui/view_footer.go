@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
+	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -29,6 +30,7 @@ var keyDefs = []keyDef{
 	{[]string{"ctrl+r"}, "restart", (*model).handleRestart},
 	{[]string{"ctrl+c"}, "copy", (*model).handleCopy},
 	{[]string{"m"}, "fullscreen", (*model).handleFullscreen},
+	{[]string{"s"}, "snapshot", (*model).handleSnapshot},
 }
 
 var notificationBaseStyle = lipgloss.NewStyle().Bold(true)
@@ -136,6 +138,10 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
+	if m.conf.Flags.Snapshot.OnExit {
+		m.captureSnapshot(snapshot.ReasonExit)
+	}
+
 	m.quitting = true
 	resetable := m.resetable.Load()
 
@@ -170,6 +176,10 @@ func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
+	if m.conf.Flags.Snapshot.OnRetry {
+		m.captureSnapshot(snapshot.ReasonRetry)
+	}
+
 	m.resetable.Load().workflow.State().Retry.Trigger()
 
 	return m, nil
@@ -209,13 +219,38 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 		resetable.viewports.ExitFullscreen()
 	case resetable.viewports.HasActiveInner():
 		resetable.viewports.DeselectAll()
-	case resetable.statsTable.SelectedMachine >= 0:
+	case resetable.statsTable.Data.SelectedMachine >= 0:
 		resetable.statsTable.Reset()
 	case resetable.phaseStatus.SelectedPhase >= 0:
 		resetable.phaseStatus.Reset()
 	}
 
 	return m, nil
+}
+
+func (m *model) handleSnapshot() (tea.Model, tea.Cmd) {
+	m.captureSnapshot(snapshot.ReasonManual)
+
+	return m, m.notification.Set("Snapshot saved", m.conf.ColorScheme.Status.OK)
+}
+
+func (m *model) captureSnapshot(reason snapshot.Reason) {
+	resetable := m.resetable.Load()
+	if resetable == nil || resetable.workflow == nil {
+		return
+	}
+
+	snap, err := snapshot.Capture(m.conf, reason, resetable.err)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to capture snapshot")
+
+		return
+	}
+
+	err = snapshot.Write(m.conf.Flags.Snapshot.Dir, snap)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to write snapshot")
+	}
 }
 
 func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth int) string {

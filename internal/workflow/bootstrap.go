@@ -28,9 +28,10 @@ const KexecURL = "https://github.com/nix-community/nixos-images/releases/latest/
 var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 
 func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
+	return w.Phase(machine, phases.Bootstrap, machine,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			if machine.MetaInspect.RequiresKexec.Load() {
+			mi := machine.MetaInspect.Load()
+			if mi != nil && mi.RequiresKexec {
 				err := w.executeKexec(exc, machine)
 				if err != nil {
 					return err
@@ -96,7 +97,12 @@ func (w *Workflow) executeDiskEncryptionKeys(
 }
 
 func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Machine) error {
-	arch := machine.MetaInspect.Architecture.Load()
+	mi := machine.MetaInspect.Load()
+	arch := ""
+	if mi != nil {
+		arch = mi.Architecture
+	}
+
 	if arch == "" || arch == "DRY_RUN" {
 		arch = "x86_64"
 	}
@@ -136,7 +142,9 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *confi
 		return err
 	}
 
-	machine.MetaInspect.RequiresKexec.Store(false)
+	machine.UpdateMetaInspect(func(mi *config.MetaInspect) {
+		mi.RequiresKexec = false
+	})
 
 	return nil
 }
@@ -250,7 +258,7 @@ func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *config
 
 // waitForKexecReboot waits for the machine to disconnect and reconnect after kexec.
 func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machine *config.Machine) error {
-	activeSSH := machine.MetaInspect.GetActiveSSH()
+	activeSSH := machine.GetActiveSSH()
 
 	err := executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
 	if err != nil {
@@ -266,7 +274,7 @@ func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machine *con
 	}
 
 	// Update active SSH to kexec SSH for subsequent commands
-	machine.MetaInspect.SetActiveSSH(kexecSSH)
+	machine.State.ActiveSSH = machine.SSHTypeKexec
 
 	return w.verifyInstaller(exc)
 }

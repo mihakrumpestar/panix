@@ -7,11 +7,9 @@ import (
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -35,17 +33,11 @@ type Workflow struct {
 }
 
 type WorkflowState struct {
-	Pool        pond.Pool
-	Retry       *retry.Retry
-	TargetsLogs *logs.TargetsLogs
+	Pool  pond.Pool
+	Retry *retry.Retry
 }
 
 func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
-	targetsLogs, err := logs.InitBuildLogs(conf.Fleet, conf.Flags.Logging)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to initialize build logs")
-	}
-
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	workflow := &Workflow{
@@ -53,9 +45,8 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
-			Pool:        pond.NewPool(WorkerPoolMaxConcurrency, pond.WithContext(ctxWithCancel)),
-			Retry:       retry.NewTaskRetry(),
-			TargetsLogs: targetsLogs,
+			Pool:  pond.NewPool(WorkerPoolMaxConcurrency, pond.WithContext(ctxWithCancel)),
+			Retry: retry.NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),
 	}
@@ -94,7 +85,7 @@ func (w *Workflow) Cancel() error {
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
-func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath attributes.Xpath, f func() error) error {
+func (w *Workflow) NewTaskWithRetry(p phases.Phase, logNode config.LogNode, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
@@ -113,7 +104,7 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath attributes.Xpath, 
 				return errors.Wrap(err, "retry wait failed")
 			}
 
-			w.state.TargetsLogs.MustGet(xpath).PhaseLogs.Get(phase).Clear()
+			logNode.GetLog(p).Clear()
 		} else {
 			return nil
 		}
@@ -121,33 +112,35 @@ func (w *Workflow) NewTaskWithRetry(phase phases.Phase, xpath attributes.Xpath, 
 }
 
 func (w *Workflow) Phase(
-	xpath attributes.Xpath,
-	phase phases.Phase,
+	logNode config.LogNode,
+	p phases.Phase,
 	machine *config.Machine,
 	phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error,
 ) error {
 	var err error
 
-	phaseLog := w.state.TargetsLogs.MustGetOrCreateLog(xpath, phase)
+	phaseLog := logNode.MustGetOrCreateLog(p)
 
 	phaseLog.TimeAndState().StartTimer()
 
+	xpath := logNode.GetLogs().Xpath()
+
 	sublog := log.With().
-		Str("phase", string(phase)).
+		Str("phase", string(p)).
 		Str("xpath", xpath.String()).
 		Logger()
 
-	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", phase, xpath)
+	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", p, xpath.String())
 
-	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phase != phases.Inspect)
-	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, machine, phaseLog, w.updateHook.Signal)
+	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && p != phases.Inspect)
+	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, machine, phaseLog, xpath, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	phaseLog.TimeAndState().EndTimerWithError(err)
 	duration, _ := phaseLog.TimeAndState().Duration()
 
 	logger.ResultEvent(sublog,
-		fmt.Sprintf("Finished %s of %s", phase, xpath),
+		fmt.Sprintf("Finished %s of %s", p, xpath.String()),
 		err,
 		func(event *zerolog.Event) {
 			event.Str("event", "phase_end").Dur("duration", duration)
@@ -206,12 +199,9 @@ func (w *Workflow) MachineCount() int {
 func (w *Workflow) FleetTree(function func(idx int, machine *config.Machine)) {
 	idx := 0
 
-	for _, flakePair := range w.conf.Fleet.Flakes.Omap.Pairs() {
-		flake := flakePair.Value
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			configuration := configPair.Value
-			for _, machinePair := range configuration.Machines.Omap.Pairs() {
-				machine := machinePair.Value
+	for _, flake := range w.conf.Fleet.Flakes {
+		for _, cfg := range flake.Configurations {
+			for _, machine := range cfg.Machines {
 				function(idx, machine)
 
 				idx++

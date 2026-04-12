@@ -26,7 +26,7 @@ var (
 var nixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
 
 func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
-	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
+	return w.Phase(configuration, phases.Build, nil,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			if configuration.MetaBuild == nil {
 				configuration.MetaBuild = &config.MetaBuild{}

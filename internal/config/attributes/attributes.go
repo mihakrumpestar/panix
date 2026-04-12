@@ -15,21 +15,21 @@ const defaultFilePermissions os.FileMode = 0700
 // Flake, Configuration, and Machine Attributes
 
 type Attributes struct {
-	SSH     *ssh.SSHClient              `yaml:"ssh,omitempty"`
-	Tags    []string                    `yaml:"tags"`
-	Secrets []*PlainFileOrDirToTransfer `yaml:"secrets,omitempty"`
+	SSH     *ssh.SSHClient              `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	Tags    []string                    `yaml:"tags,omitempty" json:"tags,omitempty"`
+	Secrets []*PlainFileOrDirToTransfer `yaml:"secrets,omitempty" json:"secrets,omitempty"`
 
-	Disabled            bool                        `yaml:"disabled"`
-	OverrideSudoProgram string                      `yaml:"override_sudo_program"`
-	HardwareConfigPath  string                      `yaml:"hardware_config_path"`
-	ActivationMode      config_flags.ActivationMode `yaml:"activation_mode" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
+	Disabled            bool                        `yaml:"disabled" json:"disabled"`
+	OverrideSudoProgram string                      `yaml:"override_sudo_program" json:"override_sudo_program"`
+	HardwareConfigPath  string                      `yaml:"hardware_config_path" json:"hardware_config_path"`
+	ActivationMode      config_flags.ActivationMode `yaml:"activation_mode" json:"activation_mode" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 
 	Bootstrap Bootstrap `yaml:"bootstrap"`
 	Nix       NixConfig `yaml:"nix"`
 
-	Name    string              `yaml:"-" validate:"-"`
-	Xpath   Xpath               `yaml:"-" validate:"-"`
-	Message string              `yaml:"-" validate:"-"`
+	Name    string              `yaml:"-" json:"name" validate:"-"`
+	Xpath   Xpath               `yaml:"-" json:"xpath" validate:"-"`
+	Message string              `yaml:"-" json:"message" validate:"-"`
 	Flags   *config_flags.Flags `yaml:"-" validate:"-"`
 }
 

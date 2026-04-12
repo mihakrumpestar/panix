@@ -1,6 +1,7 @@
 package attributes
 
 import (
+	"encoding/json"
 	"strings"
 )
 
@@ -56,4 +57,19 @@ func (x Xpath) IsParent(xpath Xpath) bool {
 
 func (x Xpath) String() string {
 	return x.path
+}
+
+func (x Xpath) MarshalJSON() ([]byte, error) {
+	return json.Marshal(x.path)
+}
+
+func (x *Xpath) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err //nolint:wrapcheck
+	}
+
+	x.path = s
+
+	return nil
 }

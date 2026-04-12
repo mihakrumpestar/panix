@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -56,6 +58,8 @@ type model struct {
 	notification       *notifications.Notification
 	lastWorkflowUpdate time.Time
 	footer             *Footer
+	isSnapshot         bool
+	snapshotInfo       *snapshotInfo
 }
 
 // NewTui initializes and runs the TUI application.
@@ -138,6 +142,12 @@ func startCPUProfile(path string) (func(), error) {
 }
 
 func (m *model) Init() tea.Cmd {
+	if m.isSnapshot {
+		return tea.Batch(
+			tea.RequestWindowSize,
+		)
+	}
+
 	return tea.Batch(
 		tea.RequestWindowSize,
 		m.startResetableWorkflow(),
@@ -167,9 +177,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case workflowDoneMsg:
+		if m.isSnapshot {
+			return m, nil
+		}
+
 		log.Debug().Msg("workflowDoneMsg")
 
-		// Only exit automatically if exitOnComplete flag is set
+		if m.conf.Flags.Snapshot.OnExit {
+			m.captureSnapshot(snapshot.ReasonExit)
+		}
+
 		if m.conf.Flags.ExitOnComplete {
 			m.quitting = true
 
@@ -186,6 +203,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
 	case tea.KeyPressMsg:
+		if m.isSnapshot {
+			for _, kd := range snapshotKeyDefs {
+				if slices.Contains(kd.keys, msg.String()) {
+					return kd.handler(m)
+				}
+			}
+
+			return m, nil
+		}
+
 		return m.HandleKeyInput(msg)
 
 	case tea.MouseClickMsg:
@@ -205,7 +232,7 @@ func (m *model) View() tea.View {
 	view.MouseMode = tea.MouseModeCellMotion
 
 	resetable := m.resetable.Load()
-	if resetable == nil || resetable.workflow == nil {
+	if resetable == nil {
 		return view
 	}
 
@@ -213,6 +240,10 @@ func (m *model) View() tea.View {
 
 	if m.quitting {
 		return view
+	}
+
+	if m.isSnapshot {
+		mainContent = m.viewSnapshotHeader() + mainContent
 	}
 
 	if resetable.viewports.IsFullscreen() {
@@ -256,7 +287,7 @@ func (m *model) viewMainContent() string {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := resetable.spinners.Debug()
 		debugContent += resetable.viewports.Debug()
-		debugContent += resetable.workflow.State().TargetsLogs.Debug(m.conf.Phases)
+		debugContent += m.conf.Fleet.Debug(m.conf.Phases)
 		builder.WriteString(debugHeader + debugContent)
 	}
 
@@ -268,7 +299,6 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 		resetable := m.resetable.Load()
 		if resetable == nil || resetable.workflow == nil {
 			time.Sleep(workflowUpdateHookPollInterval)
-			log.Debug().Msg("workflowUpdateHook was nil")
 
 			return workflowUpdateHookMsg{}
 		}

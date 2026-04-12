@@ -114,7 +114,7 @@ func (m *model) renderPhaseFlow() string {
 	resetable := m.resetable.Load()
 	resetable.phaseStatus.Phases = phasesList
 	termWidth := resetable.viewports.ContentWidth()
-	statistics := resetable.workflow.State().TargetsLogs.ComputeStatisticsPerPhase(phasesList)
+	statistics := m.conf.Fleet.ComputeStatisticsPerPhase()
 	stateHash := computeStateHash(phasesList, statistics)
 
 	if !m.animationNeedsUpdate(&resetable.phaseStatus.anim) && resetable.phaseStatus.cache.width == termWidth &&

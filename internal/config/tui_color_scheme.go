@@ -62,7 +62,7 @@ const (
 	PhaseStateCompleted
 )
 
-func defaultColorScheme() *ColorScheme {
+func DefaultColorScheme() *ColorScheme {
 	borderStyle := makeBorderStyle()
 
 	return &ColorScheme{

@@ -23,23 +23,18 @@ func (c *Config) filterUnusedPhases() {
 func (c *Config) hasRequiredPhases() hasPhases {
 	var has hasPhases
 
-	for _, flakePair := range c.Fleet.Flakes.Pairs() {
-		for _, cfgPair := range flakePair.Value.Configurations.Pairs() {
-			for _, machinePair := range cfgPair.Value.Machines.Pairs() {
-				machine := machinePair.Value
+	for _, m := range c.Fleet.AllMachines() {
+		if len(m.Secrets) > 0 {
+			has.Secrets = true
+		}
 
-				if len(machine.Secrets) > 0 {
-					has.Secrets = true
-				}
+		if m.Bootstrap.SSH != nil || m.Bootstrap.ForceBootstrap {
+			has.Bootstrap = true
+		}
 
-				if machine.Bootstrap.SSH != nil || machine.Bootstrap.ForceBootstrap {
-					has.Bootstrap = true
-				}
-
-				if has.Secrets && has.Bootstrap {
-					return has
-				}
-			}
+		// Early return since we already have all possible optional phases
+		if has.Secrets && has.Bootstrap {
+			break
 		}
 	}
 

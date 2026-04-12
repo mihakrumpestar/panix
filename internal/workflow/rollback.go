@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -20,12 +19,14 @@ var (
 )
 
 func (w *Workflow) executeRollbackPhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Rollback, machine,
+	return w.Phase(machine, phases.Rollback, machine,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			genData := machine.MetaInspect.Generations.Load()
-			if genData == nil || genData.Generations.Len() == 0 {
+			mi := machine.MetaInspect.Load()
+			if mi == nil || mi.Generations == nil || len(mi.Generations.Generations) == 0 {
 				return ErrNoGenerations
 			}
+
+			genData := mi.Generations
 
 			var targetGenNum uint
 
@@ -74,13 +75,14 @@ func validateAndGetTargetGen(genData *config.GenerationsData, generation int) (u
 	}
 }
 
-func getSpecificGeneration(generations *omap.Omap[uint, *config.GenerationInfo], generation uint) (uint, error) {
-	_, ok := generations.Get(generation)
-	if !ok {
-		return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", generation)
+func getSpecificGeneration(generations []*config.GenerationInfo, generation uint) (uint, error) {
+	for _, gen := range generations {
+		if gen.Number == generation {
+			return generation, nil
+		}
 	}
 
-	return generation, nil
+	return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", generation)
 }
 
 func executeRollback(exc *executioner.Executioner, machine *config.Machine, targetGenNum uint) error {
