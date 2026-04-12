@@ -47,6 +47,10 @@ func (spp *StatisticsPerPhase) Get(phase phases.Phase, state StatsState) []attri
 	return result
 }
 
+func (spp *StatisticsPerPhase) Clear() {
+	spp.stats = make(map[phases.Phase]map[StatsState][]attributes.Xpath)
+}
+
 type StatsPack struct {
 	Running []attributes.Xpath
 	Failed  []attributes.Xpath

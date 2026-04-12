@@ -93,7 +93,7 @@ func main() {
 	case "build":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Build.WorkflowFlags, []phases.Phase{phases.Build}))
 	case "deploy":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Deploy.WorkflowFlags, phases.PhasesInOrder()))
+		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Deploy.WorkflowFlags, phases.DeployPhasesInOrder()))
 	case "secrets":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Secrets.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Secrets}))
 	case "rollback":
@@ -136,7 +136,7 @@ func (c *CLI) runSnapshot(path string) error {
 		return errors.Wrapf(err, "failed to stat %s", path)
 	}
 
-	var snapshots []*snapshot.Snapshot
+	var snapshots []*config.Config
 
 	if stat.IsDir() {
 		snapshots, err = snapshot.ReadDir(path)
@@ -144,14 +144,14 @@ func (c *CLI) runSnapshot(path string) error {
 			return errors.Wrap(err, "failed to read snapshots from directory")
 		}
 	} else {
-		var s *snapshot.Snapshot
+		var s *config.Config
 
 		s, err = snapshot.Read(path)
 		if err != nil {
 			return errors.Wrap(err, "failed to read snapshot file")
 		}
 
-		snapshots = []*snapshot.Snapshot{s}
+		snapshots = []*config.Config{s}
 	}
 
 	if len(snapshots) == 0 {

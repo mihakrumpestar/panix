@@ -31,10 +31,11 @@ const (
 )
 
 type PhaseStatus struct {
-	SelectedPhase int
-	Phases        []phases.Phase
-	anim          animationState
-	cache         phaseStatusCache
+	StatisticsPerPhase *stats.StatisticsPerPhase `json:"-"`
+	SelectedPhase      int                       `json:"selected_phase"`
+	Phases             []phases.Phase            `json:"-"`
+	anim               animationState            `json:"-"`
+	cache              phaseStatusCache          `json:"-"`
 }
 
 type phaseStatusCache struct {

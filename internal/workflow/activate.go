@@ -3,18 +3,21 @@ package workflow
 import (
 	"slices"
 
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine, phases.Activate, machine,
+func (w *Workflow) executeActivatePhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	return w.Phase(phases.Activate, fleetLeaf,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			systemClosure := machine.ParentConfiguration.MetaBuild.SystemClosure
+			machine := fleetLeaf.Machine
+
+			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
 
 			isBootstrapped := false
 			mi := machine.MetaInspect.Load()
@@ -34,7 +37,7 @@ func (w *Workflow) executeActivatePhaseMachine(machine *config.Machine) error {
 	)
 }
 
-func executeBootstrap(exc *executioner.Executioner, machine *config.Machine, systemClosure string) error {
+func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, systemClosure string) error {
 	err := exc.Exec(
 		"nixos-install",
 		"installing NixOS",
@@ -72,7 +75,7 @@ func executeBootstrap(exc *executioner.Executioner, machine *config.Machine, sys
 	return nil
 }
 
-func performReboot(exc *executioner.Executioner, machine *config.Machine) error {
+func performReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"reboot",
 		"rebooting",
@@ -83,19 +86,19 @@ func performReboot(exc *executioner.Executioner, machine *config.Machine) error 
 		return errors.Wrap(err, "reboot failed")
 	}
 
-	if len(machine.Bootstrap.PostBootstrapProvisionedHooks) == 0 {
+	if len(machineI.Bootstrap.PostBootstrapProvisionedHooks) == 0 {
 		return nil
 	}
 
-	activeSSH := machine.GetActiveSSH()
+	activeSSH := machineI.GetActiveSSH()
 
 	err = executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to reboot")
 	if err != nil {
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
-	machine.State.ActiveSSH = machine.SSHTypeRegular
-	activeSSH = machine.GetActiveSSH()
+	machineI.State.ActiveSSH = machine.SSHTypeRegular
+	activeSSH = machineI.GetActiveSSH()
 
 	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to come back online", "machine did not reconnect after reboot")
 	if err != nil {
@@ -105,7 +108,7 @@ func performReboot(exc *executioner.Executioner, machine *config.Machine) error 
 	return nil
 }
 
-func executeActivation(exc *executioner.Executioner, machine *config.Machine, systemClosure string) error {
+func executeActivation(exc *executioner.Executioner, machine *machine.Machine, systemClosure string) error {
 	mode := machine.ActivationMode
 
 	if mode != flags.ActivationModeTest {
@@ -120,7 +123,7 @@ func executeActivation(exc *executioner.Executioner, machine *config.Machine, sy
 
 // Helpers
 
-func setSystemProfile(exc *executioner.Executioner, machine *config.Machine, closurePath string) error {
+func setSystemProfile(exc *executioner.Executioner, machine *machine.Machine, closurePath string) error {
 	err := exc.Exec(
 		"set system profile",
 		"setting system profile",
@@ -131,7 +134,7 @@ func setSystemProfile(exc *executioner.Executioner, machine *config.Machine, clo
 	return errors.Wrap(err, "failed to set system profile")
 }
 
-func activateConfiguration(exc *executioner.Executioner, machine *config.Machine, closurePath string, mode flags.ActivationMode) error {
+func activateConfiguration(exc *executioner.Executioner, machine *machine.Machine, closurePath string, mode flags.ActivationMode) error {
 	binPath := closurePath + "/bin/switch-to-configuration"
 
 	err := exc.Exec(

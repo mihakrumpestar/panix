@@ -4,18 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) error {
+func (w *Workflow) executeSecretsPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	machine := fleetLeaf.Machine
+
 	secrets := machine.Secrets
 
-	return w.Phase(machine, phases.Secrets, nil,
+	return w.Phase(phases.Secrets, fleetLeaf,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
 			if len(secrets) == 0 {
 				return nil
@@ -34,7 +37,7 @@ func (w *Workflow) executeSecretsPhaseMachine(machine *config.Machine) error {
 
 func (w *Workflow) transferPlainFileOrDir(
 	exc *executioner.Executioner,
-	machine *config.Machine,
+	machine *machine.Machine,
 	plainFileOrDir *attributes.PlainFileOrDirToTransfer,
 	transferOfWhat string,
 	transferOSSecrets bool,

@@ -1,8 +1,6 @@
 package machine
 
 import (
-	"time"
-
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
@@ -48,11 +46,11 @@ type MetaInspect struct {
 
 // State does not need to be atomic (updates with UI)
 type State struct {
-	Status    stats.StatsState `json:"status"`
-	Phase     phases.Phase     `json:"phase"`
-	Duration  time.Duration    `json:"duration"`
-	Error     string           `json:"error,omitempty"`
-	ActiveSSH SSHType          `json:"active_ssh"`
+	Status stats.StatsState `json:"status"`
+	Phase  phases.Phase     `json:"phase"`
+	//Duration  time.Duration    `json:"duration"`
+	Error     error   `json:"error,omitempty"`
+	ActiveSSH SSHType `json:"active_ssh"`
 }
 
 type Generations struct {
@@ -68,9 +66,12 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 		return m.Bootstrap.SSH
 
 	case SSHTypeKexec:
-		activeSSH := m.SSH
+		var activeSSH *ssh.SSHClient
+
+		// Copy by value (dereference)
+		*activeSSH = *m.SSH
 		if m.Bootstrap.SSH != nil {
-			activeSSH = m.Bootstrap.SSH
+			*activeSSH = *m.Bootstrap.SSH
 		}
 
 		port := ssh.DefaultSSHPort // default port 22
@@ -78,15 +79,11 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 			port = m.Bootstrap.Kexec.SSHPort
 		}
 
-		return &ssh.SSHClient{
-			Hostname:              activeSSH.Hostname,
-			Port:                  port,
-			Username:              activeSSH.Username,
-			IdentityFile:          activeSSH.IdentityFile,
-			StrictKeyChecking:     false,
-			DisableAutoAddHostKey: true,
-			IsLocal:               activeSSH.IsLocal,
-		}
+		activeSSH.Port = port
+		activeSSH.StrictKeyChecking = false
+		activeSSH.DisableAutoAddHostKey = true
+
+		return activeSSH
 	}
 
 	return nil
@@ -98,77 +95,16 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) err
 		return errors.Wrap(err, "failed to initialize machine")
 	}
 
-	m.MetaInspect.Set(&MetaInspect{})
+	m.MetaInspect.Clear()
 	m.State.ActiveSSH = SSHTypeRegular
 
 	if m.Flags.ActivationMode != flags.ActivationModeSwitch {
 		m.ActivationMode = m.Flags.ActivationMode
 	}
 
-	m.Logs.PhaseLogs, err = phase.NewPhaseLogs(m.Xpath)
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize machine logs")
-	}
+	m.Logs.PhaseLogs = phase.NewPhaseLogs()
 
 	return nil
-}
-
-func (m *Machine) CalculateDurationAndError(workflowPhases []phases.Phase) logs.DurationAndError {
-	m.Logs.CalculateDurationAndError(workflowPhases)
-	m.State = m.ComputeMachineState(workflowPhases)
-
-	return m.Logs.DurationAndErrorCache
-}
-
-func (m *Machine) ComputeMachineState(orderedPhases []phases.Phase) *State {
-	machineState := &State{}
-
-	for _, p := range orderedPhases {
-		pl := m.Logs.PhaseLogs.Get(p)
-		if pl == nil {
-			continue
-		}
-
-		tas := pl.TimeAndState()
-		machineState.Phase = p
-
-		if !tas.IsFinished() {
-			machineState.Status = stats.Running
-			machineState.Duration, _ = tas.DurationOrElapsedTime()
-
-			return machineState
-		}
-
-		duration, _ := tas.DurationOrElapsedTime()
-		machineState.Duration += duration
-
-		endErr := tas.GetEndError()
-		if endErr != nil {
-			machineState.Status = stats.Failed
-			machineState.Error = endErr.Error()
-
-			return machineState
-		}
-	}
-
-	if machineState.Phase != "" {
-		machineState.Status = stats.Done
-	}
-
-	return machineState
-}
-
-func (m *Machine) GetCurrentTargetLog() *phase.PhaseLog {
-	for _, phaseLogPair := range m.Logs.PhaseLogs.All() {
-		phaseLog := phaseLogPair.Value
-
-		err := phaseLog.TimeAndState().GetEndError()
-		if err != nil {
-			return phaseLog
-		}
-	}
-
-	return m.Logs.PhaseLogs.Last()
 }
 
 var (
@@ -177,7 +113,7 @@ var (
 )
 
 func (m *Machine) MaybeSudo() []string {
-	mi := m.MetaInspect.Get()
+	mi := m.MetaInspect.Load()
 	if mi != nil && mi.IsRoot {
 		return emptySudo
 	}
@@ -190,7 +126,7 @@ func (m *Machine) MaybeSudo() []string {
 }
 
 func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
-	mi := m.MetaInspect.Get()
+	mi := m.MetaInspect.Load()
 	if mi != nil && mi.Bootstrapped {
 		return restOfPath
 	}

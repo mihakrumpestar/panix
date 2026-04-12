@@ -22,8 +22,6 @@ const (
 	rowSpanMarker        = " 󱞩"
 )
 
-type MachineRow = config.MachineRow
-
 type StatsTable struct {
 	Data *config.StatsTableData
 }
@@ -179,7 +177,7 @@ func (m *model) buildStatsTable(statsTable *StatsTable, usableWidth int, rows []
 
 	for idx, row := range rows {
 		machine := m.machineByXpath(row.Xpath)
-		phaseLog := machine.GetCurrentTargetLog()
+		phaseLog := machine.GetMachinePhaseLog(machineInOrder)
 
 		flakeDisplay := rowSpanMarker
 		if row.FlakeName != prevFlakeName {
@@ -298,7 +296,7 @@ func (m *model) getStatusIcon(phaseLog *phase.PhaseLog) string {
 		return "🔄"
 	}
 
-	if tas.GetEndError() != nil {
+	if tas.EndError != nil {
 		return "🔴"
 	}
 
@@ -320,7 +318,7 @@ func (m *model) getStatusText(phaseLog *phase.PhaseLog, colors *config.ColorSche
 		return colors.Status.Running.Render(lastCommand.StatusIfRunning)
 	}
 
-	if tas.GetEndError() != nil {
+	if tas.EndError != nil {
 		lastCommand, ok := phaseLog.CommandLogs.Last()
 		if !ok {
 			return colors.Status.Error.Render("internal error: last command is nil")

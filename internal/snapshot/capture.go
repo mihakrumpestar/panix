@@ -7,27 +7,14 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-func Capture(conf *config.Config, reason Reason, workflowErr error) (*Snapshot, error) {
-	conf.Fleet.CalculateDurationAndError(conf.Phases)
+func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr error, workflowPhases []phases.Phase) *config.Config {
+	conf.Fleet.Recalculate(workflowPhases)
 
-	var workflowErrStr string
-	if workflowErr != nil {
-		workflowErrStr = workflowErr.Error()
-	}
+	var confCopy *config.Config
+	*confCopy = *conf
 
-	workflowPhases := conf.Phases
-	if workflowPhases == nil {
-		workflowPhases = []phases.Phase{}
-	}
+	confCopy.SnapshotTime = time.Now()
+	confCopy.WorkflowError = workflowErr
 
-	return &Snapshot{
-		Version:       conf.PanixVersion,
-		AppStartTime:  epoch(conf.StartTime),
-		SnapshotTime:  epoch(time.Now()),
-		Reason:        reason,
-		Phases:        workflowPhases,
-		Flags:         *conf.Flags,
-		Fleet:         conf.Fleet,
-		WorkflowError: workflowErrStr,
-	}, nil
+	return confCopy
 }

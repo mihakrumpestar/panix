@@ -7,8 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
 
-// Logs holds the shared log state embedded in Fleet, Flake, Configuration, Machine.
-// It satisfies the LogNode interface, eliminating per-struct boilerplate.
+// Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
 type Logs struct {
 	PhaseLogs             *phase.PhaseLogs `json:"phase_logs"`
 	DurationAndErrorCache DurationAndError `json:"duration_and_error"`
@@ -19,86 +18,86 @@ type DurationAndError struct {
 	Error    error         `json:"error,omitempty"`
 }
 
-func (l *Logs) MustGetOrCreateLog(p phases.Phase) *phase.PhaseLog {
-	return l.PhaseLogs.GetOrCreate(p)
+func New() *Logs {
+	return &Logs{PhaseLogs: phase.NewPhaseLogs()}
 }
 
-func (l *Logs) GetLog(p phases.Phase) *phase.PhaseLog {
-	return l.PhaseLogs.Get(p)
-}
+func (l *Logs) RecalculateDurationAndError() error {
+	durationAndError := DurationAndError{}
 
-func (l *Logs) GetLogs() *phase.PhaseLogs {
-	return l.PhaseLogs
-}
-
-func (l *Logs) GetCachedDurationAndError() DurationAndError {
-	return l.DurationAndErrorCache
-}
-
-func (l *Logs) CalculateDurationAndError(workflowPhases []phases.Phase) DurationAndError {
-	if len(l.children) == 0 {
-		l.calculateFromPhases()
-	} else {
-		l.calculateFromChildren(workflowPhases)
-	}
-
-	return l.DurationAndErrorCache
-}
-
-func (l *Logs) calculateFromChildren(workflowPhases []phases.Phase) {
-	l.DurationAndErrorCache = DurationAndError{}
-
-	for _, child := range l.children {
-		childDae := child.CalculateDurationAndError(workflowPhases)
-		if childDae.Duration > l.DurationAndErrorCache.Duration {
-			l.DurationAndErrorCache = childDae
-		}
-	}
-}
-
-func (l *Logs) calculateFromPhases() {
-	l.DurationAndErrorCache = DurationAndError{}
-
-	for _, phaseLogPair := range l.PhaseLogs.All() {
-		tas := phaseLogPair.Value.TimeAndState()
+	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
+		tas := phaseLogPair.Value.TimeAndState.Load()
 
 		duration, err := tas.DurationOrElapsedTime()
 		if err != nil {
-			l.DurationAndErrorCache.Error = err
-
-			break
+			return err
 		}
 
-		l.DurationAndErrorCache.Duration += duration
+		durationAndError.Duration += duration
 
-		err = tas.GetEndError()
+		err = tas.EndError
 		if err != nil {
-			l.DurationAndErrorCache.Error = err
+			durationAndError.Error = err
 
 			break
 		}
 	}
+
+	l.DurationAndErrorCache = durationAndError
+
+	return nil
 }
 
-func (l *Logs) propagateLog(p phases.Phase, log *phase.PhaseLog) {
-	for _, child := range l.children {
-		child.GetLogs().SetIfNotExists(p, log)
-	}
-}
-
-func (l *Logs) ClearLogs() {
-	if l.PhaseLogs != nil {
-		l.PhaseLogs.Clear()
-	}
-
+func (l *Logs) Clear() {
+	l.PhaseLogs.Clear()
 	l.DurationAndErrorCache = DurationAndError{}
 }
 
-// LogNode is implemented by Fleet, Flake, Configuration, and Machine via embedded LogEntity.
-type LogNode interface {
-	MustGetOrCreateLog(p phases.Phase) *phase.PhaseLog
-	GetLog(p phases.Phase) *phase.PhaseLog
-	GetLogs() *phase.PhaseLogs
-	GetCachedDurationAndError() DurationAndError
-	CalculateDurationAndError(workflowPhases []phases.Phase) DurationAndError
+// Helpers
+
+// MergePhaseLogs merges multiple PhaseLogs.
+func MergePhaseLogs(phasesInOrder []phases.Phase, input ...*phase.PhaseLogs) *Logs {
+	logs := New()
+
+	gathered := phase.NewPhaseLogs()
+
+	// Gather all together
+	for _, pl := range input {
+		if pl == nil {
+			continue
+		}
+
+		for _, pair := range pl.Pairs() {
+			if gathered.MustGet(pair.Key) != nil {
+				continue
+			}
+
+			gathered.Set(pair.Key, pair.Value)
+		}
+	}
+
+	// Add phases in order (stopping after the first errored phase).
+	for _, phase := range phasesInOrder {
+		phaseLog, ok := gathered.Get(phase)
+		if !ok {
+			continue
+		}
+
+		logs.PhaseLogs.Set(phase, phaseLog)
+
+		tas := phaseLog.TimeAndState.Load()
+		phaseDOET, _ := tas.DurationOrElapsedTime()
+
+		// Sum up all valid durations and set last error
+		logs.DurationAndErrorCache = DurationAndError{
+			Duration: logs.DurationAndErrorCache.Duration + phaseDOET,
+			Error:    tas.EndError,
+		}
+
+		if tas.EndError != nil {
+			break
+		}
+	}
+
+	return logs
 }

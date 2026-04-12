@@ -7,6 +7,9 @@ import (
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
@@ -85,7 +88,7 @@ func (w *Workflow) Cancel() error {
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
-func (w *Workflow) NewTaskWithRetry(p phases.Phase, logNode config.LogNode, f func() error) error {
+func (w *Workflow) NewTaskWithRetry(p phases.Phase, logs *logs.Logs, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
@@ -104,26 +107,45 @@ func (w *Workflow) NewTaskWithRetry(p phases.Phase, logNode config.LogNode, f fu
 				return errors.Wrap(err, "retry wait failed")
 			}
 
-			logNode.GetLog(p).Clear()
+			phaseLog, ok := logs.PhaseLogs.Get(p)
+			if !ok {
+				continue
+			}
+
+			phaseLog.Clear()
 		} else {
 			return nil
 		}
 	}
 }
 
-func (w *Workflow) Phase(
-	logNode config.LogNode,
-	p phases.Phase,
-	machine *config.Machine,
-	phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error,
-) error {
-	var err error
+func (w *Workflow) Phase(p phases.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error) error {
+	var (
+		logs  *logs.Logs
+		xpath attributes.Xpath
+		err   error
+	)
 
-	phaseLog := logNode.MustGetOrCreateLog(p)
+	switch phases.GetPhaseScope(p) {
+	case phases.ScopeMachine:
+		logs = fleetLeaf.Machine.Logs
+		xpath = fleetLeaf.Machine.Xpath
+	case phases.ScopeConfiguration:
+		logs = fleetLeaf.Configuration.Logs
+		xpath = fleetLeaf.Configuration.Xpath
+	case phases.ScopeFlake:
+		logs = fleetLeaf.Flake.Logs
+		xpath = fleetLeaf.Flake.Xpath
+	case phases.ScopeFleet:
+		logs = fleetLeaf.Flake.Logs
+		xpath = fleetLeaf.Flake.Xpath
+	default:
+		return errors.New("invalid phase scope")
+	}
 
-	phaseLog.TimeAndState().StartTimer()
+	phaseLog := logs.PhaseLogs.GetOrCreate(p)
 
-	xpath := logNode.GetLogs().Xpath()
+	phaseLog.TimeAndState.StartTimer()
 
 	sublog := log.With().
 		Str("phase", string(p)).
@@ -133,11 +155,14 @@ func (w *Workflow) Phase(
 	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", p, xpath.String())
 
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && p != phases.Inspect)
-	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, machine, phaseLog, xpath, w.updateHook.Signal)
+	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, xpath, fleetLeaf.Machine, p, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
-	phaseLog.TimeAndState().EndTimerWithError(err)
-	duration, _ := phaseLog.TimeAndState().Duration()
+	phaseLog.TimeAndState.EndTimerWithError(err)
+	duration, err := phaseLog.TimeAndState.Load().Duration()
+	if err != nil {
+		return err
+	}
 
 	logger.ResultEvent(sublog,
 		fmt.Sprintf("Finished %s of %s", p, xpath.String()),
@@ -153,14 +178,12 @@ func (w *Workflow) Phase(
 func (w *Workflow) StartWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
-	w.FleetTree(func(idx int, machine *config.Machine) {
+	for idx, fleetLeaf := range w.conf.Fleet.AllMachines() {
 		subPool.SubmitErr(func() error {
 			// Create a shared phaseRunner for this machine
 			phaseRunnerInstance := &phaseRunner{
-				r:       w.runner,
-				flake:   machine.ParentConfiguration.ParentFlake,
-				config:  machine.ParentConfiguration,
-				machine: machine,
+				r:         w.runner,
+				fleetLeaf: fleetLeaf,
 			}
 
 			// Execute each phase in order
@@ -173,7 +196,7 @@ func (w *Workflow) StartWorkflow() error {
 
 			return nil
 		})
-	})
+	}
 
 	err := subPool.Wait()
 
@@ -189,44 +212,30 @@ func (w *Workflow) StartWorkflow() error {
 func (w *Workflow) MachineCount() int {
 	count := 0
 
-	w.FleetTree(func(i int, machine *config.Machine) {
+	for _, _ = range w.conf.Fleet.AllMachines() {
 		count++
-	})
+	}
 
 	return count
 }
 
-func (w *Workflow) FleetTree(function func(idx int, machine *config.Machine)) {
-	idx := 0
-
-	for _, flake := range w.conf.Fleet.Flakes {
-		for _, cfg := range flake.Configurations {
-			for _, machine := range cfg.Machines {
-				function(idx, machine)
-
-				idx++
-			}
-		}
-	}
-}
-
 // executePhase executes a phase by dispatching to the appropriate handler.
-func (w *Workflow) executePhase(phase phases.Phase, flake *config.Flake, config *config.Configuration, machine *config.Machine) error {
+func (w *Workflow) executePhase(phase phases.Phase, fleetLeaf *fleet.FleetLeaf) error {
 	switch phase {
 	case phases.Inspect:
-		return w.executeInspectPhaseMachine(machine)
+		return w.executeInspectPhaseMachine(fleetLeaf)
 	case phases.Build:
-		return w.executeBuildPhaseConfiguration(flake, config)
+		return w.executeBuildPhaseConfiguration(fleetLeaf)
 	case phases.Bootstrap:
-		return w.executeBootstrapPhaseMachine(flake, config, machine)
+		return w.executeBootstrapPhaseMachine(fleetLeaf)
 	case phases.Transfer:
-		return w.executeTransferPhaseMachine(machine)
+		return w.executeTransferPhaseMachine(fleetLeaf)
 	case phases.Secrets:
-		return w.executeSecretsPhaseMachine(machine)
+		return w.executeSecretsPhaseMachine(fleetLeaf)
 	case phases.Activate:
-		return w.executeActivatePhaseMachine(machine)
+		return w.executeActivatePhaseMachine(fleetLeaf)
 	case phases.Rollback:
-		return w.executeRollbackPhaseMachine(machine)
+		return w.executeRollbackPhaseMachine(fleetLeaf)
 	default:
 		return nil
 	}

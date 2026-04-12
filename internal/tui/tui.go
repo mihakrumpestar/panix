@@ -18,7 +18,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
-	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -54,12 +53,11 @@ type model struct {
 	conf               *config.Config
 	dimensions         *viewports.Dimensions
 	quitting           bool
+	isSnapshot         bool
 	resetable          atomic.Pointer[resetable]
 	notification       *notifications.Notification
 	lastWorkflowUpdate time.Time
 	footer             *Footer
-	isSnapshot         bool
-	snapshotInfo       *snapshotInfo
 }
 
 // NewTui initializes and runs the TUI application.
@@ -184,7 +182,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		log.Debug().Msg("workflowDoneMsg")
 
 		if m.conf.Flags.Snapshot.OnExit {
-			m.captureSnapshot(snapshot.ReasonExit)
+			m.captureSnapshot(config.SnaphsotReasonExit)
 		}
 
 		if m.conf.Flags.ExitOnComplete {

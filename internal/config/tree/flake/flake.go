@@ -25,10 +25,7 @@ func (f *Flake) Init(name string, attr *config_attributes.Attributes) error {
 		return errors.Wrap(err, "failed to initialize flake")
 	}
 
-	f.Logs.PhaseLogs, err = phase.NewPhaseLogs(f.Xpath)
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize flake logs")
-	}
+	f.Logs.PhaseLogs = phase.NewPhaseLogs()
 
 	return nil
 }

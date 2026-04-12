@@ -23,7 +23,8 @@ func (c *Config) filterUnusedPhases() {
 func (c *Config) hasRequiredPhases() hasPhases {
 	var has hasPhases
 
-	for _, m := range c.Fleet.AllMachines() {
+	for _, treeLeaf := range c.Fleet.AllMachines() {
+		m := treeLeaf.Machine
 		if len(m.Secrets) > 0 {
 			has.Secrets = true
 		}

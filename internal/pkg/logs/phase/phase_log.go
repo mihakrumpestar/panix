@@ -1,7 +1,6 @@
 package phase
 
 import (
-	"github.com/mihakrumpestar/panix/internal/pkg/atomicpointer"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomicslice"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
@@ -9,13 +8,13 @@ import (
 
 type PhaseLog struct {
 	CommandLogs  *atomicslice.AtomicSlice[*command.CommandLog]
-	TimeAndState atomicpointer.AtomicPointer[timeandstate.TimeAndState] `json:"time_and_state"`
+	TimeAndState *timeandstate.AtomicTimeAndState `json:"time_and_state"`
 }
 
 func NewPhaseLog() *PhaseLog {
 	return &PhaseLog{
 		CommandLogs:  atomicslice.New[*command.CommandLog](),
-		TimeAndState: atomicpointer.AtomicPointer[timeandstate.TimeAndState]{},
+		TimeAndState: timeandstate.New(),
 	}
 }
 

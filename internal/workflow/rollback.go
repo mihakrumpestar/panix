@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
@@ -18,11 +19,13 @@ var (
 	ErrGenerationOutOfRange = errors.New("generation number out of range")
 )
 
-func (w *Workflow) executeRollbackPhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine, phases.Rollback, machine,
+func (w *Workflow) executeRollbackPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	return w.Phase(phases.Rollback, fleetLeaf,
 		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+			machine := fleetLeaf.Machine
+
 			mi := machine.MetaInspect.Load()
-			if mi == nil || mi.Generations == nil || len(mi.Generations.Generations) == 0 {
+			if mi == nil || mi.Generations == nil || len(mi.Generations.Available) == 0 {
 				return ErrNoGenerations
 			}
 
@@ -37,7 +40,7 @@ func (w *Workflow) executeRollbackPhaseMachine(machine *config.Machine) error {
 				func(log *command.CommandLog) error {
 					var err error
 
-					targetGenNum, err = validateAndGetTargetGen(genData, w.conf.RollbackGeneration)
+					targetGenNum, err = validateAndGetTargetGen(genData, w.conf.Flags.Generation)
 					if err != nil {
 						return err
 					}
@@ -56,36 +59,36 @@ func (w *Workflow) executeRollbackPhaseMachine(machine *config.Machine) error {
 	)
 }
 
-func validateAndGetTargetGen(genData *config.GenerationsData, generation int) (uint, error) {
-	generations := genData.Generations
-	currentGen := genData.Current
+func validateAndGetTargetGen(generations *machine.Generations, rollbackGeneration int) (uint, error) {
+	current := generations.Current
+	availableGenerations := generations.Available
 
 	switch {
-	case generation == 0:
-		return currentGen, nil
-	case generation < 0:
-		resolvedGeneration := int(currentGen) + generation //nolint:gosec // G115: uint -> int should not overflow
+	case rollbackGeneration == 0:
+		return current, nil
+	case rollbackGeneration < 0:
+		resolvedGeneration := int(current) + rollbackGeneration //nolint:gosec // G115: uint -> int should not overflow
 		if resolvedGeneration <= 0 {
 			return 0, errors.Wrapf(ErrGenerationOutOfRange, "%d", resolvedGeneration)
 		}
 
-		return getSpecificGeneration(generations, uint(resolvedGeneration))
+		return getSpecificGeneration(availableGenerations, uint(resolvedGeneration))
 	default:
-		return getSpecificGeneration(generations, uint(generation))
+		return getSpecificGeneration(availableGenerations, uint(rollbackGeneration))
 	}
 }
 
-func getSpecificGeneration(generations []*config.GenerationInfo, generation uint) (uint, error) {
-	for _, gen := range generations {
-		if gen.Number == generation {
-			return generation, nil
+func getSpecificGeneration(availableGenerations []uint, specificGeneration uint) (uint, error) {
+	for _, availableGeneration := range availableGenerations {
+		if availableGeneration == specificGeneration {
+			return specificGeneration, nil
 		}
 	}
 
-	return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", generation)
+	return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", specificGeneration)
 }
 
-func executeRollback(exc *executioner.Executioner, machine *config.Machine, targetGenNum uint) error {
+func executeRollback(exc *executioner.Executioner, machine *machine.Machine, targetGenNum uint) error {
 	closurePath, err := findGenerationClosure(exc, machine, targetGenNum)
 	if err != nil {
 		return errors.Wrap(err, "failed to find generation closure")
@@ -104,7 +107,7 @@ func executeRollback(exc *executioner.Executioner, machine *config.Machine, targ
 	return nil
 }
 
-func findGenerationClosure(exc *executioner.Executioner, machine *config.Machine, generation uint) (string, error) {
+func findGenerationClosure(exc *executioner.Executioner, machine *machine.Machine, generation uint) (string, error) {
 	var closurePath string
 
 	generationLink := fmt.Sprintf("/nix/var/nix/profiles/system-%d-link", generation)

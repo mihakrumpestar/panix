@@ -26,13 +26,18 @@ const (
 	Rollback Phase = "rollback"
 )
 
+func (p Phase) String() string {
+	return string(p)
+}
+
 // PhaseScope defines at what level a phase should execute.
 type PhaseScope int
 
 const (
-	ScopeMachine PhaseScope = iota // Once per machine
-	ScopeConfig                    // Once per configuration
-	ScopeFlake                     // Once per flake
+	ScopeMachine       PhaseScope = iota // Once per machine
+	ScopeConfiguration                   // Once per configuration
+	ScopeFlake                           // Once per flake
+	ScopeFleet                           // Once per fleet
 )
 
 // PhaseMetadata defines the behavior of each phase.
@@ -45,7 +50,7 @@ type PhaseMetadata struct {
 // they are defined in execution order.
 var PhaseRegistry = []PhaseMetadata{
 	{Phase: Inspect, Scope: ScopeMachine},
-	{Phase: Build, Scope: ScopeConfig},
+	{Phase: Build, Scope: ScopeConfiguration},
 	{Phase: Bootstrap, Scope: ScopeMachine},
 	{Phase: Transfer, Scope: ScopeMachine},
 	{Phase: Secrets, Scope: ScopeMachine},
@@ -66,14 +71,15 @@ func GetPhaseMetadata(phase Phase) (PhaseMetadata, bool) {
 	return PhaseMetadata{}, false
 }
 
-// PhasesInOrder returns the deploy workflow phases in execution order.
+// DeployPhasesInOrder returns the deploy workflow phases in execution order.
 // Stand-alone phases (like Rollback) are not included.
-func PhasesInOrder() []Phase {
+func DeployPhasesInOrder() []Phase {
 	return []Phase{Inspect, Build, Bootstrap, Transfer, Secrets, Activate}
 }
 
+// TODO: logic in this functon seems off, e.g. DeployPhasesInOrder
 func ValidatePhases(requiredPhases []Phase, skipPhases []Phase) ([]Phase, error) {
-	phases := PhasesInOrder()
+	phases := DeployPhasesInOrder()
 
 	standalonePhases := []Phase{Rollback}
 
@@ -119,5 +125,5 @@ func GetPhaseScope(phase Phase) PhaseScope {
 func ShouldRunOnce(phase Phase) bool {
 	scope := GetPhaseScope(phase)
 
-	return scope == ScopeConfig || scope == ScopeFlake
+	return scope == ScopeConfiguration || scope == ScopeFlake
 }

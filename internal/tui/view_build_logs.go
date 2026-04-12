@@ -73,7 +73,7 @@ func (m *model) ViewBuildLogs() string {
 func (m *model) addPhaseToTree(cfgNode *tree.Tree, cfg *config.Configuration, machines []*config.Machine, p phases.Phase) {
 	indent := treeStep * indentStep
 
-	if phases.GetPhaseScope(p) == phases.ScopeConfig {
+	if phases.GetPhaseScope(p) == phases.ScopeConfiguration {
 		m.addPhases(cfgNode, cfg, indent, false, p)
 	} else {
 		for _, machine := range machines {
@@ -90,7 +90,7 @@ func (m *model) addMachineTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	if !errored {
 		for _, phaseMeta := range phases.PhaseRegistry[1:] {
 			logNode := config.LogNode(machine)
-			if phaseMeta.Scope == phases.ScopeConfig {
+			if phaseMeta.Scope == phases.ScopeConfiguration {
 				logNode = cfg
 			}
 
@@ -121,7 +121,7 @@ func (m *model) addDefaultTree(cfgNode *tree.Tree, cfg *config.Configuration, ma
 	}
 
 	for _, phaseMeta := range phases.PhaseRegistry {
-		if phaseMeta.Scope == phases.ScopeConfig {
+		if phaseMeta.Scope == phases.ScopeConfiguration {
 			flushMachinePhases()
 			m.addPhases(cfgNode, cfg, indent, false, phaseMeta.Phase)
 		} else {

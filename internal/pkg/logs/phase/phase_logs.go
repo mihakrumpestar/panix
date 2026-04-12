@@ -41,12 +41,3 @@ func (pl *PhaseLogs) GetOrCreate(phase phases.Phase) *PhaseLog {
 
 	return phaseLog
 }
-
-// All returns all phase-log pairs as a slice.
-func (pl *PhaseLogs) All() []orderedmap.Pair[phases.Phase, *PhaseLog] {
-	if pl == nil || pl.OrderedMap == nil {
-		return nil
-	}
-
-	return pl.OrderedMap.Pairs()
-}

@@ -16,8 +16,21 @@ type Config struct {
 	// Internal - exportable
 	PanixVersion string    `yaml:"-" json:"panix_version" validate:"-"`
 	StartTime    time.Time `yaml:"-" json:"start_time" validate:"-"`
-	SnapshotTime time.Time `yaml:"-" json:"snapshot_time" validate:"-"`
+
+	// // Filled on snapshot
+
+	SnapshotTime   time.Time      `yaml:"-" json:"snapshot_time" validate:"-"`
+	SnapshotReason SnaphsotReason `json:"reason"`
+	WorkflowError  error          `json:"workflow_error,omitempty"`
 
 	// Internal - not exportable
-	Phases []phases.Phase `yaml:"-" json:"-" validate:"-"`
+	Phases []phases.Phase `yaml:"-" json:"phases" validate:"-"`
 }
+
+type SnaphsotReason string
+
+const (
+	SnaphsotReasonManual SnaphsotReason = "manual"
+	SnaphsotReasonRetry  SnaphsotReason = "retry"
+	SnaphsotReasonExit   SnaphsotReason = "exit"
+)

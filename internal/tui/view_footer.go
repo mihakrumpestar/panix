@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/pkg/errors"
@@ -139,7 +140,7 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	if m.conf.Flags.Snapshot.OnExit {
-		m.captureSnapshot(snapshot.ReasonExit)
+		m.captureSnapshot(config.SnaphsotReasonExit)
 	}
 
 	m.quitting = true
@@ -177,7 +178,7 @@ func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 	if m.conf.Flags.Snapshot.OnRetry {
-		m.captureSnapshot(snapshot.ReasonRetry)
+		m.captureSnapshot(config.SnaphsotReasonRetry)
 	}
 
 	m.resetable.Load().workflow.State().Retry.Trigger()
@@ -229,25 +230,20 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleSnapshot() (tea.Model, tea.Cmd) {
-	m.captureSnapshot(snapshot.ReasonManual)
+	m.captureSnapshot(config.SnaphsotReasonManual)
 
 	return m, m.notification.Set("Snapshot saved", m.conf.ColorScheme.Status.OK)
 }
 
-func (m *model) captureSnapshot(reason snapshot.Reason) {
+func (m *model) captureSnapshot(reason config.SnaphsotReason) {
 	resetable := m.resetable.Load()
 	if resetable == nil || resetable.workflow == nil {
 		return
 	}
 
-	snap, err := snapshot.Capture(m.conf, reason, resetable.err)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to capture snapshot")
+	snap := snapshot.Capture(m.conf, reason, resetable.err)
 
-		return
-	}
-
-	err = snapshot.Write(m.conf.Flags.Snapshot.Dir, snap)
+	err := snapshot.Write(m.conf.Flags.Snapshot.Dir, snap)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to write snapshot")
 	}

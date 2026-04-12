@@ -3,8 +3,13 @@ package timeandstate
 import (
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/pkg/atomicpointer"
 	"github.com/pkg/errors"
 )
+
+type AtomicTimeAndState struct {
+	*atomicpointer.AtomicPointer[TimeAndState]
+}
 
 type TimeAndState struct {
 	StartTime time.Time `json:"start_time"`
@@ -12,29 +17,34 @@ type TimeAndState struct {
 	EndError  error     `json:"end_error,omitempty"`
 }
 
-func New() *TimeAndState {
-	return &TimeAndState{}
+func New() *AtomicTimeAndState {
+	return &AtomicTimeAndState{atomicpointer.New(&TimeAndState{})}
 }
 
-func (tas *TimeAndState) StartTimer() time.Time {
-	if !tas.StartTime.IsZero() {
-		return tas.StartTime
+func (tas *AtomicTimeAndState) StartTimer() time.Time {
+	startTime := tas.Load().StartTime
+	if !startTime.IsZero() {
+		return startTime
 	}
 
 	timeNow := time.Now()
-	tas.StartTime = timeNow
+	tas.Update(func(tas *TimeAndState) {
+		tas.StartTime = timeNow
+	})
 
 	return timeNow
 }
 
-func (tas *TimeAndState) EndTimerWithError(err error) {
-	if tas.IsFinished() {
+func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
+	if tas.Load().IsFinished() {
 		return
 	}
 
 	timeNow := time.Now()
-	tas.EndTime = timeNow
-	tas.EndError = err
+	tas.Update(func(tas *TimeAndState) {
+		tas.EndTime = timeNow
+		tas.EndError = err
+	})
 }
 
 func (tas *TimeAndState) Clear() {
@@ -51,15 +61,6 @@ func (tas *TimeAndState) HasStarted() bool {
 
 func (tas *TimeAndState) IsFinished() bool {
 	return !tas.EndTime.IsZero()
-}
-
-func (tas *TimeAndState) GetEndError() error {
-	err := tas.EndError
-	if err != nil {
-		return err //nolint:wrapcheck
-	}
-
-	return nil
 }
 
 func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {

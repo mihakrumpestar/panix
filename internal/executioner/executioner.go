@@ -9,6 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -17,8 +18,9 @@ type Executioner struct {
 	ctx          context.Context
 	timeout      time.Duration
 	dryRun       bool
-	machine      *machine.Machine
 	xpath        attributes.Xpath
+	machine      *machine.Machine
+	phase        phases.Phase
 	phaseLog     *log_sphase.PhaseLog
 	onUpdateHook func()
 }
@@ -27,17 +29,19 @@ func NewExecutioner(
 	ctx context.Context,
 	timeout time.Duration,
 	dryRun bool,
-	machine *machine.Machine,
-	phaseLog *log_sphase.PhaseLog,
 	xpath attributes.Xpath,
+	machine *machine.Machine,
+	phase phases.Phase,
+	phaseLog *log_sphase.PhaseLog,
 	onUpdateHook func(),
 ) *Executioner {
 	return &Executioner{
 		ctx:          ctx,
 		timeout:      timeout,
 		dryRun:       dryRun,
-		machine:      machine,
 		xpath:        xpath,
+		machine:      machine,
+		phase:        phase,
 		phaseLog:     phaseLog,
 		onUpdateHook: onUpdateHook,
 	}
@@ -150,7 +154,7 @@ func (ex *Executioner) startCommandLog(
 
 	ctx := log.With().
 		Str("xpath", ex.xpath.String()).
-		Str("phase", string(ex.phaseLog.Phase())).
+		Any("phase", ex.phase).
 		Str("description", description)
 	if command != "" {
 		ctx = ctx.Str("command", command)
@@ -162,7 +166,7 @@ func (ex *Executioner) startCommandLog(
 
 	return func(err error, commandLog *logs_command.CommandLog) {
 		commandLog.TimeAndState.EndTimerWithError(err)
-		duration, _ := commandLog.TimeAndState.Duration()
+		duration, _ := commandLog.TimeAndState.Load().Duration()
 
 		logger.ResultEvent(sublog, "command finished", err, func(event *zerolog.Event) {
 			event.Str("event", "command_end").Dur("duration", duration).

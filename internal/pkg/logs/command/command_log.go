@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/atomicpointer"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomicslice"
 	"github.com/mihakrumpestar/panix/internal/pkg/safebuffer"
 	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
@@ -23,8 +22,8 @@ type CommandLog struct {
 	Command         string `json:"command"`
 
 	// Mutate
-	Output       *atomicslice.AtomicSlice[*safebuffer.Buffer]            `json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
-	TimeAndState *atomicpointer.AtomicPointer[timeandstate.TimeAndState] `json:"time_and_state"`
+	Output       *atomicslice.AtomicSlice[*safebuffer.Buffer] `json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
+	TimeAndState *timeandstate.AtomicTimeAndState             `json:"time_and_state"`
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
@@ -34,7 +33,7 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		StatusIfFailed:  statusIfFailed,
 		Command:         strings.Join(slices.Concat(env, command), " "),
 		Output:          atomicslice.New[*safebuffer.Buffer](),
-		TimeAndState:    atomicpointer.New(timeandstate.New()),
+		TimeAndState:    timeandstate.New(),
 	}
 
 	return commandLog

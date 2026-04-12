@@ -29,10 +29,7 @@ func (c *Configuration) Init(name string, parentAttributes *attributes.Attribute
 		return errors.Wrap(err, "failed to init configuration attributes")
 	}
 
-	c.Logs.PhaseLogs, err = phase.NewPhaseLogs(c.Xpath)
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize configuration logs")
-	}
+	c.Logs.PhaseLogs = phase.NewPhaseLogs()
 
 	return nil
 }

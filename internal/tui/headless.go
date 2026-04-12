@@ -6,10 +6,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -51,39 +49,42 @@ type machineState struct {
 	Error    string   `json:"error,omitempty"`
 }
 
+// TODO:
 func logFinalState(workflow *workflow.Workflow) {
-	anyFailed := false
-	states := make(map[string]machineState)
+	/*
+		anyFailed := false
+		states := make(map[string]machineState)
 
-	workflowPhases := workflow.WorkflowPhases()
+		workflowPhases := workflow.WorkflowPhases()
 
-	workflow.FleetTree(func(_ int, machine *config.Machine) {
-		machineStateI := machine.ComputeMachineState(workflowPhases)
-		if machineStateI.Status == "" {
-			return
+		workflow.FleetTree(func(_ int, machine *config.Machine) {
+			machineStateI := machine.ComputeMachineState(workflowPhases)
+			if machineStateI.Status == "" {
+				return
+			}
+
+			entry := machineState{
+				Status:   string(machineStateI.Status),
+				Phase:    string(machineStateI.Phase),
+				Duration: Duration(machineStateI.Duration),
+			}
+
+			if machineStateI.Status == "failed" {
+				anyFailed = true
+				entry.Error = machineStateI.Error
+			}
+
+			states[machine.Xpath.String()] = entry
+		})
+
+		var workflowErr error
+		if anyFailed {
+			workflowErr = errMachinesFailed
 		}
 
-		entry := machineState{
-			Status:   string(machineStateI.Status),
-			Phase:    string(machineStateI.Phase),
-			Duration: Duration(machineStateI.Duration),
-		}
-
-		if machineStateI.Status == "failed" {
-			anyFailed = true
-			entry.Error = machineStateI.Error
-		}
-
-		states[machine.Xpath.String()] = entry
-	})
-
-	var workflowErr error
-	if anyFailed {
-		workflowErr = errMachinesFailed
-	}
-
-	sublog := log.With().Str("event", "workflow_end").Logger()
-	logger.ResultEvent(sublog, "workflow completed", workflowErr, func(event *zerolog.Event) {
-		event.Interface("machines", states)
-	})
+		sublog := log.With().Str("event", "workflow_end").Logger()
+		logger.ResultEvent(sublog, "workflow completed", workflowErr, func(event *zerolog.Event) {
+			event.Interface("machines", states)
+		})
+	*/
 }
