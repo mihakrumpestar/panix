@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 )
 
 func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr error) *config.Config {
@@ -12,7 +13,8 @@ func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr erro
 	confCopy := *conf
 
 	confCopy.SnapshotTime = time.Now()
-	confCopy.WorkflowError = workflowErr
+	confCopy.SnapshotReason = reason
+	confCopy.WorkflowError = errorjson.New(workflowErr)
 
 	return &confCopy
 }

@@ -50,6 +50,8 @@ func Read(path string) (*config.Config, error) {
 		return nil, errors.Wrap(err, "failed to unmarshal snapshot")
 	}
 
+	s.PostUnmarshalInit()
+
 	return &s, nil
 }
 

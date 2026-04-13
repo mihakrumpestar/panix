@@ -179,9 +179,11 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 	a.flags = parentAttr.flags
 
 	// Custom set/merge
-	a.Name = name
-	a.Tags = append(a.Tags, name)
-	a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
+	if name != "" {
+		a.Name = name
+		a.Tags = append(a.Tags, name)
+		a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
+	}
 
 	if parentAttr.ActivationMode == "" {
 		a.ActivationMode = config_flags.ActivationModeSwitch

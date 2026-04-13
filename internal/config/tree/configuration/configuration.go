@@ -4,15 +4,15 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/pkg/errors"
 )
 
 type Configuration struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Machines    orderedmap.OrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required"`
-	FlakeOutput string                                          `yaml:"flake_output" json:"flake_output,omitempty" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
+	Machines    atomicorderedmap.OrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required"`
+	FlakeOutput string                                                `yaml:"flake_output" json:"flake_output,omitempty" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
 	// Internal
 	MetaBuild *MetaBuild `yaml:"-" json:"meta_build,omitempty" validate:"-"`
 	Logs      *logs.Logs `yaml:"-" json:"logs,omitempty"`

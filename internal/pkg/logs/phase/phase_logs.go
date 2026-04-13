@@ -1,21 +1,16 @@
 package phase
 
 import (
-	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
-	"github.com/pkg/errors"
 )
 
-var ErrPhaseNotFound = errors.New("key for del does not exist")
-
-// PhaseLogs manages a collection of PhaseLog instances indexed by phase.
 type PhaseLogs struct {
-	*orderedmap.OrderedMap[phases.Phase, *PhaseLog]
+	*atomicorderedmap.OrderedMap[phases.Phase, *PhaseLog]
 }
 
-// NewPhaseLogs creates a new PhaseLogs instance.
 func NewPhaseLogs() *PhaseLogs {
-	return &PhaseLogs{orderedmap.New[phases.Phase, *PhaseLog]()}
+	return &PhaseLogs{atomicorderedmap.New[phases.Phase, *PhaseLog]()}
 }
 
 // Get retrieves a PhaseLog for the given phase, or nil if not found.

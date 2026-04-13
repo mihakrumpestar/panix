@@ -6,6 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
+	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -50,8 +51,8 @@ type State struct {
 	StatusMsg string           `json:"status_msg"`
 	Phase     phases.Phase     `json:"phase"`
 	//Duration  time.Duration    `json:"duration"`
-	Error     error   `json:"error,omitempty"`
-	ActiveSSH SSHType `json:"active_ssh"`
+	Error     *errorjson.ErrorJSON `json:"error,omitempty"`
+	ActiveSSH SSHType              `json:"active_ssh"`
 }
 
 type Generations struct {

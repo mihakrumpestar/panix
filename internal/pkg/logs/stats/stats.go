@@ -1,7 +1,7 @@
 package stats
 
 import (
-	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -15,14 +15,14 @@ const (
 )
 
 type StatisticsPerPhase struct {
-	*orderedmap.OrderedMap[phases.Phase, StatsPack]
+	*atomicorderedmap.OrderedMap[phases.Phase, StatsPack]
 }
 
 type StatsPack map[StatsState][]xpath.Xpath
 
 func New(workflowPhases []phases.Phase) *StatisticsPerPhase {
 	spp := &StatisticsPerPhase{
-		orderedmap.New[phases.Phase, StatsPack](),
+		atomicorderedmap.New[phases.Phase, StatsPack](),
 	}
 
 	for _, phase := range workflowPhases {

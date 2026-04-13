@@ -8,13 +8,14 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -39,16 +40,25 @@ func (m *model) ViewBuildLogs() string {
 
 	for _, flakePair := range m.conf.Fleet.Flakes.Pairs() {
 		flake := flakePair.Value
+		if flake == nil {
+			continue
+		}
 		flakeNode := m.createNode(0, colors.Flake, flake.Logs, true)
 
 		for _, configurationPair := range flake.Configurations.Pairs() {
 			configuration := configurationPair.Value
+			if configuration == nil {
+				continue
+			}
 			cfgNode := m.createNode(treeStep, colors.Configuration, configuration.Logs, false)
 
 			switch {
 			case selectedMachine.Index >= 0:
 				for _, machinePair := range configuration.Machines.Pairs() {
 					machine := machinePair.Value
+					if machine == nil {
+						continue
+					}
 					if machine.Xpath == selectedMachine.Xpath {
 						m.addMachineTree(cfgNode, configuration, machine.Logs)
 
@@ -74,19 +84,25 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
-func (m *model) addPhaseToTree(treeNode *tree.Tree, cfgLog *logs.Logs, machines orderedmap.OrderedMap[string, *machine.Machine], p phases.Phase) {
+func (m *model) addPhaseToTree(treeNode *tree.Tree, cfgLog *logs.Logs, machines atomicorderedmap.OrderedMap[string, *machine.Machine], p phases.Phase) {
 	indent := treeStep * indentStep
 
 	if phases.GetPhaseScope(p) == phases.ScopeConfiguration {
 		m.addPhases(treeNode, cfgLog, indent, false, p)
 	} else {
-		for _, machine := range machines.Pairs() {
-			m.addMachinePhases(treeNode, machine.Value.Logs, indent, p)
+		for _, machinePair := range machines.Pairs() {
+			if machinePair.Value == nil || machinePair.Value.Logs == nil {
+				continue
+			}
+			m.addMachinePhases(treeNode, machinePair.Value.Logs, indent, p)
 		}
 	}
 }
 
 func (m *model) addMachineTree(treeNode *tree.Tree, cfg *configuration.Configuration, machineLog *logs.Logs) {
+	if machineLog == nil {
+		return
+	}
 	indent := treeStep * indentStep
 	node := m.createNode(indent, m.conf.ColorScheme.Machine, machineLog, false)
 
@@ -94,7 +110,7 @@ func (m *model) addMachineTree(treeNode *tree.Tree, cfg *configuration.Configura
 	if !errored {
 		for _, phaseMeta := range phases.PhaseRegistry[1:] {
 			logNode := machineLog
-			if phaseMeta.Scope == phases.ScopeConfiguration {
+			if phaseMeta.Scope == phases.ScopeConfiguration && cfg != nil {
 				logNode = cfg.Logs
 			}
 
@@ -107,7 +123,7 @@ func (m *model) addMachineTree(treeNode *tree.Tree, cfg *configuration.Configura
 	}
 }
 
-func (m *model) addDefaultTree(treeNode *tree.Tree, cfgLogs *logs.Logs, machines orderedmap.OrderedMap[string, *machine.Machine]) {
+func (m *model) addDefaultTree(treeNode *tree.Tree, cfgLogs *logs.Logs, machines atomicorderedmap.OrderedMap[string, *machine.Machine]) {
 	indent := treeStep * indentStep
 
 	var pendingMachinePhases []phases.Phase
@@ -117,8 +133,11 @@ func (m *model) addDefaultTree(treeNode *tree.Tree, cfgLogs *logs.Logs, machines
 			return
 		}
 
-		for _, machine := range machines.Pairs() {
-			m.addMachinePhases(treeNode, machine.Value.Logs, indent, pendingMachinePhases...)
+		for _, machinePair := range machines.Pairs() {
+			if machinePair.Value == nil || machinePair.Value.Logs == nil {
+				continue
+			}
+			m.addMachinePhases(treeNode, machinePair.Value.Logs, indent, pendingMachinePhases...)
 		}
 
 		pendingMachinePhases = nil
@@ -137,6 +156,9 @@ func (m *model) addDefaultTree(treeNode *tree.Tree, cfgLogs *logs.Logs, machines
 }
 
 func (m *model) addMachinePhases(parent *tree.Tree, machineLogs *logs.Logs, indent int, allowed ...phases.Phase) {
+	if machineLogs == nil {
+		return
+	}
 	node := m.createNode(indent, m.conf.ColorScheme.Machine, machineLogs, false)
 	m.addPhases(node, machineLogs, indent+treeStep, false, allowed...)
 
@@ -146,12 +168,22 @@ func (m *model) addMachinePhases(parent *tree.Tree, machineLogs *logs.Logs, inde
 }
 
 func (m *model) createNode(indent int, style colorscheme.ColorSchemeLogEntity, logNode *logs.Logs, isRoot bool) *tree.Tree {
-	duration := logNode.DurationAndErrorCache.Duration
+	var attr *attributes.Attributes
+	durationSecs := 0.0
 
-	attr := logNode.Attributes()
+	if logNode != nil {
+		attr = logNode.Attributes()
+		durationSecs = logNode.DurationAndErrorCache.Duration.Seconds()
+	}
 
-	leftRaw := fmt.Sprintf("%s %s %s", string(style.Icon), attr.Name, attr.Message)
-	rightRaw := fmt.Sprintf(" (%.2fs)", duration.Seconds())
+	var name, message string
+	if attr != nil {
+		name = attr.Name
+		message = attr.Message
+	}
+
+	leftRaw := fmt.Sprintf("%s %s %s", string(style.Icon), name, message)
+	rightRaw := fmt.Sprintf(" (%.2fs)", durationSecs)
 
 	left := style.Color.Render(leftRaw)
 	right := style.Color.Render(rightRaw)
@@ -169,9 +201,11 @@ func (m *model) createNode(indent int, style colorscheme.ColorSchemeLogEntity, l
 }
 
 func (m *model) addPhases(parent *tree.Tree, logNode *logs.Logs, indent int, stopAtError bool, allowed ...phases.Phase) bool {
-	logs := logNode.PhaseLogs
+	if logNode == nil || logNode.PhaseLogs == nil {
+		return false
+	}
 
-	for _, pair := range logs.Pairs() {
+	for _, pair := range logNode.PhaseLogs.Pairs() {
 		if !slices.Contains(allowed, pair.Key) {
 			continue
 		}
@@ -211,7 +245,12 @@ func (m *model) shouldHidePhase(p phases.Phase, phaseLog *phase.PhaseLog) bool {
 
 func (m *model) createPhaseNode(logNode *logs.Logs, p phases.Phase, phaseLog *phase.PhaseLog, indent int) *tree.Tree {
 	colors := m.conf.ColorScheme
-	phaseXpath := logNode.Attributes().Xpath.NewXpathWithAppend(string(p))
+
+	var phaseXpath xpath.Xpath
+	if logNode != nil && logNode.Attributes() != nil {
+		phaseXpath = logNode.Attributes().Xpath.NewXpathWithAppend(string(p))
+	}
+
 	tas := phaseLog.TimeAndState.Load()
 
 	icon := m.spinnerOrIcon(phaseXpath, string(colors.Phase.Icon), tas)
@@ -227,15 +266,27 @@ func (m *model) createPhaseNode(logNode *logs.Logs, p phases.Phase, phaseLog *ph
 
 func (m *model) addCommandsToPhase(phaseNode *tree.Tree, phaseLog *phase.PhaseLog, p phases.Phase, logNode *logs.Logs, indent int) bool {
 	hideable := slices.Contains(hideablePhases, p)
-	phaseXpath := logNode.Attributes().Xpath.NewXpathWithAppend(string(p))
+
+	var phaseXpath xpath.Xpath
+	if logNode != nil && logNode.Attributes() != nil {
+		phaseXpath = logNode.Attributes().Xpath.NewXpathWithAppend(string(p))
+	}
+
 	cmds := phaseLog.CommandLogs
+	if cmds == nil {
+		return phaseLog.TimeAndState.Load().EndError != nil
+	}
+
 	hasError := phaseLog.TimeAndState.Load().EndError != nil
 
 	for i, cmd := range cmds.Values() {
+		if cmd == nil {
+			continue
+		}
 		if m.conf.Flags.Tui.ShowAllBuildLogs || !hideable || i == cmds.Length()-1 {
 			m.addCommand(phaseNode, cmd, i, phaseXpath, indent)
 
-			if cmd.TimeAndState.Load().EndError != nil {
+			if cmd.TimeAndState != nil && cmd.TimeAndState.Load() != nil && cmd.TimeAndState.Load().EndError != nil {
 				hasError = true
 			}
 		}
@@ -245,15 +296,22 @@ func (m *model) addCommandsToPhase(phaseNode *tree.Tree, phaseLog *phase.PhaseLo
 }
 
 func (m *model) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, phaseXpath xpath.Xpath, indent int) {
+	if cmd == nil {
+		return
+	}
 	colors := m.conf.ColorScheme
 	cmdIndent := indent + treeStep
 	resetable := m.resetable.Load()
 
+	if resetable == nil {
+		return
+	}
+
 	label := cmd.Description
 
-	command := cmd.Command
-	if m.conf.Flags.Tui.ShowCommandsInLabels && len(command) > 2 {
-		label = command
+	commandStr := cmd.Command
+	if m.conf.Flags.Tui.ShowCommandsInLabels && len(commandStr) > 2 {
+		label = commandStr
 	}
 
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)

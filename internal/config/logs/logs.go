@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -17,8 +18,8 @@ type Logs struct {
 }
 
 type DurationAndError struct {
-	Duration time.Duration `json:"duration"`
-	Error    error         `json:"error,omitempty"`
+	Duration time.Duration        `json:"duration"`
+	Error    *errorjson.ErrorJSON `json:"error,omitempty"`
 }
 
 func New(attributes *attributes.Attributes) *Logs {
@@ -30,6 +31,10 @@ func New(attributes *attributes.Attributes) *Logs {
 
 func (l *Logs) Attributes() *attributes.Attributes {
 	return l.attributes
+}
+
+func (l *Logs) SetAttributes(attr *attributes.Attributes) {
+	l.attributes = attr
 }
 
 func (l *Logs) RecalculateDurationAndError() error {
@@ -45,9 +50,8 @@ func (l *Logs) RecalculateDurationAndError() error {
 
 		durationAndError.Duration += duration
 
-		err = tas.EndError
-		if err != nil {
-			durationAndError.Error = err
+		if tas.EndError != nil {
+			durationAndError.Error = tas.EndError
 
 			break
 		}

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
+	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 	"github.com/pkg/errors"
 )
 
@@ -12,13 +13,21 @@ type AtomicTimeAndState struct {
 }
 
 type TimeAndState struct {
-	StartTime time.Time `json:"start_time"`
-	EndTime   time.Time `json:"end_time"`
-	EndError  error     `json:"end_error,omitempty"`
+	StartTime time.Time            `json:"start_time"`
+	EndTime   time.Time            `json:"end_time"`
+	EndError  *errorjson.ErrorJSON `json:"end_error,omitempty"`
 }
 
 func New() *AtomicTimeAndState {
 	return &AtomicTimeAndState{atomicpointer.New(&TimeAndState{})}
+}
+
+func (t *AtomicTimeAndState) UnmarshalJSON(data []byte) error {
+	if t.AtomicPointer == nil {
+		t.AtomicPointer = atomicpointer.New(&TimeAndState{})
+	}
+
+	return t.AtomicPointer.UnmarshalJSON(data)
 }
 
 func (tas *AtomicTimeAndState) StartTimer() time.Time {
@@ -43,7 +52,7 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 	timeNow := time.Now()
 	tas.Update(func(tas *TimeAndState) {
 		tas.EndTime = timeNow
-		tas.EndError = err
+		tas.EndError = errorjson.New(err)
 	})
 }
 

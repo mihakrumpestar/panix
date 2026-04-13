@@ -67,6 +67,9 @@ func (s *AtomicBuffer) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &str); err != nil {
 		return err
 	}
+	if s.buffer == nil {
+		s.buffer = bytes.NewBuffer(nil)
+	}
 	s.Write([]byte(str))
 
 	return nil

@@ -158,9 +158,7 @@ func (c *CLI) runSnapshot(path string) error {
 		return errors.New("no snapshots found")
 	}
 
-	// Use the first snapshot for TUI display
-	//return errors.Wrap(tui.NewSnapshotTui(context.Background(), snapshots[0]), "snapshot TUI error")
-	return errors.New("not implemented")
+	return errors.Wrap(tui.NewSnapshotTui(context.Background(), snapshots[0]), "snapshot TUI error")
 }
 
 // Wokflow

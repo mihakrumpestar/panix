@@ -10,9 +10,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
 	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -22,7 +22,7 @@ import (
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Flakes orderedmap.OrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes"`
+	Flakes atomicorderedmap.OrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
@@ -50,6 +50,15 @@ func (f *Fleet) Recalculate(workflowPhases []phases.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 	f.RecalculateDurationAndError()
 	f.RecalculateMachinesState(workflowPhases)
+
+	f.RefreshStatsTable()
+	f.RecalculatePhaseStatus(workflowPhases)
+}
+
+// RecalculateCachesOnly rebuilds derived caches (flattened logs, stats table, phase status)
+// without overwriting machine state. Use after snapshot deserialization where State and durations are already correct.
+func (f *Fleet) RecalculateCachesOnly(workflowPhases []phases.Phase) {
+	f.RecalculateFlattenedLogs(workflowPhases)
 
 	f.RefreshStatsTable()
 	f.RecalculatePhaseStatus(workflowPhases)
@@ -153,7 +162,7 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 	}
 }
 
-func (f *Fleet) GetMachineLastPhaseLog(machineInOrder int) (orderedmap.Pair[phases.Phase, *phase.PhaseLog], bool) {
+func (f *Fleet) GetMachineLastPhaseLog(machineInOrder int) (atomicorderedmap.Pair[phases.Phase, *phase.PhaseLog], bool) {
 	return f.StatsTable.CacheFlattenedLogs[machineInOrder].PhaseLogs.Last()
 }
 

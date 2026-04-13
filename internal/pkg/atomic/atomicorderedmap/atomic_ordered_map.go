@@ -1,4 +1,4 @@
-package orderedmap
+package atomicorderedmap
 
 import (
 	"encoding/json"
@@ -30,7 +30,30 @@ func New[K comparable, V any]() *OrderedMap[K, V] {
 	return &OrderedMap[K, V]{Omap: m}
 }
 
+// Pairs returns all key-value pairs in insertion order.
+// Nil-safe: returns nil if the OrderedMap or its underlying omap is nil.
+// This can happen after JSON unmarshaling creates a zero-value OrderedMap
+// whose UnmarshalJSON was never called (e.g., missing JSON key).
+func (m *OrderedMap[K, V]) Pairs() []Pair[K, V] {
+	if m == nil || m.Omap == nil {
+		return nil
+	}
+
+	pairs := m.Omap.Pairs()
+	result := make([]Pair[K, V], len(pairs))
+	for i, p := range pairs {
+		result[i] = Pair[K, V]{Key: p.Key, Value: p.Value}
+	}
+
+	return result
+}
+
+// DeleteFunc removes entries matching the predicate.
+// Nil-safe: no-op if the OrderedMap or its underlying omap is nil.
 func (m *OrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
+	if m == nil || m.Omap == nil {
+		return
+	}
 	pairs := m.Omap.Pairs()
 	for _, p := range pairs {
 		if pred(p.Key, p.Value) {
@@ -39,7 +62,13 @@ func (m *OrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 	}
 }
 
+// Last returns the last pair in insertion order.
+// Nil-safe: returns zero value and false if the OrderedMap or its underlying omap is nil.
 func (m *OrderedMap[K, V]) Last() (Pair[K, V], bool) {
+	if m == nil || m.Omap == nil {
+		var zero Pair[K, V]
+		return zero, false
+	}
 	pairs := m.Omap.Pairs()
 	if len(pairs) == 0 {
 		var zero Pair[K, V]
@@ -47,6 +76,34 @@ func (m *OrderedMap[K, V]) Last() (Pair[K, V], bool) {
 	}
 	p := pairs[len(pairs)-1]
 	return Pair[K, V]{Key: p.Key, Value: p.Value}, true
+}
+
+// Get retrieves a value by key.
+// Nil-safe: returns zero value and false if the OrderedMap or its underlying omap is nil.
+func (m *OrderedMap[K, V]) Get(key K) (V, bool) {
+	var zero V
+	if m == nil || m.Omap == nil {
+		return zero, false
+	}
+	return m.Omap.Get(key)
+}
+
+// Set inserts or updates a key-value pair.
+// Nil-safe: returns an error if the OrderedMap or its underlying omap is nil.
+func (m *OrderedMap[K, V]) Set(key K, value V) error {
+	if m == nil || m.Omap == nil {
+		return errors.New("ordered map is nil")
+	}
+	return m.Omap.Set(key, value)
+}
+
+// Len returns the number of entries.
+// Nil-safe: returns 0 if the OrderedMap or its underlying omap is nil.
+func (m *OrderedMap[K, V]) Len() int {
+	if m == nil || m.Omap == nil {
+		return 0
+	}
+	return m.Omap.Len()
 }
 
 func (m *OrderedMap[K, V]) MarshalJSON() ([]byte, error) {

@@ -17,6 +17,7 @@ import (
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -63,6 +64,15 @@ type model struct {
 
 // NewTui initializes and runs the TUI application.
 func NewTui(ctx context.Context, conf *config.Config) error {
+	return newTui(ctx, conf, false)
+}
+
+// NewSnapshotTui initializes and runs the TUI in snapshot mode (no workflow, read-only).
+func NewSnapshotTui(ctx context.Context, conf *config.Config) error {
+	return newTui(ctx, conf, true)
+}
+
+func newTui(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	zone.NewGlobal()
 
 	defer zone.Close()
@@ -88,6 +98,7 @@ func NewTui(ctx context.Context, conf *config.Config) error {
 		ctx:          ctx,
 		conf:         conf,
 		dimensions:   dimensions,
+		isSnapshot:   isSnapshot,
 		notification: notifications.New(),
 		footer:       newFooter(),
 	})
@@ -142,9 +153,17 @@ func startCPUProfile(path string) (func(), error) {
 
 func (m *model) Init() tea.Cmd {
 	if m.isSnapshot {
-		return tea.Batch(
-			tea.RequestWindowSize,
-		)
+		spinners, err := spinners.NewSpinners()
+		if err != nil {
+			return func() tea.Msg { return errMsg{err} }
+		}
+
+		m.resetable.Store(&resetable{
+			spinners:  spinners,
+			viewports: viewports.NewViewports(m.dimensions, m.conf),
+		})
+
+		return tea.RequestWindowSize
 	}
 
 	return tea.Batch(
@@ -274,7 +293,11 @@ func (m *model) viewMainContent() string {
 		return ""
 	}
 
-	m.conf.Fleet.Recalculate(m.conf.Phases)
+	if m.isSnapshot {
+		m.conf.Fleet.RecalculateCachesOnly(m.conf.Phases)
+	} else {
+		m.conf.Fleet.Recalculate(m.conf.Phases)
+	}
 
 	var builder strings.Builder
 

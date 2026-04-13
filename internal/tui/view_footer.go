@@ -140,18 +140,20 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleQuit() (tea.Model, tea.Cmd) {
-	if m.conf.Flags.Snapshot.OnExit {
+	if !m.isSnapshot && m.conf.Flags.Snapshot.OnExit {
 		m.captureSnapshot(config.SnaphsotReasonExit)
 	}
 
 	m.quitting = true
 	resetable := m.resetable.Load()
 
-	err := resetable.workflow.Cancel()
-	if resetable.err != nil && err != nil && !errors.Is(err, context.Canceled) {
-		resetable.err = errors.Wrap(resetable.err, err.Error())
-	} else if err != nil && !errors.Is(err, context.Canceled) {
-		resetable.err = err
+	if resetable.workflow != nil {
+		err := resetable.workflow.Cancel()
+		if resetable.err != nil && err != nil && !errors.Is(err, context.Canceled) {
+			resetable.err = errors.Wrap(resetable.err, err.Error())
+		} else if err != nil && !errors.Is(err, context.Canceled) {
+			resetable.err = err
+		}
 	}
 
 	log.Debug().Msg("Context done, exiting TUI")
@@ -178,6 +180,10 @@ func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
+	if m.isSnapshot {
+		return m, nil
+	}
+
 	if m.conf.Flags.Snapshot.OnRetry {
 		m.captureSnapshot(config.SnaphsotReasonRetry)
 	}
@@ -188,6 +194,10 @@ func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleRestart() (tea.Model, tea.Cmd) {
+	if m.isSnapshot {
+		return m, nil
+	}
+
 	return m, tea.Batch(
 		m.notification.Set("Restarting workflow...", m.conf.ColorScheme.Status.OK),
 		func() tea.Msg { return restartMsg{} },
@@ -234,6 +244,10 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleSnapshot() (tea.Model, tea.Cmd) {
+	if m.isSnapshot {
+		return m, nil
+	}
+
 	m.captureSnapshot(config.SnaphsotReasonManual)
 
 	return m, m.notification.Set("Snapshot saved", m.conf.ColorScheme.Status.OK)

@@ -36,7 +36,14 @@ type PhaseStatus struct {
 
 	CacheStatisticsPerPhase *stats.StatisticsPerPhase `json:"-"`
 	animation               animationState            `json:"-"`
-	cache                   *cache.Cache[string]      `json:"-"`
+	cache                   cache.Cache[string]       `json:"-"`
+	lastRenderWidth         int                       `json:"-"`
+}
+
+func NewPhaseStatus() *PhaseStatus {
+	return &PhaseStatus{
+		Selected: Selected{Index: -1},
+	}
 }
 
 type Selected struct {
@@ -47,13 +54,6 @@ type Selected struct {
 type animationState struct {
 	progress atomic.Uint64
 	lastTime atomic.Time
-}
-
-func NewPhaseStatus() *PhaseStatus {
-	return &PhaseStatus{
-		Selected: Selected{Index: -1},
-		cache:    cache.New[string](),
-	}
 }
 
 func (p *PhaseStatus) Reset() {
@@ -105,9 +105,14 @@ func (p *PhaseStatus) applyIndexToPhase() {
 }
 
 func (p *PhaseStatus) View(width int, colorScheme *colorscheme.ColorScheme) string {
+	widthChanged := width != p.lastRenderWidth
+	if widthChanged {
+		p.lastRenderWidth = width
+	}
+
 	return p.cache.Get(
 		func() (string, bool) {
-			if !p.animationNeedsUpdate() {
+			if !widthChanged && !p.animationNeedsUpdate() {
 				return "", false
 			}
 

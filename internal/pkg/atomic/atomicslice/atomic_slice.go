@@ -43,7 +43,11 @@ func (s *AtomicSlice[T]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return err
 	}
-	s.Clear()
+	if s.Slice == nil {
+		s.Slice = threadsafe.NewSlice[T]()
+	} else {
+		s.Clear()
+	}
 	for _, item := range items {
 		s.Append(item)
 	}

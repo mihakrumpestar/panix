@@ -25,9 +25,10 @@ const (
 type StatsTable struct {
 	Selected Selected `json:"selected"`
 
-	CacheMachineInfos  []MachineInfo        `json:"-"`
-	CacheFlattenedLogs []*logs.Logs         `json:"-"`
-	cache              *cache.Cache[string] `json:"-"`
+	CacheMachineInfos  []MachineInfo `json:"-"`
+	CacheFlattenedLogs []*logs.Logs  `json:"-"`
+
+	cache cache.Cache[string]
 }
 
 type Selected struct {
@@ -44,7 +45,6 @@ type MachineInfo struct {
 func NewStatsTable() *StatsTable {
 	return &StatsTable{
 		Selected: Selected{Index: -1},
-		cache:    cache.New[string](),
 	}
 }
 
