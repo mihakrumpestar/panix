@@ -12,22 +12,8 @@ type AtomicTimeAndState struct {
 	*atomicpointer.AtomicPointer[TimeAndState]
 }
 
-type TimeAndState struct {
-	StartTime time.Time            `json:"start_time"`
-	EndTime   time.Time            `json:"end_time"`
-	EndError  *errorjson.ErrorJSON `json:"end_error,omitempty"`
-}
-
 func New() *AtomicTimeAndState {
 	return &AtomicTimeAndState{atomicpointer.New(&TimeAndState{})}
-}
-
-func (t *AtomicTimeAndState) UnmarshalJSON(data []byte) error {
-	if t.AtomicPointer == nil {
-		t.AtomicPointer = atomicpointer.New(&TimeAndState{})
-	}
-
-	return t.AtomicPointer.UnmarshalJSON(data)
 }
 
 func (tas *AtomicTimeAndState) StartTimer() time.Time {
@@ -56,13 +42,21 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 	})
 }
 
-func (tas *TimeAndState) Clear() {
-	tas.StartTime = time.Time{}
-	tas.EndTime = time.Time{}
-	tas.EndError = nil
+func (t *AtomicTimeAndState) UnmarshalJSON(data []byte) error {
+	if t.AtomicPointer == nil {
+		t.AtomicPointer = atomicpointer.New(&TimeAndState{})
+	}
+
+	return t.AtomicPointer.UnmarshalJSON(data)
 }
 
 // Getters
+
+type TimeAndState struct {
+	StartTime time.Time            `json:"start_time"`
+	EndTime   time.Time            `json:"end_time"`
+	EndError  *errorjson.ErrorJSON `json:"end_error,omitempty"`
+}
 
 func (tas *TimeAndState) HasStarted() bool {
 	return !tas.StartTime.IsZero()
@@ -98,13 +92,4 @@ func (tas *TimeAndState) Duration() (time.Duration, error) {
 	}
 
 	return endTime.Sub(startTime), nil
-}
-
-func (tas *TimeAndState) ElapsedTime() (time.Duration, error) {
-	startTime := tas.StartTime
-	if startTime.IsZero() {
-		return time.Duration(0), errors.New("timer has not started yet")
-	}
-
-	return time.Since(startTime), nil
 }
