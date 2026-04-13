@@ -32,8 +32,8 @@ type Fleet struct {
 	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
 }
 
-func (r *Fleet) Init(f *flags.Flags) error {
-	err := r.Attributes.Init("fleet", &attributes.Attributes{Flags: f}, false)
+func (r *Fleet) Init(f flags.Flags) error {
+	err := r.Attributes.Init("", attributes.New(f), false)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
@@ -52,7 +52,7 @@ func (f *Fleet) Recalculate(workflowPhases []phases.Phase) {
 	f.RecalculateMachinesState(workflowPhases)
 
 	f.RefreshStatsTable()
-	f.RecalculatePhaseStatus()
+	f.RecalculatePhaseStatus(workflowPhases)
 }
 
 func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phases.Phase) {
@@ -143,10 +143,12 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 			continue
 		}
 
-		// Last phase completed without error, mark machine as done
 		if workflowPhases[len(workflowPhases)-1] == machineState.Phase {
 			machineState.Status = stats.Done
 			machineState.StatusMsg = "done"
+		} else {
+			machineState.Status = stats.Done
+			machineState.StatusMsg = string(machineState.Phase) + " done"
 		}
 	}
 }
@@ -157,8 +159,8 @@ func (f *Fleet) GetMachineLastPhaseLog(machineInOrder int) (orderedmap.Pair[phas
 
 func (f *Fleet) ResetState() {
 	f.Logs.Clear()
-	f.StatsTable = nil
-	f.PhaseStatus = nil
+	f.StatsTable = statstable.NewStatsTable()
+	f.PhaseStatus = phasestatus.NewPhaseStatus()
 
 	for _, flakeP := range f.Flakes.Pairs() {
 		flakeV := flakeP.Value
@@ -206,8 +208,8 @@ func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	}
 }
 
-func (f *Fleet) RecalculatePhaseStatus() *stats.StatisticsPerPhase {
-	statisticsPerPhase := stats.New()
+func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phases.Phase) *stats.StatisticsPerPhase {
+	statisticsPerPhase := stats.New(workflowPhases)
 
 	for _, treeLeaf := range f.AllMachines() {
 		ms := treeLeaf.Machine
@@ -228,8 +230,8 @@ func (f *Fleet) RefreshStatsTable() {
 
 		mInfo := statstable.MachineInfo{
 			Xpath:       m.Xpath,
-			MetaInspect: m.MetaInspect.Load(),
-			State:       m.State,
+			MetaInspect: *m.MetaInspect.Load(),
+			State:       *m.State,
 		}
 
 		machineInfos = append(machineInfos, mInfo)

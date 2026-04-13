@@ -67,12 +67,9 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 		return m.Bootstrap.SSH
 
 	case SSHTypeKexec:
-		var activeSSH *ssh.SSHClient
-
-		// Copy by value (dereference)
-		*activeSSH = *m.SSH
+		activeSSH := *m.SSH
 		if m.Bootstrap.SSH != nil {
-			*activeSSH = *m.Bootstrap.SSH
+			activeSSH = *m.Bootstrap.SSH
 		}
 
 		port := ssh.DefaultSSHPort // default port 22
@@ -84,7 +81,7 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 		activeSSH.StrictKeyChecking = false
 		activeSSH.DisableAutoAddHostKey = true
 
-		return activeSSH
+		return &activeSSH
 	}
 
 	return nil

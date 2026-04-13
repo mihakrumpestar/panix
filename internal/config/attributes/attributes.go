@@ -28,10 +28,11 @@ type Attributes struct {
 	Bootstrap Bootstrap `yaml:"bootstrap"`
 	Nix       NixConfig `yaml:"nix"`
 
-	Name    string              `yaml:"-" json:"name" validate:"-"`
-	Xpath   xpath.Xpath         `yaml:"-" json:"xpath" validate:"-"`
-	Message string              `yaml:"-" json:"message" validate:"-"`
-	Flags   *config_flags.Flags `yaml:"-" validate:"-"`
+	Name    string      `yaml:"-" json:"name" validate:"-"`
+	Xpath   xpath.Xpath `yaml:"-" json:"xpath" validate:"-"`
+	Message string      `yaml:"-" json:"message" validate:"-"`
+
+	flags config_flags.Flags
 }
 
 type PlainFileOrDirToTransfer struct {
@@ -81,6 +82,10 @@ type NixConfig struct {
 	NixosInstallFlags []string `yaml:"nixos_install_flags" desc:"Extra flags for 'nixos-install' command (e.g. '--no-bootloader')"`
 }
 
+func New(flags config_flags.Flags) *Attributes {
+	return &Attributes{flags: flags}
+}
+
 func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool) error {
 	err := a.passAttributesInto(name, parentAttr)
 	if err != nil {
@@ -124,7 +129,7 @@ func (a *Attributes) initRegularSSH(sshConfig *ssh.SSHConfig, name string) error
 		a.SSH.StrictKeyChecking = true
 	}
 
-	err := a.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
+	err := a.SSH.Init(sshConfig, name, a.flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
 	}
@@ -145,7 +150,7 @@ func (a *Attributes) initBootstrapSSH(sshConfig *ssh.SSHConfig, name string) err
 		a.Bootstrap.SSH.DisableAutoAddHostKey = true
 	}
 
-	err := a.Bootstrap.SSH.Init(sshConfig, name, a.Flags.OverrideLocalMachine)
+	err := a.Bootstrap.SSH.Init(sshConfig, name, a.flags.OverrideLocalMachine)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "bootstrap ssh"), "%s", strconv.Quote(a.Xpath.String()))
 	}
@@ -171,6 +176,8 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 		a.Bootstrap.SSH = &sshCopy
 	}
 
+	a.flags = parentAttr.flags
+
 	// Custom set/merge
 	a.Name = name
 	a.Tags = append(a.Tags, name)
@@ -181,4 +188,9 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 	}
 
 	return nil
+}
+
+// passAttributesInto has to be run before rest of the Init.
+func (a *Attributes) Flags() config_flags.Flags {
+	return a.flags
 }

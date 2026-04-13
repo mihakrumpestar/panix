@@ -25,7 +25,7 @@ func (x Xpath) Depth() int {
 	return strings.Count(x.path, "/") + 1
 }
 
-func (x Xpath) Clear() {
+func (x *Xpath) Clear() {
 	x.path = ""
 }
 

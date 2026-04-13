@@ -9,7 +9,7 @@ import (
 
 func (c *Configuration) Filter() {
 	c.Machines.DeleteFunc(func(name string, machineI *machine.Machine) bool {
-		if machineI == nil || machineI.Disabled || !machineContainsTags(machineI.Tags, c.Flags.Tags) {
+		if machineI == nil || machineI.Disabled || !machineContainsTags(machineI.Tags, c.Flags().Tags) {
 			log.Debug().Bool("machine == nil", machineI == nil).
 				Bool("disabled", machineI != nil && machineI.Disabled).
 				Strs("machine.Tags", machineI.Tags).

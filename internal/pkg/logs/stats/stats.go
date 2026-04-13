@@ -20,10 +20,16 @@ type StatisticsPerPhase struct {
 
 type StatsPack map[StatsState][]xpath.Xpath
 
-func New() *StatisticsPerPhase {
-	return &StatisticsPerPhase{
+func New(workflowPhases []phases.Phase) *StatisticsPerPhase {
+	spp := &StatisticsPerPhase{
 		orderedmap.New[phases.Phase, StatsPack](),
 	}
+
+	for _, phase := range workflowPhases {
+		spp.OrderedMap.Set(phase, StatsPack{})
+	}
+
+	return spp
 }
 
 func (spp *StatisticsPerPhase) DeepSet(phase phases.Phase, statsState StatsState, xpathI xpath.Xpath) {
@@ -36,8 +42,7 @@ func (spp *StatisticsPerPhase) DeepSet(phase phases.Phase, statsState StatsState
 	xpaths, ok := statsPack[statsState]
 	if !ok {
 		xpaths = make([]xpath.Xpath, 0)
-		statsPack[statsState] = xpaths
 	}
 
-	xpaths = append(xpaths, xpathI)
+	statsPack[statsState] = append(xpaths, xpathI)
 }

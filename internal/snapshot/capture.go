@@ -9,11 +9,10 @@ import (
 func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr error) *config.Config {
 	conf.Fleet.Recalculate(conf.Phases)
 
-	var confCopy *config.Config
-	*confCopy = *conf
+	confCopy := *conf
 
 	confCopy.SnapshotTime = time.Now()
 	confCopy.WorkflowError = workflowErr
 
-	return confCopy
+	return &confCopy
 }

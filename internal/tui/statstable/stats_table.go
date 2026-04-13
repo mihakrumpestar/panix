@@ -36,9 +36,9 @@ type Selected struct {
 }
 
 type MachineInfo struct {
-	xpath.Xpath
-	*machine.MetaInspect
-	*machine.State
+	Xpath       xpath.Xpath
+	MetaInspect machine.MetaInspect
+	State       machine.State
 }
 
 func NewStatsTable() *StatsTable {
@@ -114,6 +114,8 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 }
 
 func (s *StatsTable) View(width int, colorScheme *colorscheme.ColorScheme) string {
+	width -= 2 // For scrollbar
+
 	return s.cache.Get(
 		func() (string, bool) {
 			return s.buildStatsTable(width, colorScheme), true
@@ -124,7 +126,7 @@ func (s *StatsTable) View(width int, colorScheme *colorscheme.ColorScheme) strin
 func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorScheme) string {
 	var builder strings.Builder
 
-	builder.WriteString(colorScheme.Header.Title.Render("=== Stats table ===\n"))
+	builder.WriteString(colorScheme.Header.Title.Render("=== Stats Table ===\n"))
 
 	indexWidth := len(strconv.Itoa(len(s.CacheMachineInfos))) // Get width of the string representation of the number
 	headers, styleFunc := makeTableColumns(colorScheme, indexWidth, s.Selected.Index)
@@ -159,12 +161,12 @@ func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorSc
 			flakeDisplay,
 			configDisplay,
 			machineName,
-			machineInfo.Architecture,
+			machineInfo.MetaInspect.Architecture,
 			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, colorScheme),
 			getGeneration(machineInfo),
-			machineInfo.Date,
-			machineInfo.Nixos,
-			machineInfo.Kernel,
+			machineInfo.MetaInspect.Date,
+			machineInfo.MetaInspect.Nixos,
+			machineInfo.MetaInspect.Kernel,
 		)
 	}
 
@@ -273,9 +275,9 @@ func getStatusText(status stats.StatsState, statusMsg string, colorScheme *color
 }
 
 func getGeneration(machineInfo MachineInfo) string {
-	if machineInfo.Generations == nil {
+	if machineInfo.MetaInspect.Generations == nil {
 		return ""
 	}
 
-	return fmt.Sprintf("%d", machineInfo.Generations.Current)
+	return fmt.Sprintf("%d", machineInfo.MetaInspect.Generations.Current)
 }

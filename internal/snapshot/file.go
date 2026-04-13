@@ -15,7 +15,7 @@ import (
 const filePrefix = "panix-snapshot-"
 
 func fileName(s *config.Config) string {
-	return fmt.Sprintf("%s%d-%d-%s.json", filePrefix, s.StartTime, s.SnapshotTime, s.SnapshotReason)
+	return fmt.Sprintf("%s%d-%d-%s.json", filePrefix, s.StartTime.Unix(), s.SnapshotTime.Unix(), s.SnapshotReason)
 }
 
 func Write(dir string, s *config.Config) error {

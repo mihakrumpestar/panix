@@ -63,7 +63,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
-		//dump.P(conf.Fleet)
+		dump.P(conf.Fleet)
 	}
 
 	conf.StartTime = time.Now()
@@ -124,7 +124,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 }
 
 func (c *Config) initFleet() error {
-	err := c.Fleet.Init(c.Flags)
+	err := c.Fleet.Init(*c.Flags)
 	if err != nil {
 		return err
 	}

@@ -231,6 +231,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 			if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
 				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 					mi.Bootstrapped = false
+					mi.Nixos = osrelease["VERSION"]
 				})
 
 				return nil
@@ -240,6 +241,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 					mi.RequiresKexec = true
 					mi.Bootstrapped = false
+					mi.Nixos = osrelease["VERSION"]
 				})
 
 				return nil
@@ -249,6 +251,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 					mi.Bootstrapped = false
 					mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
+					mi.Nixos = osrelease["VERSION"]
 				})
 
 				return nil
@@ -256,6 +259,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 				mi.Bootstrapped = true
+				mi.Nixos = osrelease["VERSION"]
 			})
 
 			return nil
@@ -264,6 +268,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 				mi.Bootstrapped = false
 				mi.RequiresKexec = true
+				mi.Nixos = "DRY_RUN"
 			})
 		}),
 	)
@@ -299,13 +304,24 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 		"failed to list generations",
 		[]string{"nixos-rebuild", "list-generations"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			genData, err := parseGenerationsOutput(log.String())
+			genData, currentGenInfo, err := parseGenerationsOutput(log.String())
 			if err != nil {
 				return err
 			}
 
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 				mi.Generations = genData
+				if currentGenInfo.Date != "" {
+					mi.Date = currentGenInfo.Date
+				}
+
+				if currentGenInfo.Nixos != "" {
+					mi.Nixos = currentGenInfo.Nixos
+				}
+
+				if currentGenInfo.Kernel != "" {
+					mi.Kernel = currentGenInfo.Kernel
+				}
 			})
 
 			return nil
@@ -316,6 +332,9 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 					Current:   1,
 					Available: []uint{1},
 				}
+				mi.Date = "DRY_RUN"
+				mi.Nixos = "DRY_RUN"
+				mi.Kernel = "DRY_RUN"
 			})
 		}),
 	)
@@ -347,52 +366,72 @@ func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Mac
 	return errors.Wrap(err, "SSH config validation failed upon detected machine state")
 }
 
-func parseGenerationsOutput(output string) (*machine.Generations, error) {
+type generationInfo struct {
+	Date   string
+	Nixos  string
+	Kernel string
+}
+
+func parseGenerationsOutput(output string) (*machine.Generations, generationInfo, error) {
 	lines := strings.Split(output, "\n")
 
 	generations := &machine.Generations{}
+	var currentGenInfo generationInfo
 
 	for i, line := range lines {
-		genNum, isCurrent, ok := parseGenerationLine(i, line)
+		genNum, info, isCurrent, ok := parseGenerationLine(i, line)
 		if !ok {
 			continue
 		}
 
 		if isCurrent {
 			generations.Current = genNum
+			currentGenInfo = info
 		}
 
 		generations.Available = append(generations.Available, genNum)
 	}
 
 	if len(generations.Available) == 0 {
-		return nil, errors.New("no generations found - ensure this is a NixOS system with system profiles")
+		return nil, generationInfo{}, errors.New("no generations found - ensure this is a NixOS system with system profiles")
 	}
 
-	return generations, nil
+	return generations, currentGenInfo, nil
 }
 
-func parseGenerationLine(idx int, line string) (uint, bool, bool) {
+func parseGenerationLine(idx int, line string) (uint, generationInfo, bool, bool) {
 	const minFields = 1
 
 	line = strings.TrimSpace(line)
 	if line == "" || idx == 0 {
-		return 0, false, false
+		return 0, generationInfo{}, false, false
 	}
 
 	fields := strings.Fields(line)
 	if len(fields) < minFields {
-		return 0, false, false
+		return 0, generationInfo{}, false, false
 	}
 
 	parsedNum, err := strconv.ParseUint(fields[0], 10, 0)
 	if err != nil {
-		return 0, false, false
+		return 0, generationInfo{}, false, false
 	}
 
 	const currentFieldIdx = 6
-
 	isCurrent := len(fields) > currentFieldIdx && fields[len(fields)-1] == "True"
 
-	return uint(parsedNum), isCurrent, true
+	var info generationInfo
+	if len(fields) >= 2 {
+		info.Date = fields[1]
+	}
+
+	if len(fields) >= 4 {
+		info.Nixos = fields[3]
+	}
+
+	if len(fields) >= 5 {
+		info.Kernel = fields[4]
+	}
+
+	return uint(parsedNum), info, isCurrent, true
 }

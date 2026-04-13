@@ -159,9 +159,10 @@ func (w *Workflow) Phase(p phases.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode f
 	err = phaseCode(exc, phaseLog)
 
 	phaseLog.TimeAndState.EndTimerWithError(err)
-	duration, err := phaseLog.TimeAndState.Load().Duration()
-	if err != nil {
-		return err
+
+	duration, durationErr := phaseLog.TimeAndState.Load().Duration()
+	if durationErr != nil {
+		return durationErr
 	}
 
 	logger.ResultEvent(sublog,
@@ -212,7 +213,7 @@ func (w *Workflow) StartWorkflow() error {
 func (w *Workflow) MachineCount() int {
 	count := 0
 
-	for _, _ = range w.conf.Fleet.AllMachines() {
+	for range w.conf.Fleet.AllMachines() {
 		count++
 	}
 
