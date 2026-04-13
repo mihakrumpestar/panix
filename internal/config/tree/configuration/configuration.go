@@ -4,7 +4,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
 	"github.com/pkg/errors"
 )
@@ -29,7 +28,7 @@ func (c *Configuration) Init(name string, parentAttributes *attributes.Attribute
 		return errors.Wrap(err, "failed to init configuration attributes")
 	}
 
-	c.Logs.PhaseLogs = phase.NewPhaseLogs()
+	c.Logs = logs.New(&c.Attributes)
 
 	return nil
 }

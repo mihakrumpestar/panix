@@ -110,6 +110,9 @@ func performReboot(exc *executioner.Executioner, machineI *machine.Machine) erro
 
 func executeActivation(exc *executioner.Executioner, machine *machine.Machine, systemClosure string) error {
 	mode := machine.ActivationMode
+	if machine.Flags.ActivationMode != flags.ActivationModeSwitch {
+		mode = machine.Flags.ActivationMode
+	}
 
 	if mode != flags.ActivationModeTest {
 		err := setSystemProfile(exc, machine, systemClosure)

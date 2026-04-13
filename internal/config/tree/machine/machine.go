@@ -1,11 +1,11 @@
 package machine
 
 import (
+	"fmt"
+
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -91,19 +91,19 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 }
 
 func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) error {
+	if m == nil {
+		return fmt.Errorf("internal error: machine %s has nil value", name)
+	}
+
 	err := m.Attributes.Init(name, parentAttributes, true)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize machine")
 	}
 
 	m.MetaInspect.Clear()
-	m.State.ActiveSSH = SSHTypeRegular
+	m.State = &State{ActiveSSH: SSHTypeRegular}
 
-	if m.Flags.ActivationMode != flags.ActivationModeSwitch {
-		m.ActivationMode = m.Flags.ActivationMode
-	}
-
-	m.Logs.PhaseLogs = phase.NewPhaseLogs()
+	m.Logs = logs.New(&m.Attributes)
 
 	return nil
 }

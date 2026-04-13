@@ -38,7 +38,10 @@ func (r *Fleet) Init(f *flags.Flags) error {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
 
-	r.Logs.PhaseLogs = phase.NewPhaseLogs()
+	r.Logs = logs.New(&r.Attributes)
+
+	r.StatsTable = statstable.NewStatsTable()
+	r.PhaseStatus = phasestatus.NewPhaseStatus()
 
 	return nil
 }
@@ -47,18 +50,22 @@ func (f *Fleet) Recalculate(workflowPhases []phases.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 	f.RecalculateDurationAndError()
 	f.RecalculateMachinesState(workflowPhases)
+
 	f.RefreshStatsTable()
+	f.RecalculatePhaseStatus()
 }
 
 func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phases.Phase) {
 	flattenedLogs := make([]*logs.Logs, 0)
 
-	for i, treeLeaf := range f.AllMachines() {
-		flattenedLogs[i] = logs.MergePhaseLogs(workflowPhases,
+	for _, treeLeaf := range f.AllMachines() {
+		mergedLogs := logs.MergePhaseLogs(workflowPhases,
 			treeLeaf.Machine.Logs.PhaseLogs,
 			treeLeaf.Configuration.Logs.PhaseLogs,
 			treeLeaf.Flake.Logs.PhaseLogs,
 		)
+
+		flattenedLogs = append(flattenedLogs, mergedLogs)
 	}
 
 	f.StatsTable.CacheFlattenedLogs = flattenedLogs
@@ -97,7 +104,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 		flake.Value.Logs.DurationAndErrorCache.Duration = largestConfigurationDuration
 
 		if largestConfigurationDuration > largestFlakeDuration {
-			largestConfigurationDuration = largestConfigurationDuration
+			largestFlakeDuration = largestConfigurationDuration
 		}
 	}
 

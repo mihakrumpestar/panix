@@ -50,7 +50,10 @@ type animationState struct {
 }
 
 func NewPhaseStatus() *PhaseStatus {
-	return &PhaseStatus{Selected: Selected{Index: -1}}
+	return &PhaseStatus{
+		Selected: Selected{Index: -1},
+		cache:    cache.New[string](),
+	}
 }
 
 func (p *PhaseStatus) Reset() {
@@ -135,9 +138,12 @@ func (p *PhaseStatus) buildPhaseRows(colorScheme *colorscheme.ColorScheme) []str
 	row := make([]string, 0, statistics.Len()*2+1)
 
 	for idx, pair := range statistics.Pairs() {
-		var statsPack stats.StatsPack
-		maps.Copy(statsPack, pair.Value)
-		delete(statsPack, stats.Done)
+		statsPack := make(stats.StatsPack)
+
+		if pair.Value != nil {
+			maps.Copy(statsPack, pair.Value)
+			delete(statsPack, stats.Done)
+		}
 
 		row = append(row,
 			p.createPhaseGroup(

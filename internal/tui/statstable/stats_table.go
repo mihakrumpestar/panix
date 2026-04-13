@@ -42,7 +42,10 @@ type MachineInfo struct {
 }
 
 func NewStatsTable() *StatsTable {
-	return &StatsTable{Selected: Selected{Index: -1}}
+	return &StatsTable{
+		Selected: Selected{Index: -1},
+		cache:    cache.New[string](),
+	}
 }
 
 func (s *StatsTable) Reset() {
@@ -158,7 +161,7 @@ func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorSc
 			machineName,
 			machineInfo.Architecture,
 			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, colorScheme),
-			fmt.Sprintf("%d", machineInfo.Generations.Current),
+			getGeneration(machineInfo),
 			machineInfo.Date,
 			machineInfo.Nixos,
 			machineInfo.Kernel,
@@ -267,4 +270,12 @@ func getStatusText(status stats.StatsState, statusMsg string, colorScheme *color
 	default:
 		return "invalid"
 	}
+}
+
+func getGeneration(machineInfo MachineInfo) string {
+	if machineInfo.Generations == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%d", machineInfo.Generations.Current)
 }

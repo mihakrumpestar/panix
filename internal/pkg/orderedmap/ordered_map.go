@@ -3,6 +3,7 @@ package orderedmap
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	yaml "github.com/goccy/go-yaml"
 )
@@ -150,12 +151,29 @@ func (m *OrderedMap[K, V]) UnmarshalYAML(unmarshal func(any) error) error {
 			return fmt.Errorf("orderedmap: unmarshal key %q: %w", rawKey, err)
 		}
 		var val V
+		// Skip null/nil values — leave val as zero value for its type
+		if item.Value == nil {
+			idx := len(m.pairs)
+			m.pairs = append(m.pairs, Pair[K, V]{Key: key, Value: val})
+			m.index[key] = idx
+			continue
+		}
 		b, err = yaml.Marshal(item.Value)
 		if err != nil {
 			return fmt.Errorf("orderedmap: marshal value for key %q: %w", rawKey, err)
 		}
-		if err := yaml.Unmarshal(b, &val); err != nil {
-			return fmt.Errorf("orderedmap: unmarshal value for key %q: %w", rawKey, err)
+		// For pointer value types, allocate a zero value before unmarshaling
+		// so the YAML decoder can populate the pointed-to struct.
+		valType := reflect.TypeOf(val)
+		if valType != nil && valType.Kind() == reflect.Pointer {
+			val = reflect.New(valType.Elem()).Interface().(V)
+			if err := yaml.Unmarshal(b, val); err != nil {
+				return fmt.Errorf("orderedmap: unmarshal value for key %q: %w", rawKey, err)
+			}
+		} else {
+			if err := yaml.Unmarshal(b, &val); err != nil {
+				return fmt.Errorf("orderedmap: unmarshal value for key %q: %w", rawKey, err)
+			}
 		}
 		idx := len(m.pairs)
 		m.pairs = append(m.pairs, Pair[K, V]{Key: key, Value: val})

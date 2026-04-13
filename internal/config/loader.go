@@ -12,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
@@ -62,6 +63,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
+		//dump.P(conf.Fleet)
 	}
 
 	conf.StartTime = time.Now()
@@ -127,20 +129,31 @@ func (c *Config) initFleet() error {
 		return err
 	}
 
-	for _, flake := range c.Fleet.Flakes.Pairs() {
-		err = flake.Value.Init(flake.Key, &c.Fleet.Attributes)
+	for _, flakePair := range c.Fleet.Flakes.Pairs() {
+		flakeV := flakePair.Value
+
+		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes)
 		if err != nil {
 			return err
 		}
 
-		for _, cfg := range flake.Value.Configurations.Pairs() {
-			err = cfg.Value.Init(cfg.Key, &flake.Value.Attributes)
+		for _, configurationPair := range flakeV.Configurations.Pairs() {
+			configurationV := configurationPair.Value
+			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes)
 			if err != nil {
 				return err
 			}
 
-			for _, machine := range cfg.Value.Machines.Pairs() {
-				err = machine.Value.Init(machine.Key, &cfg.Value.Attributes)
+			for _, machinePair := range configurationV.Machines.Pairs() {
+				machineV := machinePair.Value
+
+				// Machine may be nil
+				if machineV == nil {
+					machineV = &machine.Machine{}
+					configurationV.Machines.Set(machinePair.Key, machineV)
+				}
+
+				err = machineV.Init(machinePair.Key, &configurationV.Attributes)
 				if err != nil {
 					return err
 				}
