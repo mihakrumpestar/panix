@@ -65,45 +65,14 @@ func (m *OrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 // Last returns the last pair in insertion order.
 // Nil-safe: returns zero value and false if the OrderedMap or its underlying omap is nil.
 func (m *OrderedMap[K, V]) Last() (Pair[K, V], bool) {
-	if m == nil || m.Omap == nil {
+	if m == nil || m.Omap == nil || m.Omap.Len() == 0 {
 		var zero Pair[K, V]
 		return zero, false
 	}
+
 	pairs := m.Omap.Pairs()
-	if len(pairs) == 0 {
-		var zero Pair[K, V]
-		return zero, false
-	}
 	p := pairs[len(pairs)-1]
 	return Pair[K, V]{Key: p.Key, Value: p.Value}, true
-}
-
-// Get retrieves a value by key.
-// Nil-safe: returns zero value and false if the OrderedMap or its underlying omap is nil.
-func (m *OrderedMap[K, V]) Get(key K) (V, bool) {
-	var zero V
-	if m == nil || m.Omap == nil {
-		return zero, false
-	}
-	return m.Omap.Get(key)
-}
-
-// Set inserts or updates a key-value pair.
-// Nil-safe: returns an error if the OrderedMap or its underlying omap is nil.
-func (m *OrderedMap[K, V]) Set(key K, value V) error {
-	if m == nil || m.Omap == nil {
-		return errors.New("ordered map is nil")
-	}
-	return m.Omap.Set(key, value)
-}
-
-// Len returns the number of entries.
-// Nil-safe: returns 0 if the OrderedMap or its underlying omap is nil.
-func (m *OrderedMap[K, V]) Len() int {
-	if m == nil || m.Omap == nil {
-		return 0
-	}
-	return m.Omap.Len()
 }
 
 func (m *OrderedMap[K, V]) MarshalJSON() ([]byte, error) {
@@ -111,7 +80,11 @@ func (m *OrderedMap[K, V]) MarshalJSON() ([]byte, error) {
 }
 
 func (m *OrderedMap[K, V]) UnmarshalJSON(data []byte) error {
-	var pairs []Pair[K, V]
+	if m == nil {
+		return fmt.Errorf("OrderedMap.UnmarshalJSON: nil receiver")
+	}
+
+	var pairs []omap.Pair[K, V]
 	if err := json.Unmarshal(data, &pairs); err != nil {
 		return err
 	}
@@ -138,11 +111,6 @@ func (m *OrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 var _ yaml.BytesUnmarshaler = (*OrderedMap[string, any])(nil)
 
 func (m *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
-	file, err := parser.ParseBytes(data, parser.ParseComments)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse YAML")
-	}
-
 	if m.Omap == nil {
 		omapInstance, err := omap.New[K, V]()
 		if err != nil {
@@ -153,30 +121,29 @@ func (m *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 		m.Omap.Clear()
 	}
 
-	if file == nil || len(file.Docs) == 0 || file.Docs[0].Body == nil {
+	if file, err := parser.ParseBytes(data, parser.ParseComments); err != nil {
+		return errors.Wrap(err, "failed to parse YAML")
+	} else if file == nil || len(file.Docs) == 0 || file.Docs[0].Body == nil {
 		return nil
-	}
-
-	mapping, ok := file.Docs[0].Body.(*ast.MappingNode)
-	if !ok {
+	} else if mapping, ok := file.Docs[0].Body.(*ast.MappingNode); !ok {
 		return nil
-	}
-
-	valueType := reflect.TypeFor[V]()
-	isPtr := valueType.Kind() == reflect.Pointer
-	elemType := valueType
-	if isPtr {
-		elemType = valueType.Elem()
-	}
-
-	for _, val := range mapping.Values {
-		key, value, processErr := processMappingValue[K, V](val, valueType, isPtr, elemType)
-		if processErr != nil {
-			return processErr
+	} else {
+		valueType := reflect.TypeFor[V]()
+		isPtr := valueType.Kind() == reflect.Pointer
+		elemType := valueType
+		if isPtr {
+			elemType = valueType.Elem()
 		}
 
-		if err := m.Omap.Set(key, value); err != nil {
-			return errors.Wrapf(err, "failed to set key %v", key)
+		for _, val := range mapping.Values {
+			key, value, processErr := processMappingValue[K, V](val, valueType, isPtr, elemType)
+			if processErr != nil {
+				return processErr
+			}
+
+			if err := m.Omap.Set(key, value); err != nil {
+				return errors.Wrapf(err, "failed to set key %v", key)
+			}
 		}
 	}
 

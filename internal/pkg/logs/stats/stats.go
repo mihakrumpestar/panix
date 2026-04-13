@@ -32,6 +32,14 @@ func New(workflowPhases []phases.Phase) *StatisticsPerPhase {
 	return spp
 }
 
+func (spp *StatisticsPerPhase) UnmarshalJSON(data []byte) error {
+	if spp.OrderedMap == nil {
+		spp.OrderedMap = atomicorderedmap.New[phases.Phase, StatsPack]()
+	}
+
+	return spp.OrderedMap.UnmarshalJSON(data)
+}
+
 func (spp *StatisticsPerPhase) DeepSet(phase phases.Phase, statsState StatsState, xpathI xpath.Xpath) {
 	statsPack, ok := spp.OrderedMap.Get(phase)
 	if !ok {

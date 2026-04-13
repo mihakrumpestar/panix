@@ -13,6 +13,14 @@ func NewPhaseLogs() *PhaseLogs {
 	return &PhaseLogs{atomicorderedmap.New[phases.Phase, *PhaseLog]()}
 }
 
+func (pl *PhaseLogs) UnmarshalJSON(data []byte) error {
+	if pl.OrderedMap == nil {
+		pl.OrderedMap = atomicorderedmap.New[phases.Phase, *PhaseLog]()
+	}
+
+	return pl.OrderedMap.UnmarshalJSON(data)
+}
+
 // Get retrieves a PhaseLog for the given phase, or nil if not found.
 func (pl *PhaseLogs) MustGet(phase phases.Phase) *PhaseLog {
 	if pl == nil || pl.OrderedMap == nil {
