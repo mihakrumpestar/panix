@@ -202,15 +202,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
 	case tea.KeyPressMsg:
-		if m.isSnapshot {
-			for _, kd := range snapshotKeyDefs {
-				if slices.Contains(kd.keys, msg.String()) {
-					return kd.handler(m)
-				}
-			}
-
-			return m, nil
-		}
+		//if m.isSnapshot {
+		//	for _, kd := range snapshotKeyDefs {
+		//		if slices.Contains(kd.keys, msg.String()) {
+		//			return kd.handler(m)
+		//		}
+		//	}
+		//
+		//	return m, nil
+		//}
 
 		return m.HandleKeyInput(msg)
 
@@ -242,7 +242,7 @@ func (m *model) View() tea.View {
 	}
 
 	if m.isSnapshot {
-		mainContent = m.viewSnapshotHeader() + mainContent
+		// TODO: mainContent = m.viewSnapshotHeader() + mainContent
 	}
 
 	if resetable.viewports.IsFullscreen() {
@@ -274,16 +274,17 @@ func (m *model) viewMainContent() string {
 		return ""
 	}
 
+	m.conf.Fleet.Recalculate(m.conf.Phases)
+
 	var builder strings.Builder
 
 	if !m.conf.Flags.DryRun && slices.Contains(m.conf.Phases, phases.Inspect) {
-		builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width))
-		builder.WriteString(m.ViewPhaseStatus())
+		builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width, m.conf.ColorScheme))
+		builder.WriteString(m.conf.Fleet.PhaseStatus.View(m.dimensions.Width, m.conf.ColorScheme))
 	}
 
 	builder.WriteString(m.ViewBuildLogs())
 
-	resetable := m.resetable.Load()
 	if resetable.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
 		errorContent := fmt.Sprintf("\n%s\n", resetable.err.Error())
@@ -294,7 +295,6 @@ func (m *model) viewMainContent() string {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := resetable.spinners.Debug()
 		debugContent += resetable.viewports.Debug()
-		debugContent += m.conf.Fleet.Debug(m.conf.Phases)
 		builder.WriteString(debugHeader + debugContent)
 	}
 
@@ -349,15 +349,16 @@ func (m *model) renderFullscreen() string {
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
-	resetable := m.resetable.Load()
-	if resetable.statsTable.HandleMouseClick(msg) {
-		resetable.phaseStatus.Reset()
+	statsTable := m.conf.Fleet.StatsTable
+	if statsTable.HandleMouseClick(msg) {
+		statsTable.Reset()
 
 		return
 	}
 
-	if resetable.phaseStatus.HandleMouseClick(msg) {
-		resetable.statsTable.Reset()
+	phaseStatus := m.conf.Fleet.PhaseStatus
+	if phaseStatus.HandleMouseClick(msg) {
+		phaseStatus.Reset()
 	}
 }
 

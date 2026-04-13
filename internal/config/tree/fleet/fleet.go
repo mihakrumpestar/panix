@@ -13,8 +13,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/orderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/statstable"
-	"github.com/mihakrumpestar/panix/internal/tui"
+	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 )
@@ -28,8 +28,8 @@ type Fleet struct {
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 
 	// For TUI representation
-	StatsTable  *statstable.StatsTable `yaml:"-" json:"stats_table"`
-	PhaseStatus *tui.PhaseStatus       `yaml:"-" json:"phase_status"`
+	StatsTable  *statstable.StatsTable   `yaml:"-" json:"stats_table"`
+	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
 }
 
 func (r *Fleet) Init(f *flags.Flags) error {
@@ -182,13 +182,13 @@ type FleetLeaf struct {
 	Machine       *machine.Machine
 }
 
-func (f *Fleet) AllMachines() iter.Seq2[int, FleetLeaf] {
-	return func(yield func(int, FleetLeaf) bool) {
+func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
+	return func(yield func(int, *FleetLeaf) bool) {
 		i := 0
 		for _, flake := range f.Flakes.Pairs() {
 			for _, configuration := range flake.Value.Configurations.Pairs() {
 				for _, machine := range configuration.Value.Machines.Pairs() {
-					if !yield(i, FleetLeaf{flake.Value, configuration.Value, machine.Value}) {
+					if !yield(i, &FleetLeaf{flake.Value, configuration.Value, machine.Value}) {
 						return
 					}
 
@@ -205,10 +205,10 @@ func (f *Fleet) RecalculatePhaseStatus() *stats.StatisticsPerPhase {
 	for _, treeLeaf := range f.AllMachines() {
 		ms := treeLeaf.Machine
 
-		statisticsPerPhase.Add(ms.State.Phase, ms.State.Status, ms.Xpath)
+		statisticsPerPhase.DeepSet(ms.State.Phase, ms.State.Status, ms.Xpath)
 	}
 
-	f.PhaseStatus.StatisticsPerPhase = statisticsPerPhase
+	f.PhaseStatus.CacheStatisticsPerPhase = statisticsPerPhase
 
 	return statisticsPerPhase
 }
@@ -219,8 +219,14 @@ func (f *Fleet) RefreshStatsTable() {
 	for _, treeLeaf := range f.AllMachines() {
 		m := treeLeaf.Machine
 
-		machineInfos = append(machineInfos, statstable.MachineInfo{m.MetaInspect.Load(), m.State})
+		mInfo := statstable.MachineInfo{
+			Xpath:       m.Xpath,
+			MetaInspect: m.MetaInspect.Load(),
+			State:       m.State,
+		}
+
+		machineInfos = append(machineInfos, mInfo)
 	}
 
-	f.StatsTable.MachineInfos = machineInfos
+	f.StatsTable.CacheMachineInfos = machineInfos
 }

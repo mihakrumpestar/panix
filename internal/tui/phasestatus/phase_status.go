@@ -2,6 +2,7 @@ package phasestatus
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
+	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"go.uber.org/atomic"
 )
 
@@ -30,11 +32,16 @@ const (
 )
 
 type PhaseStatus struct {
-	SelectedPhase int `json:"selected_phase"`
+	Selected Selected `json:"selected"`
 
 	CacheStatisticsPerPhase *stats.StatisticsPerPhase `json:"-"`
 	animation               animationState            `json:"-"`
 	cache                   *cache.Cache[string]      `json:"-"`
+}
+
+type Selected struct {
+	Phase phases.Phase `json:"phase"`
+	Index int          `json:"index"`
 }
 
 type animationState struct {
@@ -43,17 +50,20 @@ type animationState struct {
 }
 
 func NewPhaseStatus() *PhaseStatus {
-	return &PhaseStatus{SelectedPhase: -1}
+	return &PhaseStatus{Selected: Selected{Index: -1}}
 }
 
 func (p *PhaseStatus) Reset() {
-	p.SelectedPhase = -1
+	p.Selected.Phase = ""
+	p.Selected.Index = -1
 }
 
 func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	for i := range p.CacheStatisticsPerPhase.Len() {
 		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, i)); z != nil && z.InBounds(msg) {
-			p.SelectedPhase = map[bool]int{true: -1, false: i}[p.SelectedPhase == i]
+			p.Selected.Index = map[bool]int{true: -1, false: i}[p.Selected.Index == i]
+
+			p.applyIndexToPhase()
 
 			return true
 		}
@@ -63,34 +73,32 @@ func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
 }
 
 func (p *PhaseStatus) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || p.CacheStatisticsPerPhase.Len() == 0 || p.SelectedPhase < 0 {
+	if hasActiveInnerViewport || p.CacheStatisticsPerPhase.Len() == 0 || p.Selected.Index < 0 {
 		return false
 	}
 
 	switch key {
 	case "left":
-		if p.SelectedPhase > 0 {
-			p.SelectedPhase--
-		}
+		if p.Selected.Index > 0 {
+			p.Selected.Index--
+			p.applyIndexToPhase()
 
-		return true
+			return true
+		}
 	case "right":
-		if p.SelectedPhase < p.CacheStatisticsPerPhase.Len()-1 {
-			p.SelectedPhase++
-		}
+		if p.Selected.Index < p.CacheStatisticsPerPhase.Len()-1 {
+			p.Selected.Index++
+			p.applyIndexToPhase()
 
-		return true
+			return true
+		}
 	}
 
 	return false
 }
 
-func (p *PhaseStatus) GetSelectedPhase() *stats.StatsPack {
-	if p.SelectedPhase < 0 || p.SelectedPhase >= p.CacheStatisticsPerPhase.Len() {
-		return nil
-	}
-
-	return p.CacheStatisticsPerPhase.Pairs()[p.SelectedPhase].Value
+func (p *PhaseStatus) applyIndexToPhase() {
+	p.Selected.Phase = p.CacheStatisticsPerPhase.Pairs()[p.Selected.Index].Key
 }
 
 func (p *PhaseStatus) View(width int, colorScheme *colorscheme.ColorScheme) string {
@@ -102,7 +110,7 @@ func (p *PhaseStatus) View(width int, colorScheme *colorscheme.ColorScheme) stri
 
 			return p.renderPhaseFlow(width, colorScheme), true
 		},
-		p.CacheStatisticsPerPhase, width, p.SelectedPhase)
+		p.CacheStatisticsPerPhase, width, p.Selected.Index)
 }
 
 func (p *PhaseStatus) renderPhaseFlow(width int, colorScheme *colorscheme.ColorScheme) string {
@@ -127,9 +135,9 @@ func (p *PhaseStatus) buildPhaseRows(colorScheme *colorscheme.ColorScheme) []str
 	row := make([]string, 0, statistics.Len()*2+1)
 
 	for idx, pair := range statistics.Pairs() {
-		var statsPack *stats.StatsPack
-		*statsPack = *pair.Value
-		statsPack.Done = nil
+		var statsPack stats.StatsPack
+		maps.Copy(statsPack, pair.Value)
+		delete(statsPack, stats.Done)
 
 		row = append(row,
 			p.createPhaseGroup(
@@ -144,8 +152,8 @@ func (p *PhaseStatus) buildPhaseRows(colorScheme *colorscheme.ColorScheme) []str
 
 	statsPack, _ := statistics.Last()
 
-	tpmStatPack := &stats.StatsPack{
-		Done: statsPack.Value.Done,
+	tpmStatPack := stats.StatsPack{
+		stats.Done: statsPack.Value[stats.Done],
 	}
 
 	row = append(row, p.createPhaseGroup("Done", tpmStatPack, -1, colorScheme))
@@ -162,7 +170,7 @@ func (p *PhaseStatus) animationNeedsUpdate() bool {
 	return time.Since(lastTime) >= animationCacheInterval
 }
 
-func (p *PhaseStatus) createPhaseGroup(name string, statsPack *stats.StatsPack, phaseIdx int, colorScheme *colorscheme.ColorScheme) string {
+func (p *PhaseStatus) createPhaseGroup(name string, statsPack stats.StatsPack, phaseIdx int, colorScheme *colorscheme.ColorScheme) string {
 	displayName := strings.ToTitle(name)
 	width := lipgloss.Width(displayName) + displayNamePadding
 	colStyle := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
@@ -170,7 +178,7 @@ func (p *PhaseStatus) createPhaseGroup(name string, statsPack *stats.StatsPack, 
 	phaseName := colStyle.Render(p.createAnimatedGradient(displayName, statsPack, colorScheme))
 	statusLine := buildStatusLine(statsPack, colorScheme)
 
-	if phaseIdx >= 0 && phaseIdx == p.SelectedPhase {
+	if phaseIdx >= 0 && phaseIdx == p.Selected.Index {
 		statusLine = colorScheme.Table.SelectionHighlightBackground.Width(width).Align(lipgloss.Center).Render(statusLine)
 	} else {
 		statusLine = colStyle.Render(statusLine)
@@ -184,7 +192,7 @@ func (p *PhaseStatus) createPhaseGroup(name string, statsPack *stats.StatsPack, 
 	return content
 }
 
-func (p *PhaseStatus) createAnimatedGradient(text string, stats *stats.StatsPack, colors *colorscheme.ColorScheme) string {
+func (p *PhaseStatus) createAnimatedGradient(text string, statsPack stats.StatsPack, colors *colorscheme.ColorScheme) string {
 	now := time.Now()
 
 	lastTime := p.animation.lastTime.Load()
@@ -203,11 +211,11 @@ func (p *PhaseStatus) createAnimatedGradient(text string, stats *stats.StatsPack
 	var gradient [2]colorful.Color
 
 	switch {
-	case len(stats.Running) > 0:
+	case len(statsPack[stats.Running]) > 0:
 		gradient = colors.PhaseStatus.Running
-	case len(stats.Failed) > 0:
+	case len(statsPack[stats.Failed]) > 0:
 		gradient = colors.PhaseStatus.Failed
-	case len(stats.Done) > 0:
+	case len(statsPack[stats.Done]) > 0:
 		gradient = colors.PhaseStatus.Done
 	default:
 		gradient = colors.PhaseStatus.Default
@@ -220,18 +228,18 @@ func (p *PhaseStatus) createAnimatedGradient(text string, stats *stats.StatsPack
 
 var cachedPhaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 1)
 
-func buildStatusLine(statsPack *stats.StatsPack, colors *colorscheme.ColorScheme) string {
+func buildStatusLine(statsPack stats.StatsPack, colors *colorscheme.ColorScheme) string {
 	var parts []string
 
-	if n := len(statsPack.Running); n > 0 {
+	if n := len(statsPack[stats.Running]); n > 0 {
 		parts = append(parts, colors.Status.Running.Render(strconv.Itoa(n)))
 	}
 
-	if n := len(statsPack.Running); n > 0 {
+	if n := len(statsPack[stats.Failed]); n > 0 {
 		parts = append(parts, colors.Status.Failed.Render(strconv.Itoa(n)))
 	}
 
-	if n := len(statsPack.Running); n > 0 {
+	if n := len(statsPack[stats.Done]); n > 0 {
 		parts = append(parts, colors.Status.OK.Render(strconv.Itoa(n)))
 	}
 

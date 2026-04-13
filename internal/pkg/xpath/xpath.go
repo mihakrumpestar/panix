@@ -25,6 +25,10 @@ func (x Xpath) Depth() int {
 	return strings.Count(x.path, "/") + 1
 }
 
+func (x Xpath) Clear() {
+	x.path = ""
+}
+
 // NewXpathWithAppend creates a new Xpath based on current Xpath as base and appends appendXpath.
 // If current Xpath is nil, resulting Xpath consists only of appendXpath.
 func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {

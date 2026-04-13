@@ -94,17 +94,18 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleEsc()
 	}
 
-	resetable := m.resetable.Load()
-	hasActiveInner := resetable.viewports.HasActiveInner()
+	hasActiveInner := m.resetable.Load().viewports.HasActiveInner()
 
-	if resetable.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		resetable.phaseStatus.Reset()
+	statsTable := m.conf.Fleet.StatsTable
+	if statsTable.HandleNavigation(msg.String(), hasActiveInner) {
+		statsTable.Reset()
 
 		return m, nil
 	}
 
-	if resetable.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
-		resetable.statsTable.Reset()
+	phaseStatus := m.conf.Fleet.PhaseStatus
+	if phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
+		phaseStatus.Reset()
 
 		return m, nil
 	}
@@ -132,7 +133,7 @@ func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 
 	err := clipboard.CopyToClipboard(content)
 	if err != nil {
-		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Error)
+		return m, m.notification.Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed)
 	}
 
 	return m, m.notification.Set("Copied to clipboard", m.conf.ColorScheme.Status.OK)
@@ -215,15 +216,18 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 	resetable := m.resetable.Load()
 
+	statsTable := m.conf.Fleet.StatsTable
+	phaseStatus := m.conf.Fleet.PhaseStatus
+
 	switch {
 	case resetable.viewports.IsFullscreen():
 		resetable.viewports.ExitFullscreen()
 	case resetable.viewports.HasActiveInner():
 		resetable.viewports.DeselectAll()
-	case resetable.statsTable.Data.SelectedMachine >= 0:
-		resetable.statsTable.Reset()
-	case resetable.phaseStatus.SelectedPhase >= 0:
-		resetable.phaseStatus.Reset()
+	case statsTable.Selected.Index >= 0:
+		statsTable.Reset()
+	case phaseStatus.Selected.Index >= 0:
+		phaseStatus.Reset()
 	}
 
 	return m, nil

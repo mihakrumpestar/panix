@@ -178,7 +178,7 @@ func (w *Workflow) Phase(p phases.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode f
 func (w *Workflow) StartWorkflow() error {
 	subPool := w.state.Pool.NewGroup()
 
-	for idx, fleetLeaf := range w.conf.Fleet.AllMachines() {
+	for _, fleetLeaf := range w.conf.Fleet.AllMachines() {
 		subPool.SubmitErr(func() error {
 			// Create a shared phaseRunner for this machine
 			phaseRunnerInstance := &phaseRunner{

@@ -3,6 +3,7 @@ package logs
 import (
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -11,6 +12,8 @@ import (
 type Logs struct {
 	PhaseLogs             *phase.PhaseLogs `json:"phase_logs"`
 	DurationAndErrorCache DurationAndError `json:"duration_and_error"`
+
+	attributes *attributes.Attributes
 }
 
 type DurationAndError struct {
@@ -18,8 +21,15 @@ type DurationAndError struct {
 	Error    error         `json:"error,omitempty"`
 }
 
-func New() *Logs {
-	return &Logs{PhaseLogs: phase.NewPhaseLogs()}
+func New(attributes *attributes.Attributes) *Logs {
+	return &Logs{
+		PhaseLogs:  phase.NewPhaseLogs(),
+		attributes: attributes,
+	}
+}
+
+func (l *Logs) Attributes() *attributes.Attributes {
+	return l.attributes
 }
 
 func (l *Logs) RecalculateDurationAndError() error {
@@ -57,7 +67,7 @@ func (l *Logs) Clear() {
 
 // MergePhaseLogs merges multiple PhaseLogs.
 func MergePhaseLogs(phasesInOrder []phases.Phase, input ...*phase.PhaseLogs) *Logs {
-	logs := New()
+	logs := New(nil)
 
 	gathered := phase.NewPhaseLogs()
 

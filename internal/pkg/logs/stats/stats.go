@@ -15,17 +15,29 @@ const (
 )
 
 type StatisticsPerPhase struct {
-	*orderedmap.OrderedMap[phases.Phase, *StatsPack]
+	*orderedmap.OrderedMap[phases.Phase, StatsPack]
 }
 
-type StatsPack struct {
-	Running []xpath.Xpath
-	Failed  []xpath.Xpath
-	Done    []xpath.Xpath
-}
+type StatsPack map[StatsState][]xpath.Xpath
 
 func New() *StatisticsPerPhase {
 	return &StatisticsPerPhase{
-		orderedmap.New[phases.Phase, *StatsPack](),
+		orderedmap.New[phases.Phase, StatsPack](),
 	}
+}
+
+func (spp *StatisticsPerPhase) DeepSet(phase phases.Phase, statsState StatsState, xpathI xpath.Xpath) {
+	statsPack, ok := spp.OrderedMap.Get(phase)
+	if !ok {
+		statsPack = StatsPack{}
+		spp.OrderedMap.Set(phase, statsPack)
+	}
+
+	xpaths, ok := statsPack[statsState]
+	if !ok {
+		xpaths = make([]xpath.Xpath, 0)
+		statsPack[statsState] = xpaths
+	}
+
+	xpaths = append(xpaths, xpathI)
 }

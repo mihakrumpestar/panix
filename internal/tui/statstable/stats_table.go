@@ -23,25 +23,31 @@ const (
 )
 
 type StatsTable struct {
-	SelectedMachine int `json:"selected_machine"`
+	Selected Selected `json:"selected"`
 
 	CacheMachineInfos  []MachineInfo        `json:"-"`
 	CacheFlattenedLogs []*logs.Logs         `json:"-"`
 	cache              *cache.Cache[string] `json:"-"`
 }
 
+type Selected struct {
+	Xpath xpath.Xpath `json:"xpath"`
+	Index int         `json:"index"`
+}
+
 type MachineInfo struct {
-	*xpath.Xpath
+	xpath.Xpath
 	*machine.MetaInspect
 	*machine.State
 }
 
 func NewStatsTable() *StatsTable {
-	return &StatsTable{SelectedMachine: -1}
+	return &StatsTable{Selected: Selected{Index: -1}}
 }
 
 func (s *StatsTable) Reset() {
-	s.SelectedMachine = -1
+	s.Selected.Xpath.Clear()
+	s.Selected.Index = -1
 }
 
 func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
@@ -68,66 +74,62 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 		return false
 	}
 
-	if s.SelectedMachine == rowIndex {
-		s.SelectedMachine = -1
+	if s.Selected.Index == rowIndex {
+		s.Selected.Index = -1
 	} else {
-		s.SelectedMachine = rowIndex
+		s.Selected.Index = rowIndex
 	}
+
+	s.applyIndexToXpath()
 
 	return true
 }
 
 func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || len(s.CacheMachineInfos) == 0 || s.SelectedMachine < 0 {
+	if hasActiveInnerViewport || len(s.CacheMachineInfos) == 0 || s.Selected.Index < 0 {
 		return false
 	}
 
 	switch key {
 	case "left":
-		if s.SelectedMachine > 0 {
-			s.SelectedMachine--
-		}
+		if s.Selected.Index > 0 {
+			s.Selected.Index--
+			s.applyIndexToXpath()
 
-		return true
+			return true
+		}
 	case "right":
-		if s.SelectedMachine < len(s.CacheMachineInfos)-1 {
-			s.SelectedMachine++
-		}
+		if s.Selected.Index < len(s.CacheMachineInfos)-1 {
+			s.Selected.Index++
+			s.applyIndexToXpath()
 
-		return true
+			return true
+		}
 	}
 
 	return false
 }
 
-func (s *StatsTable) GetSelectedXpath() xpath.Xpath {
-	if s.SelectedMachine < 0 || s.SelectedMachine >= len(s.CacheMachineInfos) {
-		return xpath.Xpath{}
-	}
-
-	return *s.CacheMachineInfos[s.SelectedMachine].Xpath
-}
-
-func (s *StatsTable) View(usableWidth int, colorScheme *colorscheme.ColorScheme) string {
+func (s *StatsTable) View(width int, colorScheme *colorscheme.ColorScheme) string {
 	return s.cache.Get(
 		func() (string, bool) {
-			return s.buildStatsTable(usableWidth, colorScheme), true
+			return s.buildStatsTable(width, colorScheme), true
 		},
-		s.CacheMachineInfos, usableWidth, s.SelectedMachine)
+		s.CacheMachineInfos, width, s.Selected.Index)
 }
 
-func (s *StatsTable) buildStatsTable(usableWidth int, colorScheme *colorscheme.ColorScheme) string {
+func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorScheme) string {
 	var builder strings.Builder
 
 	builder.WriteString(colorScheme.Header.Title.Render("=== Stats table ===\n"))
 
 	indexWidth := len(strconv.Itoa(len(s.CacheMachineInfos))) // Get width of the string representation of the number
-	headers, styleFunc := makeTableColumns(colorScheme, indexWidth, s.SelectedMachine)
+	headers, styleFunc := makeTableColumns(colorScheme, indexWidth, s.Selected.Index)
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(colorScheme.Table.Border).
 		Headers(headers...).
-		Width(usableWidth).
+		Width(width).
 		Wrap(false).
 		StyleFunc(styleFunc)
 
@@ -171,12 +173,16 @@ func (s *StatsTable) buildStatsTable(usableWidth int, colorScheme *colorscheme.C
 	return result
 }
 
+func (s *StatsTable) applyIndexToXpath() {
+	s.Selected.Xpath = s.CacheMachineInfos[s.Selected.Index].Xpath
+}
+
 type tableColumn struct {
 	header string
 	style  func(*colorscheme.ColorScheme) lipgloss.Style
 }
 
-func makeTableColumns(colorScheme *colorscheme.ColorScheme, indexWidth int, selectedRow int) ([]string, func(row, col int) lipgloss.Style) {
+func makeTableColumns(colorScheme *colorscheme.ColorScheme, indexWidth int, selectedIndex int) ([]string, func(row, col int) lipgloss.Style) {
 	columns := []tableColumn{
 		{header: "", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
 			return c.Table.Row.Width(indexWidth).Align(lipgloss.Right)
@@ -226,7 +232,7 @@ func makeTableColumns(colorScheme *colorscheme.ColorScheme, indexWidth int, sele
 		if col >= 0 && col < len(columns) {
 			style := columns[col].style(colorScheme)
 
-			if row == selectedRow {
+			if row == selectedIndex {
 				style = style.Background(colorScheme.Table.SelectionHighlightBackground.GetBackground())
 			}
 
