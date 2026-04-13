@@ -23,7 +23,7 @@ type CLI struct {
 
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
-	// Complementary
+	// Complementary commands
 
 	Init struct {
 		Output string `name:"output" short:"o" help:"Output file path" default:"panix.yml"`
@@ -83,7 +83,7 @@ func main() {
 
 	switch ctx.Command() {
 
-	// Complementary
+	// Complementary commands
 
 	case "init":
 		ctx.FatalIfErrorf(cli.runInitCommand(cli.Init.Output, cli.Init.Force))

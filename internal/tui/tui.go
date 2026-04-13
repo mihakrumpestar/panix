@@ -16,9 +16,9 @@ import (
 	"charm.land/lipgloss/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -57,9 +57,8 @@ type model struct {
 	quitting           bool
 	isSnapshot         bool
 	resetable          atomic.Pointer[resetable]
-	notification       *notifications.Notification
 	lastWorkflowUpdate time.Time
-	footer             *Footer
+	footer             *footer.Footer
 }
 
 // NewTui initializes and runs the TUI application.
@@ -94,14 +93,16 @@ func newTui(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		defer stopCPUProfile()
 	}
 
-	program := tea.NewProgram(&model{
-		ctx:          ctx,
-		conf:         conf,
-		dimensions:   dimensions,
-		isSnapshot:   isSnapshot,
-		notification: notifications.New(),
-		footer:       newFooter(),
-	})
+	mdl := &model{
+		ctx:        ctx,
+		conf:       conf,
+		dimensions: dimensions,
+		isSnapshot: isSnapshot,
+	}
+
+	mdl.footer = footer.New(mdl.keyDefs())
+
+	program := tea.NewProgram(mdl)
 
 	m, err := program.Run()
 	if err != nil {
@@ -180,7 +181,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if resetable != nil {
 		cmd = tea.Batch(cmd, resetable.spinners.ProcessPendingTicks())
 		cmd = tea.Batch(cmd, resetable.viewports.Update(msg))
-		cmd = tea.Batch(cmd, m.notification.Update(msg))
+		cmd = tea.Batch(cmd, m.footer.Update(msg))
 		cmd = tea.Batch(cmd, resetable.spinners.Update(msg))
 	}
 
@@ -221,16 +222,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
 	case tea.KeyPressMsg:
-		//if m.isSnapshot {
-		//	for _, kd := range snapshotKeyDefs {
-		//		if slices.Contains(kd.keys, msg.String()) {
-		//			return kd.handler(m)
-		//		}
-		//	}
-		//
-		//	return m, nil
-		//}
-
 		return m.HandleKeyInput(msg)
 
 	case tea.MouseClickMsg:
@@ -273,7 +264,7 @@ func (m *model) View() tea.View {
 		}
 	}
 
-	footer := m.ViewFooter()
+	footer := m.footer.View(m.dimensions.Width)
 	footerHeight := lipgloss.Height(footer)
 	mainViewport := resetable.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
 
@@ -359,7 +350,7 @@ func (m *model) renderFullscreen() string {
 		return ""
 	}
 
-	footer := m.ViewFooter()
+	footer := m.footer.View(m.dimensions.Width)
 	footerHeight := lipgloss.Height(footer)
 	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
 
