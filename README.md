@@ -935,7 +935,7 @@ Commands:
   eval [flags]
     Evaluate config (process templates and anchors) and output result
 
-  snapshot [flags]
+  snapshot --path=STRING [flags]
     View snapshot in TUI
 
   inspect [flags]
@@ -952,7 +952,8 @@ Commands:
     Deploy secrets to all machines
 
   rollback [flags]
-    Rollback to a previous generation, use --gen=<number> flag, default is -1
+    Rollback to a previous generation, use optional --gen=NUMBER flag, default
+    is -1
 
 Run "panix <command> --help" for more information on a command.
 ```

@@ -30,8 +30,8 @@ type Config struct {
 	// // Filled on snapshot
 
 	SnapshotTime   time.Time            `yaml:"-" json:"snapshot_time" validate:"-"`
-	SnapshotReason SnaphsotReason       `json:"reason"`
-	WorkflowError  *errorjson.ErrorJSON `json:"workflow_error,omitempty"`
+	SnapshotReason SnaphsotReason       `yaml:"-" json:"reason"`
+	WorkflowError  *errorjson.ErrorJSON `yaml:"-" json:"workflow_error,omitempty"`
 
 	// Internal - not exportable
 	Phases []phases.Phase `yaml:"-" json:"phases" validate:"-"`

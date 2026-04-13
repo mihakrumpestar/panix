@@ -23,6 +23,8 @@ type CLI struct {
 
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
+	// Complementary
+
 	Init struct {
 		Output string `name:"output" short:"o" help:"Output file path" default:"panix.yml"`
 		Force  bool   `name:"force" short:"f" help:"Overwrite existing file"`
@@ -37,8 +39,10 @@ type CLI struct {
 	} `cmd:"" help:"Evaluate config (process templates and anchors) and output result"`
 
 	Snapshot struct {
-		Path string `name:"path" short:"p" help:"Snapshot file or directory" default:"."`
+		Path string `name:"path" short:"p" help:"Snapshot file path" required:""`
 	} `cmd:"" help:"View snapshot in TUI"`
+
+	// Workflow commands
 
 	Inspect struct {
 		flags.WorkflowFlags
@@ -59,7 +63,7 @@ type CLI struct {
 	Rollback struct {
 		flags.RollbackFlags
 		flags.WorkflowFlags
-	} `cmd:"" help:"Rollback to a previous generation, use --gen=<number> flag, default is -1"`
+	} `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag, default is -1"`
 }
 
 //nolint:cyclop
@@ -78,6 +82,9 @@ func main() {
 	)
 
 	switch ctx.Command() {
+
+	// Complementary
+
 	case "init":
 		ctx.FatalIfErrorf(cli.runInitCommand(cli.Init.Output, cli.Init.Force))
 	case "schema":
@@ -88,6 +95,7 @@ func main() {
 		ctx.FatalIfErrorf(cli.runSnapshot(cli.Snapshot.Path))
 
 	// Wokflow commands
+
 	case "inspect":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Inspect.WorkflowFlags, []phases.Phase{phases.Inspect}))
 	case "build":
@@ -97,12 +105,7 @@ func main() {
 	case "secrets":
 		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Secrets.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Secrets}))
 	case "rollback":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Rollback.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Rollback},
-			func(conf *config.Config) {
-				//conf.Flags.RollbackFlags.Generation = cli.Rollback.Generation
-			}))
-	default:
-		// Kong handles unknown commands, this should never be reached
+		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Rollback.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Rollback}))
 	}
 }
 
@@ -131,34 +134,12 @@ func (c *CLI) runSchemaCommand(_ flags.GlobalFlags, outputPath string) error {
 }
 
 func (c *CLI) runSnapshot(path string) error {
-	stat, err := os.Stat(path)
+	s, err := snapshot.Read(path)
 	if err != nil {
-		return errors.Wrapf(err, "failed to stat %s", path)
+		return errors.Wrap(err, "failed to read snapshot file")
 	}
 
-	var snapshots []*config.Config
-
-	if stat.IsDir() {
-		snapshots, err = snapshot.ReadDir(path)
-		if err != nil {
-			return errors.Wrap(err, "failed to read snapshots from directory")
-		}
-	} else {
-		var s *config.Config
-
-		s, err = snapshot.Read(path)
-		if err != nil {
-			return errors.Wrap(err, "failed to read snapshot file")
-		}
-
-		snapshots = []*config.Config{s}
-	}
-
-	if len(snapshots) == 0 {
-		return errors.New("no snapshots found")
-	}
-
-	return errors.Wrap(tui.NewSnapshotTui(context.Background(), snapshots[0]), "snapshot TUI error")
+	return errors.Wrap(tui.NewSnapshotTui(context.Background(), s), "snapshot TUI error")
 }
 
 // Wokflow

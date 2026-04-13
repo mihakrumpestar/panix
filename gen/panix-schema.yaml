@@ -69,6 +69,10 @@ properties:
       require_all_success:
         type: boolean
         description: Abort if any task fails, primarily for CI/CD
+      rollback_generation:
+        type: integer
+        description: "0=current generation, -N=Nth before current, N=specific generation (default: -1)"
+        default: -1
       skip_phases:
         type: array
         description: Declare phases to skip (not all phases can be skipped)

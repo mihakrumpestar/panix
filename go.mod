@@ -26,7 +26,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.35.0
 	github.com/stoewer/go-strcase v1.3.1
-	github.com/stretchr/testify v1.11.1
 	go.uber.org/atomic v1.11.0
 )
 
@@ -63,5 +62,4 @@ require (
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
