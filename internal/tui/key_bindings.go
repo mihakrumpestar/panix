@@ -43,14 +43,14 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	statsTable := m.conf.Fleet.StatsTable
 	if statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		statsTable.Reset()
+		m.conf.Fleet.PhaseStatus.Reset()
 
 		return m, nil
 	}
 
 	phaseStatus := m.conf.Fleet.PhaseStatus
 	if phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
-		phaseStatus.Reset()
+		m.conf.Fleet.StatsTable.Reset()
 
 		return m, nil
 	}

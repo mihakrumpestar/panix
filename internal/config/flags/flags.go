@@ -28,15 +28,12 @@ const (
 	OutputModeJSON    OutputMode = "json"    // JSON log output to stdout
 )
 
-type GlobalFlags struct {
+type ConfigFlag struct {
 	Config string `yaml:"config" json:"config" short:"c" help:"Config file" default:"panix.yml"`
 }
 
-type RollbackFlags struct {
-	Generation int `name:"gen" yaml:"rollback_generation" json:"rollback_generation" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
-}
-
 type WorkflowFlags struct {
+	ConfigFlag           `yaml:",inline"`
 	Tags                 []string       `yaml:"tags" short:"t" help:"Filter machines by tags (flakes, configs and names are already registered as tags)"`
 	Bootstrap            Bootstrap      `yaml:"bootstrap" embed:"" prefix:"bootstrap."`
 	RequireAllSuccess    bool           `yaml:"require_all_success" help:"Abort if any task fails, primarily for CI/CD"`
@@ -54,10 +51,13 @@ type WorkflowFlags struct {
 	Logging  `yaml:"logging"`                              //nolint:embeddedstructfieldcheck
 }
 
+type RollbackFlags struct {
+	Generation int `name:"gen" yaml:"rollback_generation" json:"rollback_generation" help:"0=current generation, -N=Nth before current, N=specific generation" default:"-1"`
+}
+
 type Flags struct {
-	GlobalFlags   `yaml:",inline"`
-	RollbackFlags `yaml:",inline"`
 	WorkflowFlags `yaml:",inline"`
+	RollbackFlags `yaml:",inline"`
 }
 
 type Bootstrap struct {

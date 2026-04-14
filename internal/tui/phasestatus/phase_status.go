@@ -64,9 +64,13 @@ func (p *PhaseStatus) Reset() {
 func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	for i := range p.CacheStatisticsPerPhase.Len() {
 		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, i)); z != nil && z.InBounds(msg) {
-			p.Selected.Index = map[bool]int{true: -1, false: i}[p.Selected.Index == i]
-
-			p.applyIndexToPhase()
+			if p.Selected.Index == i {
+				p.Selected.Index = -1
+				p.Selected.Phase = ""
+			} else {
+				p.Selected.Index = i
+				p.applyIndexToPhase()
+			}
 
 			return true
 		}

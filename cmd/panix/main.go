@@ -19,8 +19,6 @@ import (
 )
 
 type CLI struct {
-	flags.GlobalFlags
-
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
 	// Complementary commands
@@ -35,6 +33,7 @@ type CLI struct {
 	} `cmd:"" help:"Generate YAML schema for configuration files"`
 
 	Eval struct {
+		flags.ConfigFlag
 		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"-"`
 	} `cmd:"" help:"Evaluate config (process templates and anchors) and output result"`
 
@@ -88,24 +87,24 @@ func main() {
 	case "init":
 		ctx.FatalIfErrorf(cli.runInitCommand(cli.Init.Output, cli.Init.Force))
 	case "schema":
-		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.GlobalFlags, cli.Schema.Output))
+		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.Schema.Output))
 	case "eval":
-		ctx.FatalIfErrorf(cli.runEvalCommand(cli.GlobalFlags, cli.Eval.Output))
+		ctx.FatalIfErrorf(cli.runEvalCommand(cli.Eval.Config, cli.Eval.Output))
 	case "snapshot":
 		ctx.FatalIfErrorf(cli.runSnapshot(cli.Snapshot.Path))
 
 	// Wokflow commands
 
 	case "inspect":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Inspect.WorkflowFlags, []phases.Phase{phases.Inspect}))
+		ctx.FatalIfErrorf(cli.runTui(cli.Inspect.WorkflowFlags, []phases.Phase{phases.Inspect}))
 	case "build":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Build.WorkflowFlags, []phases.Phase{phases.Build}))
+		ctx.FatalIfErrorf(cli.runTui(cli.Build.WorkflowFlags, []phases.Phase{phases.Build}))
 	case "deploy":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Deploy.WorkflowFlags, phases.DeployPhasesInOrder()))
+		ctx.FatalIfErrorf(cli.runTui(cli.Deploy.WorkflowFlags, phases.DeployPhasesInOrder()))
 	case "secrets":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Secrets.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Secrets}))
+		ctx.FatalIfErrorf(cli.runTui(cli.Secrets.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Secrets}))
 	case "rollback":
-		ctx.FatalIfErrorf(cli.runTui(cli.GlobalFlags, cli.Rollback.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Rollback}))
+		ctx.FatalIfErrorf(cli.runTuiWithRollback(cli.Rollback.WorkflowFlags, cli.Rollback.RollbackFlags, []phases.Phase{phases.Inspect, phases.Rollback}))
 	}
 }
 
@@ -125,11 +124,11 @@ func (c *CLI) runInitCommand(outputPath string, force bool) error {
 	return nil
 }
 
-func (c *CLI) runEvalCommand(gf flags.GlobalFlags, outputPath string) error {
-	return errors.Wrap(template.EvalConfig(gf.Config, outputPath), "failed to evaluate config")
+func (c *CLI) runEvalCommand(configPath string, outputPath string) error {
+	return errors.Wrap(template.EvalConfig(configPath, outputPath), "failed to evaluate config")
 }
 
-func (c *CLI) runSchemaCommand(_ flags.GlobalFlags, outputPath string) error {
+func (c *CLI) runSchemaCommand(outputPath string) error {
 	return errors.Wrap(schema.GenerateSchema(outputPath), "failed to generate schema")
 }
 
@@ -144,8 +143,8 @@ func (c *CLI) runSnapshot(path string) error {
 
 // Wokflow
 
-func (c *CLI) runTui(gf flags.GlobalFlags, wf flags.WorkflowFlags, commandPhases []phases.Phase, modifiers ...func(conf *config.Config)) error {
-	conf, err := config.LoadConfig(flags.Flags{GlobalFlags: gf, WorkflowFlags: wf}, commandPhases)
+func (c *CLI) runTui(wf flags.WorkflowFlags, commandPhases []phases.Phase, modifiers ...func(conf *config.Config)) error {
+	conf, err := config.LoadConfig(flags.Flags{WorkflowFlags: wf}, commandPhases)
 	if err != nil {
 		return errors.Wrap(err, "failed to load config")
 	}
@@ -159,4 +158,10 @@ func (c *CLI) runTui(gf flags.GlobalFlags, wf flags.WorkflowFlags, commandPhases
 	}
 
 	return errors.Wrap(tui.New(context.Background(), conf, false), "TUI error")
+}
+
+func (c *CLI) runTuiWithRollback(wf flags.WorkflowFlags, rf flags.RollbackFlags, commandPhases []phases.Phase) error {
+	return c.runTui(wf, commandPhases, func(conf *config.Config) {
+		conf.Flags.RollbackFlags = rf
+	})
 }

@@ -35,13 +35,6 @@ func (c *Cache[T]) Get(fn func() (T, bool), cacheValidationElements ...any) T {
 	return contents
 }
 
-func (c *Cache[T]) Invalidate() {
-	c.cached = false
-	c.hash = 0
-	var zero T
-	c.contents = zero
-}
-
 func (c *Cache[T]) computeHash(args ...any) uint64 {
 	if c.hasher == nil {
 		c.hasher = fnv.New64a()

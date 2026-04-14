@@ -347,16 +347,12 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
-	statsTable := m.conf.Fleet.StatsTable
-	if statsTable.HandleMouseClick(msg) {
-		statsTable.Reset()
-
+	if m.conf.Fleet.StatsTable.HandleMouseClick(msg) {
+		m.conf.Fleet.PhaseStatus.Reset()
 		return
 	}
-
-	phaseStatus := m.conf.Fleet.PhaseStatus
-	if phaseStatus.HandleMouseClick(msg) {
-		phaseStatus.Reset()
+	if m.conf.Fleet.PhaseStatus.HandleMouseClick(msg) {
+		m.conf.Fleet.StatsTable.Reset()
 	}
 }
 

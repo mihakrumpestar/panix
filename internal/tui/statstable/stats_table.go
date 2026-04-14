@@ -79,11 +79,11 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 
 	if s.Selected.Index == rowIndex {
 		s.Selected.Index = -1
+		s.Selected.Xpath.Clear()
 	} else {
 		s.Selected.Index = rowIndex
+		s.applyIndexToXpath()
 	}
-
-	s.applyIndexToXpath()
 
 	return true
 }
