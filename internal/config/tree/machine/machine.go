@@ -61,20 +61,10 @@ type Generations struct {
 }
 
 func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attributes) {
-	attributes.EnsureAttributes(&m.Attributes, name, parentAttr)
-
 	if m.Logs == nil {
-		m.Logs = logs.New(&m.Attributes)
+		m.Logs = logs.New()
 	} else {
-		m.Logs.PostUnmarshalInit(&m.Attributes)
-	}
-
-	if m.MetaInspect == nil {
-		m.MetaInspect = atomicpointer.New(&MetaInspect{})
-	}
-
-	if m.State == nil {
-		m.State = &State{ActiveSSH: SSHTypeRegular}
+		m.Logs.PostUnmarshalInit()
 	}
 }
 
@@ -91,7 +81,7 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) err
 	m.MetaInspect = atomicpointer.New(&MetaInspect{})
 	m.State = &State{ActiveSSH: SSHTypeRegular}
 
-	m.Logs = logs.New(&m.Attributes)
+	m.Logs = logs.New()
 
 	return nil
 }

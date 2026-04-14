@@ -32,33 +32,13 @@ type Fleet struct {
 	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
 }
 
-func (f *Fleet) PostUnmarshalInit() {
-	if f.Logs == nil {
-		f.Logs = logs.New(&f.Attributes)
-	} else {
-		f.Logs.PostUnmarshalInit(&f.Attributes)
-	}
-
-	if f.StatsTable == nil {
-		f.StatsTable = statstable.NewStatsTable()
-	}
-
-	if f.PhaseStatus == nil {
-		f.PhaseStatus = phasestatus.NewPhaseStatus()
-	}
-
-	for _, flakePair := range f.Flakes.Pairs() {
-		flakePair.Value.PostUnmarshalInit(flakePair.Key, &f.Attributes)
-	}
-}
-
 func (r *Fleet) Init(f flags.Flags) error {
 	err := r.Attributes.Init("", attributes.New(f), false)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
 
-	r.Logs = logs.New(&r.Attributes)
+	r.Logs = logs.New()
 
 	r.StatsTable = statstable.NewStatsTable()
 	r.PhaseStatus = phasestatus.NewPhaseStatus()

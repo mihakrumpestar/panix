@@ -28,9 +28,8 @@ type Attributes struct {
 	Bootstrap Bootstrap `yaml:"bootstrap"`
 	Nix       NixConfig `yaml:"nix"`
 
-	Name    string      `yaml:"-" json:"name" validate:"-"`
-	Xpath   xpath.Xpath `yaml:"-" json:"xpath" validate:"-"`
-	Message string      `yaml:"-" json:"message" validate:"-"`
+	Name  string      `yaml:"-" json:"name" validate:"-"`
+	Xpath xpath.Xpath `yaml:"-" json:"xpath" validate:"-"`
 
 	flags config_flags.Flags
 }
@@ -192,17 +191,6 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 	return nil
 }
 
-// EnsureAttributes fills in Name and Xpath if empty after JSON deserialization.
-func EnsureAttributes(attr *Attributes, name string, parentAttr *Attributes) {
-	if attr.Name == "" {
-		attr.Name = name
-	}
-	if attr.Xpath.String() == "" && parentAttr != nil {
-		attr.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
-	}
-}
-
-// passAttributesInto has to be run before rest of the Init.
 func (a *Attributes) Flags() config_flags.Flags {
 	return a.flags
 }

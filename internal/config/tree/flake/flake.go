@@ -18,27 +18,13 @@ type Flake struct {
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 }
 
-func (f *Flake) PostUnmarshalInit(name string, parentAttr *attributes.Attributes) {
-	attributes.EnsureAttributes(&f.Attributes, name, parentAttr)
-
-	if f.Logs == nil {
-		f.Logs = logs.New(&f.Attributes)
-	} else {
-		f.Logs.PostUnmarshalInit(&f.Attributes)
-	}
-
-	for _, cfgPair := range f.Configurations.Pairs() {
-		cfgPair.Value.PostUnmarshalInit(cfgPair.Key, &f.Attributes)
-	}
-}
-
 func (f *Flake) Init(name string, attr *attributes.Attributes) error {
 	err := f.Attributes.Init(name, attr, false)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize flake")
 	}
 
-	f.Logs = logs.New(&f.Attributes)
+	f.Logs = logs.New()
 
 	return nil
 }

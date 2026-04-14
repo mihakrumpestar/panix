@@ -53,12 +53,7 @@ func (c *Config) PostUnmarshalInit() {
 		c.ColorScheme = colorscheme.DefaultColorScheme()
 	}
 
-	if len(c.Phases) == 0 {
-		c.Phases = phases.DeployPhasesInOrder()
-	}
-
 	if c.Fleet != nil {
-		c.Fleet.PostUnmarshalInit()
 		c.Fleet.RecalculateCachesOnly(c.Phases)
 	}
 }

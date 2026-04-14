@@ -54,54 +54,63 @@ type ColorScheme struct {
 }
 
 type ColorSchemePhaseStatus struct {
-	Running [2]colorful.Color
-	Failed  [2]colorful.Color
-	Done    [2]colorful.Color
-	Default [2]colorful.Color
+	Running ColorPair
+	Failed  ColorPair
+	Done    ColorPair
+	Default ColorPair
 }
 
+type ColorPair [2]colorful.Color
+
 func DefaultColorScheme() *ColorScheme {
-	borderStyle := makeBorderStyle()
+	borderStyle := makeForegroundStyle("#6272A4", false)
 
 	return &ColorScheme{
 		Header: ColorSchemeHeader{
-			Title:  makeHeaderTitleStyle(),
+			Title:  makeForegroundStyle("#00ADD8", true),
 			Border: borderStyle,
 		},
 		Status: ColorSchemeStatus{
-			OK:      makeForegroundStyle("#50FA7B"),
-			Warning: makeForegroundStyle("#FFB86C"),
-			Failed:  makeForegroundStyle("#FF5555"),
-			Running: makeForegroundStyle("#00BFFF"),
+			OK:      makeForegroundStyle("#50FA7B", false),
+			Warning: makeForegroundStyle("#FFB86C", false),
+			Failed:  makeForegroundStyle("#FF5555", false),
+			Running: makeForegroundStyle("#00BFFF", false),
 		},
 		Table: ColorSchemeTable{
 			Header:                       makeBoldForegroundStyle("#F8F8F2"),
 			Border:                       borderStyle,
-			Row:                          makeForegroundStyle("#F8F8F2"),
-			RowAlt:                       makeForegroundStyle("#BFBFBF"),
+			Row:                          makeForegroundStyle("#F8F8F2", false),
+			RowAlt:                       makeForegroundStyle("#BFBFBF", false),
 			SelectionHighlightBackground: makeBackgroundStyle("#444444"),
 		},
 		PhaseStatus: ColorSchemePhaseStatus{
-			Running: [2]colorful.Color{mustColorfulHex("#01536e"), mustColorfulHex("#007da7")},
-			Failed:  [2]colorful.Color{mustColorfulHex("#5f1414"), mustColorfulHex("#DC2626")},
-			Done:    [2]colorful.Color{mustColorfulHex("#14532D"), mustColorfulHex("#11883d")},
-			Default: [2]colorful.Color{mustColorfulHex("#535862"), mustColorfulHex("#6B7280")},
+			Running: mustColorfulHexPair("#01536e", "#007da7"),
+			Failed:  mustColorfulHexPair("#5f1414", "#DC2626"),
+			Done:    mustColorfulHexPair("#14532D", "#11883d"),
+			Default: mustColorfulHexPair("#535862", "#6B7280"),
 		},
 		Tree: ColorSchemeTree{
 			Enumerator: borderStyle,
 		},
-		Spinner:       makeForegroundStyle("#8BE9FD"),
 		Flake:         makeLogEntity("#F1FA8C", '📁', true),
 		Configuration: makeLogEntity("#FFB86C", '📦', false),
 		Machine:       makeLogEntity("#8BE9FD", '💻', false),
 		Phase:         makeLogEntity("#FF79C6", '📋', false),
 		Command:       makeLogEntity("#BD93F9", '⚙', false),
 		Error:         makeLogEntity("#FF5555", '✗', false),
+		Spinner:       makeForegroundStyle("#8BE9FD", false),
 	}
 }
 
-func makeForegroundStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+// Helpers
+
+func makeForegroundStyle(color string, bold bool) lipgloss.Style {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	if bold {
+		style = style.Bold(true)
+	}
+
+	return style
 }
 
 func makeBoldForegroundStyle(color string) lipgloss.Style {
@@ -112,19 +121,8 @@ func makeBackgroundStyle(color string) lipgloss.Style {
 	return lipgloss.NewStyle().Background(lipgloss.Color(color))
 }
 
-func makeBorderStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
-}
-
-func makeHeaderTitleStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00ADD8"))
-}
-
 func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-	if bold {
-		style = style.Bold(true)
-	}
+	style := makeForegroundStyle(color, bold)
 
 	return ColorSchemeLogEntity{Color: style, Icon: icon}
 }
@@ -136,4 +134,8 @@ func mustColorfulHex(hex string) colorful.Color {
 	}
 
 	return c
+}
+
+func mustColorfulHexPair(hex1, hex2 string) ColorPair {
+	return ColorPair{mustColorfulHex(hex1), mustColorfulHex(hex2)}
 }

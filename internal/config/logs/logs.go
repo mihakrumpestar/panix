@@ -3,7 +3,6 @@ package logs
 import (
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -13,8 +12,6 @@ import (
 type Logs struct {
 	PhaseLogs             *phase.PhaseLogs `json:"phase_logs"`
 	DurationAndErrorCache DurationAndError `json:"duration_and_error"`
-
-	attributes *attributes.Attributes
 }
 
 type DurationAndError struct {
@@ -22,19 +19,10 @@ type DurationAndError struct {
 	Error    *errorjson.ErrorJSON `json:"error,omitempty"`
 }
 
-func New(attributes *attributes.Attributes) *Logs {
+func New() *Logs {
 	return &Logs{
-		PhaseLogs:  phase.NewPhaseLogs(),
-		attributes: attributes,
+		PhaseLogs: phase.NewPhaseLogs(),
 	}
-}
-
-func (l *Logs) Attributes() *attributes.Attributes {
-	return l.attributes
-}
-
-func (l *Logs) SetAttributes(attr *attributes.Attributes) {
-	l.attributes = attr
 }
 
 func (l *Logs) RecalculateDurationAndError() error {
@@ -67,12 +55,11 @@ func (l *Logs) Clear() {
 	l.DurationAndErrorCache = DurationAndError{}
 }
 
-func (l *Logs) PostUnmarshalInit(attr *attributes.Attributes) {
+func (l *Logs) PostUnmarshalInit() {
 	if l == nil {
 		return
 	}
 
-	l.attributes = attr
 	if l.PhaseLogs == nil {
 		l.PhaseLogs = phase.NewPhaseLogs()
 	}
@@ -82,7 +69,7 @@ func (l *Logs) PostUnmarshalInit(attr *attributes.Attributes) {
 
 // MergePhaseLogs merges multiple PhaseLogs.
 func MergePhaseLogs(phasesInOrder []phases.Phase, input ...*phase.PhaseLogs) *Logs {
-	logs := New(nil)
+	logs := New()
 
 	gathered := phase.NewPhaseLogs()
 
