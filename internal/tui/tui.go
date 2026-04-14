@@ -252,7 +252,7 @@ func (m *model) View() tea.View {
 	}
 
 	if m.isSnapshot {
-		// TODO: mainContent = m.viewSnapshotHeader() + mainContent
+		mainContent = m.viewSnapshotHeader() + mainContent
 	}
 
 	if resetable.viewports.IsFullscreen() {
