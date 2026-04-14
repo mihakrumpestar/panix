@@ -13,7 +13,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
@@ -53,7 +52,6 @@ type model struct {
 	ctx                context.Context
 	conf               *config.Config
 	dimensions         *viewports.Dimensions
-	dimensionsReceived bool
 	quitting           bool
 	isSnapshot         bool
 	resetable          atomic.Pointer[resetable]
@@ -93,7 +91,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	mdl.header = header.New(isSnapshot, conf.Snapshot)
 
-	mdl.footer = footer.New(mdl.keyDefs())
+	mdl.footer = footer.New(mdl.keyDefs(), conf)
 
 	program := tea.NewProgram(mdl)
 
@@ -223,7 +221,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
-		m.dimensionsReceived = true
 	}
 
 	return m, cmd
@@ -235,7 +232,7 @@ func (m *model) View() tea.View {
 	view.MouseMode = tea.MouseModeCellMotion
 
 	resetable := m.resetable.Load()
-	if resetable == nil || !m.dimensionsReceived {
+	if resetable == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
 		return view
 	}
 
@@ -243,15 +240,13 @@ func (m *model) View() tea.View {
 		m.buildLogs = buildlogs.New(m.conf, resetable.viewports, resetable.spinners)
 	}
 
-	mainContent := m.viewMainContent()
-
 	header := m.header.View(m.dimensions.Width, m.conf.ColorScheme)
-	headerHeight := lipgloss.Height(header)
-
+	mainContent := m.viewMainContent()
 	footer := m.footer.View(m.dimensions.Width)
-	footerHeight := lipgloss.Height(footer)
 
-	headerFooterHeight := headerHeight + footerHeight
+	headerFooterHeight := header.Height + footer.Height
+
+	//fmt.Println("headerFooterHeight", header.Height, footerHeight, headerFooterHeight)
 
 	var main string
 	if resetable.viewports.IsFullscreen() {
@@ -262,9 +257,9 @@ func (m *model) View() tea.View {
 
 	var builder strings.Builder
 
-	builder.WriteString(header)
+	builder.WriteString(header.Content)
 	builder.WriteString(main)
-	builder.WriteString(footer)
+	builder.WriteString(footer.Content)
 
 	view.SetContent(zone.Scan(builder.String()))
 
@@ -300,7 +295,10 @@ func (m *model) viewMainContent() string {
 
 	if m.conf.Flags.Logging.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
-		debugContent := resetable.spinners.Debug()
+		debugContent := fmt.Sprintf("terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width)
+		debugContent += fmt.Sprintf("header - h: %d\n", m.header.View(m.dimensions.Width, m.conf.ColorScheme).Height)
+		debugContent += fmt.Sprintf("footer - h: %d\n", m.footer.View(m.dimensions.Width).Height)
+		debugContent += resetable.spinners.Debug()
 		debugContent += resetable.viewports.Debug()
 		builder.WriteString(debugHeader + debugContent)
 	}

@@ -15,7 +15,12 @@ type Header struct {
 	isSnapshot bool
 	snapshot   config.Snapshot
 
-	cache cache.Cache[string]
+	cache cache.Cache[ContentAndHeight]
+}
+
+type ContentAndHeight struct {
+	Content string
+	Height  int
 }
 
 func New(isSnapshot bool, snapshot config.Snapshot) *Header {
@@ -25,13 +30,16 @@ func New(isSnapshot bool, snapshot config.Snapshot) *Header {
 	}
 }
 
-func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) string {
+func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAndHeight {
 	if !h.isSnapshot {
-		return ""
+		return ContentAndHeight{}
 	}
 
-	return h.cache.Get(func() (string, bool) {
-		return h.render(width, colorScheme), true
+	return h.cache.Get(func() (ContentAndHeight, bool) {
+		content := h.render(width, colorScheme)
+		height := lipgloss.Height(content)
+
+		return ContentAndHeight{Content: content, Height: height}, true
 	}, width)
 }
 
@@ -52,7 +60,7 @@ func (h *Header) render(width int, cs *colorscheme.ColorScheme) string {
 	sep := cs.Table.Border.Render(" │ ")
 	line := cs.Header.Title.Render("◉ Snapshot") + cs.Table.Border.Render(": ") + strings.Join(parts, sep)
 
-	return lipgloss.NewStyle().Width(width).Render(line)
+	return lipgloss.NewStyle().Width(width).Render(line) + "\n"
 }
 
 func formatTime(t time.Time) string {

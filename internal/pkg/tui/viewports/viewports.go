@@ -27,7 +27,9 @@ const (
 )
 
 // Dimensions represents terminal size.
-type Dimensions struct{ Width, Height int }
+type Dimensions struct {
+	Width, Height int
+}
 
 // Viewports manages all viewport instances.
 type Viewports struct {
@@ -36,7 +38,6 @@ type Viewports struct {
 	conf            *config.Config
 	fullscreenXpath xpath.Xpath
 	mainXpath       xpath.Xpath
-	footerHeight    int
 }
 
 // Viewport wraps a bubbletea viewport with additional state.
@@ -102,20 +103,18 @@ func (v *Viewports) GetOrCreateLabelViewport(xpath xpath.Xpath, content string, 
 	return v.createViewport(xpath, content, indent, viewportOptions{wrapContent: true, noPadding: true})
 }
 
-func (v *Viewports) GetOrCreateMainViewport(content string, footerHeight int) string {
-	v.footerHeight = footerHeight
-	h := v.dimensions.Height - footerHeight
+func (v *Viewports) GetOrCreateMainViewport(content string, footerHeaderHeight int) string {
+	h := v.dimensions.Height - footerHeaderHeight
 
 	return v.createViewport(v.mainXpath, content, 0, viewportOptions{
 		height:    h,
 		maxHeight: h,
 		full:      true,
-	})
+	}) + "\n"
 }
 
-func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, footerHeight int) string {
-	v.footerHeight = footerHeight
-	height := max(1, v.dimensions.Height-footerHeight-borderHeight)
+func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, footerHeaderHeight int) string {
+	height := max(1, v.dimensions.Height-footerHeaderHeight-borderHeight)
 	width := max(1, v.dimensions.Width-scrollbarWidth-borderWidth)
 
 	viewport, exists := v.viewports.Get(xpath)
@@ -151,7 +150,7 @@ func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, 
 		render:      rendered,
 	}
 
-	return rendered
+	return rendered + "\n"
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xpath xpath.Xpath) { v.viewports.Del(xpath) }

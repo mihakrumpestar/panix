@@ -14,9 +14,8 @@ const (
 	fadeStart    = 1 * time.Second
 	tickInterval = 250 * time.Millisecond
 
-	fadeFactor  = 0.4
-	boxPaddingX = 2
-	rgbaShift   = 8
+	fadeFactor = 0.4
+	rgbaShift  = 8
 )
 
 type notificationTickMsg struct{}
@@ -68,31 +67,26 @@ func (n *Notification) Clear() {
 	n.started = time.Time{}
 }
 
-func (n *Notification) GetTextAndStarted() (string, int64) {
-	return n.text, n.started.UnixMilli()
-}
-
-func (n *Notification) Render(baseStyle lipgloss.Style) string {
-	if n.isExpired() {
-		return ""
-	}
-
-	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
-}
-
-func (n *Notification) RenderBox(baseStyle lipgloss.Style) (string, int) {
+func (n *Notification) View(baseStyle lipgloss.Style) (string, int) {
 	if n.isExpired() {
 		return "", 0
 	}
 
 	fg := n.fadedColor()
 	box := lipgloss.NewStyle().
-		Padding(0, boxPaddingX).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(fg).
-		Render(n.Render(baseStyle))
+		Render(n.render(baseStyle))
 
-	return box, lipgloss.Width(box)
+	return box + "\n", lipgloss.Width(box)
+}
+
+func (n *Notification) render(baseStyle lipgloss.Style) string {
+	if n.isExpired() {
+		return ""
+	}
+
+	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
 }
 
 func (n *Notification) isExpired() bool {
