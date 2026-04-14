@@ -44,7 +44,7 @@ func Write(dir string, s *config.Config) error {
 	path := filepath.Join(dir, fileName(s))
 	err = os.WriteFile(path, data, filepermissions.DefaultFilePermissions)
 	if err != nil {
-		return errors.Wrap(err, "failed to write snapshot file")
+		return errors.Wrap(err, "failed to write snapshot")
 	}
 
 	return nil

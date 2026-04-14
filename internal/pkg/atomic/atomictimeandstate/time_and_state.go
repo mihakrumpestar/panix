@@ -8,9 +8,12 @@ import (
 )
 
 type TimeAndState struct {
-	StartTime time.Time            `json:"start_time"`
-	EndTime   time.Time            `json:"end_time"`
-	EndError  *errorjson.ErrorJSON `json:"end_error,omitempty"`
+	StartTime     time.Time            `json:"start_time"`
+	EndTime       time.Time            `json:"end_time"`
+	DurationCache time.Duration        `json:"duration"`
+	EndError      *errorjson.ErrorJSON `json:"end_error,omitempty"`
+
+	live bool
 }
 
 func (tas *TimeAndState) HasStarted() bool {
@@ -22,29 +25,31 @@ func (tas *TimeAndState) IsFinished() bool {
 }
 
 func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {
-	startTime := tas.StartTime
-	if startTime.IsZero() {
-		return time.Duration(0), errors.New("timer has not started yet")
+	if tas.StartTime.IsZero() {
+		return 0, errors.New("timer has not started yet")
 	}
 
-	endTime := tas.EndTime
-	if !endTime.IsZero() {
-		return endTime.Sub(startTime), nil
+	// EndTime set, so last DurationCache already set on EndTimerWithError
+	if !tas.EndTime.IsZero() {
+		return tas.DurationCache, nil
 	}
 
-	return time.Since(startTime), nil
+	if !tas.live {
+		return tas.DurationCache, nil
+	}
+
+	tas.DurationCache = time.Since(tas.StartTime)
+	return tas.DurationCache, nil
 }
 
 func (tas *TimeAndState) Duration() (time.Duration, error) {
-	startTime := tas.StartTime
-	if startTime.IsZero() {
-		return time.Duration(0), errors.New("timer has not started yet")
+	if tas.StartTime.IsZero() {
+		return 0, errors.New("timer has not started yet")
 	}
 
-	endTime := tas.EndTime
-	if endTime.IsZero() {
-		return time.Duration(0), errors.New("timer has not ended yet")
+	if tas.EndTime.IsZero() {
+		return 0, errors.New("timer has not ended yet")
 	}
 
-	return endTime.Sub(startTime), nil
+	return tas.DurationCache, nil // Already calculated by EndTimerWithError
 }

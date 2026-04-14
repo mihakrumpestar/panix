@@ -37,7 +37,7 @@ func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAn
 
 	return h.cache.Get(func() (ContentAndHeight, bool) {
 		content := h.render(width, colorScheme)
-		height := lipgloss.Height(content)
+		height := lipgloss.Height(content) - 1 // Lipgloss does not count properly height for this, so we -1
 
 		return ContentAndHeight{Content: content, Height: height}, true
 	}, width)
@@ -60,7 +60,7 @@ func (h *Header) render(width int, cs *colorscheme.ColorScheme) string {
 	sep := cs.Table.Border.Render(" │ ")
 	line := cs.Header.Title.Render("◉ Snapshot") + cs.Table.Border.Render(": ") + strings.Join(parts, sep)
 
-	return lipgloss.NewStyle().Width(width).Render(line) + "\n"
+	return lipgloss.NewStyle().Width(width).Render(line) + "\n\n"
 }
 
 func formatTime(t time.Time) string {

@@ -106,7 +106,8 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	}
 
 	if finalModel.quitting {
-		content := finalModel.viewMainContent()
+		content := finalModel.header.View(finalModel.dimensions.Width, finalModel.conf.ColorScheme).Content
+		content += finalModel.viewMainContent()
 		fmt.Println(content)
 	}
 

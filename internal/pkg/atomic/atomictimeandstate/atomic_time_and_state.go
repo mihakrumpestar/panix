@@ -12,21 +12,19 @@ type AtomicTimeAndState struct {
 }
 
 func New() *AtomicTimeAndState {
-	return &AtomicTimeAndState{atomicpointer.New(&TimeAndState{})}
+	return &AtomicTimeAndState{atomicpointer.New(&TimeAndState{live: true})}
 }
 
-func (tas *AtomicTimeAndState) StartTimer() time.Time {
+func (tas *AtomicTimeAndState) StartTimer() {
 	startTime := tas.Load().StartTime
 	if !startTime.IsZero() {
-		return startTime
+		return
 	}
 
 	timeNow := time.Now()
 	tas.Update(func(tas *TimeAndState) {
 		tas.StartTime = timeNow
 	})
-
-	return timeNow
 }
 
 func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
@@ -36,6 +34,7 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 
 	timeNow := time.Now()
 	tas.Update(func(tas *TimeAndState) {
+		tas.DurationCache = timeNow.Sub(tas.StartTime)
 		tas.EndTime = timeNow
 		tas.EndError = errorjson.New(err)
 	})
