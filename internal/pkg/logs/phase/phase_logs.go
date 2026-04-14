@@ -6,7 +6,7 @@ import (
 )
 
 type PhaseLogs struct {
-	*atomicorderedmap.OrderedMap[phases.Phase, *PhaseLog]
+	*atomicorderedmap.AtomicOrderedMap[phases.Phase, *PhaseLog]
 }
 
 func NewPhaseLogs() *PhaseLogs {
@@ -14,20 +14,20 @@ func NewPhaseLogs() *PhaseLogs {
 }
 
 func (pl *PhaseLogs) UnmarshalJSON(data []byte) error {
-	if pl.OrderedMap == nil {
-		pl.OrderedMap = atomicorderedmap.New[phases.Phase, *PhaseLog]()
+	if pl.AtomicOrderedMap == nil {
+		pl.AtomicOrderedMap = atomicorderedmap.New[phases.Phase, *PhaseLog]()
 	}
 
-	return pl.OrderedMap.UnmarshalJSON(data)
+	return pl.AtomicOrderedMap.UnmarshalJSON(data)
 }
 
 // Get retrieves a PhaseLog for the given phase, or nil if not found.
 func (pl *PhaseLogs) MustGet(phase phases.Phase) *PhaseLog {
-	if pl == nil || pl.OrderedMap == nil {
+	if pl == nil || pl.AtomicOrderedMap == nil {
 		return nil
 	}
 
-	phaseLog, _ := pl.OrderedMap.Get(phase)
+	phaseLog, _ := pl.AtomicOrderedMap.Get(phase)
 
 	return phaseLog
 }
@@ -40,7 +40,7 @@ func (pl *PhaseLogs) GetOrCreate(phase phases.Phase) *PhaseLog {
 	}
 
 	phaseLog = NewPhaseLog()
-	pl.OrderedMap.Set(phase, phaseLog)
+	pl.AtomicOrderedMap.Set(phase, phaseLog)
 
 	return phaseLog
 }

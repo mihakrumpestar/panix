@@ -67,6 +67,17 @@ func (l *Logs) Clear() {
 	l.DurationAndErrorCache = DurationAndError{}
 }
 
+func (l *Logs) PostUnmarshalInit(attr *attributes.Attributes) {
+	if l == nil {
+		return
+	}
+
+	l.attributes = attr
+	if l.PhaseLogs == nil {
+		l.PhaseLogs = phase.NewPhaseLogs()
+	}
+}
+
 // Helpers
 
 // MergePhaseLogs merges multiple PhaseLogs.

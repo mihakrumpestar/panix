@@ -11,11 +11,25 @@ import (
 type Flake struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Configurations atomicorderedmap.OrderedMap[string, *configuration.Configuration] `yaml:"configurations,required" json:"configurations" validate:"required"`
-	URL            string                                                            `yaml:"url,required" json:"url" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
+	Configurations atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration] `yaml:"configurations,required" json:"configurations" validate:"required"`
+	URL            string                                                                  `yaml:"url,required" json:"url" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"` //nolint:lll
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
+}
+
+func (f *Flake) PostUnmarshalInit(name string, parentAttr *attributes.Attributes) {
+	attributes.EnsureAttributes(&f.Attributes, name, parentAttr)
+
+	if f.Logs == nil {
+		f.Logs = logs.New(&f.Attributes)
+	} else {
+		f.Logs.PostUnmarshalInit(&f.Attributes)
+	}
+
+	for _, cfgPair := range f.Configurations.Pairs() {
+		cfgPair.Value.PostUnmarshalInit(cfgPair.Key, &f.Attributes)
+	}
 }
 
 func (f *Flake) Init(name string, attr *attributes.Attributes) error {

@@ -11,8 +11,8 @@ import (
 type Configuration struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Machines    atomicorderedmap.OrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required"`
-	FlakeOutput string                                                `yaml:"flake_output" json:"flake_output,omitempty" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
+	Machines    atomicorderedmap.AtomicOrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required"`
+	FlakeOutput string                                                      `yaml:"flake_output" json:"flake_output,omitempty" desc:"Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"` //nolint:lll
 	// Internal
 	MetaBuild *MetaBuild `yaml:"-" json:"meta_build,omitempty" validate:"-"`
 	Logs      *logs.Logs `yaml:"-" json:"logs,omitempty"`
@@ -20,6 +20,24 @@ type Configuration struct {
 
 type MetaBuild struct {
 	SystemClosure string `json:"system_closure,omitempty"`
+}
+
+func (c *Configuration) PostUnmarshalInit(name string, parentAttr *attributes.Attributes) {
+	attributes.EnsureAttributes(&c.Attributes, name, parentAttr)
+
+	if c.Logs == nil {
+		c.Logs = logs.New(&c.Attributes)
+	} else {
+		c.Logs.PostUnmarshalInit(&c.Attributes)
+	}
+
+	for _, mPair := range c.Machines.Pairs() {
+		if mPair.Value == nil {
+			continue
+		}
+
+		mPair.Value.PostUnmarshalInit(mPair.Key, &c.Attributes)
+	}
 }
 
 func (c *Configuration) Init(name string, parentAttributes *attributes.Attributes) error {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicbuffer"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicslice"
-	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
 	"github.com/pkg/errors"
 )
 
@@ -23,7 +23,7 @@ type CommandLog struct {
 
 	// Mutate
 	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
-	TimeAndState *timeandstate.AtomicTimeAndState                     `json:"time_and_state"`
+	TimeAndState *atomictimeandstate.AtomicTimeAndState               `json:"time_and_state"`
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
@@ -33,7 +33,7 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		StatusIfFailed:  statusIfFailed,
 		Command:         strings.Join(slices.Concat(env, command), " "),
 		Output:          atomicslice.New[*atomicbuffer.AtomicBuffer](),
-		TimeAndState:    timeandstate.New(),
+		TimeAndState:    atomictimeandstate.New(),
 	}
 
 	return commandLog

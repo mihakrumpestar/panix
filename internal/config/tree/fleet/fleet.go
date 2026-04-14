@@ -22,7 +22,7 @@ import (
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Flakes atomicorderedmap.OrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes"`
+	Flakes atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
@@ -30,6 +30,26 @@ type Fleet struct {
 	// For TUI representation
 	StatsTable  *statstable.StatsTable   `yaml:"-" json:"stats_table"`
 	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
+}
+
+func (f *Fleet) PostUnmarshalInit() {
+	if f.Logs == nil {
+		f.Logs = logs.New(&f.Attributes)
+	} else {
+		f.Logs.PostUnmarshalInit(&f.Attributes)
+	}
+
+	if f.StatsTable == nil {
+		f.StatsTable = statstable.NewStatsTable()
+	}
+
+	if f.PhaseStatus == nil {
+		f.PhaseStatus = phasestatus.NewPhaseStatus()
+	}
+
+	for _, flakePair := range f.Flakes.Pairs() {
+		flakePair.Value.PostUnmarshalInit(flakePair.Key, &f.Attributes)
+	}
 }
 
 func (r *Fleet) Init(f flags.Flags) error {
@@ -137,17 +157,17 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 		}
 
 		tas := machineLastPhaseLog.Value.TimeAndState.Load()
+		endErr := tas.EndError
+		machineState.Error = endErr // Error (or lack thereof) has to be always propagated (e.g. retry)
+
 		if !tas.IsFinished() {
 			machineState.Status = stats.Running
 			machineState.StatusMsg = lastCommandLog.StatusIfRunning
 			continue
 		}
 
-		endErr := tas.EndError
 		if endErr != nil {
 			machineState.Status = stats.Failed
-			machineState.Error = endErr
-
 			machineState.StatusMsg = lastCommandLog.StatusIfFailed
 			continue
 		}

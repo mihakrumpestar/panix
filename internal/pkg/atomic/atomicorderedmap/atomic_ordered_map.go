@@ -17,24 +17,24 @@ type Pair[K comparable, V any] struct {
 	Value V `json:"value"`
 }
 
-type OrderedMap[K comparable, V any] struct {
+type AtomicOrderedMap[K comparable, V any] struct {
 	*omap.Omap[K, V] `validate:"-"`
 }
 
-func New[K comparable, V any]() *OrderedMap[K, V] {
+func New[K comparable, V any]() *AtomicOrderedMap[K, V] {
 	m, err := omap.New[K, V]()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create omap: %v", err))
 	}
 
-	return &OrderedMap[K, V]{Omap: m}
+	return &AtomicOrderedMap[K, V]{Omap: m}
 }
 
 // Pairs returns all key-value pairs in insertion order.
 // Nil-safe: returns nil if the OrderedMap or its underlying omap is nil.
 // This can happen after JSON unmarshaling creates a zero-value OrderedMap
 // whose UnmarshalJSON was never called (e.g., missing JSON key).
-func (m *OrderedMap[K, V]) Pairs() []Pair[K, V] {
+func (m *AtomicOrderedMap[K, V]) Pairs() []Pair[K, V] {
 	if m == nil || m.Omap == nil {
 		return nil
 	}
@@ -50,7 +50,7 @@ func (m *OrderedMap[K, V]) Pairs() []Pair[K, V] {
 
 // DeleteFunc removes entries matching the predicate.
 // Nil-safe: no-op if the OrderedMap or its underlying omap is nil.
-func (m *OrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
+func (m *AtomicOrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 	if m == nil || m.Omap == nil {
 		return
 	}
@@ -64,7 +64,7 @@ func (m *OrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 
 // Last returns the last pair in insertion order.
 // Nil-safe: returns zero value and false if the OrderedMap or its underlying omap is nil.
-func (m *OrderedMap[K, V]) Last() (Pair[K, V], bool) {
+func (m *AtomicOrderedMap[K, V]) Last() (Pair[K, V], bool) {
 	if m == nil || m.Omap == nil || m.Omap.Len() == 0 {
 		var zero Pair[K, V]
 		return zero, false
@@ -75,11 +75,11 @@ func (m *OrderedMap[K, V]) Last() (Pair[K, V], bool) {
 	return Pair[K, V]{Key: p.Key, Value: p.Value}, true
 }
 
-func (m *OrderedMap[K, V]) MarshalJSON() ([]byte, error) {
+func (m *AtomicOrderedMap[K, V]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m.Pairs())
 }
 
-func (m *OrderedMap[K, V]) UnmarshalJSON(data []byte) error {
+func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	if m == nil {
 		return fmt.Errorf("OrderedMap.UnmarshalJSON: nil receiver")
 	}
@@ -108,9 +108,9 @@ func (m *OrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-var _ yaml.BytesUnmarshaler = (*OrderedMap[string, any])(nil)
+var _ yaml.BytesUnmarshaler = (*AtomicOrderedMap[string, any])(nil)
 
-func (m *OrderedMap[K, V]) UnmarshalYAML(data []byte) error {
+func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 	if m.Omap == nil {
 		omapInstance, err := omap.New[K, V]()
 		if err != nil {

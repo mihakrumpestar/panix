@@ -14,9 +14,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 )
@@ -84,7 +84,7 @@ func (m *model) ViewBuildLogs() string {
 	return builder.String()
 }
 
-func (m *model) addPhaseToTree(treeNode *tree.Tree, cfgLog *logs.Logs, machines atomicorderedmap.OrderedMap[string, *machine.Machine], p phases.Phase) {
+func (m *model) addPhaseToTree(treeNode *tree.Tree, cfgLog *logs.Logs, machines atomicorderedmap.AtomicOrderedMap[string, *machine.Machine], p phases.Phase) {
 	indent := treeStep * indentStep
 
 	if phases.GetPhaseScope(p) == phases.ScopeConfiguration {
@@ -123,7 +123,7 @@ func (m *model) addMachineTree(treeNode *tree.Tree, cfg *configuration.Configura
 	}
 }
 
-func (m *model) addDefaultTree(treeNode *tree.Tree, cfgLogs *logs.Logs, machines atomicorderedmap.OrderedMap[string, *machine.Machine]) {
+func (m *model) addDefaultTree(treeNode *tree.Tree, cfgLogs *logs.Logs, machines atomicorderedmap.AtomicOrderedMap[string, *machine.Machine]) {
 	indent := treeStep * indentStep
 
 	var pendingMachinePhases []phases.Phase
@@ -362,7 +362,7 @@ func (m *model) layoutLine(indent int, left, right string, leftWidth, rightWidth
 	return left + centerSpace + right
 }
 
-func (m *model) spinnerOrIcon(xpath xpath.Xpath, icon string, tas *timeandstate.TimeAndState) string {
+func (m *model) spinnerOrIcon(xpath xpath.Xpath, icon string, tas *atomictimeandstate.TimeAndState) string {
 	if !tas.HasStarted() {
 		return ""
 	}
@@ -374,7 +374,7 @@ func (m *model) spinnerOrIcon(xpath xpath.Xpath, icon string, tas *timeandstate.
 	return m.resetable.Load().spinners.GetOrCreateSpinner(xpath).View()
 }
 
-func (m *model) durationText(style colorscheme.ColorSchemeLogEntity, tas *timeandstate.TimeAndState) (string, int) {
+func (m *model) durationText(style colorscheme.ColorSchemeLogEntity, tas *atomictimeandstate.TimeAndState) (string, int) {
 	duration, err := tas.DurationOrElapsedTime()
 	if err == nil {
 		text := fmt.Sprintf(" (%.2fs)", duration.Seconds())

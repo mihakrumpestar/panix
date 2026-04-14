@@ -15,7 +15,7 @@ const (
 )
 
 type StatisticsPerPhase struct {
-	*atomicorderedmap.OrderedMap[phases.Phase, StatsPack]
+	*atomicorderedmap.AtomicOrderedMap[phases.Phase, StatsPack]
 }
 
 type StatsPack map[StatsState][]xpath.Xpath
@@ -26,25 +26,25 @@ func New(workflowPhases []phases.Phase) *StatisticsPerPhase {
 	}
 
 	for _, phase := range workflowPhases {
-		spp.OrderedMap.Set(phase, StatsPack{})
+		spp.AtomicOrderedMap.Set(phase, StatsPack{})
 	}
 
 	return spp
 }
 
 func (spp *StatisticsPerPhase) UnmarshalJSON(data []byte) error {
-	if spp.OrderedMap == nil {
-		spp.OrderedMap = atomicorderedmap.New[phases.Phase, StatsPack]()
+	if spp.AtomicOrderedMap == nil {
+		spp.AtomicOrderedMap = atomicorderedmap.New[phases.Phase, StatsPack]()
 	}
 
-	return spp.OrderedMap.UnmarshalJSON(data)
+	return spp.AtomicOrderedMap.UnmarshalJSON(data)
 }
 
 func (spp *StatisticsPerPhase) DeepSet(phase phases.Phase, statsState StatsState, xpathI xpath.Xpath) {
-	statsPack, ok := spp.OrderedMap.Get(phase)
+	statsPack, ok := spp.AtomicOrderedMap.Get(phase)
 	if !ok {
 		statsPack = StatsPack{}
-		spp.OrderedMap.Set(phase, statsPack)
+		spp.AtomicOrderedMap.Set(phase, statsPack)
 	}
 
 	xpaths, ok := statsPack[statsState]

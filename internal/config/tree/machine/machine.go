@@ -25,9 +25,9 @@ type Machine struct {
 	attributes.Attributes `yaml:",inline"`
 
 	// Internal
-	MetaInspect atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty" validate:"-"`
-	Logs        *logs.Logs                               `yaml:"-" json:"logs,omitempty"`
-	State       *State                                   `yaml:"-" json:"machine_state,omitempty"`
+	MetaInspect *atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty" validate:"-"`
+	Logs        *logs.Logs                                `yaml:"-" json:"logs,omitempty"`
+	State       *State                                    `yaml:"-" json:"machine_state,omitempty"`
 }
 
 // MetaInspect needs to be atomic (updates with executioner)
@@ -60,6 +60,42 @@ type Generations struct {
 	Available []uint `json:"available"`
 }
 
+func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attributes) {
+	attributes.EnsureAttributes(&m.Attributes, name, parentAttr)
+
+	if m.Logs == nil {
+		m.Logs = logs.New(&m.Attributes)
+	} else {
+		m.Logs.PostUnmarshalInit(&m.Attributes)
+	}
+
+	if m.MetaInspect == nil {
+		m.MetaInspect = atomicpointer.New(&MetaInspect{})
+	}
+
+	if m.State == nil {
+		m.State = &State{ActiveSSH: SSHTypeRegular}
+	}
+}
+
+func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) error {
+	if m == nil {
+		return fmt.Errorf("internal error: machine %s has nil value", name)
+	}
+
+	err := m.Attributes.Init(name, parentAttributes, true)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize machine")
+	}
+
+	m.MetaInspect = atomicpointer.New(&MetaInspect{})
+	m.State = &State{ActiveSSH: SSHTypeRegular}
+
+	m.Logs = logs.New(&m.Attributes)
+
+	return nil
+}
+
 func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 	switch m.State.ActiveSSH {
 	case SSHTypeRegular:
@@ -84,24 +120,6 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 
 		return &activeSSH
 	}
-
-	return nil
-}
-
-func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) error {
-	if m == nil {
-		return fmt.Errorf("internal error: machine %s has nil value", name)
-	}
-
-	err := m.Attributes.Init(name, parentAttributes, true)
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize machine")
-	}
-
-	m.MetaInspect.Clear()
-	m.State = &State{ActiveSSH: SSHTypeRegular}
-
-	m.Logs = logs.New(&m.Attributes)
 
 	return nil
 }
