@@ -29,9 +29,6 @@ import (
 var ErrTypeAssertionFinalModel = errors.New("internal error: type assertion failed for finalModel")
 
 const (
-	initialWidth  = 80
-	initialHeight = 24
-
 	workflowUpdateHookPollInterval  = 20 * time.Millisecond
 	workflowUpdateHookThrottleDelay = 100 * time.Millisecond
 )
@@ -56,6 +53,7 @@ type model struct {
 	ctx                context.Context
 	conf               *config.Config
 	dimensions         *viewports.Dimensions
+	dimensionsReceived bool
 	quitting           bool
 	isSnapshot         bool
 	resetable          atomic.Pointer[resetable]
@@ -75,10 +73,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	// Handle SIGINT as a keybinding instead of terminating the process
 	defer setupSIGINTHandler(ctx)()
 
-	dimensions := &viewports.Dimensions{
-		Width:  initialWidth,
-		Height: initialHeight,
-	}
+	dimensions := &viewports.Dimensions{}
 
 	cpuProfile := conf.Flags.Logging.CPUProfile
 	if cpuProfile != "" {
@@ -228,6 +223,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
+		m.dimensionsReceived = true
 	}
 
 	return m, cmd
@@ -239,7 +235,7 @@ func (m *model) View() tea.View {
 	view.MouseMode = tea.MouseModeCellMotion
 
 	resetable := m.resetable.Load()
-	if resetable == nil {
+	if resetable == nil || !m.dimensionsReceived {
 		return view
 	}
 
@@ -248,10 +244,6 @@ func (m *model) View() tea.View {
 	}
 
 	mainContent := m.viewMainContent()
-
-	if m.quitting {
-		return view
-	}
 
 	header := m.header.View(m.dimensions.Width, m.conf.ColorScheme)
 	headerHeight := lipgloss.Height(header)
