@@ -92,7 +92,7 @@ tasks:
         if not re.search(pattern, content, flags=re.DOTALL):
             pattern = r'\n### CLI\n\n```sh\n.*?```\n'
         content = re.sub(pattern, cli_section, content, flags=re.DOTALL)
-        with open('examples/panix.yml', 'r') as f:
+        with open('examples/panix.demo.yml', 'r') as f:
             panix_yml = f.read()
         panix_yml_section = "```yaml\n" + panix_yml + "\n```\n"
         content = re.sub(

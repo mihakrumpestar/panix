@@ -921,9 +921,8 @@ Usage: panix <command> [flags]
 Universal NixOS Deployment Tool
 
 Flags:
-  -h, --help                  Show context-sensitive help.
-  -c, --config="panix.yml"    Config file ($PANIX_CONFIG)
-      --version               Show version ($PANIX_VERSION)
+  -h, --help       Show context-sensitive help.
+      --version    Show version ($PANIX_VERSION)
 
 Commands:
   init [flags]
@@ -970,9 +969,9 @@ activate)
 
 Flags:
   -h, --help                       Show context-sensitive help.
-  -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
       --version                    Show version ($PANIX_VERSION)
 
+  -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
   -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
                                    and names are already registered as tags)
                                    ($PANIX_TAGS)
