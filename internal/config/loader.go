@@ -66,8 +66,8 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 		dump.P(conf.Fleet)
 	}
 
-	conf.StartTime = time.Now()
-	conf.PanixVersion = gen.Version()
+	conf.Snapshot.StartTime = time.Now()
+	conf.Snapshot.PanixVersion = gen.Version()
 
 	return conf, nil
 }

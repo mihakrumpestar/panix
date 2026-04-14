@@ -19,8 +19,8 @@ func New[T any]() *Cache[T] {
 
 // Get has function that returns true if the new contents are valid and false if not
 // (in that case it returns cached contents)
-func (c *Cache[T]) Get(fn func() (T, bool), elementsToCache ...any) T {
-	h := computeHash(elementsToCache...)
+func (c *Cache[T]) Get(fn func() (T, bool), cacheValidationElements ...any) T {
+	h := computeHash(cacheValidationElements...)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

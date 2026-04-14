@@ -1,1 +1,64 @@
 package header
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
+	"github.com/mihakrumpestar/panix/internal/pkg/cache"
+)
+
+type Header struct {
+	isSnapshot bool
+	snapshot   config.Snapshot
+
+	cache cache.Cache[string]
+}
+
+func New(isSnapshot bool, snapshot config.Snapshot) *Header {
+	return &Header{
+		isSnapshot: isSnapshot,
+		snapshot:   snapshot,
+	}
+}
+
+func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) string {
+	if !h.isSnapshot {
+		return ""
+	}
+
+	return h.cache.Get(func() (string, bool) {
+		return h.render(width, colorScheme), true
+	}, width)
+}
+
+func (h *Header) render(width int, cs *colorscheme.ColorScheme) string {
+	reason := h.snapshot.Reason.String()
+
+	parts := []string{
+		cs.Status.Running.Render(fmt.Sprintf("v%s", h.snapshot.PanixVersion)),
+		cs.Table.Border.Render(reason),
+		cs.Status.OK.Render(formatTime(h.snapshot.StartTime)),
+		cs.Status.Warning.Render(formatTime(h.snapshot.SnapshotTime)),
+	}
+
+	if h.snapshot.WorkflowError != nil {
+		parts = append(parts, cs.Status.Failed.Render(h.snapshot.WorkflowError.Error()))
+	}
+
+	sep := cs.Table.Border.Render(" │ ")
+	line := cs.Header.Title.Render("◉ Snapshot") + cs.Table.Border.Render(": ") + strings.Join(parts, sep)
+
+	return lipgloss.NewStyle().Width(width).Render(line)
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return "N/A"
+	}
+
+	return t.Format("2006-01-02 15:04:05")
+}

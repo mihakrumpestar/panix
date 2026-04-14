@@ -12,9 +12,9 @@ func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr erro
 
 	confCopy := *conf
 
-	confCopy.SnapshotTime = time.Now()
-	confCopy.SnapshotReason = reason
-	confCopy.WorkflowError = errorjson.New(workflowErr)
+	confCopy.Snapshot.SnapshotTime = time.Now()
+	confCopy.Snapshot.Reason = reason
+	confCopy.Snapshot.WorkflowError = errorjson.New(workflowErr)
 
 	return &confCopy
 }

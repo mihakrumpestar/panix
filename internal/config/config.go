@@ -16,17 +16,19 @@ type Config struct {
 	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-" validate:"-"`
 
 	// Internal - exportable
-	PanixVersion string    `yaml:"-" json:"panix_version" validate:"-"`
-	StartTime    time.Time `yaml:"-" json:"start_time" validate:"-"`
-
-	// // Filled on snapshot
-
-	SnapshotTime   time.Time            `yaml:"-" json:"snapshot_time" validate:"-"`
-	SnapshotReason SnaphsotReason       `yaml:"-" json:"reason"`
-	WorkflowError  *errorjson.ErrorJSON `yaml:"-" json:"workflow_error,omitempty"`
+	Snapshot Snapshot `yaml:"-" json:"snapshot"`
 
 	// Internal - not exportable
 	Phases []phases.Phase `yaml:"-" json:"phases" validate:"-"`
+}
+
+type Snapshot struct {
+	PanixVersion string    `yaml:"-" json:"panix_version" validate:"-"`
+	StartTime    time.Time `yaml:"-" json:"start_time" validate:"-"`
+
+	Reason        SnaphsotReason       `yaml:"-" json:"reason"`
+	SnapshotTime  time.Time            `yaml:"-" json:"snapshot_time" validate:"-"`
+	WorkflowError *errorjson.ErrorJSON `yaml:"-" json:"workflow_error,omitempty"`
 }
 
 type SnaphsotReason string
@@ -36,6 +38,10 @@ const (
 	SnaphsotReasonRetry  SnaphsotReason = "retry"
 	SnaphsotReasonExit   SnaphsotReason = "exit"
 )
+
+func (sr SnaphsotReason) String() string {
+	return string(sr)
+}
 
 func (c *Config) PostUnmarshalInit() {
 	if c.Flags == nil {

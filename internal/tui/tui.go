@@ -19,6 +19,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
+	"github.com/mihakrumpestar/panix/internal/tui/header"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -59,6 +60,7 @@ type model struct {
 	resetable          atomic.Pointer[resetable]
 	lastWorkflowUpdate time.Time
 	footer             *footer.Footer
+	snapshotHeader     *header.Header
 }
 
 // NewTui initializes and runs the TUI application.
@@ -99,6 +101,8 @@ func newTui(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		dimensions: dimensions,
 		isSnapshot: isSnapshot,
 	}
+
+	mdl.snapshotHeader = header.New(isSnapshot, conf.Snapshot)
 
 	mdl.footer = footer.New(mdl.keyDefs())
 
@@ -251,26 +255,25 @@ func (m *model) View() tea.View {
 		return view
 	}
 
-	if m.isSnapshot {
-		mainContent = m.viewSnapshotHeader() + mainContent
-	}
-
-	if resetable.viewports.IsFullscreen() {
-		result := m.renderFullscreen()
-		if result != "" {
-			view.SetContent(result)
-
-			return view
-		}
-	}
+	header := m.snapshotHeader.View(m.dimensions.Width, m.conf.ColorScheme)
+	headerHeight := lipgloss.Height(header)
 
 	footer := m.footer.View(m.dimensions.Width)
 	footerHeight := lipgloss.Height(footer)
-	mainViewport := resetable.viewports.GetOrCreateMainViewport(mainContent, footerHeight)
+
+	headerFooterHeight := headerHeight + footerHeight
+
+	var main string
+	if resetable.viewports.IsFullscreen() {
+		main = m.renderFullscreenViewport(headerFooterHeight)
+	} else {
+		main = resetable.viewports.GetOrCreateMainViewport(mainContent, headerFooterHeight)
+	}
 
 	var builder strings.Builder
 
-	builder.WriteString(mainViewport)
+	builder.WriteString(header)
+	builder.WriteString(main)
 	builder.WriteString(footer)
 
 	view.SetContent(zone.Scan(builder.String()))
@@ -339,7 +342,7 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 	}
 }
 
-func (m *model) renderFullscreen() string {
+func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 	resetable := m.resetable.Load()
 	fullscreenXpath := resetable.viewports.GetFullscreenXpath()
 	content := resetable.viewports.GetViewportContent(fullscreenXpath)
@@ -350,16 +353,9 @@ func (m *model) renderFullscreen() string {
 		return ""
 	}
 
-	footer := m.footer.View(m.dimensions.Width)
-	footerHeight := lipgloss.Height(footer)
-	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeight)
+	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeaderHeight)
 
-	var builder strings.Builder
-
-	builder.WriteString(fullscreenViewport)
-	builder.WriteString(footer)
-
-	return zone.Scan(builder.String())
+	return zone.Scan(fullscreenViewport)
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {

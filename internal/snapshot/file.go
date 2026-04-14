@@ -53,5 +53,5 @@ func Write(dir string, s *config.Config) error {
 // Helpers
 
 func fileName(s *config.Config) string {
-	return fmt.Sprintf("%s%d-%d-%s.json", snapshotFilePrefix, s.StartTime.Unix(), s.SnapshotTime.Unix(), s.SnapshotReason)
+	return fmt.Sprintf("%s%d-%d-%s.json", snapshotFilePrefix, s.Snapshot.StartTime.Unix(), s.Snapshot.SnapshotTime.Unix(), s.Snapshot.Reason)
 }
