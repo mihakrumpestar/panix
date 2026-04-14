@@ -134,12 +134,12 @@ func (c *CLI) runSchemaCommand(_ flags.GlobalFlags, outputPath string) error {
 }
 
 func (c *CLI) runSnapshot(path string) error {
-	s, err := snapshot.Read(path)
+	snap, err := snapshot.Read(path)
 	if err != nil {
 		return errors.Wrap(err, "failed to read snapshot file")
 	}
 
-	return errors.Wrap(tui.NewSnapshotTui(context.Background(), s), "snapshot TUI error")
+	return errors.Wrap(tui.New(context.Background(), snap, true), "snapshot TUI error")
 }
 
 // Wokflow
@@ -158,5 +158,5 @@ func (c *CLI) runTui(gf flags.GlobalFlags, wf flags.WorkflowFlags, commandPhases
 		return errors.Wrap(tui.NewHeadless(context.Background(), conf), "headless error")
 	}
 
-	return errors.Wrap(tui.NewTui(context.Background(), conf), "TUI error")
+	return errors.Wrap(tui.New(context.Background(), conf, false), "TUI error")
 }

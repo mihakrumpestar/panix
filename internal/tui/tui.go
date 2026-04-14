@@ -18,6 +18,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
 	"github.com/mihakrumpestar/panix/internal/workflow/phases"
@@ -59,21 +60,14 @@ type model struct {
 	isSnapshot         bool
 	resetable          atomic.Pointer[resetable]
 	lastWorkflowUpdate time.Time
-	footer             *footer.Footer
-	snapshotHeader     *header.Header
+
+	header    *header.Header
+	buildLogs *buildlogs.BuildLogs
+	footer    *footer.Footer
 }
 
 // NewTui initializes and runs the TUI application.
-func NewTui(ctx context.Context, conf *config.Config) error {
-	return newTui(ctx, conf, false)
-}
-
-// NewSnapshotTui initializes and runs the TUI in snapshot mode (no workflow, read-only).
-func NewSnapshotTui(ctx context.Context, conf *config.Config) error {
-	return newTui(ctx, conf, true)
-}
-
-func newTui(ctx context.Context, conf *config.Config, isSnapshot bool) error {
+func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	zone.NewGlobal()
 
 	defer zone.Close()
@@ -102,7 +96,7 @@ func newTui(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		isSnapshot: isSnapshot,
 	}
 
-	mdl.snapshotHeader = header.New(isSnapshot, conf.Snapshot)
+	mdl.header = header.New(isSnapshot, conf.Snapshot)
 
 	mdl.footer = footer.New(mdl.keyDefs())
 
@@ -249,13 +243,17 @@ func (m *model) View() tea.View {
 		return view
 	}
 
+	if m.buildLogs == nil {
+		m.buildLogs = buildlogs.New(m.conf, resetable.viewports, resetable.spinners)
+	}
+
 	mainContent := m.viewMainContent()
 
 	if m.quitting {
 		return view
 	}
 
-	header := m.snapshotHeader.View(m.dimensions.Width, m.conf.ColorScheme)
+	header := m.header.View(m.dimensions.Width, m.conf.ColorScheme)
 	headerHeight := lipgloss.Height(header)
 
 	footer := m.footer.View(m.dimensions.Width)
@@ -300,7 +298,7 @@ func (m *model) viewMainContent() string {
 		builder.WriteString(m.conf.Fleet.PhaseStatus.View(m.dimensions.Width, m.conf.ColorScheme))
 	}
 
-	builder.WriteString(m.ViewBuildLogs())
+	builder.WriteString(m.buildLogs.View())
 
 	if resetable.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
