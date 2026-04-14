@@ -2,7 +2,6 @@ package viewports
 
 import (
 	"fmt"
-	"hash/fnv"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/kirill-scherba/omap"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -46,25 +46,7 @@ type Viewport struct {
 	active        bool
 	content       string
 	scrollbarZone xpath.Xpath
-	cache         viewportCache
-}
-
-// viewportCache stores rendered output to avoid redundant rendering.
-type viewportCache struct {
-	width       int
-	height      int
-	contentHash uint64
-	scrollPct   float64
-	active      bool
-	render      string
-}
-
-// hashContent generates a fast hash for content comparison.
-func hashContent(content string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(content))
-
-	return h.Sum64()
+	cache         cache.Cache[string]
 }
 
 // NewViewports creates a new viewport manager.
@@ -125,30 +107,22 @@ func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, 
 		})
 	}
 
-	if v.isCacheValid(viewport, width, height, content) {
-		return viewport.cache.render
-	}
+	rendered := viewport.cache.Get(
+		func() (string, bool) {
+			yOffset := viewport.model.YOffset()
+			viewport.model.SetWidth(width)
+			viewport.model.SetHeight(height)
+			viewport.content = content
+			proc := lipgloss.NewStyle().Width(width).Render(content)
+			viewport.model.SetContent(proc)
+			viewport.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-height)))
 
-	contentHash := hashContent(content)
+			r := v.renderViewport(viewport, lipgloss.Height(proc), height, true, false)
+			r = zone.Mark(xpath.String(), r)
 
-	yOffset := viewport.model.YOffset()
-	viewport.model.SetWidth(width)
-	viewport.model.SetHeight(height)
-	viewport.content = content
-	proc := lipgloss.NewStyle().Width(width).Render(content)
-	viewport.model.SetContent(proc)
-	viewport.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-height)))
-
-	rendered := v.renderViewport(viewport, lipgloss.Height(proc), height, true, false)
-	rendered = zone.Mark(xpath.String(), rendered)
-	viewport.cache = viewportCache{
-		width:       width,
-		height:      height,
-		contentHash: contentHash,
-		scrollPct:   viewport.model.ScrollPercent(),
-		active:      viewport.active,
-		render:      rendered,
-	}
+			return r, true
+		},
+		width, height, content, viewport.model.ScrollPercent(), viewport.active)
 
 	return rendered + "\n"
 }
@@ -274,17 +248,6 @@ func (v *Viewports) DeselectAll() {
 	}
 }
 
-// isCacheValid checks if the cached render is still valid.
-// Dimensions and state are checked first (O(1)) before content hash (O(n)) due to && short-circuit.
-func (v *Viewports) isCacheValid(viewport *Viewport, width, height int, content string) bool {
-	return viewport.cache.width == width &&
-		viewport.cache.height == height &&
-		viewport.cache.scrollPct == viewport.model.ScrollPercent() &&
-		viewport.cache.active == viewport.active &&
-		viewport.cache.contentHash == hashContent(content) &&
-		viewport.cache.render != ""
-}
-
 // handleResize updates dimensions when terminal size changes.
 func (v *Viewports) handleResize(msg tea.WindowSizeMsg) {
 	v.dimensions.Width = msg.Width
@@ -347,30 +310,19 @@ func (v *Viewports) createViewport(xpath xpath.Xpath, content string, indent int
 		return ""
 	}
 
-	if v.isCacheValid(viewportInstance, width, height, content) {
-		return viewportInstance.cache.render
-	}
+	return viewportInstance.cache.Get(
+		func() (string, bool) {
+			proc, contentHeight, finalWidth := v.processViewportContent(content, width, opts)
 
-	contentHash := hashContent(content)
+			finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
+			v.configureViewportModel(xpath, viewportInstance, proc, finalWidth, finalHeight)
 
-	proc, contentHeight, finalWidth := v.processViewportContent(content, width, opts)
+			rendered := v.renderViewport(viewportInstance, contentHeight, finalHeight, opts.useBorder, opts.noPadding)
+			rendered = zone.Mark(xpath.String(), rendered)
 
-	finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
-	v.configureViewportModel(xpath, viewportInstance, proc, finalWidth, finalHeight)
-
-	rendered := v.renderViewport(viewportInstance, contentHeight, finalHeight, opts.useBorder, opts.noPadding)
-	rendered = zone.Mark(xpath.String(), rendered)
-
-	viewportInstance.cache = viewportCache{
-		width:       width,
-		height:      height,
-		contentHash: contentHash,
-		scrollPct:   viewportInstance.model.ScrollPercent(),
-		active:      viewportInstance.active,
-		render:      rendered,
-	}
-
-	return rendered
+			return rendered, true
+		},
+		width, height, content, viewportInstance.model.ScrollPercent(), viewportInstance.active)
 }
 
 // calculateViewportWidth determines the available width for a viewport.

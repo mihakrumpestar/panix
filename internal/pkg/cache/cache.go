@@ -1,29 +1,24 @@
 package cache
 
 import (
+	"encoding/binary"
 	"fmt"
+	"hash"
 	"hash/fnv"
-	"sync"
+	"math"
 )
 
 type Cache[T any] struct {
-	mu       sync.Mutex
+	hasher   hash.Hash64
 	cached   bool
 	hash     uint64
 	contents T
 }
 
-func New[T any]() *Cache[T] {
-	return &Cache[T]{}
-}
-
 // Get has function that returns true if the new contents are valid and false if not
 // (in that case it returns cached contents)
 func (c *Cache[T]) Get(fn func() (T, bool), cacheValidationElements ...any) T {
-	h := computeHash(cacheValidationElements...)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	h := c.computeHash(cacheValidationElements...)
 
 	if c.cached && c.hash == h {
 		return c.contents
@@ -41,18 +36,42 @@ func (c *Cache[T]) Get(fn func() (T, bool), cacheValidationElements ...any) T {
 }
 
 func (c *Cache[T]) Invalidate() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.cached = false
 	c.hash = 0
 	var zero T
 	c.contents = zero
 }
 
-func computeHash(args ...any) uint64 {
-	h := fnv.New64a()
-	for _, arg := range args {
-		fmt.Fprint(h, arg)
+func (c *Cache[T]) computeHash(args ...any) uint64 {
+	if c.hasher == nil {
+		c.hasher = fnv.New64a()
 	}
-	return h.Sum64()
+	c.hasher.Reset()
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case int:
+			var buf [8]byte
+			binary.LittleEndian.PutUint64(buf[:], uint64(v))
+			c.hasher.Write(buf[:])
+		case string:
+			c.hasher.Write([]byte(v))
+		case uint64:
+			var buf [8]byte
+			binary.LittleEndian.PutUint64(buf[:], v)
+			c.hasher.Write(buf[:])
+		case float64:
+			var buf [8]byte
+			binary.LittleEndian.PutUint64(buf[:], math.Float64bits(v))
+			c.hasher.Write(buf[:])
+		case bool:
+			var b [1]byte
+			if v {
+				b[0] = 1
+			}
+			c.hasher.Write(b[:])
+		default:
+			fmt.Fprint(c.hasher, v)
+		}
+	}
+	return c.hasher.Sum64()
 }
