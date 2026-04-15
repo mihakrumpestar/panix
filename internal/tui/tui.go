@@ -344,7 +344,7 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 
 	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeaderHeight)
 
-	return zone.Scan(fullscreenViewport)
+	return fullscreenViewport
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
