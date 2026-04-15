@@ -96,6 +96,21 @@ func (cl *CommandLog) WriteLine(p []byte) {
 	cl.Output.Append(atomicbuffer.New(p))
 }
 
+// TrimTrailingEmptyLines removes empty lines from the end of the output.
+// PTY output typically ends with a trailing newline, which processSequence
+// converts into an empty line entry. This strips those artifact empty lines
+// while preserving intentional blank lines mid-output.
+func (cl *CommandLog) TrimTrailingEmptyLines() {
+	for cl.Output.Length() > 0 {
+		last, ok := cl.Output.Last()
+		if !ok || last.Len() > 0 {
+			break
+		}
+
+		cl.Output.Remove(cl.Output.Length() - 1)
+	}
+}
+
 // ReplaceLastLine replaces the content of the last line in StdInOutErr.
 func (cl *CommandLog) ReplaceLastLine(data []byte) {
 	if cl.Output.Length() == 0 {
