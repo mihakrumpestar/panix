@@ -109,15 +109,26 @@ func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, 
 
 	rendered := viewport.cache.Get(
 		func() (string, bool) {
+			wasAtBottom := viewport.model.ScrollPercent() == 1
 			yOffset := viewport.model.YOffset()
 			viewport.model.SetWidth(width)
 			viewport.model.SetHeight(height)
+			viewport.model.SoftWrap = true
 			viewport.content = content
-			proc := lipgloss.NewStyle().Width(width).Render(content)
-			viewport.model.SetContent(proc)
-			viewport.model.SetYOffset(min(yOffset, max(0, lipgloss.Height(proc)-height)))
+			viewport.model.SetContent(content)
 
-			r := v.renderViewport(viewport, lipgloss.Height(proc), height, true, false)
+			contentHeight := viewport.model.TotalLineCount()
+			if contentHeight == 0 {
+				contentHeight = 1
+			}
+
+			if wasAtBottom {
+				viewport.model.GotoBottom()
+			} else {
+				viewport.model.SetYOffset(min(yOffset, max(0, contentHeight-height)))
+			}
+
+			r := v.renderViewport(viewport, contentHeight, height, true, false)
 			r = zone.Mark(xpath.String(), r)
 
 			return r, true
@@ -215,7 +226,7 @@ func (v *Viewports) Debug() string {
 	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d)\n", v.viewports.Len(), v.dimensions.Width, v.dimensions.Height)
 
 	for xpath, viewport := range v.viewports.Records() {
-		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", xpath, viewport.model.Width(), viewport.model.Height(), lipgloss.Height(viewport.content))
+		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", xpath, viewport.model.Width(), viewport.model.Height(), viewport.model.TotalLineCount())
 
 		if viewport.active {
 			builder.WriteString(" [A]")
@@ -312,10 +323,13 @@ func (v *Viewports) createViewport(xpath xpath.Xpath, content string, indent int
 
 	return viewportInstance.cache.Get(
 		func() (string, bool) {
-			proc, contentHeight, finalWidth := v.processViewportContent(content, width, opts)
+			wasAtBottom := viewportInstance.model.ScrollPercent() == 1 && xpath != v.mainXpath
+			yOffset := viewportInstance.model.YOffset()
+
+			contentHeight, _ := v.processViewportContent(viewportInstance, content, width, opts)
 
 			finalHeight := v.calculateFinalHeight(contentHeight, opts, height)
-			v.configureViewportModel(xpath, viewportInstance, proc, finalWidth, finalHeight)
+			v.configureViewportModel(viewportInstance, finalHeight, contentHeight, wasAtBottom, yOffset)
 
 			rendered := v.renderViewport(viewportInstance, contentHeight, finalHeight, opts.useBorder, opts.noPadding)
 			rendered = zone.Mark(xpath.String(), rendered)
@@ -332,6 +346,19 @@ func (v *Viewports) calculateViewportWidth(opts viewportOptions, indent int) int
 	}
 
 	return v.dimensions.Width - indent - scrollbarWidth
+}
+
+// calculateFinalHeight determines the final height for a viewport.
+func (v *Viewports) calculateFinalHeight(contentHeight int, opts viewportOptions, height int) int {
+	if !opts.full && opts.maxHeight > 0 && contentHeight > opts.maxHeight {
+		return opts.maxHeight
+	}
+
+	if opts.full {
+		return height
+	}
+
+	return contentHeight
 }
 
 // getOrCreateViewportInstance retrieves an existing viewport or creates a new one.
@@ -357,46 +384,54 @@ func (v *Viewports) getOrCreateViewportInstance(xpath xpath.Xpath, content strin
 	return viewportInstance
 }
 
-// processViewportContent processes content and returns it with its calculated height and final width.
-func (v *Viewports) processViewportContent(content string, width int, opts viewportOptions) (string, int, int) {
-	proc := v.processContent(content, width, opts.wrapContent, opts.noPadding)
-	contentHeight := lipgloss.Height(proc)
+// processViewportContent configures the viewport model with content and determines the final
+// content height and width. When wrapContent is true, the viewport model's SoftWrap is enabled
+// so that TotalLineCount() accounts for soft-wrapped lines correctly.
+func (v *Viewports) processViewportContent(vp *Viewport, content string, width int, opts viewportOptions) (int, int) {
+	vp.model.SoftWrap = opts.wrapContent
+	vp.model.SetWidth(width)
+
+	if opts.wrapContent {
+		vp.model.SetContent(content)
+	} else {
+		proc := v.processContent(content, width, opts.wrapContent, opts.noPadding)
+		vp.model.SetContent(proc)
+	}
+
+	contentHeight := vp.model.TotalLineCount()
+	if contentHeight == 0 {
+		contentHeight = 1
+	}
 
 	finalWidth := width
 	if contentHeight > opts.maxHeight && opts.maxHeight > 0 && !opts.full {
 		finalWidth = max(1, width-scrollbarWidth)
-		proc = v.processContent(content, finalWidth, opts.wrapContent, opts.noPadding)
-		contentHeight = lipgloss.Height(proc)
+		vp.model.SetWidth(finalWidth)
+
+		if opts.wrapContent {
+			vp.model.SetContent(content)
+		} else {
+			proc := v.processContent(content, finalWidth, opts.wrapContent, opts.noPadding)
+			vp.model.SetContent(proc)
+		}
+
+		contentHeight = vp.model.TotalLineCount()
+		if contentHeight == 0 {
+			contentHeight = 1
+		}
 	}
 
-	return proc, contentHeight, finalWidth
+	return contentHeight, finalWidth
 }
 
-// calculateFinalHeight determines the final height for a viewport.
-func (v *Viewports) calculateFinalHeight(contentHeight int, opts viewportOptions, height int) int {
-	if !opts.full && opts.maxHeight > 0 && contentHeight > opts.maxHeight {
-		return opts.maxHeight
-	}
-
-	if opts.full {
-		return height
-	}
-
-	return contentHeight
-}
-
-// configureViewportModel configures the viewport model with processed content.
-func (v *Viewports) configureViewportModel(xpath xpath.Xpath, viewportInstance *Viewport, proc string, width, finalHeight int) {
-	viewportInstance.model.SetWidth(width)
+// configureViewportModel finalizes the viewport model's configuration after content is set.
+func (v *Viewports) configureViewportModel(viewportInstance *Viewport, finalHeight int, contentHeight int, wasAtBottom bool, yOffset int) {
 	viewportInstance.model.SetHeight(finalHeight)
 
-	yOffset, pct := viewportInstance.model.YOffset(), viewportInstance.model.ScrollPercent()
-	viewportInstance.model.SetContent(proc)
-
-	if pct == 1 && xpath != v.mainXpath {
+	if wasAtBottom {
 		viewportInstance.model.GotoBottom()
 	} else {
-		maxOffset := max(0, lipgloss.Height(proc)-finalHeight)
+		maxOffset := max(0, contentHeight-finalHeight)
 		viewportInstance.model.SetYOffset(min(yOffset, maxOffset))
 	}
 }
@@ -431,7 +466,7 @@ func (v *Viewports) renderViewport(viewport *Viewport, wrappedContentHeight int,
 
 	borderColor := v.conf.ColorScheme.Table.Border.GetForeground()
 	if viewport.active {
-		borderColor = v.conf.ColorScheme.Table.Border.GetBackground()
+		borderColor = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
 	}
 
 	return lipgloss.NewStyle().

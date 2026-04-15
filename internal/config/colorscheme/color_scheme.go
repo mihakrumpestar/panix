@@ -24,12 +24,13 @@ type ColorSchemeStatus struct {
 	Running lipgloss.Style
 }
 
-type ColorSchemeTable struct {
+type ColorSchemeTableAndLogs struct {
 	Header                       lipgloss.Style
 	Border                       lipgloss.Style
 	Row                          lipgloss.Style
 	RowAlt                       lipgloss.Style
 	SelectionHighlightBackground lipgloss.Style
+	SelectionHighlightBorder     lipgloss.Style
 }
 
 type ColorSchemeTree struct {
@@ -39,7 +40,7 @@ type ColorSchemeTree struct {
 type ColorScheme struct {
 	Header      ColorSchemeHeader
 	Status      ColorSchemeStatus
-	Table       ColorSchemeTable
+	Table       ColorSchemeTableAndLogs
 	PhaseStatus ColorSchemePhaseStatus
 
 	Tree    ColorSchemeTree
@@ -76,12 +77,13 @@ func DefaultColorScheme() *ColorScheme {
 			Failed:  makeForegroundStyle("#FF5555", false),
 			Running: makeForegroundStyle("#00BFFF", false),
 		},
-		Table: ColorSchemeTable{
+		Table: ColorSchemeTableAndLogs{
 			Header:                       makeBoldForegroundStyle("#F8F8F2"),
 			Border:                       borderStyle,
 			Row:                          makeForegroundStyle("#F8F8F2", false),
 			RowAlt:                       makeForegroundStyle("#BFBFBF", false),
-			SelectionHighlightBackground: makeBackgroundStyle("#444444"),
+			SelectionHighlightBackground: makeBackgroundStyle("#3B3258"),
+			SelectionHighlightBorder:     makeBackgroundStyle("#BD93F9"),
 		},
 		PhaseStatus: ColorSchemePhaseStatus{
 			Running: mustColorfulHexPair("#01536e", "#007da7"),
