@@ -113,9 +113,8 @@ func (v *Viewports) RenderFullscreenViewport(xpath xpath.Xpath, content string, 
 			yOffset := viewport.model.YOffset()
 			viewport.model.SetWidth(width)
 			viewport.model.SetHeight(height)
-			viewport.model.SoftWrap = true
 			viewport.content = content
-			viewport.model.SetContent(content)
+			viewport.model.SetContent(lipgloss.Wrap(content, width, ""))
 
 			contentHeight := viewport.model.TotalLineCount()
 			if contentHeight == 0 {
@@ -385,18 +384,13 @@ func (v *Viewports) getOrCreateViewportInstance(xpath xpath.Xpath, content strin
 }
 
 // processViewportContent configures the viewport model with content and determines the final
-// content height and width. When wrapContent is true, the viewport model's SoftWrap is enabled
-// so that TotalLineCount() accounts for soft-wrapped lines correctly.
+// content height and width. When wrapContent is true, content is word-wrapped to fit the width
+// before being set on the viewport model.
 func (v *Viewports) processViewportContent(vp *Viewport, content string, width int, opts viewportOptions) (int, int) {
-	vp.model.SoftWrap = opts.wrapContent
 	vp.model.SetWidth(width)
 
-	if opts.wrapContent {
-		vp.model.SetContent(content)
-	} else {
-		proc := v.processContent(content, width, opts.wrapContent, opts.noPadding)
-		vp.model.SetContent(proc)
-	}
+	proc := v.processContent(content, width, opts.wrapContent)
+	vp.model.SetContent(proc)
 
 	contentHeight := vp.model.TotalLineCount()
 	if contentHeight == 0 {
@@ -408,12 +402,8 @@ func (v *Viewports) processViewportContent(vp *Viewport, content string, width i
 		finalWidth = max(1, width-scrollbarWidth)
 		vp.model.SetWidth(finalWidth)
 
-		if opts.wrapContent {
-			vp.model.SetContent(content)
-		} else {
-			proc := v.processContent(content, finalWidth, opts.wrapContent, opts.noPadding)
-			vp.model.SetContent(proc)
-		}
+		proc = v.processContent(content, finalWidth, opts.wrapContent)
+		vp.model.SetContent(proc)
 
 		contentHeight = vp.model.TotalLineCount()
 		if contentHeight == 0 {
@@ -436,13 +426,9 @@ func (v *Viewports) configureViewportModel(viewportInstance *Viewport, finalHeig
 	}
 }
 
-func (v *Viewports) processContent(content string, width int, wrap bool, noPadding bool) string {
+func (v *Viewports) processContent(content string, width int, wrap bool) string {
 	if wrap {
-		if noPadding {
-			return lipgloss.NewStyle().Width(width).Align(lipgloss.Left).Render(content)
-		}
-
-		return lipgloss.NewStyle().Width(width).Render(content)
+		return lipgloss.Wrap(content, width, "")
 	}
 
 	return truncateLines(content, width)
