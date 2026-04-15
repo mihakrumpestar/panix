@@ -37,7 +37,7 @@ func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAn
 
 	return h.cache.Get(func() (ContentAndHeight, bool) {
 		content := h.render(width, colorScheme)
-		height := lipgloss.Height(content) - 1 // Lipgloss does not count properly height for this, so we -1
+		height := lipgloss.Height(content) - 1 // -1 to account for next view
 
 		return ContentAndHeight{Content: content, Height: height}, true
 	}, width)
