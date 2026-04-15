@@ -6,8 +6,11 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/logger"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -26,7 +29,7 @@ func NewHeadless(ctx context.Context, conf *config.Config) error {
 
 	err = workflowI.StartWorkflow() //nolint:contextcheck // False positive lint
 
-	logFinalState(workflowI)
+	logFinalState(conf)
 
 	if err != nil {
 		return errors.Wrap(err, "workflow execution failed")
@@ -43,48 +46,47 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 }
 
 type machineState struct {
-	Status   string   `json:"status"`
-	Phase    string   `json:"phase"`
-	Duration Duration `json:"duration"`
-	Error    string   `json:"error,omitempty"`
+	Xpath    xpath.Xpath `json:"xpath"`
+	Status   string      `json:"status"`
+	Phase    string      `json:"phase"`
+	Duration Duration    `json:"duration"`
+	Error    string      `json:"error,omitempty"`
 }
 
-// TODO:
-func logFinalState(workflow *workflow.Workflow) {
-	/*
-		anyFailed := false
-		states := make(map[string]machineState)
+func logFinalState(conf *config.Config) {
+	conf.Fleet.Recalculate(conf.Phases) // Needed, since this is generally only done in TUI
 
-		workflowPhases := workflow.WorkflowPhases()
+	anyFailed := false
+	states := make([]machineState, 0)
 
-		workflow.FleetTree(func(_ int, machine *config.Machine) {
-			machineStateI := machine.ComputeMachineState(workflowPhases)
-			if machineStateI.Status == "" {
-				return
-			}
+	for _, fleetLeaf := range conf.Fleet.AllMachines() {
+		ms := fleetLeaf.Machine.State
 
-			entry := machineState{
-				Status:   string(machineStateI.Status),
-				Phase:    string(machineStateI.Phase),
-				Duration: Duration(machineStateI.Duration),
-			}
-
-			if machineStateI.Status == "failed" {
-				anyFailed = true
-				entry.Error = machineStateI.Error
-			}
-
-			states[machine.Xpath.String()] = entry
-		})
-
-		var workflowErr error
-		if anyFailed {
-			workflowErr = errMachinesFailed
+		entry := machineState{
+			Xpath:    fleetLeaf.Machine.Xpath,
+			Status:   string(ms.Status),
+			Phase:    string(ms.Phase),
+			Duration: Duration(fleetLeaf.Machine.Logs.DurationAndErrorCache.Duration),
 		}
 
-		sublog := log.With().Str("event", "workflow_end").Logger()
-		logger.ResultEvent(sublog, "workflow completed", workflowErr, func(event *zerolog.Event) {
-			event.Interface("machines", states)
-		})
-	*/
+		if ms.Status == "failed" {
+			anyFailed = true
+			if ms.Error != nil {
+				entry.Error = ms.Error.Error()
+			}
+		}
+
+		states = append(states, entry)
+	}
+
+	var workflowErr error
+	if anyFailed {
+		workflowErr = errMachinesFailed
+	}
+
+	sublog := log.With().Str("event", "workflow_end").Logger()
+
+	logger.ResultEvent(sublog, "workflow completed", workflowErr, func(event *zerolog.Event) {
+		event.Interface("machines", states)
+	})
 }
