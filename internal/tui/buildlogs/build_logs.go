@@ -33,16 +33,20 @@ const (
 var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
 
 type BuildLogs struct {
-	conf      *config.Config
+	conf *config.Config
+
 	viewports *viewports.Viewports
 	spinners  *spinners.Spinners
 }
 
-func New(conf *config.Config, viewports *viewports.Viewports, spinners *spinners.Spinners) *BuildLogs {
-	return &BuildLogs{conf: conf, viewports: viewports, spinners: spinners}
+func New(conf *config.Config) *BuildLogs {
+	return &BuildLogs{conf: conf}
 }
 
-func (b *BuildLogs) View() string {
+func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string {
+	b.viewports = vp
+	b.spinners = sp
+
 	var sb strings.Builder
 	sb.WriteString(b.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n"))
 
@@ -360,7 +364,7 @@ func (b *BuildLogs) spinnerOrIcon(xp xpath.Xpath, icon string, tas *atomictimean
 		return icon + " "
 	}
 
-	return b.spinners.GetOrCreateSpinner(xp).View()
+	return b.spinners.View(xp)
 }
 
 func (b *BuildLogs) durationText(style colorscheme.ColorSchemeLogEntity, tas *atomictimeandstate.AtomicTimeAndState) (string, int) {

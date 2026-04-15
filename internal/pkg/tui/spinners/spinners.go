@@ -2,7 +2,6 @@ package spinners
 
 import (
 	"fmt"
-	"hash/fnv"
 	"strings"
 	"time"
 
@@ -12,102 +11,88 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
-const maxSpinners = 5
+const tickingFallback = 100 * time.Millisecond
+
+type tickMsg struct{}
 
 type Spinners struct {
-	spinners   *omap.Omap[int, *Spinner]
-	pendingCmd tea.Cmd
+	entries *omap.Omap[xpath.Xpath, *entry]
+	ticking bool
 }
 
-type Spinner struct {
+type entry struct {
 	lastUsed time.Time
-	model    *spinner.Model
+	model    spinner.Model
 }
 
 func NewSpinners() (*Spinners, error) {
-	spinners, err := omap.New[int, *Spinner]()
+	entries, err := omap.New[xpath.Xpath, *entry]()
 	if err != nil {
 		return nil, err
 	}
 
-	return &Spinners{
-		spinners: spinners,
-	}, nil
+	return &Spinners{entries: entries}, nil
 }
 
-func (s *Spinners) GetOrCreateSpinner(xpath xpath.Xpath) *spinner.Model {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(xpath.String()))
-	hashKey := int(h.Sum32() % maxSpinners)
-
-	spnr, ok := s.spinners.Get(hashKey)
-	if ok {
-		spnr.lastUsed = time.Now()
-
-		return spnr.model
+func (s *Spinners) View(xp xpath.Xpath) string {
+	if e, ok := s.entries.Get(xp); ok {
+		e.lastUsed = time.Now()
+		return e.model.View()
 	}
 
-	spnrRaw := spinner.New(spinner.WithSpinner(spinner.Dot))
-	spnr = &Spinner{
+	model := spinner.New(spinner.WithSpinner(spinner.Dot))
+	s.entries.Set(xp, &entry{
 		lastUsed: time.Now(),
-		model:    &spnrRaw,
-	}
+		model:    model,
+	})
 
-	err := s.spinners.Set(hashKey, spnr)
-	if err != nil {
-		panic(fmt.Sprintf("failed to set spinner: %v", err))
-	}
-
-	s.pendingCmd = tea.Batch(s.pendingCmd, spnr.model.Tick)
-
-	return spnr.model
+	return model.View()
 }
 
 func (s *Spinners) ProcessPendingTicks() tea.Cmd {
-	if s == nil {
+	if s == nil || s.ticking {
 		return nil
 	}
 
-	// Delete spinners that have not been rendered in View for more than x time
-	now := time.Now()
-	for _, spinner := range s.spinners.Pairs() {
-		if now.Sub(spinner.Value.lastUsed).Seconds() > 1 {
-			s.spinners.Del(spinner.Key)
-		}
+	if s.entries.Len() == 0 {
+		return nil
 	}
 
-	cmd := s.pendingCmd
-	s.pendingCmd = nil
-
-	return cmd
+	s.ticking = true
+	return s.nextTick()
 }
 
 func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
-	if _, ok := msg.(spinner.TickMsg); !ok {
+	if _, ok := msg.(tickMsg); !ok {
 		return nil
 	}
 
-	var cmd tea.Cmd
-
-	for _, spnr := range s.spinners.Records() {
-		spinnerModel, spinnerCmd := spnr.model.Update(msg)
-		if spinnerCmd != nil {
-			cmd = tea.Batch(cmd, spinnerCmd)
-			*spnr.model = spinnerModel
+	now := time.Now()
+	for _, pair := range s.entries.Pairs() {
+		if now.Sub(pair.Value.lastUsed).Seconds() > 1 {
+			s.entries.Del(pair.Key)
 		}
 	}
 
-	return cmd
+	if s.entries.Len() == 0 {
+		s.ticking = false
+		return nil
+	}
+
+	for _, pair := range s.entries.Pairs() {
+		newModel, _ := pair.Value.model.Update(spinner.TickMsg{})
+		pair.Value.model = newModel
+	}
+
+	return s.nextTick()
+}
+
+func (s *Spinners) nextTick() tea.Cmd {
+	return tea.Tick(spinner.Dot.FPS, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
 func (s *Spinners) Debug() string {
 	var str strings.Builder
-
-	fmt.Fprintf(&str, "\nSpinners: %d\n", s.spinners.Len())
-
-	for key := range s.spinners.Records() {
-		fmt.Fprintf(&str, "  key=%d\n", key)
-	}
-
+	fmt.Fprintf(&str, "\nSpinners: %d (ticking: %v)\n", s.entries.Len(), s.ticking)
 	return str.String()
 }

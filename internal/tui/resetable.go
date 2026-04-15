@@ -4,7 +4,6 @@ import (
 	"context"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/pkg/errors"
@@ -13,7 +12,6 @@ import (
 type resetable struct {
 	err       error
 	workflow  *workflow.Workflow
-	spinners  *spinners.Spinners
 	viewports *viewports.Viewports
 }
 
@@ -27,14 +25,8 @@ func (m *model) startResetableWorkflow() tea.Cmd {
 			return errMsg{err}
 		}
 
-		spinners, err := spinners.NewSpinners()
-		if err != nil {
-			return errMsg{err}
-		}
-
 		m.resetable.Store(&resetable{
 			workflow:  workflow,
-			spinners:  spinners,
 			viewports: viewports.NewViewports(m.dimensions, m.conf),
 		})
 

@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
@@ -32,8 +33,6 @@ type Footer struct {
 
 func New(keyDefs []KeyDef, conf *config.Config) *Footer {
 	h := help.New()
-	h.Styles.ShortKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
-	h.Styles.FullKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 
 	return &Footer{
 		keyDefs:      keyDefs,
@@ -65,7 +64,10 @@ type Keymap struct {
 func (k Keymap) ShortHelp() []key.Binding  { return k.bindings }
 func (k Keymap) FullHelp() [][]key.Binding { return [][]key.Binding{k.bindings} }
 
-func (f *Footer) View(width int) header.ContentAndHeight {
+func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) header.ContentAndHeight {
+	f.keymapHelp.Styles.ShortKey = colorScheme.Footer.HelpKey
+	f.keymapHelp.Styles.FullKey = colorScheme.Footer.HelpKey
+
 	notifBox, notifWidth := f.notification.View(notificationBaseStyle)
 
 	helpText := f.cache.Get(func() (header.ContentAndHeight, bool) {
@@ -77,7 +79,7 @@ func (f *Footer) View(width int) header.ContentAndHeight {
 
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width - notifWidth)
 	if f.conf.Flags.Debug {
-		style = style.Background(lipgloss.Color("#ffc800"))
+		style = style.Background(colorScheme.Footer.DebugBackground.GetBackground())
 	}
 
 	styledHelp := style.Render("\n" + helpText.Content)

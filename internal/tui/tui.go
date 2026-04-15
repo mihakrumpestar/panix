@@ -60,6 +60,7 @@ type model struct {
 	header    *header.Header
 	buildLogs *buildlogs.BuildLogs
 	footer    *footer.Footer
+	spinners  *spinners.Spinners
 }
 
 // NewTui initializes and runs the TUI application.
@@ -89,6 +90,12 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		isSnapshot: isSnapshot,
 	}
 
+	spinnersI, err := spinners.NewSpinners()
+	if err != nil {
+		return err
+	}
+
+	mdl.spinners = spinnersI
 	mdl.header = header.New(isSnapshot, conf.Snapshot)
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
@@ -146,13 +153,7 @@ func startCPUProfile(path string) (func(), error) {
 
 func (m *model) Init() tea.Cmd {
 	if m.isSnapshot {
-		spinners, err := spinners.NewSpinners()
-		if err != nil {
-			return func() tea.Msg { return errMsg{err} }
-		}
-
 		m.resetable.Store(&resetable{
-			spinners:  spinners,
 			viewports: viewports.NewViewports(m.dimensions, m.conf),
 		})
 
@@ -173,10 +174,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	resetable := m.resetable.Load()
 	if resetable != nil {
-		cmd = tea.Batch(cmd, resetable.spinners.ProcessPendingTicks())
+		cmd = tea.Batch(cmd, m.spinners.ProcessPendingTicks())
 		cmd = tea.Batch(cmd, resetable.viewports.Update(msg))
 		cmd = tea.Batch(cmd, m.footer.Update(msg))
-		cmd = tea.Batch(cmd, resetable.spinners.Update(msg))
+		cmd = tea.Batch(cmd, m.spinners.Update(msg))
 	}
 
 	switch msg := msg.(type) {
@@ -190,11 +191,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.quitting = true
 
-		return m, tea.Quit
+		return m, tea.Batch(cmd, tea.Quit)
 
 	case workflowDoneMsg:
 		if m.isSnapshot {
-			return m, nil
+			return m, cmd
 		}
 
 		log.Debug().Msg("workflowDoneMsg")
@@ -209,20 +210,22 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conf.Flags.ExitOnComplete {
 			m.quitting = true
 
-			return m, tea.Quit
+			return m, tea.Batch(cmd, tea.Quit)
 		}
 		// Stay open — user can press 'q' to quit or 'r' to retry
 
-		return m, nil
+		return m, cmd
 
 	case restartMsg:
-		return m, m.restartWorkflow()
+		cmd = tea.Batch(cmd, m.restartWorkflow())
 
 	case workflowUpdateHookMsg:
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
 	case tea.KeyPressMsg:
-		return m.HandleKeyInput(msg)
+		var keyCmd tea.Cmd
+		_, keyCmd = m.HandleKeyInput(msg)
+		cmd = tea.Batch(cmd, keyCmd)
 
 	case tea.MouseClickMsg:
 		m.handleMouseClick(msg)
@@ -246,12 +249,12 @@ func (m *model) View() tea.View {
 	}
 
 	if m.buildLogs == nil {
-		m.buildLogs = buildlogs.New(m.conf, resetable.viewports, resetable.spinners)
+		m.buildLogs = buildlogs.New(m.conf)
 	}
 
 	header := m.header.View(m.dimensions.Width, m.conf.ColorScheme)
 	mainContent := m.viewMainContent()
-	footer := m.footer.View(m.dimensions.Width)
+	footer := m.footer.View(m.dimensions.Width, m.conf.ColorScheme)
 
 	headerFooterHeight := header.Height + footer.Height
 
@@ -292,7 +295,7 @@ func (m *model) viewMainContent() string {
 		builder.WriteString(m.conf.Fleet.PhaseStatus.View(m.dimensions.Width, m.conf.ColorScheme))
 	}
 
-	builder.WriteString(m.buildLogs.View())
+	builder.WriteString(m.buildLogs.View(resetable.viewports, m.spinners))
 
 	if resetable.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
@@ -304,8 +307,8 @@ func (m *model) viewMainContent() string {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := fmt.Sprintf("terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width)
 		debugContent += fmt.Sprintf("header - h: %d\n", m.header.View(m.dimensions.Width, m.conf.ColorScheme).Height)
-		debugContent += fmt.Sprintf("footer - h: %d\n", m.footer.View(m.dimensions.Width).Height)
-		debugContent += resetable.spinners.Debug()
+		debugContent += fmt.Sprintf("footer - h: %d\n", m.footer.View(m.dimensions.Width, m.conf.ColorScheme).Height)
+		debugContent += m.spinners.Debug()
 		debugContent += resetable.viewports.Debug()
 		builder.WriteString(debugHeader + debugContent)
 	}

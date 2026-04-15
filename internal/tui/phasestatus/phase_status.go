@@ -238,10 +238,8 @@ func (p *PhaseStatus) createAnimatedGradient(text string, statsPack stats.StatsP
 
 	finalColor := gradient[0].BlendLuv(gradient[1], progress)
 
-	return cachedPhaseStyle.Background(lipgloss.Color(finalColor.Hex())).Render(text)
+	return colors.PhaseStatus.Pill.Background(lipgloss.Color(finalColor.Hex())).Render(text)
 }
-
-var cachedPhaseStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 1)
 
 func buildStatusLine(statsPack stats.StatsPack, colors *colorscheme.ColorScheme) string {
 	var parts []string
