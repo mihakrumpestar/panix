@@ -40,12 +40,8 @@ func (m *model) startResetableWorkflow() tea.Cmd {
 
 		err = workflow.StartWorkflow()
 		if err != nil {
-			logFinalState(m.conf)
-
 			return errMsg{err}
 		}
-
-		logFinalState(m.conf)
 
 		return workflowDoneMsg{}
 	}

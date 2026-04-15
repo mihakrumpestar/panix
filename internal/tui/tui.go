@@ -156,6 +156,8 @@ func (m *model) Init() tea.Cmd {
 			viewports: viewports.NewViewports(m.dimensions, m.conf),
 		})
 
+		m.conf.Fleet.RecalculateCachesOnly(m.conf.Phases)
+
 		return tea.RequestWindowSize
 	}
 
@@ -181,6 +183,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		resetable.err = msg.err
 
+		m.conf.Fleet.Recalculate(m.conf.Phases)
+		logFinalState(m.conf)
+
 		log.Error().Err(msg.err).Msg("errMsg")
 
 		m.quitting = true
@@ -193,6 +198,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		log.Debug().Msg("workflowDoneMsg")
+
+		m.conf.Fleet.Recalculate(m.conf.Phases)
+		logFinalState(m.conf)
 
 		if m.conf.Flags.Snapshot.OnExit {
 			m.captureSnapshot(config.SnaphsotReasonExit)
@@ -246,8 +254,6 @@ func (m *model) View() tea.View {
 	footer := m.footer.View(m.dimensions.Width)
 
 	headerFooterHeight := header.Height + footer.Height
-
-	//fmt.Println("headerFooterHeight", header.Height, footerHeight, headerFooterHeight)
 
 	var main string
 	if resetable.viewports.IsFullscreen() {
