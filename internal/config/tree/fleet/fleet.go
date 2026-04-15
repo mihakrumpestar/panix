@@ -122,14 +122,10 @@ func (f *Fleet) RecalculateDurationAndError() {
 
 func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 	for i, fleetLeaf := range f.AllMachines() {
-		machineState := fleetLeaf.Machine.State
-
 		machineLastPhaseLog, ok := f.GetMachineLastPhaseLog(i)
 		if !ok {
 			continue
 		}
-
-		machineState.Phase = machineLastPhaseLog.Key
 
 		lastCommandLog, ok := machineLastPhaseLog.Value.CommandLogs.Last()
 		if !ok {
@@ -138,27 +134,31 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 
 		tas := machineLastPhaseLog.Value.TimeAndState.Load()
 		endErr := tas.EndError
-		machineState.Error = endErr // Error (or lack thereof) has to be always propagated (e.g. retry)
 
-		if !tas.IsFinished() {
-			machineState.Status = stats.Running
-			machineState.StatusMsg = lastCommandLog.StatusIfRunning
-			continue
-		}
+		fleetLeaf.Machine.State.Update(func(s *machine.State) {
+			s.Phase = machineLastPhaseLog.Key
+			s.Error = endErr
 
-		if endErr != nil {
-			machineState.Status = stats.Failed
-			machineState.StatusMsg = lastCommandLog.StatusIfFailed
-			continue
-		}
+			if !tas.IsFinished() {
+				s.Status = stats.Running
+				s.StatusMsg = lastCommandLog.StatusIfRunning
+				return
+			}
 
-		if workflowPhases[len(workflowPhases)-1] == machineState.Phase {
-			machineState.Status = stats.Done
-			machineState.StatusMsg = "done"
-		} else {
-			machineState.Status = stats.Done
-			machineState.StatusMsg = string(machineState.Phase) + " done"
-		}
+			if endErr != nil {
+				s.Status = stats.Failed
+				s.StatusMsg = lastCommandLog.StatusIfFailed
+				return
+			}
+
+			if workflowPhases[len(workflowPhases)-1] == s.Phase {
+				s.Status = stats.Done
+				s.StatusMsg = "done"
+			} else {
+				s.Status = stats.Done
+				s.StatusMsg = string(s.Phase) + " done"
+			}
+		})
 	}
 }
 
@@ -186,7 +186,7 @@ func (f *Fleet) ResetState() {
 
 				machineV.Logs.Clear()
 				machineV.MetaInspect.Clear()
-				machineV.State.ActiveSSH = machine.SSHTypeRegular
+				machineV.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 			}
 		}
 	}
@@ -222,8 +222,9 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phases.Phase) *stats.Sta
 
 	for _, treeLeaf := range f.AllMachines() {
 		ms := treeLeaf.Machine
+		msState := ms.State.Load()
 
-		statisticsPerPhase.DeepSet(ms.State.Phase, ms.State.Status, ms.Xpath)
+		statisticsPerPhase.DeepSet(msState.Phase, msState.Status, ms.Xpath)
 	}
 
 	f.PhaseStatus.CacheStatisticsPerPhase = statisticsPerPhase
@@ -240,7 +241,7 @@ func (f *Fleet) RefreshStatsTable() {
 		mInfo := statstable.MachineInfo{
 			Xpath:       m.Xpath,
 			MetaInspect: *m.MetaInspect.Load(),
-			State:       *m.State,
+			State:       *m.State.Load(),
 		}
 
 		machineInfos = append(machineInfos, mInfo)

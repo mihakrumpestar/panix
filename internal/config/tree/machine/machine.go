@@ -27,7 +27,7 @@ type Machine struct {
 	// Internal
 	MetaInspect *atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty" validate:"-"`
 	Logs        *logs.Logs                                `yaml:"-" json:"logs,omitempty"`
-	State       *State                                    `yaml:"-" json:"machine_state,omitempty"`
+	State       *atomicpointer.AtomicPointer[State]       `yaml:"-" json:"machine_state,omitempty"`
 }
 
 // MetaInspect needs to be atomic (updates with executioner)
@@ -45,7 +45,7 @@ type MetaInspect struct {
 	Kernel       string       `json:"kernel,omitempty"`
 }
 
-// State does not need to be atomic (updates with UI)
+// State needs to be atomic (updates from both workflow goroutines and UI)
 type State struct {
 	Status    stats.StatsState `json:"status"`
 	StatusMsg string           `json:"status_msg"`
@@ -66,6 +66,10 @@ func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attribut
 	} else {
 		m.Logs.PostUnmarshalInit()
 	}
+
+	if m.State == nil {
+		m.State = atomicpointer.New(&State{ActiveSSH: SSHTypeRegular})
+	}
 }
 
 func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) error {
@@ -79,7 +83,7 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) err
 	}
 
 	m.MetaInspect = atomicpointer.New(&MetaInspect{})
-	m.State = &State{ActiveSSH: SSHTypeRegular}
+	m.State = atomicpointer.New(&State{ActiveSSH: SSHTypeRegular})
 
 	m.Logs = logs.New()
 
@@ -87,7 +91,8 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) err
 }
 
 func (m *Machine) GetActiveSSH() *ssh.SSHClient {
-	switch m.State.ActiveSSH {
+	state := m.State.Load()
+	switch state.ActiveSSH {
 	case SSHTypeRegular:
 		return m.SSH
 	case SSHTypeBootstrap:

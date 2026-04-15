@@ -60,7 +60,7 @@ func logFinalState(conf *config.Config) {
 	states := make([]machineState, 0)
 
 	for _, fleetLeaf := range conf.Fleet.AllMachines() {
-		ms := fleetLeaf.Machine.State
+		ms := fleetLeaf.Machine.State.Load()
 
 		entry := machineState{
 			Xpath:    fleetLeaf.Machine.Xpath,

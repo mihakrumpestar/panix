@@ -26,7 +26,7 @@ func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error 
 			machineI := fleetLeaf.Machine
 
 			if machineI.SSH.IsLocal {
-				machineI.State.ActiveSSH = machine.SSHTypeRegular
+				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 					mi.Reachable = true
 					mi.SSHConnectable = true
@@ -85,7 +85,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 					return errors.New("bootstrap SSH is configured but unreachable")
 				}
 
-				machineI.State.ActiveSSH = machine.SSHTypeBootstrap
+				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeBootstrap })
 			} else {
 				regularSSHReachable := machineI.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
@@ -93,7 +93,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 					return errors.New("regular SSH is unreachable")
 				}
 
-				machineI.State.ActiveSSH = machine.SSHTypeRegular
+				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 			}
 
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {

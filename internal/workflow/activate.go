@@ -97,7 +97,7 @@ func performReboot(exc *executioner.Executioner, machineI *machine.Machine) erro
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
-	machineI.State.ActiveSSH = machine.SSHTypeRegular
+	machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 	activeSSH = machineI.GetActiveSSH()
 
 	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to come back online", "machine did not reconnect after reboot")

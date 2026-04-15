@@ -271,7 +271,7 @@ func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machineI *ma
 	}
 
 	// After kexec, use the kexec SSH config (default: same hostname, port 22)
-	machineI.State.ActiveSSH = machine.SSHTypeKexec
+	machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeKexec })
 	activeSSH = machineI.GetActiveSSH()
 
 	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
