@@ -5,6 +5,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
+	"github.com/pkg/errors"
 )
 
 type AtomicTimeAndState struct {
@@ -40,10 +41,34 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 	})
 }
 
-func (t *AtomicTimeAndState) UnmarshalJSON(data []byte) error {
-	if t.AtomicPointer == nil {
-		t.AtomicPointer = atomicpointer.New(&TimeAndState{})
+func (tas *AtomicTimeAndState) UnmarshalJSON(data []byte) error {
+	if tas.AtomicPointer == nil {
+		tas.AtomicPointer = atomicpointer.New(&TimeAndState{})
 	}
 
-	return t.AtomicPointer.UnmarshalJSON(data)
+	return tas.AtomicPointer.UnmarshalJSON(data)
+}
+
+func (tas *AtomicTimeAndState) DurationOrElapsedTime() (time.Duration, error) {
+	tasI := tas.Load()
+
+	if tasI.StartTime.IsZero() {
+		return 0, errors.New("timer has not started yet")
+	}
+
+	if !tasI.EndTime.IsZero() {
+		return tasI.DurationCache, nil
+	}
+
+	if !tasI.live {
+		return tasI.DurationCache, nil
+	}
+
+	durationCache := time.Since(tasI.StartTime)
+
+	tas.Update(func(tas *TimeAndState) {
+		tas.DurationCache = durationCache
+	})
+
+	return durationCache, nil
 }

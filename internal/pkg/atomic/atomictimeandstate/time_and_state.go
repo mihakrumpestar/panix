@@ -24,24 +24,6 @@ func (tas *TimeAndState) IsFinished() bool {
 	return !tas.EndTime.IsZero()
 }
 
-func (tas *TimeAndState) DurationOrElapsedTime() (time.Duration, error) {
-	if tas.StartTime.IsZero() {
-		return 0, errors.New("timer has not started yet")
-	}
-
-	// EndTime set, so last DurationCache already set on EndTimerWithError
-	if !tas.EndTime.IsZero() {
-		return tas.DurationCache, nil
-	}
-
-	if !tas.live {
-		return tas.DurationCache, nil
-	}
-
-	tas.DurationCache = time.Since(tas.StartTime)
-	return tas.DurationCache, nil
-}
-
 func (tas *TimeAndState) Duration() (time.Duration, error) {
 	if tas.StartTime.IsZero() {
 		return 0, errors.New("timer has not started yet")

@@ -276,9 +276,9 @@ func (b *BuildLogs) shouldHidePhase(p phases.Phase, phaseLog *phase.PhaseLog) bo
 func (b *BuildLogs) createPhaseNode(entityXpath xpath.Xpath, p phases.Phase, phaseLog *phase.PhaseLog, indent int) *tree.Tree {
 	phaseXpath := entityXpath.NewXpathWithAppend(string(p))
 
-	tas := phaseLog.TimeAndState.Load()
+	tas := phaseLog.TimeAndState
 
-	icon := b.spinnerOrIcon(phaseXpath, string(b.conf.ColorScheme.Phase.Icon), tas)
+	icon := b.spinnerOrIcon(phaseXpath, string(b.conf.ColorScheme.Phase.Icon), tas.Load())
 	durationStyled, durationWidth := b.durationText(b.conf.ColorScheme.Phase, tas)
 
 	leftRaw := icon + strings.ToUpper(string(p))
@@ -341,8 +341,9 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	}
 
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
-	tas := cmd.TimeAndState.Load()
-	icon := b.spinnerOrIcon(cmdXpath, strconv.Itoa(idx+1), tas)
+	tas := cmd.TimeAndState
+	tasCached := cmd.TimeAndState.Load()
+	icon := b.spinnerOrIcon(cmdXpath, strconv.Itoa(idx+1), tasCached)
 	durationStyled, durationWidth := b.durationText(b.conf.ColorScheme.Command, tas)
 
 	labelWidth := cmdIndent + lipgloss.Width(icon) + durationWidth
@@ -365,7 +366,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 		b.viewports.RemoveIfExistsViewport(cmdXpath.NewXpathWithAppend("output"))
 	}
 
-	err := tas.EndError
+	err := tasCached.EndError
 	if err != nil {
 		errMsg := "✗ Command failed: " + err.Error()
 		errViewport := b.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("error"), errMsg, cmdIndent+treeStep)
@@ -400,7 +401,7 @@ func (b *BuildLogs) spinnerOrIcon(xp xpath.Xpath, icon string, tas *atomictimean
 	return b.spinners.GetOrCreateSpinner(xp).View()
 }
 
-func (b *BuildLogs) durationText(style colorscheme.ColorSchemeLogEntity, tas *atomictimeandstate.TimeAndState) (string, int) {
+func (b *BuildLogs) durationText(style colorscheme.ColorSchemeLogEntity, tas *atomictimeandstate.AtomicTimeAndState) (string, int) {
 	duration, err := tas.DurationOrElapsedTime()
 	if err == nil {
 		text := fmt.Sprintf(" (%.2fs)", duration.Seconds())

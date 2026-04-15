@@ -29,7 +29,7 @@ func (l *Logs) RecalculateDurationAndError() error {
 	durationAndError := DurationAndError{}
 
 	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
-		tas := phaseLogPair.Value.TimeAndState.Load()
+		tas := phaseLogPair.Value.TimeAndState
 
 		duration, err := tas.DurationOrElapsedTime()
 		if err != nil {
@@ -38,8 +38,10 @@ func (l *Logs) RecalculateDurationAndError() error {
 
 		durationAndError.Duration += duration
 
-		if tas.EndError != nil {
-			durationAndError.Error = tas.EndError
+		endError := tas.Load().EndError
+
+		if endError != nil {
+			durationAndError.Error = endError
 
 			break
 		}
@@ -97,16 +99,17 @@ func MergePhaseLogs(phasesInOrder []phases.Phase, input ...*phase.PhaseLogs) *Lo
 
 		logs.PhaseLogs.Set(phase, phaseLog)
 
-		tas := phaseLog.TimeAndState.Load()
+		tas := phaseLog.TimeAndState
 		phaseDOET, _ := tas.DurationOrElapsedTime()
+		endError := tas.Load().EndError
 
 		// Sum up all valid durations and set last error
 		logs.DurationAndErrorCache = DurationAndError{
 			Duration: logs.DurationAndErrorCache.Duration + phaseDOET,
-			Error:    tas.EndError,
+			Error:    endError,
 		}
 
-		if tas.EndError != nil {
+		if endError != nil {
 			break
 		}
 	}
