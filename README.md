@@ -481,7 +481,65 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 | `left`/`right` | Navigate between stats table or phase status entrys |
 | `mouse click` | Select and entry from stats table, phase status, build logs command label or command output |
 | `mouse scroll`/`up`/`down` | Allows scrolling main view or an inner view when selected (eg. command output) |
+| `s` | Take a snapshot of current workflow state |
 | `q` | Quit |
+
+</details>
+
+<details>
+<summary><strong>Snapshots</strong></summary>
+
+Snapshots capture the full state of a deployment workflow at a point in time and save it to a JSON file. They include machine states, phase results, command outputs, inspect metadata, and timing information.
+
+> [!TIP]
+> **Why snapshots?** When a deployment fails, a snapshot preserves the exact state for later inspection, debugging, sharing with others or to give them for context to LLMs. Instead of scrolling through TUI logs or parsing terminal scrollback, you get a structured record of everything that happened.
+
+### Taking snapshots
+
+Three ways to take a snapshot:
+
+| Method | Description |
+|--------|-------------|
+| Press `s` in TUI | Manual snapshot at any time |
+| `--snapshot.on-retry` | Automatic snapshot before retrying failed phases |
+| `--snapshot.on-exit` | Automatic snapshot when exiting TUI |
+
+Snapshot files are written to `--snapshot.dir` (default: current directory) with the naming format:
+
+```
+panix-snapshot-<start_epoch>-<snapshot_epoch>-<reason>.json
+```
+
+Where `<reason>` is `manual`, `retry`, or `exit`.
+
+### Viewing snapshots
+
+Replay any snapshot in the TUI:
+
+```bash
+panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
+```
+
+This opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at the time of capture will also appear as running (loading spinners) in TUI replay.
+
+> [!NOTE]
+> `r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
+
+### Configuration
+
+```yaml
+flags:
+  snapshot:
+    dir: .                    # Directory to save snapshots
+    on_retry: true            # Take snapshot before retry
+    on_exit: true             # Take snapshot on exit
+```
+
+Or via CLI flags:
+
+```bash
+panix deploy --snapshot.dir=./snapshots --snapshot.on-retry --snapshot.on-exit
+```
 
 </details>
 
