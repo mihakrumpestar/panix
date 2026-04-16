@@ -14,11 +14,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
-func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config, error) {
+func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
 		d.SkipNilField = true
@@ -54,7 +54,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
 
-	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
+	conf.Phases, err = phase.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid phases")
 	}

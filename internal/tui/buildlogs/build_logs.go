@@ -15,11 +15,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 	phaseInd    = machineInd + treeStep
 )
 
-var hideablePhases = []phases.Phase{phases.Inspect, phases.Secrets}
+var hideablePhases = []phase.Phase{phase.Inspect, phase.Secrets}
 
 type BuildLogs struct {
 	conf *config.Config
@@ -104,9 +104,9 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configurat
 
 		node := b.entityNode(machineInd, b.conf.ColorScheme.Machine, m.Name, m.Logs, false)
 
-		errored := b.addPhases(node, m.Logs, m.Xpath, phaseInd, true, phases.Inspect)
+		errored := b.addPhases(node, m.Logs, m.Xpath, phaseInd, true, phase.Inspect)
 		if !errored {
-			for _, pm := range phases.PhaseRegistry[1:] {
+			for _, pm := range phase.PhaseRegistry[1:] {
 				logs_, xp := b.phaseLogsAndXpath(pm, cfg, m)
 				if b.addPhases(node, logs_, xp, phaseInd, true, pm.Phase) {
 					break
@@ -125,7 +125,7 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configurat
 func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
 	p := b.conf.Fleet.PhaseStatus.Selected.Phase
 
-	if phases.GetPhaseScope(p) == phases.ScopeConfiguration {
+	if p.GetPhaseScope() == phase.ScopeConfiguration {
 		b.addPhases(cfgNode, cfg.Logs, cfg.Xpath, machineInd, false, p)
 		return
 	}
@@ -139,7 +139,7 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuratio
 }
 
 func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
-	var machinePhases []phases.Phase
+	var machinePhases []phase.Phase
 
 	flush := func() {
 		if len(machinePhases) == 0 {
@@ -154,8 +154,8 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Conf
 		machinePhases = nil
 	}
 
-	for _, pm := range phases.PhaseRegistry {
-		if pm.Scope == phases.ScopeConfiguration {
+	for _, pm := range phase.PhaseRegistry {
+		if pm.Scope == phase.ScopeConfiguration {
 			flush()
 			b.addPhases(cfgNode, cfg.Logs, cfg.Xpath, machineInd, false, pm.Phase)
 		} else {
@@ -165,7 +165,7 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Conf
 	flush()
 }
 
-func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, m *machine.Machine, indent int, allowed ...phases.Phase) {
+func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, m *machine.Machine, indent int, allowed ...phase.Phase) {
 	if m == nil || m.Logs == nil {
 		return
 	}
@@ -176,26 +176,26 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, m *machine.Machine, 
 	}
 }
 
-func (b *BuildLogs) phaseLogsAndXpath(pm phases.PhaseMetadata, cfg *configuration.Configuration, m *machine.Machine) (*logs.Logs, xpath.Xpath) {
-	if pm.Scope == phases.ScopeConfiguration {
+func (b *BuildLogs) phaseLogsAndXpath(pm phase.PhaseMetadata, cfg *configuration.Configuration, m *machine.Machine) (*logs.Logs, xpath.Xpath) {
+	if pm.Scope == phase.ScopeConfiguration {
 		return cfg.Logs, cfg.Xpath
 	}
 
 	return m.Logs, m.Xpath
 }
 
-func (b *BuildLogs) isHideable(p phases.Phase) bool {
+func (b *BuildLogs) isHideable(p phase.Phase) bool {
 	return slices.Contains(hideablePhases, p)
 }
 
-func (b *BuildLogs) shouldHidePhase(p phases.Phase, phaseLog *phase.PhaseLog) bool {
+func (b *BuildLogs) shouldHidePhase(p phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
 	tas := phaseLog.TimeAndState.Load()
 	shouldHide := (!b.conf.Flags.Tui.ShowAllBuildLogs && b.isHideable(p)) || b.conf.Flags.Tui.ShowActiveOnly
 
 	return shouldHide && tas.IsFinished() && tas.EndError == nil
 }
 
-func (b *BuildLogs) addPhases(parent *tree.Tree, logNode *logs.Logs, entityXpath xpath.Xpath, indent int, stopAtError bool, allowed ...phases.Phase) bool {
+func (b *BuildLogs) addPhases(parent *tree.Tree, logNode *logs.Logs, entityXpath xpath.Xpath, indent int, stopAtError bool, allowed ...phase.Phase) bool {
 	if logNode == nil || logNode.PhaseLogs == nil {
 		return false
 	}
@@ -213,7 +213,7 @@ func (b *BuildLogs) addPhases(parent *tree.Tree, logNode *logs.Logs, entityXpath
 	return false
 }
 
-func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, p phases.Phase, phaseLog *phase.PhaseLog, indent int) bool {
+func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, p phase.Phase, phaseLog *phaselogs.PhaseLog, indent int) bool {
 	if phaseLog == nil || b.shouldHidePhase(p, phaseLog) {
 		return false
 	}
@@ -228,7 +228,7 @@ func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, p phase
 	left := b.conf.ColorScheme.Phase.Color.Render(leftRaw)
 
 	layoutIndent := indent
-	if phases.GetPhaseScope(p) == phases.ScopeConfiguration {
+	if p.GetPhaseScope() == phase.ScopeConfiguration {
 		layoutIndent -= 2
 	}
 
@@ -241,7 +241,7 @@ func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, p phase
 	return hasError
 }
 
-func (b *BuildLogs) addCommands(phaseNode *tree.Tree, phaseLog *phase.PhaseLog, p phases.Phase, phaseXpath xpath.Xpath, indent int) bool {
+func (b *BuildLogs) addCommands(phaseNode *tree.Tree, phaseLog *phaselogs.PhaseLog, p phase.Phase, phaseXpath xpath.Xpath, indent int) bool {
 	hideable := b.isHideable(p)
 	cmds := phaseLog.CommandLogs
 

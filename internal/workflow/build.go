@@ -12,8 +12,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/stoewer/go-strcase"
@@ -27,8 +27,8 @@ var (
 var nixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
 
 func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phases.Build, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+	return w.Phase(phase.Build, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			flake := fleetLeaf.Flake
 			configurationI := fleetLeaf.Configuration
 

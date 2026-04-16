@@ -10,8 +10,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -21,8 +21,8 @@ var (
 )
 
 func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phases.Inspect, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+	return w.Phase(phase.Inspect, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			machineI := fleetLeaf.Machine
 
 			if machineI.SSH.IsLocal {

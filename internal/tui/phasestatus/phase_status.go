@@ -16,7 +16,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"go.uber.org/atomic"
 )
 
@@ -47,8 +47,8 @@ func NewPhaseStatus() *PhaseStatus {
 }
 
 type Selected struct {
-	Phase phases.Phase `json:"phase"`
-	Index int          `json:"index"`
+	Phase phase.Phase `json:"phase"`
+	Index int         `json:"index"`
 }
 
 type animationState struct {

@@ -7,7 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -63,28 +63,28 @@ func (r *runner) getOrCreateOnceAsync(xpath xpath.Xpath) *onceasync.OnceAsync {
 }
 
 // run executes a phase with automatic once-per-scope semantics.
-func (pr *phaseRunner) run(phase phases.Phase) error {
-	if shouldSkipPhase(phase, pr.fleetLeaf.Machine) {
+func (pr *phaseRunner) run(p phase.Phase) error {
+	if shouldSkipPhase(p, pr.fleetLeaf.Machine) {
 		return nil
 	}
 
 	workflow := pr.r.workflow
 
-	xpath, logs, err := getXpathAndLogsForScope(phase, pr.fleetLeaf)
+	xpath, logs, err := getXpathAndLogsForScope(p, pr.fleetLeaf)
 	if err != nil {
 		return err
 	}
 
 	execFn := func() error {
-		return workflow.executePhase(phase, pr.fleetLeaf)
+		return workflow.executePhase(p, pr.fleetLeaf)
 	}
 
 	// If this phase should only run once per scope, use OnceAsync
-	if phases.ShouldRunOnce(phase) {
+	if p.ShouldRunOnce() {
 		once := pr.r.getOrCreateOnceAsync(xpath)
 
 		err := once.Do(func() error {
-			return workflow.NewTaskWithRetry(phase, logs, execFn)
+			return workflow.NewTaskWithRetry(p, logs, execFn)
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to run once-per-scope phase")
@@ -94,11 +94,11 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	}
 
 	// Otherwise, run directly
-	return workflow.NewTaskWithRetry(phase, logs, execFn)
+	return workflow.NewTaskWithRetry(p, logs, execFn)
 }
 
-func shouldSkipPhase(phase phases.Phase, machine *machine.Machine) bool {
-	if phase != phases.Bootstrap {
+func shouldSkipPhase(p phase.Phase, machine *machine.Machine) bool {
+	if p != phase.Bootstrap {
 		return false
 	}
 
@@ -107,13 +107,13 @@ func shouldSkipPhase(phase phases.Phase, machine *machine.Machine) bool {
 	return mi != nil && mi.Bootstrapped && !machine.Bootstrap.ForceBootstrap
 }
 
-func getXpathAndLogsForScope(phase phases.Phase, fleetLeaf *fleet.FleetLeaf) (xpath.Xpath, *logs.Logs, error) {
-	switch phases.GetPhaseScope(phase) {
-	case phases.ScopeFlake:
+func getXpathAndLogsForScope(p phase.Phase, fleetLeaf *fleet.FleetLeaf) (xpath.Xpath, *logs.Logs, error) {
+	switch p.GetPhaseScope() {
+	case phase.ScopeFlake:
 		return fleetLeaf.Flake.Xpath, fleetLeaf.Flake.Logs, nil
-	case phases.ScopeConfiguration:
+	case phase.ScopeConfiguration:
 		return fleetLeaf.Configuration.Xpath, fleetLeaf.Configuration.Logs, nil
-	case phases.ScopeMachine:
+	case phase.ScopeMachine:
 		return fleetLeaf.Machine.Xpath, fleetLeaf.Machine.Logs, nil
 	default:
 		return xpath.New(), nil, errors.New("getLogsForScope invalid scope")

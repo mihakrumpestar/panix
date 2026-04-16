@@ -9,8 +9,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -20,8 +20,8 @@ var (
 )
 
 func (w *Workflow) executeRollbackPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phases.Rollback, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+	return w.Phase(phase.Rollback, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			machine := fleetLeaf.Machine
 
 			mi := machine.MetaInspect.Load()

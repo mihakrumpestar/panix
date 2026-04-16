@@ -13,8 +13,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -29,8 +29,8 @@ const KexecURL = "https://github.com/nix-community/nixos-images/releases/latest/
 var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 
 func (w *Workflow) executeBootstrapPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phases.Bootstrap, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+	return w.Phase(phase.Bootstrap, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			flake := fleetLeaf.Flake
 			configuration := fleetLeaf.Configuration
 			machine := fleetLeaf.Machine

@@ -8,8 +8,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -18,8 +18,8 @@ func (w *Workflow) executeSecretsPhaseMachine(fleetLeaf *fleet.FleetLeaf) error 
 
 	secrets := machine.Secrets
 
-	return w.Phase(phases.Secrets, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+	return w.Phase(phase.Secrets, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			if len(secrets) == 0 {
 				return nil
 			}

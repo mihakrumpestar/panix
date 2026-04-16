@@ -7,7 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
 type Config struct {
@@ -19,7 +19,7 @@ type Config struct {
 	Snapshot Snapshot `yaml:"-" json:"snapshot"`
 
 	// Internal - not exportable
-	Phases []phases.Phase `yaml:"-" json:"phases" validate:"-"`
+	Phases []phase.Phase `yaml:"-" json:"phases" validate:"-"`
 }
 
 type Snapshot struct {

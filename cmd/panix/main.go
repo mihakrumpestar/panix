@@ -14,7 +14,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -96,15 +96,15 @@ func main() {
 	// Wokflow commands
 
 	case "inspect":
-		ctx.FatalIfErrorf(cli.runTui(cli.Inspect.WorkflowFlags, []phases.Phase{phases.Inspect}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect}))
 	case "build":
-		ctx.FatalIfErrorf(cli.runTui(cli.Build.WorkflowFlags, []phases.Phase{phases.Build}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Build}))
 	case "deploy":
-		ctx.FatalIfErrorf(cli.runTui(cli.Deploy.WorkflowFlags, phases.DeployPhasesInOrder()))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Transfer, phase.Secrets, phase.Activate}))
 	case "secrets":
-		ctx.FatalIfErrorf(cli.runTui(cli.Secrets.WorkflowFlags, []phases.Phase{phases.Inspect, phases.Secrets}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Secrets}))
 	case "rollback":
-		ctx.FatalIfErrorf(cli.runTuiWithRollback(cli.Rollback.WorkflowFlags, cli.Rollback.RollbackFlags, []phases.Phase{phases.Inspect, phases.Rollback}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags, RollbackFlags: cli.Rollback.RollbackFlags}, []phase.Phase{phase.Inspect, phase.Rollback}))
 	}
 }
 
@@ -143,8 +143,8 @@ func (c *CLI) runSnapshot(path string) error {
 
 // Wokflow
 
-func (c *CLI) runTui(wf flags.WorkflowFlags, commandPhases []phases.Phase, modifiers ...func(conf *config.Config)) error {
-	conf, err := config.LoadConfig(flags.Flags{WorkflowFlags: wf}, commandPhases)
+func (c *CLI) runTui(f flags.Flags, commandPhases []phase.Phase, modifiers ...func(conf *config.Config)) error {
+	conf, err := config.LoadConfig(f, commandPhases)
 	if err != nil {
 		return errors.Wrap(err, "failed to load config")
 	}
@@ -158,10 +158,4 @@ func (c *CLI) runTui(wf flags.WorkflowFlags, commandPhases []phases.Phase, modif
 	}
 
 	return errors.Wrap(tui.New(context.Background(), conf, false), "TUI error")
-}
-
-func (c *CLI) runTuiWithRollback(wf flags.WorkflowFlags, rf flags.RollbackFlags, commandPhases []phases.Phase) error {
-	return c.runTui(wf, commandPhases, func(conf *config.Config) {
-		conf.Flags.RollbackFlags = rf
-	})
 }

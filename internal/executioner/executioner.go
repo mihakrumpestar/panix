@@ -7,9 +7,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -20,7 +20,7 @@ type Executioner struct {
 	dryRun       bool
 	xpath        xpath.Xpath
 	machine      *machine.Machine
-	phase        phases.Phase
+	phase        phase.Phase
 	phaseLog     *log_sphase.PhaseLog
 	onUpdateHook func()
 }
@@ -31,7 +31,7 @@ func NewExecutioner(
 	dryRun bool,
 	xpath xpath.Xpath,
 	machine *machine.Machine,
-	phase phases.Phase,
+	phase phase.Phase,
 	phaseLog *log_sphase.PhaseLog,
 	onUpdateHook func(),
 ) *Executioner {

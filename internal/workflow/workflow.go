@@ -12,10 +12,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/pkg/hook"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/retry"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -70,10 +70,6 @@ func (w *Workflow) State() *WorkflowState {
 	return w.state
 }
 
-func (w *Workflow) WorkflowPhases() []phases.Phase {
-	return w.conf.Phases
-}
-
 func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
@@ -88,7 +84,7 @@ func (w *Workflow) Cancel() error {
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
-func (w *Workflow) NewTaskWithRetry(p phases.Phase, logs *logs.Logs, f func() error) error {
+func (w *Workflow) NewTaskWithRetry(p phase.Phase, logs *logs.Logs, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
@@ -119,24 +115,24 @@ func (w *Workflow) NewTaskWithRetry(p phases.Phase, logs *logs.Logs, f func() er
 	}
 }
 
-func (w *Workflow) Phase(p phases.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error) error {
+func (w *Workflow) Phase(p phase.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error) error {
 	var (
 		logs  *logs.Logs
 		xpath xpath.Xpath
 		err   error
 	)
 
-	switch phases.GetPhaseScope(p) {
-	case phases.ScopeMachine:
+	switch p.GetPhaseScope() {
+	case phase.ScopeMachine:
 		logs = fleetLeaf.Machine.Logs
 		xpath = fleetLeaf.Machine.Xpath
-	case phases.ScopeConfiguration:
+	case phase.ScopeConfiguration:
 		logs = fleetLeaf.Configuration.Logs
 		xpath = fleetLeaf.Configuration.Xpath
-	case phases.ScopeFlake:
+	case phase.ScopeFlake:
 		logs = fleetLeaf.Flake.Logs
 		xpath = fleetLeaf.Flake.Xpath
-	case phases.ScopeFleet:
+	case phase.ScopeFleet:
 		logs = fleetLeaf.Flake.Logs
 		xpath = fleetLeaf.Flake.Xpath
 	default:
@@ -154,7 +150,7 @@ func (w *Workflow) Phase(p phases.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode f
 
 	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", p, xpath.String())
 
-	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && p != phases.Inspect)
+	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && p != phase.Inspect)
 	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, xpath, fleetLeaf.Machine, p, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
@@ -221,21 +217,21 @@ func (w *Workflow) MachineCount() int {
 }
 
 // executePhase executes a phase by dispatching to the appropriate handler.
-func (w *Workflow) executePhase(phase phases.Phase, fleetLeaf *fleet.FleetLeaf) error {
-	switch phase {
-	case phases.Inspect:
+func (w *Workflow) executePhase(p phase.Phase, fleetLeaf *fleet.FleetLeaf) error {
+	switch p {
+	case phase.Inspect:
 		return w.executeInspectPhaseMachine(fleetLeaf)
-	case phases.Build:
+	case phase.Build:
 		return w.executeBuildPhaseConfiguration(fleetLeaf)
-	case phases.Bootstrap:
+	case phase.Bootstrap:
 		return w.executeBootstrapPhaseMachine(fleetLeaf)
-	case phases.Transfer:
+	case phase.Transfer:
 		return w.executeTransferPhaseMachine(fleetLeaf)
-	case phases.Secrets:
+	case phase.Secrets:
 		return w.executeSecretsPhaseMachine(fleetLeaf)
-	case phases.Activate:
+	case phase.Activate:
 		return w.executeActivatePhaseMachine(fleetLeaf)
-	case phases.Rollback:
+	case phase.Rollback:
 		return w.executeRollbackPhaseMachine(fleetLeaf)
 	default:
 		return nil

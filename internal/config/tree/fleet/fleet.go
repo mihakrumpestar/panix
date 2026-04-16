@@ -11,11 +11,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -46,7 +46,7 @@ func (r *Fleet) Init(f flags.Flags) error {
 	return nil
 }
 
-func (f *Fleet) Recalculate(workflowPhases []phases.Phase) {
+func (f *Fleet) Recalculate(workflowPhases []phase.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 	f.RecalculateDurationAndError()
 	f.RecalculateMachinesState(workflowPhases)
@@ -57,14 +57,14 @@ func (f *Fleet) Recalculate(workflowPhases []phases.Phase) {
 
 // RecalculateCachesOnly rebuilds derived caches (flattened logs, stats table, phase status)
 // without overwriting machine state. Use after snapshot deserialization where State and durations are already correct.
-func (f *Fleet) RecalculateCachesOnly(workflowPhases []phases.Phase) {
+func (f *Fleet) RecalculateCachesOnly(workflowPhases []phase.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 
 	f.RefreshStatsTable()
 	f.RecalculatePhaseStatus(workflowPhases)
 }
 
-func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phases.Phase) {
+func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
 	flattenedLogs := make([]*logs.Logs, 0)
 
 	for _, treeLeaf := range f.AllMachines() {
@@ -120,7 +120,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 	f.Logs.DurationAndErrorCache.Duration = largestFlakeDuration
 }
 
-func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
+func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 	for i, fleetLeaf := range f.AllMachines() {
 		machineLastPhaseLog, ok := f.GetMachineLastPhaseLog(i)
 		if !ok {
@@ -156,13 +156,13 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phases.Phase) {
 				s.StatusMsg = "done"
 			} else {
 				s.Status = stats.Done
-				s.StatusMsg = string(s.Phase) + " done"
+				s.StatusMsg = s.Phase.String() + " done"
 			}
 		})
 	}
 }
 
-func (f *Fleet) GetMachineLastPhaseLog(machineInOrder int) (atomicorderedmap.Pair[phases.Phase, *phase.PhaseLog], bool) {
+func (f *Fleet) GetMachineLastPhaseLog(machineInOrder int) (atomicorderedmap.Pair[phase.Phase, *phaselogs.PhaseLog], bool) {
 	return f.StatsTable.CacheFlattenedLogs[machineInOrder].PhaseLogs.Last()
 }
 
@@ -217,7 +217,7 @@ func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	}
 }
 
-func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phases.Phase) *stats.StatisticsPerPhase {
+func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.StatisticsPerPhase {
 	statisticsPerPhase := stats.New(workflowPhases)
 
 	for _, treeLeaf := range f.AllMachines() {

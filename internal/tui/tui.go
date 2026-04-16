@@ -20,7 +20,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -290,7 +290,7 @@ func (m *model) viewMainContent() string {
 
 	var builder strings.Builder
 
-	if !m.conf.Flags.DryRun && slices.Contains(m.conf.Phases, phases.Inspect) {
+	if !m.conf.Flags.DryRun && slices.Contains(m.conf.Phases, phase.Inspect) {
 		builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width, m.conf.ColorScheme))
 		builder.WriteString(m.conf.Fleet.PhaseStatus.View(m.dimensions.Width, m.conf.ColorScheme))
 	}

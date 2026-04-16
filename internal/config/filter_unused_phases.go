@@ -3,7 +3,7 @@ package config
 import (
 	"slices"
 
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
 type hasPhases struct {
@@ -14,9 +14,9 @@ type hasPhases struct {
 func (c *Config) filterUnusedPhases() {
 	hasRequiredPhases := c.hasRequiredPhases()
 
-	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(phase phases.Phase) bool {
-		return (phase == phases.Secrets && !hasRequiredPhases.Secrets) ||
-			(phase == phases.Bootstrap && !hasRequiredPhases.Bootstrap)
+	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(p phase.Phase) bool {
+		return (p == phase.Secrets && !hasRequiredPhases.Secrets) ||
+			(p == phase.Bootstrap && !hasRequiredPhases.Bootstrap)
 	})
 }
 

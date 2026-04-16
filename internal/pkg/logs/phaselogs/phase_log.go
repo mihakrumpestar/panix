@@ -1,4 +1,4 @@
-package phase
+package phaselogs
 
 import (
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicslice"

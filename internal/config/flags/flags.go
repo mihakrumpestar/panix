@@ -6,7 +6,7 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/mattn/go-isatty"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -41,7 +41,7 @@ type WorkflowFlags struct {
 	DryRun               bool           `yaml:"dry_run" help:"Show what would be done without executing"`
 	DryRunWithInspect    bool           `yaml:"dry_run_with_inspect" help:"Show what would be done without executing, but with real inspect query"`
 	Timeout              time.Duration  `yaml:"timeout" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
-	SkipPhases           []phases.Phase `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
+	SkipPhases           []phase.Phase  `yaml:"skip_phases" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	ExitOnComplete       bool           `yaml:"exit_on_complete" help:"Exit TUI on completion; 'retry' and 'restart' are disabled in this mode"`
 	ActivationMode       ActivationMode `yaml:"activation_mode" help:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
 	Output               OutputMode     `yaml:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json"`                                                         //nolint:lll

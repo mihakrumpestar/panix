@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
 // Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
 type Logs struct {
-	PhaseLogs             *phase.PhaseLogs `json:"phase_logs"`
-	DurationAndErrorCache DurationAndError `json:"duration_and_error"`
+	PhaseLogs             *phaselogs.PhaseLogs `json:"phase_logs"`
+	DurationAndErrorCache DurationAndError     `json:"duration_and_error"`
 }
 
 type DurationAndError struct {
@@ -21,7 +21,7 @@ type DurationAndError struct {
 
 func New() *Logs {
 	return &Logs{
-		PhaseLogs: phase.NewPhaseLogs(),
+		PhaseLogs: phaselogs.NewPhaseLogs(),
 	}
 }
 
@@ -63,17 +63,17 @@ func (l *Logs) PostUnmarshalInit() {
 	}
 
 	if l.PhaseLogs == nil {
-		l.PhaseLogs = phase.NewPhaseLogs()
+		l.PhaseLogs = phaselogs.NewPhaseLogs()
 	}
 }
 
 // Helpers
 
 // MergePhaseLogs merges multiple PhaseLogs.
-func MergePhaseLogs(phasesInOrder []phases.Phase, input ...*phase.PhaseLogs) *Logs {
+func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) *Logs {
 	logs := New()
 
-	gathered := phase.NewPhaseLogs()
+	gathered := phaselogs.NewPhaseLogs()
 
 	// Gather all together
 	for _, pl := range input {

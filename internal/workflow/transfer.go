@@ -6,15 +6,15 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
 func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phases.Transfer, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
+	return w.Phase(phase.Transfer, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
 
 			err := executeTransferPhaseMachineWrapper(exc, fleetLeaf.Machine, []string{systemClosure}, true)

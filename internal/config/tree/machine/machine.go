@@ -9,7 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -49,7 +49,7 @@ type MetaInspect struct {
 type State struct {
 	Status    stats.StatsState `json:"status"`
 	StatusMsg string           `json:"status_msg"`
-	Phase     phases.Phase     `json:"phase"`
+	Phase     phase.Phase      `json:"phase"`
 	//Duration  time.Duration    `json:"duration"`
 	Error     *errorjson.ErrorJSON `json:"error,omitempty"`
 	ActiveSSH SSHType              `json:"active_ssh"`
