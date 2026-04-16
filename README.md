@@ -975,14 +975,13 @@ Flags:
   -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
                                    and names are already registered as tags)
                                    ($PANIX_TAGS)
-      --bootstrap.disable-disko    Disables building, transfer and execution of
-                                   disko tool ($PANIX_BOOTSTRAP_DISABLE_DISKO)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
-      --override-local-machine=STRING
+      --local-machine-hostname=STRING
                                    Hostname of the machine that is local
-                                   (won't use ssh to connect to it)
-                                   ($PANIX_OVERRIDE_LOCAL_MACHINE)
+                                   (won't use ssh to connect to it);
+                                   default:your machines hostname
+                                   ($PANIX_LOCAL_MACHINE_HOSTNAME)
       --dry-run                    Show what would be done without executing
                                    ($PANIX_DRY_RUN)
       --dry-run-with-inspect       Show what would be done without
@@ -996,9 +995,10 @@ Flags:
       --exit-on-complete           Exit TUI on completion; 'retry' and
                                    'restart' are disabled in this mode
                                    ($PANIX_EXIT_ON_COMPLETE)
-      --activation-mode="switch"
-                                   Activation mode: check, switch, boot, test,
-                                   dry-activate ($PANIX_ACTIVATION_MODE)
+      --activation-mode=ACTIVATION-MODE
+                                   Activation mode: check, switch, boot,
+                                   test, dry-activate; overrides machine one
+                                   ($PANIX_ACTIVATION_MODE)
       --output="tui"               Output mode: tui, console, json
                                    ($PANIX_OUTPUT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)

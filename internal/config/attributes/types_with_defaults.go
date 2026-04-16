@@ -70,6 +70,8 @@ func (f FileMode) String() string {
 
 // ActivationMode
 
+type ActivationModeD ActivationMode
+
 type ActivationMode string
 
 const (
@@ -80,14 +82,14 @@ const (
 	ActivationModeDryActivate ActivationMode = "dry-activate" // show what would be done if this configuration were activated
 )
 
-func (am ActivationMode) Get() ActivationMode {
+func (am ActivationModeD) Get() ActivationMode {
 	if am == "" {
 		return ActivationModeSwitch
 	}
 
-	return am
+	return ActivationMode(am)
 }
 
-func (am ActivationMode) String() string {
+func (am ActivationModeD) String() string {
 	return string(am.Get())
 }

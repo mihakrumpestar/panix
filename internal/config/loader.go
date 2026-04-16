@@ -87,11 +87,11 @@ func decodeConfigFile(configPath string) (*Config, error) {
 	}
 
 	conf := &Config{}
-	decoder := yaml.NewDecoder(bytes.NewReader(processedYAML))
+	decoder := yaml.NewDecoder(bytes.NewReader(processedYAML), yaml.Strict())
 
 	err = decoder.Decode(conf)
 	if err != nil {
-		return nil, errors.New(yaml.FormatError(err, true, false))
+		return nil, errors.New("decoder: " + yaml.FormatError(err, true, true))
 	}
 
 	return conf, nil
@@ -106,6 +106,15 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 
 	if conf.ColorScheme == nil {
 		conf.ColorScheme = colorscheme.DefaultColorScheme()
+	}
+
+	if conf.Flags.LocalMachineHostname == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+
+		conf.Flags.LocalMachineHostname = hostname
 	}
 
 	conf.Flags.DefautlIfNoTTY()

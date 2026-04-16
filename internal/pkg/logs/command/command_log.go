@@ -16,14 +16,14 @@ var nixBuildOutputPrefix = []byte(`[{"drvPath":"/nix/store/`)
 
 type CommandLog struct {
 	// On creation
-	Description     string `json:"description"`
-	StatusIfRunning string `json:"-"`
-	StatusIfFailed  string `json:"-"`
-	Command         string `json:"command"`
+	Description     string `yaml:"-" json:"description,omitempty"`
+	StatusIfRunning string `yaml:"-" json:"-"`
+	StatusIfFailed  string `yaml:"-" json:"-"`
+	Command         string `yaml:"-" json:"command,omitempty"`
 
 	// Mutate
-	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
-	TimeAndState *atomictimeandstate.AtomicTimeAndState               `json:"time_and_state"`
+	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `yaml:"-" json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
+	TimeAndState *atomictimeandstate.AtomicTimeAndState               `yaml:"-" json:"time_and_state,omitempty"`
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {

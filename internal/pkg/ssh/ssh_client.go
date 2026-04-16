@@ -9,7 +9,7 @@ type SSHClient struct {
 	Hostname              string      `yaml:"hostname" json:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
 	Port                  SSHPort     `yaml:"port" json:"port" desc:"SSH port number" default:"22"`
 	Username              SSHUsername `yaml:"username" json:"username" desc:"SSH username" default:"root"`
-	IdentityFile          string      `yaml:"identity_file" json:"identity_file" validate:"omitempty,filepath" desc:"Path to SSH private key"`
+	IdentityFile          string      `yaml:"identity_file" json:"identity_file,omitempty" validate:"omitempty,filepath" desc:"Path to SSH private key"`
 	StrictKeyChecking     bool        `yaml:"strict_key_checking" json:"strict_key_checking,omitempty" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`                                                      //nolint:lll
 	DisableAutoAddHostKey bool        `yaml:"disable_auto_add_host_key" json:"disable_auto_add_host_key,omitempty" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"` //nolint:lll
 	ExtraFlags            []string    `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')"`                                                                                             //nolint:lll

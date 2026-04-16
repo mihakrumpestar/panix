@@ -7,8 +7,8 @@ import (
 )
 
 type PhaseLog struct {
-	CommandLogs  *atomicslice.AtomicSlice[*command.CommandLog]
-	TimeAndState *atomictimeandstate.AtomicTimeAndState `json:"time_and_state"`
+	CommandLogs  *atomicslice.AtomicSlice[*command.CommandLog] `yaml:"-" json:"command_logs"`
+	TimeAndState *atomictimeandstate.AtomicTimeAndState        `yaml:"-" json:"time_and_state"`
 }
 
 func NewPhaseLog() *PhaseLog {

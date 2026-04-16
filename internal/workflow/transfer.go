@@ -13,6 +13,10 @@ import (
 )
 
 func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	if w.conf.Flags.LocalMachineHostname == fleetLeaf.Machine.SSH.Hostname {
+		return nil
+	}
+
 	return w.Phase(phase.Transfer, fleetLeaf,
 		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure

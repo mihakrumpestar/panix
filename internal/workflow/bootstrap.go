@@ -24,8 +24,6 @@ var (
 func (w *Workflow) executeBootstrapPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
 	return w.Phase(phase.Bootstrap, fleetLeaf,
 		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			flake := fleetLeaf.Flake
-			configuration := fleetLeaf.Configuration
 			machine := fleetLeaf.Machine
 
 			mi := machine.MetaInspect.Load()
@@ -36,46 +34,61 @@ func (w *Workflow) executeBootstrapPhaseMachine(fleetLeaf *fleet.FleetLeaf) erro
 				}
 			}
 
-			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
-
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "disko")
-			if err != nil {
-				return err
-			}
-
-			if len(parsedOutput) == 0 {
-				return ErrDiskoNoOutputPaths
-			}
-
-			diskoScript := parsedOutput[0].Outputs.Out
-
-			err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
-			if err != nil {
-				return err
-			}
-
-			// Upload disk encryption keys BEFORE running disko
-			// Keys must be available for LUKS unlocking during partitioning
-			if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-				err = w.executeDiskEncryptionKeys(exc, machine)
+			if !machine.Bootstrap.DisableDisko {
+				err := w.disko(exc, fleetLeaf)
 				if err != nil {
 					return err
 				}
 			}
 
-			err = exc.Exec(
-				"disko",
-				"partitioning disk",
-				"diskoScript failed",
-				[]string{diskoScript},
-			)
-			if err != nil {
-				return errors.Wrap(err, "disko failed")
-			}
-
 			return exc.ExecuteHooks(machine.Bootstrap.PostBootstrapHooks, "post bootstrap hook")
 		},
 	)
+}
+
+func (w *Workflow) disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	flake := fleetLeaf.Flake
+	configuration := fleetLeaf.Configuration
+	machine := fleetLeaf.Machine
+
+	installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
+
+	parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "disko")
+	if err != nil {
+		return err
+	}
+
+	if len(parsedOutput) == 0 {
+		return ErrDiskoNoOutputPaths
+	}
+
+	diskoScript := parsedOutput[0].Outputs.Out
+
+	err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
+	if err != nil {
+		return err
+	}
+
+	// Upload disk encryption keys BEFORE running disko
+	// Keys must be available for LUKS unlocking during partitioning
+	if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
+		err = w.executeDiskEncryptionKeys(exc, machine)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = exc.Exec(
+		"disko",
+		"partitioning disk",
+		"diskoScript failed",
+		[]string{diskoScript},
+	)
+	if err != nil {
+		return errors.Wrap(err, "disko failed")
+	}
+
+	return nil
 }
 
 // executeDiskEncryptionKeys transfers disk encryption keys to the target machine.
@@ -233,7 +246,7 @@ func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machineI *ma
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
-	// After kexec, use the kexec SSH config (default: same hostname, port 22)
+	// After kexec, use the kexec SSH config (same hostname)
 	machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeKexec })
 	activeSSH = machineI.GetActiveSSH()
 
