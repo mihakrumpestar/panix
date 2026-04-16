@@ -15,10 +15,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	yamlIndent = 2
-)
-
 func EvalConfig(configPath string, outputPath string) error {
 	//nolint:gosec // Config path is user-provided by design
 	rawYAML, err := os.ReadFile(configPath)
@@ -105,8 +101,8 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 		return nil
 	}
 
-	decodedMap, ok := decoded.(map[string]any)
-	if !ok {
+	decodedMap := toMap(decoded)
+	if decodedMap == nil {
 		return nil
 	}
 
@@ -114,7 +110,7 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 
 	for _, mappingValue := range mappingNode.Values {
 		key := mappingValue.Key.GetToken().Value
-		if key == "flags" || key == "fleet" {
+		if key == "flags" || key == "fleet" { // This prevents anchor definitions to remain in output
 			if val, exists := decodedMap[key]; exists {
 				result = append(result, yaml.MapItem{
 					Key:   key,
@@ -127,15 +123,30 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 	return result
 }
 
-func rebuildOrderedRecursive(astNode ast.Node, decoded any) any {
-	switch decodedVal := decoded.(type) {
+func toMap(v any) map[string]any {
+	switch m := v.(type) {
 	case map[string]any:
-		return rebuildOrderedMap(astNode, decodedVal)
-	case []any:
-		return decodedVal
+		return m
+	case yaml.MapSlice:
+		result := make(map[string]any, len(m))
+		for _, item := range m {
+			result[item.Key.(string)] = item.Value
+		}
+		return result
 	default:
+		return nil
+	}
+}
+
+func rebuildOrderedRecursive(astNode ast.Node, decoded any) any {
+	decodedMap := toMap(decoded)
+	if decodedMap != nil {
+		return rebuildOrderedMap(astNode, decodedMap)
+	}
+	if _, ok := decoded.([]any); ok {
 		return decoded
 	}
+	return decoded
 }
 
 func rebuildOrderedMap(astNode ast.Node, decodedVal map[string]any) yaml.MapSlice {
