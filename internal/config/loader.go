@@ -49,7 +49,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, 
 	}
 
 	// Filter based on tags and disabled flags
-	err = conf.Fleet.Filter()
+	err = conf.Fleet.Filter(conf.Flags)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
@@ -59,7 +59,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, 
 		return nil, errors.Wrap(err, "invalid phases")
 	}
 
-	conf.filterUnusedPhases()
+	conf.filterOutUnusedPhases()
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
@@ -99,11 +99,6 @@ func decodeConfigFile(configPath string) (*Config, error) {
 
 // applyConfigDefaults merges configuration with CLI flags and applies defaults.
 func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
-	// Apply defaults
-	if conf.Flags == nil {
-		conf.Flags = &flags.Flags{}
-	}
-
 	err := conf.Flags.MergeConfWithCliFlags(parsedFlags)
 	if err != nil {
 		return errors.Wrap(err, "failed merging config with cli flags")
@@ -124,7 +119,9 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 }
 
 func (c *Config) initFleet() error {
-	err := c.Fleet.Init(*c.Flags)
+	localMachineHostname := c.Flags.LocalMachineHostname
+
+	err := c.Fleet.Init(localMachineHostname)
 	if err != nil {
 		return err
 	}
@@ -132,14 +129,14 @@ func (c *Config) initFleet() error {
 	for _, flakePair := range c.Fleet.Flakes.Pairs() {
 		flakeV := flakePair.Value
 
-		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes)
+		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes, localMachineHostname)
 		if err != nil {
 			return err
 		}
 
 		for _, configurationPair := range flakeV.Configurations.Pairs() {
 			configurationV := configurationPair.Value
-			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes)
+			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes, localMachineHostname)
 			if err != nil {
 				return err
 			}
@@ -153,7 +150,7 @@ func (c *Config) initFleet() error {
 					configurationV.Machines.Set(machinePair.Key, machineV)
 				}
 
-				err = machineV.Init(machinePair.Key, &configurationV.Attributes)
+				err = machineV.Init(machinePair.Key, &configurationV.Attributes, localMachineHostname)
 				if err != nil {
 					return err
 				}

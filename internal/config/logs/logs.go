@@ -10,13 +10,13 @@ import (
 
 // Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
 type Logs struct {
-	PhaseLogs             *phaselogs.PhaseLogs `json:"phase_logs"`
-	DurationAndErrorCache DurationAndError     `json:"duration_and_error"`
+	PhaseLogs             *phaselogs.PhaseLogs `yaml:"-" json:"phase_logs"`
+	DurationAndErrorCache DurationAndError     `yaml:"-" json:"duration_and_error"`
 }
 
 type DurationAndError struct {
-	Duration time.Duration        `json:"duration"`
-	Error    *errorjson.ErrorJSON `json:"error,omitempty"`
+	Duration time.Duration        `yaml:"-" json:"duration"`
+	Error    *errorjson.ErrorJSON `yaml:"-" json:"error,omitempty"`
 }
 
 func New() *Logs {

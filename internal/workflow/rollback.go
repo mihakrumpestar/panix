@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -99,7 +99,7 @@ func executeRollback(exc *executioner.Executioner, machine *machine.Machine, tar
 		return errors.Wrap(err, "failed to set profile")
 	}
 
-	err = activateConfiguration(exc, machine, closurePath, flags.ActivationModeSwitch)
+	err = activateConfiguration(exc, machine, closurePath, attributes.ActivationModeSwitch)
 	if err != nil {
 		return errors.Wrap(err, "failed to activate")
 	}

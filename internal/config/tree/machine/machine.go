@@ -25,39 +25,38 @@ type Machine struct {
 	attributes.Attributes `yaml:",inline"`
 
 	// Internal
-	MetaInspect *atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty" validate:"-"`
+	MetaInspect *atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty"`
 	Logs        *logs.Logs                                `yaml:"-" json:"logs,omitempty"`
 	State       *atomicpointer.AtomicPointer[State]       `yaml:"-" json:"machine_state,omitempty"`
 }
 
 // MetaInspect needs to be atomic (updates with executioner)
 type MetaInspect struct {
-	Reachable      bool `json:"reachable"`
-	SSHConnectable bool `json:"ssh_connectable"`
-	IsRoot         bool `json:"is_root"`
-	Bootstrapped   bool `json:"bootstrapped"`
-	RequiresKexec  bool `json:"requires_kexec"`
+	Reachable      bool `yaml:"-" json:"reachable,omitempty"`
+	SSHConnectable bool `yaml:"-" json:"ssh_connectable,omitempty"`
+	IsRoot         bool `yaml:"-" json:"is_root,omitempty"`
+	Bootstrapped   bool `yaml:"-" json:"bootstrapped,omitempty"`
+	RequiresKexec  bool `yaml:"-" json:"requires_kexec,omitempty"`
 
-	Architecture string       `json:"architecture,omitempty"`
-	Generations  *Generations `json:"generations,omitempty"`
-	Date         string       `json:"date,omitempty"`
-	Nixos        string       `json:"nixos,omitempty"`
-	Kernel       string       `json:"kernel,omitempty"`
+	Architecture string       `yaml:"-" json:"architecture,omitempty"`
+	Generations  *Generations `yaml:"-" json:"generations,omitempty"`
+	Date         string       `yaml:"-" json:"date,omitempty"`
+	Nixos        string       `yaml:"-" json:"nixos,omitempty"`
+	Kernel       string       `yaml:"-" json:"kernel,omitempty"`
 }
 
 // State needs to be atomic (updates from both workflow goroutines and UI)
 type State struct {
-	Status    stats.StatsState `json:"status"`
-	StatusMsg string           `json:"status_msg"`
-	Phase     phase.Phase      `json:"phase"`
-	//Duration  time.Duration    `json:"duration"`
-	Error     *errorjson.ErrorJSON `json:"error,omitempty"`
-	ActiveSSH SSHType              `json:"active_ssh"`
+	Status    stats.StatsState     `yaml:"-" json:"status"`
+	StatusMsg string               `yaml:"-" json:"status_msg"`
+	Phase     phase.Phase          `yaml:"-" json:"phase"`
+	Error     *errorjson.ErrorJSON `yaml:"-" json:"error,omitempty"`
+	ActiveSSH SSHType              `yaml:"-" json:"active_ssh" default:"regular"`
 }
 
 type Generations struct {
-	Current   uint   `json:"current"`
-	Available []uint `json:"available"`
+	Current   uint   `yaml:"-" json:"current"`
+	Available []uint `yaml:"-" json:"available"`
 }
 
 func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attributes) {
@@ -72,12 +71,12 @@ func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attribut
 	}
 }
 
-func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) error {
+func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, localMachineHostname string) error {
 	if m == nil {
 		return fmt.Errorf("internal error: machine %s has nil value", name)
 	}
 
-	err := m.Attributes.Init(name, parentAttributes, true)
+	err := m.Attributes.Init(name, parentAttributes, true, localMachineHostname)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize machine")
 	}
@@ -104,12 +103,7 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 			activeSSH = *m.Bootstrap.SSH
 		}
 
-		port := ssh.DefaultSSHPort // default port 22
-		if m.Bootstrap.Kexec != nil && m.Bootstrap.Kexec.SSHPort != 0 {
-			port = m.Bootstrap.Kexec.SSHPort
-		}
-
-		activeSSH.Port = port
+		activeSSH.Port = m.Bootstrap.Kexec.SSHPort
 		activeSSH.StrictKeyChecking = false
 		activeSSH.DisableAutoAddHostKey = true
 
@@ -119,22 +113,13 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 	return nil
 }
 
-var (
-	emptySudo = []string{}
-	sudoCmd   = []string{"sudo"}
-)
-
 func (m *Machine) MaybeSudo() []string {
 	mi := m.MetaInspect.Load()
 	if mi != nil && mi.IsRoot {
-		return emptySudo
+		return []string{}
 	}
 
-	if m.OverrideSudoProgram == "" {
-		return sudoCmd
-	}
-
-	return []string{m.OverrideSudoProgram}
+	return []string{m.SudoProgram.String()}
 }
 
 func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {

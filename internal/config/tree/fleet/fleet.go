@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
@@ -22,7 +21,7 @@ import (
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Flakes atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes"`
+	Flakes atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
@@ -32,8 +31,8 @@ type Fleet struct {
 	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
 }
 
-func (r *Fleet) Init(f flags.Flags) error {
-	err := r.Attributes.Init("", attributes.New(f), false)
+func (r *Fleet) Init(localMachineHostname string) error {
+	err := r.Attributes.Init("", attributes.New(), false, localMachineHostname)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
@@ -186,7 +185,6 @@ func (f *Fleet) ResetState() {
 
 				machineV.Logs.Clear()
 				machineV.MetaInspect.Clear()
-				machineV.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 			}
 		}
 	}

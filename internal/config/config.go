@@ -11,23 +11,23 @@ import (
 )
 
 type Config struct {
-	Flags       *flags.Flags             `yaml:"flags" json:"flags"`
-	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required"`
-	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-" validate:"-"`
+	Flags       flags.Flags              `yaml:"flags" json:"flags" desc:"Flags"`
+	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required" desc:"Fleet configuration"`
+	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-"`
 
 	// Internal - exportable
 	Snapshot Snapshot `yaml:"-" json:"snapshot"`
 
 	// Internal - not exportable
-	Phases []phase.Phase `yaml:"-" json:"phases" validate:"-"`
+	Phases []phase.Phase `yaml:"-" json:"phases"`
 }
 
 type Snapshot struct {
-	PanixVersion string    `yaml:"-" json:"panix_version" validate:"-"`
-	StartTime    time.Time `yaml:"-" json:"start_time" validate:"-"`
+	PanixVersion string    `yaml:"-" json:"panix_version"`
+	StartTime    time.Time `yaml:"-" json:"start_time"`
 
 	Reason        SnaphsotReason       `yaml:"-" json:"reason"`
-	SnapshotTime  time.Time            `yaml:"-" json:"snapshot_time" validate:"-"`
+	SnapshotTime  time.Time            `yaml:"-" json:"snapshot_time"`
 	WorkflowError *errorjson.ErrorJSON `yaml:"-" json:"workflow_error,omitempty"`
 }
 
@@ -44,11 +44,6 @@ func (sr SnaphsotReason) String() string {
 }
 
 func (c *Config) PostUnmarshalInit() {
-	if c.Flags == nil {
-		c.Flags = &flags.Flags{}
-		c.Flags.DefautlIfNoTTY()
-	}
-
 	if c.ColorScheme == nil {
 		c.ColorScheme = colorscheme.DefaultColorScheme()
 	}

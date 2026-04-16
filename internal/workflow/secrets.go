@@ -49,7 +49,7 @@ func (w *Workflow) transferPlainFileOrDir(
 		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", strings.Join(maybeSudo, " ")))
 	}
 
-	perms := plainFileOrDir.GetPermissions()
+	perms := plainFileOrDir.Permissions.Get()
 	commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=D%o,F%o", perms, perms))
 
 	if plainFileOrDir.UID != nil && plainFileOrDir.GID != nil {

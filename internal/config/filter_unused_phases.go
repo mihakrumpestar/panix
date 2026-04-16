@@ -11,7 +11,7 @@ type hasPhases struct {
 	Bootstrap bool
 }
 
-func (c *Config) filterUnusedPhases() {
+func (c *Config) filterOutUnusedPhases() {
 	hasRequiredPhases := c.hasRequiredPhases()
 
 	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(p phase.Phase) bool {

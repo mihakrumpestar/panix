@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
@@ -150,10 +149,6 @@ func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine)
 			architecture := strings.Trim(log.String(), "\n")
 			if architecture == "" {
 				return ErrArchitectureOutputEmpty
-			}
-
-			if !slices.Contains(KexecSupportedPlatforms, architecture) {
-				return errors.Wrapf(ErrPlatformUnsupported, "%s (supported: %s)", strconv.Quote(architecture), KexecSupportedPlatforms)
 			}
 
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {

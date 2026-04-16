@@ -36,12 +36,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) er
 				configurationI.MetaBuild = &configuration.MetaBuild{}
 			}
 
-			flakeOutput := configurationI.FlakeOutput
-			if flakeOutput == "" {
-				flakeOutput = "nixosConfigurations.<name>.config.system.build.toplevel"
-			}
-
-			flakeOutput = strings.ReplaceAll(flakeOutput, "<name>", configurationI.Name)
+			flakeOutput := strings.ReplaceAll(configurationI.FlakeOutput.String(), "<name>", configurationI.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
 			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "system closure")

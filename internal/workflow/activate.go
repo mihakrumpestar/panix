@@ -3,6 +3,7 @@ package workflow
 import (
 	"slices"
 
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -32,7 +33,7 @@ func (w *Workflow) executeActivatePhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 				return executeBootstrap(exc, machine, systemClosure)
 			}
 
-			return executeActivation(exc, machine, systemClosure)
+			return executeActivation(exc, w.conf.Flags, machine, systemClosure)
 		},
 	)
 }
@@ -108,13 +109,13 @@ func performReboot(exc *executioner.Executioner, machineI *machine.Machine) erro
 	return nil
 }
 
-func executeActivation(exc *executioner.Executioner, machine *machine.Machine, systemClosure string) error {
-	mode := machine.ActivationMode
-	if machine.Flags().ActivationMode != flags.ActivationModeSwitch {
-		mode = machine.Flags().ActivationMode
+func executeActivation(exc *executioner.Executioner, flagsI flags.Flags, machine *machine.Machine, systemClosure string) error {
+	mode := machine.ActivationMode.Get()
+	if string(flagsI.ActivationMode) != "" {
+		mode = flagsI.ActivationMode
 	}
 
-	if mode != flags.ActivationModeTest {
+	if mode != attributes.ActivationModeTest {
 		err := setSystemProfile(exc, machine, systemClosure)
 		if err != nil {
 			return errors.Wrap(err, "failed to set system profile")
@@ -137,7 +138,7 @@ func setSystemProfile(exc *executioner.Executioner, machine *machine.Machine, cl
 	return errors.Wrap(err, "failed to set system profile")
 }
 
-func activateConfiguration(exc *executioner.Executioner, machine *machine.Machine, closurePath string, mode flags.ActivationMode) error {
+func activateConfiguration(exc *executioner.Executioner, machine *machine.Machine, closurePath string, mode attributes.ActivationMode) error {
 	binPath := closurePath + "/bin/switch-to-configuration"
 
 	err := exc.Exec(

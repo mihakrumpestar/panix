@@ -3,13 +3,14 @@ package configuration
 import (
 	"slices"
 
+	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/rs/zerolog/log"
 )
 
-func (c *Configuration) Filter() {
+func (c *Configuration) Filter(flags flags.Flags) {
 	c.Machines.DeleteFunc(func(name string, machineI *machine.Machine) bool {
-		if machineI == nil || machineI.Disabled || !machineContainsTags(machineI.Tags, c.Flags().Tags) {
+		if machineI == nil || machineI.Disabled || !machineContainsTags(machineI.Tags, flags.Tags) {
 			log.Debug().Bool("machine == nil", machineI == nil).
 				Bool("disabled", machineI != nil && machineI.Disabled).
 				Strs("machine.Tags", machineI.Tags).

@@ -3,8 +3,6 @@ package workflow
 import (
 	"fmt"
 	"net/url"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/acobaugh/osrelease"
@@ -19,14 +17,9 @@ import (
 )
 
 var (
-	ErrDiskoNoOutputPaths       = errors.New("disko build output did not contain any output paths")
-	ErrArchitectureNotSupported = errors.New("architecture not supported by default kexec")
-	ErrKexecBootFailed          = errors.New("kexec did not boot into NixOS installer")
+	ErrDiskoNoOutputPaths = errors.New("disko build output did not contain any output paths")
+	ErrKexecBootFailed    = errors.New("kexec did not boot into NixOS installer")
 )
-
-const KexecURL = "https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"
-
-var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
 
 func (w *Workflow) executeBootstrapPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
 	return w.Phase(phase.Bootstrap, fleetLeaf,
@@ -101,28 +94,16 @@ func (w *Workflow) executeDiskEncryptionKeys(
 	return nil
 }
 
-func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *machine.Machine) error {
-	mi := machine.MetaInspect.Load()
-	arch := ""
-	if mi != nil {
-		arch = mi.Architecture
-	}
+func (w *Workflow) executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
+	arch := machineI.MetaInspect.Load().Architecture
 
-	if arch == "" || arch == "DRY_RUN" {
+	if arch == "DRY_RUN" {
 		arch = "x86_64"
 	}
 
-	return w.executeKexecReal(exc, machine, arch)
-}
+	kexecURL := strings.ReplaceAll(machineI.Bootstrap.Kexec.Image.String(), "<arch>", arch)
 
-// executeKexecReal performs the actual kexec bootstrap process.
-func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machineI *machine.Machine, arch string) error {
-	kexecURL, err := resolveKexecURL(machineI, arch)
-	if err != nil {
-		return err
-	}
-
-	err = w.createKexecDirectory(exc, machineI)
+	err := w.createKexecDirectory(exc, machineI)
 	if err != nil {
 		return err
 	}
@@ -152,24 +133,6 @@ func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machineI *mach
 	})
 
 	return nil
-}
-
-// resolveKexecURL returns the kexec URL, using default if not configured.
-func resolveKexecURL(machine *machine.Machine, arch string) (string, error) {
-	kexecURL := ""
-	if machine.Bootstrap.Kexec != nil {
-		kexecURL = machine.Bootstrap.Kexec.URL
-	}
-
-	if kexecURL == "" {
-		if !slices.Contains(KexecSupportedPlatforms, arch) {
-			return "", errors.Wrapf(ErrArchitectureNotSupported, "%s (supported: %s)", strconv.Quote(arch), KexecSupportedPlatforms)
-		}
-
-		kexecURL = KexecURL
-	}
-
-	return strings.ReplaceAll(kexecURL, "<arch>", arch), nil
 }
 
 // createKexecDirectory creates the temporary directory for kexec files.
