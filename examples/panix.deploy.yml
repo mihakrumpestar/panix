@@ -4,7 +4,7 @@
 # it is Golang template function definition
 # {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
 
-bootstrap_defaults: &bootstrap_defaults
+anchor_bootstrap: &bootstrap_defaults
   kexec:
     image: ./kexec-<arch>.tar.gz
   disk_encryption_keys:

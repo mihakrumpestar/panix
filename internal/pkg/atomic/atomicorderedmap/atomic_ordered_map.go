@@ -3,11 +3,8 @@ package atomicorderedmap
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 
 	"github.com/goccy/go-yaml"
-	"github.com/goccy/go-yaml/ast"
-	"github.com/goccy/go-yaml/parser"
 	"github.com/kirill-scherba/omap"
 	"github.com/pkg/errors"
 )
@@ -108,9 +105,25 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-var _ yaml.BytesUnmarshaler = (*AtomicOrderedMap[string, any])(nil)
+var _ yaml.InterfaceMarshaler = (*AtomicOrderedMap[string, any])(nil)
 
-func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(data []byte) error {
+func (m AtomicOrderedMap[K, V]) MarshalYAML() (interface{}, error) {
+	if m.Omap == nil {
+		return yaml.MapSlice{}, nil
+	}
+
+	pairs := m.Omap.Pairs()
+	result := make(yaml.MapSlice, 0, len(pairs))
+	for _, p := range pairs {
+		result = append(result, yaml.MapItem{Key: p.Key, Value: p.Value})
+	}
+
+	return result, nil
+}
+
+var _ yaml.InterfaceUnmarshaler = (*AtomicOrderedMap[string, any])(nil)
+
+func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(interface{}) error) error {
 	if m.Omap == nil {
 		omapInstance, err := omap.New[K, V]()
 		if err != nil {
@@ -121,86 +134,31 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(data []byte) error {
 		m.Omap.Clear()
 	}
 
-	if file, err := parser.ParseBytes(data, parser.ParseComments); err != nil {
-		return errors.Wrap(err, "failed to parse YAML")
-	} else if file == nil || len(file.Docs) == 0 || file.Docs[0].Body == nil {
-		return nil
-	} else if mapping, ok := file.Docs[0].Body.(*ast.MappingNode); !ok {
-		return nil
-	} else {
-		valueType := reflect.TypeFor[V]()
-		isPtr := valueType.Kind() == reflect.Pointer
-		elemType := valueType
-		if isPtr {
-			elemType = valueType.Elem()
+	typed := make(map[K]V)
+	if err := decode(&typed); err != nil {
+		return errors.Wrap(err, "failed to decode ordered map")
+	}
+
+	var ms yaml.MapSlice
+	if err := decode(&ms); err != nil {
+		return errors.Wrap(err, "failed to decode ordered map keys")
+	}
+
+	for _, item := range ms {
+		key, ok := item.Key.(K)
+		if !ok {
+			continue
 		}
 
-		for _, val := range mapping.Values {
-			key, value, processErr := processMappingValue[K, V](val, valueType, isPtr, elemType)
-			if processErr != nil {
-				return processErr
-			}
+		value, exists := typed[key]
+		if !exists {
+			continue
+		}
 
-			if err := m.Omap.Set(key, value); err != nil {
-				return errors.Wrapf(err, "failed to set key %v", key)
-			}
+		if err := m.Omap.Set(key, value); err != nil {
+			return errors.Wrapf(err, "failed to set key %v", key)
 		}
 	}
 
 	return nil
-}
-
-func processMappingValue[K comparable, V any](
-	val *ast.MappingValueNode,
-	valueType reflect.Type, isPtr bool, elemType reflect.Type,
-) (K, V, error) {
-	var (
-		key   K
-		value V
-	)
-
-	if err := yaml.NodeToValue(val.Key, &key); err != nil {
-		return key, value, errors.Wrap(err, "failed to unmarshal key")
-	}
-
-	if _, isNull := val.Value.(*ast.NullNode); isNull {
-		if isPtr && elemType.Kind() == reflect.Struct {
-			newPtr := reflect.New(elemType)
-			var ok bool
-			value, ok = newPtr.Interface().(V)
-			if !ok {
-				panic(fmt.Sprintf("type assertion failed: expected %T, got %T", value, newPtr.Interface()))
-			}
-		}
-
-		return key, value, nil
-	}
-
-	if !isPtr {
-		if err := yaml.NodeToValue(val.Value, &value); err != nil {
-			return key, value, errors.Wrapf(err, "failed to unmarshal %v", key)
-		}
-
-		return key, value, nil
-	}
-
-	if elemType.Kind() == reflect.Struct {
-		newPtr := reflect.New(elemType)
-		if err := yaml.NodeToValue(val.Value, newPtr.Interface()); err != nil {
-			return key, value, errors.Wrapf(err, "failed to unmarshal %v", key)
-		}
-
-		v, ok := newPtr.Interface().(V)
-		if !ok {
-			return key, value, errors.Errorf("type assertion failed: expected %T, got %T", value, newPtr.Interface())
-		}
-
-		value = v
-	} else {
-		if err := yaml.NodeToValue(val.Value, &value); err != nil {
-			return key, value, errors.Wrapf(err, "failed to unmarshal %v", key)
-		}
-	}
-
-	return key, value, nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
@@ -31,6 +32,12 @@ type Generator struct {
 	visited     map[reflect.Type]bool
 	definitions map[string]any
 	defTypes    map[reflect.Type]string
+	orderedDefs map[reflect.Type]orderedMapDef
+}
+
+type orderedMapDef struct {
+	valueType reflect.Type
+	allowNull bool
 }
 
 // RequiredList is a list of required fields that always serializes properly,
@@ -108,6 +115,7 @@ func NewGenerator() *Generator {
 		visited:     make(map[reflect.Type]bool),
 		definitions: make(map[string]any),
 		defTypes:    make(map[reflect.Type]string),
+		orderedDefs: make(map[reflect.Type]orderedMapDef),
 	}
 
 	generator.initDefinitionTypes()
@@ -150,12 +158,24 @@ func (g *Generator) Generate() (*Schema, error) {
 
 // initDefinitionTypes registers types that should be defined once and referenced via $ref.
 func (g *Generator) initDefinitionTypes() {
-	// Register types that appear multiple times in the schema
 	g.defTypes[reflect.TypeFor[config_attributes.Bootstrap]()] = "Bootstrap"
 	g.defTypes[reflect.TypeFor[config_attributes.NixConfig]()] = "NixConfig"
 	g.defTypes[reflect.TypeFor[config_attributes.PlainFileOrDirToTransfer]()] = "FileTransfer"
 	g.defTypes[reflect.TypeFor[config_attributes.KexecConfig]()] = "KexecConfig"
 	g.defTypes[reflect.TypeFor[ssh.SSHClient]()] = "SSH"
+
+	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *flake.Flake]]()] = orderedMapDef{
+		valueType: reflect.TypeFor[*flake.Flake](),
+		allowNull: false,
+	}
+	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration]]()] = orderedMapDef{
+		valueType: reflect.TypeFor[*configuration.Configuration](),
+		allowNull: false,
+	}
+	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *machine.Machine]]()] = orderedMapDef{
+		valueType: reflect.TypeFor[*machine.Machine](),
+		allowNull: true,
+	}
 }
 
 // processStruct processes a struct type and returns its properties and required fields.
@@ -366,24 +386,16 @@ func (g *Generator) processTypeByKind(kind reflect.Kind, typ reflect.Type, field
 		// Handle regular maps
 		return g.processMapType(typ, field)
 	case reflect.Struct:
-		return g.processStructOrOrderedMap(typ, field)
+		if def, ok := g.orderedDefs[typ]; ok {
+			return g.processOrderedMap(def)
+		}
+		return g.processStructType(typ)
 	case reflect.Interface:
 		// Interfaces can be any type
 		return &TypeDefinition{}, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedTypeKind, "%v", kind)
 	}
-}
-
-// processStructOrOrderedMap handles struct types, checking for OrderedMap first.
-func (g *Generator) processStructOrOrderedMap(typ reflect.Type, field reflect.StructField) (any, error) {
-	// Check if this is an OrderedMap
-	if g.isOrderedMap(typ) {
-		return g.processOrderedMap(field)
-	}
-
-	// Process as regular struct
-	return g.processStructType(typ)
 }
 
 // processNumericType creates a type definition for basic numeric or string types.
@@ -396,47 +408,6 @@ func (g *Generator) processNumericType(typeName string, validateTag string) *Typ
 
 // processSliceType processes slice/array types and returns their schema definition.
 func (g *Generator) processSliceType(typ reflect.Type, field reflect.StructField, validateTag string) (*TypeDefinition, error) {
-	// Check if this slice should be treated as a YAML key-value object
-	// (flakes, configurations, machines are key-value in YAML but slice internally)
-	if g.isYAMLKeyedSlice(field) {
-		// Get the element type to determine the value schema
-		elemType := typ.Elem()
-		if elemType.Kind() == reflect.Ptr {
-			elemType = elemType.Elem()
-		}
-
-		valueSchema, err := g.processType(typ.Elem(), field)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check if this field allows null values (machines does, flakes/configurations don't)
-		yamlTag := field.Tag.Get("yaml")
-		parts := strings.Split(yamlTag, ",")
-		fieldName := parts[0]
-
-		allowNull := fieldName == "machines"
-
-		var additionalProps *AdditionalPropertiesWrapper
-		if allowNull {
-			additionalProps = &AdditionalPropertiesWrapper{
-				Value: map[string]any{
-					"anyOf": []any{
-						valueSchema,
-						map[string]any{"type": "null"},
-					},
-				},
-			}
-		} else {
-			additionalProps = &AdditionalPropertiesWrapper{Value: valueSchema}
-		}
-
-		return &TypeDefinition{
-			Type:                 "object",
-			AdditionalProperties: additionalProps,
-		}, nil
-	}
-
 	itemType, err := g.processType(typ.Elem(), field)
 	if err != nil {
 		return nil, err
@@ -597,98 +568,30 @@ func parseInt(s string) (int, error) {
 	return parsed, nil
 }
 
-// isOrderedMap checks if a type is an OrderedMap.
-func (g *Generator) isOrderedMap(typ reflect.Type) bool {
-	// OrderedMap is a struct with an embedded *omap.Omap field
-	if typ.Kind() != reflect.Struct {
-		return false
-	}
-
-	// Check if it has the Omap field which is characteristic of OrderedMap
-	_, hasOmap := typ.FieldByName("Omap")
-
-	return hasOmap
-}
-
-// isYAMLKeyedSlice checks if a slice field should be treated as a YAML object
-// (key-value format) for schema generation, even though it's internally stored as a slice.
-func (g *Generator) isYAMLKeyedSlice(field reflect.StructField) bool {
-	yamlTag := field.Tag.Get("yaml")
-	if yamlTag == "" {
-		return false
-	}
-
-	// Check field name from yaml tag
-	parts := strings.Split(yamlTag, ",")
-	fieldName := parts[0]
-
-	// These fields are YAML key-value objects but stored as slices internally
-	return fieldName == "flakes" || fieldName == "configurations" || fieldName == "machines"
-}
-
 // processOrderedMap processes an OrderedMap type and returns its schema definition.
-// Since Go doesn't provide access to generic type parameters at runtime via reflection,
-// we manually handle the known OrderedMap types based on their field names.
-func (g *Generator) processOrderedMap(field reflect.StructField) (*TypeDefinition, error) {
-	// Get the field name from the yaml tag or struct field name
-	yamlTag := field.Tag.Get("yaml")
-	fieldName := field.Name
-
-	if yamlTag != "" && yamlTag != "-" {
-		parts := strings.Split(yamlTag, ",")
-		if parts[0] != "" {
-			fieldName = parts[0]
-		}
+func (g *Generator) processOrderedMap(def orderedMapDef) (*TypeDefinition, error) {
+	valueSchema, err := g.processType(def.valueType, reflect.StructField{})
+	if err != nil {
+		return nil, err
 	}
 
-	// Get the value type for AdditionalProperties based on field name
-	var valueType reflect.Type
-
-	var allowNull bool
-
-	switch fieldName {
-	case "flakes":
-		valueType = reflect.TypeFor[*flake.Flake]()
-		allowNull = false
-	case "configurations":
-		valueType = reflect.TypeFor[*configuration.Configuration]()
-		allowNull = false
-	case "machines":
-		valueType = reflect.TypeFor[*machine.Machine]()
-		allowNull = true
-	}
-
-	if valueType != nil {
-		valueSchema, err := g.processType(valueType, field)
-		if err != nil {
-			return nil, err
-		}
-
-		var additionalProps *AdditionalPropertiesWrapper
-		if allowNull {
-			// Allow null/empty values for machines (key-only is valid)
-			additionalProps = &AdditionalPropertiesWrapper{
-				Value: map[string]any{
-					"anyOf": []any{
-						valueSchema,
-						map[string]any{"type": "null"},
-					},
+	var additionalProps *AdditionalPropertiesWrapper
+	if def.allowNull {
+		additionalProps = &AdditionalPropertiesWrapper{
+			Value: map[string]any{
+				"anyOf": []any{
+					valueSchema,
+					map[string]any{"type": "null"},
 				},
-			}
-		} else {
-			// Flakes and configurations require a value
-			additionalProps = &AdditionalPropertiesWrapper{Value: valueSchema}
+			},
 		}
-
-		return &TypeDefinition{
-			Type:                 "object",
-			AdditionalProperties: additionalProps,
-		}, nil
+	} else {
+		additionalProps = &AdditionalPropertiesWrapper{Value: valueSchema}
 	}
 
 	return &TypeDefinition{
 		Type:                 "object",
-		AdditionalProperties: &AdditionalPropertiesWrapper{Value: &TypeDefinition{Type: "object"}},
+		AdditionalProperties: additionalProps,
 	}, nil
 }
 

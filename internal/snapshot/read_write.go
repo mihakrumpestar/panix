@@ -1,13 +1,14 @@
 package snapshot
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/goccy/go-json"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
+	"github.com/mihakrumpestar/panix/internal/pkg/jsonx"
 	"github.com/pkg/errors"
 )
 
@@ -20,9 +21,10 @@ func Read(path string) (*config.Config, error) {
 	}
 
 	var s config.Config
-	err = json.Unmarshal(data, &s)
+
+	err = jsonx.Decode(data, &s)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal snapshot")
+		return nil, err
 	}
 
 	s.PostUnmarshalInit()
@@ -36,13 +38,15 @@ func Write(dir string, s *config.Config) error {
 		return errors.Wrap(err, "failed to create snapshot directory")
 	}
 
-	data, err := json.MarshalIndent(s, "", "  ")
+	var data bytes.Buffer
+
+	err = jsonx.Encode(s, &data)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal snapshot")
+		return err
 	}
 
 	path := filepath.Join(dir, fileName(s))
-	err = os.WriteFile(path, data, filepermissions.DefaultFilePermissions)
+	err = os.WriteFile(path, data.Bytes(), filepermissions.DefaultFilePermissions)
 	if err != nil {
 		return errors.Wrap(err, "failed to write snapshot")
 	}

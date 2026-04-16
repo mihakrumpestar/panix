@@ -1,12 +1,10 @@
 package config
 
 import (
-	"bytes"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -14,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
+	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
@@ -87,11 +86,9 @@ func decodeConfigFile(configPath string) (*Config, error) {
 	}
 
 	conf := &Config{}
-	decoder := yaml.NewDecoder(bytes.NewReader(processedYAML), yaml.Strict())
-
-	err = decoder.Decode(conf)
+	err = yamlx.Decode(processedYAML, conf)
 	if err != nil {
-		return nil, errors.New("decoder: " + yaml.FormatError(err, true, true))
+		return nil, err
 	}
 
 	return conf, nil

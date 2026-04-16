@@ -10,6 +10,7 @@ import (
 	"github.com/goccy/go-yaml/parser"
 	"github.com/goccy/go-yaml/printer"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
+	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -37,14 +38,9 @@ func EvalConfig(configPath string, outputPath string) error {
 
 	var formatted bytes.Buffer
 
-	encoder := yaml.NewEncoder(&formatted,
-		yaml.UseLiteralStyleIfMultiline(true),
-		yaml.Indent(yamlIndent),
-	)
-
-	err = encoder.Encode(orderedResult)
+	err = yamlx.Encode(orderedResult, &formatted)
 	if err != nil {
-		return errors.Wrap(err, "failed to encode YAML")
+		return err
 	}
 
 	return writeOutput(formatted.Bytes(), outputPath)
@@ -62,9 +58,9 @@ func parseAndOrderYAML(yamlData []byte) (yaml.MapSlice, error) {
 
 	var decoded any
 
-	err = yaml.NewDecoder(bytes.NewReader(yamlData)).Decode(&decoded)
+	err = yamlx.Decode(yamlData, &decoded)
 	if err != nil {
-		return nil, errors.New(yaml.FormatError(err, true, false))
+		return nil, err
 	}
 
 	return rebuildOrdered(astFile, decoded), nil

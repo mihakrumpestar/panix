@@ -297,9 +297,10 @@ You can provide a custom kexec tarball:
 ```yaml
 bootstrap:
   kexec:
-    url: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
+    image: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
     # <arch> placeholder replaced with detected architecture
-    extra_flags: "--no-sync"  # Optional flags passed to kexec (default: "")
+    extra_flags: # Optional flags passed to kexec (default: "")
+      "--no-sync"
     ssh_port: 22 # Optional kexec ssh port (default: 22)
 ```
 
@@ -374,7 +375,7 @@ machines:
       hostname: 192.168.1.100
     bootstrap:
       kexec:
-        url: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
+        image: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
 ```
 
 The `<arch>` placeholder is automatically replaced with the detected architecture (eg. `x86_64`). Panix detects whether `url` is a local path or HTTP URL - local paths are transferred via `rsync`, URLs trigger remote download with `curl`.
@@ -562,11 +563,11 @@ machines:
   workstation:              # Detected as local, no SSH
 ```
 
-This can be overriden (if you want to prevent this, or if hostname detecton does not work):
+This can be overriden (if you want to prevent this, or if hostname detecton does not work for you):
 
 ```yaml
 flags:
-  override_local_machine: my-local-machine
+  local_machine_hostname: my-local-machine
 ```
 
 </details>
@@ -579,7 +580,7 @@ Panix supports three output modes via the `--output` flag:
 | Mode | Description |
 |------|-------------|
 | `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
-| `console` | Human-readable log output to stdout (auto-selected when no TTY detected) |
+| `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
 | `json` | JSON-structured log output to stdout |
 
 ```bash
@@ -596,7 +597,7 @@ panix deploy --output json
 panix deploy --output json --log
 ```
 
-When no TTY is detected, `--output console` is automatically selected since the TUI cannot render without a terminal.
+When no TTY is present, `--output console` is automatically selected since the TUI cannot render without a terminal.
 
 **File logging** is enabled with `--log` and writes structured JSON to a file with an epoch timestamp in the name (e.g. `panix.1746565600.log`):
 
@@ -623,13 +624,13 @@ Example:
 {"level":"error","event":"workflow_end","machines":{"fleet/infrastructure/personal-workstation/fake":{"status":"failed","phase":"inspect","duration":0.065123731,"error":"reachability check failed: regular SSH is unreachable"},"fleet/infrastructure/personal-workstation/personal-workstation":{"status":"done","phase":"activate","duration":6.746481573}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
 ```
 
-**CI/CD** usage:
+There are 2 additional failure modes:
 
 ```bash
 # Fail immediately on first error
 panix deploy --require-all-success
 
-# In TUI mode (console mode does this automatically), you can force it exit when workflow finishes (default is that it stays open)
+# In TUI mode (console mode does this automatically), you can force it exit when workflow finishes (by default it stays open)
 panix deploy --exit-on-complete
 ```
 
@@ -661,14 +662,17 @@ Environment variables and dynamic values:
 fleet:
   flakes:
     my-flake:
-      url: {{ env "MY_FLAKE_URL" }}
+      url: |
+        {{ env "MY_FLAKE_URL" }}
       configurations:
         server:
           machines:
             server-01:
               ssh:
-                hostname: {{ env "SERVER_HOST" | default "192.168.1.100" }}
-                port: {{ env "SSH_PORT" | default "22" }}
+                hostname: |
+                  {{ env "SERVER_HOST" | default "192.168.1.100" }}
+                port: |
+                  {{ env "SSH_PORT" | default "22" }}
 ```
 
 ### Conditional Logic
@@ -723,7 +727,7 @@ Panix provides 100+ functions from Sprout, documentaion is available in [Sprout 
 Use YAML anchors for reusable blocks alongside templates:
 
 ```yaml
-bootstrap_defaults: &bootstrap_defaults
+anchor_bootstrap: &bootstrap_defaults
   disk_encryption_keys:
     - local_path: /tmp/disko-encryption-password.txt
       remote_path: /tmp/disko-encryption-password.txt
@@ -740,6 +744,9 @@ fleet:
                 post_bootstrap_hooks:
                   - systemd-cryptenroll --tpm2-device=auto /dev/sda2
 ```
+
+> [!WARNING]
+> When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
 
 ### Eval Command
 
@@ -762,7 +769,7 @@ The `eval` command:
 - Template definitions (`{{define}}`) work inside YAML comments
 - Standard Go template syntax with `{{` and `}}` delimiters
 - YAML LSP may complain about template syntax - this is cosmetic
-- For complex multiline templates, use block scalars (`|`) in hooks
+- For complex multiline templates, use block scalars (`|`)
 
 </details>
 
@@ -1067,12 +1074,11 @@ flags: # Listed are default values, all also overridable using CLI arguments
   exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
   require_all_success: false           # Abort if any task fails (for CI/CD)
   skip_phases: []                      # Phases to skip (not all phases can be skipped)
-  override_local_machine: my-laptop    # Override which machine is considered local (no SSH)
+  local_machine_hostname: my-laptop    # Override which machine is considered local based on machine name (no SSH)
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
   output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
-  bootstrap:
-    disable_disko: false               # Disable disko tool build/transfer/bootstrap
+
   tui:
     show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)
     show_active_only: false            # Show only running/errored logs (keybind a)
@@ -1136,8 +1142,9 @@ fleet:
           identity_file: ./keys/bootstrap.key
           strict_key_checking: false   # Default: false for bootstrap SSH
           disable_auto_add_host_key: true  # Default: true for bootstrap SSH
+        disable_disko: false           # Disable disko tool build/transfer/bootstrap
         kexec:                         # Kexec configuration for non-NixOS machines
-          url: ""                      # Custom kexec tarball URL (default: nix-community image)
+          image: ""                      # Custom kexec tarball image (default: nix-community image)
           extra_flags: ""              # Extra flags for kexec (e.g. '--no-sync')
           ssh_port: 22                 # SSH port for kexec installer (default: 22)
         disk_encryption_keys:          # Transferred BEFORE disko runs
@@ -1188,7 +1195,7 @@ fleet:
               strict_key_checking: false
               disable_auto_add_host_key: true
             kexec:
-              url: ""
+              image: ""
               extra_flags: ""
               ssh_port: 22
             disk_encryption_keys: []
@@ -1233,7 +1240,7 @@ fleet:
                   strict_key_checking: false
                   disable_auto_add_host_key: true
                 kexec:
-                  url: ""
+                  image: ""
                   extra_flags: ""
                   ssh_port: 22
                 disk_encryption_keys: []
