@@ -20,7 +20,6 @@ type ColorSchemeFooter struct {
 type ColorSchemeHeader struct {
 	Title  lipgloss.Style
 	Border lipgloss.Style
-	Time   lipgloss.Style
 }
 
 type ColorSchemeStatus struct {
@@ -78,7 +77,6 @@ func DefaultColorScheme() *ColorScheme {
 		Header: ColorSchemeHeader{
 			Title:  makeForegroundStyle("#00ADD8", true),
 			Border: borderStyle,
-			Time:   makeForegroundStyle("#6EE7B7", false),
 		},
 		Status: ColorSchemeStatus{
 			OK:      makeForegroundStyle("#50FA7B", false),

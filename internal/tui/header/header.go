@@ -49,8 +49,8 @@ func (h *Header) render(width int, cs *colorscheme.ColorScheme) string {
 	parts := []string{
 		cs.Status.Running.Render(fmt.Sprintf("v%s", h.snapshot.PanixVersion)),
 		cs.Table.Border.Render(reason),
-		cs.Header.Time.Render("started:", formatTime(h.snapshot.StartTime)),
-		cs.Header.Time.Render("taken:", formatTime(h.snapshot.SnapshotTime)),
+		cs.Table.Border.Render("started:", formatTime(h.snapshot.StartTime)),
+		cs.Table.Border.Render("taken:", formatTime(h.snapshot.SnapshotTime)),
 	}
 
 	if h.snapshot.WorkflowError != nil {

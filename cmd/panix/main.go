@@ -96,17 +96,19 @@ func main() {
 	// Wokflow commands
 
 	case "inspect":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Inspect.WorkflowFlags}, []phase.Phase{phase.Inspect}))
 	case "build":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Build}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Build.WorkflowFlags}, []phase.Phase{phase.Build}))
 	case "deploy":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Transfer, phase.Secrets, phase.Activate}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Deploy.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Transfer, phase.Secrets, phase.Activate}))
 	case "secrets":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Secrets}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Secrets.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Secrets}))
 	case "rollback":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Rollback.WorkflowFlags, RollbackFlags: cli.Rollback.RollbackFlags}, []phase.Phase{phase.Inspect, phase.Rollback}))
+		ctx.FatalIfErrorf(cli.runTui(flags.Flags{RollbackFlags: cli.Rollback.RollbackFlags, WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Rollback}))
 	}
 }
+
+// Complementary
 
 func (c *CLI) runInitCommand(outputPath string, force bool) error {
 	if !force {
@@ -143,14 +145,10 @@ func (c *CLI) runSnapshot(path string) error {
 
 // Wokflow
 
-func (c *CLI) runTui(f flags.Flags, commandPhases []phase.Phase, modifiers ...func(conf *config.Config)) error {
+func (c *CLI) runTui(f flags.Flags, commandPhases []phase.Phase) error {
 	conf, err := config.LoadConfig(f, commandPhases)
 	if err != nil {
 		return errors.Wrap(err, "failed to load config")
-	}
-
-	for _, modifier := range modifiers {
-		modifier(conf)
 	}
 
 	if conf.Flags.Output != flags.OutputModeTui {
