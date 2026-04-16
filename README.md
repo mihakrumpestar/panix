@@ -986,8 +986,8 @@ Flags:
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
       --local-machine-hostname=STRING
                                    Hostname of the machine that is local
-                                   (won't use ssh to connect to it);
-                                   default:your machines hostname
+                                   (won't use ssh to connect to it) (default:
+                                   your deployment machine hostname)
                                    ($PANIX_LOCAL_MACHINE_HOSTNAME)
       --dry-run                    Show what would be done without executing
                                    ($PANIX_DRY_RUN)

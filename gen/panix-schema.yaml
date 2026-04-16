@@ -33,7 +33,7 @@ properties:
         description: Exit TUI on completion; 'retry' and 'restart' are disabled in this mode
       local_machine_hostname:
         type: string
-        description: Hostname of the machine that is local (won't use ssh to connect to it); default:your machines hostname
+        description: "Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"
       logging:
         type: object
         properties:

@@ -27,7 +27,7 @@ type WorkflowFlags struct {
 	ConfigFlag           `yaml:",inline"`
 	Tags                 []string                  `yaml:"tags" json:"tags,omitempty" short:"t" help:"Filter machines by tags (flakes, configs and names are already registered as tags)"`
 	RequireAllSuccess    bool                      `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD"`
-	LocalMachineHostname string                    `yaml:"local_machine_hostname" json:"local_machine_hostname,omitempty" help:"Hostname of the machine that is local (won't use ssh to connect to it); default:your machines hostname"`
+	LocalMachineHostname string                    `yaml:"local_machine_hostname" json:"local_machine_hostname,omitempty" help:"Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"`
 	DryRun               bool                      `yaml:"dry_run" json:"dry_run,omitempty" help:"Show what would be done without executing"`
 	DryRunWithInspect    bool                      `yaml:"dry_run_with_inspect" json:"dry_run_with_inspect,omitempty" help:"Show what would be done without executing, but with real inspect query"`
 	Timeout              time.Duration             `yaml:"timeout" json:"timeout,omitempty" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
