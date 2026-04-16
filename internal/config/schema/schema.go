@@ -175,11 +175,7 @@ func (g *Generator) shouldSkipField(field reflect.StructField) bool {
 		return true
 	}
 
-	if strings.Contains(field.Tag.Get("desc"), "CLI-only") {
-		return true
-	}
-
-	if strings.Contains(field.Tag.Get("flag"), " ") && field.Name == "Config" {
+	if strings.Contains(field.Tag.Get("flag"), " ") {
 		return true
 	}
 

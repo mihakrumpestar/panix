@@ -15,6 +15,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/go-sprout/sprout v1.0.3
+	github.com/goccy/go-json v0.10.6
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gookit/goutil v0.7.4
 	github.com/hayageek/threadsafe v1.0.1

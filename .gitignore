@@ -39,4 +39,4 @@ temp_key.pub
 panix
 panix.log
 panix.*.log
-panix-snapshot-*
+/panix-snapshot-*

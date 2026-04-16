@@ -1,11 +1,11 @@
 package snapshot
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/goccy/go-json"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/pkg/errors"
