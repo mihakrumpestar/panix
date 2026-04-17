@@ -4,11 +4,11 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
-	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
+	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
 	"github.com/pkg/errors"
 )
 
-// AtomicTimeAndState is a wrapper around atomicpointer.AtomicPointer for easier access
+// AtomicTimeAndState is a wrapper around atomicpointer.AtomicPointer for easier access.
 type AtomicTimeAndState struct {
 	*atomicpointer.AtomicPointer[TimeAndState]
 }
@@ -43,7 +43,7 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 	tas.Update(func(tas *TimeAndState) {
 		tas.DurationCache = timeNow.Sub(tas.StartTime)
 		tas.EndTime = timeNow
-		tas.EndError = errorjson.New(err)
+		tas.EndError = jsonerror.New(err)
 	})
 }
 

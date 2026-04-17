@@ -11,6 +11,7 @@ import (
 
 // Flake, Configuration, and Machine Attributes
 
+//nolint:lll
 type Attributes struct {
 	SSH     *ssh.SSHClient              `yaml:"ssh" json:"ssh,omitempty" desc:"SSH configuration for remote access"`
 	Tags    []string                    `yaml:"tags" json:"tags,omitempty" desc:"Tags for filtering (flakes, configs and machines are already registered as tags)"`
@@ -19,7 +20,7 @@ type Attributes struct {
 	Disabled           bool            `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
 	SudoProgram        SudoProgram     `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the sudo program" default:"sudo"`
 	HardwareConfigPath string          `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Path to hardware config"`
-	ActivationMode     ActivationModeD `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"` //nolint:lll
+	ActivationMode     ActivationModeD `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"`
 
 	Bootstrap Bootstrap `yaml:"bootstrap" json:"bootstrap" desc:"Bootstrap configuration for initial provisioning"`
 	Nix       NixConfig `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
@@ -36,20 +37,22 @@ type PlainFileOrDirToTransfer struct {
 	Permissions FileMode `yaml:"permissions,omitempty" json:"permissions,omitempty" desc:"File permissions" default:"0700"`
 }
 
+//nolint:lll
 type Bootstrap struct {
-	SSH                           *ssh.SSHClient              `yaml:"ssh" json:"ssh,omitempty" desc:"Bootstrap SSH configuration (used during initial provisioning)"`                                                                                                                                //nolint:lll
-	DiskEncryptionKeys            []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'"` //nolint:lll
+	SSH                           *ssh.SSHClient              `yaml:"ssh" json:"ssh,omitempty" desc:"Bootstrap SSH configuration (used during initial provisioning)"`
+	DiskEncryptionKeys            []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'"`
 	PostBootstrapHooks            []PostBootstrapHookCommand  `yaml:"post_bootstrap_hooks" json:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning"`
-	PostBootstrapInstallHooks     []PostBootstrapHookCommand  `yaml:"post_bootstrap_install_hooks" json:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`     //nolint:lll
-	PostBootstrapProvisionedHooks []PostBootstrapHookCommand  `yaml:"post_bootstrap_provisioned_hooks" json:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"` //nolint:lll
-	Kexec                         *KexecConfig                `yaml:"kexec" json:"kexec,omitempty" desc:"Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation"`    //nolint:lll
+	PostBootstrapInstallHooks     []PostBootstrapHookCommand  `yaml:"post_bootstrap_install_hooks" json:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`
+	PostBootstrapProvisionedHooks []PostBootstrapHookCommand  `yaml:"post_bootstrap_provisioned_hooks" json:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`
+	Kexec                         *KexecConfig                `yaml:"kexec" json:"kexec,omitempty" desc:"Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation"`
 	DisableDisko                  bool                        `yaml:"disable_disko" json:"disable_disko,omitempty" desc:"Disables building, transfer and execution of disko tool"`
-	DisableAutomaticReboot        bool                        `yaml:"disable_automatic_reboot" json:"disable_automatic_reboot,omitempty" desc:"Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)"`                                                                          //nolint:lll
-	ForceBootstrap                bool                        `yaml:"force_bootstrap" json:"force_bootstrap,omitempty" desc:"Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)" validate:"required_if=ForceBootstrapKexec true"`                                                            //nolint:lll
-	ForceBootstrapKexec           bool                        `yaml:"force_bootstrap_kexec" json:"force_bootstrap_kexec,omitempty" desc:"Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)"`                                                                       //nolint:lll
-	AllowDestructiveActions       bool                        `yaml:"allow_destructive_actions" json:"allow_destructive_actions,omitempty" desc:"Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)" validate:"required_if=ForceBootstrap true,required_if=ForceBootstrapKexec true"` //nolint:lll
+	DisableAutomaticReboot        bool                        `yaml:"disable_automatic_reboot" json:"disable_automatic_reboot,omitempty" desc:"Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)"`
+	ForceBootstrap                bool                        `yaml:"force_bootstrap" json:"force_bootstrap,omitempty" desc:"Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)" validate:"required_if=ForceBootstrapKexec true"`
+	ForceBootstrapKexec           bool                        `yaml:"force_bootstrap_kexec" json:"force_bootstrap_kexec,omitempty" desc:"Force kexec method even if already in NixOS installer (requires force_bootstrap and allow_destructive_actions)"`
+	AllowDestructiveActions       bool                        `yaml:"allow_destructive_actions" json:"allow_destructive_actions,omitempty" desc:"Allow destructive bootstrap actions (required for force_bootstrap and force_bootstrap_kexec)" validate:"required_if=ForceBootstrap true,required_if=ForceBootstrapKexec true"`
 }
 
+//nolint:lll
 type KexecConfig struct {
 	Image      KexecImage  `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"`
 	ExtraFlags string      `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
@@ -61,6 +64,7 @@ type PostBootstrapHookCommand string
 const PostBootstrapHookWaitForOnline PostBootstrapHookCommand = "waitForOnline"
 const PostBootstrapHookWaitForOffline PostBootstrapHookCommand = "waitForOffline"
 
+//nolint:lll
 type NixConfig struct {
 	ExtraFlags        []string `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags applied to both 'nix build' and 'nix copy'"`
 	BuildFlags        []string `yaml:"build_flags" json:"build_flags,omitempty" desc:"Extra flags for 'nix build' command (e.g. '--max-jobs', '4')"`

@@ -203,7 +203,13 @@ func (b *BuildLogs) shouldHidePhase(p phase.Phase, phaseLog *phaselogs.PhaseLog)
 	return shouldHide && tas.IsFinished() && tas.EndError == nil
 }
 
-func (b *BuildLogs) addPhases(parent *tree.Tree, logNode *logs.Logs, entityXpath xpath.Xpath, indent int, stopAtError bool, allowed ...phase.Phase) bool {
+func (b *BuildLogs) addPhases(
+	parent *tree.Tree,
+	logNode *logs.Logs,
+	entityXpath xpath.Xpath,
+	indent int, stopAtError bool,
+	allowed ...phase.Phase,
+) bool {
 	if logNode == nil || logNode.PhaseLogs == nil {
 		return false
 	}
@@ -320,7 +326,9 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	}
 
 	errXpath := cmdXpath.NewXpathWithAppend("error")
-	if err := tasCached.EndError; err != nil {
+
+	err := tasCached.EndError
+	if err != nil {
 		errMsg := "✗ Command failed: " + err.Error()
 		cmdNode.Child(b.conf.ColorScheme.Error.Color.Render(
 			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, cmdIndent+treeStep),

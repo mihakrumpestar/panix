@@ -25,10 +25,15 @@ func (m *model) keyDefs() []footer.KeyDef {
 
 	if !m.isSnapshot {
 		kds = append(kds,
-			footer.KeyDef{Keys: []string{"r"}, Help: "retry", Handler: m.handleRetry},
-			footer.KeyDef{Keys: []string{"ctrl+r"}, Help: "restart", Handler: m.handleRestart},
 			footer.KeyDef{Keys: []string{"s"}, Help: "snapshot", Handler: m.handleSnapshot},
 		)
+
+		if !m.conf.Flags.ExitOnComplete {
+			kds = append(kds,
+				footer.KeyDef{Keys: []string{"r"}, Help: "retry", Handler: m.handleRetry},
+				footer.KeyDef{Keys: []string{"ctrl+r"}, Help: "restart", Handler: m.handleRestart},
+			)
+		}
 	}
 
 	return kds

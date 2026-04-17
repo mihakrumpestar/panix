@@ -3,7 +3,7 @@ package atomictimeandstate
 import (
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
+	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
 	"github.com/pkg/errors"
 )
 
@@ -11,7 +11,7 @@ type TimeAndState struct {
 	StartTime     time.Time            `json:"start_time"`
 	EndTime       time.Time            `json:"end_time"`
 	DurationCache time.Duration        `json:"duration"`
-	EndError      *errorjson.ErrorJSON `json:"end_error,omitempty"`
+	EndError      *jsonerror.JSONError `json:"end_error,omitempty"`
 
 	live bool
 }

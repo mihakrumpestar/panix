@@ -88,13 +88,15 @@ func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 	return s.nextTick()
 }
 
-func (s *Spinners) nextTick() tea.Cmd {
-	return tea.Tick(spinner.Dot.FPS, func(time.Time) tea.Msg { return tickMsg{} })
-}
-
 func (s *Spinners) Debug() string {
 	var str strings.Builder
 	fmt.Fprintf(&str, "\nSpinners: %d (ticking: %v)\n", s.entries.Len(), s.ticking)
 
 	return str.String()
+}
+
+// helpers
+
+func (s *Spinners) nextTick() tea.Cmd {
+	return tea.Tick(spinner.Dot.FPS, func(time.Time) tea.Msg { return tickMsg{} })
 }

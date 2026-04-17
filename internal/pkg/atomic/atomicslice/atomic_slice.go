@@ -44,7 +44,9 @@ func (s *AtomicSlice[T]) MarshalJSON() ([]byte, error) {
 
 func (s *AtomicSlice[T]) UnmarshalJSON(data []byte) error {
 	var items []T
-	if err := json.Unmarshal(data, &items); err != nil {
+
+	err := json.Unmarshal(data, &items)
+	if err != nil {
 		return errors.Wrap(err, "unmarshal atomic slice")
 	}
 

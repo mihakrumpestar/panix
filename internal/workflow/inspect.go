@@ -418,15 +418,15 @@ func parseGenerationLine(idx int, line string) (uint, generationInfo, bool, bool
 	isCurrent := len(fields) > currentFieldIdx && fields[len(fields)-1] == "True"
 
 	var info generationInfo
-	if len(fields) >= 2 {
+	if len(fields) >= 2 { //nolint:mnd
 		info.Date = fields[1]
 	}
 
-	if len(fields) >= 4 {
+	if len(fields) >= 4 { //nolint:mnd
 		info.Nixos = fields[3]
 	}
 
-	if len(fields) >= 5 {
+	if len(fields) >= 5 { //nolint:mnd
 		info.Kernel = fields[4]
 	}
 

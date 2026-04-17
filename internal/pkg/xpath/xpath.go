@@ -95,7 +95,7 @@ func (x Xpath) FleetLeaf() (string, string, string) {
 	switch numOfParts {
 	case 1:
 		return "", "", parts[0]
-	case 2:
+	case 2: //nolint:mnd
 		return "", parts[0], parts[1]
 	default:
 		return parts[numOfParts-3], parts[numOfParts-2], parts[numOfParts-1]
@@ -108,16 +108,15 @@ func (x Xpath) String() string {
 
 func (x Xpath) MarshalJSON() ([]byte, error) {
 	b, err := json.Marshal(x.path)
+
 	return b, errors.Wrap(err, "marshal xpath")
 }
 
 func (x *Xpath) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
+	err := json.Unmarshal(data, &x.path)
+	if err != nil {
 		return errors.Wrap(err, "unmarshal xpath")
 	}
-
-	x.path = s
 
 	return nil
 }

@@ -22,7 +22,8 @@ type CommandLog struct {
 	Command         string `yaml:"-" json:"command,omitempty"`
 
 	// Mutate
-	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `yaml:"-" json:"output,omitempty"` // Std In and Out; Each line is a separate buffer to allow line replacement
+	// Output is StdIn and StdOut, each line is a separate buffer to allow line replacement
+	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `yaml:"-" json:"output,omitempty"`
 	TimeAndState *atomictimeandstate.AtomicTimeAndState               `yaml:"-" json:"time_and_state,omitempty"`
 }
 

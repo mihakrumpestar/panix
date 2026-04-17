@@ -394,7 +394,8 @@ func parseDefaultValue(val string, typ reflect.Type) any {
 		return val == "true"
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if intVal, err := strconv.Atoi(val); err == nil {
+		intVal, err := strconv.Atoi(val)
+		if err == nil {
 			return intVal
 		}
 
@@ -434,12 +435,14 @@ func GenerateSchema(outputPath string) error {
 
 	dir := filepath.Dir(outputPath)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, filepermissions.DefaultDirPermissions); err != nil {
+		err = os.MkdirAll(dir, filepermissions.DefaultDirPermissions)
+		if err != nil {
 			return errors.Wrapf(err, "failed to create directory %s", dir)
 		}
 	}
 
-	if err := os.WriteFile(outputPath, schemaYAML, filepermissions.DefaultFilePermissions); err != nil {
+	err = os.WriteFile(outputPath, schemaYAML, filepermissions.DefaultFilePermissions)
+	if err != nil {
 		return errors.Wrapf(err, "failed to write schema to %s", outputPath)
 	}
 

@@ -93,15 +93,30 @@ func main() {
 
 	// Wokflow commands
 	case "inspect":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Inspect.WorkflowFlags}, []phase.Phase{phase.Inspect}))
+		flags := flags.Flags{WorkflowFlags: cli.Inspect.WorkflowFlags}
+		commandPhases := []phase.Phase{phase.Inspect}
+
+		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
 	case "build":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Build.WorkflowFlags}, []phase.Phase{phase.Build}))
+		flags := flags.Flags{WorkflowFlags: cli.Build.WorkflowFlags}
+		commandPhases := []phase.Phase{phase.Build}
+
+		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
 	case "deploy":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Deploy.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Transfer, phase.Secrets, phase.Activate}))
+		flags := flags.Flags{WorkflowFlags: cli.Deploy.WorkflowFlags}
+		commandPhases := []phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Transfer, phase.Secrets, phase.Activate}
+
+		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
 	case "secrets":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Secrets.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Secrets}))
+		flags := flags.Flags{WorkflowFlags: cli.Secrets.WorkflowFlags}
+		commandPhases := []phase.Phase{phase.Inspect, phase.Secrets}
+
+		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
 	case "rollback":
-		ctx.FatalIfErrorf(cli.runTui(flags.Flags{RollbackFlags: cli.Rollback.RollbackFlags, WorkflowFlags: cli.Rollback.WorkflowFlags}, []phase.Phase{phase.Inspect, phase.Rollback}))
+		flags := flags.Flags{RollbackFlags: cli.Rollback.RollbackFlags, WorkflowFlags: cli.Rollback.WorkflowFlags}
+		commandPhases := []phase.Phase{phase.Inspect, phase.Rollback}
+
+		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
 	}
 }
 

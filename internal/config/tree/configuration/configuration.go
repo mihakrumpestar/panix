@@ -8,11 +8,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+//nolint:lll
 type Configuration struct {
 	attributes.Attributes `yaml:",inline"`
 
 	Machines    atomicorderedmap.AtomicOrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required" desc:"Machines configuration"`
-	FlakeOutput FlakeOutput                                                 `yaml:"flake_output" json:"flake_output" desc:"Override flake output" default:"nixosConfigurations.<name>.config.system.build.toplevel"` //nolint:lll
+	FlakeOutput FlakeOutput                                                 `yaml:"flake_output" json:"flake_output" desc:"Override flake output" default:"nixosConfigurations.<name>.config.system.build.toplevel"`
 	// Internal
 	MetaBuild *MetaBuild `yaml:"-" json:"meta_build,omitempty"`
 	Logs      *logs.Logs `yaml:"-" json:"logs,omitempty"`

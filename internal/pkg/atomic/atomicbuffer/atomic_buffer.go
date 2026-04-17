@@ -66,7 +66,9 @@ func (s *AtomicBuffer) MarshalJSON() ([]byte, error) {
 
 func (s *AtomicBuffer) UnmarshalJSON(data []byte) error {
 	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
+
+	err := json.Unmarshal(data, &str)
+	if err != nil {
 		return errors.Wrap(err, "unmarshal atomic buffer")
 	}
 

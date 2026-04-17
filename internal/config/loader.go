@@ -107,7 +107,9 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 	}
 
 	if conf.Flags.LocalMachineHostname == "" {
-		hostname, err := os.Hostname()
+		var hostname string
+
+		hostname, err = os.Hostname()
 		if err != nil {
 			return errors.Wrap(err, "failed to get hostname")
 		}

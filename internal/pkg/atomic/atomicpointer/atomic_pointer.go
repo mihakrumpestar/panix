@@ -60,7 +60,9 @@ func (p *AtomicPointer[T]) UnmarshalJSON(data []byte) error {
 	}
 
 	var val T
-	if err := json.Unmarshal(data, &val); err != nil {
+
+	err := json.Unmarshal(data, &val)
+	if err != nil {
 		return errors.Wrap(err, "unmarshal atomic pointer")
 	}
 

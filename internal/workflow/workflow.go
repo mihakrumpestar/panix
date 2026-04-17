@@ -87,42 +87,46 @@ func (w *Workflow) Cancel() error {
 func (w *Workflow) NewTaskWithRetry(phase phase.Phase, logs *logs.Logs, f func() error) error {
 	for {
 		err := f()
-		if err != nil {
-			if w.conf.Flags.RequireAllSuccess {
-				w.cancel()
-
-				return err
-			}
-
-			if w.conf.Flags.ExitOnComplete {
-				return err
-			}
-
-			err = w.state.Retry.Wait(w.ctx)
-			if err != nil {
-				return errors.Wrap(err, "retry wait failed")
-			}
-
-			phaseLog, ok := logs.PhaseLogs.Get(phase)
-			if !ok {
-				continue
-			}
-
-			phaseLog.Clear()
-		} else {
+		if err == nil {
 			return nil
 		}
+
+		if w.conf.Flags.RequireAllSuccess {
+			w.cancel()
+
+			return err
+		}
+
+		if w.conf.Flags.ExitOnComplete {
+			return err
+		}
+
+		err = w.state.Retry.Wait(w.ctx)
+		if err != nil {
+			return errors.Wrap(err, "retry wait failed")
+		}
+
+		phaseLog, ok := logs.PhaseLogs.Get(phase)
+		if !ok {
+			continue
+		}
+
+		phaseLog.Clear()
 	}
 }
 
-func (w *Workflow) Phase(p phase.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error) error {
+func (w *Workflow) Phase(
+	phaseI phase.Phase,
+	fleetLeaf *fleet.FleetLeaf,
+	phaseCode func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error,
+) error {
 	var (
 		logs  *logs.Logs
 		xpath xpath.Xpath
 		err   error
 	)
 
-	switch p.GetPhaseScope() {
+	switch phaseI.GetPhaseScope() {
 	case phase.ScopeMachine:
 		logs = fleetLeaf.Machine.Logs
 		xpath = fleetLeaf.Machine.Xpath
@@ -139,19 +143,19 @@ func (w *Workflow) Phase(p phase.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode fu
 		return errors.New("invalid phase scope")
 	}
 
-	phaseLog := logs.PhaseLogs.GetOrCreate(p)
+	phaseLog := logs.PhaseLogs.GetOrCreate(phaseI)
 
 	phaseLog.TimeAndState.StartTimer()
 
 	sublog := log.With().
-		Str("phase", string(p)).
+		Str("phase", string(phaseI)).
 		Str("xpath", xpath.String()).
 		Logger()
 
-	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", p, xpath.String())
+	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", phaseI, xpath.String())
 
-	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && p != phase.Inspect)
-	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, xpath, fleetLeaf.Machine, p, phaseLog, w.updateHook.Signal)
+	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phaseI != phase.Inspect)
+	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, xpath, fleetLeaf.Machine, phaseI, phaseLog, w.updateHook.Signal)
 	err = phaseCode(exc, phaseLog)
 
 	phaseLog.TimeAndState.EndTimerWithError(err)
@@ -162,7 +166,7 @@ func (w *Workflow) Phase(p phase.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode fu
 	}
 
 	logger.ResultEvent(sublog,
-		fmt.Sprintf("Finished %s of %s", p, xpath.String()),
+		fmt.Sprintf("Finished %s of %s", phaseI, xpath.String()),
 		err,
 		func(event *zerolog.Event) {
 			event.Str("event", "phase_end").Dur("duration", duration)

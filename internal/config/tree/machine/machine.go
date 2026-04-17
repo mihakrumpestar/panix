@@ -6,7 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
-	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
+	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
@@ -50,7 +50,7 @@ type State struct {
 	Status    stats.StatsState     `yaml:"-" json:"status"`
 	StatusMsg string               `yaml:"-" json:"status_msg"`
 	Phase     phase.Phase          `yaml:"-" json:"phase"`
-	Error     *errorjson.ErrorJSON `yaml:"-" json:"error,omitempty"`
+	Error     *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
 	ActiveSSH SSHType              `yaml:"-" json:"active_ssh" default:"regular"`
 }
 
@@ -90,27 +90,32 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, loc
 }
 
 func (m *Machine) GetActiveSSH() *ssh.SSHClient {
+	var sshClient *ssh.SSHClient
+
 	state := m.State.Load()
 	switch state.ActiveSSH {
 	case SSHTypeRegular:
-		return m.SSH
+		sshClient = m.SSH
 	case SSHTypeBootstrap:
-		return m.Bootstrap.SSH
-
+		sshClient = m.Bootstrap.SSH
 	case SSHTypeKexec:
-		activeSSH := *m.SSH
+		kexecSSH := *m.SSH
 		if m.Bootstrap.SSH != nil {
-			activeSSH = *m.Bootstrap.SSH
+			kexecSSH = *m.Bootstrap.SSH
 		}
 
-		activeSSH.Port = m.Bootstrap.Kexec.SSHPort
-		activeSSH.StrictKeyChecking = false
-		activeSSH.DisableAutoAddHostKey = true
+		kexecSSH.Port = m.Bootstrap.Kexec.SSHPort
+		kexecSSH.StrictKeyChecking = false
+		kexecSSH.DisableAutoAddHostKey = true
 
-		return &activeSSH
+		sshClient = &kexecSSH
 	}
 
-	return nil
+	if sshClient == nil {
+		panic("internal error: set active sshClient to nil")
+	}
+
+	return sshClient
 }
 
 func (m *Machine) MaybeSudo() []string {

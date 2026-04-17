@@ -88,12 +88,16 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	}
 
 	var pairs []omap.Pair[K, V]
-	if err := json.Unmarshal(data, &pairs); err != nil {
+
+	err := json.Unmarshal(data, &pairs)
+	if err != nil {
 		return errors.Wrap(err, "unmarshal ordered map")
 	}
 
 	if m.Omap == nil {
-		omapInstance, err := omap.New[K, V]()
+		var omapInstance *omap.Omap[K, V]
+
+		omapInstance, err = omap.New[K, V]()
 		if err != nil {
 			return errors.Wrap(err, "failed to create omap")
 		}
@@ -104,7 +108,8 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	}
 
 	for _, p := range pairs {
-		if err := m.Omap.Set(p.Key, p.Value); err != nil {
+		err = m.Omap.Set(p.Key, p.Value)
+		if err != nil {
 			return errors.Wrapf(err, "failed to set key %v", p.Key)
 		}
 	}
@@ -144,16 +149,20 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(any) error) error {
 	}
 
 	typed := make(map[K]V)
-	if err := decode(&typed); err != nil {
+
+	err := decode(&typed)
+	if err != nil {
 		return errors.Wrap(err, "failed to decode ordered map")
 	}
 
-	var ms yaml.MapSlice
-	if err := decode(&ms); err != nil {
+	var mapSlice yaml.MapSlice
+
+	err = decode(&mapSlice)
+	if err != nil {
 		return errors.Wrap(err, "failed to decode ordered map keys")
 	}
 
-	for _, item := range ms {
+	for _, item := range mapSlice {
 		key, ok := item.Key.(K)
 		if !ok {
 			continue
@@ -164,7 +173,8 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(any) error) error {
 			continue
 		}
 
-		if err := m.Omap.Set(key, value); err != nil {
+		err = m.Omap.Set(key, value)
+		if err != nil {
 			return errors.Wrapf(err, "failed to set key %v", key)
 		}
 	}

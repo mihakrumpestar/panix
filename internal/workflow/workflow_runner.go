@@ -83,7 +83,7 @@ func (pr *phaseRunner) run(phase phase.Phase) error {
 	if phase.ShouldRunOnce() {
 		once := pr.r.getOrCreateOnceAsync(xpath)
 
-		err := once.Do(func() error {
+		err = once.Do(func() error {
 			return workflow.NewTaskWithRetry(phase, logs, execFn)
 		})
 		if err != nil {

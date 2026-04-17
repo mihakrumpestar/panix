@@ -45,8 +45,8 @@ tasks:
       - |
         {{.CUSTOM_GCL}} run ./...
       - |
-        if grep -rn "if err :=" internal/ --include="*.go"; then
-          echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
+        if grep -rn "; " internal/ --include="*.go"; then
+          echo "Error: Inlining pattern detected"
           exit 1
         fi
         echo "0 issues"

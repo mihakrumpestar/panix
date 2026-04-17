@@ -6,7 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
+	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
@@ -28,7 +28,7 @@ type Snapshot struct {
 
 	Reason        SnaphsotReason       `yaml:"-" json:"reason"`
 	SnapshotTime  time.Time            `yaml:"-" json:"snapshot_time"`
-	WorkflowError *errorjson.ErrorJSON `yaml:"-" json:"workflow_error,omitempty"`
+	WorkflowError *jsonerror.JSONError `yaml:"-" json:"workflow_error,omitempty"`
 }
 
 type SnaphsotReason string

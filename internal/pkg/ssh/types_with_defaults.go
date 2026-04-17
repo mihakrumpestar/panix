@@ -4,11 +4,15 @@ import "strconv"
 
 // SSHPort
 
+const (
+	SSHPortDefault = 22
+)
+
 type SSHPort uint16 //nolint:recvcheck
 
 func (s SSHPort) Get() uint16 {
 	if s == 0 {
-		return 22
+		return SSHPortDefault
 	}
 
 	return uint16(s)

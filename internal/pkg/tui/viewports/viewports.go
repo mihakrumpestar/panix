@@ -262,7 +262,9 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 			active:   xp == v.mainXpath,
 		}
 		itemI.model.GotoBottom()
-		if err := v.items.Set(xp, itemI); err != nil {
+
+		err := v.items.Set(xp, itemI)
+		if err != nil {
 			return ""
 		}
 	} else {
@@ -425,7 +427,10 @@ func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 	}
 
 	if !hasClick {
-		if main, ok := v.items.Get(v.mainXpath); ok {
+		var main *item
+
+		main, ok = v.items.Get(v.mainXpath)
+		if ok {
 			main.active = true
 		}
 	}

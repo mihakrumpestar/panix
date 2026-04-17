@@ -29,7 +29,7 @@ func Encode(v any, w io.Writer) error { //nolint:varnamelen
 		w,
 		yaml.WithSmartAnchor(),
 		yaml.UseLiteralStyleIfMultiline(true),
-		yaml.Indent(2),
+		yaml.Indent(2), //nolint:mnd
 		yaml.OmitEmpty(),
 		yaml.OmitZero(),
 	)

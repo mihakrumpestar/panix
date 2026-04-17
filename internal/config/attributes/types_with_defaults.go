@@ -1,11 +1,10 @@
 package attributes
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 // KexecImage
@@ -29,7 +28,7 @@ func (k KexecImage) IfDefaultIsArchSupported(arch string) error { // TODO: add t
 		defaultKexecImageSupportedPlatforms := []string{"x86_64", "aarch64"}
 
 		if !slices.Contains(defaultKexecImageSupportedPlatforms, arch) {
-			return errors.Wrapf(errors.New("architecture not supported by default kexec"), "%s (supported: %s)", strconv.Quote(arch), defaultKexecImageSupportedPlatforms)
+			return fmt.Errorf("architecture not supported by default kexec: %s (supported: %s)", strconv.Quote(arch), defaultKexecImageSupportedPlatforms)
 		}
 	}
 
@@ -54,11 +53,15 @@ func (s SudoProgram) String() string {
 
 // FileMode
 
+const (
+	FileModeDefault FileMode = 0700
+)
+
 type FileMode os.FileMode
 
 func (f FileMode) Get() FileMode {
 	if f == 0 {
-		return 0700
+		return FileModeDefault
 	}
 
 	return f

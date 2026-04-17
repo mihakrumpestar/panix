@@ -5,14 +5,17 @@ import (
 	"strings"
 )
 
+//nolint:lll
 type SSHClient struct {
-	Hostname              string      `yaml:"hostname" json:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
+	// Hostname is alias if all other fileds are empty
+	Hostname              string      `yaml:"hostname" json:"hostname" desc:"SSH hostname or IP address"`
 	Port                  SSHPort     `yaml:"port" json:"port" desc:"SSH port number" default:"22"`
 	Username              SSHUsername `yaml:"username" json:"username" desc:"SSH username" default:"root"`
 	IdentityFile          string      `yaml:"identity_file" json:"identity_file,omitempty" validate:"omitempty,filepath" desc:"Path to SSH private key"`
-	StrictKeyChecking     bool        `yaml:"strict_key_checking" json:"strict_key_checking,omitempty" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`                                                      //nolint:lll
-	DisableAutoAddHostKey bool        `yaml:"disable_auto_add_host_key" json:"disable_auto_add_host_key,omitempty" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"` //nolint:lll
-	ExtraFlags            []string    `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')"`                                                                                             //nolint:lll
+	StrictKeyChecking     bool        `yaml:"strict_key_checking" json:"strict_key_checking,omitempty" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`
+	DisableAutoAddHostKey bool        `yaml:"disable_auto_add_host_key" json:"disable_auto_add_host_key,omitempty" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"`
+	ExtraFlags            []string    `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')"`
+
 	// Internal - computed during Init(), should never inherit from parent
 	IsLocal         bool `yaml:"-" json:"-" mergo:"-"`
 	HostnameIsAlias bool `yaml:"-" json:"-" mergo:"-"`
