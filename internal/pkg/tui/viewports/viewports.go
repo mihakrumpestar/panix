@@ -25,20 +25,14 @@ const (
 
 type Dimensions struct{ Width, Height int }
 
-// Kind classifies viewport rendering style.
-type Kind int
-
-const (
-	KindContent    Kind = iota // bordered, word-wrapped, maxHeight-capped command output
-	KindLabel                  // borderless, word-wrapped, highlight-on-active label
-	KindMain                   // fills available space, no border, no wrap cap (main scroll area)
-	KindFullscreen             // fills available space, bordered, word-wrapped (fullscreen view)
-)
-
 type Viewports struct {
-	items       *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
-	dimensions  *Dimensions
-	conf        *config.Config
+	items      *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
+	dimensions *Dimensions
+	conf       *config.Config
+	activation activation
+}
+
+type activation struct {
 	fullscreen  xpath.Xpath
 	mainXpath   xpath.Xpath
 	activeXpath xpath.Xpath
@@ -51,71 +45,99 @@ type item struct {
 	cache    cache.Cache[string]
 }
 
+type renderConfig struct {
+	bordered        bool
+	highlightActive bool
+	maxHeight       int
+	explicitHeight  int
+	explicitWidth   int
+	indent          int
+}
+
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
 	mainXpath := xpath.New("main")
 
 	return &Viewports{
-		items:       atomicorderedmap.New[xpath.Xpath, *item](),
-		dimensions:  dimensions,
-		conf:        conf,
-		mainXpath:   mainXpath,
-		activeXpath: mainXpath,
+		items:      atomicorderedmap.New[xpath.Xpath, *item](),
+		dimensions: dimensions,
+		conf:       conf,
+		activation: activation{
+			mainXpath:   mainXpath,
+			activeXpath: mainXpath,
+		},
 	}
 }
 
 // Fullscreen
 
 func (v *Viewports) IsFullscreen() bool {
-	return v.fullscreen.Depth() > 0
-}
-func (v *Viewports) GetFullscreenXpath() xpath.Xpath {
-	return v.fullscreen
-}
-func (v *Viewports) SetFullscreen(xp xpath.Xpath) {
-	v.fullscreen = xp
-}
-func (v *Viewports) ExitFullscreen() {
-	v.fullscreen = xpath.New()
+	return v.activation.fullscreen.Depth() > 0
 }
 
-// ContentWidth returns available width accounting for scrollbar.
+func (v *Viewports) GetFullscreenXpath() xpath.Xpath {
+	return v.activation.fullscreen
+}
+
+func (v *Viewports) SetFullscreen(xp xpath.Xpath) {
+	v.activation.fullscreen = xp
+}
+
+func (v *Viewports) ExitFullscreen() {
+	v.activation.fullscreen = xpath.New()
+}
+
+// Dimensions
+
 func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWidth }
 
 // Factory methods
 
 func (v *Viewports) GetOrCreateViewport(xp xpath.Xpath, content string, indent int) string {
-	return v.render(xp, content, indent, KindContent)
+	return v.render(xp, content, renderConfig{
+		bordered:  true,
+		maxHeight: v.conf.Flags.Tui.CommandOutputMaxHeight,
+		indent:    indent,
+	})
 }
 
 func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, indent int) string {
-	return v.render(xp, content, indent, KindLabel)
+	return v.render(xp, content, renderConfig{
+		highlightActive: true,
+		indent:          indent,
+	})
 }
 
 func (v *Viewports) GetOrCreateMainViewport(content string, footerHeaderHeight int) string {
 	h := v.dimensions.Height - footerHeaderHeight
 
-	return v.render(v.mainXpath, content, 0, KindMain, withHeight(h)) + "\n"
+	return v.render(v.activation.mainXpath, content, renderConfig{
+		explicitHeight: h,
+	}) + "\n"
 }
 
 func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, footerHeaderHeight int) string {
 	h := max(1, v.dimensions.Height-footerHeaderHeight-borderOverhead)
 	w := max(1, v.dimensions.Width-scrollbarWidth-borderOverhead)
 
-	return v.render(xp, content, 0, KindFullscreen, withHeight(h), withWidth(w)) + "\n"
+	return v.render(xp, content, renderConfig{
+		bordered:       true,
+		explicitHeight: h,
+		explicitWidth:  w,
+	}) + "\n"
 }
 
 func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
 	v.items.Del(xp)
 
-	if v.activeXpath == xp {
-		v.activeXpath = v.mainXpath
+	if v.activation.activeXpath == xp {
+		v.activation.activeXpath = v.activation.mainXpath
 	}
 }
 
 // Active queries
 
 func (v *Viewports) HasActiveInner() bool {
-	return v.activeXpath.Depth() > 0 && v.activeXpath != v.mainXpath
+	return v.activation.activeXpath.Depth() > 0 && v.activation.activeXpath != v.activation.mainXpath
 }
 
 func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
@@ -123,7 +145,7 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 		return "", false
 	}
 
-	it, ok := v.items.Get(v.activeXpath)
+	it, ok := v.items.Get(v.activation.activeXpath)
 	if !ok {
 		return "", false
 	}
@@ -133,7 +155,7 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 
 func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 	if v.HasActiveInner() {
-		return v.activeXpath
+		return v.activation.activeXpath
 	}
 
 	return xpath.Xpath{}
@@ -148,7 +170,7 @@ func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
 }
 
 func (v *Viewports) DeselectAll() {
-	v.activeXpath = v.mainXpath
+	v.activation.activeXpath = v.activation.mainXpath
 }
 
 // Update
@@ -164,22 +186,23 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		clicked := v.mostSpecific(v.underMouse(mouseClick))
 
 		if clicked.Depth() > 0 {
-			v.activeXpath = clicked
+			v.activation.activeXpath = clicked
 		} else {
-			v.activeXpath = v.mainXpath
+			v.activation.activeXpath = v.activation.mainXpath
 		}
 
 		return nil
 	}
 
-	activeViewport := v.activeViewport()
-	if activeViewport == nil {
+	itm := v.activeViewport()
+	if itm == nil {
 		return nil
 	}
 
-	activeViewport.model, _ = activeViewport.model.Update(msg) // Never returns cmd
+	var cmd tea.Cmd
+	itm.model, cmd = itm.model.Update(msg)
 
-	return nil
+	return cmd
 }
 
 // Debug
@@ -191,7 +214,7 @@ func (v *Viewports) Debug() string {
 	for _, pair := range v.items.Pairs() {
 		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", pair.Key, pair.Value.model.Width(), pair.Value.model.Height(), pair.Value.model.TotalLineCount())
 
-		if pair.Key == v.activeXpath {
+		if pair.Key == v.activation.activeXpath {
 			builder.WriteString(" [A]")
 		}
 
@@ -205,116 +228,106 @@ func (v *Viewports) Debug() string {
 	return builder.String()
 }
 
-// Internal: render options
+func (v *Viewports) viewWidth(cfg renderConfig) int {
+	if cfg.explicitWidth > 0 {
+		return cfg.explicitWidth
+	}
 
-type renderOpts struct {
-	explicitWidth  int
-	explicitHeight int
+	return max(1, v.dimensions.Width-cfg.indent-scrollbarWidth)
 }
 
-func withWidth(w int) func(*renderOpts)  { return func(o *renderOpts) { o.explicitWidth = w } }
-func withHeight(h int) func(*renderOpts) { return func(o *renderOpts) { o.explicitHeight = h } }
-
-// Internal: unified render
-
-func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind, optsFns ...func(*renderOpts)) string {
-	var opts renderOpts
-	for _, fn := range optsFns {
-		fn(&opts)
+func (v *Viewports) finalHeight(totalLines int, cfg renderConfig) int {
+	if cfg.explicitHeight > 0 {
+		return max(1, cfg.explicitHeight)
 	}
 
-	width := opts.explicitWidth
-	if width == 0 {
-		width = max(1, v.dimensions.Width-indent-scrollbarWidth)
+	if cfg.maxHeight > 0 && totalLines > cfg.maxHeight {
+		return cfg.maxHeight
 	}
 
-	maxH := v.conf.Flags.Tui.CommandOutputMaxHeight
-	if kind == KindMain || kind == KindFullscreen {
-		maxH = 0
+	return totalLines
+}
+
+func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg renderConfig) {
+	wasAtBottom := itm.model.ScrollPercent() == 1 && xp != v.activation.mainXpath
+	yOffset := itm.model.YOffset()
+
+	w := v.viewWidth(cfg)
+
+	itm.content = content
+	itm.model.SetWidth(w)
+	itm.model.SetContent(lipgloss.Wrap(content, w, ""))
+
+	totalLines := max(1, itm.model.TotalLineCount())
+
+	if cfg.maxHeight > 0 && totalLines > cfg.maxHeight {
+		contentW := max(1, w-scrollbarWidth)
+		itm.model.SetWidth(contentW)
+		itm.model.SetContent(lipgloss.Wrap(content, contentW, ""))
+		totalLines = max(1, itm.model.TotalLineCount())
 	}
 
-	height := max(1, opts.explicitHeight)
+	finalH := v.finalHeight(totalLines, cfg)
+	itm.model.SetHeight(finalH)
 
-	itemI, exists := v.items.Get(xp)
-	if !exists {
-		itemI = &item{
-			model:    viewport.New(viewport.WithWidth(width), viewport.WithHeight(height)),
-			zoneBase: xp.NewXpathWithAppend("scrollbar"),
-			content:  content,
-		}
-		itemI.model.GotoBottom()
-
-		v.items.Set(xp, itemI)
+	if wasAtBottom {
+		itm.model.GotoBottom()
 	} else {
-		itemI.content = content
+		itm.model.SetYOffset(min(yOffset, max(0, totalLines-finalH)))
 	}
+}
 
-	view := itemI.cache.Get(
+func (v *Viewports) render(xp xpath.Xpath, content string, cfg renderConfig) string {
+	itm := v.getOrCreateItem(xp, content, cfg)
+
+	v.syncItem(itm, xp, content, cfg)
+
+	view := itm.cache.Get(
 		func() (string, bool) {
-			wasAtBottom := itemI.model.ScrollPercent() == 1 && xp != v.mainXpath
-			yOffset := itemI.model.YOffset()
-
-			contentH := v.setContent(itemI, content, width)
-			itemI.model.SetWidth(width)
-
-			// Scrollbar narrows content for capped viewports
-			if kind == KindContent && maxH > 0 && contentH > maxH {
-				narrowW := max(1, width-scrollbarWidth)
-				itemI.model.SetWidth(narrowW)
-				contentH = v.setContent(itemI, content, narrowW)
-			}
-
-			finalH := contentH
-			if maxH > 0 && contentH > maxH && kind == KindContent {
-				finalH = maxH
-			} else if kind == KindMain || kind == KindFullscreen {
-				finalH = max(1, height)
-			}
-
-			itemI.model.SetHeight(finalH)
-
-			if wasAtBottom {
-				itemI.model.GotoBottom()
-			} else {
-				itemI.model.SetYOffset(min(yOffset, max(0, contentH-finalH)))
-			}
-
-			scrollbar, _ := v.scrollbar(itemI.model.ScrollPercent(), contentH, finalH)
-			view := v.withScrollbar(itemI.model.View(), scrollbar, itemI.zoneBase)
-
-			return view, true
+			scrollbar, _ := v.scrollbar(itm.model.ScrollPercent(), itm.model.TotalLineCount(), itm.model.Height())
+			return v.withScrollbar(itm.model.View(), scrollbar, itm.zoneBase), true
 		},
-		width, height, content, itemI.model.ScrollPercent())
+		itm.model.Width(), itm.model.Height(), content, itm.model.ScrollPercent(),
+	)
 
-	active := xp == v.activeXpath
-	view = v.applyActiveStyle(view, kind, active)
+	active := xp == v.activation.activeXpath
+	view = v.applyActiveStyle(view, cfg, active)
 	view = zone.Mark(xp.String(), view)
 
 	return view
 }
 
-// setContent word-wraps content and sets it on the viewport model.
-// Returns the total line count (minimum 1).
-func (v *Viewports) setContent(it *item, content string, width int) int {
-	it.model.SetContent(lipgloss.Wrap(content, width, ""))
+func (v *Viewports) getOrCreateItem(xp xpath.Xpath, content string, cfg renderConfig) *item {
+	itm, exists := v.items.Get(xp)
+	if exists {
+		itm.content = content
 
-	h := it.model.TotalLineCount()
-	if h == 0 {
-		h = 1
+		return itm
 	}
 
-	return h
+	w := v.viewWidth(cfg)
+	h := max(1, cfg.explicitHeight)
+
+	itm = &item{
+		model:    viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		zoneBase: xp.NewXpathWithAppend("scrollbar"),
+		content:  content,
+	}
+	itm.model.GotoBottom()
+	v.items.Set(xp, itm)
+
+	return itm
 }
 
-func (v *Viewports) applyActiveStyle(view string, kind Kind, active bool) string {
-	switch kind {
-	case KindLabel:
+func (v *Viewports) applyActiveStyle(view string, cfg renderConfig, active bool) string {
+	switch {
+	case cfg.highlightActive:
 		if active {
 			return v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(view)
 		}
 
 		return view
-	case KindContent, KindFullscreen:
+	case cfg.bordered:
 		border := v.conf.ColorScheme.Table.Border.GetForeground()
 		if active {
 			border = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
@@ -324,7 +337,7 @@ func (v *Viewports) applyActiveStyle(view string, kind Kind, active bool) string
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(border).
 			Render(view)
-	default: // KindMain
+	default:
 		return view
 	}
 }
@@ -382,10 +395,10 @@ func (v *Viewports) withScrollbar(view, bar string, barZone xpath.Xpath) string 
 // Input helpers
 
 func (v *Viewports) activeViewport() *item {
-	activeXpath := v.activeXpath
+	activeXpath := v.activation.activeXpath
 
 	if activeXpath.String() == "" {
-		activeXpath = v.mainXpath
+		activeXpath = v.activation.mainXpath
 	}
 
 	it, ok := v.items.Get(activeXpath)

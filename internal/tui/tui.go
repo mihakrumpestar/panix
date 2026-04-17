@@ -194,27 +194,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, tea.Quit)
 
 	case workflowDoneMsg:
-		if m.isSnapshot {
-			return m, cmd
-		}
-
-		log.Debug().Msg("workflowDoneMsg")
-
-		m.conf.Fleet.Recalculate(m.conf.Phases)
-		logFinalState(m.conf)
-
-		if m.conf.Flags.Snapshot.OnExit {
-			m.captureSnapshot(config.SnaphsotReasonExit)
-		}
-
-		if m.conf.Flags.ExitOnComplete {
-			m.quitting = true
-
-			return m, tea.Batch(cmd, tea.Quit)
-		}
-		// Stay open — user can press 'q' to quit or 'r' to retry
-
-		return m, cmd
+		return m.handleWorkflowDone(cmd)
 
 	case restartMsg:
 		cmd = tea.Batch(cmd, m.restartWorkflow())
@@ -273,6 +253,31 @@ func (m *model) View() tea.View {
 	view.SetContent(zone.Scan(builder.String()))
 
 	return view
+}
+
+func (m *model) handleWorkflowDone(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	if m.isSnapshot {
+		return m, cmd
+	}
+
+	log.Debug().Msg("workflowDoneMsg")
+
+	m.conf.Fleet.Recalculate(m.conf.Phases)
+	logFinalState(m.conf)
+
+	if m.conf.Flags.Snapshot.OnExit {
+		m.captureSnapshot(config.SnaphsotReasonExit)
+	}
+
+	if m.conf.Flags.ExitOnComplete {
+		m.quitting = true
+
+		return m, tea.Batch(cmd, tea.Quit)
+	}
+
+	// Stay open — user can press 'q' to quit or 'r' to retry
+
+	return m, cmd
 }
 
 func (m *model) viewMainContent() string {
