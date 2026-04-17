@@ -28,7 +28,8 @@ func NewSpinners() (*Spinners, error) {
 }
 
 func (s *Spinners) View(xpath xpath.Xpath) string {
-	if e, ok := s.entries.Get(xpath); ok {
+	e, ok := s.entries.Get(xpath)
+	if ok {
 		e.lastUsed = time.Now()
 
 		return e.model.View()
@@ -58,7 +59,8 @@ func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 }
 
 func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
-	if _, ok := msg.(tickMsg); !ok {
+	_, ok := msg.(tickMsg)
+	if !ok {
 		return nil
 	}
 

@@ -34,7 +34,8 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 	n.text, n.started = text, time.Now()
 	n.fgR, n.fgG, n.fgB = 180, 180, 180
 
-	if fg := color.GetForeground(); fg != nil {
+	fg := color.GetForeground()
+	if fg != nil {
 		r, g, b, _ := fg.RGBA()
 
 		// #nosec G115 -- rgba values are 0-65535, >>8 safely converts to 0-255 range
@@ -45,7 +46,8 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 }
 
 func (n *Notification) Update(msg tea.Msg) tea.Cmd {
-	if _, ok := msg.(notificationTickMsg); !ok {
+	_, ok := msg.(notificationTickMsg)
+	if !ok {
 		return nil
 	}
 

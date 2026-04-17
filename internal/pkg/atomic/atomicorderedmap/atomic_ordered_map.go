@@ -45,7 +45,8 @@ func (m *AtomicOrderedMap[K, V]) Set(key K, value V) {
 		m.values = make(map[K]V)
 	}
 
-	if _, exists := m.index[key]; exists {
+	_, ok := m.index[key]
+	if ok {
 		m.values[key] = value
 
 		return
@@ -160,16 +161,20 @@ func (m *AtomicOrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for i := len(m.keys) - 1; i >= 0; i-- {
-		k := m.keys[i]
-		if pred(k, m.values[k]) {
-			delete(m.values, k)
-			delete(m.index, k)
-			m.keys = append(m.keys[:i], m.keys[i+1:]...)
+	idx := 0
+
+	for _, key := range m.keys {
+		if pred(key, m.values[key]) {
+			delete(m.values, key)
+			delete(m.index, key)
+		} else {
+			m.keys[idx] = key
+			m.index[key] = idx
+			idx++
 		}
 	}
 
-	m.rebuildIndex()
+	m.keys = m.keys[:idx]
 }
 
 // Last returns the last pair in insertion order.
@@ -193,12 +198,6 @@ func (m *AtomicOrderedMap[K, V]) Last() (Pair[K, V], bool) {
 	k := m.keys[len(m.keys)-1]
 
 	return Pair[K, V]{Key: k, Value: m.values[k]}, true
-}
-
-func (m *AtomicOrderedMap[K, V]) rebuildIndex() {
-	for i, k := range m.keys {
-		m.index[k] = i
-	}
 }
 
 // JSON marshaling/unmarshaling

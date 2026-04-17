@@ -204,7 +204,8 @@ func (g *generator) processType(typ reflect.Type, field reflect.StructField) (an
 		typ = typ.Elem()
 	}
 
-	if defName, ok := g.defTypes[typ]; ok {
+	defName, ok := g.defTypes[typ]
+	if ok {
 		return g.processDefinitionType(typ, defName)
 	}
 
@@ -236,7 +237,8 @@ func (g *generator) processByKind(kind reflect.Kind, typ reflect.Type, field ref
 		return g.applyConstraints(&TypeDefinition{Type: "array", Items: itemType}, field.Tag.Get("validate")), nil
 
 	case reflect.Struct:
-		if def, ok := g.orderedDefs[typ]; ok {
+		def, ok := g.orderedDefs[typ]
+		if ok {
 			return g.processOrderedMap(def)
 		}
 
@@ -263,15 +265,18 @@ func (g *generator) applyConstraints(typeDef *TypeDefinition, validateTag string
 			continue
 		}
 
-		if val, ok := strings.CutPrefix(tag, "oneof="); ok {
-			if values := strings.Fields(val); len(values) > 0 {
+		val, ok := strings.CutPrefix(tag, "oneof=")
+		if ok {
+			values := strings.Fields(val)
+			if len(values) > 0 {
 				typeDef.Enum = values
 			}
 
 			continue
 		}
 
-		if f, ok := formatConstraints[tag]; ok {
+		f, ok := formatConstraints[tag]
+		if ok {
 			typeDef.Format = f.format
 			if f.pattern != "" {
 				typeDef.Pattern = f.pattern
@@ -283,7 +288,8 @@ func (g *generator) applyConstraints(typeDef *TypeDefinition, validateTag string
 }
 
 func (g *generator) processDefinitionType(typ reflect.Type, defName string) (any, error) {
-	if _, exists := g.definitions[defName]; exists {
+	_, ok := g.definitions[defName]
+	if ok {
 		return &TypeDefinition{Ref: "#/definitions/" + defName}, nil
 	}
 
@@ -346,7 +352,8 @@ func (g *generator) setFieldDescription(prop any, field reflect.StructField) {
 		desc = field.Tag.Get("help")
 	}
 
-	if defaultVal := field.Tag.Get("default"); defaultVal != "" {
+	defaultVal := field.Tag.Get("default")
+	if defaultVal != "" {
 		typeDef.Default = parseDefaultValue(defaultVal, field.Type)
 		if desc != "" {
 			desc += " (default: " + defaultVal + ")"
@@ -377,7 +384,8 @@ func yamlFieldName(field reflect.StructField, yamlTag string) string {
 		return strings.ToLower(field.Name)
 	}
 
-	if name := strings.Split(yamlTag, ",")[0]; name != "" {
+	name := strings.Split(yamlTag, ",")[0]
+	if name != "" {
 		return name
 	}
 

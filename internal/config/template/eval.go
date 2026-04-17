@@ -111,7 +111,10 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 	for _, mappingValue := range mappingNode.Values {
 		key := mappingValue.Key.GetToken().Value
 		if key == "flags" || key == "fleet" { // This prevents anchor definitions to remain in output
-			if val, exists := decodedMap[key]; exists {
+			var val any
+
+			val, ok = decodedMap[key]
+			if ok {
 				result = append(result, yaml.MapItem{
 					Key:   key,
 					Value: rebuildOrderedRecursive(mappingValue.Value, val),
@@ -150,7 +153,8 @@ func rebuildOrderedRecursive(astNode ast.Node, decoded any) any {
 		return rebuildOrderedMap(astNode, decodedMap)
 	}
 
-	if _, ok := decoded.([]any); ok {
+	_, ok := decoded.([]any)
+	if ok {
 		return decoded
 	}
 
@@ -173,7 +177,10 @@ func rebuildOrderedMap(astNode ast.Node, decodedVal map[string]any) yaml.MapSlic
 			continue
 		}
 
-		if val, exists := decodedVal[key]; exists {
+		var val any
+
+		val, ok = decodedVal[key]
+		if ok {
 			result = append(result, yaml.MapItem{
 				Key:   key,
 				Value: rebuildOrderedRecursive(mappingValue.Value, val),

@@ -277,7 +277,8 @@ func (b *BuildLogs) addCommands(phaseNode *tree.Tree, phaseLog *phaselogs.PhaseL
 		b.addCommand(phaseNode, cmd, idx, phaseXpath, indent)
 
 		if cmd.TimeAndState != nil {
-			if t := cmd.TimeAndState.Load(); t != nil && t.EndError != nil {
+			t := cmd.TimeAndState.Load()
+			if t != nil && t.EndError != nil {
 				hasError = true
 			}
 		}
@@ -307,7 +308,8 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	labelWidth := cmdIndent + lipgloss.Width(icon) + durWidth
 	labelVP := b.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, labelWidth)
 
-	if h := lipgloss.Height(labelVP); h > 1 {
+	h := lipgloss.Height(labelVP)
+	if h > 1 {
 		treeLine := "\n" + b.conf.ColorScheme.Tree.Enumerator.Render("│")
 		icon += strings.Repeat(treeLine, h-1)
 	}

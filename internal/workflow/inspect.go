@@ -361,7 +361,7 @@ func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Mac
 		"SSH config invalid for detected machine state",
 		func(_ *command.CommandLog) error {
 			if machineI.Bootstrap.SSH != nil && isBootstrapped && !machineI.Bootstrap.ForceBootstrap {
-				return errors.New("bootstrap SSH is configured but machine is already bootstrapped; set \"force_bootstrap\" to re-bootstrap, or remove bootstrap SSH configuration") //nolint:lll
+				return errors.New("bootstrap SSH is configured but machine is already bootstrapped, set \"force_bootstrap\" to re-bootstrap, or remove bootstrap SSH configuration") //nolint:lll
 			}
 
 			if !isBootstrapped && machineI.Bootstrap.SSH == nil && !machineI.Bootstrap.ForceBootstrap {

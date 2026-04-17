@@ -162,7 +162,8 @@ func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 }
 
 func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
-	if it, ok := v.items.Get(xp); ok {
+	it, ok := v.items.Get(xp)
+	if ok {
 		return it.content
 	}
 
@@ -200,6 +201,7 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	}
 
 	var cmd tea.Cmd
+
 	itm.model, cmd = itm.model.Update(msg)
 
 	return cmd
@@ -252,16 +254,16 @@ func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg rend
 	wasAtBottom := itm.model.ScrollPercent() == 1 && xp != v.activation.mainXpath
 	yOffset := itm.model.YOffset()
 
-	w := v.viewWidth(cfg)
+	width := v.viewWidth(cfg)
 
 	itm.content = content
-	itm.model.SetWidth(w)
-	itm.model.SetContent(lipgloss.Wrap(content, w, ""))
+	itm.model.SetWidth(width)
+	itm.model.SetContent(lipgloss.Wrap(content, width, ""))
 
 	totalLines := max(1, itm.model.TotalLineCount())
 
 	if cfg.maxHeight > 0 && totalLines > cfg.maxHeight {
-		contentW := max(1, w-scrollbarWidth)
+		contentW := max(1, width-scrollbarWidth)
 		itm.model.SetWidth(contentW)
 		itm.model.SetContent(lipgloss.Wrap(content, contentW, ""))
 		totalLines = max(1, itm.model.TotalLineCount())
@@ -277,28 +279,29 @@ func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg rend
 	}
 }
 
-func (v *Viewports) render(xp xpath.Xpath, content string, cfg renderConfig) string {
-	itm := v.getOrCreateItem(xp, content, cfg)
+func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) string {
+	itm := v.getOrCreateItem(xpath, content, cfg)
 
-	v.syncItem(itm, xp, content, cfg)
+	v.syncItem(itm, xpath, content, cfg)
 
 	view := itm.cache.Get(
 		func() (string, bool) {
 			scrollbar, _ := v.scrollbar(itm.model.ScrollPercent(), itm.model.TotalLineCount(), itm.model.Height())
+
 			return v.withScrollbar(itm.model.View(), scrollbar, itm.zoneBase), true
 		},
 		itm.model.Width(), itm.model.Height(), content, itm.model.ScrollPercent(),
 	)
 
-	active := xp == v.activation.activeXpath
+	active := xpath == v.activation.activeXpath
 	view = v.applyActiveStyle(view, cfg, active)
-	view = zone.Mark(xp.String(), view)
+	view = zone.Mark(xpath.String(), view)
 
 	return view
 }
 
-func (v *Viewports) getOrCreateItem(xp xpath.Xpath, content string, cfg renderConfig) *item {
-	itm, exists := v.items.Get(xp)
+func (v *Viewports) getOrCreateItem(xpath xpath.Xpath, content string, cfg renderConfig) *item {
+	itm, exists := v.items.Get(xpath)
 	if exists {
 		itm.content = content
 
@@ -310,11 +313,11 @@ func (v *Viewports) getOrCreateItem(xp xpath.Xpath, content string, cfg renderCo
 
 	itm = &item{
 		model:    viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
-		zoneBase: xp.NewXpathWithAppend("scrollbar"),
+		zoneBase: xpath.NewXpathWithAppend("scrollbar"),
 		content:  content,
 	}
 	itm.model.GotoBottom()
-	v.items.Set(xp, itm)
+	v.items.Set(xpath, itm)
 
 	return itm
 }

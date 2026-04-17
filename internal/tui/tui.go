@@ -118,7 +118,8 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		fmt.Println(content)
 	}
 
-	if r := finalModel.resetable.Load(); r != nil {
+	r := finalModel.resetable.Load()
+	if r != nil {
 		return r.err
 	}
 

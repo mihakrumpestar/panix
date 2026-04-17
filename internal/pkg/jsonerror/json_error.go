@@ -8,7 +8,7 @@ import (
 
 // JSONError wraps an error with JSON marshal/unmarshal support.
 // Go's error interface cannot be unmarshaled from JSON, so we serialize as a string.
-// Nil *JSONError means no error; non-nil means error is set.
+// Nil *JSONError means no error, non-nil means error is set.
 type JSONError struct {
 	err error
 }

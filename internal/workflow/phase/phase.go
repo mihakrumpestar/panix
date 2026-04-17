@@ -30,7 +30,8 @@ func (p Phase) String() string {
 
 // GetPhaseScope returns the scope at which a phase should execute.
 func (p Phase) GetPhaseScope() PhaseScope {
-	if meta, ok := GetPhaseMetadata(p); ok {
+	meta, ok := GetPhaseMetadata(p)
+	if ok {
 		return meta.Scope
 	}
 
@@ -99,7 +100,8 @@ func PhasesInOrder() []Phase {
 // and validates that the first phase is allowed to start a workflow.
 func ValidatePhases(requestedPhases []Phase, skipPhases []Phase) ([]Phase, error) {
 	for _, p := range requestedPhases {
-		if _, ok := GetPhaseMetadata(p); !ok {
+		_, ok := GetPhaseMetadata(p)
+		if !ok {
 			return nil, errors.Wrapf(ErrUnknownPhase, "%s", p)
 		}
 	}

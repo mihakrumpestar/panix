@@ -209,7 +209,8 @@ func processTerminalOutput(buf []byte, exm *command.CommandLog) error {
 }
 
 func processSequence(seq []byte, isFirst bool, exm *command.CommandLog) error {
-	if after, ok := bytes.CutPrefix(seq, []byte("\n")); ok {
+	after, ok := bytes.CutPrefix(seq, []byte("\n"))
+	if ok {
 		exm.WriteLine(after)
 
 		return nil

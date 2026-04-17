@@ -107,7 +107,8 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 	var isLocal bool
 
 	if ex.machine != nil {
-		if ssh := ex.machine.GetActiveSSH(); ssh != nil {
+		ssh := ex.machine.GetActiveSSH()
+		if ssh != nil {
 			isLocal = ssh.IsLocal
 		}
 	}

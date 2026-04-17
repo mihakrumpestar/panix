@@ -63,7 +63,8 @@ func (p *PhaseStatus) Reset() {
 
 func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
 	for idx := range p.CacheStatisticsPerPhase.Len() {
-		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, idx)); z != nil && z.InBounds(msg) {
+		z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, idx))
+		if z != nil && z.InBounds(msg) {
 			if p.Selected.Index == idx {
 				p.Selected.Index = -1
 				p.Selected.Phase = ""
@@ -246,16 +247,19 @@ func (p *PhaseStatus) createAnimatedGradient(text string, statsPack stats.StatsP
 func buildStatusLine(statsPack stats.StatsPack, colors *colorscheme.ColorScheme) string {
 	var parts []string
 
-	if n := len(statsPack[stats.Running]); n > 0 {
-		parts = append(parts, colors.Status.Running.Render(strconv.Itoa(n)))
+	num := len(statsPack[stats.Running])
+	if num > 0 {
+		parts = append(parts, colors.Status.Running.Render(strconv.Itoa(num)))
 	}
 
-	if n := len(statsPack[stats.Failed]); n > 0 {
-		parts = append(parts, colors.Status.Failed.Render(strconv.Itoa(n)))
+	num = len(statsPack[stats.Failed])
+	if num > 0 {
+		parts = append(parts, colors.Status.Failed.Render(strconv.Itoa(num)))
 	}
 
-	if n := len(statsPack[stats.Done]); n > 0 {
-		parts = append(parts, colors.Status.OK.Render(strconv.Itoa(n)))
+	num = len(statsPack[stats.Done])
+	if num > 0 {
+		parts = append(parts, colors.Status.OK.Render(strconv.Itoa(num)))
 	}
 
 	return strings.Join(parts, colors.Table.Border.Render(statusSeparator))
