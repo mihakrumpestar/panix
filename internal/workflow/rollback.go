@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
@@ -79,10 +80,8 @@ func validateAndGetTargetGen(generations *machine.Generations, rollbackGeneratio
 }
 
 func getSpecificGeneration(availableGenerations []uint, specificGeneration uint) (uint, error) {
-	for _, availableGeneration := range availableGenerations {
-		if availableGeneration == specificGeneration {
-			return specificGeneration, nil
-		}
+	if slices.Contains(availableGenerations, specificGeneration) {
+		return specificGeneration, nil
 	}
 
 	return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", specificGeneration)

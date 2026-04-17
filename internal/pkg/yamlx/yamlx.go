@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Decode(b []byte, v any) error {
+func Decode(b []byte, v any) error { //nolint:varnamelen
 	decoder := yaml.NewDecoder(
 		bytes.NewReader(b),
 		yaml.Strict(),
@@ -24,7 +24,7 @@ func Decode(b []byte, v any) error {
 	return nil
 }
 
-func Encode(v any, w io.Writer) error {
+func Encode(v any, w io.Writer) error { //nolint:varnamelen
 	encoder := yaml.NewEncoder(
 		w,
 		yaml.WithSmartAnchor(),

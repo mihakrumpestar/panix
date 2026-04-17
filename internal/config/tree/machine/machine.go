@@ -30,7 +30,7 @@ type Machine struct {
 	State       *atomicpointer.AtomicPointer[State]       `yaml:"-" json:"machine_state,omitempty"`
 }
 
-// MetaInspect needs to be atomic (updates with executioner)
+// MetaInspect needs to be atomic (updates with executioner).
 type MetaInspect struct {
 	Reachable      bool `yaml:"-" json:"reachable,omitempty"`
 	SSHConnectable bool `yaml:"-" json:"ssh_connectable,omitempty"`
@@ -45,7 +45,7 @@ type MetaInspect struct {
 	Kernel       string       `yaml:"-" json:"kernel,omitempty"`
 }
 
-// State needs to be atomic (updates from both workflow goroutines and UI)
+// State needs to be atomic (updates from both workflow goroutines and UI).
 type State struct {
 	Status    stats.StatsState     `yaml:"-" json:"status"`
 	StatusMsg string               `yaml:"-" json:"status_msg"`

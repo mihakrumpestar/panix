@@ -20,19 +20,19 @@ func Read(path string) (*config.Config, error) {
 		return nil, errors.Wrap(err, "failed to read snapshot file")
 	}
 
-	var s config.Config
+	var conf config.Config
 
-	err = jsonx.Decode(data, &s)
+	err = jsonx.Decode(data, &conf)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode snapshot")
 	}
 
-	s.PostUnmarshalInit()
+	conf.PostUnmarshalInit()
 
-	return &s, nil
+	return &conf, nil
 }
 
-func Write(dir string, s *config.Config) error {
+func Write(dir string, conf *config.Config) error {
 	err := os.MkdirAll(dir, filepermissions.DefaultDirPermissions)
 	if err != nil {
 		return errors.Wrap(err, "failed to create snapshot directory")
@@ -40,12 +40,12 @@ func Write(dir string, s *config.Config) error {
 
 	var data bytes.Buffer
 
-	err = jsonx.Encode(s, &data)
+	err = jsonx.Encode(conf, &data)
 	if err != nil {
 		return errors.Wrap(err, "failed to encode snapshot")
 	}
 
-	path := filepath.Join(dir, fileName(s))
+	path := filepath.Join(dir, fileName(conf))
 
 	err = os.WriteFile(path, data.Bytes(), filepermissions.DefaultFilePermissions)
 	if err != nil {

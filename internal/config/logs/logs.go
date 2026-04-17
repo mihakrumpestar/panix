@@ -82,8 +82,9 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		}
 
 		for _, pair := range pl.Pairs() {
-			if gathered.MustGet(pair.Key) != nil {
-				continue
+			ok := gathered.Exists(pair.Key)
+			if ok {
+				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
 			}
 
 			gathered.Set(pair.Key, pair.Value)

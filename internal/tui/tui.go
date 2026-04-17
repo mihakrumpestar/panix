@@ -63,7 +63,7 @@ type model struct {
 	spinners  *spinners.Spinners
 }
 
-// NewTui initializes and runs the TUI application.
+// New initializes and runs the TUI application.
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	zone.NewGlobal()
 

@@ -32,14 +32,15 @@ func NewSpinners() (*Spinners, error) {
 	return &Spinners{entries: entries}, nil
 }
 
-func (s *Spinners) View(xp xpath.Xpath) string {
-	if e, ok := s.entries.Get(xp); ok {
+func (s *Spinners) View(xpath xpath.Xpath) string {
+	if e, ok := s.entries.Get(xpath); ok {
 		e.lastUsed = time.Now()
+
 		return e.model.View()
 	}
 
 	model := spinner.New(spinner.WithSpinner(spinner.Dot))
-	s.entries.Set(xp, &entry{
+	s.entries.Set(xpath, &entry{
 		lastUsed: time.Now(),
 		model:    model,
 	})
@@ -57,6 +58,7 @@ func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 	}
 
 	s.ticking = true
+
 	return s.nextTick()
 }
 
@@ -74,6 +76,7 @@ func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
 
 	if s.entries.Len() == 0 {
 		s.ticking = false
+
 		return nil
 	}
 

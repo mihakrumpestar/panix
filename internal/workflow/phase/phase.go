@@ -85,10 +85,10 @@ func GetPhaseMetadata(phase Phase) (PhaseMetadata, bool) {
 
 // PhasesInOrder returns the standard deploy workflow phases in execution order.
 func PhasesInOrder() []Phase {
-	var result []Phase
+	result := make([]Phase, len(PhaseRegistry))
 
-	for _, pm := range PhaseRegistry {
-		result = append(result, pm.Phase)
+	for idx, pm := range PhaseRegistry {
+		result[idx] = pm.Phase
 	}
 
 	return result

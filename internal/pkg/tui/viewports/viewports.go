@@ -65,10 +65,18 @@ func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
 
 // Fullscreen
 
-func (v *Viewports) IsFullscreen() bool              { return v.fullscreen.Depth() > 0 }
-func (v *Viewports) GetFullscreenXpath() xpath.Xpath { return v.fullscreen }
-func (v *Viewports) SetFullscreen(xp xpath.Xpath)    { v.fullscreen = xp }
-func (v *Viewports) ExitFullscreen()                 { v.fullscreen = xpath.Xpath{} }
+func (v *Viewports) IsFullscreen() bool {
+	return v.fullscreen.Depth() > 0
+}
+func (v *Viewports) GetFullscreenXpath() xpath.Xpath {
+	return v.fullscreen
+}
+func (v *Viewports) SetFullscreen(xp xpath.Xpath) {
+	v.fullscreen = xp
+}
+func (v *Viewports) ExitFullscreen() {
+	v.fullscreen = xpath.New()
+}
 
 // ContentWidth returns available width accounting for scrollbar.
 func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWidth }
@@ -92,6 +100,7 @@ func (v *Viewports) GetOrCreateMainViewport(content string, footerHeaderHeight i
 func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, footerHeaderHeight int) string {
 	h := max(1, v.dimensions.Height-footerHeaderHeight-borderOverhead)
 	w := max(1, v.dimensions.Width-scrollbarWidth-borderOverhead)
+
 	return v.render(xp, content, 0, KindFullscreen, withHeight(h), withWidth(w)) + "\n"
 }
 
@@ -150,18 +159,18 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
-	switch m := msg.(type) {
+	switch msgParsed := msg.(type) {
 	case tea.MouseMsg:
-		v.handleMouse(m)
+		v.handleMouse(msgParsed)
 
 		return nil
 	case tea.KeyPressMsg:
-		v.handleKey(m)
+		v.handleKey(msgParsed)
 
 		return nil
 	case tea.WindowSizeMsg:
-		v.dimensions.Width = m.Width
-		v.dimensions.Height = m.Height
+		v.dimensions.Width = msgParsed.Width
+		v.dimensions.Height = msgParsed.Height
 
 		return nil
 	}
@@ -194,23 +203,24 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 // Debug
 
 func (v *Viewports) Debug() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
+	var stringsBuilder strings.Builder
+	fmt.Fprintf(&stringsBuilder, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
 
-	for xp, it := range v.items.Records() {
-		fmt.Fprintf(&b, "  '%s': %dx%d c:%d", xp, it.model.Width(), it.model.Height(), it.model.TotalLineCount())
+	for xp, item := range v.items.Records() {
+		fmt.Fprintf(&stringsBuilder, "  '%s': %dx%d c:%d", xp, item.model.Width(), item.model.Height(), item.model.TotalLineCount())
 
-		if it.active {
-			b.WriteString(" [A]")
+		if item.active {
+			stringsBuilder.WriteString(" [A]")
 		}
 
-		if it.model.ScrollPercent() == 1 {
-			b.WriteString(" @btm")
+		if item.model.ScrollPercent() == 1 {
+			stringsBuilder.WriteString(" @btm")
 		}
 
-		b.WriteByte('\n')
+		stringsBuilder.WriteByte('\n')
 	}
-	return b.String()
+
+	return stringsBuilder.String()
 }
 
 // Internal: render options
@@ -231,69 +241,70 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 		fn(&opts)
 	}
 
-	w := opts.explicitWidth
-	if w == 0 {
-		w = max(1, v.dimensions.Width-indent-scrollbarWidth)
+	width := opts.explicitWidth
+	if width == 0 {
+		width = max(1, v.dimensions.Width-indent-scrollbarWidth)
 	}
 
 	maxH := v.conf.Flags.Tui.CommandOutputMaxHeight
 	if kind == KindMain || kind == KindFullscreen {
 		maxH = 0
 	}
-	h := max(1, opts.explicitHeight)
 
-	it, exists := v.items.Get(xp)
+	height := max(1, opts.explicitHeight)
+
+	itemI, exists := v.items.Get(xp)
 	if !exists {
-		it = &item{
-			model:    viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		itemI = &item{
+			model:    viewport.New(viewport.WithWidth(width), viewport.WithHeight(height)),
 			zoneBase: xp.NewXpathWithAppend("scrollbar"),
 			content:  content,
 			active:   xp == v.mainXpath,
 		}
-		it.model.GotoBottom()
-		if err := v.items.Set(xp, it); err != nil {
+		itemI.model.GotoBottom()
+		if err := v.items.Set(xp, itemI); err != nil {
 			return ""
 		}
 	} else {
-		it.content = content
+		itemI.content = content
 	}
 
-	return it.cache.Get(
+	return itemI.cache.Get(
 		func() (string, bool) {
-			wasAtBottom := it.model.ScrollPercent() == 1 && xp != v.mainXpath
-			yOffset := it.model.YOffset()
+			wasAtBottom := itemI.model.ScrollPercent() == 1 && xp != v.mainXpath
+			yOffset := itemI.model.YOffset()
 
-			contentH := v.setContent(it, content, w)
-			it.model.SetWidth(w)
+			contentH := v.setContent(itemI, content, width)
+			itemI.model.SetWidth(width)
 
 			// Scrollbar narrows content for capped viewports
 			if kind == KindContent && maxH > 0 && contentH > maxH {
-				narrowW := max(1, w-scrollbarWidth)
-				it.model.SetWidth(narrowW)
-				contentH = v.setContent(it, content, narrowW)
+				narrowW := max(1, width-scrollbarWidth)
+				itemI.model.SetWidth(narrowW)
+				contentH = v.setContent(itemI, content, narrowW)
 			}
 
 			finalH := contentH
 			if maxH > 0 && contentH > maxH && kind == KindContent {
 				finalH = maxH
 			} else if kind == KindMain || kind == KindFullscreen {
-				finalH = max(1, h)
+				finalH = max(1, height)
 			}
 
-			it.model.SetHeight(finalH)
+			itemI.model.SetHeight(finalH)
 
 			if wasAtBottom {
-				it.model.GotoBottom()
+				itemI.model.GotoBottom()
 			} else {
-				it.model.SetYOffset(min(yOffset, max(0, contentH-finalH)))
+				itemI.model.SetYOffset(min(yOffset, max(0, contentH-finalH)))
 			}
 
-			r := v.style(it, contentH, finalH, kind)
+			r := v.style(itemI, contentH, finalH, kind)
 			r = zone.Mark(xp.String(), r)
 
 			return r, true
 		},
-		w, h, content, it.model.ScrollPercent(), it.active)
+		width, height, content, itemI.model.ScrollPercent(), itemI.active)
 }
 
 // setContent word-wraps content and sets it on the viewport model.
@@ -310,25 +321,26 @@ func (v *Viewports) setContent(it *item, content string, width int) int {
 }
 
 // style renders the viewport with border/highlight/scrollbar based on kind.
-func (v *Viewports) style(it *item, contentH, visH int, kind Kind) string {
-	scrollbar, _ := v.scrollbar(it.model.ScrollPercent(), contentH, visH)
-	combined := v.withScrollbar(it.model.View(), scrollbar, it.zoneBase)
+func (v *Viewports) style(item *item, contentH, visH int, kind Kind) string {
+	scrollbar, _ := v.scrollbar(item.model.ScrollPercent(), contentH, visH)
+	combined := v.withScrollbar(item.model.View(), scrollbar, item.zoneBase)
 
 	switch kind {
 	case KindLabel:
-		if it.active {
+		if item.active {
 			combined = v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(combined)
 		}
+
 		return combined
 	case KindContent, KindFullscreen:
-		bc := v.conf.ColorScheme.Table.Border.GetForeground()
-		if it.active {
-			bc = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
+		border := v.conf.ColorScheme.Table.Border.GetForeground()
+		if item.active {
+			border = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
 		}
 
 		return lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(bc).
+			BorderForeground(border).
 			Render(combined)
 	default: // KindMain
 		return combined
@@ -345,23 +357,23 @@ func (v *Viewports) scrollbar(pct float64, total, visible int) (string, int) {
 	pos := int(float64(visible-thumb) * clamp(pct, 0, 1))
 	end := pos + thumb
 
-	var b strings.Builder
+	var stringsBuilder strings.Builder
 
 	for i := range visible {
 		if i > 0 {
-			b.WriteByte('\n')
+			stringsBuilder.WriteByte('\n')
 		}
 
 		if i >= pos && i < end {
-			b.WriteString(scrollThumb)
+			stringsBuilder.WriteString(scrollThumb)
 		} else {
-			b.WriteString(scrollTrack)
+			stringsBuilder.WriteString(scrollTrack)
 		}
 	}
 
 	return lipgloss.NewStyle().
 		Foreground(v.conf.ColorScheme.Table.Border.GetForeground()).
-		Render(b.String()), 1
+		Render(stringsBuilder.String()), 1
 }
 
 // withScrollbar appends scrollbar lines to the right side of the viewport view.
@@ -420,24 +432,24 @@ func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 }
 
 func (v *Viewports) handleKey(msg tea.KeyPressMsg) {
-	it := v.activeViewport()
-	if it == nil {
+	activeViewport := v.activeViewport()
+	if activeViewport == nil {
 		return
 	}
 
 	switch msg.String() {
 	case "up", "k":
-		it.model.ScrollUp(1)
+		activeViewport.model.ScrollUp(1)
 	case "down", "j":
-		it.model.ScrollDown(1)
+		activeViewport.model.ScrollDown(1)
 	case "pgup":
-		it.model.HalfPageUp()
+		activeViewport.model.HalfPageUp()
 	case "pgdown", "space":
-		it.model.HalfPageDown()
+		activeViewport.model.HalfPageDown()
 	case "home", "g":
-		it.model.GotoTop()
+		activeViewport.model.GotoTop()
 	case "end", "G":
-		it.model.GotoBottom()
+		activeViewport.model.GotoBottom()
 	}
 }
 
@@ -477,13 +489,13 @@ func (v *Viewports) mostSpecific(xps []xpath.Xpath) xpath.Xpath {
 	return xps[0]
 }
 
-func clamp(v, lo, hi float64) float64 {
-	if v < lo {
-		return lo
+func clamp(v, low, high float64) float64 { //nolint:varnamelen
+	if v < low {
+		return low
 	}
 
-	if v > hi {
-		return hi
+	if v > high {
+		return high
 	}
 
 	return v

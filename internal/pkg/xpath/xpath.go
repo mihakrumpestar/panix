@@ -9,7 +9,7 @@ import (
 
 // Note: all methods are immutable.
 
-type Xpath struct {
+type Xpath struct { //nolint:recvcheck
 	path string
 }
 
@@ -90,15 +90,15 @@ func (x Xpath) FleetLeaf() (string, string, string) {
 	}
 
 	parts := strings.Split(x.path, "/")
-	n := len(parts)
+	numOfParts := len(parts)
 
-	switch n {
+	switch numOfParts {
 	case 1:
 		return "", "", parts[0]
 	case 2:
 		return "", parts[0], parts[1]
 	default:
-		return parts[n-3], parts[n-2], parts[n-1]
+		return parts[numOfParts-3], parts[numOfParts-2], parts[numOfParts-1]
 	}
 }
 

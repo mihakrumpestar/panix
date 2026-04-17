@@ -1,10 +1,9 @@
 package fleet
 
 import (
-	"errors"
-
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
+	"github.com/pkg/errors"
 )
 
 var ErrNoFlakesAfterFilter = errors.New("no flakes in fleet after filtering")

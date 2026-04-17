@@ -60,6 +60,7 @@ func (s *AtomicBuffer) Len() int {
 
 func (s *AtomicBuffer) MarshalJSON() ([]byte, error) {
 	b, err := json.Marshal(s.String())
+
 	return b, errors.Wrap(err, "marshal atomic buffer")
 }
 

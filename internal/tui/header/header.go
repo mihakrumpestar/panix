@@ -1,7 +1,6 @@
 package header
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -43,22 +42,22 @@ func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAn
 	}, width)
 }
 
-func (h *Header) render(width int, cs *colorscheme.ColorScheme) string {
+func (h *Header) render(width int, colorScheme *colorscheme.ColorScheme) string {
 	reason := h.snapshot.Reason.String()
 
 	parts := []string{
-		cs.Status.Running.Render(fmt.Sprintf("v%s", h.snapshot.PanixVersion)),
-		cs.Table.Border.Render(reason),
-		cs.Table.Border.Render("started:", formatTime(h.snapshot.StartTime)),
-		cs.Table.Border.Render("taken:", formatTime(h.snapshot.SnapshotTime)),
+		colorScheme.Status.Running.Render("v" + h.snapshot.PanixVersion),
+		colorScheme.Table.Border.Render(reason),
+		colorScheme.Table.Border.Render("started:", formatTime(h.snapshot.StartTime)),
+		colorScheme.Table.Border.Render("taken:", formatTime(h.snapshot.SnapshotTime)),
 	}
 
 	if h.snapshot.WorkflowError != nil {
-		parts = append(parts, cs.Status.Failed.Render(h.snapshot.WorkflowError.Error()))
+		parts = append(parts, colorScheme.Status.Failed.Render(h.snapshot.WorkflowError.Error()))
 	}
 
-	sep := cs.Table.Border.Render(" │ ")
-	line := cs.Header.Title.Render("◉ Snapshot") + cs.Table.Border.Render(": ") + strings.Join(parts, sep)
+	sep := colorScheme.Table.Border.Render(" │ ")
+	line := colorScheme.Header.Title.Render("◉ Snapshot") + colorScheme.Table.Border.Render(": ") + strings.Join(parts, sep)
 
 	return lipgloss.NewStyle().Width(width).Render(line) + "\n\n"
 }

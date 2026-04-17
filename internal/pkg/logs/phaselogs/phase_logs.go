@@ -22,21 +22,10 @@ func (pl *PhaseLogs) UnmarshalJSON(data []byte) error {
 	return errors.Wrap(pl.AtomicOrderedMap.UnmarshalJSON(data), "unmarshal phase logs")
 }
 
-// Get retrieves a PhaseLog for the given phase, or nil if not found.
-func (pl *PhaseLogs) MustGet(phase phase.Phase) *PhaseLog {
-	if pl == nil || pl.AtomicOrderedMap == nil {
-		return nil
-	}
-
-	phaseLog, _ := pl.AtomicOrderedMap.Get(phase)
-
-	return phaseLog
-}
-
 // GetOrCreate retrieves or creates a PhaseLog for the given phase.
 func (pl *PhaseLogs) GetOrCreate(phase phase.Phase) *PhaseLog {
-	phaseLog := pl.MustGet(phase)
-	if phaseLog != nil {
+	phaseLog, ok := pl.AtomicOrderedMap.Get(phase)
+	if ok {
 		return phaseLog
 	}
 

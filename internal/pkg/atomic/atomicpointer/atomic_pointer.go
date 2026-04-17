@@ -25,7 +25,7 @@ func (p *AtomicPointer[T]) Clear() {
 	p.Pointer.Store(&zero)
 }
 
-func (p *AtomicPointer[T]) Update(fn func(*T)) {
+func (p *AtomicPointer[T]) Update(fun func(*T)) {
 	for {
 		old := p.Pointer.Load()
 		if old == nil {
@@ -33,7 +33,7 @@ func (p *AtomicPointer[T]) Update(fn func(*T)) {
 		}
 
 		copied := *old
-		fn(&copied)
+		fun(&copied)
 
 		if p.Pointer.CompareAndSwap(old, &copied) {
 			return

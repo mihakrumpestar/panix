@@ -62,13 +62,13 @@ func (p *PhaseStatus) Reset() {
 }
 
 func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
-	for i := range p.CacheStatisticsPerPhase.Len() {
-		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, i)); z != nil && z.InBounds(msg) {
-			if p.Selected.Index == i {
+	for idx := range p.CacheStatisticsPerPhase.Len() {
+		if z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, idx)); z != nil && z.InBounds(msg) {
+			if p.Selected.Index == idx {
 				p.Selected.Index = -1
 				p.Selected.Phase = ""
 			} else {
-				p.Selected.Index = i
+				p.Selected.Index = idx
 				p.applyIndexToPhase()
 			}
 
@@ -104,10 +104,6 @@ func (p *PhaseStatus) HandleNavigation(key string, hasActiveInnerViewport bool) 
 	return false
 }
 
-func (p *PhaseStatus) applyIndexToPhase() {
-	p.Selected.Phase = p.CacheStatisticsPerPhase.Pairs()[p.Selected.Index].Key
-}
-
 func (p *PhaseStatus) View(width int, colorScheme *colorscheme.ColorScheme) string {
 	widthChanged := width != p.lastRenderWidth
 	if widthChanged {
@@ -123,6 +119,12 @@ func (p *PhaseStatus) View(width int, colorScheme *colorscheme.ColorScheme) stri
 			return p.renderPhaseFlow(width, colorScheme), true
 		},
 		p.CacheStatisticsPerPhase, width, p.Selected.Index)
+}
+
+// Helpers
+
+func (p *PhaseStatus) applyIndexToPhase() {
+	p.Selected.Phase = p.CacheStatisticsPerPhase.Pairs()[p.Selected.Index].Key
 }
 
 func (p *PhaseStatus) renderPhaseFlow(width int, colorScheme *colorscheme.ColorScheme) string {

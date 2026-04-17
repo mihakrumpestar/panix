@@ -2,9 +2,8 @@ package errorjson
 
 import (
 	"encoding/json"
-	"errors"
 
-	pkgerrors "github.com/pkg/errors"
+	"github.com/pkg/errors"
 )
 
 // ErrorJSON wraps an error with JSON marshal/unmarshal support.
@@ -22,7 +21,7 @@ func New(err error) *ErrorJSON {
 	return &ErrorJSON{err: err}
 }
 
-// Error satisfies error interface
+// Error satisfies error interface.
 func (e *ErrorJSON) Error() string {
 	if e == nil || e.err == nil {
 		return ""
@@ -37,7 +36,8 @@ func (e *ErrorJSON) MarshalJSON() ([]byte, error) {
 	}
 
 	b, err := json.Marshal(e.err.Error())
-	return b, pkgerrors.Wrap(err, "marshal error json")
+
+	return b, errors.Wrap(err, "marshal error json")
 }
 
 func (e *ErrorJSON) UnmarshalJSON(data []byte) error {
@@ -49,7 +49,7 @@ func (e *ErrorJSON) UnmarshalJSON(data []byte) error {
 
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
-		return pkgerrors.Wrap(err, "unmarshal error json")
+		return errors.Wrap(err, "unmarshal error json")
 	}
 
 	e.err = errors.New(s)

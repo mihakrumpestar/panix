@@ -63,9 +63,7 @@ func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 		sshArgs = append(sshArgs, "-o", "StrictHostKeyChecking=accept-new")
 	}
 
-	for _, extraFlag := range sC.ExtraFlags {
-		sshArgs = append(sshArgs, extraFlag)
-	}
+	sshArgs = append(sshArgs, sC.ExtraFlags...)
 
 	return sshArgs
 }

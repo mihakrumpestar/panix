@@ -4,7 +4,7 @@ import "strconv"
 
 // SSHPort
 
-type SSHPort uint16
+type SSHPort uint16 //nolint:recvcheck
 
 func (s SSHPort) Get() uint16 {
 	if s == 0 {
@@ -24,7 +24,7 @@ func (s SSHPort) String() string {
 
 // SSHUsername
 
-type SSHUsername string
+type SSHUsername string //nolint:recvcheck
 
 func (s SSHUsername) Get() string {
 	if s == "" {

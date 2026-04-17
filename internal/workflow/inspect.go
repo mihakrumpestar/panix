@@ -322,14 +322,14 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.Generations = &machine.Generations{
+			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
+				metaInspect.Generations = &machine.Generations{
 					Current:   1,
 					Available: []uint{1},
 				}
-				mi.Date = "DRY_RUN"
-				mi.Nixos = "DRY_RUN"
-				mi.Kernel = "DRY_RUN"
+				metaInspect.Date = "DRY_RUN"
+				metaInspect.Nixos = "DRY_RUN"
+				metaInspect.Kernel = "DRY_RUN"
 			})
 		}),
 	)

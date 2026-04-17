@@ -114,7 +114,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 
 var _ yaml.InterfaceMarshaler = (*AtomicOrderedMap[string, any])(nil)
 
-func (m AtomicOrderedMap[K, V]) MarshalYAML() (interface{}, error) {
+func (m AtomicOrderedMap[K, V]) MarshalYAML() (any, error) {
 	if m.Omap == nil {
 		return yaml.MapSlice{}, nil
 	}
@@ -131,7 +131,7 @@ func (m AtomicOrderedMap[K, V]) MarshalYAML() (interface{}, error) {
 
 var _ yaml.InterfaceUnmarshaler = (*AtomicOrderedMap[string, any])(nil)
 
-func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(interface{}) error) error {
+func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(any) error) error {
 	if m.Omap == nil {
 		omapInstance, err := omap.New[K, V]()
 		if err != nil {

@@ -31,16 +31,16 @@ type Fleet struct {
 	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
 }
 
-func (r *Fleet) Init(localMachineHostname string) error {
-	err := r.Attributes.Init("", attributes.New(), false, localMachineHostname)
+func (f *Fleet) Init(localMachineHostname string) error {
+	err := f.Attributes.Init("", attributes.New(), false, localMachineHostname)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
 
-	r.Logs = logs.New()
+	f.Logs = logs.New()
 
-	r.StatsTable = statstable.NewStatsTable()
-	r.PhaseStatus = phasestatus.NewPhaseStatus()
+	f.StatsTable = statstable.NewStatsTable()
+	f.PhaseStatus = phasestatus.NewPhaseStatus()
 
 	return nil
 }
@@ -80,7 +80,7 @@ func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
 }
 
 func (f *Fleet) RecalculateDurationAndError() {
-	i := 0
+	idx := 0
 
 	var largestFlakeDuration time.Duration
 
@@ -91,7 +91,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 			var largestMachineDuration time.Duration
 
 			for _, machine := range configuration.Value.Machines.Pairs() {
-				dae := f.StatsTable.CacheFlattenedLogs[i].DurationAndErrorCache
+				dae := f.StatsTable.CacheFlattenedLogs[idx].DurationAndErrorCache
 
 				machine.Value.Logs.DurationAndErrorCache = dae
 
@@ -99,7 +99,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 					largestMachineDuration = dae.Duration
 				}
 
-				i++
+				idx++
 			}
 
 			configuration.Value.Logs.DurationAndErrorCache.Duration = largestMachineDuration
@@ -134,30 +134,30 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 		tas := machineLastPhaseLog.Value.TimeAndState.Load()
 		endErr := tas.EndError
 
-		fleetLeaf.Machine.State.Update(func(s *machine.State) {
-			s.Phase = machineLastPhaseLog.Key
-			s.Error = endErr
+		fleetLeaf.Machine.State.Update(func(machineState *machine.State) {
+			machineState.Phase = machineLastPhaseLog.Key
+			machineState.Error = endErr
 
 			if !tas.IsFinished() {
-				s.Status = stats.Running
-				s.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.Status = stats.Running
+				machineState.StatusMsg = lastCommandLog.StatusIfRunning
 
 				return
 			}
 
 			if endErr != nil {
-				s.Status = stats.Failed
-				s.StatusMsg = lastCommandLog.StatusIfFailed
+				machineState.Status = stats.Failed
+				machineState.StatusMsg = lastCommandLog.StatusIfFailed
 
 				return
 			}
 
-			if workflowPhases[len(workflowPhases)-1] == s.Phase {
-				s.Status = stats.Done
-				s.StatusMsg = "done"
+			if workflowPhases[len(workflowPhases)-1] == machineState.Phase {
+				machineState.Status = stats.Done
+				machineState.StatusMsg = "done"
 			} else {
-				s.Status = stats.Done
-				s.StatusMsg = s.Phase.String() + " done"
+				machineState.Status = stats.Done
+				machineState.StatusMsg = machineState.Phase.String() + " done"
 			}
 		})
 	}
@@ -202,16 +202,16 @@ type FleetLeaf struct {
 
 func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	return func(yield func(int, *FleetLeaf) bool) {
-		i := 0
+		idx := 0
 
 		for _, flake := range f.Flakes.Pairs() {
 			for _, configuration := range flake.Value.Configurations.Pairs() {
 				for _, machine := range configuration.Value.Machines.Pairs() {
-					if !yield(i, &FleetLeaf{flake.Value, configuration.Value, machine.Value}) {
+					if !yield(idx, &FleetLeaf{flake.Value, configuration.Value, machine.Value}) {
 						return
 					}
 
-					i++
+					idx++
 				}
 			}
 		}

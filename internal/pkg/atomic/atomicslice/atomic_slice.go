@@ -22,6 +22,7 @@ func NewFrom[T any](items []T) *AtomicSlice[T] {
 	for _, item := range items {
 		s.Append(item)
 	}
+
 	return s
 }
 

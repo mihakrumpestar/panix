@@ -93,15 +93,15 @@ var formatConstraints = map[string]struct {
 }
 
 func newGenerator() *generator {
-	g := &generator{
+	generator := &generator{
 		definitions: make(map[string]any),
 		defTypes:    make(map[reflect.Type]string),
 		orderedDefs: make(map[reflect.Type]orderedMapDef),
 	}
 
-	g.initDefinitionTypes()
+	generator.initDefinitionTypes()
 
-	return g
+	return generator
 }
 
 func (g *generator) initDefinitionTypes() {

@@ -47,18 +47,18 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 	b.viewports = vp
 	b.spinners = sp
 
-	var sb strings.Builder
-	sb.WriteString(b.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n"))
+	var stringBuilder strings.Builder
+	stringBuilder.WriteString(b.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n"))
 
 	for _, fp := range b.conf.Fleet.Flakes.Pairs() {
-		f := fp.Value
-		if f == nil {
+		flake := fp.Value
+		if flake == nil {
 			continue
 		}
 
-		flakeNode := b.entityNode(0, b.conf.ColorScheme.Flake, f.Name, f.Logs, true)
+		flakeNode := b.entityNode(0, b.conf.ColorScheme.Flake, flake.Name, flake.Logs, true)
 
-		for _, cp := range f.Configurations.Pairs() {
+		for _, cp := range flake.Configurations.Pairs() {
 			cfg := cp.Value
 			if cfg == nil {
 				continue
@@ -73,11 +73,11 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 		}
 
 		if flakeNode.Children().Length() > 0 {
-			sb.WriteString("\n" + flakeNode.String())
+			stringBuilder.WriteString("\n" + flakeNode.String())
 		}
 	}
 
-	return sb.String()
+	return stringBuilder.String()
 }
 
 func (b *BuildLogs) buildConfigTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
@@ -93,21 +93,21 @@ func (b *BuildLogs) buildConfigTree(cfgNode *tree.Tree, cfg *configuration.Confi
 
 func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
 	for _, mp := range cfg.Machines.Pairs() {
-		m := mp.Value
-		if m == nil || m.Xpath != b.conf.Fleet.StatsTable.Selected.Xpath {
+		machine := mp.Value
+		if machine == nil || machine.Xpath != b.conf.Fleet.StatsTable.Selected.Xpath {
 			continue
 		}
 
-		if m.Logs == nil {
+		if machine.Logs == nil {
 			return
 		}
 
-		node := b.entityNode(machineInd, b.conf.ColorScheme.Machine, m.Name, m.Logs, false)
+		node := b.entityNode(machineInd, b.conf.ColorScheme.Machine, machine.Name, machine.Logs, false)
 
-		errored := b.addPhases(node, m.Logs, m.Xpath, phaseInd, true, phase.Inspect)
+		errored := b.addPhases(node, machine.Logs, machine.Xpath, phaseInd, true, phase.Inspect)
 		if !errored {
 			for _, pm := range phase.PhaseRegistry[1:] {
-				logs_, xp := b.phaseLogsAndXpath(pm, cfg, m)
+				logs_, xp := b.phaseLogsAndXpath(pm, cfg, machine)
 				if b.addPhases(node, logs_, xp, phaseInd, true, pm.Phase) {
 					break
 				}
@@ -123,10 +123,10 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configurat
 }
 
 func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
-	p := b.conf.Fleet.PhaseStatus.Selected.Phase
+	phaseI := b.conf.Fleet.PhaseStatus.Selected.Phase
 
-	if p.GetPhaseScope() == phase.ScopeConfiguration {
-		b.addPhases(cfgNode, cfg.Logs, cfg.Xpath, machineInd, false, p)
+	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
+		b.addPhases(cfgNode, cfg.Logs, cfg.Xpath, machineInd, false, phaseI)
 
 		return
 	}
@@ -136,7 +136,7 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuratio
 			continue
 		}
 
-		b.addMachineWithPhases(cfgNode, mp.Value, machineInd, p)
+		b.addMachineWithPhases(cfgNode, mp.Value, machineInd, phaseI)
 	}
 }
 
@@ -171,13 +171,13 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Conf
 	flush()
 }
 
-func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, m *machine.Machine, indent int, allowed ...phase.Phase) {
-	if m == nil || m.Logs == nil {
+func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, machine *machine.Machine, indent int, allowed ...phase.Phase) {
+	if machine == nil || machine.Logs == nil {
 		return
 	}
 
-	node := b.entityNode(indent, b.conf.ColorScheme.Machine, m.Name, m.Logs, false)
-	b.addPhases(node, m.Logs, m.Xpath, indent+treeStep, false, allowed...)
+	node := b.entityNode(indent, b.conf.ColorScheme.Machine, machine.Name, machine.Logs, false)
+	b.addPhases(node, machine.Logs, machine.Xpath, indent+treeStep, false, allowed...)
 
 	if node.Children().Length() > 0 {
 		parent.Child(node)
@@ -221,29 +221,29 @@ func (b *BuildLogs) addPhases(parent *tree.Tree, logNode *logs.Logs, entityXpath
 	return false
 }
 
-func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, p phase.Phase, phaseLog *phaselogs.PhaseLog, indent int) bool {
-	if phaseLog == nil || b.shouldHidePhase(p, phaseLog) {
+func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, phaseI phase.Phase, phaseLog *phaselogs.PhaseLog, indent int) bool {
+	if phaseLog == nil || b.shouldHidePhase(phaseI, phaseLog) {
 		return false
 	}
 
-	phaseXpath := entityXpath.NewXpathWithAppend(string(p))
+	phaseXpath := entityXpath.NewXpathWithAppend(phaseI.String())
 	tas := phaseLog.TimeAndState
 
 	icon := b.spinnerOrIcon(phaseXpath, string(b.conf.ColorScheme.Phase.Icon), tas.Load())
 	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Phase, tas)
 
-	leftRaw := icon + strings.ToUpper(string(p))
+	leftRaw := icon + strings.ToUpper(phaseI.String())
 	left := b.conf.ColorScheme.Phase.Color.Render(leftRaw)
 
 	layoutIndent := indent
-	if p.GetPhaseScope() == phase.ScopeConfiguration {
+	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
 		layoutIndent -= 2
 	}
 
 	line := b.layoutLine(layoutIndent, left, durStyled, len(leftRaw), durWidth)
 
 	phaseNode := tree.New().Root(b.conf.ColorScheme.Phase.Color.Render(line))
-	hasError := b.addCommands(phaseNode, phaseLog, p, phaseXpath, indent)
+	hasError := b.addCommands(phaseNode, phaseLog, phaseI, phaseXpath, indent)
 	parent.Child(phaseNode)
 
 	return hasError
@@ -344,14 +344,14 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 	right := style.Color.Render(rightRaw)
 	line := b.layoutLine(indent, left, right, len(leftRaw), len(rightRaw))
 
-	t := tree.New().Root(line)
+	treeI := tree.New().Root(line)
 	if isRoot {
-		t = t.Enumerator(tree.RoundedEnumerator).
+		treeI = treeI.Enumerator(tree.RoundedEnumerator).
 			EnumeratorStyle(b.conf.ColorScheme.Tree.Enumerator).
 			IndenterStyle(b.conf.ColorScheme.Tree.Enumerator)
 	}
 
-	return t
+	return treeI
 }
 
 func (b *BuildLogs) layoutLine(indent int, left, right string, leftWidth, rightWidth int) string {
