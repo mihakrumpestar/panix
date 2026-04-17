@@ -37,6 +37,7 @@ func (m *AtomicOrderedMap[K, V]) Pairs() []Pair[K, V] {
 	}
 
 	pairs := m.Omap.Pairs()
+
 	result := make([]Pair[K, V], len(pairs))
 	for i, p := range pairs {
 		result[i] = Pair[K, V]{Key: p.Key, Value: p.Value}
@@ -51,6 +52,7 @@ func (m *AtomicOrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 	if m == nil || m.Omap == nil {
 		return
 	}
+
 	pairs := m.Omap.Pairs()
 	for _, p := range pairs {
 		if pred(p.Key, p.Value) {
@@ -64,16 +66,20 @@ func (m *AtomicOrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 func (m *AtomicOrderedMap[K, V]) Last() (Pair[K, V], bool) {
 	if m == nil || m.Omap == nil || m.Omap.Len() == 0 {
 		var zero Pair[K, V]
+
 		return zero, false
 	}
 
 	pairs := m.Omap.Pairs()
 	p := pairs[len(pairs)-1]
+
 	return Pair[K, V]{Key: p.Key, Value: p.Value}, true
 }
 
 func (m *AtomicOrderedMap[K, V]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(m.Pairs())
+	b, err := json.Marshal(m.Pairs())
+
+	return b, errors.Wrap(err, "marshal ordered map")
 }
 
 func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
@@ -83,7 +89,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 
 	var pairs []omap.Pair[K, V]
 	if err := json.Unmarshal(data, &pairs); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal ordered map")
 	}
 
 	if m.Omap == nil {
@@ -91,6 +97,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to create omap")
 		}
+
 		m.Omap = omapInstance
 	} else {
 		m.Omap.Clear()
@@ -113,6 +120,7 @@ func (m AtomicOrderedMap[K, V]) MarshalYAML() (interface{}, error) {
 	}
 
 	pairs := m.Omap.Pairs()
+
 	result := make(yaml.MapSlice, 0, len(pairs))
 	for _, p := range pairs {
 		result = append(result, yaml.MapItem{Key: p.Key, Value: p.Value})
@@ -129,6 +137,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(interface{}) error) e
 		if err != nil {
 			return errors.Wrap(err, "failed to create omap")
 		}
+
 		m.Omap = omapInstance
 	} else {
 		m.Omap.Clear()

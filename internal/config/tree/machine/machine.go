@@ -67,7 +67,7 @@ func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attribut
 	}
 
 	if m.State == nil {
-		m.State = atomicpointer.New(&State{ActiveSSH: SSHTypeRegular})
+		m.State = atomicpointer.New[State]()
 	}
 }
 
@@ -81,8 +81,8 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, loc
 		return errors.Wrap(err, "failed to initialize machine")
 	}
 
-	m.MetaInspect = atomicpointer.New(&MetaInspect{})
-	m.State = atomicpointer.New(&State{ActiveSSH: SSHTypeRegular})
+	m.MetaInspect = atomicpointer.New[MetaInspect]()
+	m.State = atomicpointer.New[State]()
 
 	m.Logs = logs.New()
 

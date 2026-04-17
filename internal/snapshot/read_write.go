@@ -24,7 +24,7 @@ func Read(path string) (*config.Config, error) {
 
 	err = jsonx.Decode(data, &s)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to decode snapshot")
 	}
 
 	s.PostUnmarshalInit()
@@ -42,10 +42,11 @@ func Write(dir string, s *config.Config) error {
 
 	err = jsonx.Encode(s, &data)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to encode snapshot")
 	}
 
 	path := filepath.Join(dir, fileName(s))
+
 	err = os.WriteFile(path, data.Bytes(), filepermissions.DefaultFilePermissions)
 	if err != nil {
 		return errors.Wrap(err, "failed to write snapshot")

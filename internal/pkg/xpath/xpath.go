@@ -3,6 +3,8 @@ package xpath
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // Note: all methods are immutable.
@@ -105,13 +107,14 @@ func (x Xpath) String() string {
 }
 
 func (x Xpath) MarshalJSON() ([]byte, error) {
-	return json.Marshal(x.path)
+	b, err := json.Marshal(x.path)
+	return b, errors.Wrap(err, "marshal xpath")
 }
 
 func (x *Xpath) UnmarshalJSON(data []byte) error {
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
-		return err //nolint:wrapcheck
+		return errors.Wrap(err, "unmarshal xpath")
 	}
 
 	x.path = s

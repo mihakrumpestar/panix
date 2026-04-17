@@ -3,6 +3,7 @@ package phaselogs
 import (
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/pkg/errors"
 )
 
 type PhaseLogs struct {
@@ -18,7 +19,7 @@ func (pl *PhaseLogs) UnmarshalJSON(data []byte) error {
 		pl.AtomicOrderedMap = atomicorderedmap.New[phase.Phase, *PhaseLog]()
 	}
 
-	return pl.AtomicOrderedMap.UnmarshalJSON(data)
+	return errors.Wrap(pl.AtomicOrderedMap.UnmarshalJSON(data), "unmarshal phase logs")
 }
 
 // Get retrieves a PhaseLog for the given phase, or nil if not found.

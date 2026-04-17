@@ -3,15 +3,20 @@ package atomicpointer
 import (
 	"encoding/json"
 	"sync/atomic"
+
+	"github.com/pkg/errors"
 )
 
 type AtomicPointer[T any] struct {
 	atomic.Pointer[T]
 }
 
-func New[T any](val *T) *AtomicPointer[T] {
+func New[T any]() *AtomicPointer[T] {
 	ap := &AtomicPointer[T]{}
-	ap.Pointer.Store(val)
+
+	var zero T
+	ap.Pointer.Store(&zero)
+
 	return ap
 }
 
@@ -26,8 +31,10 @@ func (p *AtomicPointer[T]) Update(fn func(*T)) {
 		if old == nil {
 			panic("atomicpointer: Update called on nil pointer")
 		}
+
 		copied := *old
 		fn(&copied)
+
 		if p.Pointer.CompareAndSwap(old, &copied) {
 			return
 		}
@@ -39,18 +46,25 @@ func (p *AtomicPointer[T]) MarshalJSON() ([]byte, error) {
 	if val == nil {
 		return []byte("null"), nil
 	}
-	return json.Marshal(val)
+
+	b, err := json.Marshal(val)
+
+	return b, errors.Wrap(err, "marshal atomic pointer")
 }
 
 func (p *AtomicPointer[T]) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
 		p.Pointer.Store(nil)
+
 		return nil
 	}
+
 	var val T
 	if err := json.Unmarshal(data, &val); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal atomic pointer")
 	}
+
 	p.Pointer.Store(&val)
+
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/hayageek/threadsafe"
+	"github.com/pkg/errors"
 )
 
 type AtomicSlice[T any] struct {
@@ -35,21 +36,26 @@ func (s *AtomicSlice[T]) Copy() *AtomicSlice[T] {
 }
 
 func (s *AtomicSlice[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.Values())
+	b, err := json.Marshal(s.Values())
+
+	return b, errors.Wrap(err, "marshal atomic slice")
 }
 
 func (s *AtomicSlice[T]) UnmarshalJSON(data []byte) error {
 	var items []T
 	if err := json.Unmarshal(data, &items); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal atomic slice")
 	}
+
 	if s.Slice == nil {
 		s.Slice = threadsafe.NewSlice[T]()
 	} else {
 		s.Clear()
 	}
+
 	for _, item := range items {
 		s.Append(item)
 	}
+
 	return nil
 }

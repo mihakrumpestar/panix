@@ -92,7 +92,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	spinnersI, err := spinners.NewSpinners()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to initialize spinners")
 	}
 
 	mdl.spinners = spinnersI
@@ -223,8 +223,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(cmd, m.workflowUpdateHook())
 
 	case tea.KeyPressMsg:
-		var keyCmd tea.Cmd
-		_, keyCmd = m.HandleKeyInput(msg)
+		_, keyCmd := m.HandleKeyInput(msg)
 		cmd = tea.Batch(cmd, keyCmd)
 
 	case tea.MouseClickMsg:
@@ -359,8 +358,10 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
 	if m.conf.Fleet.StatsTable.HandleMouseClick(msg) {
 		m.conf.Fleet.PhaseStatus.Reset()
+
 		return
 	}
+
 	if m.conf.Fleet.PhaseStatus.HandleMouseClick(msg) {
 		m.conf.Fleet.StatsTable.Reset()
 	}

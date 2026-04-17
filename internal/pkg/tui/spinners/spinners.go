@@ -11,8 +11,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
-const tickingFallback = 100 * time.Millisecond
-
 type tickMsg struct{}
 
 type Spinners struct {
@@ -94,5 +92,6 @@ func (s *Spinners) nextTick() tea.Cmd {
 func (s *Spinners) Debug() string {
 	var str strings.Builder
 	fmt.Fprintf(&str, "\nSpinners: %d (ticking: %v)\n", s.entries.Len(), s.ticking)
+
 	return str.String()
 }

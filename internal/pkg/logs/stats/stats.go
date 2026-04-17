@@ -4,6 +4,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/pkg/errors"
 )
 
 type StatsState string
@@ -37,7 +38,7 @@ func (spp *StatisticsPerPhase) UnmarshalJSON(data []byte) error {
 		spp.AtomicOrderedMap = atomicorderedmap.New[phase.Phase, StatsPack]()
 	}
 
-	return spp.AtomicOrderedMap.UnmarshalJSON(data)
+	return errors.Wrap(spp.AtomicOrderedMap.UnmarshalJSON(data), "unmarshal statistics per phase")
 }
 
 func (spp *StatisticsPerPhase) DeepSet(phase phase.Phase, statsState StatsState, xpathI xpath.Xpath) {

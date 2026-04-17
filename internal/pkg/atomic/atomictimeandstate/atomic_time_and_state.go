@@ -8,12 +8,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AtomicTimeAndState is a wrapper around atomicpointer.AtomicPointer for easier access
 type AtomicTimeAndState struct {
 	*atomicpointer.AtomicPointer[TimeAndState]
 }
 
 func New() *AtomicTimeAndState {
-	return &AtomicTimeAndState{atomicpointer.New(&TimeAndState{live: true})}
+	tas := atomicpointer.New[TimeAndState]()
+	tas.Store(&TimeAndState{live: true})
+
+	return &AtomicTimeAndState{tas}
 }
 
 func (tas *AtomicTimeAndState) StartTimer() {
@@ -23,6 +27,7 @@ func (tas *AtomicTimeAndState) StartTimer() {
 	}
 
 	timeNow := time.Now()
+
 	tas.Update(func(tas *TimeAndState) {
 		tas.StartTime = timeNow
 	})
@@ -34,6 +39,7 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 	}
 
 	timeNow := time.Now()
+
 	tas.Update(func(tas *TimeAndState) {
 		tas.DurationCache = timeNow.Sub(tas.StartTime)
 		tas.EndTime = timeNow
@@ -43,10 +49,10 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 
 func (tas *AtomicTimeAndState) UnmarshalJSON(data []byte) error {
 	if tas.AtomicPointer == nil {
-		tas.AtomicPointer = atomicpointer.New(&TimeAndState{})
+		tas.AtomicPointer = atomicpointer.New[TimeAndState]()
 	}
 
-	return tas.AtomicPointer.UnmarshalJSON(data)
+	return errors.Wrap(tas.AtomicPointer.UnmarshalJSON(data), "unmarshal time and state")
 }
 
 func (tas *AtomicTimeAndState) DurationOrElapsedTime() (time.Duration, error) {

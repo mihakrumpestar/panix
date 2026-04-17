@@ -63,28 +63,28 @@ func (r *runner) getOrCreateOnceAsync(xpath xpath.Xpath) *onceasync.OnceAsync {
 }
 
 // run executes a phase with automatic once-per-scope semantics.
-func (pr *phaseRunner) run(p phase.Phase) error {
-	if shouldSkipPhase(p, pr.fleetLeaf.Machine) {
+func (pr *phaseRunner) run(phase phase.Phase) error {
+	if shouldSkipPhase(phase, pr.fleetLeaf.Machine) {
 		return nil
 	}
 
 	workflow := pr.r.workflow
 
-	xpath, logs, err := getXpathAndLogsForScope(p, pr.fleetLeaf)
+	xpath, logs, err := getXpathAndLogsForScope(phase, pr.fleetLeaf)
 	if err != nil {
 		return err
 	}
 
 	execFn := func() error {
-		return workflow.executePhase(p, pr.fleetLeaf)
+		return workflow.executePhase(phase, pr.fleetLeaf)
 	}
 
 	// If this phase should only run once per scope, use OnceAsync
-	if p.ShouldRunOnce() {
+	if phase.ShouldRunOnce() {
 		once := pr.r.getOrCreateOnceAsync(xpath)
 
 		err := once.Do(func() error {
-			return workflow.NewTaskWithRetry(p, logs, execFn)
+			return workflow.NewTaskWithRetry(phase, logs, execFn)
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to run once-per-scope phase")
@@ -94,7 +94,7 @@ func (pr *phaseRunner) run(p phase.Phase) error {
 	}
 
 	// Otherwise, run directly
-	return workflow.NewTaskWithRetry(p, logs, execFn)
+	return workflow.NewTaskWithRetry(phase, logs, execFn)
 }
 
 func shouldSkipPhase(p phase.Phase, machine *machine.Machine) bool {

@@ -6,6 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/errorjson"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/pkg/errors"
 )
 
 // Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
@@ -33,13 +34,12 @@ func (l *Logs) RecalculateDurationAndError() error {
 
 		duration, err := tas.DurationOrElapsedTime()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to get duration or elapsed time")
 		}
 
 		durationAndError.Duration += duration
 
 		endError := tas.Load().EndError
-
 		if endError != nil {
 			durationAndError.Error = endError
 

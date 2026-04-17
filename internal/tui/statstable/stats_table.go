@@ -1,7 +1,6 @@
 package statstable
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -279,5 +278,5 @@ func getGeneration(machineInfo MachineInfo) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%d", machineInfo.MetaInspect.Generations.Current)
+	return strconv.FormatUint(uint64(machineInfo.MetaInspect.Generations.Current), 10)
 }

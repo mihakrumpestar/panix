@@ -32,6 +32,7 @@ func (c *Cache[T]) Get(fn func() (T, bool), cacheValidationElements ...any) T {
 	c.cached = true
 	c.hash = h
 	c.contents = contents
+
 	return contents
 }
 
@@ -39,7 +40,9 @@ func (c *Cache[T]) computeHash(args ...any) uint64 {
 	if c.hasher == nil {
 		c.hasher = fnv.New64a()
 	}
+
 	c.hasher.Reset()
+
 	for _, arg := range args {
 		switch v := arg.(type) {
 		case int:
@@ -66,5 +69,6 @@ func (c *Cache[T]) computeHash(args ...any) uint64 {
 			fmt.Fprint(c.hasher, v)
 		}
 	}
+
 	return c.hasher.Sum64()
 }

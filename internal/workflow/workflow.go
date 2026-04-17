@@ -84,7 +84,7 @@ func (w *Workflow) Cancel() error {
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
-func (w *Workflow) NewTaskWithRetry(p phase.Phase, logs *logs.Logs, f func() error) error {
+func (w *Workflow) NewTaskWithRetry(phase phase.Phase, logs *logs.Logs, f func() error) error {
 	for {
 		err := f()
 		if err != nil {
@@ -103,7 +103,7 @@ func (w *Workflow) NewTaskWithRetry(p phase.Phase, logs *logs.Logs, f func() err
 				return errors.Wrap(err, "retry wait failed")
 			}
 
-			phaseLog, ok := logs.PhaseLogs.Get(p)
+			phaseLog, ok := logs.PhaseLogs.Get(phase)
 			if !ok {
 				continue
 			}
@@ -158,7 +158,7 @@ func (w *Workflow) Phase(p phase.Phase, fleetLeaf *fleet.FleetLeaf, phaseCode fu
 
 	duration, durationErr := phaseLog.TimeAndState.Load().Duration()
 	if durationErr != nil {
-		return durationErr
+		return errors.Wrap(durationErr, "failed to get phase duration")
 	}
 
 	logger.ResultEvent(sublog,

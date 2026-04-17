@@ -59,17 +59,20 @@ func (s *AtomicBuffer) Len() int {
 }
 
 func (s *AtomicBuffer) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.String())
+	b, err := json.Marshal(s.String())
+	return b, errors.Wrap(err, "marshal atomic buffer")
 }
 
 func (s *AtomicBuffer) UnmarshalJSON(data []byte) error {
 	var str string
 	if err := json.Unmarshal(data, &str); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshal atomic buffer")
 	}
+
 	if s.buffer == nil {
 		s.buffer = bytes.NewBuffer(nil)
 	}
+
 	s.Write([]byte(str))
 
 	return nil

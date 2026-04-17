@@ -304,18 +304,18 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 				return err
 			}
 
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.Generations = genData
+			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
+				metaInspect.Generations = genData
 				if currentGenInfo.Date != "" {
-					mi.Date = currentGenInfo.Date
+					metaInspect.Date = currentGenInfo.Date
 				}
 
 				if currentGenInfo.Nixos != "" {
-					mi.Nixos = currentGenInfo.Nixos
+					metaInspect.Nixos = currentGenInfo.Nixos
 				}
 
 				if currentGenInfo.Kernel != "" {
-					mi.Kernel = currentGenInfo.Kernel
+					metaInspect.Kernel = currentGenInfo.Kernel
 				}
 			})
 
@@ -371,6 +371,7 @@ func parseGenerationsOutput(output string) (*machine.Generations, generationInfo
 	lines := strings.Split(output, "\n")
 
 	generations := &machine.Generations{}
+
 	var currentGenInfo generationInfo
 
 	for i, line := range lines {
@@ -413,6 +414,7 @@ func parseGenerationLine(idx int, line string) (uint, generationInfo, bool, bool
 	}
 
 	const currentFieldIdx = 6
+
 	isCurrent := len(fields) > currentFieldIdx && fields[len(fields)-1] == "True"
 
 	var info generationInfo

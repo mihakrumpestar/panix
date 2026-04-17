@@ -150,6 +150,7 @@ func (g *generator) generate() (*Schema, error) {
 
 func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, error) {
 	properties := make(map[string]any)
+
 	var required requiredList
 
 	if structType.Kind() == reflect.Pointer {
@@ -174,6 +175,7 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 			}
 
 			maps.Copy(properties, inlineProps)
+
 			required = append(required, inlineRequired...)
 
 			continue

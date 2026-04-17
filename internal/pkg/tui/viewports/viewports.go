@@ -54,6 +54,7 @@ type item struct {
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
 	m, _ := omap.New[xpath.Xpath, *item]()
+
 	return &Viewports{
 		items:      m,
 		dimensions: dimensions,
@@ -84,6 +85,7 @@ func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, ind
 
 func (v *Viewports) GetOrCreateMainViewport(content string, footerHeaderHeight int) string {
 	h := v.dimensions.Height - footerHeaderHeight
+
 	return v.render(v.mainXpath, content, 0, KindMain, withHeight(h)) + "\n"
 }
 
@@ -103,6 +105,7 @@ func (v *Viewports) HasActiveInner() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -112,6 +115,7 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 			return it.content, true
 		}
 	}
+
 	return "", false
 }
 
@@ -121,6 +125,7 @@ func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 			return xp
 		}
 	}
+
 	return xpath.Xpath{}
 }
 
@@ -128,6 +133,7 @@ func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
 	if it, ok := v.items.Get(xp); ok {
 		return it.content
 	}
+
 	return ""
 }
 
@@ -147,33 +153,41 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case tea.MouseMsg:
 		v.handleMouse(m)
+
 		return nil
 	case tea.KeyPressMsg:
 		v.handleKey(m)
+
 		return nil
 	case tea.WindowSizeMsg:
 		v.dimensions.Width = m.Width
 		v.dimensions.Height = m.Height
+
 		return nil
 	}
 
 	var cmds []tea.Cmd
+
 	for _, it := range v.items.Records() {
 		if it.active {
 			if updated, cmd := it.model.Update(msg); cmd != nil {
 				it.model = updated
+
 				cmds = append(cmds, cmd)
 			}
 		}
 	}
+
 	if !v.HasActiveInner() {
 		if main, ok := v.items.Get(v.mainXpath); ok {
 			if updated, cmd := main.model.Update(msg); cmd != nil {
 				main.model = updated
+
 				cmds = append(cmds, cmd)
 			}
 		}
 	}
+
 	return tea.Batch(cmds...)
 }
 
@@ -182,14 +196,18 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 func (v *Viewports) Debug() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
+
 	for xp, it := range v.items.Records() {
 		fmt.Fprintf(&b, "  '%s': %dx%d c:%d", xp, it.model.Width(), it.model.Height(), it.model.TotalLineCount())
+
 		if it.active {
 			b.WriteString(" [A]")
 		}
+
 		if it.model.ScrollPercent() == 1 {
 			b.WriteString(" @btm")
 		}
+
 		b.WriteByte('\n')
 	}
 	return b.String()
@@ -263,6 +281,7 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 			}
 
 			it.model.SetHeight(finalH)
+
 			if wasAtBottom {
 				it.model.GotoBottom()
 			} else {
@@ -271,6 +290,7 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 
 			r := v.style(it, contentH, finalH, kind)
 			r = zone.Mark(xp.String(), r)
+
 			return r, true
 		},
 		w, h, content, it.model.ScrollPercent(), it.active)
@@ -280,10 +300,12 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 // Returns the total line count (minimum 1).
 func (v *Viewports) setContent(it *item, content string, width int) int {
 	it.model.SetContent(lipgloss.Wrap(content, width, ""))
+
 	h := it.model.TotalLineCount()
 	if h == 0 {
 		h = 1
 	}
+
 	return h
 }
 
@@ -303,6 +325,7 @@ func (v *Viewports) style(it *item, contentH, visH int, kind Kind) string {
 		if it.active {
 			bc = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
 		}
+
 		return lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(bc).
@@ -323,10 +346,12 @@ func (v *Viewports) scrollbar(pct float64, total, visible int) (string, int) {
 	end := pos + thumb
 
 	var b strings.Builder
+
 	for i := range visible {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
+
 		if i >= pos && i < end {
 			b.WriteString(scrollThumb)
 		} else {
@@ -371,6 +396,7 @@ func (v *Viewports) handleMouse(msg tea.MouseMsg) {
 				it.model.ScrollDown(mouseScrollAmount)
 			}
 		}
+
 		return
 	}
 
@@ -421,19 +447,23 @@ func (v *Viewports) activeViewport() *item {
 			return it
 		}
 	}
+
 	if main, ok := v.items.Get(v.mainXpath); ok {
 		return main
 	}
+
 	return nil
 }
 
 func (v *Viewports) underMouse(m tea.MouseMsg) []xpath.Xpath {
 	var result []xpath.Xpath
+
 	for xp := range v.items.Records() {
 		if zone.Get(xp.String()).InBounds(m) {
 			result = append(result, xp)
 		}
 	}
+
 	return result
 }
 
@@ -441,7 +471,9 @@ func (v *Viewports) mostSpecific(xps []xpath.Xpath) xpath.Xpath {
 	if len(xps) == 0 {
 		return xpath.Xpath{}
 	}
+
 	sort.Slice(xps, func(i, j int) bool { return xps[i].Depth() > xps[j].Depth() })
+
 	return xps[0]
 }
 
@@ -449,8 +481,10 @@ func clamp(v, lo, hi float64) float64 {
 	if v < lo {
 		return lo
 	}
+
 	if v > hi {
 		return hi
 	}
+
 	return v
 }

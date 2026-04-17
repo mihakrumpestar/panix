@@ -127,6 +127,7 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuratio
 
 	if p.GetPhaseScope() == phase.ScopeConfiguration {
 		b.addPhases(cfgNode, cfg.Logs, cfg.Xpath, machineInd, false, p)
+
 		return
 	}
 
@@ -134,6 +135,7 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuratio
 		if mp.Value == nil || mp.Value.Logs == nil {
 			continue
 		}
+
 		b.addMachineWithPhases(cfgNode, mp.Value, machineInd, p)
 	}
 }
@@ -145,12 +147,15 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Conf
 		if len(machinePhases) == 0 {
 			return
 		}
+
 		for _, mp := range cfg.Machines.Pairs() {
 			if mp.Value == nil || mp.Value.Logs == nil {
 				continue
 			}
+
 			b.addMachineWithPhases(cfgNode, mp.Value, machineInd, machinePhases...)
 		}
+
 		machinePhases = nil
 	}
 
@@ -162,6 +167,7 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Conf
 			machinePhases = append(machinePhases, pm.Phase)
 		}
 	}
+
 	flush()
 }
 
@@ -169,8 +175,10 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, m *machine.Machine, 
 	if m == nil || m.Logs == nil {
 		return
 	}
+
 	node := b.entityNode(indent, b.conf.ColorScheme.Machine, m.Name, m.Logs, false)
 	b.addPhases(node, m.Logs, m.Xpath, indent+treeStep, false, allowed...)
+
 	if node.Children().Length() > 0 {
 		parent.Child(node)
 	}
@@ -251,16 +259,16 @@ func (b *BuildLogs) addCommands(phaseNode *tree.Tree, phaseLog *phaselogs.PhaseL
 
 	hasError := phaseLog.TimeAndState.Load().EndError != nil
 
-	for i, cmd := range cmds.Values() {
+	for idx, cmd := range cmds.Values() {
 		if cmd == nil {
 			continue
 		}
 
-		if !b.conf.Flags.Tui.ShowAllBuildLogs && hideable && i != cmds.Length()-1 {
+		if !b.conf.Flags.Tui.ShowAllBuildLogs && hideable && idx != cmds.Length()-1 {
 			continue
 		}
 
-		b.addCommand(phaseNode, cmd, i, phaseXpath, indent)
+		b.addCommand(phaseNode, cmd, idx, phaseXpath, indent)
 
 		if cmd.TimeAndState != nil {
 			if t := cmd.TimeAndState.Load(); t != nil && t.EndError != nil {
@@ -303,6 +311,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	))
 
 	output := cmd.StringForBuildLogs()
+
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
 	if len(output) > 0 {
 		cmdNode.Child(b.viewports.GetOrCreateViewport(outputXpath, output, cmdIndent+treeStep*2-1))
@@ -355,7 +364,7 @@ func (b *BuildLogs) layoutLine(indent int, left, right string, leftWidth, rightW
 	return left + strings.Repeat(" ", pad) + right
 }
 
-func (b *BuildLogs) spinnerOrIcon(xp xpath.Xpath, icon string, tas *atomictimeandstate.TimeAndState) string {
+func (b *BuildLogs) spinnerOrIcon(xpath xpath.Xpath, icon string, tas *atomictimeandstate.TimeAndState) string {
 	if !tas.HasStarted() {
 		return ""
 	}
@@ -364,7 +373,7 @@ func (b *BuildLogs) spinnerOrIcon(xp xpath.Xpath, icon string, tas *atomictimean
 		return icon + " "
 	}
 
-	return b.spinners.View(xp)
+	return b.spinners.View(xpath)
 }
 
 func (b *BuildLogs) durationText(style colorscheme.ColorSchemeLogEntity, tas *atomictimeandstate.AtomicTimeAndState) (string, int) {

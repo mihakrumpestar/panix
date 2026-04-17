@@ -54,6 +54,7 @@ func (f *Footer) Keymap() Keymap {
 			key.WithHelp(f.keyDefs[i].Keys[0], f.keyDefs[i].Help),
 		)
 	}
+
 	return Keymap{bindings: bindings}
 }
 

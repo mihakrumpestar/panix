@@ -21,6 +21,7 @@ func (w *Workflow) executeActivatePhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
 
 			isBootstrapped := false
+
 			mi := machine.MetaInspect.Load()
 			if mi != nil {
 				isBootstrapped = mi.Bootstrapped

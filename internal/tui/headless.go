@@ -45,7 +45,7 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d).Seconds()) //nolint:wrapcheck
 }
 
-type machineState struct {
+type MachineState struct {
 	Xpath    xpath.Xpath `json:"xpath"`
 	Status   string      `json:"status"`
 	Phase    string      `json:"phase"`
@@ -57,22 +57,23 @@ func logFinalState(conf *config.Config) {
 	conf.Fleet.Recalculate(conf.Phases) // Needed, since this is generally only done in TUI
 
 	anyFailed := false
-	states := make([]machineState, 0)
+	states := make([]MachineState, 0)
 
 	for _, fleetLeaf := range conf.Fleet.AllMachines() {
-		ms := fleetLeaf.Machine.State.Load()
+		machineState := fleetLeaf.Machine.State.Load()
 
-		entry := machineState{
+		entry := MachineState{
 			Xpath:    fleetLeaf.Machine.Xpath,
-			Status:   string(ms.Status),
-			Phase:    string(ms.Phase),
+			Status:   string(machineState.Status),
+			Phase:    string(machineState.Phase),
 			Duration: Duration(fleetLeaf.Machine.Logs.DurationAndErrorCache.Duration),
 		}
 
-		if ms.Status == "failed" {
+		if machineState.Status == "failed" {
 			anyFailed = true
-			if ms.Error != nil {
-				entry.Error = ms.Error.Error()
+
+			if machineState.Error != nil {
+				entry.Error = machineState.Error.Error()
 			}
 		}
 

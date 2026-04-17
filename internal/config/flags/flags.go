@@ -38,7 +38,7 @@ type WorkflowFlags struct {
 
 	Tui      `yaml:"tui" json:"tui" embed:"" prefix:"tui."`                //nolint:embeddedstructfieldcheck
 	Snapshot `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."` //nolint:embeddedstructfieldcheck
-	Logging  `yaml:"logging" json:"logging"`                               //nolint:embeddedstructfieldcheck
+	Logging  `yaml:"logging" json:"logging"`
 }
 
 type RollbackFlags struct {

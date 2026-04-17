@@ -37,6 +37,7 @@ func executeTransferPhaseMachineWrapper(
 	transferClosure bool,
 ) error {
 	storeArgs := ""
+
 	mi := machine.MetaInspect.Load()
 	if mi != nil && !mi.Bootstrapped && transferClosure {
 		storeArgs += "?remote-store=local?root=/mnt"

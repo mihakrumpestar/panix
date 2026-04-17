@@ -141,12 +141,14 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 			if !tas.IsFinished() {
 				s.Status = stats.Running
 				s.StatusMsg = lastCommandLog.StatusIfRunning
+
 				return
 			}
 
 			if endErr != nil {
 				s.Status = stats.Failed
 				s.StatusMsg = lastCommandLog.StatusIfFailed
+
 				return
 			}
 
@@ -201,6 +203,7 @@ type FleetLeaf struct {
 func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	return func(yield func(int, *FleetLeaf) bool) {
 		i := 0
+
 		for _, flake := range f.Flakes.Pairs() {
 			for _, configuration := range flake.Value.Configurations.Pairs() {
 				for _, machine := range configuration.Value.Machines.Pairs() {

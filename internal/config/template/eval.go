@@ -36,7 +36,7 @@ func EvalConfig(configPath string, outputPath string) error {
 
 	err = yamlx.Encode(orderedResult, &formatted)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to encode config")
 	}
 
 	return writeOutput(formatted.Bytes(), outputPath)
@@ -56,7 +56,7 @@ func parseAndOrderYAML(yamlData []byte) (yaml.MapSlice, error) {
 
 	err = yamlx.Decode(yamlData, &decoded)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to decode config")
 	}
 
 	return rebuildOrdered(astFile, decoded), nil
@@ -132,6 +132,7 @@ func toMap(v any) map[string]any {
 		for _, item := range m {
 			result[item.Key.(string)] = item.Value
 		}
+
 		return result
 	default:
 		return nil
@@ -143,9 +144,11 @@ func rebuildOrderedRecursive(astNode ast.Node, decoded any) any {
 	if decodedMap != nil {
 		return rebuildOrderedMap(astNode, decodedMap)
 	}
+
 	if _, ok := decoded.([]any); ok {
 		return decoded
 	}
+
 	return decoded
 }
 

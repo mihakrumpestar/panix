@@ -86,9 +86,10 @@ func decodeConfigFile(configPath string) (*Config, error) {
 	}
 
 	conf := &Config{}
+
 	err = yamlx.Decode(processedYAML, conf)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to decode config")
 	}
 
 	return conf, nil
@@ -108,7 +109,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 	if conf.Flags.LocalMachineHostname == "" {
 		hostname, err := os.Hostname()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to get hostname")
 		}
 
 		conf.Flags.LocalMachineHostname = hostname
@@ -129,7 +130,7 @@ func (c *Config) initFleet() error {
 
 	err := c.Fleet.Init(localMachineHostname)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to init fleet")
 	}
 
 	for _, flakePair := range c.Fleet.Flakes.Pairs() {
@@ -137,14 +138,15 @@ func (c *Config) initFleet() error {
 
 		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes, localMachineHostname)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to init flake")
 		}
 
 		for _, configurationPair := range flakeV.Configurations.Pairs() {
 			configurationV := configurationPair.Value
+
 			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes, localMachineHostname)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "failed to init configuration")
 			}
 
 			for _, machinePair := range configurationV.Machines.Pairs() {
@@ -158,7 +160,7 @@ func (c *Config) initFleet() error {
 
 				err = machineV.Init(machinePair.Key, &configurationV.Attributes, localMachineHostname)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "failed to init machine")
 				}
 			}
 		}

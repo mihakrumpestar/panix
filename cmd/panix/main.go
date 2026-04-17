@@ -81,9 +81,7 @@ func main() {
 	)
 
 	switch ctx.Command() {
-
 	// Complementary commands
-
 	case "init":
 		ctx.FatalIfErrorf(cli.runInitCommand(cli.Init.Output, cli.Init.Force))
 	case "schema":
@@ -94,7 +92,6 @@ func main() {
 		ctx.FatalIfErrorf(cli.runSnapshot(cli.Snapshot.Path))
 
 	// Wokflow commands
-
 	case "inspect":
 		ctx.FatalIfErrorf(cli.runTui(flags.Flags{WorkflowFlags: cli.Inspect.WorkflowFlags}, []phase.Phase{phase.Inspect}))
 	case "build":
