@@ -239,6 +239,11 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 					mi.Nixos = osrelease["VERSION"]
 				})
 
+				err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+				if err != nil {
+					return errors.Wrap(err, "kexec arch validation failed")
+				}
+
 				return nil
 			}
 
@@ -248,6 +253,13 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 					mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
 					mi.Nixos = osrelease["VERSION"]
 				})
+
+				if machineI.Bootstrap.ForceBootstrapKexec {
+					err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+					if err != nil {
+						return errors.Wrap(err, "kexec arch validation failed")
+					}
+				}
 
 				return nil
 			}

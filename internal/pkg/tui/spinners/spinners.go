@@ -7,14 +7,14 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"github.com/kirill-scherba/omap"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
 type tickMsg struct{}
 
 type Spinners struct {
-	entries *omap.Omap[xpath.Xpath, *entry]
+	entries *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *entry]
 	ticking bool
 }
 
@@ -24,12 +24,7 @@ type entry struct {
 }
 
 func NewSpinners() (*Spinners, error) {
-	entries, err := omap.New[xpath.Xpath, *entry]()
-	if err != nil {
-		return nil, err
-	}
-
-	return &Spinners{entries: entries}, nil
+	return &Spinners{entries: atomicorderedmap.New[xpath.Xpath, *entry]()}, nil
 }
 
 func (s *Spinners) View(xpath xpath.Xpath) string {

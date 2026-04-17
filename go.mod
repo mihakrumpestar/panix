@@ -19,7 +19,6 @@ require (
 	github.com/gookit/goutil v0.7.4
 	github.com/hayageek/threadsafe v1.0.1
 	github.com/kevinburke/ssh_config v1.6.0
-	github.com/kirill-scherba/omap v0.1.0
 	github.com/lrstanley/bubblezone/v2 v2.0.0
 	github.com/lucasb-eyer/go-colorful v1.4.0
 	github.com/mattn/go-isatty v0.0.21

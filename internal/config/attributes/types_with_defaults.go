@@ -1,13 +1,18 @@
 package attributes
 
 import (
-	"fmt"
 	"os"
 	"slices"
 	"strconv"
+
+	"github.com/pkg/errors"
 )
 
 // KexecImage
+
+var (
+	DefaultImageUnsupportedArch = errors.New("architecture not supported by default kexec")
+)
 
 type KexecImage string
 
@@ -23,12 +28,12 @@ func (k KexecImage) String() string {
 	return string(k.Get())
 }
 
-func (k KexecImage) IfDefaultIsArchSupported(arch string) error { // TODO: add this check to inspect after we know arch and bootstrap status
+func (k KexecImage) IfDefaultImageIsArchSupported(arch string) error {
 	if string(k) == "" {
 		defaultKexecImageSupportedPlatforms := []string{"x86_64", "aarch64"}
 
 		if !slices.Contains(defaultKexecImageSupportedPlatforms, arch) {
-			return fmt.Errorf("architecture not supported by default kexec: %s (supported: %s)", strconv.Quote(arch), defaultKexecImageSupportedPlatforms)
+			return errors.Wrapf(DefaultImageUnsupportedArch, "%s (supported: %s)", strconv.Quote(arch), defaultKexecImageSupportedPlatforms)
 		}
 	}
 
@@ -68,7 +73,7 @@ func (f FileMode) Get() FileMode {
 }
 
 func (f FileMode) String() string {
-	return string(rune(f.Get()))
+	return strconv.FormatUint(uint64(f.Get()), 8)
 }
 
 // ActivationMode

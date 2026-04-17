@@ -9,9 +9,9 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/kirill-scherba/omap"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
@@ -37,7 +37,7 @@ const (
 )
 
 type Viewports struct {
-	items      *omap.Omap[xpath.Xpath, *item]
+	items      *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
 	dimensions *Dimensions
 	conf       *config.Config
 	fullscreen xpath.Xpath
@@ -53,10 +53,8 @@ type item struct {
 }
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
-	m, _ := omap.New[xpath.Xpath, *item]()
-
 	return &Viewports{
-		items:      m,
+		items:      atomicorderedmap.New[xpath.Xpath, *item](),
 		dimensions: dimensions,
 		conf:       conf,
 		mainXpath:  xpath.New("main"),
@@ -263,10 +261,7 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 		}
 		itemI.model.GotoBottom()
 
-		err := v.items.Set(xp, itemI)
-		if err != nil {
-			return ""
-		}
+		v.items.Set(xp, itemI)
 	} else {
 		itemI.content = content
 	}

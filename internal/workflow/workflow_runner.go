@@ -1,10 +1,10 @@
 package workflow
 
 import (
-	"github.com/kirill-scherba/omap"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
@@ -15,7 +15,7 @@ import (
 // It is bound to a Workflow instance to avoid global state issues.
 type runner struct {
 	workflow     *Workflow
-	onceRegistry *omap.Omap[string, *onceasync.OnceAsync]
+	onceRegistry *atomicorderedmap.AtomicOrderedMap[string, *onceasync.OnceAsync]
 }
 
 // phaseRunner handles the execution of a single phase for a specific machine.
@@ -26,14 +26,9 @@ type phaseRunner struct {
 }
 
 func newRunner(workflow *Workflow) (*runner, error) {
-	onceRegistry, err := omap.New[string, *onceasync.OnceAsync]()
-	if err != nil {
-		return nil, err
-	}
-
 	return &runner{
 		workflow:     workflow,
-		onceRegistry: onceRegistry,
+		onceRegistry: atomicorderedmap.New[string, *onceasync.OnceAsync](),
 	}, nil
 }
 
@@ -54,10 +49,7 @@ func (r *runner) getOrCreateOnceAsync(xpath xpath.Xpath) *onceasync.OnceAsync {
 		return existing
 	}
 
-	err := r.onceRegistry.Set(xpathS, newOnce)
-	if err != nil {
-		return newOnce
-	}
+	r.onceRegistry.Set(xpathS, newOnce)
 
 	return newOnce
 }

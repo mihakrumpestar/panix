@@ -12,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
+	"github.com/mihakrumpestar/panix/internal/pkg/validatorx"
 	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
@@ -37,7 +38,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, 
 	}
 
 	// Validate and initialize configuration
-	err = conf.ValidateStructTags()
+	err = validatorx.ValidateStructTags(conf)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
@@ -157,6 +158,7 @@ func (c *Config) initFleet() error {
 				// Machine may be nil
 				if machineV == nil {
 					machineV = &machine.Machine{}
+
 					configurationV.Machines.Set(machinePair.Key, machineV)
 				}
 

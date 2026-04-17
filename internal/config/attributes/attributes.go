@@ -15,7 +15,7 @@ import (
 type Attributes struct {
 	SSH     *ssh.SSHClient              `yaml:"ssh" json:"ssh,omitempty" desc:"SSH configuration for remote access"`
 	Tags    []string                    `yaml:"tags" json:"tags,omitempty" desc:"Tags for filtering (flakes, configs and machines are already registered as tags)"`
-	Secrets []*PlainFileOrDirToTransfer `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine"`
+	Secrets []*PlainFileOrDirToTransfer `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine" validate:"dive"`
 
 	Disabled           bool            `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
 	SudoProgram        SudoProgram     `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the sudo program" default:"sudo"`
@@ -30,7 +30,7 @@ type Attributes struct {
 }
 
 type PlainFileOrDirToTransfer struct {
-	LocalPath   string   `yaml:"local_path,required" json:"local_path" desc:"Path to a local file or dir" validate:"required,filepath"` // TODO: add custom validator that checks paths
+	LocalPath   string   `yaml:"local_path,required" json:"local_path" desc:"Path to a local file or dir" validate:"required,filepath,pathexists"`
 	RemotePath  string   `yaml:"remote_path,required" json:"remote_path" desc:"Absolute path on remote machine" validate:"required,abspath"`
 	UID         *uint    `yaml:"uid,omitempty" json:"uid,omitempty" desc:"Optional User ID for remote" validate:"required_with=GID"`
 	GID         *uint    `yaml:"gid,omitempty" json:"gid,omitempty" desc:"Optional Group ID for remote" validate:"required_with=UID"`
@@ -40,7 +40,7 @@ type PlainFileOrDirToTransfer struct {
 //nolint:lll
 type Bootstrap struct {
 	SSH                           *ssh.SSHClient              `yaml:"ssh" json:"ssh,omitempty" desc:"Bootstrap SSH configuration (used during initial provisioning)"`
-	DiskEncryptionKeys            []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'"`
+	DiskEncryptionKeys            []*PlainFileOrDirToTransfer `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'" validate:"dive"`
 	PostBootstrapHooks            []PostBootstrapHookCommand  `yaml:"post_bootstrap_hooks" json:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning"`
 	PostBootstrapInstallHooks     []PostBootstrapHookCommand  `yaml:"post_bootstrap_install_hooks" json:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`
 	PostBootstrapProvisionedHooks []PostBootstrapHookCommand  `yaml:"post_bootstrap_provisioned_hooks" json:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`

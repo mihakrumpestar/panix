@@ -47,26 +47,27 @@ func (c *Cache[T]) computeHash(args ...any) uint64 {
 		switch argType := arg.(type) {
 		case int:
 			var buf [8]byte
-			binary.LittleEndian.PutUint64(buf[:], uint64(argType))
-			c.hasher.Write(buf[:])
+			binary.LittleEndian.PutUint64(buf[:], uint64(argType)) //nolint:gosec // intentional conversion for hashing
+			_, _ = c.hasher.Write(buf[:])
 		case string:
-			c.hasher.Write([]byte(argType))
+			_, _ = c.hasher.Write([]byte(argType))
 		case uint64:
 			var buf [8]byte
 			binary.LittleEndian.PutUint64(buf[:], argType)
-			c.hasher.Write(buf[:])
+			_, _ = c.hasher.Write(buf[:])
 		case float64:
 			var buf [8]byte
 			binary.LittleEndian.PutUint64(buf[:], math.Float64bits(argType))
-			c.hasher.Write(buf[:])
+			_, _ = c.hasher.Write(buf[:])
 		case bool:
 			var b [1]byte
 			if argType {
 				b[0] = 1
 			}
-			c.hasher.Write(b[:])
+
+			_, _ = c.hasher.Write(b[:])
 		default:
-			fmt.Fprint(c.hasher, argType)
+			_, _ = fmt.Fprint(c.hasher, argType)
 		}
 	}
 

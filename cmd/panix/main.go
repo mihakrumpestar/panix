@@ -34,6 +34,7 @@ type CLI struct {
 
 	Eval struct {
 		flags.ConfigFlag
+
 		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"-"`
 	} `cmd:"" help:"Evaluate config (process templates and anchors) and output result"`
 
