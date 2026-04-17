@@ -2,11 +2,15 @@ package atomicorderedmap
 
 import (
 	"encoding/json"
-	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/goccy/go-yaml"
 	"github.com/pkg/errors"
+)
+
+var (
+	ErrAtomicOrderedMapNil = errors.New("OrderedMap.UnmarshalJSON: nil receiver")
 )
 
 type Pair[K comparable, V any] struct {
@@ -36,6 +40,7 @@ func (m *AtomicOrderedMap[K, V]) Set(key K, value V) {
 	if m.index == nil {
 		m.index = make(map[K]int)
 	}
+
 	if m.values == nil {
 		m.values = make(map[K]V)
 	}
@@ -105,6 +110,7 @@ func (m *AtomicOrderedMap[K, V]) Clear() {
 	for k := range m.index {
 		delete(m.index, k)
 	}
+
 	for k := range m.values {
 		delete(m.values, k)
 	}
@@ -139,9 +145,7 @@ func (m *AtomicOrderedMap[K, V]) Records() map[K]V {
 	defer m.mu.RUnlock()
 
 	result := make(map[K]V, len(m.keys))
-	for k, v := range m.values {
-		result[k] = v
-	}
+	maps.Copy(result, m.values)
 
 	return result
 }
@@ -173,6 +177,7 @@ func (m *AtomicOrderedMap[K, V]) DeleteFunc(pred func(K, V) bool) {
 func (m *AtomicOrderedMap[K, V]) Last() (Pair[K, V], bool) {
 	if m == nil {
 		var zero Pair[K, V]
+
 		return zero, false
 	}
 
@@ -181,6 +186,7 @@ func (m *AtomicOrderedMap[K, V]) Last() (Pair[K, V], bool) {
 
 	if len(m.keys) == 0 {
 		var zero Pair[K, V]
+
 		return zero, false
 	}
 
@@ -205,7 +211,7 @@ func (m *AtomicOrderedMap[K, V]) MarshalJSON() ([]byte, error) {
 
 func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	if m == nil {
-		return fmt.Errorf("OrderedMap.UnmarshalJSON: nil receiver")
+		return ErrAtomicOrderedMapNil
 	}
 
 	var pairs []Pair[K, V]
@@ -221,6 +227,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	if m.index == nil {
 		m.index = make(map[K]int)
 	}
+
 	if m.values == nil {
 		m.values = make(map[K]V)
 	}
@@ -229,6 +236,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 	for k := range m.index {
 		delete(m.index, k)
 	}
+
 	for k := range m.values {
 		delete(m.values, k)
 	}
@@ -266,6 +274,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(any) error) error {
 	if m.index == nil {
 		m.index = make(map[K]int)
 	}
+
 	if m.values == nil {
 		m.values = make(map[K]V)
 	}
@@ -274,6 +283,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalYAML(decode func(any) error) error {
 	for k := range m.index {
 		delete(m.index, k)
 	}
+
 	for k := range m.values {
 		delete(m.values, k)
 	}

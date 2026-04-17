@@ -201,24 +201,24 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 // Debug
 
 func (v *Viewports) Debug() string {
-	var stringsBuilder strings.Builder
-	fmt.Fprintf(&stringsBuilder, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
 
 	for xp, item := range v.items.Records() {
-		fmt.Fprintf(&stringsBuilder, "  '%s': %dx%d c:%d", xp, item.model.Width(), item.model.Height(), item.model.TotalLineCount())
+		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", xp, item.model.Width(), item.model.Height(), item.model.TotalLineCount())
 
 		if item.active {
-			stringsBuilder.WriteString(" [A]")
+			builder.WriteString(" [A]")
 		}
 
 		if item.model.ScrollPercent() == 1 {
-			stringsBuilder.WriteString(" @btm")
+			builder.WriteString(" @btm")
 		}
 
-		stringsBuilder.WriteByte('\n')
+		builder.WriteByte('\n')
 	}
 
-	return stringsBuilder.String()
+	return builder.String()
 }
 
 // Internal: render options
@@ -354,23 +354,23 @@ func (v *Viewports) scrollbar(pct float64, total, visible int) (string, int) {
 	pos := int(float64(visible-thumb) * clamp(pct, 0, 1))
 	end := pos + thumb
 
-	var stringsBuilder strings.Builder
+	var builder strings.Builder
 
 	for i := range visible {
 		if i > 0 {
-			stringsBuilder.WriteByte('\n')
+			builder.WriteByte('\n')
 		}
 
 		if i >= pos && i < end {
-			stringsBuilder.WriteString(scrollThumb)
+			builder.WriteString(scrollThumb)
 		} else {
-			stringsBuilder.WriteString(scrollTrack)
+			builder.WriteString(scrollTrack)
 		}
 	}
 
 	return lipgloss.NewStyle().
 		Foreground(v.conf.ColorScheme.Table.Border.GetForeground()).
-		Render(stringsBuilder.String()), 1
+		Render(builder.String()), 1
 }
 
 // withScrollbar appends scrollbar lines to the right side of the viewport view.

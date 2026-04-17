@@ -11,7 +11,7 @@ import (
 // KexecImage
 
 var (
-	DefaultImageUnsupportedArch = errors.New("architecture not supported by default kexec")
+	ErrDefaultImageUnsupportedArch = errors.New("architecture not supported by default kexec")
 )
 
 type KexecImage string
@@ -33,7 +33,7 @@ func (k KexecImage) IfDefaultImageIsArchSupported(arch string) error {
 		defaultKexecImageSupportedPlatforms := []string{"x86_64", "aarch64"}
 
 		if !slices.Contains(defaultKexecImageSupportedPlatforms, arch) {
-			return errors.Wrapf(DefaultImageUnsupportedArch, "%s (supported: %s)", strconv.Quote(arch), defaultKexecImageSupportedPlatforms)
+			return errors.Wrapf(ErrDefaultImageUnsupportedArch, "%s (supported: %s)", strconv.Quote(arch), defaultKexecImageSupportedPlatforms)
 		}
 	}
 

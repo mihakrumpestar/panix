@@ -54,14 +54,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		updateHook: hook.NewHook(),
 	}
 
-	runner, err := newRunner(workflow)
-	if err != nil {
-		cancel()
-
-		return nil, err
-	}
-
-	workflow.runner = runner
+	workflow.runner = newRunner(workflow)
 
 	return workflow, nil
 }

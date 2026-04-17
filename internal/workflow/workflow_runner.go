@@ -25,11 +25,11 @@ type phaseRunner struct {
 	fleetLeaf *fleet.FleetLeaf
 }
 
-func newRunner(workflow *Workflow) (*runner, error) {
+func newRunner(workflow *Workflow) *runner {
 	return &runner{
 		workflow:     workflow,
 		onceRegistry: atomicorderedmap.New[string, *onceasync.OnceAsync](),
-	}, nil
+	}
 }
 
 // getOrCreateOnceAsync returns a OnceAsync for the given xpath.

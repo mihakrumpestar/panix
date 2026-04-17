@@ -10,13 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func ValidateStructTags[T any](v T) error {
+func ValidateStructTags[T any](v T) error { //nolint:varnamelen
 	validate := validator.New(validator.WithPrivateFieldValidation(), validator.WithRequiredStructEnabled())
 
 	err := validate.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {
-		val := fl.Field().String()
-
-		return filepath.IsAbs(val)
+		return filepath.IsAbs(fl.Field().String())
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to register abspath validation")
@@ -28,7 +26,7 @@ func ValidateStructTags[T any](v T) error {
 			return true
 		}
 
-		_, err := os.Stat(val)
+		_, err = os.Stat(val)
 
 		return err == nil
 	})
@@ -44,65 +42,43 @@ func ValidateStructTags[T any](v T) error {
 	return nil
 }
 
-// humanizeValidationErrors converts validator.ValidationErrors into a user-friendly
-// multi-line error message with YAML-style paths and human-readable descriptions.
 func humanizeValidationErrors(err error) string {
-	var ve validator.ValidationErrors
-	if !extractValidationErrors(err, &ve) {
+	var validationErrors validator.ValidationErrors
+	if !errors.As(err, &validationErrors) {
 		return err.Error()
 	}
 
-	seen := make(map[string]bool, len(ve))
-	var b strings.Builder
+	seen := make(map[string]bool, len(validationErrors))
 
-	b.WriteString("configuration validation errors:\n")
+	var builder strings.Builder
+	builder.WriteString("configuration validation errors:\n")
 
-	for _, fe := range ve {
+	for _, fe := range validationErrors {
 		path := humanizePath(fe.Namespace())
 		msg := humanizeTagMessage(fe)
-
 		key := fmt.Sprintf("%s: %s", path, msg)
+
 		if !seen[key] {
 			seen[key] = true
-			b.WriteString(fmt.Sprintf("  - %s\n", key))
+			fmt.Fprintf(&builder, "  - %s\n", key)
 		}
 	}
 
-	return b.String()
+	return builder.String()
 }
 
-// extractValidationErrors unwraps err to find validator.ValidationErrors.
-func extractValidationErrors(err error, ve *validator.ValidationErrors) bool {
-	for {
-		switch e := err.(type) {
-		case validator.ValidationErrors:
-			*ve = e
-			return true
-		case interface{ Unwrap() error }:
-			err = e.Unwrap()
-			if err == nil {
-				return false
-			}
-		default:
-			return false
-		}
-	}
+// skipParts are Go type/field names that appear in validator namespaces but aren't meaningful in user-facing paths.
+var skipParts = map[string]bool{
+	"Config": true, "Flake": true, "Configuration": true, "Machine": true, "Attributes": true, "Values": true,
 }
 
-// humanizePath converts a validator namespace like
-// "Config.Fleet.Flakes.Values[*].Configurations.Values[*].Machines.Values[*].Attributes.Bootstrap.DiskEncryptionKeys[0].LocalPath"
-// into a readable dotted path like
-// "fleet.flakes.configurations.machines.bootstrap.disk_encryption_keys[0].local_path"
 func humanizePath(namespace string) string {
 	parts := strings.Split(namespace, ".")
+
 	var result []string
 
 	for _, part := range parts {
-		if part == "Config" || part == "" {
-			continue
-		}
-
-		if isTypeNode(part) {
+		if part == "" || skipParts[part] {
 			continue
 		}
 
@@ -112,18 +88,6 @@ func humanizePath(namespace string) string {
 	return strings.Join(result, ".")
 }
 
-// isTypeNode returns true for Go type names that appear as intermediate namespace nodes
-// but don't represent actual config keys.
-func isTypeNode(part string) bool {
-	switch part {
-	case "Flake", "Configuration", "Machine", "Attributes", "Values":
-		return true
-	}
-
-	return false
-}
-
-// camelToSnake converts CamelCase to snake_case, preserving array indices.
 func camelToSnake(s string) string {
 	suffix := ""
 	if idx := strings.Index(s, "["); idx >= 0 {
@@ -131,48 +95,47 @@ func camelToSnake(s string) string {
 		s = s[:idx]
 	}
 
-	var b strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
+	var builder strings.Builder
+
+	for i, runeI := range s {
+		if i > 0 && runeI >= 'A' && runeI <= 'Z' {
 			nextLower := i+1 < len(s) && s[i+1] >= 'a' && s[i+1] <= 'z'
+
 			prevLower := s[i-1] >= 'a' && s[i-1] <= 'z'
 			if nextLower || prevLower {
-				b.WriteByte('_')
+				builder.WriteByte('_')
 			}
 		}
 
-		if r >= 'A' && r <= 'Z' {
-			r |= 0x20
+		if runeI >= 'A' && runeI <= 'Z' {
+			runeI |= 0x20
 		}
 
-		b.WriteRune(r)
+		builder.WriteRune(runeI)
 	}
 
-	return b.String() + suffix
+	return builder.String() + suffix
 }
 
-// humanizeTagMessage returns a human-readable message for a failed validation tag.
-func humanizeTagMessage(fe validator.FieldError) string {
-	switch fe.Tag() {
+func humanizeTagMessage(fieldError validator.FieldError) string {
+	switch fieldError.Tag() {
 	case "required":
 		return "is required"
 	case "pathexists":
-		return fmt.Sprintf("path does not exist: %v", fe.Value())
+		return fmt.Sprintf("path does not exist: %v", fieldError.Value())
 	case "filepath":
-		return fmt.Sprintf("invalid file path: %v", fe.Value())
+		return fmt.Sprintf("invalid file path: %v", fieldError.Value())
 	case "abspath":
-		return fmt.Sprintf("must be an absolute path, got: %v", fe.Value())
-	case "min":
-		return fmt.Sprintf("must have at least %s items, but has %v", fe.Param(), fe.Value())
+		return fmt.Sprintf("must be an absolute path, got: %v", fieldError.Value())
 	case "url":
-		return fmt.Sprintf("must be a valid URL, got: %v", fe.Value())
+		return fmt.Sprintf("must be a valid URL, got: %v", fieldError.Value())
 	case "uri":
-		return fmt.Sprintf("must be a valid URI, got: %v", fe.Value())
+		return fmt.Sprintf("must be a valid URI, got: %v", fieldError.Value())
 	case "oneof":
-		return fmt.Sprintf("must be one of [%s], got: %v", fe.Param(), fe.Value())
+		return fmt.Sprintf("must be one of [%s], got: %v", fieldError.Param(), fieldError.Value())
 	case "dive":
 		return "contains invalid elements"
 	default:
-		return fmt.Sprintf("failed validation '%s' (value: %v)", fe.Tag(), fe.Value())
+		return fmt.Sprintf("failed validation '%s' (value: %v)", fieldError.Tag(), fieldError.Value())
 	}
 }
