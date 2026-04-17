@@ -17,11 +17,10 @@ import (
 )
 
 const (
-	scrollThumb       = "█"
-	scrollTrack       = "│"
-	scrollbarWidth    = 2
-	borderOverhead    = 2
-	mouseScrollAmount = 3
+	scrollThumb    = "█"
+	scrollTrack    = "│"
+	scrollbarWidth = 2
+	borderOverhead = 2
 )
 
 type Dimensions struct{ Width, Height int }
@@ -37,27 +36,30 @@ const (
 )
 
 type Viewports struct {
-	items      *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
-	dimensions *Dimensions
-	conf       *config.Config
-	fullscreen xpath.Xpath
-	mainXpath  xpath.Xpath
+	items       *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
+	dimensions  *Dimensions
+	conf        *config.Config
+	fullscreen  xpath.Xpath
+	mainXpath   xpath.Xpath
+	activeXpath xpath.Xpath
 }
 
 type item struct {
 	model    viewport.Model
-	active   bool
 	content  string
 	zoneBase xpath.Xpath
 	cache    cache.Cache[string]
 }
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
+	mainXpath := xpath.New("main")
+
 	return &Viewports{
-		items:      atomicorderedmap.New[xpath.Xpath, *item](),
-		dimensions: dimensions,
-		conf:       conf,
-		mainXpath:  xpath.New("main"),
+		items:       atomicorderedmap.New[xpath.Xpath, *item](),
+		dimensions:  dimensions,
+		conf:        conf,
+		mainXpath:   mainXpath,
+		activeXpath: mainXpath,
 	}
 }
 
@@ -102,35 +104,36 @@ func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, foo
 	return v.render(xp, content, 0, KindFullscreen, withHeight(h), withWidth(w)) + "\n"
 }
 
-func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) { v.items.Del(xp) }
+func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
+	v.items.Del(xp)
+
+	if v.activeXpath == xp {
+		v.activeXpath = v.mainXpath
+	}
+}
 
 // Active queries
 
 func (v *Viewports) HasActiveInner() bool {
-	for xp, it := range v.items.Records() {
-		if xp != v.mainXpath && it.active {
-			return true
-		}
-	}
-
-	return false
+	return v.activeXpath.Depth() > 0 && v.activeXpath != v.mainXpath
 }
 
 func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
-	for xp, it := range v.items.Records() {
-		if it.active && xp != v.mainXpath {
-			return it.content, true
-		}
+	if !v.HasActiveInner() {
+		return "", false
 	}
 
-	return "", false
+	it, ok := v.items.Get(v.activeXpath)
+	if !ok {
+		return "", false
+	}
+
+	return it.content, true
 }
 
 func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
-	for xp, it := range v.items.Records() {
-		if it.active && xp != v.mainXpath {
-			return xp
-		}
+	if v.HasActiveInner() {
+		return v.activeXpath
 	}
 
 	return xpath.Xpath{}
@@ -145,9 +148,7 @@ func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
 }
 
 func (v *Viewports) DeselectAll() {
-	for xp, it := range v.items.Records() {
-		it.active = xp == v.mainXpath
-	}
+	v.activeXpath = v.mainXpath
 }
 
 // Update
@@ -157,45 +158,28 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
-	switch msgParsed := msg.(type) {
-	case tea.MouseMsg:
-		v.handleMouse(msgParsed)
+	// Set active viewport by click
+	mouseClick, ok := msg.(tea.MouseClickMsg)
+	if ok {
+		clicked := v.mostSpecific(v.underMouse(mouseClick))
 
-		return nil
-	case tea.KeyPressMsg:
-		v.handleKey(msgParsed)
-
-		return nil
-	case tea.WindowSizeMsg:
-		v.dimensions.Width = msgParsed.Width
-		v.dimensions.Height = msgParsed.Height
-
-		return nil
-	}
-
-	var cmds []tea.Cmd
-
-	for _, it := range v.items.Records() {
-		if it.active {
-			if updated, cmd := it.model.Update(msg); cmd != nil {
-				it.model = updated
-
-				cmds = append(cmds, cmd)
-			}
+		if clicked.Depth() > 0 {
+			v.activeXpath = clicked
+		} else {
+			v.activeXpath = v.mainXpath
 		}
+
+		return nil
 	}
 
-	if !v.HasActiveInner() {
-		if main, ok := v.items.Get(v.mainXpath); ok {
-			if updated, cmd := main.model.Update(msg); cmd != nil {
-				main.model = updated
-
-				cmds = append(cmds, cmd)
-			}
-		}
+	activeViewport := v.activeViewport()
+	if activeViewport == nil {
+		return nil
 	}
 
-	return tea.Batch(cmds...)
+	activeViewport.model, _ = activeViewport.model.Update(msg) // Never returns cmd
+
+	return nil
 }
 
 // Debug
@@ -204,14 +188,14 @@ func (v *Viewports) Debug() string {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
 
-	for xp, item := range v.items.Records() {
-		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", xp, item.model.Width(), item.model.Height(), item.model.TotalLineCount())
+	for _, pair := range v.items.Pairs() {
+		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", pair.Key, pair.Value.model.Width(), pair.Value.model.Height(), pair.Value.model.TotalLineCount())
 
-		if item.active {
+		if pair.Key == v.activeXpath {
 			builder.WriteString(" [A]")
 		}
 
-		if item.model.ScrollPercent() == 1 {
+		if pair.Value.model.ScrollPercent() == 1 {
 			builder.WriteString(" @btm")
 		}
 
@@ -257,7 +241,6 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 			model:    viewport.New(viewport.WithWidth(width), viewport.WithHeight(height)),
 			zoneBase: xp.NewXpathWithAppend("scrollbar"),
 			content:  content,
-			active:   xp == v.mainXpath,
 		}
 		itemI.model.GotoBottom()
 
@@ -266,7 +249,7 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 		itemI.content = content
 	}
 
-	return itemI.cache.Get(
+	view := itemI.cache.Get(
 		func() (string, bool) {
 			wasAtBottom := itemI.model.ScrollPercent() == 1 && xp != v.mainXpath
 			yOffset := itemI.model.YOffset()
@@ -296,12 +279,18 @@ func (v *Viewports) render(xp xpath.Xpath, content string, indent int, kind Kind
 				itemI.model.SetYOffset(min(yOffset, max(0, contentH-finalH)))
 			}
 
-			r := v.style(itemI, contentH, finalH, kind)
-			r = zone.Mark(xp.String(), r)
+			scrollbar, _ := v.scrollbar(itemI.model.ScrollPercent(), contentH, finalH)
+			view := v.withScrollbar(itemI.model.View(), scrollbar, itemI.zoneBase)
 
-			return r, true
+			return view, true
 		},
-		width, height, content, itemI.model.ScrollPercent(), itemI.active)
+		width, height, content, itemI.model.ScrollPercent())
+
+	active := xp == v.activeXpath
+	view = v.applyActiveStyle(view, kind, active)
+	view = zone.Mark(xp.String(), view)
+
+	return view
 }
 
 // setContent word-wraps content and sets it on the viewport model.
@@ -317,30 +306,26 @@ func (v *Viewports) setContent(it *item, content string, width int) int {
 	return h
 }
 
-// style renders the viewport with border/highlight/scrollbar based on kind.
-func (v *Viewports) style(item *item, contentH, visH int, kind Kind) string {
-	scrollbar, _ := v.scrollbar(item.model.ScrollPercent(), contentH, visH)
-	combined := v.withScrollbar(item.model.View(), scrollbar, item.zoneBase)
-
+func (v *Viewports) applyActiveStyle(view string, kind Kind, active bool) string {
 	switch kind {
 	case KindLabel:
-		if item.active {
-			combined = v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(combined)
+		if active {
+			return v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(view)
 		}
 
-		return combined
+		return view
 	case KindContent, KindFullscreen:
 		border := v.conf.ColorScheme.Table.Border.GetForeground()
-		if item.active {
+		if active {
 			border = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
 		}
 
 		return lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(border).
-			Render(combined)
+			Render(view)
 	default: // KindMain
-		return combined
+		return view
 	}
 }
 
@@ -394,74 +379,18 @@ func (v *Viewports) withScrollbar(view, bar string, barZone xpath.Xpath) string 
 	return strings.Join(result, "\n")
 }
 
-// Input handlers
-
-func (v *Viewports) handleMouse(msg tea.MouseMsg) {
-	if wheel, ok := msg.(tea.MouseWheelMsg); ok {
-		if it := v.activeViewport(); it != nil {
-			if wheel.Button == tea.MouseWheelUp {
-				it.model.ScrollUp(mouseScrollAmount)
-			} else {
-				it.model.ScrollDown(mouseScrollAmount)
-			}
-		}
-
-		return
-	}
-
-	click, ok := msg.(tea.MouseClickMsg)
-	if !ok {
-		return
-	}
-
-	clicked := v.mostSpecific(v.underMouse(click))
-	hasClick := clicked.Depth() > 0
-
-	for xp, it := range v.items.Records() {
-		it.active = hasClick && xp == clicked
-	}
-
-	if !hasClick {
-		var main *item
-
-		main, ok = v.items.Get(v.mainXpath)
-		if ok {
-			main.active = true
-		}
-	}
-}
-
-func (v *Viewports) handleKey(msg tea.KeyPressMsg) {
-	activeViewport := v.activeViewport()
-	if activeViewport == nil {
-		return
-	}
-
-	switch msg.String() {
-	case "up", "k":
-		activeViewport.model.ScrollUp(1)
-	case "down", "j":
-		activeViewport.model.ScrollDown(1)
-	case "pgup":
-		activeViewport.model.HalfPageUp()
-	case "pgdown", "space":
-		activeViewport.model.HalfPageDown()
-	case "home", "g":
-		activeViewport.model.GotoTop()
-	case "end", "G":
-		activeViewport.model.GotoBottom()
-	}
-}
+// Input helpers
 
 func (v *Viewports) activeViewport() *item {
-	for xp, it := range v.items.Records() {
-		if it.active && xp != v.mainXpath {
-			return it
-		}
+	activeXpath := v.activeXpath
+
+	if activeXpath.String() == "" {
+		activeXpath = v.mainXpath
 	}
 
-	if main, ok := v.items.Get(v.mainXpath); ok {
-		return main
+	it, ok := v.items.Get(activeXpath)
+	if ok {
+		return it
 	}
 
 	return nil
@@ -479,14 +408,14 @@ func (v *Viewports) underMouse(m tea.MouseMsg) []xpath.Xpath {
 	return result
 }
 
-func (v *Viewports) mostSpecific(xps []xpath.Xpath) xpath.Xpath {
-	if len(xps) == 0 {
+func (v *Viewports) mostSpecific(xpathI []xpath.Xpath) xpath.Xpath {
+	if len(xpathI) == 0 {
 		return xpath.Xpath{}
 	}
 
-	sort.Slice(xps, func(i, j int) bool { return xps[i].Depth() > xps[j].Depth() })
+	sort.Slice(xpathI, func(i, j int) bool { return xpathI[i].Depth() > xpathI[j].Depth() })
 
-	return xps[0]
+	return xpathI[0]
 }
 
 func clamp(v, low, high float64) float64 { //nolint:varnamelen

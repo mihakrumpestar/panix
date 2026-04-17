@@ -27,8 +27,8 @@ tasks:
   go:run:profile:
     desc: Run the application with go run
     cmds:
-      - go run cmd/panix/main.go --cpu-profile={{.DEBUG_DIR}}/profile.prof
-        {{.CLI_ARGS}}
+      - go run cmd/panix/main.go {{.CLI_ARGS}}
+        --cpu-profile={{.DEBUG_DIR}}/profile.prof
 
   go:profile-ui:
     cmds:

@@ -254,7 +254,7 @@ func (m *AtomicOrderedMap[K, V]) UnmarshalJSON(data []byte) error {
 
 var _ yaml.InterfaceMarshaler = (*AtomicOrderedMap[string, any])(nil)
 
-func (m AtomicOrderedMap[K, V]) MarshalYAML() (any, error) {
+func (m *AtomicOrderedMap[K, V]) MarshalYAML() (any, error) {
 	pairs := m.Pairs()
 
 	result := make(yaml.MapSlice, 0, len(pairs))

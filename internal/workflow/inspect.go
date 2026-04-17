@@ -216,60 +216,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 			return errors.Wrap(err, log.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := log.String()
-
-			osrelease, err := osrelease.ReadString(output)
-			if err != nil {
-				return errors.Wrap(err, "error parsing /etc/os-release")
-			}
-
-			if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
-				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-					mi.Bootstrapped = false
-					mi.Nixos = osrelease["VERSION"]
-				})
-
-				return nil
-			}
-
-			if osrelease["ID"] != "nixos" {
-				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-					mi.RequiresKexec = true
-					mi.Bootstrapped = false
-					mi.Nixos = osrelease["VERSION"]
-				})
-
-				err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
-				if err != nil {
-					return errors.Wrap(err, "kexec arch validation failed")
-				}
-
-				return nil
-			}
-
-			if machineI.Bootstrap.ForceBootstrap {
-				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-					mi.Bootstrapped = false
-					mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
-					mi.Nixos = osrelease["VERSION"]
-				})
-
-				if machineI.Bootstrap.ForceBootstrapKexec {
-					err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
-					if err != nil {
-						return errors.Wrap(err, "kexec arch validation failed")
-					}
-				}
-
-				return nil
-			}
-
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.Bootstrapped = true
-				mi.Nixos = osrelease["VERSION"]
-			})
-
-			return nil
+			return classifyBootstrapStatus(log.String(), machineI)
 		}),
 		executioner.OnDryRun(func() {
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
@@ -282,6 +229,61 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 	if err != nil {
 		return errors.Wrap(err, "bootstrap detection failed")
 	}
+
+	return nil
+}
+
+func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
+	osr, err := osrelease.ReadString(output)
+	if err != nil {
+		return errors.Wrap(err, "error parsing /etc/os-release")
+	}
+
+	if osr["ID"] == "nixos" && osr["VARIANT_ID"] == "installer" {
+		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+			mi.Bootstrapped = false
+			mi.Nixos = osr["VERSION"]
+		})
+
+		return nil
+	}
+
+	if osr["ID"] != "nixos" {
+		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+			mi.RequiresKexec = true
+			mi.Bootstrapped = false
+			mi.Nixos = osr["VERSION"]
+		})
+
+		err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+		if err != nil {
+			return errors.Wrap(err, "kexec arch validation failed")
+		}
+
+		return nil
+	}
+
+	if machineI.Bootstrap.ForceBootstrap {
+		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+			mi.Bootstrapped = false
+			mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
+			mi.Nixos = osr["VERSION"]
+		})
+
+		if machineI.Bootstrap.ForceBootstrapKexec {
+			err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+			if err != nil {
+				return errors.Wrap(err, "kexec arch validation failed")
+			}
+		}
+
+		return nil
+	}
+
+	machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+		mi.Bootstrapped = true
+		mi.Nixos = osr["VERSION"]
+	})
 
 	return nil
 }
@@ -372,6 +374,8 @@ func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Mac
 
 	return errors.Wrap(err, "SSH config validation failed upon detected machine state")
 }
+
+// Helpers
 
 type generationInfo struct {
 	Date   string

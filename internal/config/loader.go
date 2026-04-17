@@ -155,7 +155,7 @@ func (c *Config) initFleet() error {
 			for _, machinePair := range configurationV.Machines.Pairs() {
 				machineV := machinePair.Value
 
-				// Machine may be nil
+				// Machine may be nil due to existing only as key (this is intended behaviour), so we set it here in that case
 				if machineV == nil {
 					machineV = &machine.Machine{}
 

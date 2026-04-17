@@ -130,7 +130,12 @@ func toMap(v any) map[string]any {
 	case yaml.MapSlice:
 		result := make(map[string]any, len(m))
 		for _, item := range m {
-			result[item.Key.(string)] = item.Value
+			key, ok := item.Key.(string)
+			if !ok {
+				continue
+			}
+
+			result[key] = item.Value
 		}
 
 		return result

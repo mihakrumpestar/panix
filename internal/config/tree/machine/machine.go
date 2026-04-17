@@ -1,8 +1,6 @@
 package machine
 
 import (
-	"fmt"
-
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
@@ -72,10 +70,6 @@ func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attribut
 }
 
 func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, localMachineHostname string) error {
-	if m == nil {
-		return fmt.Errorf("internal error: machine %s has nil value", name)
-	}
-
 	err := m.Attributes.Init(name, parentAttributes, true, localMachineHostname)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize machine")

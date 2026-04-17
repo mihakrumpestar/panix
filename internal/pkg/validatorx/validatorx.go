@@ -8,9 +8,10 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
+	"github.com/stoewer/go-strcase"
 )
 
-func ValidateStructTags[T any](v T) error { //nolint:varnamelen
+func ValidateStructTags[T any](s T) error { //nolint:varnamelen
 	validate := validator.New(validator.WithPrivateFieldValidation(), validator.WithRequiredStructEnabled())
 
 	err := validate.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {
@@ -34,7 +35,7 @@ func ValidateStructTags[T any](v T) error { //nolint:varnamelen
 		return errors.Wrap(err, "failed to register pathexists validation")
 	}
 
-	err = validate.Struct(v)
+	err = validate.Struct(s)
 	if err != nil {
 		return errors.New(humanizeValidationErrors(err))
 	}
@@ -82,39 +83,10 @@ func humanizePath(namespace string) string {
 			continue
 		}
 
-		result = append(result, camelToSnake(part))
+		result = append(result, strcase.SnakeCase(part))
 	}
 
 	return strings.Join(result, ".")
-}
-
-func camelToSnake(s string) string {
-	suffix := ""
-	if idx := strings.Index(s, "["); idx >= 0 {
-		suffix = s[idx:]
-		s = s[:idx]
-	}
-
-	var builder strings.Builder
-
-	for i, runeI := range s {
-		if i > 0 && runeI >= 'A' && runeI <= 'Z' {
-			nextLower := i+1 < len(s) && s[i+1] >= 'a' && s[i+1] <= 'z'
-
-			prevLower := s[i-1] >= 'a' && s[i-1] <= 'z'
-			if nextLower || prevLower {
-				builder.WriteByte('_')
-			}
-		}
-
-		if runeI >= 'A' && runeI <= 'Z' {
-			runeI |= 0x20
-		}
-
-		builder.WriteRune(runeI)
-	}
-
-	return builder.String() + suffix
 }
 
 func humanizeTagMessage(fieldError validator.FieldError) string {
