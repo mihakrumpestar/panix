@@ -5,6 +5,7 @@ vars:
   BUILD_DIR: ./build
   DIST_DIR: ./dist
   DEBUG_DIR: ./debug
+  PROFILE_DIR: ./profile
 
 tasks:
   default:
@@ -22,18 +23,24 @@ tasks:
     env:
       GORACE: log_path={{.DEBUG_DIR}}/race.log
     cmds:
+      - mkdir -p {{.DEBUG_DIR}}
       - CGO_ENABLED=1 go run --race cmd/panix/main.go {{.CLI_ARGS}}
 
   go:run:profile:
-    desc: Run the application with go run
+    desc: Run the application with go run + all profiling enabled
     cmds:
+      - mkdir -p {{.PROFILE_DIR}}
       - go run cmd/panix/main.go {{.CLI_ARGS}}
-        --cpu-profile={{.DEBUG_DIR}}/profile.prof
+        --profile.cpu={{.PROFILE_DIR}}/cpu.prof
+        --profile.mem={{.PROFILE_DIR}}/mem.prof
+        --profile.block={{.PROFILE_DIR}}/block.prof
+        --profile.mutex={{.PROFILE_DIR}}/mutex.prof
+        --profile.goroutine={{.PROFILE_DIR}}/goroutine.prof
 
   go:profile-ui:
     cmds:
       # https://ksysoev.github.io/posts/go-cpu-profile/
-      - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/profile.prof
+      - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/cpu.prof
 
   go:check:
     desc: Run checks

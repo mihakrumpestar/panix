@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/pkg/profile"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
@@ -72,31 +72,21 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	// Handle SIGINT as a keybinding instead of terminating the process
 	defer setupSIGINTHandler(ctx)()
 
-	dimensions := &viewports.Dimensions{}
-
-	cpuProfile := conf.Flags.Logging.CPUProfile
-	if cpuProfile != "" {
-		stopCPUProfile, err := startCPUProfile(cpuProfile)
-		if err != nil {
-			return err
-		}
-		defer stopCPUProfile()
+	profileStop, err := profile.Start(conf.Flags.Profile)
+	if err != nil {
+		return errors.Wrap(err, "failed to start profiling")
 	}
+	defer profileStop()
 
 	mdl := &model{
 		ctx:        ctx,
 		conf:       conf,
-		dimensions: dimensions,
+		dimensions: &viewports.Dimensions{},
 		isSnapshot: isSnapshot,
-	}
 
-	spinnersI, err := spinners.NewSpinners()
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize spinners")
+		header:   header.New(isSnapshot, conf.Snapshot),
+		spinners: spinners.NewSpinners(),
 	}
-
-	mdl.spinners = spinnersI
-	mdl.header = header.New(isSnapshot, conf.Snapshot)
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
 
@@ -124,32 +114,6 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	}
 
 	return nil
-}
-
-func startCPUProfile(path string) (func(), error) {
-	file, err := os.Create(path) // #nosec G304 -- path comes from controlled configuration flag
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create CPU profile file")
-	}
-
-	err = pprof.StartCPUProfile(file)
-	if err != nil {
-		err = file.Close()
-		if err != nil {
-			log.Error().Err(err).Msg("failed to close CPU profile file")
-		}
-
-		return nil, errors.Wrap(err, "failed to start CPU profile")
-	}
-
-	return func() {
-		pprof.StopCPUProfile()
-
-		err = file.Close()
-		if err != nil {
-			log.Error().Err(err).Msg("failed to close CPU profile file")
-		}
-	}, nil
 }
 
 func (m *model) Init() tea.Cmd {

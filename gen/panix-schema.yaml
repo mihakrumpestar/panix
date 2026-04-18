@@ -11,17 +11,13 @@ properties:
     properties:
       activation_mode:
         type: string
-        description: "Activation mode: check, switch, boot, test, dry-activate; overrides machine one"
+        description: "Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)"
         enum:
         - check
         - switch
         - boot
         - test
         - dry-activate
-      config:
-        type: string
-        description: "Config file (default: panix.yml)"
-        default: panix.yml
       dry_run:
         type: boolean
         description: Show what would be done without executing
@@ -30,19 +26,16 @@ properties:
         description: Show what would be done without executing, but with real inspect query
       exit_on_complete:
         type: boolean
-        description: Exit TUI on completion; 'retry' and 'restart' are disabled in this mode
+        description: Exit TUI on completion ('retry' and 'restart' are disabled in this mode)
       local_machine_hostname:
         type: string
         description: "Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"
       logging:
         type: object
         properties:
-          cpu_profile:
-            type: string
-            description: Path for cpu profiling to file, declaring it enables it
           debug:
             type: boolean
-            description: Debug output (enables logging)
+            description: Debug mode (enables logging)
           log:
             type: boolean
             description: Enable logging to file
@@ -50,6 +43,7 @@ properties:
             type: string
             description: "Log file path (epoch timestamp appended before .log) (default: panix.log)"
             default: panix.log
+            format: file-path
         additionalProperties: false
       output:
         type: string
@@ -59,6 +53,30 @@ properties:
         - tui
         - console
         - json
+      profile:
+        type: object
+        properties:
+          block:
+            type: string
+            description: Path for block profile output (enables block profiling)
+            format: file-path
+          cpu:
+            type: string
+            description: Path for CPU profile output (enables CPU profiling)
+            format: file-path
+          goroutine:
+            type: string
+            description: Path for goroutine profile output (enables goroutine profiling)
+            format: file-path
+          mem:
+            type: string
+            description: Path for memory profile output (enables memory profiling)
+            format: file-path
+          mutex:
+            type: string
+            description: Path for mutex profile output (enables mutex profiling)
+            format: file-path
+        additionalProperties: false
       require_all_success:
         type: boolean
         description: Abort if any task fails, primarily for CI/CD
@@ -78,6 +96,7 @@ properties:
             type: string
             description: "Directory to save snapshots (default: .)"
             default: .
+            format: file-path
           on_exit:
             type: boolean
             description: Take snapshot on exit

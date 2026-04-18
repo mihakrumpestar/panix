@@ -23,8 +23,8 @@ type entry struct {
 	model    spinner.Model
 }
 
-func NewSpinners() (*Spinners, error) {
-	return &Spinners{entries: atomicorderedmap.New[xpath.Xpath, *entry]()}, nil
+func NewSpinners() *Spinners {
+	return &Spinners{entries: atomicorderedmap.New[xpath.Xpath, *entry]()}
 }
 
 func (s *Spinners) View(xpath xpath.Xpath) string {

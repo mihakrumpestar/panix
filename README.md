@@ -1057,13 +1057,13 @@ Flags:
   -s, --skip-phases=SKIP-PHASES,...
                                    Declare phases to skip (not all phases can be
                                    skipped) ($PANIX_SKIP_PHASES)
-      --exit-on-complete           Exit TUI on completion; 'retry' and
-                                   'restart' are disabled in this mode
+      --exit-on-complete           Exit TUI on completion ('retry' and
+                                   'restart' are disabled in this mode)
                                    ($PANIX_EXIT_ON_COMPLETE)
       --activation-mode=ACTIVATION-MODE
-                                   Activation mode: check, switch, boot,
-                                   test, dry-activate; overrides machine one
-                                   ($PANIX_ACTIVATION_MODE)
+                                   Activation mode: check, switch, boot, test,
+                                   dry-activate (overrides machine specific
+                                   ones) ($PANIX_ACTIVATION_MODE)
       --output="tui"               Output mode: tui, console, json
                                    ($PANIX_OUTPUT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
@@ -1088,9 +1088,19 @@ Flags:
   -l, --log                        Enable logging to file ($PANIX_LOG)
       --log-file="panix.log"       Log file path (epoch timestamp appended
                                    before .log) ($PANIX_LOG_FILE)
-  -d, --debug                      Debug output (enables logging) ($PANIX_DEBUG)
-      --cpu-profile=STRING         Path for cpu profiling to file, declaring it
-                                   enables it ($PANIX_CPU_PROFILE)
+  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
+      --profile.cpu=STRING         Path for CPU profile output (enables CPU
+                                   profiling) ($PANIX_PROFILE_CPU)
+      --profile.mem=STRING         Path for memory profile output (enables
+                                   memory profiling) ($PANIX_PROFILE_MEM)
+      --profile.block=STRING       Path for block profile output (enables block
+                                   profiling) ($PANIX_PROFILE_BLOCK)
+      --profile.mutex=STRING       Path for mutex profile output (enables mutex
+                                   profiling) ($PANIX_PROFILE_MUTEX)
+      --profile.goroutine=STRING
+                                   Path for goroutine profile output
+                                   (enables goroutine profiling)
+                                   ($PANIX_PROFILE_GOROUTINE)
 ```
 
 </details>

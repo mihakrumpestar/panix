@@ -20,7 +20,7 @@ const (
 )
 
 type ConfigFlag struct {
-	Config string `yaml:"config" json:"config" short:"c" help:"Config file" default:"panix.yml"`
+	Config string `yaml:"-" json:"config" short:"c" help:"Config file" validate:"required,filepath" default:"panix.yml"`
 }
 
 //nolint:lll
@@ -40,6 +40,7 @@ type WorkflowFlags struct {
 	Tui      `yaml:"tui" json:"tui" embed:"" prefix:"tui."`                //nolint:embeddedstructfieldcheck
 	Snapshot `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."` //nolint:embeddedstructfieldcheck
 	Logging  `yaml:"logging" json:"logging"`
+	Profile  `yaml:"profile" json:"profile" embed:"" prefix:"profile."`
 }
 
 //nolint:lll
@@ -61,16 +62,25 @@ type Tui struct {
 }
 
 type Snapshot struct {
-	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" default:"."`
+	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"dir" default:"."`
 	OnRetry bool   `yaml:"on_retry" json:"on_retry,omitempty" help:"Take snapshot before retry"`
 	OnExit  bool   `yaml:"on_exit" json:"on_exit,omitempty" help:"Take snapshot on exit"`
 }
 
+//nolint:lll
 type Logging struct {
-	Log        bool   `yaml:"log" json:"log,omitempty" short:"l" help:"Enable logging to file"`
-	LogFile    string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" default:"panix.log"`
-	Debug      bool   `yaml:"debug" json:"debug,omitempty" short:"d" help:"Debug output (enables logging)"`
-	CPUProfile string `yaml:"cpu_profile" json:"cpu_profile,omitempty" help:"Path for cpu profiling to file, declaring it enables it"`
+	Log     bool   `yaml:"log" json:"log,omitempty" short:"l" help:"Enable logging to file"`
+	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"filepath" default:"panix.log"`
+	Debug   bool   `yaml:"debug" json:"debug,omitempty" short:"d" help:"Debug mode (enables logging)"`
+}
+
+//nolint:lll
+type Profile struct {
+	CPU       string `yaml:"cpu" json:"cpu,omitempty" help:"Path for CPU profile output (enables CPU profiling)" validate:"omitempty,filepath"`
+	Mem       string `yaml:"mem" json:"mem,omitempty" help:"Path for memory profile output (enables memory profiling)" validate:"omitempty,filepath"`
+	Block     string `yaml:"block" json:"block,omitempty" help:"Path for block profile output (enables block profiling)" validate:"omitempty,filepath"`
+	Mutex     string `yaml:"mutex" json:"mutex,omitempty" help:"Path for mutex profile output (enables mutex profiling)" validate:"omitempty,filepath"`
+	Goroutine string `yaml:"goroutine" json:"goroutine,omitempty" help:"Path for goroutine profile output (enables goroutine profiling)" validate:"omitempty,filepath"`
 }
 
 func (f *Flags) DefautlIfNoTTY() {
