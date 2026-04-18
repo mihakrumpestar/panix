@@ -3,48 +3,32 @@ package ssh
 import (
 	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
-const (
-	DefaultSSHPort     uint16 = 22
-	DefaultSSHUsername string = "root"
-)
-
-var (
-	ErrSSHClientNil     = errors.New("internal error: SSHClient is nil")
-	ErrMachineNameEmpty = errors.New("machine name is empty")
-)
-
+//nolint:lll,recvcheck
 type SSHClient struct {
-	Hostname              string `yaml:"hostname" desc:"SSH hostname or IP address"` // Hostname is alias if all other fileds are empty
-	Port                  uint16 `yaml:"port" desc:"SSH port number"`
-	Username              string `yaml:"username" desc:"SSH username"`
-	IdentityFile          string `yaml:"identity_file" desc:"Path to SSH private key" validate:"omitempty,filepath"`
-	StrictKeyChecking     bool   `yaml:"strict_key_checking" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`                                                //nolint:lll
-	DisableAutoAddHostKey bool   `yaml:"disable_auto_add_host_key" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"` //nolint:lll
-	// Internal - computed during Init(), never inherit from parent
-	IsLocal         bool `yaml:"-" json:"-" validate:"-" mergo:"-"`
-	HostnameIsAlias bool `yaml:"-" json:"-" validate:"-" mergo:"-"`
+	// Machine key is ssh alias if hostname is not set
+	Hostname              string      `yaml:"hostname" json:"hostname,omitempty" desc:"SSH hostname or IP address"`
+	Port                  SSHPort     `yaml:"port" json:"port,omitempty" desc:"SSH port number" default:"22"`
+	Username              SSHUsername `yaml:"username" json:"username,omitempty" desc:"SSH username" default:"root"`
+	IdentityFile          string      `yaml:"identity_file" json:"identity_file,omitempty" validate:"omitempty,filepath" desc:"Path to SSH private key"`
+	StrictKeyChecking     bool        `yaml:"strict_key_checking" json:"strict_key_checking,omitempty" desc:"Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"`
+	DisableAutoAddHostKey bool        `yaml:"disable_auto_add_host_key" json:"disable_auto_add_host_key,omitempty" desc:"Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"`
+	ExtraFlags            []string    `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')"`
+
+	isLocal         bool
+	hostnameIsAlias bool
 }
 
-func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, overrideLocalMachine string) error {
-	if sC == nil {
-		return ErrSSHClientNil
-	}
-
-	if machineName == "" {
-		return ErrMachineNameEmpty
-	}
-
+func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, localMachine string) error {
 	// Use machineName as Hostname if Hostname is empty (indicates SSH config alias usage)
 	if sC.Hostname == "" {
-		sC.HostnameIsAlias = true
+		sC.hostnameIsAlias = true
 		sC.Hostname = machineName
 	}
 
-	if sC.HostnameIsAlias {
+	// Even if it is alias we need to get port info for certain tasks
+	if sC.hostnameIsAlias {
 		err := sshConfig.RetrieveFullParamsFromSSHConfig(sC)
 		if err != nil {
 			return err
@@ -52,32 +36,28 @@ func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, overrideLocalMachin
 	}
 
 	// Check if machine is local after hostname is fully resolved (from SSH config if alias)
-	sC.IsLocal = sC.Hostname == overrideLocalMachine
-
-	if sC.HostnameIsAlias {
-		return nil
-	}
-
-	if sC.Port == 0 {
-		sC.Port = DefaultSSHPort
-	}
-
-	if sC.Username == "" {
-		sC.Username = DefaultSSHUsername
-	}
+	sC.isLocal = sC.Hostname == localMachine
 
 	return nil
 }
 
+func (sC SSHClient) IsInitialized() bool {
+	return sC.Hostname != ""
+}
+
+func (sC SSHClient) IsLocal() bool {
+	return sC.isLocal
+}
+
 func (sC *SSHClient) PortString() string {
-	return strconv.Itoa(int(sC.Port))
+	return strconv.Itoa(int(sC.Port.Get()))
 }
 
 func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 	var sshArgs []string
 
-	if !sC.HostnameIsAlias {
-		sshArgs = []string{"-p", sC.PortString(), "-l", sC.Username}
+	if !sC.hostnameIsAlias {
+		sshArgs = []string{"-p", sC.PortString(), "-l", sC.Username.Get()}
 
 		if sC.IdentityFile != "" {
 			sshArgs = append(sshArgs, "-i", sC.IdentityFile, "-o", "IdentitiesOnly=yes")
@@ -89,6 +69,8 @@ func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 	} else if !sC.DisableAutoAddHostKey {
 		sshArgs = append(sshArgs, "-o", "StrictHostKeyChecking=accept-new")
 	}
+
+	sshArgs = append(sshArgs, sC.ExtraFlags...)
 
 	return sshArgs
 }

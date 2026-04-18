@@ -5,6 +5,7 @@ vars:
   BUILD_DIR: ./build
   DIST_DIR: ./dist
   DEBUG_DIR: ./debug
+  PROFILE_DIR: ./profile
 
 tasks:
   default:
@@ -22,18 +23,19 @@ tasks:
     env:
       GORACE: log_path={{.DEBUG_DIR}}/race.log
     cmds:
+      - mkdir -p {{.DEBUG_DIR}}
       - CGO_ENABLED=1 go run --race cmd/panix/main.go {{.CLI_ARGS}}
 
   go:run:profile:
-    desc: Run the application with go run
+    desc: Run the application with go run + all profiling enabled
     cmds:
-      - go run cmd/panix/main.go --cpu-profile={{.DEBUG_DIR}}/profile.prof
-        {{.CLI_ARGS}}
-
-  go:profile-ui:
-    cmds:
-      # https://ksysoev.github.io/posts/go-cpu-profile/
-      - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/profile.prof
+      - mkdir -p {{.PROFILE_DIR}}
+      - go run cmd/panix/main.go {{.CLI_ARGS}}
+        --profile.cpu={{.PROFILE_DIR}}/cpu.prof
+        --profile.mem={{.PROFILE_DIR}}/mem.prof
+        --profile.block={{.PROFILE_DIR}}/block.prof
+        --profile.mutex={{.PROFILE_DIR}}/mutex.prof
+        --profile.goroutine={{.PROFILE_DIR}}/goroutine.prof
 
   go:check:
     desc: Run checks
@@ -45,12 +47,18 @@ tasks:
       - |
         {{.CUSTOM_GCL}} run ./...
       - |
-        if grep -rn "if err :=" internal/ --include="*.go"; then
-          echo "Error: Found 'if err :=' pattern. Use 'err := ...' followed by 'if err != nil' instead."
+        if grep -rn "; " internal/ --include="*.go"; then
+          echo "Error: Inlining pattern detected"
           exit 1
         fi
         echo "0 issues"
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  nix:run:
+    desc: Run the application using nix
+    cmds:
+      - nix run path:$(pwd)#default --extra-experimental-features "nix-command
+        flakes" -- {{.CLI_ARGS}}
 
   nix:build:
     desc: Build the package using nix
@@ -58,12 +66,6 @@ tasks:
       - nix build path:$(pwd)#default --extra-experimental-features "nix-command
         flakes"
       - ls -sh result/bin/panix
-
-  nix:run:
-    desc: Run the application using nix
-    cmds:
-      - nix run path:$(pwd)#default --extra-experimental-features "nix-command
-        flakes" -- {{.CLI_ARGS}}
 
   nix:update:
     desc: Update flake
@@ -92,7 +94,7 @@ tasks:
         if not re.search(pattern, content, flags=re.DOTALL):
             pattern = r'\n### CLI\n\n```sh\n.*?```\n'
         content = re.sub(pattern, cli_section, content, flags=re.DOTALL)
-        with open('examples/panix.yml', 'r') as f:
+        with open('examples/panix.demo.yml', 'r') as f:
             panix_yml = f.read()
         panix_yml_section = "```yaml\n" + panix_yml + "\n```\n"
         content = re.sub(
@@ -117,6 +119,7 @@ tasks:
       - go get -u all
       - go mod tidy
       - task: nix:update
+      - task: nix:vendor
 
   ci:
     desc: Run all CI checks

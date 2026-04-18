@@ -1,23 +1,24 @@
 package config
 
 import (
-	"bytes"
 	"os"
-	"slices"
 	"strconv"
+	"time"
 
-	"github.com/goccy/go-yaml"
 	"github.com/gookit/goutil/dump"
+	"github.com/mihakrumpestar/panix/gen"
+	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/validatorx"
+	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
-var ErrNoFlakesAfterFilter = errors.New("no flakes left after filtering")
-
-func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config, error) {
+func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
 		d.SkipNilField = true
@@ -37,7 +38,7 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	}
 
 	// Validate and initialize configuration
-	err = conf.ValidateStructTags()
+	err = validatorx.ValidateStructTags(conf)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
@@ -48,21 +49,25 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phases.Phase) (*Config,
 	}
 
 	// Filter based on tags and disabled flags
-	err = conf.filterFleet()
+	err = conf.Fleet.Filter(conf.Flags)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
 
-	conf.Phases, err = phases.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
+	conf.Phases, err = phase.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid phases")
 	}
 
-	conf.filterUnusedPhases()
+	conf.filterOutUnusedPhases()
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)
+		dump.P(conf.Fleet)
 	}
+
+	conf.Snapshot.StartTime = time.Now()
+	conf.Snapshot.PanixVersion = gen.Version()
 
 	return conf, nil
 }
@@ -82,11 +87,10 @@ func decodeConfigFile(configPath string) (*Config, error) {
 	}
 
 	conf := &Config{}
-	decoder := yaml.NewDecoder(bytes.NewReader(processedYAML))
 
-	err = decoder.Decode(conf)
+	err = yamlx.Decode(processedYAML, conf)
 	if err != nil {
-		return nil, errors.New(yaml.FormatError(err, true, false))
+		return nil, errors.Wrap(err, "failed to decode config")
 	}
 
 	return conf, nil
@@ -94,18 +98,24 @@ func decodeConfigFile(configPath string) (*Config, error) {
 
 // applyConfigDefaults merges configuration with CLI flags and applies defaults.
 func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
-	// Apply defaults
-	if conf.Flags == nil {
-		conf.Flags = &flags.Flags{}
-	}
-
 	err := conf.Flags.MergeConfWithCliFlags(parsedFlags)
 	if err != nil {
 		return errors.Wrap(err, "failed merging config with cli flags")
 	}
 
 	if conf.ColorScheme == nil {
-		conf.ColorScheme = defaultColorScheme()
+		conf.ColorScheme = colorscheme.DefaultColorScheme()
+	}
+
+	if conf.Flags.LocalMachineHostname == "" {
+		var hostname string
+
+		hostname, err = os.Hostname()
+		if err != nil {
+			return errors.Wrap(err, "failed to get hostname")
+		}
+
+		conf.Flags.LocalMachineHostname = hostname
 	}
 
 	conf.Flags.DefautlIfNoTTY()
@@ -119,53 +129,46 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 }
 
 func (c *Config) initFleet() error {
-	err := c.Fleet.Init(c.Flags)
+	localMachineHostname := c.Flags.LocalMachineHostname
+
+	err := c.Fleet.Init(localMachineHostname)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to init fleet")
 	}
 
-	for _, flakePair := range c.Fleet.Flakes.Omap.Pairs() {
-		flakeName, flake := flakePair.Key, flakePair.Value
+	for _, flakePair := range c.Fleet.Flakes.Pairs() {
+		flakeV := flakePair.Value
 
-		err = flake.Init(flakeName, &c.Fleet.Attributes)
+		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes, localMachineHostname)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to init flake")
 		}
 
-		for _, configPair := range flake.Configurations.Omap.Pairs() {
-			configurationName, configuration := configPair.Key, configPair.Value
+		for _, configurationPair := range flakeV.Configurations.Pairs() {
+			configurationV := configurationPair.Value
 
-			err = configuration.Init(configurationName, flake)
+			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes, localMachineHostname)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "failed to init configuration")
 			}
 
-			for _, machinePair := range configuration.Machines.Omap.Pairs() {
-				machineName, machine := machinePair.Key, machinePair.Value
+			for _, machinePair := range configurationV.Machines.Pairs() {
+				machineV := machinePair.Value
 
-				err = machine.Init(machineName, configuration)
+				// Machine may be nil due to existing only as key (this is intended behaviour), so we set it here in that case
+				if machineV == nil {
+					machineV = &machine.Machine{}
+
+					configurationV.Machines.Set(machinePair.Key, machineV)
+				}
+
+				err = machineV.Init(machinePair.Key, &configurationV.Attributes, localMachineHostname)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "failed to init machine")
 				}
 			}
 		}
 	}
 
 	return nil
-}
-
-// Helpers
-
-func machineContainsTags(tags, filterTags []string) bool {
-	if len(filterTags) == 0 {
-		return true
-	}
-
-	for _, filterTag := range filterTags {
-		if slices.Contains(tags, filterTag) {
-			return true
-		}
-	}
-
-	return false
 }

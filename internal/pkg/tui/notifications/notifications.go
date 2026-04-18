@@ -14,9 +14,8 @@ const (
 	fadeStart    = 1 * time.Second
 	tickInterval = 250 * time.Millisecond
 
-	fadeFactor  = 0.4
-	boxPaddingX = 2
-	rgbaShift   = 8
+	fadeFactor = 0.4
+	rgbaShift  = 8
 )
 
 type notificationTickMsg struct{}
@@ -35,7 +34,8 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 	n.text, n.started = text, time.Now()
 	n.fgR, n.fgG, n.fgB = 180, 180, 180
 
-	if fg := color.GetForeground(); fg != nil {
+	fg := color.GetForeground()
+	if fg != nil {
 		r, g, b, _ := fg.RGBA()
 
 		// #nosec G115 -- rgba values are 0-65535, >>8 safely converts to 0-255 range
@@ -46,7 +46,8 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 }
 
 func (n *Notification) Update(msg tea.Msg) tea.Cmd {
-	if _, ok := msg.(notificationTickMsg); !ok {
+	_, ok := msg.(notificationTickMsg)
+	if !ok {
 		return nil
 	}
 
@@ -68,31 +69,26 @@ func (n *Notification) Clear() {
 	n.started = time.Time{}
 }
 
-func (n *Notification) GetTextAndStarted() (string, int64) {
-	return n.text, n.started.UnixMilli()
-}
-
-func (n *Notification) Render(baseStyle lipgloss.Style) string {
-	if n.isExpired() {
-		return ""
-	}
-
-	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
-}
-
-func (n *Notification) RenderBox(baseStyle lipgloss.Style) (string, int) {
+func (n *Notification) View(baseStyle lipgloss.Style) (string, int) {
 	if n.isExpired() {
 		return "", 0
 	}
 
 	fg := n.fadedColor()
 	box := lipgloss.NewStyle().
-		Padding(0, boxPaddingX).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(fg).
-		Render(n.Render(baseStyle))
+		Render(n.render(baseStyle))
 
-	return box, lipgloss.Width(box)
+	return box + "\n", lipgloss.Width(box)
+}
+
+func (n *Notification) render(baseStyle lipgloss.Style) string {
+	if n.isExpired() {
+		return ""
+	}
+
+	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
 }
 
 func (n *Notification) isExpired() bool {
