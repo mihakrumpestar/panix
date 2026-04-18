@@ -1,11 +1,13 @@
 package workflow
 
 import (
-	"github.com/kirill-scherba/omap"
-	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -13,73 +15,68 @@ import (
 // It is bound to a Workflow instance to avoid global state issues.
 type runner struct {
 	workflow     *Workflow
-	onceRegistry *omap.Omap[string, *onceasync.OnceAsync]
+	onceRegistry *atomicorderedmap.AtomicOrderedMap[string, *onceasync.OnceAsync]
 }
 
 // phaseRunner handles the execution of a single phase for a specific machine.
 // It is created per-machine to hold the context for that machine's execution.
 type phaseRunner struct {
-	r       *runner
-	flake   *config.Flake
-	config  *config.Configuration
-	machine *config.Machine
+	r         *runner
+	fleetLeaf *fleet.FleetLeaf
 }
 
-func newRunner(workflow *Workflow) (*runner, error) {
-	onceRegistry, err := omap.New[string, *onceasync.OnceAsync]()
-	if err != nil {
-		return nil, err
-	}
-
+func newRunner(workflow *Workflow) *runner {
 	return &runner{
 		workflow:     workflow,
-		onceRegistry: onceRegistry,
-	}, nil
+		onceRegistry: atomicorderedmap.New[string, *onceasync.OnceAsync](),
+	}
 }
 
 // getOrCreateOnceAsync returns a OnceAsync for the given xpath.
 // This ensures that phases with ScopeConfig or ScopeFlake only run once.
-func (r *runner) getOrCreateOnceAsync(xpath string) *onceasync.OnceAsync {
-	once, ok := r.onceRegistry.Get(xpath)
+func (r *runner) getOrCreateOnceAsync(xpath xpath.Xpath) *onceasync.OnceAsync {
+	xpathS := xpath.String()
+
+	once, ok := r.onceRegistry.Get(xpathS)
 	if ok {
 		return once
 	}
 
 	newOnce := onceasync.NewOnceAsync()
 
-	existing, ok := r.onceRegistry.Get(xpath)
+	existing, ok := r.onceRegistry.Get(xpathS)
 	if ok {
 		return existing
 	}
 
-	err := r.onceRegistry.Set(xpath, newOnce)
-	if err != nil {
-		return newOnce
-	}
+	r.onceRegistry.Set(xpathS, newOnce)
 
 	return newOnce
 }
 
 // run executes a phase with automatic once-per-scope semantics.
-func (pr *phaseRunner) run(phase phases.Phase) error {
-	if shouldSkipPhase(phase, pr.machine) {
+func (pr *phaseRunner) run(phase phase.Phase) error {
+	if shouldSkipPhase(phase, pr.fleetLeaf.Machine) {
 		return nil
 	}
 
 	workflow := pr.r.workflow
 
-	xpath := getXpathForScope(phase, pr.flake, pr.config, pr.machine)
+	xpath, logs, err := getXpathAndLogsForScope(phase, pr.fleetLeaf)
+	if err != nil {
+		return err
+	}
 
 	execFn := func() error {
-		return workflow.executePhase(phase, pr.flake, pr.config, pr.machine)
+		return workflow.executePhase(phase, pr.fleetLeaf)
 	}
 
 	// If this phase should only run once per scope, use OnceAsync
-	if phases.ShouldRunOnce(phase) {
-		once := pr.r.getOrCreateOnceAsync(xpath.String())
+	if phase.ShouldRunOnce() {
+		once := pr.r.getOrCreateOnceAsync(xpath)
 
-		err := once.Do(func() error {
-			return workflow.NewTaskWithRetry(phase, xpath, execFn)
+		err = once.Do(func() error {
+			return workflow.NewTaskWithRetry(phase, logs, execFn)
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to run once-per-scope phase")
@@ -89,20 +86,28 @@ func (pr *phaseRunner) run(phase phases.Phase) error {
 	}
 
 	// Otherwise, run directly
-	return workflow.NewTaskWithRetry(phase, xpath, execFn)
+	return workflow.NewTaskWithRetry(phase, logs, execFn)
 }
 
-func shouldSkipPhase(phase phases.Phase, machine *config.Machine) bool {
-	return phase == phases.Bootstrap && machine.MetaInspect.Bootstrapped.Load() && !machine.Bootstrap.ForceBootstrap
+func shouldSkipPhase(p phase.Phase, machine *machine.Machine) bool {
+	if p != phase.Bootstrap {
+		return false
+	}
+
+	mi := machine.MetaInspect.Load()
+
+	return mi != nil && mi.Bootstrapped && !machine.Bootstrap.ForceBootstrap
 }
 
-func getXpathForScope(phase phases.Phase, flake *config.Flake, cfg *config.Configuration, machine *config.Machine) attributes.Xpath {
-	switch phases.GetPhaseScope(phase) {
-	case phases.ScopeFlake:
-		return flake.Xpath
-	case phases.ScopeConfig:
-		return cfg.Xpath
+func getXpathAndLogsForScope(p phase.Phase, fleetLeaf *fleet.FleetLeaf) (xpath.Xpath, *logs.Logs, error) {
+	switch p.GetPhaseScope() {
+	case phase.ScopeFlake:
+		return fleetLeaf.Flake.Xpath, fleetLeaf.Flake.Logs, nil
+	case phase.ScopeConfiguration:
+		return fleetLeaf.Configuration.Xpath, fleetLeaf.Configuration.Logs, nil
+	case phase.ScopeMachine:
+		return fleetLeaf.Machine.Xpath, fleetLeaf.Machine.Logs, nil
 	default:
-		return machine.Xpath
+		return xpath.New(), nil, errors.New("getLogsForScope invalid scope")
 	}
 }

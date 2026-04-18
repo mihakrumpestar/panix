@@ -8,11 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/stoewer/go-strcase"
@@ -25,27 +26,25 @@ var (
 
 var nixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
 
-func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configuration *config.Configuration) error {
-	return w.Phase(configuration.Attributes.Xpath, phases.Build, nil,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			if configuration.MetaBuild == nil {
-				configuration.MetaBuild = &config.MetaBuild{}
+func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) error {
+	return w.Phase(phase.Build, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
+			flake := fleetLeaf.Flake
+			configurationI := fleetLeaf.Configuration
+
+			if configurationI.MetaBuild == nil {
+				configurationI.MetaBuild = &configuration.MetaBuild{}
 			}
 
-			flakeOutput := configuration.FlakeOutput
-			if flakeOutput == "" {
-				flakeOutput = "nixosConfigurations.<name>.config.system.build.toplevel"
-			}
-
-			flakeOutput = strings.ReplaceAll(flakeOutput, "<name>", configuration.Name)
+			flakeOutput := strings.ReplaceAll(configurationI.FlakeOutput.String(), "<name>", configurationI.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, flake, configuration, installables, "system closure")
+			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "system closure")
 			if err != nil {
 				return err
 			}
 
-			configuration.MetaBuild.SystemClosure = parsedOutput[0].Outputs.Out
+			configurationI.MetaBuild.SystemClosure = parsedOutput[0].Outputs.Out
 
 			return nil
 		})
@@ -53,11 +52,13 @@ func (w *Workflow) executeBuildPhaseConfiguration(flake *config.Flake, configura
 
 func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 	exc *executioner.Executioner,
-	flake *config.Flake,
-	configuration *config.Configuration,
+	fleetLeaf *fleet.FleetLeaf,
 	installables []string,
 	whatIsBuilding string,
 ) (BuildOutputJSON, error) {
+	flake := fleetLeaf.Flake
+	configuration := fleetLeaf.Configuration
+
 	var parsedOutput BuildOutputJSON
 
 	commandWithArgs := slices.Concat(

@@ -297,9 +297,10 @@ You can provide a custom kexec tarball:
 ```yaml
 bootstrap:
   kexec:
-    url: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
+    image: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
     # <arch> placeholder replaced with detected architecture
-    extra_flags: "--no-sync"  # Optional flags passed to kexec (default: "")
+    extra_flags: # Optional flags passed to kexec (default: "")
+      "--no-sync"
     ssh_port: 22 # Optional kexec ssh port (default: 22)
 ```
 
@@ -374,7 +375,7 @@ machines:
       hostname: 192.168.1.100
     bootstrap:
       kexec:
-        url: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
+        image: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
 ```
 
 The `<arch>` placeholder is automatically replaced with the detected architecture (eg. `x86_64`). Panix detects whether `url` is a local path or HTTP URL - local paths are transferred via `rsync`, URLs trigger remote download with `curl`.
@@ -480,7 +481,65 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 | `left`/`right` | Navigate between stats table or phase status entrys |
 | `mouse click` | Select and entry from stats table, phase status, build logs command label or command output |
 | `mouse scroll`/`up`/`down` | Allows scrolling main view or an inner view when selected (eg. command output) |
+| `s` | Take a snapshot of current workflow state |
 | `q` | Quit |
+
+</details>
+
+<details>
+<summary><strong>Snapshots</strong></summary>
+
+Snapshots capture the full state of a deployment workflow at a point in time and save it to a JSON file. They include machine states, phase results, command outputs, inspect metadata, and timing information.
+
+> [!TIP]
+> **Why snapshots?** When a deployment fails, a snapshot preserves the exact state for later inspection, debugging, sharing with others or to give them for context to LLMs. Instead of scrolling through TUI logs or parsing terminal scrollback, you get a structured record of everything that happened.
+
+### Taking snapshots
+
+Three ways to take a snapshot:
+
+| Method | Description |
+|--------|-------------|
+| Press `s` in TUI | Manual snapshot at any time |
+| `--snapshot.on-retry` | Automatic snapshot before retrying failed phases |
+| `--snapshot.on-exit` | Automatic snapshot when exiting TUI |
+
+Snapshot files are written to `--snapshot.dir` (default: current directory) with the naming format:
+
+```
+panix-snapshot-<start_epoch>-<snapshot_epoch>-<reason>.json
+```
+
+Where `<reason>` is `manual`, `retry`, or `exit`.
+
+### Viewing snapshots
+
+Replay any snapshot in the TUI:
+
+```bash
+panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
+```
+
+This opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at the time of capture will also appear as running (loading spinners) in TUI replay.
+
+> [!NOTE]
+> `r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
+
+### Configuration
+
+```yaml
+flags:
+  snapshot:
+    dir: .                    # Directory to save snapshots
+    on_retry: true            # Take snapshot before retry
+    on_exit: true             # Take snapshot on exit
+```
+
+Or via CLI flags:
+
+```bash
+panix deploy --snapshot.dir=./snapshots --snapshot.on-retry --snapshot.on-exit
+```
 
 </details>
 
@@ -562,11 +621,11 @@ machines:
   workstation:              # Detected as local, no SSH
 ```
 
-This can be overriden (if you want to prevent this, or if hostname detecton does not work):
+This can be overriden (if you want to prevent this, or if hostname detecton does not work for you):
 
 ```yaml
 flags:
-  override_local_machine: my-local-machine
+  local_machine_hostname: my-local-machine
 ```
 
 </details>
@@ -579,7 +638,7 @@ Panix supports three output modes via the `--output` flag:
 | Mode | Description |
 |------|-------------|
 | `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
-| `console` | Human-readable log output to stdout (auto-selected when no TTY detected) |
+| `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
 | `json` | JSON-structured log output to stdout |
 
 ```bash
@@ -596,7 +655,7 @@ panix deploy --output json
 panix deploy --output json --log
 ```
 
-When no TTY is detected, `--output console` is automatically selected since the TUI cannot render without a terminal.
+When no TTY is present, `--output console` is automatically selected since the TUI cannot render without a terminal.
 
 **File logging** is enabled with `--log` and writes structured JSON to a file with an epoch timestamp in the name (e.g. `panix.1746565600.log`):
 
@@ -623,13 +682,13 @@ Example:
 {"level":"error","event":"workflow_end","machines":{"fleet/infrastructure/personal-workstation/fake":{"status":"failed","phase":"inspect","duration":0.065123731,"error":"reachability check failed: regular SSH is unreachable"},"fleet/infrastructure/personal-workstation/personal-workstation":{"status":"done","phase":"activate","duration":6.746481573}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
 ```
 
-**CI/CD** usage:
+There are 2 additional failure modes:
 
 ```bash
 # Fail immediately on first error
 panix deploy --require-all-success
 
-# In TUI mode (console mode does this automatically), you can force it exit when workflow finishes (default is that it stays open)
+# In TUI mode (console mode does this automatically), you can force it exit when workflow finishes (by default it stays open)
 panix deploy --exit-on-complete
 ```
 
@@ -661,14 +720,17 @@ Environment variables and dynamic values:
 fleet:
   flakes:
     my-flake:
-      url: {{ env "MY_FLAKE_URL" }}
+      url: |
+        {{ env "MY_FLAKE_URL" }}
       configurations:
         server:
           machines:
             server-01:
               ssh:
-                hostname: {{ env "SERVER_HOST" | default "192.168.1.100" }}
-                port: {{ env "SSH_PORT" | default "22" }}
+                hostname: |
+                  {{ env "SERVER_HOST" | default "192.168.1.100" }}
+                port: |
+                  {{ env "SSH_PORT" | default "22" }}
 ```
 
 ### Conditional Logic
@@ -723,7 +785,7 @@ Panix provides 100+ functions from Sprout, documentaion is available in [Sprout 
 Use YAML anchors for reusable blocks alongside templates:
 
 ```yaml
-bootstrap_defaults: &bootstrap_defaults
+anchor_bootstrap: &bootstrap_defaults
   disk_encryption_keys:
     - local_path: /tmp/disko-encryption-password.txt
       remote_path: /tmp/disko-encryption-password.txt
@@ -740,6 +802,9 @@ fleet:
                 post_bootstrap_hooks:
                   - systemd-cryptenroll --tpm2-device=auto /dev/sda2
 ```
+
+> [!WARNING]
+> When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
 
 ### Eval Command
 
@@ -762,7 +827,7 @@ The `eval` command:
 - Template definitions (`{{define}}`) work inside YAML comments
 - Standard Go template syntax with `{{` and `}}` delimiters
 - YAML LSP may complain about template syntax - this is cosmetic
-- For complex multiline templates, use block scalars (`|`) in hooks
+- For complex multiline templates, use block scalars (`|`)
 
 </details>
 
@@ -921,9 +986,8 @@ Usage: panix <command> [flags]
 Universal NixOS Deployment Tool
 
 Flags:
-  -h, --help                  Show context-sensitive help.
-  -c, --config="panix.yml"    Config file ($PANIX_CONFIG)
-      --version               Show version ($PANIX_VERSION)
+  -h, --help       Show context-sensitive help.
+      --version    Show version ($PANIX_VERSION)
 
 Commands:
   init [flags]
@@ -934,6 +998,9 @@ Commands:
 
   eval [flags]
     Evaluate config (process templates and anchors) and output result
+
+  snapshot --path=STRING [flags]
+    View snapshot in TUI
 
   inspect [flags]
     Inspect machine per host
@@ -949,7 +1016,8 @@ Commands:
     Deploy secrets to all machines
 
   rollback [flags]
-    Rollback to a previous generation, use --gen=<number> flag, default is -1
+    Rollback to a previous generation, use optional --gen=NUMBER flag, default
+    is -1
 
 Run "panix <command> --help" for more information on a command.
 ```
@@ -966,20 +1034,19 @@ activate)
 
 Flags:
   -h, --help                       Show context-sensitive help.
-  -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
       --version                    Show version ($PANIX_VERSION)
 
+  -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
   -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
                                    and names are already registered as tags)
                                    ($PANIX_TAGS)
-      --bootstrap.disable-disko    Disables building, transfer and execution of
-                                   disko tool ($PANIX_BOOTSTRAP_DISABLE_DISKO)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
-      --override-local-machine=STRING
+      --local-machine-hostname=STRING
                                    Hostname of the machine that is local
-                                   (won't use ssh to connect to it)
-                                   ($PANIX_OVERRIDE_LOCAL_MACHINE)
+                                   (won't use ssh to connect to it) (default:
+                                   your deployment machine hostname)
+                                   ($PANIX_LOCAL_MACHINE_HOSTNAME)
       --dry-run                    Show what would be done without executing
                                    ($PANIX_DRY_RUN)
       --dry-run-with-inspect       Show what would be done without
@@ -990,12 +1057,13 @@ Flags:
   -s, --skip-phases=SKIP-PHASES,...
                                    Declare phases to skip (not all phases can be
                                    skipped) ($PANIX_SKIP_PHASES)
-      --exit-on-complete           Exit TUI on completion; 'retry' and
-                                   'restart' are disabled in this mode
+      --exit-on-complete           Exit TUI on completion ('retry' and
+                                   'restart' are disabled in this mode)
                                    ($PANIX_EXIT_ON_COMPLETE)
-      --activation-mode="switch"
+      --activation-mode=ACTIVATION-MODE
                                    Activation mode: check, switch, boot, test,
-                                   dry-activate ($PANIX_ACTIVATION_MODE)
+                                   dry-activate (overrides machine specific
+                                   ones) ($PANIX_ACTIVATION_MODE)
       --output="tui"               Output mode: tui, console, json
                                    ($PANIX_OUTPUT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
@@ -1011,12 +1079,28 @@ Flags:
                                    Maximum height for command labels
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+      --snapshot.dir="."           Directory to save snapshots
+                                   ($PANIX_SNAPSHOT_DIR)
+      --snapshot.on-retry          Take snapshot before retry
+                                   ($PANIX_SNAPSHOT_ON_RETRY)
+      --snapshot.on-exit           Take snapshot on exit
+                                   ($PANIX_SNAPSHOT_ON_EXIT)
   -l, --log                        Enable logging to file ($PANIX_LOG)
       --log-file="panix.log"       Log file path (epoch timestamp appended
                                    before .log) ($PANIX_LOG_FILE)
-  -d, --debug                      Debug output (enables logging) ($PANIX_DEBUG)
-      --cpu-profile=STRING         Path for cpu profiling to file, declaring it
-                                   enables it ($PANIX_CPU_PROFILE)
+  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
+      --profile.cpu=STRING         Path for CPU profile output (enables CPU
+                                   profiling) ($PANIX_PROFILE_CPU)
+      --profile.mem=STRING         Path for memory profile output (enables
+                                   memory profiling) ($PANIX_PROFILE_MEM)
+      --profile.block=STRING       Path for block profile output (enables block
+                                   profiling) ($PANIX_PROFILE_BLOCK)
+      --profile.mutex=STRING       Path for mutex profile output (enables mutex
+                                   profiling) ($PANIX_PROFILE_MUTEX)
+      --profile.goroutine=STRING
+                                   Path for goroutine profile output
+                                   (enables goroutine profiling)
+                                   ($PANIX_PROFILE_GOROUTINE)
 ```
 
 </details>
@@ -1058,12 +1142,11 @@ flags: # Listed are default values, all also overridable using CLI arguments
   exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
   require_all_success: false           # Abort if any task fails (for CI/CD)
   skip_phases: []                      # Phases to skip (not all phases can be skipped)
-  override_local_machine: my-laptop    # Override which machine is considered local (no SSH)
+  local_machine_hostname: my-laptop    # Override which machine is considered local based on machine name (no SSH)
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
   output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
-  bootstrap:
-    disable_disko: false               # Disable disko tool build/transfer/bootstrap
+
   tui:
     show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)
     show_active_only: false            # Show only running/errored logs (keybind a)
@@ -1127,8 +1210,9 @@ fleet:
           identity_file: ./keys/bootstrap.key
           strict_key_checking: false   # Default: false for bootstrap SSH
           disable_auto_add_host_key: true  # Default: true for bootstrap SSH
+        disable_disko: false           # Disable disko tool build/transfer/bootstrap
         kexec:                         # Kexec configuration for non-NixOS machines
-          url: ""                      # Custom kexec tarball URL (default: nix-community image)
+          image: ""                      # Custom kexec tarball image (default: nix-community image)
           extra_flags: ""              # Extra flags for kexec (e.g. '--no-sync')
           ssh_port: 22                 # SSH port for kexec installer (default: 22)
         disk_encryption_keys:          # Transferred BEFORE disko runs
@@ -1179,7 +1263,7 @@ fleet:
               strict_key_checking: false
               disable_auto_add_host_key: true
             kexec:
-              url: ""
+              image: ""
               extra_flags: ""
               ssh_port: 22
             disk_encryption_keys: []
@@ -1224,7 +1308,7 @@ fleet:
                   strict_key_checking: false
                   disable_auto_add_host_key: true
                 kexec:
-                  url: ""
+                  image: ""
                   extra_flags: ""
                   ssh_port: 22
                 disk_encryption_keys: []
@@ -1287,7 +1371,7 @@ Contributions are welcome! Whether it's bug reports, feature requests, construct
 
 ## License
 
-AGPL-3.0 - see [LICENSE](LICENSE).
+Panix is licensed under [AGPL-3.0](LICENSE). Internal packages under `internal/pkg` are licensed under [MIT](internal/pkg/LICENSE). For more details about licenses, see [choosingalicense.com/licenses](https://www.choosingalicense.com/licenses).
 
 ---
 

@@ -10,9 +10,7 @@ import (
 )
 
 func ProcessTemplate(rawYAML []byte) ([]byte, error) {
-	handler := sprout.New(
-		sprout.WithGroups(all.RegistryGroup()),
-	)
+	handler := sprout.New(sprout.WithGroups(all.RegistryGroup()))
 
 	tmpl, err := template.New("config").
 		Funcs(handler.Build()).

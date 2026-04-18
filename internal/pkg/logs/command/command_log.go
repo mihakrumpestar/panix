@@ -6,21 +6,25 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hayageek/threadsafe"
-	"github.com/mihakrumpestar/panix/internal/pkg/safebuffer"
-	"github.com/mihakrumpestar/panix/internal/pkg/timeandstate"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicbuffer"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicslice"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
 	"github.com/pkg/errors"
 )
 
 var nixBuildOutputPrefix = []byte(`[{"drvPath":"/nix/store/`)
 
 type CommandLog struct {
-	Description     string
-	StatusIfRunning string
-	StatusIfFailed  string
-	Command         string
-	stdInOutErr     *threadsafe.Slice[*safebuffer.Buffer] // Each line is a separate buffer to allow line replacement
-	TimeAndState    *timeandstate.TimeAndState
+	// On creation
+	Description     string `yaml:"-" json:"description,omitempty"`
+	StatusIfRunning string `yaml:"-" json:"-"`
+	StatusIfFailed  string `yaml:"-" json:"-"`
+	Command         string `yaml:"-" json:"command,omitempty"`
+
+	// Mutate
+	// Output is StdIn and StdOut, each line is a separate buffer to allow line replacement
+	Output       *atomicslice.AtomicSlice[*atomicbuffer.AtomicBuffer] `yaml:"-" json:"output,omitempty"`
+	TimeAndState *atomictimeandstate.AtomicTimeAndState               `yaml:"-" json:"time_and_state,omitempty"`
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
@@ -29,8 +33,8 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
 		Command:         strings.Join(slices.Concat(env, command), " "),
-		stdInOutErr:     threadsafe.NewSlice[*safebuffer.Buffer](),
-		TimeAndState:    timeandstate.NewTimeAndState(),
+		Output:          atomicslice.New[*atomicbuffer.AtomicBuffer](),
+		TimeAndState:    atomictimeandstate.New(),
 	}
 
 	return commandLog
@@ -63,14 +67,14 @@ func (cl *CommandLog) WriteString(s string) (int, error) {
 
 // Write writes bytes to the last line in StdInOutErr.
 func (cl *CommandLog) Write(data []byte) (int, error) {
-	length := cl.stdInOutErr.Length()
+	length := cl.Output.Length()
 	if length == 0 {
-		cl.stdInOutErr.Append(safebuffer.NewBuffer(nil))
+		cl.Output.Append(atomicbuffer.New(nil))
 
 		length = 1
 	}
 
-	stdInOutErr, ok := cl.stdInOutErr.Get(length - 1)
+	stdInOutErr, ok := cl.Output.Get(length - 1)
 	if !ok {
 		panic(fmt.Sprintf("internal error: command log %q: stdInOutErr index %d out of bounds (length=%d)", cl.Description, length-1, length))
 	}
@@ -90,27 +94,42 @@ func (cl *CommandLog) WriteLineString(s string) {
 
 // WriteLine writes bytes as a new line to StdInOutErr.
 func (cl *CommandLog) WriteLine(p []byte) {
-	cl.stdInOutErr.Append(safebuffer.NewBuffer(p))
+	cl.Output.Append(atomicbuffer.New(p))
+}
+
+// TrimTrailingEmptyLines removes empty lines from the end of the output.
+// PTY output typically ends with a trailing newline, which processSequence
+// converts into an empty line entry. This strips those artifact empty lines
+// while preserving intentional blank lines mid-output.
+func (cl *CommandLog) TrimTrailingEmptyLines() {
+	for cl.Output.Length() > 0 {
+		last, ok := cl.Output.Last()
+		if !ok || last.Len() > 0 {
+			break
+		}
+
+		cl.Output.Remove(cl.Output.Length() - 1)
+	}
 }
 
 // ReplaceLastLine replaces the content of the last line in StdInOutErr.
 func (cl *CommandLog) ReplaceLastLine(data []byte) {
-	if cl.stdInOutErr.Length() == 0 {
+	if cl.Output.Length() == 0 {
 		cl.WriteLine(data)
 
 		return
 	}
 
-	index := cl.stdInOutErr.Length() - 1
-	ok := cl.stdInOutErr.Set(index, safebuffer.NewBuffer(data))
+	index := cl.Output.Length() - 1
+	ok := cl.Output.Set(index, atomicbuffer.New(data))
 
 	if !ok {
-		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.stdInOutErr.Length()))
+		panic(fmt.Sprintf("internal error: command log %q: failed to replace line at index %d (length=%d)", cl.Description, index, cl.Output.Length()))
 	}
 }
 
 func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
-	values := cl.stdInOutErr.Values()
+	values := cl.Output.Values()
 	if len(values) == 0 {
 		return nil
 	}
@@ -143,8 +162,10 @@ func (cl *CommandLog) filterBytes(skipPrefix []byte) []byte {
 	return result.Bytes()
 }
 
+// Helpers
+
 // estimateSize approximates the total size needed for all buffers.
-func estimateSize(buffers []*safebuffer.Buffer) int {
+func estimateSize(buffers []*atomicbuffer.AtomicBuffer) int {
 	total := 0
 	for _, buf := range buffers {
 		total += buf.Len() + 1 // +1 for potential newline

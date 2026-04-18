@@ -7,28 +7,17 @@ type: object
 properties:
   flags:
     type: object
+    description: Flags
     properties:
       activation_mode:
         type: string
-        description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-        default: switch
+        description: "Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)"
         enum:
         - check
         - switch
         - boot
         - test
         - dry-activate
-      bootstrap:
-        type: object
-        properties:
-          disable_disko:
-            type: boolean
-            description: Disables building, transfer and execution of disko tool
-        additionalProperties: false
-      config:
-        type: string
-        description: "Config file (default: panix.yml)"
-        default: panix.yml
       dry_run:
         type: boolean
         description: Show what would be done without executing
@@ -37,16 +26,16 @@ properties:
         description: Show what would be done without executing, but with real inspect query
       exit_on_complete:
         type: boolean
-        description: Exit TUI on completion; 'retry' and 'restart' are disabled in this mode
+        description: Exit TUI on completion ('retry' and 'restart' are disabled in this mode)
+      local_machine_hostname:
+        type: string
+        description: "Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"
       logging:
         type: object
         properties:
-          cpu_profile:
-            type: string
-            description: Path for cpu profiling to file, declaring it enables it
           debug:
             type: boolean
-            description: Debug output (enables logging)
+            description: Debug mode (enables logging)
           log:
             type: boolean
             description: Enable logging to file
@@ -54,6 +43,7 @@ properties:
             type: string
             description: "Log file path (epoch timestamp appended before .log) (default: panix.log)"
             default: panix.log
+            format: file-path
         additionalProperties: false
       output:
         type: string
@@ -63,17 +53,56 @@ properties:
         - tui
         - console
         - json
-      override_local_machine:
-        type: string
-        description: Hostname of the machine that is local (won't use ssh to connect to it)
+      profile:
+        type: object
+        properties:
+          block:
+            type: string
+            description: Path for block profile output (enables block profiling)
+            format: file-path
+          cpu:
+            type: string
+            description: Path for CPU profile output (enables CPU profiling)
+            format: file-path
+          goroutine:
+            type: string
+            description: Path for goroutine profile output (enables goroutine profiling)
+            format: file-path
+          mem:
+            type: string
+            description: Path for memory profile output (enables memory profiling)
+            format: file-path
+          mutex:
+            type: string
+            description: Path for mutex profile output (enables mutex profiling)
+            format: file-path
+        additionalProperties: false
       require_all_success:
         type: boolean
         description: Abort if any task fails, primarily for CI/CD
+      rollback_generation:
+        type: integer
+        description: "0=current generation, -N=Nth before current, N=specific generation (default: -1)"
+        default: -1
       skip_phases:
         type: array
         description: Declare phases to skip (not all phases can be skipped)
         items:
           type: string
+      snapshot:
+        type: object
+        properties:
+          dir:
+            type: string
+            description: "Directory to save snapshots (default: .)"
+            default: .
+          on_exit:
+            type: boolean
+            description: Take snapshot on exit
+          on_retry:
+            type: boolean
+            description: Take snapshot before retry
+        additionalProperties: false
       tags:
         type: array
         description: Filter machines by tags (flakes, configs and names are already registered as tags)
@@ -103,6 +132,7 @@ properties:
     additionalProperties: false
   fleet:
     type: object
+    description: Fleet configuration
     properties:
       activation_mode:
         type: string
@@ -115,11 +145,14 @@ properties:
         - test
         - dry-activate
       bootstrap:
+        description: Bootstrap configuration for initial provisioning
         $ref: "#/definitions/Bootstrap"
       disabled:
         type: boolean
+        description: Disable this
       flakes:
         type: object
+        description: Flakes in the fleet
         additionalProperties:
           type: object
           properties:
@@ -134,9 +167,11 @@ properties:
               - test
               - dry-activate
             bootstrap:
+              description: Bootstrap configuration for initial provisioning
               $ref: "#/definitions/Bootstrap"
             configurations:
               type: object
+              description: Configurations in flake
               additionalProperties:
                 type: object
                 properties:
@@ -151,16 +186,21 @@ properties:
                     - test
                     - dry-activate
                   bootstrap:
+                    description: Bootstrap configuration for initial provisioning
                     $ref: "#/definitions/Bootstrap"
                   disabled:
                     type: boolean
+                    description: Disable this
                   flake_output:
                     type: string
                     description: "Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"
+                    default: nixosConfigurations.<name>.config.system.build.toplevel
                   hardware_config_path:
                     type: string
+                    description: Path to hardware config
                   machines:
                     type: object
+                    description: Machines configuration
                     additionalProperties:
                       anyOf:
                       - type: object
@@ -176,39 +216,54 @@ properties:
                             - test
                             - dry-activate
                           bootstrap:
+                            description: Bootstrap configuration for initial provisioning
                             $ref: "#/definitions/Bootstrap"
                           disabled:
                             type: boolean
+                            description: Disable this
                           hardware_config_path:
                             type: string
+                            description: Path to hardware config
                           nix:
+                            description: Nix build and copy configuration
                             $ref: "#/definitions/NixConfig"
-                          override_sudo_program:
-                            type: string
                           secrets:
                             type: array
+                            description: Files or directories to transfer to the remote machine
                             items:
                               $ref: "#/definitions/FileTransfer"
                           ssh:
+                            description: SSH configuration for remote access
                             $ref: "#/definitions/SSH"
+                          sudo_program:
+                            type: string
+                            description: "Override the sudo program (default: sudo)"
+                            default: sudo
                           tags:
                             type: array
+                            description: Tags for filtering (flakes, configs and machines are already registered as tags)
                             items:
                               type: string
                         additionalProperties: false
                       - type: "null"
                   nix:
+                    description: Nix build and copy configuration
                     $ref: "#/definitions/NixConfig"
-                  override_sudo_program:
-                    type: string
                   secrets:
                     type: array
+                    description: Files or directories to transfer to the remote machine
                     items:
                       $ref: "#/definitions/FileTransfer"
                   ssh:
+                    description: SSH configuration for remote access
                     $ref: "#/definitions/SSH"
+                  sudo_program:
+                    type: string
+                    description: "Override the sudo program (default: sudo)"
+                    default: sudo
                   tags:
                     type: array
+                    description: Tags for filtering (flakes, configs and machines are already registered as tags)
                     items:
                       type: string
                 required:
@@ -216,20 +271,28 @@ properties:
                 additionalProperties: false
             disabled:
               type: boolean
+              description: Disable this
             hardware_config_path:
               type: string
+              description: Path to hardware config
             nix:
+              description: Nix build and copy configuration
               $ref: "#/definitions/NixConfig"
-            override_sudo_program:
-              type: string
             secrets:
               type: array
+              description: Files or directories to transfer to the remote machine
               items:
                 $ref: "#/definitions/FileTransfer"
             ssh:
+              description: SSH configuration for remote access
               $ref: "#/definitions/SSH"
+            sudo_program:
+              type: string
+              description: "Override the sudo program (default: sudo)"
+              default: sudo
             tags:
               type: array
+              description: Tags for filtering (flakes, configs and machines are already registered as tags)
               items:
                 type: string
             url:
@@ -242,18 +305,25 @@ properties:
           additionalProperties: false
       hardware_config_path:
         type: string
+        description: Path to hardware config
       nix:
+        description: Nix build and copy configuration
         $ref: "#/definitions/NixConfig"
-      override_sudo_program:
-        type: string
       secrets:
         type: array
+        description: Files or directories to transfer to the remote machine
         items:
           $ref: "#/definitions/FileTransfer"
       ssh:
+        description: SSH configuration for remote access
         $ref: "#/definitions/SSH"
+      sudo_program:
+        type: string
+        description: "Override the sudo program (default: sudo)"
+        default: sudo
       tags:
         type: array
+        description: Tags for filtering (flakes, configs and machines are already registered as tags)
         items:
           type: string
     required:
@@ -272,6 +342,9 @@ definitions:
       disable_automatic_reboot:
         type: boolean
         description: Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)
+      disable_disko:
+        type: boolean
+        description: Disables building, transfer and execution of disko tool
       disk_encryption_keys:
         type: array
         description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
@@ -317,8 +390,8 @@ definitions:
         format: file-path
       permissions:
         type: integer
-        description: "Optional file permissions (default: 0700)"
-        default: "0700"
+        description: "File permissions (default: 0700)"
+        default: 700
       remote_path:
         type: string
         description: Absolute path on remote machine
@@ -335,14 +408,18 @@ definitions:
     type: object
     properties:
       extra_flags:
-        type: string
+        type: array
         description: Extra flags to pass to kexec (e.g. '--no-sync')
+        items:
+          type: string
+      image:
+        type: string
+        description: "URL or path to kexec tarball for bootstrapping non-NixOS machines (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz)"
+        default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz
       ssh_port:
         type: integer
         description: "SSH port for kexec installer (default: 22)"
-      url:
-        type: string
-        description: URL or path to kexec tarball for bootstrapping non-NixOS machines
+        default: 22
     additionalProperties: false
   NixConfig:
     type: object
@@ -374,6 +451,11 @@ definitions:
       disable_auto_add_host_key:
         type: boolean
         description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+      extra_flags:
+        type: array
+        description: Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')
+        items:
+          type: string
       hostname:
         type: string
         description: SSH hostname or IP address
@@ -383,11 +465,13 @@ definitions:
         format: file-path
       port:
         type: integer
-        description: SSH port number
+        description: "SSH port number (default: 22)"
+        default: 22
       strict_key_checking:
         type: boolean
         description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
       username:
         type: string
-        description: SSH username
+        description: "SSH username (default: root)"
+        default: root
     additionalProperties: false

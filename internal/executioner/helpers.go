@@ -27,14 +27,14 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 	for idx, hook := range hooks {
 		switch hook {
 		case attributes.PostBootstrapHookWaitForOnline:
-			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
+			activeSSH := ex.machine.GetActiveSSH()
 
 			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), hookType+" did not come online")
 			if err != nil {
 				return err
 			}
 		case attributes.PostBootstrapHookWaitForOffline:
-			activeSSH := ex.machine.MetaInspect.GetActiveSSH()
+			activeSSH := ex.machine.GetActiveSSH()
 
 			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
 			if err != nil {
@@ -56,7 +56,7 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 	return nil
 }
 
-func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg string) error {
+func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg string) error {
 	return exc.ExecFn(
 		"wait for disconnect",
 		statusMsg,
@@ -75,12 +75,12 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg str
 				}
 			}
 
-			return errors.Wrapf(ErrHostDisconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port)
+			return errors.Wrapf(ErrHostDisconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port.Get())
 		},
 	)
 }
 
-func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, failMsg string) error {
+func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, failMsg string) error {
 	return exc.ExecFn(
 		"wait for reconnect",
 		statusMsg,
@@ -99,7 +99,7 @@ func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, fai
 				}
 			}
 
-			return errors.Wrapf(ErrHostReconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port)
+			return errors.Wrapf(ErrHostReconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port.Get())
 		},
 	)
 }

@@ -21,7 +21,7 @@ for usage.
 
 Code has to pass:
 
-- all checks in `pre-commit run`: most importantly `task golangci`
+- checks in `task ci`
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 

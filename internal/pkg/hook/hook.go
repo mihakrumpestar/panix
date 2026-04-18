@@ -6,6 +6,7 @@ import "sync"
 // It uses a buffered channel to ensure non-blocking sends.
 // Close must be called exactly once when done.
 type Hook struct {
+	mu   sync.Mutex
 	ch   chan struct{}
 	once sync.Once
 }
@@ -23,7 +24,11 @@ func (h *Hook) WaitForUpdate() <-chan struct{} {
 
 // Signal notifies all listeners of an update.
 // This is non-blocking and drops updates if the buffer is full.
+// Safe to call after Close (no-op).
 func (h *Hook) Signal() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	select {
 	case h.ch <- struct{}{}:
 	default:
@@ -33,5 +38,9 @@ func (h *Hook) Signal() {
 // Close closes the hook, signaling completion to all listeners.
 // Safe to call multiple times (subsequent calls are no-ops).
 func (h *Hook) Close() {
-	h.once.Do(func() { close(h.ch) })
+	h.once.Do(func() {
+		h.mu.Lock()
+		close(h.ch)
+		h.mu.Unlock()
+	})
 }

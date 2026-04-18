@@ -3,75 +3,42 @@ package workflow
 import (
 	"fmt"
 	"net/url"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/acobaugh/osrelease"
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
 var (
-	ErrDiskoNoOutputPaths       = errors.New("disko build output did not contain any output paths")
-	ErrArchitectureNotSupported = errors.New("architecture not supported by default kexec")
-	ErrKexecBootFailed          = errors.New("kexec did not boot into NixOS installer")
+	ErrDiskoNoOutputPaths = errors.New("disko build output did not contain any output paths")
+	ErrKexecBootFailed    = errors.New("kexec did not boot into NixOS installer")
 )
 
-const KexecURL = "https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"
+func (w *Workflow) executeBootstrapPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	return w.Phase(phase.Bootstrap, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
+			machine := fleetLeaf.Machine
 
-var KexecSupportedPlatforms = []string{"x86_64", "aarch64"}
-
-func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configuration *config.Configuration, machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Bootstrap, machine,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			if machine.MetaInspect.RequiresKexec.Load() {
+			mi := machine.MetaInspect.Load()
+			if mi != nil && mi.RequiresKexec {
 				err := w.executeKexec(exc, machine)
 				if err != nil {
 					return err
 				}
 			}
 
-			installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
-
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, flake, configuration, installables, "disko")
-			if err != nil {
-				return err
-			}
-
-			if len(parsedOutput) == 0 {
-				return ErrDiskoNoOutputPaths
-			}
-
-			diskoScript := parsedOutput[0].Outputs.Out
-
-			err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
-			if err != nil {
-				return err
-			}
-
-			// Upload disk encryption keys BEFORE running disko
-			// Keys must be available for LUKS unlocking during partitioning
-			if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-				err = w.executeDiskEncryptionKeys(exc, machine)
+			if !machine.Bootstrap.DisableDisko {
+				err := w.disko(exc, fleetLeaf)
 				if err != nil {
 					return err
 				}
-			}
-
-			err = exc.Exec(
-				"disko",
-				"partitioning disk",
-				"diskoScript failed",
-				[]string{diskoScript},
-			)
-			if err != nil {
-				return errors.Wrap(err, "disko failed")
 			}
 
 			return exc.ExecuteHooks(machine.Bootstrap.PostBootstrapHooks, "post bootstrap hook")
@@ -79,11 +46,56 @@ func (w *Workflow) executeBootstrapPhaseMachine(flake *config.Flake, configurati
 	)
 }
 
+func (w *Workflow) disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	flake := fleetLeaf.Flake
+	configuration := fleetLeaf.Configuration
+	machine := fleetLeaf.Machine
+
+	installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
+
+	parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "disko")
+	if err != nil {
+		return err
+	}
+
+	if len(parsedOutput) == 0 {
+		return ErrDiskoNoOutputPaths
+	}
+
+	diskoScript := parsedOutput[0].Outputs.Out
+
+	err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
+	if err != nil {
+		return err
+	}
+
+	// Upload disk encryption keys BEFORE running disko
+	// Keys must be available for LUKS unlocking during partitioning
+	if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
+		err = w.executeDiskEncryptionKeys(exc, machine)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = exc.Exec(
+		"disko",
+		"partitioning disk",
+		"diskoScript failed",
+		[]string{diskoScript},
+	)
+	if err != nil {
+		return errors.Wrap(err, "disko failed")
+	}
+
+	return nil
+}
+
 // executeDiskEncryptionKeys transfers disk encryption keys to the target machine.
 // Must be called BEFORE disko runs, so keys are available for LUKS unlocking.
 func (w *Workflow) executeDiskEncryptionKeys(
 	exc *executioner.Executioner,
-	machine *config.Machine,
+	machine *machine.Machine,
 ) error {
 	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
 		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key", false)
@@ -95,72 +107,49 @@ func (w *Workflow) executeDiskEncryptionKeys(
 	return nil
 }
 
-func (w *Workflow) executeKexec(exc *executioner.Executioner, machine *config.Machine) error {
-	arch := machine.MetaInspect.Architecture.Load()
-	if arch == "" || arch == "DRY_RUN" {
+func (w *Workflow) executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
+	arch := machineI.MetaInspect.Load().Architecture
+
+	if arch == "DRY_RUN" {
 		arch = "x86_64"
 	}
 
-	return w.executeKexecReal(exc, machine, arch)
-}
+	kexecURL := strings.ReplaceAll(machineI.Bootstrap.Kexec.Image.String(), "<arch>", arch)
 
-// executeKexecReal performs the actual kexec bootstrap process.
-func (w *Workflow) executeKexecReal(exc *executioner.Executioner, machine *config.Machine, arch string) error {
-	kexecURL, err := resolveKexecURL(machine, arch)
+	err := w.createKexecDirectory(exc, machineI)
 	if err != nil {
 		return err
 	}
 
-	err = w.createKexecDirectory(exc, machine)
+	err = w.downloadOrTransferKexec(exc, machineI, kexecURL)
 	if err != nil {
 		return err
 	}
 
-	err = w.downloadOrTransferKexec(exc, machine, kexecURL)
+	err = w.extractKexecTarball(exc, machineI, kexecURL)
 	if err != nil {
 		return err
 	}
 
-	err = w.extractKexecTarball(exc, machine, kexecURL)
+	err = w.runKexecCommand(exc, machineI)
 	if err != nil {
 		return err
 	}
 
-	err = w.runKexecCommand(exc, machine)
+	err = w.waitForKexecReboot(exc, machineI)
 	if err != nil {
 		return err
 	}
 
-	err = w.waitForKexecReboot(exc, machine)
-	if err != nil {
-		return err
-	}
-
-	machine.MetaInspect.RequiresKexec.Store(false)
+	machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+		mi.RequiresKexec = false
+	})
 
 	return nil
 }
 
-// resolveKexecURL returns the kexec URL, using default if not configured.
-func resolveKexecURL(machine *config.Machine, arch string) (string, error) {
-	kexecURL := ""
-	if machine.Bootstrap.Kexec != nil {
-		kexecURL = machine.Bootstrap.Kexec.URL
-	}
-
-	if kexecURL == "" {
-		if !slices.Contains(KexecSupportedPlatforms, arch) {
-			return "", errors.Wrapf(ErrArchitectureNotSupported, "%s (supported: %s)", strconv.Quote(arch), KexecSupportedPlatforms)
-		}
-
-		kexecURL = KexecURL
-	}
-
-	return strings.ReplaceAll(kexecURL, "<arch>", arch), nil
-}
-
 // createKexecDirectory creates the temporary directory for kexec files.
-func (w *Workflow) createKexecDirectory(exc *executioner.Executioner, machine *config.Machine) error {
+func (w *Workflow) createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine) error {
 	err := exc.Exec(
 		"create kexec directory",
 		"creating kexec directory",
@@ -175,7 +164,7 @@ func (w *Workflow) createKexecDirectory(exc *executioner.Executioner, machine *c
 }
 
 // downloadOrTransferKexec downloads the kexec tarball from URL or transfers it from local path.
-func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine *config.Machine, kexecURL string) error {
+func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
 	var err error
 	if isURL(kexecURL) {
 		err = exc.Exec(
@@ -185,7 +174,7 @@ func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine
 			[]string{"curl", "--fail", "-#", "-L", "-C", "-", "-o", "/tmp/kexec/kexec.tar", kexecURL},
 		)
 	} else {
-		err = w.transferPlainFileOrDir(exc, machine, &attributes.PlainFileOrDirToTransfer{
+		err = w.transferPlainFileOrDir(exc, machine, attributes.PlainFileOrDirToTransfer{
 			LocalPath:  kexecURL,
 			RemotePath: "/tmp/kexec/kexec.tar",
 		}, "kexec tarball", false)
@@ -195,7 +184,7 @@ func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine
 }
 
 // extractKexecTarball extracts the kexec tarball to the temporary directory.
-func (w *Workflow) extractKexecTarball(exc *executioner.Executioner, machine *config.Machine, kexecURL string) error {
+func (w *Workflow) extractKexecTarball(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
 	tarArgs := getTarArgs(kexecURL)
 	tarArgs = append(tarArgs, "-C", "/tmp/kexec")
 
@@ -227,11 +216,13 @@ func getTarArgs(kexecURL string) []string {
 }
 
 // runKexecCommand executes the kexec script to boot into the NixOS installer.
-func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *config.Machine) error {
+func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *machine.Machine) error {
 	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
 
-	if machine.Bootstrap.Kexec != nil && machine.Bootstrap.Kexec.ExtraFlags != "" {
-		kexecCmd = append(kexecCmd, "--kexec-extra-flags", machine.Bootstrap.Kexec.ExtraFlags)
+	if len(machine.Bootstrap.Kexec.ExtraFlags) != 0 {
+		extraFlags := append([]string{"--kexec-extra-flags"}, machine.Bootstrap.Kexec.ExtraFlags...)
+
+		kexecCmd = append(kexecCmd, extraFlags...)
 	}
 
 	err := exc.Exec(
@@ -249,24 +240,22 @@ func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *config
 }
 
 // waitForKexecReboot waits for the machine to disconnect and reconnect after kexec.
-func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machine *config.Machine) error {
-	activeSSH := machine.MetaInspect.GetActiveSSH()
+func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
+	activeSSH := machineI.GetActiveSSH()
 
 	err := executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
 	if err != nil {
 		return errors.Wrap(err, "wait for disconnect failed")
 	}
 
-	// After kexec, use the kexec SSH config (default: same hostname, port 22)
-	kexecSSH := machine.GetKexecSSH()
+	// After kexec, use the kexec SSH config (same hostname)
+	machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeKexec })
+	activeSSH = machineI.GetActiveSSH()
 
-	err = executioner.WaitForReconnect(exc, kexecSSH, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
+	err = executioner.WaitForReconnect(exc, activeSSH, "waiting for machine to reconnect after kexec", "machine did not reconnect after kexec")
 	if err != nil {
 		return errors.Wrap(err, "wait for reconnect failed")
 	}
-
-	// Update active SSH to kexec SSH for subsequent commands
-	machine.MetaInspect.SetActiveSSH(kexecSSH)
 
 	return w.verifyInstaller(exc)
 }
