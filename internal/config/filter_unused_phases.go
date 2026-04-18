@@ -3,43 +3,40 @@ package config
 import (
 	"slices"
 
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
-type hasPhases struct {
+type optionalPhases struct {
 	Secrets   bool
 	Bootstrap bool
 }
 
-func (c *Config) filterUnusedPhases() {
-	hasRequiredPhases := c.hasRequiredPhases()
+func (c *Config) filterOutUnusedPhases() {
+	hasRequiredPhases := hasRequiredPhases(c.Fleet)
 
-	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(phase phases.Phase) bool {
-		return (phase == phases.Secrets && !hasRequiredPhases.Secrets) ||
-			(phase == phases.Bootstrap && !hasRequiredPhases.Bootstrap)
+	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(p phase.Phase) bool {
+		return (p == phase.Secrets && !hasRequiredPhases.Secrets) ||
+			(p == phase.Bootstrap && !hasRequiredPhases.Bootstrap)
 	})
 }
 
-func (c *Config) hasRequiredPhases() hasPhases {
-	var has hasPhases
+func hasRequiredPhases(f *fleet.Fleet) optionalPhases {
+	var has optionalPhases
 
-	for _, flakePair := range c.Fleet.Flakes.Pairs() {
-		for _, cfgPair := range flakePair.Value.Configurations.Pairs() {
-			for _, machinePair := range cfgPair.Value.Machines.Pairs() {
-				machine := machinePair.Value
+	for _, treeLeaf := range f.AllMachines() {
+		m := treeLeaf.Machine
+		if len(m.Secrets) > 0 {
+			has.Secrets = true
+		}
 
-				if len(machine.Secrets) > 0 {
-					has.Secrets = true
-				}
+		if m.Bootstrap.SSH.IsInitialized() || m.Bootstrap.ForceBootstrap {
+			has.Bootstrap = true
+		}
 
-				if machine.Bootstrap.SSH != nil || machine.Bootstrap.ForceBootstrap {
-					has.Bootstrap = true
-				}
-
-				if has.Secrets && has.Bootstrap {
-					return has
-				}
-			}
+		// Early return since we already have all possible optional phases
+		if has.Secrets && has.Bootstrap {
+			break
 		}
 	}
 

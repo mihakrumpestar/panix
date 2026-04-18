@@ -34,7 +34,7 @@ func InitLogging(logging flags.Logging, output flags.OutputMode) error {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
-	w, logFilePath, err := buildWriter(logging, output, fileLogging, headless)
+	w, logFilePath, err := buildWriter(logging.LogFile, output, fileLogging, headless)
 	if err != nil {
 		return err
 	}
@@ -53,14 +53,14 @@ func InitLogging(logging flags.Logging, output flags.OutputMode) error {
 	return nil
 }
 
-func buildWriter(logging flags.Logging, output flags.OutputMode, fileLogging, headless bool) (io.Writer, string, error) {
+func buildWriter(logFile string, output flags.OutputMode, fileLogging, headless bool) (io.Writer, string, error) {
 	var (
 		writers     []io.Writer
 		logFilePath string
 	)
 
 	if fileLogging {
-		file, path, err := openLogFile(logging.LogFile)
+		file, path, err := openLogFile(logFile)
 		if err != nil {
 			return nil, "", err
 		}

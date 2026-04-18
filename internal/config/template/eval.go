@@ -10,12 +10,9 @@ import (
 	"github.com/goccy/go-yaml/parser"
 	"github.com/goccy/go-yaml/printer"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
+	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
-)
-
-const (
-	yamlIndent = 2
 )
 
 func EvalConfig(configPath string, outputPath string) error {
@@ -37,14 +34,9 @@ func EvalConfig(configPath string, outputPath string) error {
 
 	var formatted bytes.Buffer
 
-	encoder := yaml.NewEncoder(&formatted,
-		yaml.UseLiteralStyleIfMultiline(true),
-		yaml.Indent(yamlIndent),
-	)
-
-	err = encoder.Encode(orderedResult)
+	err = yamlx.Encode(orderedResult, &formatted)
 	if err != nil {
-		return errors.Wrap(err, "failed to encode YAML")
+		return errors.Wrap(err, "failed to encode config")
 	}
 
 	return writeOutput(formatted.Bytes(), outputPath)
@@ -62,9 +54,9 @@ func parseAndOrderYAML(yamlData []byte) (yaml.MapSlice, error) {
 
 	var decoded any
 
-	err = yaml.NewDecoder(bytes.NewReader(yamlData)).Decode(&decoded)
+	err = yamlx.Decode(yamlData, &decoded)
 	if err != nil {
-		return nil, errors.New(yaml.FormatError(err, true, false))
+		return nil, errors.Wrap(err, "failed to decode config")
 	}
 
 	return rebuildOrdered(astFile, decoded), nil
@@ -109,8 +101,8 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 		return nil
 	}
 
-	decodedMap, ok := decoded.(map[string]any)
-	if !ok {
+	decodedMap := toMap(decoded)
+	if decodedMap == nil {
 		return nil
 	}
 
@@ -118,8 +110,11 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 
 	for _, mappingValue := range mappingNode.Values {
 		key := mappingValue.Key.GetToken().Value
-		if key == "flags" || key == "fleet" {
-			if val, exists := decodedMap[key]; exists {
+		if key == "flags" || key == "fleet" { // This prevents anchor definitions to remain in output
+			var val any
+
+			val, ok = decodedMap[key]
+			if ok {
 				result = append(result, yaml.MapItem{
 					Key:   key,
 					Value: rebuildOrderedRecursive(mappingValue.Value, val),
@@ -131,15 +126,39 @@ func rebuildOrdered(astFile *ast.File, decoded any) yaml.MapSlice {
 	return result
 }
 
-func rebuildOrderedRecursive(astNode ast.Node, decoded any) any {
-	switch decodedVal := decoded.(type) {
+func toMap(v any) map[string]any {
+	switch m := v.(type) {
 	case map[string]any:
-		return rebuildOrderedMap(astNode, decodedVal)
-	case []any:
-		return decodedVal
+		return m
+	case yaml.MapSlice:
+		result := make(map[string]any, len(m))
+		for _, item := range m {
+			key, ok := item.Key.(string)
+			if !ok {
+				continue
+			}
+
+			result[key] = item.Value
+		}
+
+		return result
 	default:
+		return nil
+	}
+}
+
+func rebuildOrderedRecursive(astNode ast.Node, decoded any) any {
+	decodedMap := toMap(decoded)
+	if decodedMap != nil {
+		return rebuildOrderedMap(astNode, decodedMap)
+	}
+
+	_, ok := decoded.([]any)
+	if ok {
 		return decoded
 	}
+
+	return decoded
 }
 
 func rebuildOrderedMap(astNode ast.Node, decodedVal map[string]any) yaml.MapSlice {
@@ -158,7 +177,10 @@ func rebuildOrderedMap(astNode ast.Node, decodedVal map[string]any) yaml.MapSlic
 			continue
 		}
 
-		if val, exists := decodedVal[key]; exists {
+		var val any
+
+		val, ok = decodedVal[key]
+		if ok {
 			result = append(result, yaml.MapItem{
 				Key:   key,
 				Value: rebuildOrderedRecursive(mappingValue.Value, val),

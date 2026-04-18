@@ -26,10 +26,11 @@ go.work.sum
 
 .task
 .opencode
-build
-dist
-debug
-result
+/build
+/dist
+/debug
+/result
+/profile
 
 temp_key
 temp_key.pub
@@ -39,3 +40,4 @@ temp_key.pub
 panix
 panix.log
 panix.*.log
+/panix-snapshot-*

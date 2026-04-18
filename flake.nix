@@ -27,7 +27,7 @@
           flags = ["-trimpath"];
           ldflags = ["-s" "-w"];
 
-          vendorHash = "sha256-kqwy+cn34ax5mu/mgq0ElKT4ZeECLOhB2Tlv+5WsaJM=";
+          vendorHash = "sha256-bhh1+w+6QN5EaD0jzELsnuWNI25tx65adiPES+gboh8=";
 
           meta = with pkgs.lib; {
             description = "A TUI application for Nix deployment workflows";

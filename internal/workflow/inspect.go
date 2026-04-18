@@ -1,17 +1,16 @@
 package workflow
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/acobaugh/osrelease"
-	"github.com/kirill-scherba/omap"
-	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phase"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
@@ -20,80 +19,85 @@ var (
 	ErrPlatformUnsupported     = errors.New("platform unsupported, kexec supports limited platforms")
 )
 
-func (w *Workflow) executeInspectPhaseMachine(machine *config.Machine) error {
-	return w.Phase(machine.Attributes.Xpath, phases.Inspect, machine,
-		func(exc *executioner.Executioner, phaseLog *phase.PhaseLog) error {
-			mms := machine.MetaInspect
+func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	return w.Phase(phase.Inspect, fleetLeaf,
+		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
+			machineI := fleetLeaf.Machine
 
-			if machine.SSH.IsLocal {
-				machine.SwitchToRegularSSH()
-				mms.Reachable.Store(true)
-				mms.SSHConnectable.Store(true)
+			if machineI.SSH.IsLocal() {
+				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
+				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+					mi.Reachable = true
+					mi.SSHConnectable = true
+				})
 			} else {
-				err := checkSSHReachability(exc, machine, mms)
+				err := checkSSHReachability(exc, machineI)
 				if err != nil {
 					return err
 				}
 			}
 
-			err := checkSSHConnection(exc, mms)
+			err := checkSSHConnection(exc, machineI)
 			if err != nil {
 				return err
 			}
 
-			err = detectArchitecture(exc, mms)
+			err = detectArchitecture(exc, machineI)
 			if err != nil {
 				return err
 			}
 
-			err = checkSuperuser(exc, mms)
+			err = checkSuperuser(exc, machineI)
 			if err != nil {
 				return err
 			}
 
-			err = detectBootstrapStatus(exc, machine, mms)
+			err = detectBootstrapStatus(exc, machineI)
 			if err != nil {
 				return err
 			}
 
-			err = validateSSHMachineState(exc, machine, mms)
+			err = validateSSHMachineState(exc, machineI)
 			if err != nil {
 				return err
 			}
 
-			if !mms.Bootstrapped.Load() {
-				return handleUnbootstrapped(exc, machine)
+			mi := machineI.MetaInspect.Load()
+			if mi != nil && !mi.Bootstrapped {
+				return handleUnbootstrapped(exc, machineI)
 			}
 
-			return readGenerations(exc, mms)
+			return readGenerations(exc, machineI)
 		})
 }
 
-func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
+func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.ExecFn(
 		"SSH reachability check",
 		"checking SSH reachability",
 		"SSH unreachable",
 		func(_ *command.CommandLog) error {
-			if machine.Bootstrap.SSH != nil {
-				bootstrapSSHReachable := machine.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
+			if machineI.Bootstrap.SSH.IsInitialized() {
+				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
 				if !bootstrapSSHReachable {
 					return errors.New("bootstrap SSH is configured but unreachable")
 				}
 
-				machine.SwitchToBootstrapSSH()
+				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeBootstrap })
 			} else {
-				regularSSHReachable := machine.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
+				regularSSHReachable := machineI.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
 				if !regularSSHReachable {
 					return errors.New("regular SSH is unreachable")
 				}
 
-				machine.SwitchToRegularSSH()
+				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 			}
 
-			mms.Reachable.Store(true)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.Reachable = true
+			})
 
 			return nil
 		},
@@ -105,7 +109,7 @@ func checkSSHReachability(exc *executioner.Executioner, machine *config.Machine,
 	return nil
 }
 
-func checkSSHConnection(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func checkSSHConnection(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"SSH connect",
 		"connecting via SSH",
@@ -116,12 +120,16 @@ func checkSSHConnection(exc *executioner.Executioner, mms *config.MetaInspect) e
 			return errors.Wrap(err, log.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			mms.SSHConnectable.Store(true)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.SSHConnectable = true
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.SSHConnectable.Store(true)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.SSHConnectable = true
+			})
 		}),
 	)
 	if err != nil {
@@ -131,7 +139,7 @@ func checkSSHConnection(exc *executioner.Executioner, mms *config.MetaInspect) e
 	return nil
 }
 
-func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"architecture",
 		"detecting architecture",
@@ -143,16 +151,16 @@ func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) e
 				return ErrArchitectureOutputEmpty
 			}
 
-			if !slices.Contains(KexecSupportedPlatforms, architecture) {
-				return errors.Wrapf(ErrPlatformUnsupported, "%s (supported: %s)", strconv.Quote(architecture), KexecSupportedPlatforms)
-			}
-
-			mms.Architecture.Store(architecture)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.Architecture = architecture
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.Architecture.Store("DRY_RUN")
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.Architecture = "DRY_RUN"
+			})
 		}),
 	)
 	if err != nil {
@@ -162,7 +170,7 @@ func detectArchitecture(exc *executioner.Executioner, mms *config.MetaInspect) e
 	return nil
 }
 
-func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func checkSuperuser(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"superuser check",
 		"checking superuser privileges",
@@ -179,12 +187,16 @@ func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error
 				return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
 			}
 
-			mms.IsRoot.Store(parsedOutput == 0)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.IsRoot = parsedOutput == 0
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			mms.IsRoot.Store(true)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.IsRoot = true
+			})
 		}),
 	)
 	if err != nil {
@@ -194,7 +206,7 @@ func checkSuperuser(exc *executioner.Executioner, mms *config.MetaInspect) error
 	return nil
 }
 
-func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
+func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"bootstrap detection",
 		"detecting bootstrap status",
@@ -204,40 +216,14 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 			return errors.Wrap(err, log.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := log.String()
-
-			osrelease, err := osrelease.ReadString(output)
-			if err != nil {
-				return errors.Wrap(err, "error parsing /etc/os-release")
-			}
-
-			if osrelease["ID"] == "nixos" && osrelease["VARIANT_ID"] == "installer" {
-				mms.Bootstrapped.Store(false)
-
-				return nil
-			}
-
-			if osrelease["ID"] != "nixos" {
-				mms.RequiresKexec.Store(true)
-				mms.Bootstrapped.Store(false)
-
-				return nil
-			}
-
-			if machine.Bootstrap.ForceBootstrap {
-				mms.Bootstrapped.Store(false)
-				mms.RequiresKexec.Store(machine.Bootstrap.ForceBootstrapKexec)
-
-				return nil
-			}
-
-			mms.Bootstrapped.Store(true)
-
-			return nil
+			return classifyBootstrapStatus(log.String(), machineI)
 		}),
 		executioner.OnDryRun(func() {
-			mms.Bootstrapped.Store(false)
-			mms.RequiresKexec.Store(true)
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.Bootstrapped = false
+				mi.RequiresKexec = true
+				mi.Nixos = "DRY_RUN"
+			})
 		}),
 	)
 	if err != nil {
@@ -247,8 +233,63 @@ func detectBootstrapStatus(exc *executioner.Executioner, machine *config.Machine
 	return nil
 }
 
-func handleUnbootstrapped(exc *executioner.Executioner, machine *config.Machine) error {
-	if machine.HardwareConfigPath == "" {
+func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
+	osr, err := osrelease.ReadString(output)
+	if err != nil {
+		return errors.Wrap(err, "error parsing /etc/os-release")
+	}
+
+	if osr["ID"] == "nixos" && osr["VARIANT_ID"] == "installer" {
+		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+			mi.Bootstrapped = false
+			mi.Nixos = osr["VERSION"]
+		})
+
+		return nil
+	}
+
+	if osr["ID"] != "nixos" {
+		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+			mi.RequiresKexec = true
+			mi.Bootstrapped = false
+			mi.Nixos = osr["VERSION"]
+		})
+
+		err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+		if err != nil {
+			return errors.Wrap(err, "kexec arch validation failed")
+		}
+
+		return nil
+	}
+
+	if machineI.Bootstrap.ForceBootstrap {
+		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+			mi.Bootstrapped = false
+			mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
+			mi.Nixos = osr["VERSION"]
+		})
+
+		if machineI.Bootstrap.ForceBootstrapKexec {
+			err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+			if err != nil {
+				return errors.Wrap(err, "kexec arch validation failed")
+			}
+		}
+
+		return nil
+	}
+
+	machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+		mi.Bootstrapped = true
+		mi.Nixos = osr["VERSION"]
+	})
+
+	return nil
+}
+
+func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machine) error {
+	if machineI.HardwareConfigPath == "" {
 		return nil
 	}
 
@@ -256,7 +297,7 @@ func handleUnbootstrapped(exc *executioner.Executioner, machine *config.Machine)
 		"generate config",
 		"generating hardware config",
 		"nixos-generate-config failed",
-		append(machine.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machine.HardwareConfigPath),
+		append(machineI.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machineI.HardwareConfigPath),
 	)
 	if err != nil {
 		return errors.Wrap(err, "hardware config generation failed")
@@ -265,30 +306,44 @@ func handleUnbootstrapped(exc *executioner.Executioner, machine *config.Machine)
 	return nil
 }
 
-func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) error {
+func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"list generations",
 		"listing generations",
 		"failed to list generations",
 		[]string{"nixos-rebuild", "list-generations"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			genData, err := parseGenerationsOutput(log.String())
+			genData, currentGenInfo, err := parseGenerationsOutput(log.String())
 			if err != nil {
 				return err
 			}
 
-			mms.Generations.Store(genData)
+			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
+				metaInspect.Generations = genData
+				if currentGenInfo.Date != "" {
+					metaInspect.Date = currentGenInfo.Date
+				}
+
+				if currentGenInfo.Nixos != "" {
+					metaInspect.Nixos = currentGenInfo.Nixos
+				}
+
+				if currentGenInfo.Kernel != "" {
+					metaInspect.Kernel = currentGenInfo.Kernel
+				}
+			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			generations, _ := omap.New[uint, *config.GenerationInfo]()
-
-			_ = generations.Set(1, &config.GenerationInfo{Date: "DRY_RUN", Nixos: "DRY_RUN", Kernel: "DRY_RUN", Current: true})
-
-			mms.Generations.Store(&config.GenerationsData{
-				Current:     1,
-				Generations: generations,
+			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
+				metaInspect.Generations = &machine.Generations{
+					Current:   1,
+					Available: []uint{1},
+				}
+				metaInspect.Date = "DRY_RUN"
+				metaInspect.Nixos = "DRY_RUN"
+				metaInspect.Kernel = "DRY_RUN"
 			})
 		}),
 	)
@@ -296,19 +351,20 @@ func readGenerations(exc *executioner.Executioner, mms *config.MetaInspect) erro
 	return errors.Wrap(err, "failed to list generations")
 }
 
-func validateSSHMachineState(exc *executioner.Executioner, machine *config.Machine, mms *config.MetaInspect) error {
-	isBootstrapped := mms.Bootstrapped.Load()
+func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Machine) error {
+	mi := machineI.MetaInspect.Load()
+	isBootstrapped := mi != nil && mi.Bootstrapped
 
 	err := exc.ExecFn(
 		"validate SSH config upon detected machine state",
 		"validating SSH config",
 		"SSH config invalid for detected machine state",
 		func(_ *command.CommandLog) error {
-			if machine.Bootstrap.SSH != nil && isBootstrapped && !machine.Bootstrap.ForceBootstrap {
-				return errors.New("bootstrap SSH is configured but machine is already bootstrapped; set \"force_bootstrap\" to re-bootstrap, or remove bootstrap SSH configuration") //nolint:lll
+			if machineI.Bootstrap.SSH.IsInitialized() && isBootstrapped && !machineI.Bootstrap.ForceBootstrap {
+				return errors.New("bootstrap SSH is configured but machine is already bootstrapped, set \"force_bootstrap\" to re-bootstrap, or remove bootstrap SSH configuration") //nolint:lll
 			}
 
-			if !isBootstrapped && machine.Bootstrap.SSH == nil && !machine.Bootstrap.ForceBootstrap {
+			if !isBootstrapped && !machineI.Bootstrap.SSH.IsInitialized() && !machineI.Bootstrap.ForceBootstrap {
 				return errors.New("bootstrapping requires bootstrap SSH to be configured (or set \"force_bootstrap\" to re-bootstrap with regular SSH)")
 			}
 
@@ -319,71 +375,76 @@ func validateSSHMachineState(exc *executioner.Executioner, machine *config.Machi
 	return errors.Wrap(err, "SSH config validation failed upon detected machine state")
 }
 
-func parseGenerationsOutput(output string) (*config.GenerationsData, error) {
+// Helpers
+
+type generationInfo struct {
+	Date   string
+	Nixos  string
+	Kernel string
+}
+
+func parseGenerationsOutput(output string) (*machine.Generations, generationInfo, error) {
 	lines := strings.Split(output, "\n")
 
-	generations, err := omap.New[uint, *config.GenerationInfo]()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create generations map")
-	}
+	generations := &machine.Generations{}
 
-	var currentGenNum uint
+	var currentGenInfo generationInfo
 
 	for i, line := range lines {
-		genNum, gen, ok := parseGenerationLine(i, line)
+		genNum, info, isCurrent, ok := parseGenerationLine(i, line)
 		if !ok {
 			continue
 		}
 
-		if gen.Current {
-			currentGenNum = genNum
+		if isCurrent {
+			generations.Current = genNum
+			currentGenInfo = info
 		}
 
-		err = generations.Set(genNum, gen)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to set generation")
-		}
+		generations.Available = append(generations.Available, genNum)
 	}
 
-	if generations.Len() == 0 {
-		return nil, errors.New("no generations found - ensure this is a NixOS system with system profiles")
+	if len(generations.Available) == 0 {
+		return nil, generationInfo{}, errors.New("no generations found - ensure this is a NixOS system with system profiles")
 	}
 
-	return &config.GenerationsData{
-		Current:     currentGenNum,
-		Generations: generations,
-	}, nil
+	return generations, currentGenInfo, nil
 }
 
-func parseGenerationLine(idx int, line string) (uint, *config.GenerationInfo, bool) {
-	const minFields = 5
+func parseGenerationLine(idx int, line string) (uint, generationInfo, bool, bool) {
+	const minFields = 1
 
 	line = strings.TrimSpace(line)
 	if line == "" || idx == 0 {
-		return 0, nil, false
+		return 0, generationInfo{}, false, false
 	}
 
 	fields := strings.Fields(line)
 	if len(fields) < minFields {
-		return 0, nil, false
+		return 0, generationInfo{}, false, false
 	}
 
 	parsedNum, err := strconv.ParseUint(fields[0], 10, 0)
 	if err != nil {
-		return 0, nil, false
-	}
-
-	gen := &config.GenerationInfo{
-		Date:   fields[1] + " " + fields[2],
-		Nixos:  fields[3],
-		Kernel: fields[4],
+		return 0, generationInfo{}, false, false
 	}
 
 	const currentFieldIdx = 6
 
-	if len(fields) > currentFieldIdx && fields[len(fields)-1] == "True" {
-		gen.Current = true
+	isCurrent := len(fields) > currentFieldIdx && fields[len(fields)-1] == "True"
+
+	var info generationInfo
+	if len(fields) >= 2 { //nolint:mnd
+		info.Date = fields[1]
 	}
 
-	return uint(parsedNum), gen, true
+	if len(fields) >= 4 { //nolint:mnd
+		info.Nixos = fields[3]
+	}
+
+	if len(fields) >= 5 { //nolint:mnd
+		info.Kernel = fields[4]
+	}
+
+	return uint(parsedNum), info, isCurrent, true
 }

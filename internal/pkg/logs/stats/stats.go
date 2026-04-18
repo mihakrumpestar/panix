@@ -1,8 +1,10 @@
 package stats
 
 import (
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/workflow/phases"
+	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
+	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/pkg/errors"
 )
 
 type StatsState string
@@ -14,53 +16,42 @@ const (
 )
 
 type StatisticsPerPhase struct {
-	stats map[phases.Phase]map[StatsState][]attributes.Xpath
+	*atomicorderedmap.AtomicOrderedMap[phase.Phase, StatsPack]
 }
 
-func NewStatisticsPerPhase() *StatisticsPerPhase {
-	return &StatisticsPerPhase{
-		stats: make(map[phases.Phase]map[StatsState][]attributes.Xpath),
+type StatsPack map[StatsState][]xpath.Xpath
+
+func New(workflowPhases []phase.Phase) *StatisticsPerPhase {
+	spp := &StatisticsPerPhase{
+		atomicorderedmap.New[phase.Phase, StatsPack](),
 	}
+
+	for _, phase := range workflowPhases {
+		spp.AtomicOrderedMap.Set(phase, StatsPack{})
+	}
+
+	return spp
 }
 
-func (spp *StatisticsPerPhase) Add(phase phases.Phase, state StatsState, xpath attributes.Xpath) {
-	phaseStats, ok := spp.stats[phase]
+func (spp *StatisticsPerPhase) UnmarshalJSON(data []byte) error {
+	if spp.AtomicOrderedMap == nil {
+		spp.AtomicOrderedMap = atomicorderedmap.New[phase.Phase, StatsPack]()
+	}
+
+	return errors.Wrap(spp.AtomicOrderedMap.UnmarshalJSON(data), "unmarshal statistics per phase")
+}
+
+func (spp *StatisticsPerPhase) DeepSet(phase phase.Phase, statsState StatsState, xpathI xpath.Xpath) {
+	statsPack, ok := spp.AtomicOrderedMap.Get(phase)
 	if !ok {
-		phaseStats = make(map[StatsState][]attributes.Xpath)
-		spp.stats[phase] = phaseStats
+		statsPack = StatsPack{}
+		spp.AtomicOrderedMap.Set(phase, statsPack)
 	}
 
-	phaseStats[state] = append(phaseStats[state], xpath)
-}
-
-func (spp *StatisticsPerPhase) Get(phase phases.Phase, state StatsState) []attributes.Xpath {
-	phaseStats, ok := spp.stats[phase]
+	xpaths, ok := statsPack[statsState]
 	if !ok {
-		return nil
+		xpaths = make([]xpath.Xpath, 0)
 	}
 
-	result, ok := phaseStats[state]
-	if !ok {
-		return nil
-	}
-
-	return result
-}
-
-type StatsPack struct {
-	Running []attributes.Xpath
-	Failed  []attributes.Xpath
-	Done    []attributes.Xpath
-}
-
-func (spp *StatisticsPerPhase) GetPack(phase phases.Phase) *StatsPack {
-	if spp == nil {
-		return nil
-	}
-
-	return &StatsPack{
-		Running: spp.Get(phase, Running),
-		Failed:  spp.Get(phase, Failed),
-		Done:    spp.Get(phase, Done),
-	}
+	statsPack[statsState] = append(xpaths, xpathI)
 }
