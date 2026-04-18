@@ -3,16 +3,17 @@ package config
 import (
 	"slices"
 
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
-type hasPhases struct {
+type optionalPhases struct {
 	Secrets   bool
 	Bootstrap bool
 }
 
 func (c *Config) filterOutUnusedPhases() {
-	hasRequiredPhases := c.hasRequiredPhases()
+	hasRequiredPhases := hasRequiredPhases(c.Fleet)
 
 	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(p phase.Phase) bool {
 		return (p == phase.Secrets && !hasRequiredPhases.Secrets) ||
@@ -20,16 +21,16 @@ func (c *Config) filterOutUnusedPhases() {
 	})
 }
 
-func (c *Config) hasRequiredPhases() hasPhases {
-	var has hasPhases
+func hasRequiredPhases(f *fleet.Fleet) optionalPhases {
+	var has optionalPhases
 
-	for _, treeLeaf := range c.Fleet.AllMachines() {
+	for _, treeLeaf := range f.AllMachines() {
 		m := treeLeaf.Machine
 		if len(m.Secrets) > 0 {
 			has.Secrets = true
 		}
 
-		if m.Bootstrap.SSH != nil || m.Bootstrap.ForceBootstrap {
+		if m.Bootstrap.SSH.IsInitialized() || m.Bootstrap.ForceBootstrap {
 			has.Bootstrap = true
 		}
 

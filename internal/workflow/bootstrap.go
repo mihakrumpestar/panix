@@ -174,7 +174,7 @@ func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine
 			[]string{"curl", "--fail", "-#", "-L", "-C", "-", "-o", "/tmp/kexec/kexec.tar", kexecURL},
 		)
 	} else {
-		err = w.transferPlainFileOrDir(exc, machine, &attributes.PlainFileOrDirToTransfer{
+		err = w.transferPlainFileOrDir(exc, machine, attributes.PlainFileOrDirToTransfer{
 			LocalPath:  kexecURL,
 			RemotePath: "/tmp/kexec/kexec.tar",
 		}, "kexec tarball", false)
@@ -219,8 +219,10 @@ func getTarArgs(kexecURL string) []string {
 func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *machine.Machine) error {
 	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
 
-	if machine.Bootstrap.Kexec != nil && machine.Bootstrap.Kexec.ExtraFlags != "" {
-		kexecCmd = append(kexecCmd, "--kexec-extra-flags", machine.Bootstrap.Kexec.ExtraFlags)
+	if len(machine.Bootstrap.Kexec.ExtraFlags) != 0 {
+		extraFlags := append([]string{"--kexec-extra-flags"}, machine.Bootstrap.Kexec.ExtraFlags...)
+
+		kexecCmd = append(kexecCmd, extraFlags...)
 	}
 
 	err := exc.Exec(

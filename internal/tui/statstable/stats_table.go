@@ -31,7 +31,7 @@ type StatsTable struct {
 }
 
 type Selected struct {
-	Xpath xpath.Xpath `json:"xpath"`
+	Xpath xpath.Xpath `json:"xpath,omitempty"`
 	Index int         `json:"index"`
 }
 
@@ -48,7 +48,7 @@ func NewStatsTable() *StatsTable {
 }
 
 func (s *StatsTable) Reset() {
-	s.Selected.Xpath.Clear()
+	s.Selected.Xpath = ""
 	s.Selected.Index = -1
 }
 
@@ -78,7 +78,7 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 
 	if s.Selected.Index == rowIndex {
 		s.Selected.Index = -1
-		s.Selected.Xpath.Clear()
+		s.Selected.Xpath = ""
 	} else {
 		s.Selected.Index = rowIndex
 		s.applyIndexToXpath()

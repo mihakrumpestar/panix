@@ -38,7 +38,7 @@ func (w *Workflow) executeSecretsPhaseMachine(fleetLeaf *fleet.FleetLeaf) error 
 func (w *Workflow) transferPlainFileOrDir(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
-	plainFileOrDir *attributes.PlainFileOrDirToTransfer,
+	plainFileOrDir attributes.PlainFileOrDirToTransfer,
 	transferOfWhat string,
 	transferOSSecrets bool,
 ) error {
@@ -64,7 +64,7 @@ func (w *Workflow) transferPlainFileOrDir(
 	}
 
 	activeSSH := machine.GetActiveSSH()
-	if activeSSH.IsLocal {
+	if activeSSH.IsLocal() {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {
 		sshArgs := activeSSH.MaybeSSHCommandArguments()

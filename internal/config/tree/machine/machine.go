@@ -19,16 +19,16 @@ const (
 	SSHTypeRegular   SSHType = "regular"
 )
 
+//nolint:lll
 type Machine struct {
 	attributes.Attributes `yaml:",inline"`
 
 	// Internal
-	MetaInspect *atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty"`
+	MetaInspect *atomicpointer.AtomicPointer[MetaInspect] `yaml:"-" json:"meta_inspect,omitempty"` // Needs to be atomic (updates with executioner)
 	Logs        *logs.Logs                                `yaml:"-" json:"logs,omitempty"`
-	State       *atomicpointer.AtomicPointer[State]       `yaml:"-" json:"machine_state,omitempty"`
+	State       *atomicpointer.AtomicPointer[State]       `yaml:"-" json:"machine_state,omitempty"` // Needs to be atomic (updates from both workflow goroutines and UI)
 }
 
-// MetaInspect needs to be atomic (updates with executioner).
 type MetaInspect struct {
 	Reachable      bool `yaml:"-" json:"reachable,omitempty"`
 	SSHConnectable bool `yaml:"-" json:"ssh_connectable,omitempty"`
@@ -43,13 +43,12 @@ type MetaInspect struct {
 	Kernel       string       `yaml:"-" json:"kernel,omitempty"`
 }
 
-// State needs to be atomic (updates from both workflow goroutines and UI).
 type State struct {
 	Status    stats.StatsState     `yaml:"-" json:"status"`
 	StatusMsg string               `yaml:"-" json:"status_msg"`
 	Phase     phase.Phase          `yaml:"-" json:"phase"`
 	Error     *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
-	ActiveSSH SSHType              `yaml:"-" json:"active_ssh" default:"regular"`
+	ActiveSSH SSHType              `yaml:"-" json:"active_ssh,omitempty" default:"regular"`
 }
 
 type Generations struct {
@@ -83,8 +82,8 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, loc
 	return nil
 }
 
-func (m *Machine) GetActiveSSH() *ssh.SSHClient {
-	var sshClient *ssh.SSHClient
+func (m *Machine) GetActiveSSH() ssh.SSHClient {
+	var sshClient ssh.SSHClient
 
 	state := m.State.Load()
 	switch state.ActiveSSH {
@@ -93,19 +92,17 @@ func (m *Machine) GetActiveSSH() *ssh.SSHClient {
 	case SSHTypeBootstrap:
 		sshClient = m.Bootstrap.SSH
 	case SSHTypeKexec:
-		kexecSSH := *m.SSH
-		if m.Bootstrap.SSH != nil {
-			kexecSSH = *m.Bootstrap.SSH
+		sshClient = m.SSH
+		if m.Bootstrap.SSH.IsInitialized() {
+			sshClient = m.Bootstrap.SSH
 		}
 
-		kexecSSH.Port = m.Bootstrap.Kexec.SSHPort
-		kexecSSH.StrictKeyChecking = false
-		kexecSSH.DisableAutoAddHostKey = true
-
-		sshClient = &kexecSSH
+		sshClient.Port = m.Bootstrap.Kexec.SSHPort
+		sshClient.StrictKeyChecking = false
+		sshClient.DisableAutoAddHostKey = true
 	}
 
-	if sshClient == nil {
+	if !sshClient.IsInitialized() {
 		panic("internal error: set active sshClient to nil")
 	}
 

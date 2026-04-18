@@ -1,95 +1,52 @@
 package xpath
 
 import (
-	"encoding/json"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // Note: all methods are immutable.
 
-type Xpath struct { //nolint:recvcheck
-	path string
-}
+type Xpath string
 
 func New(xpath ...string) Xpath {
-	return Xpath{
-		path: strings.Join(xpath, "/"),
-	}
+	return Xpath(strings.Join(xpath, "/"))
 }
 
 func (x Xpath) Depth() int {
-	if x.path == "" {
+	xS := x.String()
+	if xS == "" {
 		return 0
 	}
 
-	return strings.Count(x.path, "/") + 1
-}
-
-func (x *Xpath) Clear() {
-	x.path = ""
+	return strings.Count(xS, "/") + 1
 }
 
 // NewXpathWithAppend creates a new Xpath based on current Xpath as base and appends appendXpath.
 // If current Xpath is nil, resulting Xpath consists only of appendXpath.
 func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
-	if x.path == "" {
+	xpathS := x.String()
+	if xpathS == "" {
 		return New(appendXpath...)
 	}
 
 	var builder strings.Builder
 
-	builder.WriteString(x.path)
+	builder.WriteString(xpathS)
 	builder.WriteByte('/')
 	builder.WriteString(strings.Join(appendXpath, "/"))
 
-	return Xpath{path: builder.String()}
-}
-
-// IsChild checks if provided xpath is a child of called Xpath.
-func (x Xpath) IsChild(xpath Xpath) bool {
-	// Check if x.path is a prefix of xpath.path
-	// Must be prefix AND child must be deeper (longer string)
-	return strings.HasPrefix(xpath.path, x.path+"/") && len(xpath.path) > len(x.path)
-}
-
-// IsParent checks if provided xpath is a parent of called Xpath.
-func (x Xpath) IsParent(xpath Xpath) bool {
-	// Check if xpath.path is a prefix of x.path
-	// Must be prefix AND current path must be deeper than the potential parent
-	return strings.HasPrefix(x.path, xpath.path+"/") && len(x.path) > len(xpath.path)
-}
-
-// Element returns the xpath element at the given index.
-// 0 returns the first element, 1 returns the second, etc.
-// -1 returns the last element, -2 returns the second-to-last, etc.
-// Returns empty string if the index is out of range.
-func (x Xpath) Element(index int) string {
-	if x.path == "" {
-		return ""
-	}
-
-	parts := strings.Split(x.path, "/")
-
-	if index < 0 {
-		index += len(parts)
-	}
-
-	if index < 0 || index >= len(parts) {
-		return ""
-	}
-
-	return parts[index]
+	return Xpath(builder.String())
 }
 
 // FleetLeaf returns the last 3 elements of the path as strings.
 func (x Xpath) FleetLeaf() (string, string, string) {
-	if x.path == "" {
+	xpathS := x.String()
+
+	if xpathS == "" {
 		return "", "", ""
 	}
 
-	parts := strings.Split(x.path, "/")
+	parts := strings.Split(xpathS, "/")
 	numOfParts := len(parts)
 
 	switch numOfParts {
@@ -103,20 +60,5 @@ func (x Xpath) FleetLeaf() (string, string, string) {
 }
 
 func (x Xpath) String() string {
-	return x.path
-}
-
-func (x Xpath) MarshalJSON() ([]byte, error) {
-	b, err := json.Marshal(x.path)
-
-	return b, errors.Wrap(err, "marshal xpath")
-}
-
-func (x *Xpath) UnmarshalJSON(data []byte) error {
-	err := json.Unmarshal(data, &x.path)
-	if err != nil {
-		return errors.Wrap(err, "unmarshal xpath")
-	}
-
-	return nil
+	return string(x)
 }

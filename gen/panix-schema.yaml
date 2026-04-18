@@ -96,7 +96,6 @@ properties:
             type: string
             description: "Directory to save snapshots (default: .)"
             default: .
-            format: file-path
           on_exit:
             type: boolean
             description: Take snapshot on exit
@@ -409,8 +408,10 @@ definitions:
     type: object
     properties:
       extra_flags:
-        type: string
+        type: array
         description: Extra flags to pass to kexec (e.g. '--no-sync')
+        items:
+          type: string
       image:
         type: string
         description: "URL or path to kexec tarball for bootstrapping non-NixOS machines (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz)"

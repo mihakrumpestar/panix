@@ -37,11 +37,6 @@ tasks:
         --profile.mutex={{.PROFILE_DIR}}/mutex.prof
         --profile.goroutine={{.PROFILE_DIR}}/goroutine.prof
 
-  go:profile-ui:
-    cmds:
-      # https://ksysoev.github.io/posts/go-cpu-profile/
-      - go tool pprof -http=:8080 -no_browser {{.DEBUG_DIR}}/cpu.prof
-
   go:check:
     desc: Run checks
     vars:
@@ -59,18 +54,18 @@ tasks:
         echo "0 issues"
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  nix:run:
+    desc: Run the application using nix
+    cmds:
+      - nix run path:$(pwd)#default --extra-experimental-features "nix-command
+        flakes" -- {{.CLI_ARGS}}
+
   nix:build:
     desc: Build the package using nix
     cmds:
       - nix build path:$(pwd)#default --extra-experimental-features "nix-command
         flakes"
       - ls -sh result/bin/panix
-
-  nix:run:
-    desc: Run the application using nix
-    cmds:
-      - nix run path:$(pwd)#default --extra-experimental-features "nix-command
-        flakes" -- {{.CLI_ARGS}}
 
   nix:update:
     desc: Update flake
@@ -124,6 +119,7 @@ tasks:
       - go get -u all
       - go mod tidy
       - task: nix:update
+      - task: nix:vendor
 
   ci:
     desc: Run all CI checks

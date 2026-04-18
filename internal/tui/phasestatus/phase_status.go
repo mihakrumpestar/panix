@@ -47,7 +47,7 @@ func NewPhaseStatus() *PhaseStatus {
 }
 
 type Selected struct {
-	Phase phase.Phase `json:"phase"`
+	Phase phase.Phase `json:"phase,omitempty"`
 	Index int         `json:"index"`
 }
 

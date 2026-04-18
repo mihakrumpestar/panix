@@ -158,7 +158,7 @@ func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 		return v.activation.activeXpath
 	}
 
-	return xpath.Xpath{}
+	return ""
 }
 
 func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
@@ -426,7 +426,7 @@ func (v *Viewports) underMouse(m tea.MouseMsg) []xpath.Xpath {
 
 func (v *Viewports) mostSpecific(xpathI []xpath.Xpath) xpath.Xpath {
 	if len(xpathI) == 0 {
-		return xpath.Xpath{}
+		return ""
 	}
 
 	sort.Slice(xpathI, func(i, j int) bool { return xpathI[i].Depth() > xpathI[j].Depth() })

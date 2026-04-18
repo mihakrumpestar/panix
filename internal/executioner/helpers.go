@@ -56,7 +56,7 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 	return nil
 }
 
-func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg string) error {
+func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg string) error {
 	return exc.ExecFn(
 		"wait for disconnect",
 		statusMsg,
@@ -80,7 +80,7 @@ func WaitForDisconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg str
 	)
 }
 
-func WaitForReconnect(exc *Executioner, sshClient *ssh.SSHClient, statusMsg, failMsg string) error {
+func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, failMsg string) error {
 	return exc.ExecFn(
 		"wait for reconnect",
 		statusMsg,

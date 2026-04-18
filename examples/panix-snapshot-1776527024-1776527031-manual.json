@@ -15,20 +15,28 @@
     },
     "logging": {
       "log_file": "panix.log"
-    }
+    },
+    "profile": {}
   },
   "fleet": {
-    "bootstrap": {},
+    "ssh": {},
+    "bootstrap": {
+      "ssh": {},
+      "kexec": {}
+    },
     "nix": {},
-    "xpath": "",
     "flakes": [
       {
         "key": "infrastructure",
         "value": {
+          "ssh": {},
           "tags": [
             "infrastructure"
           ],
-          "bootstrap": {},
+          "bootstrap": {
+            "ssh": {},
+            "kexec": {}
+          },
           "nix": {},
           "name": "infrastructure",
           "xpath": "infrastructure",
@@ -36,11 +44,15 @@
             {
               "key": "personal-workstation",
               "value": {
+                "ssh": {},
                 "tags": [
                   "infrastructure",
                   "personal-workstation"
                 ],
-                "bootstrap": {},
+                "bootstrap": {
+                  "ssh": {},
+                  "kexec": {}
+                },
                 "nix": {},
                 "name": "personal-workstation",
                 "xpath": "infrastructure/personal-workstation",
@@ -60,6 +72,7 @@
                         "personal-workstation"
                       ],
                       "bootstrap": {
+                        "ssh": {},
                         "disk_encryption_keys": [
                           {
                             "local_path": "/tmp/disko-encryption-password.txt",
@@ -128,9 +141,9 @@
                                   "description": "SSH reachability check",
                                   "output": [],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:21.622246811+02:00",
-                                    "end_time": "2026-04-17T00:41:21.622831104+02:00",
-                                    "duration": 584302
+                                    "start_time": "2026-04-18T17:43:44.110756963+02:00",
+                                    "end_time": "2026-04-18T17:43:44.111558682+02:00",
+                                    "duration": 801719
                                   }
                                 },
                                 {
@@ -140,9 +153,9 @@
                                     "OK"
                                   ],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:21.622874946+02:00",
-                                    "end_time": "2026-04-17T00:41:21.979895472+02:00",
-                                    "duration": 357020536
+                                    "start_time": "2026-04-18T17:43:44.111567008+02:00",
+                                    "end_time": "2026-04-18T17:43:44.442052424+02:00",
+                                    "duration": 330485416
                                   }
                                 },
                                 {
@@ -152,9 +165,9 @@
                                     "x86_64"
                                   ],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:21.979912283+02:00",
-                                    "end_time": "2026-04-17T00:41:22.091887167+02:00",
-                                    "duration": 111974884
+                                    "start_time": "2026-04-18T17:43:44.442064667+02:00",
+                                    "end_time": "2026-04-18T17:43:44.547581693+02:00",
+                                    "duration": 105517026
                                   }
                                 },
                                 {
@@ -164,9 +177,9 @@
                                     "0"
                                   ],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:22.091905201+02:00",
-                                    "end_time": "2026-04-17T00:41:22.199716882+02:00",
-                                    "duration": 107811681
+                                    "start_time": "2026-04-18T17:43:44.547620816+02:00",
+                                    "end_time": "2026-04-18T17:43:44.65803689+02:00",
+                                    "duration": 110416094
                                   }
                                 },
                                 {
@@ -197,18 +210,18 @@
                                     "VERSION_ID=\"26.05\""
                                   ],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:22.199725338+02:00",
-                                    "end_time": "2026-04-17T00:41:22.312750535+02:00",
-                                    "duration": 113025207
+                                    "start_time": "2026-04-18T17:43:44.658048582+02:00",
+                                    "end_time": "2026-04-18T17:43:44.767678868+02:00",
+                                    "duration": 109630296
                                   }
                                 },
                                 {
                                   "description": "validate SSH config upon detected machine state",
                                   "output": [],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:22.312776864+02:00",
-                                    "end_time": "2026-04-17T00:41:22.312792193+02:00",
-                                    "duration": 15339
+                                    "start_time": "2026-04-18T17:43:44.767696701+02:00",
+                                    "end_time": "2026-04-18T17:43:44.767703904+02:00",
+                                    "duration": 7203
                                   }
                                 },
                                 {
@@ -248,16 +261,16 @@
                                     "1           2026-04-03 13:16:58  26.05.20260324.46db2e0  6.19.9   Unknown                 []              False"
                                   ],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:22.312796361+02:00",
-                                    "end_time": "2026-04-17T00:41:22.543004667+02:00",
-                                    "duration": 230208297
+                                    "start_time": "2026-04-18T17:43:44.767709996+02:00",
+                                    "end_time": "2026-04-18T17:43:44.986859569+02:00",
+                                    "duration": 219149573
                                   }
                                 }
                               ],
                               "time_and_state": {
-                                "start_time": "2026-04-17T00:41:21.622234438+02:00",
-                                "end_time": "2026-04-17T00:41:22.543027129+02:00",
-                                "duration": 920792692
+                                "start_time": "2026-04-18T17:43:44.110746153+02:00",
+                                "end_time": "2026-04-18T17:43:44.986884325+02:00",
+                                "duration": 876138152
                               }
                             }
                           },
@@ -270,16 +283,16 @@
                                   "command": "NIX_SSHOPTS=-o StrictHostKeyChecking=accept-new nix --extra-experimental-features nix-command flakes copy --to ssh://personal-workstation /nix/store/kff1ayigd8b7bhasd71519vr9h4ssx6h-nixos-system-personal-workstation-26.05.20260409.4c1018d",
                                   "output": [],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:25.657753114+02:00",
-                                    "end_time": "2026-04-17T00:41:26.289393956+02:00",
-                                    "duration": 631640842
+                                    "start_time": "2026-04-18T17:43:48.000449008+02:00",
+                                    "end_time": "2026-04-18T17:43:48.640654966+02:00",
+                                    "duration": 640205948
                                   }
                                 }
                               ],
                               "time_and_state": {
-                                "start_time": "2026-04-17T00:41:25.657748205+02:00",
-                                "end_time": "2026-04-17T00:41:26.289399897+02:00",
-                                "duration": 631651692
+                                "start_time": "2026-04-18T17:43:48.000441063+02:00",
+                                "end_time": "2026-04-18T17:43:48.640660206+02:00",
+                                "duration": 640219153
                               }
                             }
                           },
@@ -292,9 +305,9 @@
                                   "command": "ssh -q -o StrictHostKeyChecking=accept-new personal-workstation nix-env --profile /nix/var/nix/profiles/system --set /nix/store/kff1ayigd8b7bhasd71519vr9h4ssx6h-nixos-system-personal-workstation-26.05.20260409.4c1018d",
                                   "output": [],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:26.289418792+02:00",
-                                    "end_time": "2026-04-17T00:41:26.414890486+02:00",
-                                    "duration": 125471684
+                                    "start_time": "2026-04-18T17:43:48.640674132+02:00",
+                                    "end_time": "2026-04-18T17:43:48.769869639+02:00",
+                                    "duration": 129195517
                                   }
                                 },
                                 {
@@ -313,22 +326,22 @@
                                     "the following new units were started: NetworkManager-dispatcher.service"
                                   ],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:26.414915192+02:00",
-                                    "end_time": "2026-04-17T00:41:28.326945797+02:00",
-                                    "duration": 1912030605
+                                    "start_time": "2026-04-18T17:43:48.769881762+02:00",
+                                    "end_time": "2026-04-18T17:43:50.592234916+02:00",
+                                    "duration": 1822353164
                                   }
                                 }
                               ],
                               "time_and_state": {
-                                "start_time": "2026-04-17T00:41:26.289409575+02:00",
-                                "end_time": "2026-04-17T00:41:28.326972096+02:00",
-                                "duration": 2037562521
+                                "start_time": "2026-04-18T17:43:48.640667009+02:00",
+                                "end_time": "2026-04-18T17:43:50.592256907+02:00",
+                                "duration": 1951589898
                               }
                             }
                           }
                         ],
                         "duration_and_error": {
-                          "duration": 6704702143
+                          "duration": 6481481469
                         }
                       },
                       "machine_state": {
@@ -353,7 +366,10 @@
                         "personal-workstation",
                         "fake"
                       ],
-                      "bootstrap": {},
+                      "bootstrap": {
+                        "ssh": {},
+                        "kexec": {}
+                      },
                       "nix": {},
                       "name": "fake",
                       "xpath": "infrastructure/personal-workstation/fake",
@@ -368,24 +384,24 @@
                                   "description": "SSH reachability check",
                                   "output": [],
                                   "time_and_state": {
-                                    "start_time": "2026-04-17T00:41:21.622246521+02:00",
-                                    "end_time": "2026-04-17T00:41:21.623395018+02:00",
-                                    "duration": 1148497,
+                                    "start_time": "2026-04-18T17:43:44.110733499+02:00",
+                                    "end_time": "2026-04-18T17:43:44.112056432+02:00",
+                                    "duration": 1322932,
                                     "end_error": "regular SSH is unreachable"
                                   }
                                 }
                               ],
                               "time_and_state": {
-                                "start_time": "2026-04-17T00:41:21.622226103+02:00",
-                                "end_time": "2026-04-17T00:41:21.623398645+02:00",
-                                "duration": 1172542,
+                                "start_time": "2026-04-18T17:43:44.110715396+02:00",
+                                "end_time": "2026-04-18T17:43:44.11206064+02:00",
+                                "duration": 1345244,
                                 "end_error": "reachability check failed: regular SSH is unreachable"
                               }
                             }
                           }
                         ],
                         "duration_and_error": {
-                          "duration": 1172542,
+                          "duration": 1345244,
                           "error": "reachability check failed: regular SSH is unreachable"
                         }
                       },
@@ -393,13 +409,11 @@
                         "status": "failed",
                         "status_msg": "SSH unreachable",
                         "phase": "inspect",
-                        "error": "reachability check failed: regular SSH is unreachable",
-                        "active_ssh": "regular"
+                        "error": "reachability check failed: regular SSH is unreachable"
                       }
                     }
                   }
                 ],
-                "flake_output": "",
                 "meta_build": {
                   "system_closure": "/nix/store/kff1ayigd8b7bhasd71519vr9h4ssx6h-nixos-system-personal-workstation-26.05.20260409.4c1018d"
                 },
@@ -416,22 +430,22 @@
                               "[{\"drvPath\":\"/nix/store/hslaqlp4731vhkd187iq8s8950a6wihr-nixos-system-personal-workstation-26.05.20260409.4c1018d.drv\",\"outputs\":{\"out\":\"/nix/store/kff1ayigd8b7bhasd71519vr9h4ssx6h-nixos-system-personal-workstation-26.05.20260409.4c1018d\"}}]"
                             ],
                             "time_and_state": {
-                              "start_time": "2026-04-17T00:41:22.543058508+02:00",
-                              "end_time": "2026-04-17T00:41:25.657728097+02:00",
-                              "duration": 3114669589
+                              "start_time": "2026-04-18T17:43:44.986911736+02:00",
+                              "end_time": "2026-04-18T17:43:48.000411378+02:00",
+                              "duration": 3013499652
                             }
                           }
                         ],
                         "time_and_state": {
-                          "start_time": "2026-04-17T00:41:22.543044221+02:00",
-                          "end_time": "2026-04-17T00:41:25.657739449+02:00",
-                          "duration": 3114695238
+                          "start_time": "2026-04-18T17:43:44.986899083+02:00",
+                          "end_time": "2026-04-18T17:43:48.000433349+02:00",
+                          "duration": 3013534266
                         }
                       }
                     }
                   ],
                   "duration_and_error": {
-                    "duration": 6704702143
+                    "duration": 6481481469
                   }
                 }
               }
@@ -441,7 +455,7 @@
           "logs": {
             "phase_logs": [],
             "duration_and_error": {
-              "duration": 6704702143
+              "duration": 6481481469
             }
           }
         }
@@ -450,27 +464,25 @@
     "logs": {
       "phase_logs": [],
       "duration_and_error": {
-        "duration": 6704702143
+        "duration": 6481481469
       }
     },
     "stats_table": {
       "selected": {
-        "xpath": "",
         "index": -1
       }
     },
     "phase_status": {
       "selected": {
-        "phase": "",
         "index": -1
       }
     }
   },
   "snapshot": {
     "panix_version": "0.4.0",
-    "start_time": "2026-04-17T00:41:21.621492682+02:00",
+    "start_time": "2026-04-18T17:43:44.109752085+02:00",
     "reason": "manual",
-    "snapshot_time": "2026-04-17T00:41:30.402268252+02:00"
+    "snapshot_time": "2026-04-18T17:43:51.901104906+02:00"
   },
   "phases": [
     "inspect",

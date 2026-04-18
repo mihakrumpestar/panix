@@ -24,7 +24,7 @@ func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error 
 		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			machineI := fleetLeaf.Machine
 
-			if machineI.SSH.IsLocal {
+			if machineI.SSH.IsLocal() {
 				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 					mi.Reachable = true
@@ -77,7 +77,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 		"checking SSH reachability",
 		"SSH unreachable",
 		func(_ *command.CommandLog) error {
-			if machineI.Bootstrap.SSH != nil {
+			if machineI.Bootstrap.SSH.IsInitialized() {
 				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
 
 				if !bootstrapSSHReachable {
@@ -360,11 +360,11 @@ func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Mac
 		"validating SSH config",
 		"SSH config invalid for detected machine state",
 		func(_ *command.CommandLog) error {
-			if machineI.Bootstrap.SSH != nil && isBootstrapped && !machineI.Bootstrap.ForceBootstrap {
+			if machineI.Bootstrap.SSH.IsInitialized() && isBootstrapped && !machineI.Bootstrap.ForceBootstrap {
 				return errors.New("bootstrap SSH is configured but machine is already bootstrapped, set \"force_bootstrap\" to re-bootstrap, or remove bootstrap SSH configuration") //nolint:lll
 			}
 
-			if !isBootstrapped && machineI.Bootstrap.SSH == nil && !machineI.Bootstrap.ForceBootstrap {
+			if !isBootstrapped && !machineI.Bootstrap.SSH.IsInitialized() && !machineI.Bootstrap.ForceBootstrap {
 				return errors.New("bootstrapping requires bootstrap SSH to be configured (or set \"force_bootstrap\" to re-bootstrap with regular SSH)")
 			}
 
