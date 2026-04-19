@@ -3,8 +3,8 @@ package logs
 import (
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )

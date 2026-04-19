@@ -10,8 +10,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
@@ -267,7 +267,7 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 		"not in NixOS installer",
 		[]string{"cat", "/etc/os-release"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := log.String()
+			output := log.Output.String()
 
 			osRelease, err := osrelease.ReadString(output)
 			if err != nil {

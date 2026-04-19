@@ -6,8 +6,8 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
-	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	log_sphase "github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
+	log_sphase "github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/rs/zerolog"
@@ -168,7 +168,7 @@ func (ex *Executioner) startCommandLog(
 
 		logger.ResultEvent(sublog, "command finished", err, func(event *zerolog.Event) {
 			event.Str("event", "command_end").Dur("duration", duration).
-				Str("output", string(CleanAnsiAndSpace(commandLog.Bytes())))
+				Str("output", string(CleanAnsiAndSpace(commandLog.Output.Bytes())))
 		})
 
 		ex.onUpdateHook()
