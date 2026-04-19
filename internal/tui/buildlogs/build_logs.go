@@ -13,9 +13,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
@@ -318,11 +318,11 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 		lipgloss.JoinHorizontal(lipgloss.Top, icon, b.conf.ColorScheme.Command.Color.Render(labelVP), durStyled),
 	))
 
-	output := cmd.StringForBuildLogs()
+	output := cmd.Output
 
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
-	if len(output) > 0 {
-		cmdNode.Child(b.viewports.GetOrCreateViewport(outputXpath, output, cmdIndent+treeStep*2-1))
+	if output.LenForBuildLogs() > 0 {
+		cmdNode.Child(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep*2-1))
 	} else {
 		b.viewports.RemoveIfExistsViewport(outputXpath)
 	}

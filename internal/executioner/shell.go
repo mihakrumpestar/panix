@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/creack/pty"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/pkg/errors"
 )
 
@@ -102,7 +102,7 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *os.File, comm
 			bytesRead, err := ptyFile.Read(buf)
 			if err != nil {
 				err = ex.handleReadError(err, commandLog)
-				commandLog.TrimTrailingEmptyLines()
+				commandLog.Output.TrimTrailingEmptyLines()
 
 				return err
 			}
@@ -113,8 +113,8 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *os.File, comm
 
 			err = processTerminalOutput(buf[:bytesRead], commandLog)
 			if err != nil {
-				commandLog.WriteLineString("processTerminalOutput write error: " + err.Error())
-				commandLog.WriteLineString("")
+				commandLog.Output.WriteLineString("processTerminalOutput write error: " + err.Error())
+				commandLog.Output.WriteLineString("")
 
 				return err
 			}
@@ -127,8 +127,8 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *os.File, comm
 func (ex *Executioner) handleReadError(err error, commandLog *command.CommandLog) error {
 	err = ptyError(err)
 	if err != nil && !errors.Is(err, io.EOF) {
-		commandLog.WriteLineString("PTY read error: " + err.Error())
-		commandLog.WriteLineString("")
+		commandLog.Output.WriteLineString("PTY read error: " + err.Error())
+		commandLog.Output.WriteLineString("")
 	}
 
 	return err
@@ -211,21 +211,18 @@ func processTerminalOutput(buf []byte, exm *command.CommandLog) error {
 func processSequence(seq []byte, isFirst bool, exm *command.CommandLog) error {
 	after, ok := bytes.CutPrefix(seq, []byte("\n"))
 	if ok {
-		exm.WriteLine(after)
+		exm.Output.WriteLine(after)
 
 		return nil
 	}
 
 	if isFirst {
-		_, err := exm.Write(seq)
-		if err != nil {
-			return errors.Wrap(err, "failed to write to command log")
-		}
+		exm.Output.Write(seq)
 
 		return nil
 	}
 
-	exm.ReplaceLastLine(seq)
+	exm.Output.ReplaceLastLine(seq)
 
 	return nil
 }

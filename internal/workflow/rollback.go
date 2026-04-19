@@ -9,8 +9,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
@@ -46,7 +46,7 @@ func (w *Workflow) executeRollbackPhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 						return err
 					}
 
-					log.WriteLineString(fmt.Sprintf("target generation: %d", targetGenNum))
+					log.Output.WriteLineString(fmt.Sprintf("target generation: %d", targetGenNum))
 
 					return nil
 				},
@@ -117,7 +117,7 @@ func findGenerationClosure(exc *executioner.Executioner, machine *machine.Machin
 		"failed to find generation closure",
 		append(machine.MaybeSudo(), "readlink", generationLink),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			closurePath = strings.TrimSpace(log.String())
+			closurePath = strings.TrimSpace(log.Output.String())
 
 			if closurePath == "" {
 				return errors.New("generation closure path is empty")

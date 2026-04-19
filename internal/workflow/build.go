@@ -11,8 +11,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -76,7 +76,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := lastNonEmptyLine(log.Bytes())
+			output := lastNonEmptyLine(log.Output.Bytes())
 
 			err := json.Unmarshal(output, &parsedOutput)
 			if err != nil || len(parsedOutput) == 0 {
