@@ -17,10 +17,10 @@ body = """
             {% if commit.remote.pr_number %}\
                 ([#{{ commit.remote.pr_number }}](https://github.com/mihakrumpestar/panix/pull/{{ commit.remote.pr_number }})) \
             {% endif %}\
-            {% if commit.links %}\
-                {% for link in commit.links %}\
-                    ([{{ link.text }}]({{ link.href }})) \
-                {% endfor %}\
+            {% if commit.remote.username %}\
+                by @{{ commit.remote.username }} \
+            {% elif commit.author %}\
+                by {{ commit.author.name }} \
             {% endif %}\
             ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/mihakrumpestar/panix/commit/{{ commit.id }}))\
     {% endfor %}
@@ -55,6 +55,4 @@ skip_tags = ""
 ignore_tags = ""
 topo_order = false
 sort_commits = "oldest"
-link_parsers = [
-    { pattern = "#(\\d+)", href = "https://github.com/mihakrumpestar/panix/issues/$1"},
-]
+
