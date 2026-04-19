@@ -28,9 +28,9 @@ go.work.sum
 .opencode
 /build
 /dist
-/debug
+/debug*
 /result
-/profile
+/profile*
 
 temp_key
 temp_key.pub

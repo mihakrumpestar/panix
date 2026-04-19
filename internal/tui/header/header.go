@@ -10,11 +10,15 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 )
 
+type headerCacheKey struct {
+	width int
+}
+
 type Header struct {
 	isSnapshot bool
 	snapshot   config.Snapshot
 
-	cache cache.Cache[ContentAndHeight]
+	cache cache.Cache[ContentAndHeight, headerCacheKey]
 }
 
 type ContentAndHeight struct {
@@ -39,7 +43,7 @@ func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAn
 		height := lipgloss.Height(content) - 1 // -1 to account for next view
 
 		return ContentAndHeight{Content: content, Height: height}, true
-	}, width)
+	}, headerCacheKey{width: width})
 }
 
 func (h *Header) render(width int, colorScheme *colorscheme.ColorScheme) string {

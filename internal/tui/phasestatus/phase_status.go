@@ -2,6 +2,7 @@ package phasestatus
 
 import (
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"math"
 	"strconv"
@@ -14,8 +15,8 @@ import (
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
+	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"go.uber.org/atomic"
 )
@@ -31,13 +32,19 @@ const (
 	animationAmplitude = 0.5
 )
 
+type phaseStatusCacheKey struct {
+	statisticsHash uint64
+	width          int
+	selectedIndex  int
+}
+
 type PhaseStatus struct {
 	Selected Selected `json:"selected"`
 
-	CacheStatisticsPerPhase *stats.StatisticsPerPhase `json:"-"`
-	animation               animationState            `json:"-"`
-	cache                   cache.Cache[string]       `json:"-"`
-	lastRenderWidth         int                       `json:"-"`
+	CacheStatisticsPerPhase *stats.StatisticsPerPhase                `json:"-"`
+	animation               animationState                           `json:"-"`
+	cache                   cache.Cache[string, phaseStatusCacheKey] `json:"-"`
+	lastRenderWidth         int                                      `json:"-"`
 }
 
 func NewPhaseStatus() *PhaseStatus {
@@ -119,7 +126,33 @@ func (p *PhaseStatus) View(width int, colorScheme *colorscheme.ColorScheme) stri
 
 			return p.renderPhaseFlow(width, colorScheme), true
 		},
-		p.CacheStatisticsPerPhase, width, p.Selected.Index)
+		phaseStatusCacheKey{
+			statisticsHash: hashStatisticsPerPhase(p.CacheStatisticsPerPhase),
+			width:          width,
+			selectedIndex:  p.Selected.Index,
+		})
+}
+
+func hashStatisticsPerPhase(spp *stats.StatisticsPerPhase) uint64 {
+	if spp == nil {
+		return 0
+	}
+
+	hash := fnv.New64a()
+
+	for _, pair := range spp.Pairs() {
+		_, _ = hash.Write([]byte(pair.Key))
+
+		for state, xpaths := range pair.Value {
+			_, _ = hash.Write([]byte(state))
+
+			for _, xp := range xpaths {
+				_, _ = hash.Write([]byte(xp))
+			}
+		}
+	}
+
+	return hash.Sum64()
 }
 
 // Helpers

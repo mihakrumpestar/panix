@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
@@ -38,11 +39,20 @@ type activation struct {
 	activeXpath xpath.Xpath
 }
 
+type viewportCacheKey struct {
+	width     int
+	height    int
+	scrollPct float64
+	version   uint64
+	content   string
+}
+
 type item struct {
-	model    viewport.Model
-	content  string
-	zoneBase xpath.Xpath
-	cache    cache.Cache[string]
+	model          viewport.Model
+	content        string
+	contentVersion uint64
+	zoneBase       xpath.Xpath
+	cache          cache.Cache[string, viewportCacheKey]
 }
 
 type renderConfig struct {
@@ -52,6 +62,7 @@ type renderConfig struct {
 	explicitHeight  int
 	explicitWidth   int
 	indent          int
+	output          *command.AtomicCommandOutput
 }
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
@@ -97,6 +108,15 @@ func (v *Viewports) GetOrCreateViewport(xp xpath.Xpath, content string, indent i
 		bordered:  true,
 		maxHeight: v.conf.Flags.Tui.CommandOutputMaxHeight,
 		indent:    indent,
+	})
+}
+
+func (v *Viewports) GetOrCreateViewportVersioned(xp xpath.Xpath, output *command.AtomicCommandOutput, indent int) string {
+	return v.render(xp, "", renderConfig{
+		bordered:  true,
+		maxHeight: v.conf.Flags.Tui.CommandOutputMaxHeight,
+		indent:    indent,
+		output:    output,
 	})
 }
 
@@ -214,7 +234,7 @@ func (v *Viewports) Debug() string {
 	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
 
 	for _, pair := range v.items.Pairs() {
-		fmt.Fprintf(&builder, "  '%s': %dx%d c:%d", pair.Key, pair.Value.model.Width(), pair.Value.model.Height(), pair.Value.model.TotalLineCount())
+		fmt.Fprintf(&builder, "  '%s': %dx%d l:%d", pair.Key, pair.Value.model.Width(), pair.Value.model.Height(), pair.Value.model.TotalLineCount())
 
 		if pair.Key == v.activation.activeXpath {
 			builder.WriteString(" [A]")
@@ -280,9 +300,35 @@ func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg rend
 }
 
 func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) string {
+	var version uint64
+	if cfg.output != nil {
+		version = cfg.output.Version()
+	}
+
 	itm := v.getOrCreateItem(xpath, content, cfg)
 
+	if cfg.output != nil {
+		if itm.contentVersion != version {
+			content = cfg.output.StringForBuildLogs()
+			itm.content = content
+			itm.contentVersion = version
+		} else {
+			content = itm.content
+		}
+	}
+
 	v.syncItem(itm, xpath, content, cfg)
+
+	key := viewportCacheKey{
+		width:     itm.model.Width(),
+		height:    itm.model.Height(),
+		scrollPct: itm.model.ScrollPercent(),
+	}
+	if cfg.output != nil {
+		key.version = version
+	} else {
+		key.content = content
+	}
 
 	view := itm.cache.Get(
 		func() (string, bool) {
@@ -290,7 +336,7 @@ func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) 
 
 			return v.withScrollbar(itm.model.View(), scrollbar, itm.zoneBase), true
 		},
-		itm.model.Width(), itm.model.Height(), content, itm.model.ScrollPercent(),
+		key,
 	)
 
 	active := xpath == v.activation.activeXpath
@@ -303,8 +349,6 @@ func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) 
 func (v *Viewports) getOrCreateItem(xpath xpath.Xpath, content string, cfg renderConfig) *item {
 	itm, exists := v.items.Get(xpath)
 	if exists {
-		itm.content = content
-
 		return itm
 	}
 

@@ -8,8 +8,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
@@ -117,7 +117,7 @@ func checkSSHConnection(exc *executioner.Executioner, machineI *machine.Machine)
 		[]string{"echo", "OK"},
 		executioner.SkipIfLocal(),
 		executioner.OnFailure(func(log *command.CommandLog, err error) error {
-			return errors.Wrap(err, log.String())
+			return errors.Wrap(err, log.Output.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
@@ -146,7 +146,7 @@ func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine)
 		"uname failed",
 		[]string{"uname", "-m"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			architecture := strings.Trim(log.String(), "\n")
+			architecture := strings.Trim(log.Output.String(), "\n")
 			if architecture == "" {
 				return ErrArchitectureOutputEmpty
 			}
@@ -177,10 +177,10 @@ func checkSuperuser(exc *executioner.Executioner, machineI *machine.Machine) err
 		"checking superuser failed",
 		[]string{"id", "-u"},
 		executioner.OnFailure(func(log *command.CommandLog, err error) error {
-			return errors.Wrap(err, log.String())
+			return errors.Wrap(err, log.Output.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := strings.Trim(log.String(), "\n ")
+			output := strings.Trim(log.Output.String(), "\n ")
 
 			parsedOutput, err := strconv.ParseUint(output, 10, 64)
 			if err != nil {
@@ -213,10 +213,10 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 		"bootstrap detection failed",
 		[]string{"cat", "/etc/os-release"},
 		executioner.OnFailure(func(log *command.CommandLog, err error) error {
-			return errors.Wrap(err, log.String())
+			return errors.Wrap(err, log.Output.String())
 		}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			return classifyBootstrapStatus(log.String(), machineI)
+			return classifyBootstrapStatus(log.Output.String(), machineI)
 		}),
 		executioner.OnDryRun(func() {
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
@@ -313,7 +313,7 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 		"failed to list generations",
 		[]string{"nixos-rebuild", "list-generations"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			genData, currentGenInfo, err := parseGenerationsOutput(log.String())
+			genData, currentGenInfo, err := parseGenerationsOutput(log.Output.String())
 			if err != nil {
 				return err
 			}

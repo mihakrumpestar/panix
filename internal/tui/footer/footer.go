@@ -22,13 +22,17 @@ type KeyDef struct {
 
 var notificationBaseStyle = lipgloss.NewStyle().Bold(true)
 
+type footerCacheKey struct {
+	width int
+}
+
 type Footer struct {
 	keyDefs      []KeyDef
 	keymapHelp   help.Model
 	notification *notifications.Notification
 	conf         *config.Config
 
-	cache cache.Cache[header.ContentAndHeight]
+	cache cache.Cache[header.ContentAndHeight, footerCacheKey]
 }
 
 func New(keyDefs []KeyDef, conf *config.Config) *Footer {
@@ -76,7 +80,7 @@ func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) header.Co
 		height := lipgloss.Height(content)
 
 		return header.ContentAndHeight{Content: content, Height: height}, true
-	}, width)
+	}, footerCacheKey{width: width})
 
 	style := lipgloss.NewStyle().Width(width).MaxWidth(width - notifWidth)
 	if f.conf.Flags.Debug {

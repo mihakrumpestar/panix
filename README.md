@@ -105,7 +105,7 @@ Fleet → Flake → Configuration → Machine
 
 </div>
 
-Attributes at each level cascade down, without overriding child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the fleet, extend at any level:
+Attributes at each level cascade down, **without overriding** child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the fleet, extend at any level:
 
 ```yaml
 fleet:
@@ -300,7 +300,7 @@ bootstrap:
     image: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
     # <arch> placeholder replaced with detected architecture
     extra_flags: # Optional flags passed to kexec (default: "")
-      "--no-sync"
+      - "--no-sync"
     ssh_port: 22 # Optional kexec ssh port (default: 22)
 ```
 
@@ -493,6 +493,8 @@ Snapshots capture the full state of a deployment workflow at a point in time and
 
 > [!TIP]
 > **Why snapshots?** When a deployment fails, a snapshot preserves the exact state for later inspection, debugging, sharing with others or to give them for context to LLMs. Instead of scrolling through TUI logs or parsing terminal scrollback, you get a structured record of everything that happened.
+
+An example can be found in [examples](./examples).
 
 ### Taking snapshots
 
@@ -1137,6 +1139,7 @@ fleet:
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
 flags: # Listed are default values, all also overridable using CLI arguments
+  activation_mode: switch              # Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)
   tags: []                             # Filter machines by tags (flakes, configs, machine names are auto-registered as tags)
   timeout: 2h                          # Workflow timeout (e.g. '1h', '1m15s')
   exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
@@ -1146,6 +1149,7 @@ flags: # Listed are default values, all also overridable using CLI arguments
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
   output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
+  rollback_generation: -1              # 0=current generation, -N=Nth before current, N=specific generation
 
   tui:
     show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)
@@ -1156,13 +1160,23 @@ flags: # Listed are default values, all also overridable using CLI arguments
     log: false                         # Enable logging to file (epoch timestamp appended before .log)
     log_file: panix.log                # Log file path
     debug: false                       # Enable debug output (enables logging)
-    cpu_profile: ""                    # Path for CPU profiling file
+  snapshot:
+    dir: .                             # Directory to save snapshots
+    on_retry: false                    # Take snapshot before retry
+    on_exit: false                     # Take snapshot on exit
+  profile:
+    cpu: ""                            # Path for CPU profile output (enables CPU profiling)
+    mem: ""                            # Path for memory profile output (enables memory profiling)
+    block: ""                          # Path for block profile output (enables block profiling)
+    mutex: ""                          # Path for mutex profile output (enables mutex profiling)
+    goroutine: ""                      # Path for goroutine profile output (enables goroutine profiling)
 
 fleet:
+  activation_mode: switch              # Default activation mode for fleet
   disabled: false                      # Disable this entire fleet
   tags: [production]                   # Tags inherited by all descendants
   hardware_config_path: ./hardware     # Path for hardware config generation
-  override_sudo_program: doas          # Override sudo program (default: sudo)
+  sudo_program: doas                  # Override sudo program (default: sudo)
   nix:                                 # Nix command flags inherited by all descendants
     extra_flags: []                    # Flags for both nix build and nix copy
     build_flags: []                    # Flags for nix build only
@@ -1175,6 +1189,7 @@ fleet:
     identity_file: ./keys/default.key  # Path to SSH private key
     strict_key_checking: true          # Enable strict host key checking
     disable_auto_add_host_key: false   # Disable auto-adding host keys on first connection
+    extra_flags: []                    # Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')
   secrets:                             # Secrets transferred to all machines
     - local_path: ./secrets/common.key
       remote_path: /var/secrets/common.key
@@ -1185,10 +1200,16 @@ fleet:
   flakes:
     infrastructure:
       url: path:../infra-flake         # Flake path or URL (e.g. 'github:...', 'git+ssh://...')
+      activation_mode: switch           # Activation mode for this flake
       disabled: false                  # Disable this flake
       tags: [critical]                 # Additional tags (accumulated: [production, critical])
       hardware_config_path: ./hw-config
-      override_sudo_program: sudo
+      sudo_program: sudo
+      nix:
+        extra_flags: []
+        build_flags: []
+        copy_flags: []
+        nixos_install_flags: []
       ssh:                             # SSH config for all machines in this flake
         hostname: ""
         port: 22
@@ -1196,6 +1217,7 @@ fleet:
         identity_file: ./keys/infra.key
         strict_key_checking: true
         disable_auto_add_host_key: false
+        extra_flags: []
       secrets:                         # APPENDED to inherited secrets
         - local_path: ./secrets/infra.key
           remote_path: /var/secrets/infra.key
@@ -1210,10 +1232,11 @@ fleet:
           identity_file: ./keys/bootstrap.key
           strict_key_checking: false   # Default: false for bootstrap SSH
           disable_auto_add_host_key: true  # Default: true for bootstrap SSH
-        disable_disko: false           # Disable disko tool build/transfer/bootstrap
+          extra_flags: []
+        disable_disko: false           # Disable disko tool build/transfer/execution
         kexec:                         # Kexec configuration for non-NixOS machines
-          image: ""                      # Custom kexec tarball image (default: nix-community image)
-          extra_flags: ""              # Extra flags for kexec (e.g. '--no-sync')
+          image: ""                    # Custom kexec tarball image (default: nix-community image)
+          extra_flags: []              # Extra flags for kexec (e.g. '--no-sync')
           ssh_port: 22                 # SSH port for kexec installer (default: 22)
         disk_encryption_keys:          # Transferred BEFORE disko runs
           - local_path: ./secrets/luks.key
@@ -1231,11 +1254,12 @@ fleet:
       
       configurations:
         webserver:
+          activation_mode: switch
           disabled: false
           tags: [web]                  # Accumulated: [production, critical, web]
           flake_output: nixosConfigurations.webserver.config.system.build.toplevel  # Override flake output
           hardware_config_path: ./hardware
-          override_sudo_program: sudo
+          sudo_program: sudo
           nix:                         # Nix flags for this configuration
             extra_flags: []            # Inherits + appends from parent
             build_flags: ["--max-jobs", "4"]  # Flags for nix build
@@ -1248,6 +1272,7 @@ fleet:
             identity_file: ./keys/web.key
             strict_key_checking: true
             disable_auto_add_host_key: false
+            extra_flags: []
           secrets:
             - local_path: ./secrets/web.key
               remote_path: /var/secrets/web.key
@@ -1262,9 +1287,10 @@ fleet:
               identity_file: ./keys/web-bootstrap.key
               strict_key_checking: false
               disable_auto_add_host_key: true
+              extra_flags: []
             kexec:
               image: ""
-              extra_flags: ""
+              extra_flags: []
               ssh_port: 22
             disk_encryption_keys: []
             allow_destructive_actions: false
@@ -1277,10 +1303,11 @@ fleet:
           
           machines:
             web-01:
+              activation_mode: switch
               disabled: false
               tags: [web-01]           # Accumulated: [production, critical, web, web-01]
               hardware_config_path: ./hardware/web-01
-              override_sudo_program: sudo
+              sudo_program: sudo
               nix:                     # Nix flags for this machine
                 extra_flags: []        # Inherits + appends from parent
                 build_flags: []        # Inherits + appends from parent
@@ -1293,6 +1320,7 @@ fleet:
                 identity_file: ./keys/web-01.key
                 strict_key_checking: true
                 disable_auto_add_host_key: false
+                extra_flags: []
               secrets:
                 - local_path: ./secrets/web-01.key
                   remote_path: /var/secrets/web-01.key
@@ -1307,9 +1335,10 @@ fleet:
                   identity_file: ./keys/web-01-bootstrap.key
                   strict_key_checking: false
                   disable_auto_add_host_key: true
+                  extra_flags: []
                 kexec:
                   image: ""
-                  extra_flags: ""
+                  extra_flags: []
                   ssh_port: 22
                 disk_encryption_keys: []
                 allow_destructive_actions: false
@@ -1327,6 +1356,7 @@ fleet:
         database:
           machines:
             db-01:
+              activation_mode: switch
               ssh:
                 hostname: 10.0.1.50
               bootstrap:

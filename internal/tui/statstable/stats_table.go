@@ -1,6 +1,7 @@
 package statstable
 
 import (
+	"hash/fnv"
 	"strconv"
 	"strings"
 
@@ -11,8 +12,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
-	"github.com/mihakrumpestar/panix/internal/pkg/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -21,13 +22,19 @@ const (
 	rowSpanMarker        = " 󱞩"
 )
 
+type statsTableCacheKey struct {
+	machineInfosHash uint64
+	width            int
+	selectedIndex    int
+}
+
 type StatsTable struct {
 	Selected Selected `json:"selected"`
 
 	CacheMachineInfos  []MachineInfo `json:"-"`
 	CacheFlattenedLogs []*logs.Logs  `json:"-"`
 
-	cache cache.Cache[string]
+	cache cache.Cache[string, statsTableCacheKey]
 }
 
 type Selected struct {
@@ -119,7 +126,24 @@ func (s *StatsTable) View(width int, colorScheme *colorscheme.ColorScheme) strin
 		func() (string, bool) {
 			return s.buildStatsTable(width, colorScheme), true
 		},
-		s.CacheMachineInfos, width, s.Selected.Index)
+		statsTableCacheKey{
+			machineInfosHash: hashMachineInfos(s.CacheMachineInfos),
+			width:            width,
+			selectedIndex:    s.Selected.Index,
+		})
+}
+
+func hashMachineInfos(infos []MachineInfo) uint64 {
+	hash := fnv.New64a()
+
+	for _, info := range infos {
+		_, _ = hash.Write([]byte(info.Xpath))
+		_, _ = hash.Write([]byte(info.State.Status))
+		_, _ = hash.Write([]byte(info.State.StatusMsg))
+		_, _ = hash.Write([]byte(info.State.Phase))
+	}
+
+	return hash.Sum64()
 }
 
 func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorScheme) string {

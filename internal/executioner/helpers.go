@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	logs_command "github.com/mihakrumpestar/panix/internal/pkg/logs/command"
+	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/pkg/errors"
 )
