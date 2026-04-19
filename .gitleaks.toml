@@ -1,0 +1,2 @@
+[allowlist]
+paths = ['''assets/obs/terminal.json''']
