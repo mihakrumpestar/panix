@@ -42,12 +42,18 @@ Future potential:
 
 ## Demo video
 
+Record using OBS with [these settings](assets/obs), and show keys on screen:
+
+```sh
+nix-shell -p showmethekey --command showmethekey-gtk
+```
+
 ### GIF
 
 Convert using ([article](https://www.ffmpeg.media/articles/working-with-gifs-convert-optimize)):
 
 ```sh
-ffmpeg -i demo.mp4 -vf "fps=10,scale=iw*0.8:-1:flags=lanczos,format=rgba,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0 demo.gif
+ffmpeg -i demo.mp4 -vf "fps=10,scale=iw*0.8:-1:flags=lanczos,format=rgba,eq=saturation=1:contrast=1.3,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0 demo.gif
 ```
 
 ### MP4
@@ -55,8 +61,8 @@ ffmpeg -i demo.mp4 -vf "fps=10,scale=iw*0.8:-1:flags=lanczos,format=rgba,split[s
 Convert using:
 
 ```sh
-INPUT="panix kexec.mp4"
-OUTPUT="output-variable35.mp4"
+INPUT="kexec-demo.mp4"
+OUTPUT="kexec-demo-output.mp4"
 
 nix run nixpkgs#ffmpeg-full -- -hide_banner -loglevel error -stats -i "$INPUT" \
   -vf "scale=-2:1080,fps=24" \
