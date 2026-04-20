@@ -1,5 +1,5 @@
 {
-  description = "Panix - A TUI application for Nix deployment workflows";
+  description = "Panix - Universal NixOS Deployment Tool";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -30,10 +30,16 @@
           vendorHash = "sha256-jdI7gZAc4gaoUXEtffld3oOK7DJR8AEA8bpgYEjHyeY=";
 
           meta = with pkgs.lib; {
-            description = "A TUI application for Nix deployment workflows";
+            description = "Universal NixOS Deployment Tool";
             homepage = "https://github.com/mihakrumpestar/panix";
-            license = licenses.mit;
-            maintainers = [{name = "mihakrumpestar";}];
+            license = licenses.agpl3Only;
+            maintainers = [
+              {
+                name = "Miha Krumpestar";
+                github = "mihakrumpestar";
+                githubId = 70652456;
+              }
+            ];
             mainProgram = "panix";
           };
         };
