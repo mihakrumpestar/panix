@@ -31,6 +31,7 @@ go.work.sum
 /debug*
 /result
 /profile*
+/test
 
 temp_key
 temp_key.pub

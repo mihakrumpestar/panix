@@ -11,6 +11,7 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
 [![Scc Count Badge](https://sloc.xyz/github/mihakrumpestar/panix?category=code)](https://github.com/boyter/scc/)
+![Coverage](./gen/coverage.svg)
 [![NixOS](https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white)](https://nixos.org)
 
 </div>
@@ -1383,7 +1384,7 @@ The one used for testing to deploy [infrastructure](https://github.com/mihakrump
 
 ## Requirements & Caveats
 
-- **Nix**: Panix uses `nix` that it finds in PATH, it also uses commands like `uname`, `id`, `echo`, `cat`, `readlink`, `stat`, `curl` and `tar`
+- **Nix**: Panix uses `nix` that it finds in PATH, it also uses commands like `uname`, `id`, `echo`, `cat`, `readlink`, `curl` and `tar`
 - **rsync**: Required on both local and remote for file transfers (included in `kexec` images)
 - **kexec memory**: Minimum 1GB RAM without swap for `kexec` bootstrap
 - **Nix store location**: Panix expects Nix store to be in standard location

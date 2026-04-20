@@ -11,11 +11,12 @@
     "pre-commit@latest",
     "nix-update@latest",
     "gh@latest",
-    "git-cliff@latest"
+    "git-cliff@latest",
+    "tparse@latest"
   ],
   "env": {
     "DEVBOX_NO_PROMPT": "true",
-    "PANIX_CONFIG": "examples/panix.deploy.yml"
+    "PANIX_CONFIG":     "examples/panix.deploy.yml"
   },
   "shell": {
     "init_hook": ["pre-commit autoupdate", "pre-commit install"],

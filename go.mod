@@ -18,6 +18,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gookit/goutil v0.7.4
 	github.com/hayageek/threadsafe v1.0.1
+	github.com/jaswdr/faker v1.19.1
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/lrstanley/bubblezone/v2 v2.0.0
 	github.com/lucasb-eyer/go-colorful v1.4.0
@@ -25,6 +26,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.35.0
 	github.com/stoewer/go-strcase v1.3.1
+	github.com/stretchr/testify v1.11.1
 	go.uber.org/atomic v1.11.0
 )
 
@@ -61,4 +63,5 @@ require (
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

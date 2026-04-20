@@ -10,11 +10,12 @@ linters:
     - tagalign # Bad check
     - ireturn # A lot of bubbletea is based on interfaces
     - goconst # Just some same strings across codebase
-    - gochecknoglobals # constants are ok
+    - gochecknoglobals # Constants are ok
     - forbidigo # We don't use print statements for debugging
     - exhaustruct # Structs are generally initialized empty
     - exhaustive # Not necessery as we use default
     - containedctx # We use ctx to check if it is done
+    - testpackage # Don't want separate packages for testing
     - wsl # Replaced by wsl_v5
 
   enable:
@@ -51,6 +52,9 @@ linters:
       ignore-map-index-ok: true
       ignore-names:
         - ok
+        - tt
+        - fk
+        - is
 
     revive:
       rules:
