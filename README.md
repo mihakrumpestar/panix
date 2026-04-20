@@ -2,7 +2,7 @@
 
 # Panix
 
-**A Deployment Orchestrator for NixOS**
+**Universal NixOS Deployment Tool**
 
 *Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
 
@@ -1425,7 +1425,9 @@ Contributions are welcome! Whether it's bug reports, feature requests, construct
 
 ## License
 
-Panix is licensed under [AGPL-3.0](LICENSE). Internal packages under `internal/pkg` are licensed under [MIT](internal/pkg/LICENSE). For more details about licenses, see [choosingalicense.com/licenses](https://www.choosingalicense.com/licenses).
+Panix is licensed under [AGPL-3.0](LICENSE). Internal packages under `internal/pkg` are licensed under [MIT](internal/pkg/LICENSE).
+
+For more details about licenses, see [choosingalicense.com/licenses](https://www.choosingalicense.com/licenses).
 
 ---
 
