@@ -8,7 +8,7 @@ devbox shell
 
 Tasks that are used are implemented in [Taskfile.yml](Taskfile.yml).
 
-Check
+Check commands for usage:
 
 ```sh
 go-task
@@ -17,13 +17,17 @@ go-task
 task
 ```
 
-for usage.
-
-Code has to pass:
-
-- checks in `task ci`
+Code has to pass `task ci` checks, if larger or critical sections were changed, then also `task go:test:integration` (TODO).
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
+
+## Future
+
+Future potential/to-do list (by priority):
+
+- integration tests with [anatol/vmtest](https://github.com/anatol/vmtest)
+- increase unit tests
+- replace bubbletea with [tview](https://github.com/rivo/tview) for reduced binary size and improved performance
 
 ## Past
 
@@ -33,12 +37,6 @@ The following packages were inadequate for use for Panix:
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
 - [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: with `nix run github:Mic92/nix-fast-build -- --flake path:.#nixosConfigurations.personal-workstation.config.system.build.toplevel --no-link --skip-cached` it takes 1 min 6 sec instead of just 24 sec with `nix build`, while at moments using all CPU and all memory. Output also shows a lot of nix store lock errors and duplicated outputs (warnings) from nix eval.
-
-## Future
-
-Future potential:
-
-- replace bubbletea with [tview](https://github.com/rivo/tview) for reduced binary size and improved performance
 
 ## Demo video
 
