@@ -1,11 +1,11 @@
 version: "3"
 
 vars:
-  BINARY_NAME: panix
-  BUILD_DIR: ./build
-  DIST_DIR: ./dist
   DEBUG_DIR: ./debug
   PROFILE_DIR: ./profile
+
+  TEST_DIR: ./test
+  COVER_PROFILE: "{{.TEST_DIR}}/cover.out"
 
 tasks:
   default:
@@ -53,6 +53,21 @@ tasks:
         fi
         echo "0 issues"
       - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  go:test:
+    desc: Run tests with coverage check and summary
+    cmds:
+      - mkdir -p {{.TEST_DIR}}
+      - set -o pipefail && CGO_ENABLED=1 go test -race -shuffle=on ./...
+        -coverprofile={{.COVER_PROFILE}} -covermode=atomic -coverpkg=./... -json
+        | tee {{.TEST_DIR}}/test.json | tparse -all
+      - go run github.com/vladopajic/go-test-coverage/v2@latest
+        --profile={{.COVER_PROFILE}} --badge-file-name=gen/coverage.svg
+
+  go:test:visualize:
+    desc: Visualize test coverage
+    cmds:
+      - go tool cover -html={{.COVER_PROFILE}} -o={{.TEST_DIR}}/cover.html
 
   nix:run:
     desc: Run the application using nix
@@ -126,6 +141,7 @@ tasks:
     cmds:
       - task: generate
       - task: go:check
+      - task: go:test
       - task: nix:vendor
 
   release:

@@ -1,0 +1,27 @@
+fleet:
+  flakes:
+    infrastructure:
+      url: path:../infrastructure
+      configurations:
+        workstation:
+          machines:
+            workstation-host:
+              ssh:
+                hostname: 192.168.1.100
+                username: admin
+                port: 2222
+        server:
+          tags:
+            - production
+          machines:
+            server-01:
+              ssh:
+                hostname: server-01.example.com
+                port: 22
+              secrets:
+                - local_path: /tmp/dummy-secret.txt
+                  remote_path: /etc/secrets/dummy-secret.txt
+              bootstrap:
+                ssh:
+                  hostname: server-01.example.com
+                  port: 2222

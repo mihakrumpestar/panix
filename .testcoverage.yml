@@ -1,0 +1,11 @@
+profile: ./test/cover.out
+
+#threshold:
+#  file: 60
+#  package: 60
+#  total: 60
+
+exclude:
+  paths:
+    - cmd/
+    - gen/
