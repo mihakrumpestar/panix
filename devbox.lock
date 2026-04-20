@@ -516,6 +516,54 @@
           "store_path": "/nix/store/0j1cw8kk39rin6qwbly7ikadaaizz44b-pre-commit-4.5.1"
         }
       }
+    },
+    "tparse@latest": {
+      "last_modified": "2026-03-21T07:29:51Z",
+      "resolved": "github:NixOS/nixpkgs/09061f748ee21f68a089cd5d91ec1859cd93d0be#tparse",
+      "source": "devbox-search",
+      "version": "0.18.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0mcdd1ymyjrq811091i4qfh7kabbhyn5-tparse-0.18.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/0mcdd1ymyjrq811091i4qfh7kabbhyn5-tparse-0.18.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/m0hzgyi88my4qbzzz14x3l7v6p963hi8-tparse-0.18.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/m0hzgyi88my4qbzzz14x3l7v6p963hi8-tparse-0.18.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/00xyw5782m3xmll7z0sl5zdkvnmq4jgy-tparse-0.18.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/00xyw5782m3xmll7z0sl5zdkvnmq4jgy-tparse-0.18.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/zx25sqx9cb1cbmi48lm5pl8d6lbxa9cj-tparse-0.18.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/zx25sqx9cb1cbmi48lm5pl8d6lbxa9cj-tparse-0.18.0"
+        }
+      }
     }
   }
 }
