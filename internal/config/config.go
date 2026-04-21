@@ -11,7 +11,7 @@ import (
 )
 
 type Config struct {
-	Flags       flags.Flags              `yaml:"flags" json:"flags" desc:"Flags"`
+	Flags       flags.Flags              `yaml:"flags" json:"flags" desc:"Flags (CLI and YAML)"`
 	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required" desc:"Fleet configuration"`
 	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-"`
 

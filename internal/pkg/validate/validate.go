@@ -1,43 +1,36 @@
-package validatorx
+package validate
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/pkg/errors"
 	"github.com/stoewer/go-strcase"
 )
 
-func ValidateStructTags[T any](s T) error { //nolint:varnamelen
+func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags) error { //nolint:varnamelen
 	validate := validator.New(validator.WithPrivateFieldValidation(), validator.WithRequiredStructEnabled())
 
-	err := validate.RegisterValidation("abspath", func(fl validator.FieldLevel) bool {
-		return filepath.IsAbs(fl.Field().String())
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to register abspath validation")
-	}
+	registerPathValidators(validate)
 
-	err = validate.RegisterValidation("pathexists", func(fl validator.FieldLevel) bool {
-		val := fl.Field().String()
-		if val == "" {
-			return true
-		}
-
-		_, err = os.Stat(val)
-
-		return err == nil
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to register pathexists validation")
-	}
-
-	err = validate.Struct(s)
+	err := validate.Struct(s)
 	if err != nil {
 		return errors.New(humanizeValidationErrors(err))
+	}
+
+	err = validatePaths(f, flags)
+	if err != nil {
+		return err
+	}
+
+	if flags.Validate.Flakes {
+		err = validateFlakes(f)
+		if err != nil {
+			return errors.Wrap(err, "invalid flakes configuration")
+		}
 	}
 
 	return nil
@@ -93,8 +86,6 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 	switch fieldError.Tag() {
 	case "required":
 		return "is required"
-	case "pathexists":
-		return fmt.Sprintf("path does not exist: %v", fieldError.Value())
 	case "filepath":
 		return fmt.Sprintf("invalid file path: %v", fieldError.Value())
 	case "abspath":

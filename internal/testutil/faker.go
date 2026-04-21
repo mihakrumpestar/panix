@@ -81,7 +81,7 @@ func (f *Faker) MachineWithForceBootstrap() *machine.Machine {
 
 func (f *Faker) Configuration(machines ...*machine.Machine) *configuration.Configuration {
 	cfg := &configuration.Configuration{}
-	cfg.Machines = *atomicorderedmap.New[string, *machine.Machine]()
+	cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
 	for _, mach := range machines {
 		cfg.Machines.Set(f.nextID(), mach)
@@ -94,7 +94,7 @@ func (f *Faker) Flake(configs ...*configuration.Configuration) *flake.Flake {
 	flk := &flake.Flake{
 		URL: f.Internet().URL(),
 	}
-	flk.Configurations = *atomicorderedmap.New[string, *configuration.Configuration]()
+	flk.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
 
 	for _, cfg := range configs {
 		flk.Configurations.Set(f.nextID(), cfg)
@@ -105,7 +105,7 @@ func (f *Faker) Flake(configs ...*configuration.Configuration) *flake.Flake {
 
 func (f *Faker) Fleet(flakes ...*flake.Flake) *fleet.Fleet {
 	flt := &fleet.Fleet{}
-	flt.Flakes = *atomicorderedmap.New[string, *flake.Flake]()
+	flt.Flakes = atomicorderedmap.New[string, *flake.Flake]()
 
 	for _, flk := range flakes {
 		flt.Flakes.Set(f.nextID(), flk)

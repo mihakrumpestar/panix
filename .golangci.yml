@@ -55,6 +55,7 @@ linters:
         - tt
         - fk
         - is
+        - mu
 
     revive:
       rules:
@@ -66,6 +67,7 @@ linters:
         - all
         - -QF1008 # could remove embedded field from selector
         - -ST1000 # at least one file in a package should have a package comment
+        - -ST1003 # should not use underscores in package names 
 
     custom:
       nilaway:

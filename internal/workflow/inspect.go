@@ -19,13 +19,13 @@ var (
 	ErrPlatformUnsupported     = errors.New("platform unsupported, kexec supports limited platforms")
 )
 
+//nolint:cyclop
 func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
 	return w.Phase(phase.Inspect, fleetLeaf,
 		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			machineI := fleetLeaf.Machine
 
 			if machineI.SSH.IsLocal() {
-				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeRegular })
 				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 					mi.Reachable = true
 					mi.SSHConnectable = true
@@ -35,14 +35,14 @@ func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error 
 				if err != nil {
 					return err
 				}
+
+				err = checkSSHConnection(exc, machineI)
+				if err != nil {
+					return err
+				}
 			}
 
-			err := checkSSHConnection(exc, machineI)
-			if err != nil {
-				return err
-			}
-
-			err = detectArchitecture(exc, machineI)
+			err := detectArchitecture(exc, machineI)
 			if err != nil {
 				return err
 			}
@@ -58,6 +58,11 @@ func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error 
 			}
 
 			err = validateSSHMachineState(exc, machineI)
+			if err != nil {
+				return err
+			}
+
+			err = validateSecretsPaths(exc, machineI)
 			if err != nil {
 				return err
 			}
@@ -115,7 +120,6 @@ func checkSSHConnection(exc *executioner.Executioner, machineI *machine.Machine)
 		"connecting via SSH",
 		"SSH auth failed",
 		[]string{"echo", "OK"},
-		executioner.SkipIfLocal(),
 		executioner.OnFailure(func(log *command.CommandLog, err error) error {
 			return errors.Wrap(err, log.Output.String())
 		}),
@@ -371,8 +375,39 @@ func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Mac
 			return nil
 		},
 	)
+	if err != nil {
+		return errors.Wrap(err, "SSH config validation failed upon detected machine state")
+	}
 
-	return errors.Wrap(err, "SSH config validation failed upon detected machine state")
+	return nil
+}
+
+func validateSecretsPaths(exc *executioner.Executioner, machineI *machine.Machine) error {
+	mi := machineI.MetaInspect.Load()
+	isBootstrapped := mi != nil && mi.Bootstrapped
+
+	if isBootstrapped {
+		return nil
+	}
+
+	err := exc.ExecFn(
+		"bootstrap secrets paths",
+		"validating bootstrap secrets paths",
+		"missing bootstrap secrets paths",
+		func(_ *command.CommandLog) error {
+			err := machineI.ValidateBootstrapSecretsPaths()
+			if err != nil {
+				return err //nolint:wrapcheck
+			}
+
+			return nil
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "bootstrap secrets paths validation failed")
+	}
+
+	return nil
 }
 
 // Helpers

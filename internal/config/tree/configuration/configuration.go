@@ -12,8 +12,9 @@ import (
 type Configuration struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Machines    atomicorderedmap.AtomicOrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required" desc:"Machines configuration"`
-	FlakeOutput FlakeOutput                                                 `yaml:"flake_output" json:"flake_output,omitempty" desc:"Override flake output" default:"nixosConfigurations.<name>.config.system.build.toplevel"`
+	FlakeOutput FlakeOutput                                                  `yaml:"flake_output" json:"flake_output,omitempty" desc:"Nix flake output attribute (e.g. nixosConfigurations.<name>)" default:"nixosConfigurations.<name>"`
+	BuildPath   BuildPath                                                    `yaml:"build_path" json:"build_path,omitempty" desc:"Build path within the flake output (e.g. config.system.build.toplevel)" default:"config.system.build.toplevel"`
+	Machines    *atomicorderedmap.AtomicOrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required" desc:"Machines configuration"`
 	// Internal
 	MetaBuild *MetaBuild `yaml:"-" json:"meta_build,omitempty"`
 	Logs      *logs.Logs `yaml:"-" json:"logs,omitempty"`
