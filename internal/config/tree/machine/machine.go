@@ -102,8 +102,6 @@ func (m *Machine) GetActiveSSH() ssh.SSHClient {
 		}
 
 		sshClient.Port = m.Bootstrap.Kexec.SSHPort
-		sshClient.StrictKeyChecking = false
-		sshClient.DisableAutoAddHostKey = true
 	}
 
 	if !sshClient.IsInitialized() {
