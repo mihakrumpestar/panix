@@ -7,7 +7,7 @@ type: object
 properties:
   flags:
     type: object
-    description: Flags
+    description: Flags (CLI and YAML)
     properties:
       activation_mode:
         type: string
@@ -105,7 +105,7 @@ properties:
         additionalProperties: false
       tags:
         type: array
-        description: Filter machines by tags (flakes, configs and names are already registered as tags)
+        description: Filter machines by tags (flakes, configurations and machine names are already registered as tags)
         items:
           type: string
       timeout:
@@ -128,6 +128,17 @@ properties:
           show_commands_in_labels:
             type: boolean
             description: Show raw commands instead of descriptions as labels in build logs (keybind c)
+        additionalProperties: false
+      validate:
+        type: object
+        description: Validator settings
+        properties:
+          bootstrap_secrets:
+            type: boolean
+            description: Validate that bootstrap disk encryption key local paths exist on disk
+          flakes:
+            type: boolean
+            description: Validate flake URLs and configuration keys
         additionalProperties: false
     additionalProperties: false
   fleet:
@@ -188,13 +199,17 @@ properties:
                   bootstrap:
                     description: Bootstrap configuration for initial provisioning
                     $ref: "#/definitions/Bootstrap"
+                  build_path:
+                    type: string
+                    description: "Build path within the flake output (e.g. config.system.build.toplevel) (default: config.system.build.toplevel)"
+                    default: config.system.build.toplevel
                   disabled:
                     type: boolean
                     description: Disable this
                   flake_output:
                     type: string
-                    description: "Override flake output (default: nixosConfigurations.<name>.config.system.build.toplevel)"
-                    default: nixosConfigurations.<name>.config.system.build.toplevel
+                    description: "Nix flake output attribute (e.g. nixosConfigurations.<name>) (default: nixosConfigurations.<name>)"
+                    default: nixosConfigurations.<name>
                   hardware_config_path:
                     type: string
                     description: Path to hardware config
@@ -300,8 +315,8 @@ properties:
               description: "Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"
               format: uri
           required:
-          - configurations
           - url
+          - configurations
           additionalProperties: false
       hardware_config_path:
         type: string

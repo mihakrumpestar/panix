@@ -1,19 +1,14 @@
 package schema
 
 import (
-	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 
-	"github.com/goccy/go-yaml"
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -92,7 +87,7 @@ var formatConstraints = map[string]struct {
 	"url":      {format: "uri"},
 }
 
-func newGenerator() *generator {
+func NewSchema() *generator {
 	generator := &generator{
 		definitions: make(map[string]any),
 		defTypes:    make(map[reflect.Type]string),
@@ -104,26 +99,7 @@ func newGenerator() *generator {
 	return generator
 }
 
-func (g *generator) initDefinitionTypes() {
-	g.defTypes[reflect.TypeFor[attributes.Bootstrap]()] = "Bootstrap"
-	g.defTypes[reflect.TypeFor[attributes.NixConfig]()] = "NixConfig"
-	g.defTypes[reflect.TypeFor[attributes.PlainFileOrDirToTransfer]()] = "FileTransfer"
-	g.defTypes[reflect.TypeFor[attributes.KexecConfig]()] = "KexecConfig"
-	g.defTypes[reflect.TypeFor[ssh.SSHClient]()] = "SSH"
-
-	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *flake.Flake]]()] = orderedMapDef{
-		valueType: reflect.TypeFor[*flake.Flake](),
-	}
-	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration]]()] = orderedMapDef{
-		valueType: reflect.TypeFor[*configuration.Configuration](),
-	}
-	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *machine.Machine]]()] = orderedMapDef{
-		valueType: reflect.TypeFor[*machine.Machine](),
-		allowNull: true,
-	}
-}
-
-func (g *generator) generate() (*Schema, error) {
+func (g *generator) Generate() (*Schema, error) {
 	properties, required, err := g.processStruct(reflect.TypeFor[config.Config]())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to process Config struct")
@@ -146,6 +122,25 @@ func (g *generator) generate() (*Schema, error) {
 	}
 
 	return schema, nil
+}
+
+func (g *generator) initDefinitionTypes() {
+	g.defTypes[reflect.TypeFor[attributes.Bootstrap]()] = "Bootstrap"
+	g.defTypes[reflect.TypeFor[attributes.NixConfig]()] = "NixConfig"
+	g.defTypes[reflect.TypeFor[attributes.PlainFileOrDirToTransfer]()] = "FileTransfer"
+	g.defTypes[reflect.TypeFor[attributes.KexecConfig]()] = "KexecConfig"
+	g.defTypes[reflect.TypeFor[ssh.SSHClient]()] = "SSH"
+
+	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *flake.Flake]]()] = orderedMapDef{
+		valueType: reflect.TypeFor[*flake.Flake](),
+	}
+	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration]]()] = orderedMapDef{
+		valueType: reflect.TypeFor[*configuration.Configuration](),
+	}
+	g.orderedDefs[reflect.TypeFor[atomicorderedmap.AtomicOrderedMap[string, *machine.Machine]]()] = orderedMapDef{
+		valueType: reflect.TypeFor[*machine.Machine](),
+		allowNull: true,
+	}
 }
 
 func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, error) {
@@ -411,50 +406,4 @@ func parseDefaultValue(val string, typ reflect.Type) any {
 	default:
 		return val
 	}
-}
-
-func generateYAML() ([]byte, error) {
-	gen := newGenerator()
-
-	schema, err := gen.generate()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to generate schema")
-	}
-
-	data, err := yaml.Marshal(schema)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal schema to YAML")
-	}
-
-	return data, nil
-}
-
-func GenerateSchema(outputPath string) error {
-	schemaYAML, err := generateYAML()
-	if err != nil {
-		return errors.Wrap(err, "failed to generate schema")
-	}
-
-	if outputPath == "-" {
-		fmt.Print(string(schemaYAML))
-
-		return nil
-	}
-
-	dir := filepath.Dir(outputPath)
-	if dir != "" && dir != "." {
-		err = os.MkdirAll(dir, filepermissions.DefaultDirPermissions)
-		if err != nil {
-			return errors.Wrapf(err, "failed to create directory %s", dir)
-		}
-	}
-
-	err = os.WriteFile(outputPath, schemaYAML, filepermissions.DefaultFilePermissions)
-	if err != nil {
-		return errors.Wrapf(err, "failed to write schema to %s", outputPath)
-	}
-
-	fmt.Printf("Schema written to: %s\n", outputPath)
-
-	return nil
 }

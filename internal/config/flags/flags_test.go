@@ -47,13 +47,13 @@ func TestMergeConfWithCliFlagsPreservesConfigTags(t *testing.T) {
 
 	configFlags := &Flags{
 		WorkflowFlags: WorkflowFlags{
-			Tags: []string{"production"},
+			EvalFlags: EvalFlags{Tags: []string{"production"}},
 		},
 	}
 
 	cliFlags := Flags{
 		WorkflowFlags: WorkflowFlags{
-			Tags: []string{"staging"},
+			EvalFlags: EvalFlags{Tags: []string{"staging"}},
 		},
 	}
 
@@ -74,7 +74,7 @@ func TestMergeConfWithCliFlagsSetsTagsFromCliWhenConfigEmpty(t *testing.T) {
 
 	cliFlags := Flags{
 		WorkflowFlags: WorkflowFlags{
-			Tags: []string{"staging"},
+			EvalFlags: EvalFlags{Tags: []string{"staging"}},
 		},
 	}
 
@@ -91,7 +91,7 @@ func TestMergeConfWithCliFlagsPreservesConfigWhenCliZero(t *testing.T) {
 
 	configFlags := &Flags{
 		WorkflowFlags: WorkflowFlags{
-			Timeout: 5 * time.Minute,
+			EvalFlags: EvalFlags{Timeout: 5 * time.Minute},
 		},
 	}
 
@@ -176,7 +176,7 @@ func TestSkipPhasesInWorkflowFlags(t *testing.T) {
 
 	flags := &Flags{
 		WorkflowFlags: WorkflowFlags{
-			SkipPhases: []phase.Phase{phase.Inspect, phase.Build},
+			EvalFlags: EvalFlags{SkipPhases: []phase.Phase{phase.Inspect, phase.Build}},
 		},
 	}
 

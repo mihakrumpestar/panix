@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
@@ -24,7 +23,7 @@ var (
 	ErrNoBuildOutputs     = errors.New("invalid build output: no outputs")
 )
 
-var nixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
+var NixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
 
 func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) error {
 	return w.Phase(phase.Build, fleetLeaf,
@@ -36,7 +35,7 @@ func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) er
 				configurationI.MetaBuild = &configuration.MetaBuild{}
 			}
 
-			flakeOutput := strings.ReplaceAll(configurationI.FlakeOutput.String(), "<name>", configurationI.Name)
+			flakeOutput := configuration.ResolveFlakeInstallable(configurationI.FlakeOutput, configurationI.BuildPath, configurationI.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
 			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "system closure")
@@ -63,7 +62,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 
 	commandWithArgs := slices.Concat(
 		[]string{"nix"},
-		nixExperimentalFeatures,
+		NixExperimentalFeatures,
 		[]string{"build", "--no-link", "--no-update-lock-file", "--json"},
 		slices.Concat(configuration.Nix.ExtraFlags, configuration.Nix.BuildFlags),
 		installables,

@@ -12,7 +12,7 @@ type optionalPhases struct {
 	Bootstrap bool
 }
 
-func (c *Config) filterOutUnusedPhases() {
+func (c *Config) FilterOutUnusedPhases() {
 	hasRequiredPhases := hasRequiredPhases(c.Fleet)
 
 	c.Phases = slices.DeleteFunc(slices.Clone(c.Phases), func(p phase.Phase) bool {

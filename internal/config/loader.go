@@ -12,13 +12,12 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logger"
-	"github.com/mihakrumpestar/panix/internal/pkg/validatorx"
+	"github.com/mihakrumpestar/panix/internal/pkg/validate"
 	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
-func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, error) {
+func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
 		d.SkipNilField = true
@@ -37,12 +36,6 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, 
 		return nil, err
 	}
 
-	// Validate and initialize configuration
-	err = validatorx.ValidateStructTags(conf)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid configuration")
-	}
-
 	err = conf.initFleet()
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
@@ -54,12 +47,11 @@ func LoadConfig(parsedFlags flags.Flags, commandPhases []phase.Phase) (*Config, 
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
 
-	conf.Phases, err = phase.ValidatePhases(commandPhases, conf.Flags.SkipPhases)
+	// Validate configuration
+	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid phases")
+		return nil, errors.Wrap(err, "invalid configuration")
 	}
-
-	conf.filterOutUnusedPhases()
 
 	if conf.Flags.Logging.Debug {
 		dump.P(conf.Flags)

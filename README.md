@@ -1022,28 +1022,32 @@ Commands:
   schema [flags]
     Generate YAML schema for configuration files
 
-  eval [flags]
-    Evaluate config (process templates and anchors) and output result
+  template [flags]
+    Process templates and anchors, output the result
 
-  snapshot --path=STRING [flags]
+  eval [flags]
+    Fully evaluate and validate configuration (including templating) for
+    execution, output the result
+
+  snapshot-cmd --path=STRING [flags]
     View snapshot in TUI
 
   inspect [flags]
-    Inspect machine per host
+    Inspect machines
 
   build [flags]
-    Build all selected closures
+    Build NixOS closures
 
   deploy [flags]
     Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
     activate)
 
   secrets [flags]
-    Deploy secrets to all machines
+    Deploy secrets to machines
 
   rollback [flags]
-    Rollback to a previous generation, use optional --gen=NUMBER flag, default
-    is -1
+    Rollback to a previous generation, use optional --gen=NUMBER flag (default
+    is -1)
 
 Run "panix <command> --help" for more information on a command.
 ```
@@ -1063,9 +1067,46 @@ Flags:
       --version                    Show version ($PANIX_VERSION)
 
   -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
-  -t, --tags=TAGS,...              Filter machines by tags (flakes, configs
-                                   and names are already registered as tags)
-                                   ($PANIX_TAGS)
+      --validate.flakes            Validate flake URLs and configuration keys
+                                   ($PANIX_VALIDATE_FLAKES)
+      --validate.bootstrap-secrets
+                                   Validate that bootstrap disk encryption
+                                   key local paths exist on disk
+                                   ($PANIX_VALIDATE_BOOTSTRAP_SECRETS)
+  -t, --tags=TAGS,...              Filter machines by tags (flakes,
+                                   configurations and machine names are already
+                                   registered as tags) ($PANIX_TAGS)
+  -s, --skip-phases=SKIP-PHASES,...
+                                   Declare phases to skip (not all phases can be
+                                   skipped) ($PANIX_SKIP_PHASES)
+      --timeout=2h                 Timeout per command (eg. '1h', '1m15s')
+                                   ($PANIX_TIMEOUT)
+      --activation-mode=ACTIVATION-MODE
+                                   Activation mode: check, switch, boot, test,
+                                   dry-activate (overrides machine specific
+                                   ones) ($PANIX_ACTIVATION_MODE)
+  -l, --log                        Enable logging to file ($PANIX_LOG)
+      --log-file="panix.log"       Log file path (epoch timestamp appended
+                                   before .log) ($PANIX_LOG_FILE)
+  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
+      --snapshot.dir="."           Directory to save snapshots
+                                   ($PANIX_SNAPSHOT_DIR)
+      --snapshot.on-retry          Take snapshot before retry
+                                   ($PANIX_SNAPSHOT_ON_RETRY)
+      --snapshot.on-exit           Take snapshot on exit
+                                   ($PANIX_SNAPSHOT_ON_EXIT)
+      --profile.cpu=STRING         Path for CPU profile output (enables CPU
+                                   profiling) ($PANIX_PROFILE_CPU)
+      --profile.mem=STRING         Path for memory profile output (enables
+                                   memory profiling) ($PANIX_PROFILE_MEM)
+      --profile.block=STRING       Path for block profile output (enables block
+                                   profiling) ($PANIX_PROFILE_BLOCK)
+      --profile.mutex=STRING       Path for mutex profile output (enables mutex
+                                   profiling) ($PANIX_PROFILE_MUTEX)
+      --profile.goroutine=STRING
+                                   Path for goroutine profile output
+                                   (enables goroutine profiling)
+                                   ($PANIX_PROFILE_GOROUTINE)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
       --local-machine-hostname=STRING
@@ -1078,18 +1119,9 @@ Flags:
       --dry-run-with-inspect       Show what would be done without
                                    executing, but with real inspect query
                                    ($PANIX_DRY_RUN_WITH_INSPECT)
-      --timeout=2h                 Timeout per command (eg. '1h', '1m15s')
-                                   ($PANIX_TIMEOUT)
-  -s, --skip-phases=SKIP-PHASES,...
-                                   Declare phases to skip (not all phases can be
-                                   skipped) ($PANIX_SKIP_PHASES)
       --exit-on-complete           Exit TUI on completion ('retry' and
                                    'restart' are disabled in this mode)
                                    ($PANIX_EXIT_ON_COMPLETE)
-      --activation-mode=ACTIVATION-MODE
-                                   Activation mode: check, switch, boot, test,
-                                   dry-activate (overrides machine specific
-                                   ones) ($PANIX_ACTIVATION_MODE)
       --output="tui"               Output mode: tui, console, json
                                    ($PANIX_OUTPUT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
@@ -1105,28 +1137,6 @@ Flags:
                                    Maximum height for command labels
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
-      --snapshot.dir="."           Directory to save snapshots
-                                   ($PANIX_SNAPSHOT_DIR)
-      --snapshot.on-retry          Take snapshot before retry
-                                   ($PANIX_SNAPSHOT_ON_RETRY)
-      --snapshot.on-exit           Take snapshot on exit
-                                   ($PANIX_SNAPSHOT_ON_EXIT)
-  -l, --log                        Enable logging to file ($PANIX_LOG)
-      --log-file="panix.log"       Log file path (epoch timestamp appended
-                                   before .log) ($PANIX_LOG_FILE)
-  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
-      --profile.cpu=STRING         Path for CPU profile output (enables CPU
-                                   profiling) ($PANIX_PROFILE_CPU)
-      --profile.mem=STRING         Path for memory profile output (enables
-                                   memory profiling) ($PANIX_PROFILE_MEM)
-      --profile.block=STRING       Path for block profile output (enables block
-                                   profiling) ($PANIX_PROFILE_BLOCK)
-      --profile.mutex=STRING       Path for mutex profile output (enables mutex
-                                   profiling) ($PANIX_PROFILE_MUTEX)
-      --profile.goroutine=STRING
-                                   Path for goroutine profile output
-                                   (enables goroutine profiling)
-                                   ($PANIX_PROFILE_GOROUTINE)
 ```
 
 </details>

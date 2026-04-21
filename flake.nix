@@ -32,6 +32,7 @@
           meta = with pkgs.lib; {
             description = "Universal NixOS Deployment Tool";
             homepage = "https://github.com/mihakrumpestar/panix";
+            changelog = "https://github.com/mihakrumpestar/panix/releases/tag/v${version}";
             license = licenses.agpl3Only;
             maintainers = [
               {
@@ -40,6 +41,7 @@
                 githubId = 70652456;
               }
             ];
+            platforms = platforms.all;
             mainProgram = "panix";
           };
         };

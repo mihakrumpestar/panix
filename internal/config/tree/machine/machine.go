@@ -1,6 +1,10 @@
 package machine
 
 import (
+	"fmt"
+	"os"
+	"strings"
+
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
@@ -125,4 +129,38 @@ func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
 	}
 
 	return "/mnt" + restOfPath
+}
+
+func (m *Machine) ValidateSecretsPaths() error {
+	var errs []string
+
+	for _, secret := range m.Secrets {
+		_, err := os.Stat(secret.LocalPath)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: secrets local path does not exist: %s", m.Xpath, secret.LocalPath))
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+
+	return errors.New(strings.Join(errs, "\n"))
+}
+
+func (m *Machine) ValidateBootstrapSecretsPaths() error {
+	var errs []string
+
+	for _, key := range m.Bootstrap.DiskEncryptionKeys {
+		_, err := os.Stat(key.LocalPath)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: bootstrap disk encryption key local path does not exist: %s", m.Xpath, key.LocalPath))
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+
+	return errors.New(strings.Join(errs, "\n"))
 }

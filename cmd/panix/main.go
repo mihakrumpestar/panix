@@ -1,74 +1,33 @@
 package main
 
 import (
-	"context"
 	"os"
 
 	"github.com/alecthomas/kong"
-	"github.com/mihakrumpestar/panix/examples"
 	"github.com/mihakrumpestar/panix/gen"
-	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
-	"github.com/mihakrumpestar/panix/internal/config/flags"
-	"github.com/mihakrumpestar/panix/internal/config/template"
-	"github.com/mihakrumpestar/panix/internal/pkg/schema"
-	"github.com/mihakrumpestar/panix/internal/snapshot"
-	"github.com/mihakrumpestar/panix/internal/tui"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
-	"github.com/pkg/errors"
+	commands_standalone "github.com/mihakrumpestar/panix/internal/commands/standalone"
+	commands_workflow "github.com/mihakrumpestar/panix/internal/commands/workflow"
 )
 
-type CLI struct {
+//nolint:lll
+type cliCmd struct {
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
-	// Complementary commands
+	Init        commands_standalone.InitCmd     `cmd:"" help:"Initialize a new panix configuration file"`
+	Schema      commands_standalone.SchemaCmd   `cmd:"" help:"Generate YAML schema for configuration files"`
+	Template    commands_standalone.TemplateCmd `cmd:"" help:"Process templates and anchors, output the result"`
+	Eval        commands_standalone.EvalCmd     `cmd:"" help:"Fully evaluate and validate configuration (including templating) for execution, output the result"`
+	SnapshotCmd commands_standalone.SnapshotCmd `cmd:"" help:"View snapshot in TUI"`
 
-	Init struct {
-		Output string `name:"output" short:"o" help:"Output file path" default:"panix.yml"`
-		Force  bool   `name:"force" short:"f" help:"Overwrite existing file"`
-	} `cmd:"" help:"Initialize a new panix configuration file"`
-
-	Schema struct {
-		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"panix-schema.yaml"`
-	} `cmd:"" help:"Generate YAML schema for configuration files"`
-
-	Eval struct {
-		flags.ConfigFlag
-
-		Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"-"`
-	} `cmd:"" help:"Evaluate config (process templates and anchors) and output result"`
-
-	Snapshot struct {
-		Path string `name:"path" short:"p" help:"Snapshot file path" required:""`
-	} `cmd:"" help:"View snapshot in TUI"`
-
-	// Workflow commands
-
-	Inspect struct {
-		flags.WorkflowFlags
-	} `cmd:"" help:"Inspect machine per host"`
-
-	Build struct {
-		flags.WorkflowFlags
-	} `cmd:"" help:"Build all selected closures"`
-
-	Deploy struct {
-		flags.WorkflowFlags
-	} `cmd:"" help:"Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets -> activate)"`
-
-	Secrets struct {
-		flags.WorkflowFlags
-	} `cmd:"" help:"Deploy secrets to all machines"`
-
-	Rollback struct {
-		flags.RollbackFlags
-		flags.WorkflowFlags
-	} `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag, default is -1"`
+	Inspect  commands_workflow.InspectCmd  `cmd:"" help:"Inspect machines"`
+	Build    commands_workflow.BuildCmd    `cmd:"" help:"Build NixOS closures"`
+	Deploy   commands_workflow.DeployCmd   `cmd:"" help:"Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets -> activate)"`
+	Secrets  commands_workflow.SecretsCmd  `cmd:"" help:"Deploy secrets to machines"`
+	Rollback commands_workflow.RollbackCmd `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag (default is -1)"`
 }
 
-//nolint:cyclop
 func main() {
-	cli := CLI{}
+	cli := cliCmd{}
 
 	if len(os.Args) <= 1 {
 		os.Args = append(os.Args, "--help")
@@ -81,92 +40,6 @@ func main() {
 		kong.DefaultEnvars("PANIX"),
 	)
 
-	switch ctx.Command() {
-	// Complementary commands
-	case "init":
-		ctx.FatalIfErrorf(cli.runInitCommand(cli.Init.Output, cli.Init.Force))
-	case "schema":
-		ctx.FatalIfErrorf(cli.runSchemaCommand(cli.Schema.Output))
-	case "eval":
-		ctx.FatalIfErrorf(cli.runEvalCommand(cli.Eval.Config, cli.Eval.Output))
-	case "snapshot":
-		ctx.FatalIfErrorf(cli.runSnapshot(cli.Snapshot.Path))
-
-	// Wokflow commands
-	case "inspect":
-		flags := flags.Flags{WorkflowFlags: cli.Inspect.WorkflowFlags}
-		commandPhases := []phase.Phase{phase.Inspect}
-
-		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
-	case "build":
-		flags := flags.Flags{WorkflowFlags: cli.Build.WorkflowFlags}
-		commandPhases := []phase.Phase{phase.Build}
-
-		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
-	case "deploy":
-		flags := flags.Flags{WorkflowFlags: cli.Deploy.WorkflowFlags}
-		commandPhases := []phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Transfer, phase.Secrets, phase.Activate}
-
-		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
-	case "secrets":
-		flags := flags.Flags{WorkflowFlags: cli.Secrets.WorkflowFlags}
-		commandPhases := []phase.Phase{phase.Inspect, phase.Secrets}
-
-		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
-	case "rollback":
-		flags := flags.Flags{RollbackFlags: cli.Rollback.RollbackFlags, WorkflowFlags: cli.Rollback.WorkflowFlags}
-		commandPhases := []phase.Phase{phase.Inspect, phase.Rollback}
-
-		ctx.FatalIfErrorf(cli.runTui(flags, commandPhases))
-	}
-}
-
-// Complementary
-
-func (c *CLI) runInitCommand(outputPath string, force bool) error {
-	if !force {
-		_, err := os.Stat(outputPath)
-		if err == nil {
-			return errors.Errorf("file %s already exists, use --force to overwrite", outputPath)
-		}
-	}
-
-	err := os.WriteFile(outputPath, examples.ExampleConfig, filepermissions.DefaultFilePermissions)
-	if err != nil {
-		return errors.Wrap(err, "failed to write config file")
-	}
-
-	return nil
-}
-
-func (c *CLI) runEvalCommand(configPath string, outputPath string) error {
-	return errors.Wrap(template.EvalConfig(configPath, outputPath), "failed to evaluate config")
-}
-
-func (c *CLI) runSchemaCommand(outputPath string) error {
-	return errors.Wrap(schema.GenerateSchema(outputPath), "failed to generate schema")
-}
-
-func (c *CLI) runSnapshot(path string) error {
-	snap, err := snapshot.Read(path)
-	if err != nil {
-		return errors.Wrap(err, "failed to read snapshot file")
-	}
-
-	return errors.Wrap(tui.New(context.Background(), snap, true), "snapshot TUI error")
-}
-
-// Wokflow
-
-func (c *CLI) runTui(f flags.Flags, commandPhases []phase.Phase) error {
-	conf, err := config.LoadConfig(f, commandPhases)
-	if err != nil {
-		return errors.Wrap(err, "failed to load config")
-	}
-
-	if conf.Flags.Output != flags.OutputModeTui {
-		return errors.Wrap(tui.NewHeadless(context.Background(), conf), "headless error")
-	}
-
-	return errors.Wrap(tui.New(context.Background(), conf, false), "TUI error")
+	err := ctx.Run()
+	ctx.FatalIfErrorf(err)
 }
