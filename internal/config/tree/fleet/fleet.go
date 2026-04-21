@@ -21,7 +21,7 @@ import (
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Flakes atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
+	Flakes *atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`

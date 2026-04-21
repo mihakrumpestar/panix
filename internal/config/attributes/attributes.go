@@ -30,7 +30,7 @@ type Attributes struct {
 }
 
 type PlainFileOrDirToTransfer struct {
-	LocalPath   string   `yaml:"local_path,required" json:"local_path" desc:"Path to a local file or dir" validate:"required,filepath,pathexists"`
+	LocalPath   string   `yaml:"local_path,required" json:"local_path" desc:"Path to a local file or dir" validate:"required,filepath"`
 	RemotePath  string   `yaml:"remote_path,required" json:"remote_path" desc:"Absolute path on remote machine" validate:"required,abspath"`
 	UID         *uint    `yaml:"uid,omitempty" json:"uid,omitempty" desc:"Optional User ID for remote" validate:"required_with=GID"`
 	GID         *uint    `yaml:"gid,omitempty" json:"gid,omitempty" desc:"Optional Group ID for remote" validate:"required_with=UID"`

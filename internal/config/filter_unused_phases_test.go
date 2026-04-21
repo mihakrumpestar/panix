@@ -192,7 +192,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 				Fleet:  tt.buildFleet(),
 				Phases: tt.inputPhases,
 			}
-			c.filterOutUnusedPhases()
+			c.FilterOutUnusedPhases()
 			assertion.Equal(tt.wantPhases, c.Phases)
 		})
 	}

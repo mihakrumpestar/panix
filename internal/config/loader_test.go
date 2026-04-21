@@ -216,7 +216,7 @@ func TestPostUnmarshalInitSetsColorScheme(t *testing.T) {
 
 	conf := &Config{
 		Fleet: &fleet.Fleet{
-			Flakes: *atomicorderedmap.New[string, *flake.Flake](),
+			Flakes: atomicorderedmap.New[string, *flake.Flake](),
 		},
 	}
 

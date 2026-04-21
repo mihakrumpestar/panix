@@ -12,8 +12,8 @@ import (
 type Flake struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Configurations atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration] `yaml:"configurations,required" json:"configurations" validate:"required" desc:"Configurations in flake"`
-	URL            string                                                                  `yaml:"url,required" json:"url" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
+	URL            string                                                                   `yaml:"url,required" json:"url" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
+	Configurations *atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration] `yaml:"configurations,required" json:"configurations" validate:"required" desc:"Configurations in flake"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
