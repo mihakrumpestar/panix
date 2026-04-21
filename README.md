@@ -190,7 +190,7 @@ panix --tags server-01,special  # Single machine and tag special
 </details>
 
 <details>
-<summary>Template Engine</summary>
+<summary>Template Engine & Evaluation</summary>
 
 Panix includes a powerful template engine for dynamic YAML configuration. Templates use standard Go template syntax with `{{` and `}}` delimiters and support 100+ built-in functions from the [Sprout](https://github.com/go-sprout/sprout) library.
 
@@ -288,9 +288,24 @@ fleet:
 > [!WARNING]
 > When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
 
+### Template Command
+
+Preview the processed YAML with templates evaluated and anchors resolved (no validation):
+
+```bash
+panix template                    # Output to stdout (colorized)
+panix template -o processed.yaml  # Output to file (plain YAML)
+```
+
+The `template` command:
+
+- Resolves all `{{...}}` template expressions
+- Merges YAML anchors
+- Outputs only `flags` and `fleet` top level keys
+
 ### Eval Command
 
-Preview the processed YAML with templates evaluated and anchors resolved:
+Fully evaluate and validate the configuration for execution:
 
 ```bash
 panix eval                    # Output to stdout (colorized)
@@ -299,10 +314,13 @@ panix eval -o processed.yaml  # Output to file (plain YAML)
 
 The `eval` command:
 
-- Resolves all `{{...}}` template expressions
-- Merges YAML anchors
-- Preserves original key order
-- Filters anchor-only definitions (keeps only `flags` and `root`)
+- Everything the `template` command does
+- Loads and validates the full configuration
+- Validates flake URLs and configuration keys (`--validate.flakes`)
+- Validates bootstrap disk encryption key local paths (`--validate.bootstrap-secrets`)
+- Resolves inherited attributes, tags, and secrets
+- Filters out disabled and untagged parts of the configuration
+- Outputs the fully resolved configuration
 
 ### Notes
 
