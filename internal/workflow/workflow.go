@@ -174,6 +174,10 @@ func (w *Workflow) StartWorkflow() error {
 
 	for _, fleetLeaf := range w.conf.Fleet.AllMachines() {
 		subPool.SubmitErr(func() error {
+			defer func() {
+				fleetLeaf.Machine.Bootstrap.SSH.KnownHostsFile.RemoveIfAuto()
+			}()
+
 			// Create a shared phaseRunner for this machine
 			phaseRunnerInstance := &phaseRunner{
 				r:         w.runner,

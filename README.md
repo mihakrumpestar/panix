@@ -453,16 +453,33 @@ Important requirements:
 
 ```yaml
 ssh:
-  # Enable strict host key checking (default: true for regular SSH)
-  strict_key_checking: true
-  # Disable auto-adding host keys (default: false for regular SSH)
+  # Disable strict host key checking (default: false for both regular and bootstrap SSH)
+  disable_strict_key_checking: false
+  # Disable auto-adding host keys (default: false for both regular and bootstrap SSH)
   disable_auto_add_host_key: false
+  # Path to known_hosts file (default: user's ~/.ssh/known_hosts; bootstrap SSH uses a temporary file)
+  known_hosts_file: ""
 ```
 
 Defaults:
 
-- **Regular SSH**: `strict_key_checking: true`, `disable_auto_add_host_key: false` (automatically trusts new machines, but checks public key if they were already added before)
-- **Bootstrap SSH**: `strict_key_checking: false`, `disable_auto_add_host_key: true` (don't check anything and don't add machines public keys to trusted known ones)
+- `disable_strict_key_checking: false` — strict host key checking enabled
+- `disable_auto_add_host_key: false` — automatically adds new host keys to known_hosts
+- `known_hosts_file: ""` — uses the user's default `~/.ssh/known_hosts` or temporary file if using bootstrap SSH
+
+Behavior:
+
+- **Regular SSH**: uses the user's `~/.ssh/known_hosts` with `StrictHostKeyChecking=accept-new` (trusts new machines, verifies against existing entries)
+- **Bootstrap SSH**: Panix automatically creates a temporary known_hosts file and uses it for the duration of the bootstrap session. The first SSH connection records the installer's host key (trust on first use / TOFU). All subsequent commands during bootstrapping verify against that recorded key, preventing man-in-the-middle attacks mid-session. If `known_hosts_file` is explicitly set in bootstrap SSH config, that file is used instead of the temporary one. After bootstrapping completes, the temporary file (but not the user set one) is removed.
+- **After kexec**: the kexec installer preserves SSH host keys from the original system on remote, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new known_hosts entry is recorded (due to `StrictHostKeyChecking=accept-new`) for the new port (same key, different `[host]:port` entry).
+- Setting `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
+
+> [!WARNING]
+> Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
+>
+> - Setting `disable_strict_key_checking: true` disables **all** host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).
+> - Setting `disable_auto_add_host_key: true` prevents new host keys from being recorded. Combined with `disable_strict_key_checking: false` (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via `known_hosts_file` or manually adding entries).
+> - The defaults (`disable_strict_key_checking: false`, `disable_auto_add_host_key: false`) provide `StrictHostKeyChecking=accept-new` behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.
 
 #### Disable Automatic Reboot
 
@@ -639,8 +656,8 @@ machines:
       port: 2222
       username: admin
       identity_file: ./keys/server.key
-      strict_key_checking: true      # Disable strict host key checking
-      disable_auto_add_host_key: false  # Prevent auto-adding host keys
+      disable_strict_key_checking: false  # Enable strict host key checking
+      disable_auto_add_host_key: false    # Allow auto-adding host keys
 ```
 
 </details>
@@ -1239,8 +1256,8 @@ fleet:
     port: 22                           # SSH port number
     username: root                     # SSH username
     identity_file: ./keys/default.key  # Path to SSH private key
-    strict_key_checking: true          # Enable strict host key checking
-    disable_auto_add_host_key: false   # Disable auto-adding host keys on first connection
+    disable_strict_key_checking: false  # Enable strict host key checking
+    disable_auto_add_host_key: false     # Disable auto-adding host keys on first connection
     extra_flags: []                    # Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')
   secrets:                             # Secrets transferred to all machines
     - local_path: ./secrets/common.key
@@ -1267,8 +1284,9 @@ fleet:
         port: 22
         username: admin
         identity_file: ./keys/infra.key
-        strict_key_checking: true
+        disable_strict_key_checking: false
         disable_auto_add_host_key: false
+        known_hosts_file: ""            # Path to known_hosts file (empty = default ~/.ssh/known_hosts)
         extra_flags: []
       secrets:                         # APPENDED to inherited secrets
         - local_path: ./secrets/infra.key
@@ -1282,9 +1300,9 @@ fleet:
           port: 22
           username: root
           identity_file: ./keys/bootstrap.key
-          strict_key_checking: false   # Default: false for bootstrap SSH
-          disable_auto_add_host_key: true  # Default: true for bootstrap SSH
-          extra_flags: []
+          disable_strict_key_checking: false  # Default: false for bootstrap SSH
+          disable_auto_add_host_key: false    # Default: false for bootstrap SSH
+          known_hosts_file: ""              # Empty = auto-generated temp file during bootstrap
         disable_disko: false           # Disable disko tool build/transfer/execution
         kexec:                         # Kexec configuration for non-NixOS machines
           image: ""                    # Custom kexec tarball image (default: nix-community image)
@@ -1322,8 +1340,9 @@ fleet:
             port: 22
             username: root
             identity_file: ./keys/web.key
-            strict_key_checking: true
+            disable_strict_key_checking: false
             disable_auto_add_host_key: false
+            known_hosts_file: ""
             extra_flags: []
           secrets:
             - local_path: ./secrets/web.key
@@ -1337,8 +1356,9 @@ fleet:
               port: 22
               username: root
               identity_file: ./keys/web-bootstrap.key
-              strict_key_checking: false
-              disable_auto_add_host_key: true
+              disable_strict_key_checking: false
+              disable_auto_add_host_key: false
+              known_hosts_file: ""
               extra_flags: []
             kexec:
               image: ""
@@ -1370,8 +1390,9 @@ fleet:
                 port: 22
                 username: root
                 identity_file: ./keys/web-01.key
-                strict_key_checking: true
+                disable_strict_key_checking: false
                 disable_auto_add_host_key: false
+                known_hosts_file: ""
                 extra_flags: []
               secrets:
                 - local_path: ./secrets/web-01.key
@@ -1385,8 +1406,9 @@ fleet:
                   port: 22
                   username: root
                   identity_file: ./keys/web-01-bootstrap.key
-                  strict_key_checking: false
-                  disable_auto_add_host_key: true
+                  disable_strict_key_checking: false
+                  disable_auto_add_host_key: false
+                  known_hosts_file: ""
                   extra_flags: []
                 kexec:
                   image: ""
