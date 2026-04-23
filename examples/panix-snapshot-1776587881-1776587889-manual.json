@@ -63,8 +63,7 @@
                       "ssh": {
                         "hostname": "personal-workstation",
                         "port": 22222,
-                        "username": "root",
-                        "strict_key_checking": true
+                        "username": "root"
                       },
                       "tags": [
                         "infrastructure",
@@ -388,8 +387,7 @@
                       "ssh": {
                         "hostname": "fake",
                         "port": 22,
-                        "username": "root",
-                        "strict_key_checking": true
+                        "username": "root"
                       },
                       "tags": [
                         "infrastructure",

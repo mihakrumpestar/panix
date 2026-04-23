@@ -465,7 +465,10 @@ definitions:
     properties:
       disable_auto_add_host_key:
         type: boolean
-        description: "Disable automatically adding host key to known_hosts on first connection (default: true for bootstrap SSH, false for regular SSH)"
+        description: "Disable automatically adding host key to known_hosts on first connection (default: false)"
+      disable_strict_key_checking:
+        type: boolean
+        description: "Disable strict host key checking (default: false)"
       extra_flags:
         type: array
         description: Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')
@@ -478,13 +481,13 @@ definitions:
         type: string
         description: Path to SSH private key
         format: file-path
+      known_hosts_file:
+        type: string
+        description: "Path to known_hosts file for SSH host key verification (default: user's ~/.ssh/known_hosts, bootstrap SSH uses a temporary file)"
       port:
         type: integer
         description: "SSH port number (default: 22)"
         default: 22
-      strict_key_checking:
-        type: boolean
-        description: "Enable strict host key checking (default: false for bootstrap SSH, true for regular SSH)"
       username:
         type: string
         description: "SSH username (default: root)"

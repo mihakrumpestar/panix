@@ -91,13 +91,13 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool, l
 		return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
 	}
 
-	// Initialize regular SSH with defaults: strict key checking enabled, auto-add disabled
+	// Initialize regular SSH
 	err = a.initRegularSSH(sshConfig, name, localMachineHostname)
 	if err != nil {
 		return err
 	}
 
-	// Initialize bootstrap SSH with defaults: strict key checking disabled, auto-add enabled
+	// Initialize bootstrap SSH
 	err = a.initBootstrapSSH(sshConfig, name, localMachineHostname)
 	if err != nil {
 		return err
@@ -107,14 +107,7 @@ func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool, l
 }
 
 // initRegularSSH initializes the regular SSH configuration for this machine.
-// Sets defaults when both StrictKeyChecking and DisableAutoAddHostKey are unset.
 func (a *Attributes) initRegularSSH(sshConfig *ssh.SSHConfig, name, localMachineHostname string) error {
-	// Set defaults for regular SSH: strict key checking enabled, auto-add disabled
-	// This runs when both fields are unset (false from YAML parsing)
-	if !a.SSH.StrictKeyChecking && !a.SSH.DisableAutoAddHostKey {
-		a.SSH.StrictKeyChecking = true
-	}
-
 	err := a.SSH.Init(sshConfig, name, localMachineHostname)
 	if err != nil {
 		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
@@ -124,16 +117,9 @@ func (a *Attributes) initRegularSSH(sshConfig *ssh.SSHConfig, name, localMachine
 }
 
 // initBootstrapSSH initializes the bootstrap SSH configuration if present.
-// Sets defaults when both StrictKeyChecking and DisableAutoAddHostKey are unset.
 func (a *Attributes) initBootstrapSSH(sshConfig *ssh.SSHConfig, name, localMachineHostname string) error {
 	if !a.Bootstrap.SSH.IsInitialized() {
 		return nil
-	}
-
-	// Set defaults for bootstrap SSH: strict key checking disabled, auto-add enabled
-	// This runs when both fields are unset (false from YAML parsing)
-	if !a.Bootstrap.SSH.StrictKeyChecking && !a.Bootstrap.SSH.DisableAutoAddHostKey {
-		a.Bootstrap.SSH.DisableAutoAddHostKey = true
 	}
 
 	err := a.Bootstrap.SSH.Init(sshConfig, name, localMachineHostname)
