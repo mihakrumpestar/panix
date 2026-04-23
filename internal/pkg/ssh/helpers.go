@@ -7,7 +7,7 @@ import (
 )
 
 func (sC *SSHClient) ReachabilityCheck(timeout time.Duration) bool {
-	address := net.JoinHostPort(sC.Hostname, sC.PortString())
+	address := net.JoinHostPort(sC.Hostname, sC.Port.String())
 
 	dialer := &net.Dialer{
 		Timeout: timeout,

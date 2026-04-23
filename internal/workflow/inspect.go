@@ -84,9 +84,13 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 		func(_ *command.CommandLog) error {
 			if machineI.Bootstrap.SSH.IsInitialized() {
 				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
-
 				if !bootstrapSSHReachable {
 					return errors.New("bootstrap SSH is configured but unreachable")
+				}
+
+				err := machineI.Bootstrap.SSH.KnownHostsFile.Create()
+				if err != nil {
+					return errors.Wrap(err, "failed to create temp known_hosts file")
 				}
 
 				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeBootstrap })
