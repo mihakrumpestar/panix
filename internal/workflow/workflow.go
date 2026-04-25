@@ -23,7 +23,7 @@ import (
 
 const (
 	WorkerPoolMaxConcurrency    = 1000
-	SSHReachabilityCheckTimeout = 5 * time.Second
+	SSHReachabilityCheckTimeout = 2 * time.Second
 )
 
 type Workflow struct {

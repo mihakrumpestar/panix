@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -20,6 +21,16 @@ func registerPathValidators(validate *validator.Validate) {
 	})
 	if err != nil {
 		panic(errors.Wrap(err, "failed to register abspath validation"))
+	}
+
+	err = validate.RegisterValidation("dir_exists", func(fl validator.FieldLevel) bool {
+		p := fl.Field().String()
+		info, statErr := os.Stat(p)
+
+		return statErr == nil && info.IsDir()
+	})
+	if err != nil {
+		panic(errors.Wrap(err, "failed to register dir validation"))
 	}
 }
 

@@ -31,14 +31,20 @@ go.work.sum
 /debug*
 /result
 /profile*
-/test
+/test/
 
 temp_key
 temp_key.pub
 
 *.tar.gz
 
-panix
+/panix
 panix.log
 panix.*.log
 /panix-snapshot-*
+
+# E2E test cache and generated files
+/e2e
+tests/e2e/.cache/
+tests/e2e/log/
+tests/e2e/testflakes/ssh-key.pub

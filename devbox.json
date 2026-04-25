@@ -1,18 +1,23 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
   "packages": [
+    // Golang
     "go@latest",
     "gopls@latest",
     "go-tools@latest",
     "golangci-lint@latest",
 
+    // Tasks
     "go-task@latest",
-    "graphviz@latest",
     "pre-commit@latest",
     "nix-update@latest",
     "gh@latest",
     "git-cliff@latest",
-    "tparse@latest"
+    // For tests
+    "tparse@latest",
+    // For e2e tests
+    "qemu_full@latest",
+    "cdrkit@latest" // For genisoimage
   ],
   "env": {
     "DEVBOX_NO_PROMPT": "true",

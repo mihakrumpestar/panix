@@ -19,8 +19,8 @@ const (
 	WaitForDisconnectTimeoutTimes = 300 // 5 min disconnect timeout
 	WaitForDisconnectInterval     = time.Second
 
-	WaitForReconnectTimeoutTimes  = 300 // 10 min reconnect timeout
-	WaitForReconnectCheckInterval = 2 * time.Second
+	WaitForReconnectTimeoutTimes  = 600 // 10 min reconnect timeout
+	WaitForReconnectCheckInterval = time.Second
 )
 
 func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookType string) error {
@@ -67,7 +67,7 @@ func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg stri
 				case <-exc.ctx.Done():
 					return exc.ctx.Err()
 				default:
-					if !sshClient.ReachabilityCheck(WaitForDisconnectInterval) {
+					if !sshClient.ReachabilityCheck(time.Second) {
 						return nil
 					}
 
@@ -91,11 +91,11 @@ func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, fail
 				case <-exc.ctx.Done():
 					return exc.ctx.Err()
 				default:
-					if sshClient.ReachabilityCheck(WaitForReconnectCheckInterval) {
+					if sshClient.ReachabilityCheck(time.Second) {
 						return nil
 					}
 
-					time.Sleep(WaitForReconnectCheckInterval)
+					time.Sleep(WaitForDisconnectInterval)
 				}
 			}
 

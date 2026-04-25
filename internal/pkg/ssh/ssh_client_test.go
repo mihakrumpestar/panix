@@ -121,6 +121,6 @@ func TestKnownHostsFile_IsAuto(t *testing.T) {
 
 	assertion := assert.New(t)
 	assertion.False(KnownHostsFile("").IsAuto())
-	assertion.True(KnownHostsFile(os.TempDir()+"/panix-knownhosts-1234").IsAuto())
+	assertion.True(KnownHostsFile(os.TempDir() + "/panix-knownhosts-1234").IsAuto())
 	assertion.False(KnownHostsFile("/home/user/.ssh/known_hosts").IsAuto())
 }

@@ -17,7 +17,7 @@ go-task
 task
 ```
 
-Code has to pass `task ci` checks, if larger or critical sections were changed, then also `task go:test:integration` (TODO).
+Code has to pass `task ci` checks, if larger or critical sections were changed, then also `task go:test:e2e`.
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
@@ -25,9 +25,8 @@ Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
 Future potential/to-do list (by priority):
 
-- integration tests with [anatol/vmtest](https://github.com/anatol/vmtest)
 - increase unit tests
-- replace bubbletea with [tview](https://github.com/rivo/tview) for reduced binary size and improved performance
+- replace bubbletea with [tview](https://github.com/rivo/tview) for potentially reduced binary size and performance
 
 ## Past
 
