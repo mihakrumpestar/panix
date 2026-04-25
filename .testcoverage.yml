@@ -5,7 +5,6 @@ profile: ./test/cover.out
 #  package: 60
 #  total: 60
 
-exclude:
+include:
   paths:
-    - cmd/
-    - gen/
+    - internal/

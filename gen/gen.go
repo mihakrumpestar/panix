@@ -13,3 +13,4 @@ func Version() string {
 }
 
 //go:generate go run ../cmd/panix/main.go schema
+//go:generate go run badge_gen.go
