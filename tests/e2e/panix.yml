@@ -1,0 +1,51 @@
+{{- $dir := env "PANIX_E2E_DIR" -}}
+{{- $cache := printf "%s/.cache" $dir -}}
+{{- $log := printf "%s/log" $dir -}}
+{{- $key := printf "%s/id_ed25519" $cache -}}
+{{- $mode := env "PANIX_TEST_MODE" | default "bootstrap" -}}
+{{- $isBootstrap := eq $mode "bootstrap" -}}
+
+flags:
+  timeout: 600s
+  require_all_success: true
+  local_machine_hostname: not-this-host
+  snapshot:
+    on_exit: true
+    dir: {{ $log }}
+
+fleet:
+  flakes:
+    test:
+      url: path:{{ env "PANIX_E2E_DIR" }}/testflakes
+      configurations:
+        test-vm:
+          machines:
+            nixos-iso-vm:
+              ssh: &ssh_nixos_iso
+                hostname: 127.0.0.1
+                port: 10022
+                username: root
+                identity_file: {{ $key }}
+                disable_strict_key_checking: true
+{{ if $isBootstrap }}
+              bootstrap:
+                ssh: *ssh_nixos_iso
+                post_bootstrap_provisioned_hooks:
+                  - waitForOnline
+{{ end }}
+            kexec-vm:
+              ssh: &ssh_kexec
+                hostname: 127.0.0.1
+                port: 10023
+                username: root
+                identity_file: {{ $key }}
+                disable_strict_key_checking: true
+{{ if $isBootstrap }}
+              bootstrap:
+                ssh: *ssh_kexec
+                kexec:
+                  image: {{ $cache }}/kexec-installer-x86_64-linux.tar.gz
+                  ssh_port: 10023
+                post_bootstrap_provisioned_hooks:
+                  - waitForOnline
+{{ end }}

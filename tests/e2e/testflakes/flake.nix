@@ -1,0 +1,63 @@
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
+    nixos-images.url = "github:nix-community/nixos-images";
+    nixos-images.inputs.nixos-unstable.follows = "nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, disko, nixos-images }:
+  let
+    system = "x86_64-linux";
+    sshPubKey = builtins.readFile ./ssh-key.pub;
+    pkgs = nixpkgs.legacyPackages.${system};
+    lib = nixpkgs.lib;
+  in
+  {
+    nixosConfigurations.test-vm = nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        disko.nixosModules.disko
+        ./configuration.nix
+        { users.users.root.openssh.authorizedKeys.keys = [ sshPubKey ]; }
+      ];
+    };
+
+    packages.${system}.installer-iso = (nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        nixos-images.nixosModules.image-installer
+        nixos-images.nixosModules.noninteractive
+        {
+          users.users.root.openssh.authorizedKeys.keys = [ sshPubKey ];
+          networking.wireless.enable = lib.mkForce false;
+          environment.systemPackages = [ pkgs.rsync ];
+
+          # Reduce bootloader countdown (default is 10s in iso-image.nix)
+          # NOTE: 0 means "disabled/wait forever" in syslinux (BIOS boot), so use 1
+          boot.loader.timeout = lib.mkForce 1;
+
+          # Disable Tor hidden SSH service (not needed for automated installs, saves 30-90s)
+          # Must also re-enable SSH since tor-ssh module was providing it
+          tor-ssh.enable = lib.mkForce false;
+          services.openssh.enable = true;
+          services.openssh.settings.PermitRootLogin = "yes";
+
+          # Disable WiFi daemon (not needed in VMs)
+          networking.wireless.iwd.enable = lib.mkForce false;
+
+          # NetworkManager is redundant with systemd-networkd
+          networking.networkmanager.enable = lib.mkForce false;
+
+          # No RAID or full hardware scanning needed in VMs
+          boot.swraid.enable = lib.mkForce false;
+          hardware.enableAllHardware = lib.mkForce false;
+
+          # Don't block boot waiting for network
+          systemd.network.wait-online.enable = false;
+        }
+      ];
+    }).config.system.build.isoImage;
+  };
+}
