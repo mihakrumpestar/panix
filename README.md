@@ -12,6 +12,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
 [![Scc Count Badge](https://sloc.xyz/github/mihakrumpestar/panix?category=code)](https://github.com/boyter/scc/)
 [![Coverage](./gen/coverage.svg)](https://github.com/vladopajic/go-test-coverage)
+[![E2E](./gen/e2e.svg)](https://github.com/mihakrumpestar/panix/tree/main/tests/e2e)
 [![NixOS](https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white)](https://nixos.org)
 
 </div>
@@ -1464,6 +1465,38 @@ The one used for testing to deploy [infrastructure](https://github.com/mihakrump
 - **Nix store locking**: Nix does not allow writing to store by more than one at a time, so some builds may have a `waiting for store lock` warning for a brief time until the lock is lifted
 - **ssh key auth**: only ssh key auth is supported, no password auth
 - **flake only**: only flakes are supported
+
+---
+
+## Testing
+
+### Unit Tests
+
+```sh
+task go:test
+```
+
+### E2E Tests
+
+End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, followed by a re-deploy to the installed systems.
+
+**Prerequisites**: KVM (`/dev/kvm`), QEMU, Nix, `cdrtools`
+
+```sh
+task go:test:e2e
+```
+
+**What it does:**
+
+1. Generates SSH keys, downloads kexec and Debian images, builds a NixOS installer ISO, preconfigures Debian image
+2. Starts two QEMU VMs: one booting the NixOS ISO directly, one booting Debian then kexec-ing into the installer
+3. Runs panix deploy (bootstrap) against both VMs (disko, nixos-install, reboot)
+4. Runs panix deploy (re-deploy) against both VMs (switch-to-configuration)
+5. Verifies NixOS installation on both VMs via SSH
+
+**What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
+
+**Logs** (`tests/e2e/log/`): Recreated each run. Per-VM console logs with timestamps, panix logs per deploy, snapshot JSONs.
 
 ---
 

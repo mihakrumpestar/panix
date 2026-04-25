@@ -52,7 +52,8 @@ tasks:
           exit 1
         fi
         echo "0 issues"
-      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      # DISABLED UNTIL Go 1.26.2 hits Nixpkgs
+      #- go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   go:test:
     desc: Run tests with coverage check and summary
@@ -64,10 +65,10 @@ tasks:
       - go run github.com/vladopajic/go-test-coverage/v2@latest
         --profile={{.COVER_PROFILE}} --badge-file-name=gen/coverage.svg
 
-  go:test:visualize:
-    desc: Visualize test coverage
+  go:test:e2e:
+    desc: Run e2e tests (requires KVM, QEMU, Nix)
     cmds:
-      - go tool cover -html={{.COVER_PROFILE}} -o={{.TEST_DIR}}/cover.html
+      - go run ./tests/e2e/
 
   nix:run:
     desc: Run the application using nix
