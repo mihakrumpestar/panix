@@ -10,10 +10,12 @@
 [![License](https://img.shields.io/github/license/mihakrumpestar/panix)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
-[![Scc Count Badge](https://sloc.xyz/github/mihakrumpestar/panix?category=code)](https://github.com/boyter/scc/)
+![GitHub last commit](https://img.shields.io/github/last-commit/mihakrumpestar/panix)
+[![Code lines](./gen/loc.svg)](https://github.com/boyter/scc/)
 [![Coverage](./gen/coverage.svg)](https://github.com/vladopajic/go-test-coverage)
 [![E2E](./gen/e2e.svg)](https://github.com/mihakrumpestar/panix/tree/main/tests/e2e)
 [![NixOS](https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white)](https://nixos.org)
+![GitHub Repo stars](https://img.shields.io/github/stars/mihakrumpestar/panix)
 
 </div>
 
@@ -1485,6 +1487,8 @@ End-to-end tests verify the full deployment pipeline against real QEMU VMs, cove
 ```sh
 task go:test:e2e
 ```
+
+The whole test ususally takes only 1 min and 27 sec.
 
 **What it does:**
 
