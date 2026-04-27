@@ -259,8 +259,11 @@ func (m *model) viewMainContent() string {
 
 	var builder strings.Builder
 
-	if !m.conf.Flags.DryRun && slices.Contains(m.conf.Phases, phase.Inspect) {
-		builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width, m.conf.ColorScheme))
+	if !m.conf.Flags.DryRun {
+		if slices.Contains(m.conf.Phases, phase.Inspect) {
+			builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width, m.conf.ColorScheme))
+		}
+
 		builder.WriteString(m.conf.Fleet.PhaseStatus.View(m.dimensions.Width, m.conf.ColorScheme))
 	}
 
