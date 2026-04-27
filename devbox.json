@@ -17,16 +17,16 @@
     "tparse@latest",
     // For e2e tests
     "qemu_full@latest",
-    "cdrkit@latest" // For genisoimage
+    "cdrkit@latest", // For genisoimage
   ],
   "env": {
     "DEVBOX_NO_PROMPT": "true",
-    "PANIX_CONFIG":     "examples/panix.deploy.yml"
+    "PANIX_CONFIG":     "examples/panix.deploy.yml",
   },
   "shell": {
     "init_hook": ["pre-commit autoupdate", "pre-commit install"],
     "scripts": {
-      "test": ["echo \"Error: no test specified\" && exit 1"]
-    }
-  }
+      "test": ["echo \"Error: no test specified\" && exit 1"],
+    },
+  },
 }
