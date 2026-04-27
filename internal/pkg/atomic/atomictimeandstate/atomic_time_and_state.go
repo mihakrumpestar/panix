@@ -30,6 +30,7 @@ func (tas *AtomicTimeAndState) StartTimer() {
 
 	tas.Update(func(tas *TimeAndState) {
 		tas.StartTime = timeNow
+		tas.live = true
 	})
 }
 
