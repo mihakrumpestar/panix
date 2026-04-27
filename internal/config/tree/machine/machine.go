@@ -90,7 +90,13 @@ func (m *Machine) GetActiveSSH() ssh.SSHClient {
 	var sshClient ssh.SSHClient
 
 	state := m.State.Load()
-	switch state.ActiveSSH {
+
+	activeSSH := state.ActiveSSH
+	if activeSSH == "" {
+		activeSSH = SSHTypeRegular
+	}
+
+	switch activeSSH {
 	case SSHTypeRegular:
 		sshClient = m.SSH
 	case SSHTypeBootstrap:
