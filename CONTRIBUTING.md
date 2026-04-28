@@ -35,7 +35,7 @@ The following packages were inadequate for use for Panix:
 - [Koanf link to issue](https://github.com/knadh/koanf/issues/221)
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
-- [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: with `nix run github:Mic92/nix-fast-build -- --flake path:.#nixosConfigurations.personal-workstation.config.system.build.toplevel --no-link --skip-cached` it takes 1 min 6 sec instead of just 24 sec with `nix build`, while at moments using all CPU and all memory. Output also shows a lot of nix store lock errors and duplicated outputs (warnings) from nix eval.
+- [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: speed is about the same, and it does not seem to provide a meaningfull benefit over `nix build`
 
 ## Demo video
 
