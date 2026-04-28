@@ -8,8 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var nixBuildOutputPrefix = []byte(`[{"drvPath":"/nix/store/`)
-
 type AtomicCommandOutput struct {
 	mutex sync.Mutex
 
@@ -34,17 +32,7 @@ func (ao *AtomicCommandOutput) Version() uint64 {
 
 // String returns the string representation of all lines in content.
 func (ao *AtomicCommandOutput) String() string {
-	ao.mutex.Lock()
-	defer ao.mutex.Unlock()
-
-	return string(ao.filterBytesUnsafe(nil))
-}
-
-func (ao *AtomicCommandOutput) StringForBuildLogs() string {
-	ao.mutex.Lock()
-	defer ao.mutex.Unlock()
-
-	return string(bytes.TrimSpace(ao.filterBytesUnsafe(nixBuildOutputPrefix)))
+	return string(ao.Bytes())
 }
 
 // Bytes returns the byte representation of all lines in content.
@@ -52,7 +40,25 @@ func (ao *AtomicCommandOutput) Bytes() []byte {
 	ao.mutex.Lock()
 	defer ao.mutex.Unlock()
 
-	return ao.filterBytesUnsafe(nil)
+	var result bytes.Buffer
+
+	first := true
+
+	for _, buf := range ao.content {
+		if !first {
+			result.WriteByte('\n')
+		}
+
+		first = false
+
+		result.Write(buf.Bytes())
+	}
+
+	if result.Len() == 0 {
+		return nil
+	}
+
+	return result.Bytes()
 }
 
 // Write writes bytes to the last line in content.
@@ -136,22 +142,6 @@ func (ao *AtomicCommandOutput) Len() int {
 	return len(ao.content)
 }
 
-// LenForBuildLogs returns the number of lines after filtering drvPath prefixes.
-func (ao *AtomicCommandOutput) LenForBuildLogs() int {
-	ao.mutex.Lock()
-	defer ao.mutex.Unlock()
-
-	count := 0
-
-	for _, buf := range ao.content {
-		if !bytes.HasPrefix(buf.Bytes(), nixBuildOutputPrefix) {
-			count++
-		}
-	}
-
-	return count
-}
-
 func (ao *AtomicCommandOutput) MarshalJSON() ([]byte, error) {
 	ao.mutex.Lock()
 	defer ao.mutex.Unlock()
@@ -209,36 +199,8 @@ func (ao *AtomicCommandOutput) lastLineUnsafe() *bytes.Buffer {
 	length := len(ao.content)
 
 	if length == 0 {
-		panic("internal error: lastLineLocked is not designed to handle empty content slice")
+		panic("internal error: lastLineUnsafe is not designed to handle empty content slice")
 	}
 
 	return ao.content[length-1]
-}
-
-// filterBytesUnsafe returns filtered bytes. Must be called with mutex held.
-func (ao *AtomicCommandOutput) filterBytesUnsafe(skipPrefix []byte) []byte {
-	var result bytes.Buffer
-
-	first := true
-
-	for _, buf := range ao.content {
-		data := buf.Bytes()
-		if skipPrefix != nil && bytes.HasPrefix(data, skipPrefix) {
-			continue
-		}
-
-		if !first {
-			result.WriteByte('\n')
-		}
-
-		first = false
-
-		result.Write(data)
-	}
-
-	if result.Len() == 0 {
-		return nil
-	}
-
-	return result.Bytes()
 }

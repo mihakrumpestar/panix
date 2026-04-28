@@ -2,11 +2,14 @@ package workflow
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
+	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -18,10 +21,7 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-var (
-	ErrInvalidBuildOutput = errors.New("invalid build output")
-	ErrNoBuildOutputs     = errors.New("invalid build output: no outputs")
-)
+var ErrNoBuildOutputs = errors.New("invalid build output: no outputs")
 
 var NixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
 
@@ -38,12 +38,12 @@ func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) er
 			flakeOutput := configuration.ResolveFlakeInstallable(configurationI.FlakeOutput, configurationI.BuildPath, configurationI.Name)
 			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
-			parsedOutput, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "system closure")
+			storePath, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "system closure")
 			if err != nil {
 				return err
 			}
 
-			configurationI.MetaBuild.SystemClosure = parsedOutput[0].Outputs.Out
+			configurationI.MetaBuild.SystemClosure = storePath
 
 			return nil
 		})
@@ -54,63 +54,58 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 	fleetLeaf *fleet.FleetLeaf,
 	installables []string,
 	whatIsBuilding string,
-) (BuildOutputJSON, error) {
+) (string, error) {
 	flake := fleetLeaf.Flake
 	configuration := fleetLeaf.Configuration
 
-	var parsedOutput BuildOutputJSON
+	var storePath string
 
 	commandWithArgs := slices.Concat(
 		[]string{"nix"},
 		NixExperimentalFeatures,
-		[]string{"build", "--no-link", "--no-update-lock-file", "--json"},
+		[]string{"build", "--no-link", "--no-update-lock-file", "--print-out-paths"},
 		slices.Concat(configuration.Nix.ExtraFlags, configuration.Nix.BuildFlags),
 		installables,
 	)
 
-	err := exc.Exec(
+	// Isolate the eval cache per configuration to avoid SQLite busy warnings
+	// when building multiple configurations in parallel.
+	env, err := nixEvalCacheEnv(configuration.Xpath.String())
+	if err != nil {
+		return "", err
+	}
+
+	err = exc.Exec(
 		"build "+whatIsBuilding,
 		"building "+whatIsBuilding,
 		whatIsBuilding+" build failed",
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
+		executioner.Env(env),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := lastNonEmptyLine(log.Output.Bytes())
+			storePath = strings.TrimSpace(string(lastNonEmptyLine(log.Output.Bytes())))
 
-			err := json.Unmarshal(output, &parsedOutput)
-			if err != nil || len(parsedOutput) == 0 {
-				return errors.Wrapf(ErrInvalidBuildOutput, "%s/%s: %s", flake.Name, configuration.Name, strconv.Quote(string(output)))
+			if storePath == "" || !strings.HasPrefix(storePath, "/nix/store/") {
+				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", flake.Name, configuration.Name, strconv.Quote(storePath))
 			}
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
-			parsedOutput = BuildOutputJSON{{Outputs: struct {
-				Out string `json:"out"`
-			}{Out: strcase.SnakeCase(whatIsBuilding) + "_BUILD_OUTPUT_PATH_PLACEHOLDER"}}}
+			storePath = strcase.SnakeCase(whatIsBuilding) + "_BUILD_OUTPUT_PATH_PLACEHOLDER"
 		}),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute build phase")
-	}
-
-	if len(parsedOutput) == 0 {
-		return nil, errors.Wrapf(ErrNoBuildOutputs, "%s/%s", flake.Name, configuration.Name)
+		return "", errors.Wrap(err, "failed to execute build phase")
 	}
 
 	log.Info().
 		Str("flake", flake.Name).
 		Str("configuration", configuration.Name).
-		Str("closure", configuration.MetaBuild.SystemClosure).
-		Msgf("Built %s/%s -> %s", flake.Name, configuration.Name, parsedOutput[0].Outputs.Out)
+		Str("closure", storePath).
+		Msgf("Built %s/%s -> %s", flake.Name, configuration.Name, storePath)
 
-	return parsedOutput, nil
-}
-
-type BuildOutputJSON []struct {
-	Outputs struct {
-		Out string `json:"out"`
-	} `json:"outputs"`
+	return storePath, nil
 }
 
 func lastNonEmptyLine(b []byte) []byte {
@@ -125,4 +120,20 @@ func lastNonEmptyLine(b []byte) []byte {
 	}
 
 	return []byte{}
+}
+
+func nixEvalCacheEnv(xpath string) ([]string, error) {
+	userCacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get user cache dir")
+	}
+
+	evalCacheDir := filepath.Join(userCacheDir, "panix", xpath)
+
+	err = os.MkdirAll(evalCacheDir, filepermissions.DefaultDirPermissions)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create eval cache dir")
+	}
+
+	return []string{"XDG_CACHE_HOME=" + evalCacheDir}, nil
 }
