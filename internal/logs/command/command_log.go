@@ -24,10 +24,26 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
-		Command:         strings.Join(slices.Concat(env, command), " "),
-		Output:          NewAtomicCommandOutput(),
-		TimeAndState:    atomictimeandstate.New(),
+		Command:         joinCommand(slices.Concat(env, command)),
+
+		Output:       NewAtomicCommandOutput(),
+		TimeAndState: atomictimeandstate.New(),
 	}
 
 	return commandLog
+}
+
+// joinCommand joins command parts into a shell-like string, quoting parts that contain spaces.
+func joinCommand(parts []string) string {
+	quoted := make([]string, len(parts))
+
+	for i, part := range parts {
+		if strings.Contains(part, " ") {
+			quoted[i] = "'" + part + "'"
+		} else {
+			quoted[i] = part
+		}
+	}
+
+	return strings.Join(quoted, " ")
 }

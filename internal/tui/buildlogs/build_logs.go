@@ -321,7 +321,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	output := cmd.Output
 
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
-	if output.LenForBuildLogs() > 0 {
+	if output.Len() > 0 {
 		cmdNode.Child(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep*2-1))
 	} else {
 		b.viewports.RemoveIfExistsViewport(outputXpath)

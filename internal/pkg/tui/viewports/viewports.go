@@ -309,7 +309,7 @@ func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) 
 
 	if cfg.output != nil {
 		if itm.contentVersion != version {
-			content = cfg.output.StringForBuildLogs()
+			content = cfg.output.String()
 			itm.content = content
 			itm.contentVersion = version
 		} else {
