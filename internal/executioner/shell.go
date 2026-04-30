@@ -102,7 +102,6 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *os.File, comm
 			bytesRead, err := ptyFile.Read(buf)
 			if err != nil {
 				err = ex.handleReadError(err, commandLog)
-				commandLog.Output.TrimTrailingEmptyLines()
 
 				return err
 			}

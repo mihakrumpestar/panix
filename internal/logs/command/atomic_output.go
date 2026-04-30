@@ -36,20 +36,23 @@ func (ao *AtomicCommandOutput) String() string {
 }
 
 // Bytes returns the byte representation of all lines in content.
+// The last line is excluded if empty (PTY trailing newline artifact).
 func (ao *AtomicCommandOutput) Bytes() []byte {
 	ao.mutex.Lock()
 	defer ao.mutex.Unlock()
 
+	lastLineIdx := len(ao.content) - 1
+
 	var result bytes.Buffer
 
-	first := true
-
-	for _, buf := range ao.content {
-		if !first {
-			result.WriteByte('\n')
+	for idx, buf := range ao.content {
+		if idx == lastLineIdx && buf.Len() == 0 {
+			break
 		}
 
-		first = false
+		if idx != 0 {
+			result.WriteByte('\n')
+		}
 
 		result.Write(buf.Bytes())
 	}
@@ -91,31 +94,6 @@ func (ao *AtomicCommandOutput) WriteLine(p []byte) {
 	ao.version++
 }
 
-// TrimTrailingEmptyLines removes empty lines from the end of the output.
-// PTY output typically ends with a trailing newline, which processSequence
-// converts into an empty line entry. This strips those artifact empty lines
-// while preserving intentional blank lines mid-output.
-func (ao *AtomicCommandOutput) TrimTrailingEmptyLines() {
-	ao.mutex.Lock()
-	defer ao.mutex.Unlock()
-
-	changed := false
-
-	for len(ao.content) > 0 {
-		lastLine := ao.lastLineUnsafe()
-		if lastLine.Len() > 0 {
-			break
-		}
-
-		ao.content = ao.content[:len(ao.content)-1]
-		changed = true
-	}
-
-	if changed {
-		ao.version++
-	}
-}
-
 // ReplaceLastLine replaces the content of the last line in content.
 func (ao *AtomicCommandOutput) ReplaceLastLine(data []byte) {
 	ao.mutex.Lock()
@@ -134,21 +112,33 @@ func (ao *AtomicCommandOutput) ReplaceLastLine(data []byte) {
 	lastLine.Write(data)
 }
 
-// Len returns the number of lines in content.
+// Len returns the number of lines in content, excluding a trailing empty line.
 func (ao *AtomicCommandOutput) Len() int {
 	ao.mutex.Lock()
 	defer ao.mutex.Unlock()
 
-	return len(ao.content)
+	length := len(ao.content)
+
+	if length > 0 && ao.content[length-1].Len() == 0 {
+		length--
+	}
+
+	return length
 }
 
 func (ao *AtomicCommandOutput) MarshalJSON() ([]byte, error) {
 	ao.mutex.Lock()
 	defer ao.mutex.Unlock()
 
-	lines := make([]string, len(ao.content))
-	for i, buf := range ao.content {
-		lines[i] = buf.String()
+	end := len(ao.content)
+
+	if end > 0 && ao.content[end-1].Len() == 0 {
+		end--
+	}
+
+	lines := make([]string, end)
+	for i := range end {
+		lines[i] = ao.content[i].String()
 	}
 
 	out := struct {
