@@ -6,6 +6,7 @@
     "gopls@latest",
     "go-tools@latest",
     "golangci-lint@latest",
+    "govulncheck@latest",
 
     // Tasks
     "go-task@latest",
@@ -22,7 +23,7 @@
   "env": {
     "DEVBOX_NO_PROMPT": "true",
     "PANIX_CONFIG":     "examples/panix.deploy.yml",
-    "CGO_ENABLED": 0,
+    "CGO_ENABLED":      "0",
   },
   "shell": {
     "init_hook": ["pre-commit autoupdate", "pre-commit install"],

@@ -13,6 +13,8 @@ tasks:
     cmds:
       - task --list
 
+  # Go
+
   go:run:
     desc: Run the application with go run
     cmds:
@@ -37,22 +39,23 @@ tasks:
         --profile.mutex={{.PROFILE_DIR}}/mutex.prof
         --profile.goroutine={{.PROFILE_DIR}}/goroutine.prof
 
+  go:build:
+    desc: Build go binary
+    cmds:
+      - go build -o /dev/null ./...
+
   go:check:
     desc: Run checks
-    vars:
-      CUSTOM_GCL: ".devbox/bin/custom-gcl"
     cmds:
       - go mod tidy
-      - if [ ! -f {{.CUSTOM_GCL}} ]; then golangci-lint custom; fi # Build linter
-      - |
-        {{.CUSTOM_GCL}} run ./...
+      - golangci-lint run ./...
       - |
         if grep -rn "; " internal/ --include="*.go"; then
           echo "Error: Inlining pattern detected"
           exit 1
         fi
         echo "0 issues"
-      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - govulncheck ./...
 
   go:test:
     desc: Run tests with coverage check and summary
@@ -60,7 +63,8 @@ tasks:
       - mkdir -p {{.TEST_DIR}}
       - set -o pipefail && CGO_ENABLED=1 go test -race -shuffle=on ./...
         -coverprofile={{.COVER_PROFILE}} -covermode=atomic -coverpkg=./... -json
-        | tee {{.TEST_DIR}}/test.json | tparse -all
+        | tee {{.TEST_DIR}}/test.json | tparse -trimpath
+        "github.com/mihakrumpestar/panix"
       - go run github.com/vladopajic/go-test-coverage/v2@latest
         --profile={{.COVER_PROFILE}} --badge-file-name=gen/coverage.svg
 
@@ -68,6 +72,8 @@ tasks:
     desc: Run e2e tests (requires KVM, QEMU, Nix)
     cmds:
       - go run ./tests/e2e/
+
+  # Nix
 
   nix:run:
     desc: Run the application using nix
@@ -82,15 +88,23 @@ tasks:
         flakes"
       - ls -sh result/bin/panix
 
-  nix:update:
-    desc: Update flake
+  update:
+    desc: Update all deps
     cmds:
+      - devbox update
+      - go get -u all
+      - go mod tidy
+      - go mod vendor
       - nix flake update
 
-  nix:vendor:
-    desc: Update vendor hash
+  ci:
+    desc: Run all CI checks
     cmds:
-      - nix-update --flake --version=skip default
+      - task: generate
+      - task: go:check
+      - task: go:test
+      - task: go:build
+      #- go mod vendor
 
   generate:
     desc: Run go generate and update README CLI section
@@ -127,22 +141,6 @@ tasks:
         with open('README.md', 'w') as f:
             f.write(content)
         EOF
-
-  update:
-    desc: Update all deps
-    cmds:
-      - go get -u all
-      - go mod tidy
-      - task: nix:update
-      - task: nix:vendor
-
-  ci:
-    desc: Run all CI checks
-    cmds:
-      - task: generate
-      - task: go:check
-      - task: go:test
-      - task: nix:vendor
 
   release:
     desc: Create a new GitHub release

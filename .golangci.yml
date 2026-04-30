@@ -19,9 +19,6 @@ linters:
     - wsl # Replaced by wsl_v5
     - prealloc # Usually we don't preallocate slices
 
-  enable:
-    - nilaway
-
   settings:
     govet:
       enable:
@@ -69,14 +66,6 @@ linters:
         - -QF1008 # could remove embedded field from selector
         - -ST1000 # at least one file in a package should have a package comment
         - -ST1003 # should not use underscores in package names 
-
-    custom:
-      nilaway:
-        type: module
-        description: Static analysis tool to detect potential nil panics in Go code.
-        settings:
-          include-pkgs: "github.com/mihakrumpestar/panix"
-          exclude-pkgs: ""
 
 formatters:
   exclusions:
