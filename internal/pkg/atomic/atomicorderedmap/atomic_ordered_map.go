@@ -97,6 +97,10 @@ func (m *AtomicOrderedMap[K, V]) Del(key K) {
 }
 
 func (m *AtomicOrderedMap[K, V]) Len() int {
+	if m == nil {
+		return 0
+	}
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

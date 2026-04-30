@@ -75,7 +75,7 @@ func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg stri
 				}
 			}
 
-			return errors.Wrapf(ErrHostDisconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port.Get())
+			return errors.Wrap(ErrHostDisconnectTimeout, sshClient.HostPort())
 		},
 	)
 }
@@ -99,7 +99,7 @@ func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, fail
 				}
 			}
 
-			return errors.Wrapf(ErrHostReconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port.Get())
+			return errors.Wrap(ErrHostReconnectTimeout, sshClient.HostPort())
 		},
 	)
 }

@@ -10,7 +10,6 @@ import (
 )
 
 type resetable struct {
-	err       error
 	workflow  *workflow.Workflow
 	viewports *viewports.Viewports
 }
@@ -51,6 +50,7 @@ func (m *model) restartWorkflow() tea.Cmd {
 	}
 
 	m.conf.Fleet.ResetState()
+	m.err = nil
 
 	return m.startResetableWorkflow()
 }

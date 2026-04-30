@@ -9,6 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/gen"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -50,6 +51,26 @@ func FalseAdditionalProperties() *additionalPropertiesWrapper {
 	return &additionalPropertiesWrapper{Value: false}
 }
 
+type dependencyList []string
+
+func (d dependencyList) MarshalYAML() (any, error) {
+	if len(d) == 0 {
+		return []string{}, nil
+	}
+
+	return []string(d), nil
+}
+
+type dependenciesMap map[string]dependencyList
+
+func (d dependenciesMap) MarshalYAML() (any, error) {
+	if len(d) == 0 {
+		return map[string]dependencyList{}, nil
+	}
+
+	return map[string]dependencyList(d), nil
+}
+
 type TypeDefinition struct {
 	Type                 string                       `yaml:"type,omitempty"`
 	Description          string                       `yaml:"description,omitempty"`
@@ -57,6 +78,7 @@ type TypeDefinition struct {
 	Properties           map[string]any               `yaml:"properties,omitempty"`
 	Items                any                          `yaml:"items,omitempty"`
 	Required             requiredList                 `yaml:"required,omitempty"`
+	Dependencies         dependenciesMap              `yaml:"dependencies,omitempty"`
 	Enum                 []string                     `yaml:"enum,omitempty"`
 	Pattern              string                       `yaml:"pattern,omitempty"`
 	AdditionalProperties *additionalPropertiesWrapper `yaml:"additionalProperties,omitempty"`
@@ -100,7 +122,7 @@ func NewSchema() *generator {
 }
 
 func (g *generator) Generate() (*Schema, error) {
-	properties, required, err := g.processStruct(reflect.TypeFor[config.Config]())
+	properties, required, _, err := g.processStruct(reflect.TypeFor[config.Config]())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to process Config struct")
 	}
@@ -126,7 +148,7 @@ func (g *generator) Generate() (*Schema, error) {
 
 func (g *generator) initDefinitionTypes() {
 	g.defTypes[reflect.TypeFor[attributes.Bootstrap]()] = "Bootstrap"
-	g.defTypes[reflect.TypeFor[attributes.NixConfig]()] = "NixConfig"
+	g.defTypes[reflect.TypeFor[nix.NixConfig]()] = "NixConfig"
 	g.defTypes[reflect.TypeFor[attributes.PlainFileOrDirToTransfer]()] = "FileTransfer"
 	g.defTypes[reflect.TypeFor[attributes.KexecConfig]()] = "KexecConfig"
 	g.defTypes[reflect.TypeFor[ssh.SSHClient]()] = "SSH"
@@ -143,17 +165,19 @@ func (g *generator) initDefinitionTypes() {
 	}
 }
 
-func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, error) {
+func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, dependenciesMap, error) {
 	properties := make(map[string]any)
 
 	var required requiredList
+
+	dependencies := make(dependenciesMap)
 
 	if structType.Kind() == reflect.Pointer {
 		structType = structType.Elem()
 	}
 
 	if structType.Kind() != reflect.Struct {
-		return nil, nil, errors.Errorf("expected struct type, got %v", structType.Kind())
+		return nil, nil, nil, errors.Errorf("expected struct type, got %v", structType.Kind())
 	}
 
 	for field := range structType.Fields() {
@@ -164,14 +188,16 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 		yamlTag := field.Tag.Get("yaml")
 
 		if strings.Contains(yamlTag, ",inline") {
-			inlineProps, inlineRequired, err := g.processStruct(field.Type)
+			inlineProps, inlineRequired, inlineDeps, err := g.processStruct(field.Type)
 			if err != nil {
-				return nil, nil, errors.Wrapf(err, "failed to process inline field %s", field.Name)
+				return nil, nil, nil, errors.Wrapf(err, "failed to process inline field %s", field.Name)
 			}
 
 			maps.Copy(properties, inlineProps)
 
 			required = append(required, inlineRequired...)
+
+			maps.Copy(dependencies, inlineDeps)
 
 			continue
 		}
@@ -180,7 +206,7 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 
 		prop, err := g.processType(field.Type, field)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to process field %s", field.Name)
+			return nil, nil, nil, errors.Wrapf(err, "failed to process field %s", field.Name)
 		}
 
 		g.setFieldDescription(prop, field)
@@ -189,9 +215,66 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 		if isFieldRequired(field, yamlTag) {
 			required = append(required, fieldName)
 		}
+
+		g.collectDependencies(structType, field, fieldName, dependencies)
 	}
 
-	return properties, required, nil
+	return properties, required, dependencies, nil
+}
+
+func (g *generator) collectDependencies(structType reflect.Type, field reflect.StructField, fieldName string, dependencies dependenciesMap) {
+	validateTag := field.Tag.Get("validate")
+	if validateTag == "" {
+		return
+	}
+
+	for tag := range strings.SplitSeq(validateTag, ",") {
+		tag = strings.TrimSpace(tag)
+
+		depFields, ok := strings.CutPrefix(tag, "required_with=")
+		if !ok {
+			continue
+		}
+
+		goField := strings.TrimSpace(depFields)
+
+		yamlName := resolveYAMLFieldName(structType, goField)
+
+		_, ok = dependencies[yamlName]
+		if !ok {
+			dependencies[yamlName] = dependencyList{}
+		}
+
+		dependencies[yamlName] = append(dependencies[yamlName], fieldName)
+	}
+}
+
+func resolveYAMLFieldName(structType reflect.Type, goFieldName string) string {
+	if structType.Kind() == reflect.Pointer {
+		structType = structType.Elem()
+	}
+
+	if structType.Kind() != reflect.Struct {
+		return strings.ToLower(goFieldName)
+	}
+
+	for f := range structType.Fields() {
+		if f.Name == goFieldName {
+			yt := f.Tag.Get("yaml")
+			if yt == "" {
+				return strings.ToLower(goFieldName)
+			}
+
+			name := strings.Split(yt, ",")[0]
+			if name != "" {
+				return name
+			}
+
+			return strings.ToLower(goFieldName)
+		}
+	}
+
+	return strings.ToLower(goFieldName)
 }
 
 func (g *generator) processType(typ reflect.Type, field reflect.StructField) (any, error) {
@@ -299,7 +382,7 @@ func (g *generator) processDefinitionType(typ reflect.Type, defName string) (any
 }
 
 func (g *generator) buildObjectTypeDef(typ reflect.Type) (*TypeDefinition, error) {
-	properties, required, err := g.processStruct(typ)
+	properties, required, dependencies, err := g.processStruct(typ)
 	if err != nil {
 		return nil, err
 	}
@@ -308,6 +391,7 @@ func (g *generator) buildObjectTypeDef(typ reflect.Type) (*TypeDefinition, error
 		Type:                 "object",
 		Properties:           properties,
 		Required:             required,
+		Dependencies:         dependencies,
 		AdditionalProperties: FalseAdditionalProperties(),
 	}, nil
 }

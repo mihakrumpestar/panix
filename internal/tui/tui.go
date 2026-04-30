@@ -56,6 +56,7 @@ type model struct {
 	isSnapshot         bool
 	resetable          atomic.Pointer[resetable]
 	lastWorkflowUpdate time.Time
+	err                error
 
 	header    *header.Header
 	buildLogs *buildlogs.BuildLogs
@@ -90,7 +91,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
 
-	program := tea.NewProgram(mdl)
+	program := tea.NewProgram(mdl, tea.WithEnvironment(suppressDECRQMEnv()))
 
 	m, err := program.Run()
 	if err != nil {
@@ -104,13 +105,21 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	if finalModel.quitting {
 		content := finalModel.header.View(finalModel.dimensions.Width, finalModel.conf.ColorScheme).Content
-		content += finalModel.viewMainContent()
+
+		r := finalModel.resetable.Load()
+		if r != nil {
+			content += finalModel.viewMainContent()
+		}
+
+		if finalModel.err != nil {
+			content += fmt.Sprintf("\n\n=== Error ===\n\n%s\n", finalModel.err.Error())
+		}
+
 		fmt.Println(content)
 	}
 
-	r := finalModel.resetable.Load()
-	if r != nil {
-		return r.err
+	if finalModel.err != nil {
+		return finalModel.err
 	}
 
 	return nil
@@ -147,7 +156,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case errMsg:
-		resetable.err = msg.err
+		m.err = msg.err
 
 		m.conf.Fleet.Recalculate(m.conf.Phases)
 		logFinalState(m.conf)
@@ -257,6 +266,10 @@ func (m *model) viewMainContent() string {
 		m.conf.Fleet.Recalculate(m.conf.Phases)
 	}
 
+	if m.buildLogs == nil {
+		m.buildLogs = buildlogs.New(m.conf)
+	}
+
 	var builder strings.Builder
 
 	if !m.conf.Flags.DryRun {
@@ -269,9 +282,9 @@ func (m *model) viewMainContent() string {
 
 	builder.WriteString(m.buildLogs.View(resetable.viewports, m.spinners))
 
-	if resetable.err != nil {
+	if m.err != nil {
 		errorHeader := "\n\n=== Error ===\n"
-		errorContent := fmt.Sprintf("\n%s\n", resetable.err.Error())
+		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
 		builder.WriteString(m.conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
 	}
 
@@ -314,6 +327,10 @@ func (m *model) workflowUpdateHook() tea.Cmd {
 
 func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 	resetable := m.resetable.Load()
+	if resetable == nil {
+		return ""
+	}
+
 	fullscreenXpath := resetable.viewports.GetFullscreenXpath()
 	content := resetable.viewports.GetViewportContent(fullscreenXpath)
 
@@ -361,4 +378,18 @@ func setupSIGINTHandler(ctx context.Context) func() {
 	return func() {
 		signal.Stop(sigChan)
 	}
+}
+
+// suppressDECRQMEnv returns the current environment with SSH_TTY set.
+// This prevents Bubble Tea from sending DECRQM queries for mode 2026/2027,
+// which cause escape sequence leaks when the TUI exits before the terminal
+// responds.
+// See:
+// https://github.com/charmbracelet/bubbletea/issues/1590
+// https://github.com/charmbracelet/bubbletea/issues/1627
+func suppressDECRQMEnv() []string {
+	env := os.Environ()
+	env = append(env, "SSH_TTY=panix")
+
+	return env
 }

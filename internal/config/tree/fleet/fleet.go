@@ -1,11 +1,13 @@
 package fleet
 
 import (
+	"context"
 	"iter"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -21,7 +23,8 @@ import (
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Flakes *atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
+	Nix    nix.NixConfig                                                          `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
+	Flakes *atomicorderedmap.AtomicOrderedMap[string, *flake.Flake]           `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
@@ -37,6 +40,7 @@ func (f *Fleet) Init(localMachineHostname string) error {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
 
+	f.Nix.Init()
 	f.Logs = logs.New()
 
 	f.StatsTable = statstable.NewStatsTable()
@@ -136,7 +140,6 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 
 		fleetLeaf.Machine.State.Update(func(machineState *machine.State) {
 			machineState.Phase = machineLastPhaseLog.Key
-			machineState.Error = endErr
 
 			if !tas.IsFinished() {
 				machineState.Status = stats.Running
@@ -145,12 +148,23 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 				return
 			}
 
-			if endErr != nil {
-				machineState.Status = stats.Failed
-				machineState.StatusMsg = lastCommandLog.StatusIfFailed
+			if endErr != nil && errors.Is(errors.Cause(endErr.Err()), context.Canceled) {
+				machineState.Status = stats.Running
+				machineState.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.Error = nil
 
 				return
 			}
+
+			if endErr != nil {
+				machineState.Status = stats.Failed
+				machineState.StatusMsg = lastCommandLog.StatusIfFailed
+				machineState.Error = endErr
+
+				return
+			}
+
+			machineState.Error = nil
 
 			if workflowPhases[len(workflowPhases)-1] == machineState.Phase {
 				machineState.Status = stats.Done

@@ -34,8 +34,8 @@ func NewFaker() *Faker {
 func (f *Faker) SSHClient() ssh.SSHClient {
 	return ssh.SSHClient{
 		Hostname:     f.Internet().Domain(),
-		Port:         ssh.SSHPort(f.UInt16()),
-		Username:     ssh.SSHUsername(f.Internet().User()),
+		Port:         f.UInt16(),
+		Username:     f.Internet().User(),
 		IdentityFile: fmt.Sprintf("/home/%s/.ssh/id_%s", f.RandomStringWithLength(homeDirLen), f.RandomStringWithLength(shortStrLen)),
 	}
 }

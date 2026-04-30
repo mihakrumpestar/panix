@@ -21,7 +21,14 @@ func New(err error) *JSONError {
 	return &JSONError{err: err}
 }
 
-// Error satisfies error interface.
+func (e *JSONError) Err() error {
+	if e == nil {
+		return nil
+	}
+
+	return e.err
+}
+
 func (e *JSONError) Error() string {
 	if e == nil || e.err == nil {
 		return ""

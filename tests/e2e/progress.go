@@ -216,6 +216,7 @@ func printFinalf(format string, args ...any) {
 
 func failAndExit(exitErr error) {
 	stopSequentialMgr()
+	cleanupFifos()
 
 	elapsed := formatElapsed(time.Since(testStart))
 	red := color.New(color.FgHiRed, color.Bold).SprintFunc()

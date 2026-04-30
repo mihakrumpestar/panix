@@ -3,16 +3,34 @@ package workflow
 import (
 	"slices"
 
+	"github.com/mihakrumpestar/panix/internal/config/nix"
+	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
+	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
 func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
+	mode := fleetLeaf.Configuration.Nix.BuildMode
+
+	// BuildModeRemote + single machine: transfer is skipped — the closure is already on the target
+	if mode == nix.BuildModeRemote {
+		machineCount := 0
+		for range fleetLeaf.Configuration.Machines.Pairs() {
+			machineCount++
+		}
+
+		if machineCount <= 1 {
+			return nil
+		}
+	}
+
+	// Local machine: skip
 	if w.conf.Flags.LocalMachineHostname == fleetLeaf.Machine.SSH.Hostname {
 		return nil
 	}
@@ -21,7 +39,7 @@ func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
 			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
 
-			err := executeTransferPhaseMachineWrapper(exc, fleetLeaf.Machine, []string{systemClosure}, true)
+			err := executeTransferPhaseMachineWrapper(exc, fleetLeaf, []string{systemClosure}, true)
 			if err != nil {
 				return err
 			}
@@ -32,23 +50,21 @@ func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 
 func executeTransferPhaseMachineWrapper(
 	exc *executioner.Executioner,
-	machine *machine.Machine,
+	fleetLeaf *fleet.FleetLeaf,
 	toTransfer []string,
 	transferClosure bool,
 ) error {
-	storeArgs := ""
+	machineI := fleetLeaf.Machine
+	configurationI := fleetLeaf.Configuration
+	activeSSH := machineI.GetActiveSSH()
 
-	mi := machine.MetaInspect.Load()
-	if mi != nil && !mi.Bootstrapped && transferClosure {
-		storeArgs += "?remote-store=local?root=/mnt"
-	}
+	toURL := nixCopyToURL(activeSSH, machineI, transferClosure)
+	sshOpts := activeSSH.MaybeNixSSHOpts()
 
-	activeSSH := machine.GetActiveSSH()
+	baseArgs := nixCopyBaseArgs(configurationI, toURL)
 	commandWithArgs := slices.Concat(
-		[]string{"nix"},
-		NixExperimentalFeatures,
-		[]string{"copy", "--to", "ssh://" + activeSSH.Hostname + storeArgs},
-		slices.Concat(machine.Nix.ExtraFlags, machine.Nix.CopyFlags),
+		baseArgs,
+		slices.Concat(configurationI.Nix.ExtraFlags, configurationI.Nix.CopyFlags),
 		toTransfer,
 	)
 
@@ -58,16 +74,53 @@ func executeTransferPhaseMachineWrapper(
 		commandWithArgs,
 		executioner.SkipIfLocal(),
 		executioner.DisableAutoSSHCommand(),
-		executioner.Env(activeSSH.MaybeSSHEnvOpts()),
+		executioner.Env(sshOpts),
 	)
 	if err != nil {
 		return errors.Wrap(err, "transfer failed")
 	}
 
 	log.Info().
-		Str("machine", machine.Name).
+		Str("machine", machineI.Name).
 		Strs("transferred", toTransfer).
-		Msgf("Transferred %s to %s", toTransfer, machine.Name)
+		Msgf("Transferred %s to %s", toTransfer, machineI.Name)
 
 	return nil
+}
+
+func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, transferClosure bool) string {
+	var storeURLParams []string
+
+	mi := machineI.MetaInspect.Load()
+	if mi != nil && !mi.Bootstrapped && transferClosure {
+		storeURLParams = append(storeURLParams, "remote-store=local?root=/mnt")
+	}
+
+	return activeSSH.NixStoreURLWithParams(storeURLParams...)
+}
+
+func nixCopyBaseArgs(configurationI *configuration.Configuration, toURL string) []string {
+	baseArgs := []string{"nix"}
+	baseArgs = append(baseArgs, NixExperimentalFeatures...)
+	baseArgs = append(baseArgs, "copy")
+
+	if configurationI.Nix.BuildMode == nix.BuildModeRemote {
+		var fromSSH ssh.SSHClient
+
+		for i, pair := range configurationI.Machines.Pairs() {
+			if i == 0 && pair.Value != nil {
+				fromSSH = pair.Value.GetActiveSSH()
+
+				break
+			}
+		}
+
+		if fromSSH.IsInitialized() {
+			baseArgs = append(baseArgs, "--from", fromSSH.NixStoreURL())
+		}
+	}
+
+	baseArgs = append(baseArgs, "--to", toURL, "--no-check-sigs")
+
+	return baseArgs
 }

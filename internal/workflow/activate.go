@@ -31,7 +31,7 @@ func (w *Workflow) executeActivatePhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 			shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
 			if shouldBootstrap {
-				return executeBootstrap(exc, machine, systemClosure)
+				return executeBootstrap(exc, machine, fleetLeaf.Configuration.Nix.NixosInstallFlags, systemClosure)
 			}
 
 			return executeActivation(exc, w.conf.Flags, machine, systemClosure)
@@ -39,14 +39,14 @@ func (w *Workflow) executeActivatePhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 	)
 }
 
-func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, systemClosure string) error {
+func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {
 	err := exc.Exec(
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
 		slices.Concat(
 			[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
-			machine.Nix.NixosInstallFlags,
+			nixosInstallFlags,
 		),
 	)
 	if err != nil {

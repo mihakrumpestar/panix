@@ -117,7 +117,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
@@ -127,7 +127,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
@@ -137,7 +137,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
@@ -147,7 +147,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1))))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
 		},
 		{
@@ -157,8 +157,8 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithBootstrapSSH())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Activate},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 		},
 		{
 			"keeps all phases when both needed",
@@ -167,8 +167,8 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1), fk.MachineWithBootstrapSSH())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Secrets, phase.Activate},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 		},
 		{
 			"does not remove phases not in list",

@@ -44,7 +44,12 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleEsc()
 	}
 
-	hasActiveInner := m.resetable.Load().viewports.HasActiveInner()
+	resetable := m.resetable.Load()
+	if resetable == nil {
+		return m, nil
+	}
+
+	hasActiveInner := resetable.viewports.HasActiveInner()
 
 	statsTable := m.conf.Fleet.StatsTable
 	if statsTable.HandleNavigation(msg.String(), hasActiveInner) {
@@ -71,6 +76,9 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleCopy() (tea.Model, tea.Cmd) {
 	resetable := m.resetable.Load()
+	if resetable == nil {
+		return m, nil
+	}
 
 	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
@@ -93,16 +101,16 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 	m.quitting = true
 	resetable := m.resetable.Load()
 
-	if resetable.workflow != nil {
+	if resetable != nil && resetable.workflow != nil {
 		if m.conf.Flags.Snapshot.OnExit {
 			m.captureSnapshot(config.SnaphsotReasonExit)
 		}
 
 		err := resetable.workflow.Cancel()
-		if resetable.err != nil && err != nil && !errors.Is(err, context.Canceled) {
-			resetable.err = errors.Wrap(resetable.err, err.Error())
+		if m.err != nil && err != nil && !errors.Is(err, context.Canceled) {
+			m.err = errors.Wrap(m.err, err.Error())
 		} else if err != nil && !errors.Is(err, context.Canceled) {
-			resetable.err = err
+			m.err = err
 		}
 	}
 
@@ -130,11 +138,16 @@ func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleRetry() (tea.Model, tea.Cmd) {
+	resetable := m.resetable.Load()
+	if resetable == nil || resetable.workflow == nil {
+		return m, nil
+	}
+
 	if m.conf.Flags.Snapshot.OnRetry {
 		m.captureSnapshot(config.SnaphsotReasonRetry)
 	}
 
-	m.resetable.Load().workflow.State().Retry.Trigger()
+	resetable.workflow.State().Retry.Trigger()
 
 	return m, nil
 }
@@ -148,6 +161,10 @@ func (m *model) handleRestart() (tea.Model, tea.Cmd) {
 
 func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	resetable := m.resetable.Load()
+	if resetable == nil {
+		return m, nil
+	}
+
 	if resetable.viewports.IsFullscreen() {
 		resetable.viewports.ExitFullscreen()
 
@@ -170,6 +187,10 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 
 	statsTable := m.conf.Fleet.StatsTable
 	phaseStatus := m.conf.Fleet.PhaseStatus
+
+	if resetable == nil {
+		return m, nil
+	}
 
 	switch {
 	case resetable.viewports.IsFullscreen():
@@ -197,7 +218,7 @@ func (m *model) captureSnapshot(reason config.SnaphsotReason) {
 		return
 	}
 
-	snap := snapshot.Capture(m.conf, reason, resetable.err)
+	snap := snapshot.Capture(m.conf, reason, m.err)
 
 	err := snapshot.Write(m.conf.Flags.Snapshot.Dir, snap)
 	if err != nil {

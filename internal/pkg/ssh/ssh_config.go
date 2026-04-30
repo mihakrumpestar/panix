@@ -97,7 +97,7 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 			return errors.Wrapf(err, "failed to parse Port for alias %q", alias)
 		}
 
-		sshClient.Port.Set(uint16(port64))
+		sshClient.Port = uint16(port64)
 	}
 
 	username, err := sc.sshConfig.Get(alias, "User")
@@ -106,7 +106,7 @@ func (sc *SSHConfig) RetrieveFullParamsFromSSHConfig(sshClient *SSHClient) error
 	}
 
 	if username != "" {
-		sshClient.Username.Set(username)
+		sshClient.Username = username
 	}
 
 	return nil

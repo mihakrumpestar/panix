@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -26,8 +30,21 @@ func main() {
 	}
 }
 
+func killStaleQEMU() {
+	_ = exec.CommandContext(context.Background(), "pkill", "-f", "qemu-system-x86_64").Run()
+}
+
+func cleanupFifos() {
+	matches, _ := filepath.Glob(filepath.Join(logDirPath, "*-serial.fifo"))
+	for _, m := range matches {
+		_ = os.Remove(m)
+	}
+}
+
 func run() error {
 	testStart = time.Now()
+
+	killStaleQEMU()
 
 	err := runChecks()
 	if err != nil {
@@ -49,6 +66,7 @@ func run() error {
 
 	defer isoVM.kill()
 	defer kexecVM.kill()
+	defer cleanupFifos()
 
 	err = runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath)
 	if err != nil {

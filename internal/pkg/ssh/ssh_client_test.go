@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaybeSSHCommandArguments_DisableStrictKeyChecking(t *testing.T) {
@@ -123,4 +124,191 @@ func TestKnownHostsFile_IsAuto(t *testing.T) {
 	assertion.False(KnownHostsFile("").IsAuto())
 	assertion.True(KnownHostsFile(os.TempDir() + "/panix-knownhosts-1234").IsAuto())
 	assertion.False(KnownHostsFile("/home/user/.ssh/known_hosts").IsAuto())
+}
+
+func TestMaybeNixSSHOpts_Defaults(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname: "example.com",
+		Port:     22,
+		Username: "root",
+	}
+
+	opts := client.MaybeNixSSHOpts()
+
+	assertion := assert.New(t)
+	assertion.Equal([]string{"NIX_SSHOPTS=-o StrictHostKeyChecking=accept-new"}, opts)
+}
+
+func TestMaybeNixSSHOpts_DisableStrictKeyChecking(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:                 "example.com",
+		DisableStrictKeyChecking: true,
+		IdentityFile:             "/home/user/.ssh/id_ed25519",
+	}
+
+	opts := client.MaybeNixSSHOpts()
+
+	assertion := assert.New(t)
+	assertion.Equal([]string{"NIX_SSHOPTS=-o IdentitiesOnly=yes -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"}, opts)
+}
+
+func TestMaybeNixSSHOpts_DisableAutoAddHostKey(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:              "example.com",
+		DisableAutoAddHostKey: true,
+	}
+
+	opts := client.MaybeNixSSHOpts()
+
+	assertion := assert.New(t)
+	assertion.Equal([]string{"NIX_SSHOPTS="}, opts)
+}
+
+func TestNixStoreURL_Alias(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "my-server",
+		hostnameIsAlias: true,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://my-server", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_Defaults(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        SSHDefaultUsername,
+		Port:            SSHDefaultPort,
+		hostnameIsAlias: false,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50:22", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_CustomUser(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        "deploy",
+		Port:            SSHDefaultPort,
+		hostnameIsAlias: false,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://deploy@192.168.1.50:22", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_CustomPort(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Port:            2222,
+		Username:        "root",
+		hostnameIsAlias: false,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50:2222", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_IdentityFile(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        SSHDefaultUsername,
+		Port:            SSHDefaultPort,
+		IdentityFile:    "/home/user/.ssh/id_ed25519",
+		hostnameIsAlias: false,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_AllCustom(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Port:            2222,
+		Username:        "builder",
+		IdentityFile:    "/home/user/.ssh/builder_key",
+		hostnameIsAlias: false,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://builder@192.168.1.50:2222?ssh-key=/home/user/.ssh/builder_key", client.NixStoreURL())
+}
+
+func TestResolveIdentityFile_Empty(t *testing.T) {
+	t.Parallel()
+
+	result, err := resolveIdentityFile("")
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestResolveIdentityFile_AbsolutePath(t *testing.T) {
+	t.Parallel()
+
+	result, err := resolveIdentityFile("/home/user/.ssh/id_ed25519")
+	require.NoError(t, err)
+	assert.Equal(t, "/home/user/.ssh/id_ed25519", result)
+}
+
+func TestResolveIdentityFile_TildeExpansion(t *testing.T) {
+	t.Parallel()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home directory")
+	}
+
+	assertion := assert.New(t)
+	result, err := resolveIdentityFile("~/.ssh/id_ed25519")
+	require.NoError(t, err)
+	assertion.Equal(home+"/.ssh/id_ed25519", result)
+}
+
+func TestNixStoreURLWithParams_Alias(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "my-server",
+		hostnameIsAlias: true,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://my-server", client.NixStoreURLWithParams())
+	assertion.Equal("ssh-ng://my-server?remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt"))
+}
+
+func TestNixStoreURLWithParams_NonAliasWithIdentityFile(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        SSHDefaultUsername,
+		Port:            SSHDefaultPort,
+		IdentityFile:    "/home/user/.ssh/id_ed25519",
+		hostnameIsAlias: false,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURLWithParams())
+	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519&remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt")) //nolint:lll
 }

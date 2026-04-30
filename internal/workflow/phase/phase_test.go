@@ -111,7 +111,7 @@ func TestPhasesInOrder(t *testing.T) {
 
 	assertion := assert.New(t)
 
-	expected := []Phase{Inspect, Build, Bootstrap, Transfer, Secrets, Activate, Rollback}
+	expected := []Phase{Inspect, Bootstrap, Build, Transfer, Secrets, Activate, Rollback}
 	result := PhasesInOrder()
 	assertion.Equal(expected, result)
 	assertion.Len(result, len(PhaseRegistry))

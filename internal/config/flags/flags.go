@@ -28,14 +28,19 @@ type WorkflowFlags struct {
 	ConfigFlags `yaml:",inline"`
 	EvalFlags   `yaml:",inline"`
 
-	RequireAllSuccess    bool       `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD"`
-	LocalMachineHostname string     `yaml:"local_machine_hostname" json:"local_machine_hostname,omitempty" help:"Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"`
-	DryRun               bool       `yaml:"dry_run" json:"dry_run,omitempty" help:"Show what would be done without executing"`
-	DryRunWithInspect    bool       `yaml:"dry_run_with_inspect" json:"dry_run_with_inspect,omitempty" help:"Show what would be done without executing, but with real inspect query"`
-	ExitOnComplete       bool       `yaml:"exit_on_complete" json:"exit_on_complete,omitempty" help:"Exit TUI on completion ('retry' and 'restart' are disabled in this mode)"`
-	Output               OutputMode `yaml:"output" json:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json"`
+	Output OutputMode `yaml:"output" json:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json"`
 
-	Tui `yaml:"tui" json:"tui" embed:"" prefix:"tui."` //nolint:embeddedstructfieldcheck
+	RequireAllSuccess bool `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD"`
+	ExitOnComplete    bool `yaml:"exit_on_complete" json:"exit_on_complete,omitempty" help:"Exit TUI on completion ('retry' and 'restart' are disabled in this mode)"`
+
+	LocalMachineHostname string `yaml:"local_machine_hostname" json:"local_machine_hostname,omitempty" help:"Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"`
+	DryRun               bool   `yaml:"dry_run" json:"dry_run,omitempty" help:"Show what would be done without executing"`
+	DryRunWithInspect    bool   `yaml:"dry_run_with_inspect" json:"dry_run_with_inspect,omitempty" help:"Show what would be done without executing, but with real inspect query"`
+
+	Logging  `yaml:"logging" json:"logging"` //nolint:embeddedstructfieldcheck
+	Snapshot `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."`
+	Tui      `yaml:"tui" json:"tui" embed:"" prefix:"tui."`
+	Profile  `yaml:"profile" json:"profile" embed:"" prefix:"profile."`
 }
 
 //nolint:lll
@@ -46,10 +51,6 @@ type EvalFlags struct {
 	SkipPhases     []phase.Phase             `yaml:"skip_phases" json:"skip_phases,omitempty" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	Timeout        time.Duration             `yaml:"timeout" json:"timeout,omitempty" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
 	ActivationMode attributes.ActivationMode `yaml:"activation_mode" json:"activation_mode,omitempty" help:"Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)" validate:"omitempty,oneof=check switch boot test dry-activate"`
-
-	Logging  `yaml:"logging" json:"logging"` //nolint:embeddedstructfieldcheck
-	Snapshot `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."`
-	Profile  `yaml:"profile" json:"profile" embed:"" prefix:"profile."`
 }
 
 //nolint:lll

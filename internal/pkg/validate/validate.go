@@ -6,13 +6,15 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
+	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/pkg/errors"
 	"github.com/stoewer/go-strcase"
 )
 
 func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags) error { //nolint:varnamelen
-	validate := validator.New(validator.WithPrivateFieldValidation(), validator.WithRequiredStructEnabled())
+	validate := validator.New(validator.WithRequiredStructEnabled(), validator.WithPrivateFieldValidation(), validator.WithRequiredStructEnabled())
 
 	registerPathValidators(validate)
 
@@ -31,6 +33,11 @@ func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags) e
 		if err != nil {
 			return errors.Wrap(err, "invalid flakes configuration")
 		}
+	}
+
+	err = validateBuildModes(f)
+	if err != nil {
+		return errors.Wrap(err, "invalid build mode configuration")
 	}
 
 	return nil
@@ -103,4 +110,50 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 	default:
 		return fmt.Sprintf("failed validation '%s' (value: %v)", fieldError.Tag(), fieldError.Value())
 	}
+}
+
+func validateBuildModes(f *fleet.Fleet) error {
+	var errs []string
+
+	for _, flakePair := range f.Flakes.Pairs() {
+		for _, configPair := range flakePair.Value.Configurations.Pairs() {
+			config := configPair.Value
+			configPath := config.Xpath.String()
+
+			errs = validateBuildMode(config, configPath, errs)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "\n"))
+	}
+
+	return nil
+}
+
+func validateBuildMode(config *configuration.Configuration, configPath string, errs []string) []string {
+	if config.Nix.BuildMode != nix.BuildModeRemote {
+		return errs
+	}
+
+	machineCount := 0
+	firstMachineIsLocal := false
+
+	for i, machinePair := range config.Machines.Pairs() {
+		machineCount++
+
+		if i == 0 && machinePair.Value != nil && machinePair.Value.SSH.IsLocal() {
+			firstMachineIsLocal = true
+		}
+	}
+
+	if machineCount == 0 {
+		errs = append(errs, configPath+": remote mode requires at least 1 machine")
+	}
+
+	if firstMachineIsLocal {
+		errs = append(errs, configPath+": remote mode requires the first machine to be remote (not local)")
+	}
+
+	return errs
 }

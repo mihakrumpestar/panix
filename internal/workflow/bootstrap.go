@@ -62,7 +62,7 @@ func (w *Workflow) disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLea
 		return ErrDiskoNoOutputPaths
 	}
 
-	err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
+	err = executeTransferPhaseMachineWrapper(exc, fleetLeaf, []string{diskoScript}, false)
 	if err != nil {
 		return err
 	}

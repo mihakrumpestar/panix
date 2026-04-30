@@ -1123,30 +1123,13 @@ Flags:
                                    Activation mode: check, switch, boot, test,
                                    dry-activate (overrides machine specific
                                    ones) ($PANIX_ACTIVATION_MODE)
-  -l, --log                        Enable logging to file ($PANIX_LOG)
-      --log-file="panix.log"       Log file path (epoch timestamp appended
-                                   before .log) ($PANIX_LOG_FILE)
-  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
-      --snapshot.dir="."           Directory to save snapshots
-                                   ($PANIX_SNAPSHOT_DIR)
-      --snapshot.on-retry          Take snapshot before retry
-                                   ($PANIX_SNAPSHOT_ON_RETRY)
-      --snapshot.on-exit           Take snapshot on exit
-                                   ($PANIX_SNAPSHOT_ON_EXIT)
-      --profile.cpu=STRING         Path for CPU profile output (enables CPU
-                                   profiling) ($PANIX_PROFILE_CPU)
-      --profile.mem=STRING         Path for memory profile output (enables
-                                   memory profiling) ($PANIX_PROFILE_MEM)
-      --profile.block=STRING       Path for block profile output (enables block
-                                   profiling) ($PANIX_PROFILE_BLOCK)
-      --profile.mutex=STRING       Path for mutex profile output (enables mutex
-                                   profiling) ($PANIX_PROFILE_MUTEX)
-      --profile.goroutine=STRING
-                                   Path for goroutine profile output
-                                   (enables goroutine profiling)
-                                   ($PANIX_PROFILE_GOROUTINE)
+      --output="tui"               Output mode: tui, console, json
+                                   ($PANIX_OUTPUT)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
+      --exit-on-complete           Exit TUI on completion ('retry' and
+                                   'restart' are disabled in this mode)
+                                   ($PANIX_EXIT_ON_COMPLETE)
       --local-machine-hostname=STRING
                                    Hostname of the machine that is local
                                    (won't use ssh to connect to it) (default:
@@ -1157,11 +1140,16 @@ Flags:
       --dry-run-with-inspect       Show what would be done without
                                    executing, but with real inspect query
                                    ($PANIX_DRY_RUN_WITH_INSPECT)
-      --exit-on-complete           Exit TUI on completion ('retry' and
-                                   'restart' are disabled in this mode)
-                                   ($PANIX_EXIT_ON_COMPLETE)
-      --output="tui"               Output mode: tui, console, json
-                                   ($PANIX_OUTPUT)
+  -l, --log                        Enable logging to file ($PANIX_LOG)
+      --log-file="panix.log"       Log file path (epoch timestamp appended
+                                   before .log) ($PANIX_LOG_FILE)
+  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
+      --snapshot.dir="."           Directory to save snapshots
+                                   ($PANIX_SNAPSHOT_DIR)
+      --snapshot.on-retry          Take snapshot before retry
+                                   ($PANIX_SNAPSHOT_ON_RETRY)
+      --snapshot.on-exit           Take snapshot on exit
+                                   ($PANIX_SNAPSHOT_ON_EXIT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
                                    ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
       --tui.show-active-only       Show only running or errored logs
@@ -1175,6 +1163,18 @@ Flags:
                                    Maximum height for command labels
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+      --profile.cpu=STRING         Path for CPU profile output (enables CPU
+                                   profiling) ($PANIX_PROFILE_CPU)
+      --profile.mem=STRING         Path for memory profile output (enables
+                                   memory profiling) ($PANIX_PROFILE_MEM)
+      --profile.block=STRING       Path for block profile output (enables block
+                                   profiling) ($PANIX_PROFILE_BLOCK)
+      --profile.mutex=STRING       Path for mutex profile output (enables mutex
+                                   profiling) ($PANIX_PROFILE_MUTEX)
+      --profile.goroutine=STRING
+                                   Path for goroutine profile output
+                                   (enables goroutine profiling)
+                                   ($PANIX_PROFILE_GOROUTINE)
 ```
 
 </details>
