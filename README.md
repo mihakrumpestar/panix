@@ -26,9 +26,9 @@
 
 ## Demo
 
-![Demo](./assets/demo.gif)
+![Demo](https://github.com/user-attachments/assets/55b2a31c-cd79-419b-9f10-63fc9d5130a6)
 
-> [mp4 version](assets/demo.mp4)
+> [mp4 version](https://spectra.video/w/wFKyzEhzRf4fy4og53dDg1)
 
 Full demo of the bootstrap process with kexec over Arch:
 
