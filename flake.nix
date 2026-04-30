@@ -27,6 +27,8 @@
           flags = ["-trimpath"];
           ldflags = ["-s" "-w"];
 
+          env.CGO_ENABLED = 0; # Disable CGO
+
           vendorHash = "sha256-zjs5O0SZUQDv2+O5ACCfIHLwlX4BuSESHPSqKRNoXu4=";
 
           meta = with pkgs.lib; {
