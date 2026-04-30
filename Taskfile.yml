@@ -52,8 +52,7 @@ tasks:
           exit 1
         fi
         echo "0 issues"
-      # DISABLED UNTIL Go 1.26.2 hits Nixpkgs
-      #- go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   go:test:
     desc: Run tests with coverage check and summary

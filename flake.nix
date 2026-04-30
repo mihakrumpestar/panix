@@ -27,7 +27,7 @@
           flags = ["-trimpath"];
           ldflags = ["-s" "-w"];
 
-          vendorHash = "sha256-nlqA3CcIBCKR445+R5Op+kbSMT/l+aR42eprL4jcU3A=";
+          vendorHash = "sha256-zjs5O0SZUQDv2+O5ACCfIHLwlX4BuSESHPSqKRNoXu4=";
 
           meta = with pkgs.lib; {
             description = "Universal NixOS Deployment Tool";
