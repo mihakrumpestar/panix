@@ -25,3 +25,13 @@ func (c *Cache[T, K]) Get(fun func() (T, bool), key K) T {
 
 	return contents
 }
+
+func (c *Cache[T, K]) GetCheck(key K) (T, bool) {
+	if c.cached && c.key == key {
+		return c.contents, true
+	}
+
+	var zero T
+
+	return zero, false
+}

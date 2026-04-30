@@ -57,6 +57,7 @@ type model struct {
 	resetable          atomic.Pointer[resetable]
 	lastWorkflowUpdate time.Time
 	err                error
+	contentVersion     uint64
 
 	header    *header.Header
 	buildLogs *buildlogs.BuildLogs
@@ -211,11 +212,13 @@ func (m *model) View() tea.View {
 
 	headerFooterHeight := header.Height + footer.Height
 
+	m.contentVersion++
+
 	var main string
 	if resetable.viewports.IsFullscreen() {
 		main = m.renderFullscreenViewport(headerFooterHeight)
 	} else {
-		main = resetable.viewports.GetOrCreateMainViewport(mainContent, headerFooterHeight)
+		main = resetable.viewports.GetOrCreateMainViewport(mainContent, m.contentVersion, headerFooterHeight)
 	}
 
 	var builder strings.Builder
@@ -340,7 +343,7 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 		return ""
 	}
 
-	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, footerHeaderHeight)
+	fullscreenViewport := resetable.viewports.RenderFullscreenViewport(fullscreenXpath, content, m.contentVersion, footerHeaderHeight)
 
 	return fullscreenViewport
 }

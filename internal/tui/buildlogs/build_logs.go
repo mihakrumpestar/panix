@@ -299,6 +299,11 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 		label = cmd.Command
 	}
 
+	labelShowsCommands := uint64(0)
+	if b.conf.Flags.Tui.ShowCommandsInLabels {
+		labelShowsCommands = 1
+	}
+
 	cmdXpath := phaseXpath.NewXpathWithAppend(label)
 	tasCached := cmd.TimeAndState.Load()
 
@@ -306,7 +311,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Command, cmd.TimeAndState)
 
 	labelWidth := cmdIndent + lipgloss.Width(icon) + durWidth
-	labelVP := b.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, labelWidth)
+	labelVP := b.viewports.GetOrCreateLabelViewport(cmdXpath.NewXpathWithAppend("label"), label, labelShowsCommands, labelWidth)
 
 	h := lipgloss.Height(labelVP)
 	if h > 1 {
@@ -333,7 +338,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	if err != nil {
 		errMsg := "✗ Command failed: " + err.Error()
 		cmdNode.Child(b.conf.ColorScheme.Error.Color.Render(
-			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, cmdIndent+treeStep),
+			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, 0, cmdIndent+treeStep),
 		))
 	} else {
 		b.viewports.RemoveIfExistsViewport(errXpath)

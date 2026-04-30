@@ -3,7 +3,6 @@ package viewports
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -44,14 +43,12 @@ type viewportCacheKey struct {
 	height    int
 	scrollPct float64
 	version   uint64
-	content   string
 }
 
 type item struct {
 	model          viewport.Model
 	content        string
 	contentVersion uint64
-	zoneBase       xpath.Xpath
 	cache          cache.Cache[string, viewportCacheKey]
 }
 
@@ -63,6 +60,7 @@ type renderConfig struct {
 	explicitWidth   int
 	indent          int
 	output          *command.AtomicCommandOutput
+	version         uint64
 }
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
@@ -103,14 +101,6 @@ func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWi
 
 // Factory methods
 
-func (v *Viewports) GetOrCreateViewport(xp xpath.Xpath, content string, indent int) string {
-	return v.render(xp, content, renderConfig{
-		bordered:  true,
-		maxHeight: v.conf.Flags.Tui.CommandOutputMaxHeight,
-		indent:    indent,
-	})
-}
-
 func (v *Viewports) GetOrCreateViewportVersioned(xp xpath.Xpath, output *command.AtomicCommandOutput, indent int) string {
 	return v.render(xp, "", renderConfig{
 		bordered:  true,
@@ -120,22 +110,24 @@ func (v *Viewports) GetOrCreateViewportVersioned(xp xpath.Xpath, output *command
 	})
 }
 
-func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, indent int) string {
+func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, version uint64, indent int) string {
 	return v.render(xp, content, renderConfig{
 		highlightActive: true,
 		indent:          indent,
+		version:         version,
 	})
 }
 
-func (v *Viewports) GetOrCreateMainViewport(content string, footerHeaderHeight int) string {
+func (v *Viewports) GetOrCreateMainViewport(content string, version uint64, footerHeaderHeight int) string {
 	h := v.dimensions.Height - footerHeaderHeight
 
 	return v.render(v.activation.mainXpath, content, renderConfig{
 		explicitHeight: h,
+		version:        version,
 	}) + "\n"
 }
 
-func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, footerHeaderHeight int) string {
+func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, version uint64, footerHeaderHeight int) string {
 	h := max(1, v.dimensions.Height-footerHeaderHeight-borderOverhead)
 	w := max(1, v.dimensions.Width-scrollbarWidth-borderOverhead)
 
@@ -143,6 +135,7 @@ func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, foo
 		bordered:       true,
 		explicitHeight: h,
 		explicitWidth:  w,
+		version:        version,
 	}) + "\n"
 }
 
@@ -275,8 +268,6 @@ func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg rend
 	yOffset := itm.model.YOffset()
 
 	width := v.viewWidth(cfg)
-
-	itm.content = content
 	itm.model.SetWidth(width)
 	itm.model.SetContent(lipgloss.Wrap(content, width, ""))
 
@@ -300,20 +291,28 @@ func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg rend
 }
 
 func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) string {
-	var version uint64
-	if cfg.output != nil {
-		version = cfg.output.Version()
-	}
+	version := v.resolveVersion(cfg)
 
 	itm := v.getOrCreateItem(xpath, content, cfg)
+	content = v.resolveContent(itm, version, content, cfg)
 
-	if cfg.output != nil {
-		if itm.contentVersion != version {
-			content = cfg.output.String()
-			itm.content = content
-			itm.contentVersion = version
-		} else {
-			content = itm.content
+	width := v.viewWidth(cfg)
+
+	if itm.contentVersion == version && itm.model.Width() == width {
+		key := viewportCacheKey{
+			width:     width,
+			height:    itm.model.Height(),
+			scrollPct: itm.model.ScrollPercent(),
+			version:   version,
+		}
+
+		view, hit := itm.cache.GetCheck(key)
+		if hit {
+			active := xpath == v.activation.activeXpath
+			view = v.applyActiveStyle(view, cfg, active)
+			view = zone.Mark(xpath.String(), view)
+
+			return view
 		}
 	}
 
@@ -323,18 +322,14 @@ func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) 
 		width:     itm.model.Width(),
 		height:    itm.model.Height(),
 		scrollPct: itm.model.ScrollPercent(),
-	}
-	if cfg.output != nil {
-		key.version = version
-	} else {
-		key.content = content
+		version:   version,
 	}
 
 	view := itm.cache.Get(
 		func() (string, bool) {
 			scrollbar, _ := v.scrollbar(itm.model.ScrollPercent(), itm.model.TotalLineCount(), itm.model.Height())
 
-			return v.withScrollbar(itm.model.View(), scrollbar, itm.zoneBase), true
+			return v.withScrollbar(itm.model.View(), scrollbar), true
 		},
 		key,
 	)
@@ -344,6 +339,28 @@ func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) 
 	view = zone.Mark(xpath.String(), view)
 
 	return view
+}
+
+func (v *Viewports) resolveVersion(cfg renderConfig) uint64 {
+	if cfg.output != nil {
+		return cfg.output.Version()
+	}
+
+	return cfg.version
+}
+
+func (v *Viewports) resolveContent(itm *item, version uint64, currentContent string, cfg renderConfig) string {
+	if itm.contentVersion != version {
+		if cfg.output != nil {
+			itm.content = cfg.output.String()
+		} else {
+			itm.content = currentContent
+		}
+
+		itm.contentVersion = version
+	}
+
+	return itm.content
 }
 
 func (v *Viewports) getOrCreateItem(xpath xpath.Xpath, content string, cfg renderConfig) *item {
@@ -356,9 +373,8 @@ func (v *Viewports) getOrCreateItem(xpath xpath.Xpath, content string, cfg rende
 	h := max(1, cfg.explicitHeight)
 
 	itm = &item{
-		model:    viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
-		zoneBase: xpath.NewXpathWithAppend("scrollbar"),
-		content:  content,
+		model:   viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		content: content,
 	}
 	itm.model.GotoBottom()
 	v.items.Set(xpath, itm)
@@ -419,7 +435,7 @@ func (v *Viewports) scrollbar(pct float64, total, visible int) (string, int) {
 }
 
 // withScrollbar appends scrollbar lines to the right side of the viewport view.
-func (v *Viewports) withScrollbar(view, bar string, barZone xpath.Xpath) string {
+func (v *Viewports) withScrollbar(view, bar string) string {
 	if bar == "" {
 		return view
 	}
@@ -430,7 +446,7 @@ func (v *Viewports) withScrollbar(view, bar string, barZone xpath.Xpath) string 
 
 	for i, line := range vLines {
 		if i < len(bLines) {
-			result[i] = line + " " + zone.Mark(barZone.NewXpathWithAppend(strconv.Itoa(i)).String(), bLines[i])
+			result[i] = line + " " + bLines[i]
 		} else {
 			result[i] = line
 		}
