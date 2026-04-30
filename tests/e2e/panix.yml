@@ -49,3 +49,36 @@ fleet:
                 post_bootstrap_provisioned_hooks:
                   - waitForOnline
 {{ end }}
+        test-vm-remote:
+          nix:
+            build_mode: remote
+          machines:
+            nixos-iso-vm-remote:
+              ssh: &ssh_nixos_iso_remote
+                hostname: 127.0.0.1
+                port: 10025
+                username: root
+                identity_file: {{ $key }}
+                disable_strict_key_checking: true
+{{ if $isBootstrap }}
+              bootstrap:
+                ssh: *ssh_nixos_iso_remote
+                post_bootstrap_provisioned_hooks:
+                  - waitForOnline
+{{ end }}
+            kexec-vm-remote:
+              ssh: &ssh_kexec_remote
+                hostname: 127.0.0.1
+                port: 10026
+                username: root
+                identity_file: {{ $key }}
+                disable_strict_key_checking: true
+{{ if $isBootstrap }}
+              bootstrap:
+                ssh: *ssh_kexec_remote
+                kexec:
+                  image: {{ $cache }}/kexec-installer-x86_64-linux.tar.gz
+                  ssh_port: 10026
+                post_bootstrap_provisioned_hooks:
+                  - waitForOnline
+{{ end }}

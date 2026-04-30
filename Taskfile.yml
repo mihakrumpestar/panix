@@ -69,9 +69,11 @@ tasks:
         --profile={{.COVER_PROFILE}} --badge-file-name=gen/coverage.svg
 
   go:test:e2e:
-    desc: Run e2e tests (requires KVM, QEMU, Nix)
+    desc: |
+      Run e2e tests (requires KVM, QEMU, Nix)
+      Flags: -- --test=bothlocal|remote
     cmds:
-      - go run ./tests/e2e/
+      - go run ./tests/e2e/ {{.CLI_ARGS}}
 
   # Nix
 

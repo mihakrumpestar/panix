@@ -2,26 +2,71 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
+type testScope string
+
 const (
-	kexecFileName = "kexec-installer-x86_64-linux.tar.gz"
-	kexecURL      = "https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-x86_64-linux.tar.gz"
-	debianURL     = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
-	blankDiskName = "blank.qcow2"
-	blankDiskSize = "10G"
-	seedName      = "seed.iso"
-	overlayName   = "debian-overlay.qcow2"
-	nixosISOPort  = 10022
-	kexecVMPort   = 10023
+	testScopeLocal  testScope = "local"
+	testScopeRemote testScope = "remote"
+	testScopeBoth   testScope = "both"
+)
+
+var errInvalidTestScope = errors.New("invalid test scope, must be local, remote, or both")
+
+var testScopeFlag testScope
+
+func parseFlags() {
+	flag.Func("test", "test scope: local, remote, both (default: both)", func(val string) error {
+		switch testScope(val) {
+		case testScopeLocal, testScopeRemote, testScopeBoth:
+			testScopeFlag = testScope(val)
+
+			return nil
+		default:
+			return fmt.Errorf("%w: %q", errInvalidTestScope, val)
+		}
+	})
+
+	flag.Parse()
+
+	if testScopeFlag == "" {
+		testScopeFlag = testScopeBoth
+	}
+}
+
+func (s testScope) local() bool  { return s == testScopeBoth || s == testScopeLocal }
+func (s testScope) remote() bool { return s == testScopeBoth || s == testScopeRemote }
+
+const (
+	kexecFileName       = "kexec-installer-x86_64-linux.tar.gz"
+	kexecURL            = "https://github.com/nix-community/nixos-images/" +
+		"releases/latest/download/nixos-kexec-installer-noninteractive-x86_64-linux.tar.gz"
+	debianURL           = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+	blankDiskName       = "blank.qcow2"
+	blankDiskSize       = "10G"
+	blankDiskRemoteName = "blank-remote.qcow2"
+	overlayName         = "debian-overlay.qcow2"
+	overlayRemoteName   = "debian-overlay-remote.qcow2"
+	seedName            = "seed.iso"
+	seedRemoteName      = "seed-remote.iso"
+	nixosISOPort        = 10022
+	kexecVMPort         = 10023
+	remoteISOPort       = 10025
+	remoteKexecPort     = 10026
 )
 
 func main() {
+	parseFlags()
+
 	err := run()
 	if err != nil {
 		_ = writeBadgeSVG(false)
@@ -59,13 +104,12 @@ func run() error {
 		return err
 	}
 
-	isoVM, kexecVM, err := startTestVMs(res)
+	vms, err := startTestVMs(res)
 	if err != nil {
 		return err
 	}
 
-	defer isoVM.kill()
-	defer kexecVM.kill()
+	defer vms.kill()
 	defer cleanupFifos()
 
 	err = runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath)
@@ -100,12 +144,15 @@ func runChecks() error {
 }
 
 type testResources struct {
-	keyPath          string
-	installerISOPath string
-	cloudInitSeed    string
-	debianImagePath  string
-	debianOverlay    string
-	blankDisk        string
+	keyPath            string
+	installerISOPath   string
+	cloudInitSeed      string
+	cloudInitSeedRemote string
+	debianImagePath    string
+	debianOverlay      string
+	debianOverlayRemote string
+	blankDisk          string
+	blankDiskRemote    string
 }
 
 func phase0Setup() (*testResources, error) {
@@ -158,64 +205,160 @@ func phase0Setup() (*testResources, error) {
 
 func createDisks(res *testResources) error {
 	parGroup := newParallelGroup()
-	parGroup.Go("Create cloud-init seed", func() error {
-		var seedErr error
 
-		res.cloudInitSeed, seedErr = createCloudInitISO(seedName, "panix-kexec-test", "kexec-vm", res.keyPath+".pub", false)
+	if testScopeFlag.local() {
+		parGroup.Go("Create cloud-init seed", func() error {
+			var seedErr error
 
-		return seedErr
-	})
-	parGroup.Go("Create Debian overlay disk", func() error {
-		var diskErr error
+			res.cloudInitSeed, seedErr = createCloudInitISO(seedName, "panix-kexec-test", "kexec-vm", res.keyPath+".pub", false)
 
-		res.debianOverlay, diskErr = createDisk(overlayName, "-b", res.debianImagePath, "-F", "qcow2")
+			return seedErr
+		})
+		parGroup.Go("Create Debian overlay disk", func() error {
+			var diskErr error
 
-		return diskErr
-	})
-	parGroup.Go("Create blank disk", func() error {
-		var diskErr error
+			res.debianOverlay, diskErr = createDisk(overlayName, "-b", res.debianImagePath, "-F", "qcow2")
 
-		res.blankDisk, diskErr = createDisk(blankDiskName, blankDiskSize)
+			return diskErr
+		})
+		parGroup.Go("Create blank disk", func() error {
+			var diskErr error
 
-		return diskErr
-	})
+			res.blankDisk, diskErr = createDisk(blankDiskName, blankDiskSize)
+
+			return diskErr
+		})
+	}
+
+	if testScopeFlag.remote() {
+		parGroup.Go("Create cloud-init seed (remote)", func() error {
+			var seedErr error
+
+			res.cloudInitSeedRemote, seedErr = createCloudInitISO(seedRemoteName, "panix-kexec-test-remote", "kexec-vm-remote", res.keyPath+".pub", false)
+
+			return seedErr
+		})
+		parGroup.Go("Create Debian overlay disk (remote)", func() error {
+			var diskErr error
+
+			res.debianOverlayRemote, diskErr = createDisk(overlayRemoteName, "-b", res.debianImagePath, "-F", "qcow2")
+
+			return diskErr
+		})
+		parGroup.Go("Create blank disk (remote)", func() error {
+			var diskErr error
+
+			res.blankDiskRemote, diskErr = createDisk(blankDiskRemoteName, blankDiskSize)
+
+			return diskErr
+		})
+	}
 
 	return parGroup.Wait()
 }
 
-func startTestVMs(res *testResources) (*qemuVM, *qemuVM, error) {
-	isoVM, err := startVMStep("Start NixOS ISO VM (port %d)", nixosISOPort, "iso-vm",
-		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDisk),
-		"-cdrom", res.installerISOPath,
-	)
-	if err != nil {
-		return nil, nil, err
+type testVMs struct {
+	isoVM         *qemuVM
+	kexecVM       *qemuVM
+	remoteISOVM   *qemuVM
+	remoteKexecVM *qemuVM
+}
+
+func startTestVMs(res *testResources) (*testVMs, error) {
+	vms := &testVMs{}
+
+	var err error
+
+	if testScopeFlag.local() {
+		vms.isoVM, err = startVMStep("Start NixOS ISO VM (port %d)", nixosISOPort, "iso-vm",
+			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDisk),
+			"-cdrom", res.installerISOPath,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		vms.kexecVM, err = startVMStep("Start kexec VM (port %d)", kexecVMPort, "kexec-vm",
+			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlay),
+			"-cdrom", res.cloudInitSeed,
+		)
+		if err != nil {
+			vms.kill()
+
+			return nil, err
+		}
 	}
 
-	kexecVM, err := startVMStep("Start kexec VM (port %d)", kexecVMPort, "kexec-vm",
-		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlay),
-		"-cdrom", res.cloudInitSeed,
-	)
-	if err != nil {
-		isoVM.kill()
+	if testScopeFlag.remote() {
+		vms.remoteISOVM, err = startVMStep("Start remote NixOS ISO VM (port %d)", remoteISOPort, "iso-vm-remote",
+			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDiskRemote),
+			"-cdrom", res.installerISOPath,
+		)
+		if err != nil {
+			vms.kill()
 
-		return nil, nil, err
+			return nil, err
+		}
+
+		vms.remoteKexecVM, err = startVMStep("Start remote kexec VM (port %d)", remoteKexecPort, "kexec-vm-remote",
+			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayRemote),
+			"-cdrom", res.cloudInitSeedRemote,
+		)
+		if err != nil {
+			vms.kill()
+
+			return nil, err
+		}
 	}
 
+	err = waitForAllSSH(res.keyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return vms, nil
+}
+
+func (vms *testVMs) kill() {
+	if vms.isoVM != nil {
+		vms.isoVM.kill()
+	}
+
+	if vms.kexecVM != nil {
+		vms.kexecVM.kill()
+	}
+
+	if vms.remoteISOVM != nil {
+		vms.remoteISOVM.kill()
+	}
+
+	if vms.remoteKexecVM != nil {
+		vms.remoteKexecVM.kill()
+	}
+}
+
+func waitForAllSSH(keyPath string) error {
 	parGroup := newParallelGroup()
-	parGroup.Go("Wait for SSH on NixOS ISO VM", func() error {
-		return waitForSSH(nixosISOPort, res.keyPath)
-	})
-	parGroup.Go("Wait for SSH on kexec VM", func() error {
-		return waitForSSH(kexecVMPort, res.keyPath)
-	})
 
-	err = parGroup.Wait()
-	if err != nil {
-		return nil, nil, err
+	if testScopeFlag.local() {
+		parGroup.Go("Wait for SSH on NixOS ISO VM", func() error {
+			return waitForSSH(nixosISOPort, keyPath)
+		})
+		parGroup.Go("Wait for SSH on kexec VM", func() error {
+			return waitForSSH(kexecVMPort, keyPath)
+		})
 	}
 
-	return isoVM, kexecVM, nil
+	if testScopeFlag.remote() {
+		parGroup.Go("Wait for SSH on remote NixOS ISO VM", func() error {
+			return waitForSSH(remoteISOPort, keyPath)
+		})
+		parGroup.Go("Wait for SSH on remote kexec VM", func() error {
+			return waitForSSH(remoteKexecPort, keyPath)
+		})
+	}
+
+	return parGroup.Wait()
 }
 
 func runPhase(configPath, phaseName, modeEnv, keyPath string) error {
@@ -232,17 +375,29 @@ func runPhase(configPath, phaseName, modeEnv, keyPath string) error {
 
 	step.Done()
 
-	return verifyBoth(keyPath)
+	return verifyAll(keyPath)
 }
 
-func verifyBoth(keyPath string) error {
+func verifyAll(keyPath string) error {
 	parGroup := newParallelGroup()
-	parGroup.Go("Verify NixOS on ISO VM", func() error {
-		return verifyNixOSInstallation(nixosISOPort, keyPath)
-	})
-	parGroup.Go("Verify NixOS on kexec VM", func() error {
-		return verifyNixOSInstallation(kexecVMPort, keyPath)
-	})
+
+	if testScopeFlag.local() {
+		parGroup.Go("Verify NixOS on ISO VM", func() error {
+			return verifyNixOSInstallation(nixosISOPort, keyPath)
+		})
+		parGroup.Go("Verify NixOS on kexec VM", func() error {
+			return verifyNixOSInstallation(kexecVMPort, keyPath)
+		})
+	}
+
+	if testScopeFlag.remote() {
+		parGroup.Go("Verify NixOS on remote ISO VM", func() error {
+			return verifyNixOSInstallation(remoteISOPort, keyPath)
+		})
+		parGroup.Go("Verify NixOS on remote kexec VM", func() error {
+			return verifyNixOSInstallation(remoteKexecPort, keyPath)
+		})
+	}
 
 	return parGroup.Wait()
 }

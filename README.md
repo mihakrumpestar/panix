@@ -56,7 +56,7 @@ Panix addresses these problems by providing deployment orchestration with built-
 Panix is a deployment orchestrator for NixOS flakes. It provides:
 
 - **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
-- **Phase-oriented execution**: Six sequential phases - Inspect, Build, Bootstrap, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
+- **Phase-oriented execution**: Six sequential deployment phases - Inspect, Bootstrap, Build, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`. Remote build mode can execute builds on a target machine instead of locally.
 - **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
 - **Bootstrap support**: machines can be converted to NixOS via NixOS live install or any live install or previusly installed distro using kexec and `disko`, with full support for custom hooks and secrets at multiple stages.
 - **Flake-agnostic configuration**: The deployment configuration is separate from your flake. No modifications to your flake are required to use Panix.
@@ -69,7 +69,7 @@ Panix doesn't just "*run a deployment*". It executes an ordered pipeline of phas
 
 <div align="center">
 
-Inspect → Build → Bootstrap → Transfer → Secrets → Activate
+Inspect → Bootstrap → Build → Transfer → Secrets → Activate
 
 </div>
 
@@ -80,11 +80,17 @@ Inspect → Build → Bootstrap → Transfer → Secrets → Activate
 | Phase | Scope | Purpose |
 |-------|-------|---------|
 | **Inspect** | Per-machine | TCP reachability, SSH authentication, architecture detection, OS detection, generation discovery |
-| **Build** | Per-configuration | Build `config.system.build.toplevel` closure via `nix build --json` |
 | **Bootstrap** | Per-machine | kexec into NixOS installer (if needed), disko partitioning, encryption keys transfer (if provided) |
+| **Build** | Per-configuration | Build `config.system.build.toplevel` closure via `nix build` (local or remote mode) |
 | **Transfer** | Per-machine | `nix copy` closure to target (handles `/mnt` for bootstrapped systems) |
 | **Secrets** | Per-machine | Transfer files/directories with proper ownership via rsync |
 | **Activate** | Per-machine | `nixos-install` (bootstrap) or `switch-to-configuration switch` (deploy) |
+
+Standalone phases (in combination with Inpect):
+
+| Phase | Scope | Purpose |
+|-------|-------|---------|
+| **Rollback** | Per-machine | Switch to a previous NixOS generation via `switch-to-configuration` |
 
 The TUI shows this unfolding in real-time:
 
@@ -874,6 +880,62 @@ panix deploy --exit-on-complete
 Fine-tuning how builds and deployments run.
 
 <details>
+<summary>Build Modes (Local vs Remote)</summary>
+
+Panix supports two build modes: **local** (default) and **remote**. This controls where the Nix closure is built.
+
+#### Local mode (default)
+
+Builds run on the machine executing Panix:
+
+```bash
+nix build --no-link --print-out-paths <flake-url>#<installable>
+```
+
+The resulting closure is then transferred to each target machine via `nix copy`.
+
+#### Remote mode
+
+Builds run on the **first machine** of the configuration via the Nix remote store protocol:
+
+```bash
+nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths <flake-url>#<installable>
+```
+
+This is useful when the target machine has more resources (CPU/RAM) than the deployment machine, or when deployment and target machine are not same architecture.
+
+For configurations with multiple machines, the closure is built on the first machine, then copied from the first machine to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine configurations in remote mode skip the transfer phase entirely since the closure is already on the target.
+
+**Requirements:**
+
+- The first machine must be **remote** (not the local machine running Panix)
+- The first machine must have Nix installed and the flake inputs available
+
+**Configuration:**
+
+```yaml
+fleet:
+  flakes:
+    my-flake:
+      url: <url>
+      configurations:
+        my-server:
+          nix:
+            build_mode: remote    # Build on the first machine instead of locally
+          machines:
+            builder-and-target:              # First machine = remote builder and target
+              ssh:
+                hostname: 192.168.1.100
+            target-2:               # Closure copied from builder to target-2
+              ssh:
+                hostname: 192.168.1.101
+```
+
+`build_mode` can be set at fleet, flake, or configuration level (inherited like other `nix` options). It cannot be set at machine level — a configuration's machines share the same build mode (since build is a configuration level phase).
+
+</details>
+
+<details>
 <summary>Nix Command Flags</summary>
 
 Pass additional flags to nix commands (`nix build`, `nix copy`, `nixos-install`) through configuration:
@@ -1077,7 +1139,7 @@ Commands:
     Build NixOS closures
 
   deploy [flags]
-    Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
+    Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets ->
     activate)
 
   secrets [flags]
@@ -1097,7 +1159,7 @@ Run "panix <command> --help" for more information on a command.
 > panix deploy --help
 Usage: panix deploy [flags]
 
-Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
+Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets ->
 activate)
 
 Flags:
@@ -1250,6 +1312,7 @@ fleet:
   hardware_config_path: ./hardware     # Path for hardware config generation
   sudo_program: doas                  # Override sudo program (default: sudo)
   nix:                                 # Nix command flags inherited by all descendants
+    build_mode: local                  # Build mode: local (default) or remote
     extra_flags: []                    # Flags for both nix build and nix copy
     build_flags: []                    # Flags for nix build only
     copy_flags: []                     # Flags for nix copy only
@@ -1278,6 +1341,7 @@ fleet:
       hardware_config_path: ./hw-config
       sudo_program: sudo
       nix:
+        build_mode: local               # Build mode for this flake
         extra_flags: []
         build_flags: []
         copy_flags: []
@@ -1334,6 +1398,7 @@ fleet:
           hardware_config_path: ./hardware
           sudo_program: sudo
           nix:                         # Nix flags for this configuration
+            build_mode: local           # Build mode for this configuration
             extra_flags: []            # Inherits + appends from parent
             build_flags: ["--max-jobs", "4"]  # Flags for nix build
             copy_flags: []             # Flags for nix copy
@@ -1480,7 +1545,7 @@ task go:test
 
 ### E2E Tests
 
-End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, followed by a re-deploy to the installed systems.
+End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, for both local and remote build modes, followed by a re-deploy to the installed systems.
 
 **Prerequisites**: KVM (`/dev/kvm`), QEMU, Nix, `cdrtools`
 
@@ -1488,15 +1553,23 @@ End-to-end tests verify the full deployment pipeline against real QEMU VMs, cove
 task go:test:e2e
 ```
 
-The whole test ususally takes only 1 min and 27 sec.
+**Test scope selection**:
+
+```sh
+task go:test:e2e -- --test=local    # Only local build mode (2 VMs)
+task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
+task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
+```
+
+The whole test usually takes only ~1.5 min (local only), or ~2.7 min (both modes).
 
 **What it does:**
 
 1. Generates SSH keys, downloads kexec and Debian images, builds a NixOS installer ISO, preconfigures Debian image
-2. Starts two QEMU VMs: one booting the NixOS ISO directly, one booting Debian then kexec-ing into the installer
-3. Runs panix deploy (bootstrap) against both VMs (disko, nixos-install, reboot)
-4. Runs panix deploy (re-deploy) against both VMs (switch-to-configuration)
-5. Verifies NixOS installation on both VMs via SSH
+2. Starts QEMU VMs per test scope: NixOS ISO VM + Debian/kexec VM for local, and/or the same pair for remote
+3. Runs panix deploy (bootstrap) against all VMs (disko, nixos-install, reboot) — remote mode builds on the first machine via `--store ssh-ng://`
+4. Runs panix deploy (re-deploy) against all VMs (switch-to-configuration)
+5. Verifies NixOS installation on all VMs via SSH
 
 **What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
 

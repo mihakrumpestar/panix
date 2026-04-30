@@ -155,13 +155,13 @@ func TestValidatePhasesValidCases(t *testing.T) {
 		},
 		{
 			"skip phases removes them",
-			[]Phase{Inspect, Build, Bootstrap, Activate},
+			[]Phase{Inspect, Bootstrap, Build, Activate},
 			[]Phase{Bootstrap},
 			[]Phase{Inspect, Build, Activate},
 		},
 		{
 			"skip multiple phases",
-			[]Phase{Inspect, Build, Bootstrap, Transfer, Secrets, Activate},
+			[]Phase{Inspect, Bootstrap, Build, Transfer, Secrets, Activate},
 			[]Phase{Bootstrap, Transfer},
 			[]Phase{Inspect, Build, Secrets, Activate},
 		},

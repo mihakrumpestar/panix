@@ -21,7 +21,7 @@ type cliCmd struct {
 
 	Inspect  commands_workflow.InspectCmd  `cmd:"" help:"Inspect machines"`
 	Build    commands_workflow.BuildCmd    `cmd:"" help:"Build NixOS closures"`
-	Deploy   commands_workflow.DeployCmd   `cmd:"" help:"Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets -> activate)"`
+	Deploy   commands_workflow.DeployCmd   `cmd:"" help:"Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets -> activate)"`
 	Secrets  commands_workflow.SecretsCmd  `cmd:"" help:"Deploy secrets to machines"`
 	Rollback commands_workflow.RollbackCmd `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag (default is -1)"`
 }
