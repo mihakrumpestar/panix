@@ -358,8 +358,7 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 
 	treeI := tree.New().Root(line)
 	if isRoot {
-		treeI = treeI.Enumerator(tree.EnumeratorRounded).
-			EnumeratorStyle(b.conf.ColorScheme.Tree.Enumerator).
+		treeI = treeI.EnumeratorStyle(b.conf.ColorScheme.Tree.Enumerator).
 			IndenterStyle(b.conf.ColorScheme.Tree.Enumerator)
 	}
 

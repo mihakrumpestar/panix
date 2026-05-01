@@ -2,15 +2,14 @@ package tree
 
 import (
 	"strings"
+	"unsafe"
 
 	"charm.land/lipgloss/v2"
 )
 
-type EnumeratorType int
-
 const (
-	EnumeratorDefault EnumeratorType = iota
-	EnumeratorRounded
+	maxPrefixBytes = 32 * 32
+	sizePadding    = 64
 )
 
 type Node struct {
@@ -21,20 +20,12 @@ type Node struct {
 	connLast string
 	indMid   string
 	indLast  string
-
-	enumType EnumeratorType
 }
 
 func New() *Node { return &Node{} }
 
 func (n *Node) Root(content string) *Node {
 	n.content = content
-
-	return n
-}
-
-func (n *Node) Enumerator(e EnumeratorType) *Node {
-	n.enumType = e
 
 	return n
 }
@@ -74,18 +65,27 @@ func (n *Node) Length() int {
 	return len(n.children)
 }
 
-const growBase = 512
-
 func (n *Node) String() string {
 	if len(n.children) == 0 {
 		return n.content
 	}
 
-	var b strings.Builder
-	b.Grow(len(n.content) + growBase)
-	n.renderRoot(&b)
+	treeSty := n.nodeStyle()
+	size := n.measureSize(treeSty)
 
-	return b.String()
+	buf := make([]byte, 0, size)
+
+	var (
+		pfxBuf [maxPrefixBytes]byte
+		pfxEnd [32]int
+	)
+
+	pfxEnd[0] = 0
+
+	buf = n.renderBytes(buf, pfxBuf[:], pfxEnd[:], 0, "", treeSty, true)
+
+	//nolint:gosec // G103: buf contains well-formed UTF-8 tree output; no dangling pointer risk
+	return unsafe.String(unsafe.SliceData(buf), len(buf))
 }
 
 func (n *Node) RenderTo(buf *strings.Builder) {
@@ -96,90 +96,213 @@ func (n *Node) RenderTo(buf *strings.Builder) {
 	}
 
 	buf.WriteByte('\n')
-	n.renderRoot(buf)
+
+	var segs [32]string
+
+	treeSty := n.nodeStyle()
+	n.renderRoot(buf, segs[:], 0, treeSty)
 }
 
-func (n *Node) renderRoot(buf *strings.Builder) {
+type treeStyle struct {
+	midConn     string
+	lastConn    string
+	midInd      string
+	lastInd     string
+	midConnLen  int
+	lastConnLen int
+	midIndLen   int
+	lastIndLen  int
+}
+
+func (n *Node) nodeStyle() treeStyle {
+	if n.connMid != "" {
+		return treeStyle{
+			midConn:     n.connMid,
+			lastConn:    n.connLast,
+			midInd:      n.indMid,
+			lastInd:     n.indLast,
+			midConnLen:  len(n.connMid),
+			lastConnLen: len(n.connLast),
+			midIndLen:   len(n.indMid),
+			lastIndLen:  len(n.indLast),
+		}
+	}
+
+	return treeStyle{
+		midConn:     "├── ",
+		lastConn:    "╰── ",
+		midInd:      "│   ",
+		lastInd:     "    ",
+		midConnLen:  len("├── "),
+		lastConnLen: len("╰── "),
+		midIndLen:   len("│   "),
+		lastIndLen:  len("    "),
+	}
+}
+
+func (n *Node) renderRoot(buf *strings.Builder, segs []string, depth int, treeSty treeStyle) {
 	buf.WriteString(n.content)
 
-	for i, child := range n.children {
-		isLast := i == len(n.children)-1
+	nChildren := len(n.children)
+	if nChildren == 0 {
+		return
+	}
 
+	lastIdx := nChildren - 1
+	for childIdx := range lastIdx {
 		buf.WriteByte('\n')
-		child.render(buf, n.conn(isLast), n.ind(isLast))
+
+		segs[depth] = treeSty.midInd
+		n.children[childIdx].render(buf, segs, depth+1, treeSty.midConn, treeSty)
 	}
+
+	buf.WriteByte('\n')
+
+	segs[depth] = treeSty.lastInd
+	n.children[lastIdx].render(buf, segs, depth+1, treeSty.lastConn, treeSty)
 }
 
-func (n *Node) render(buf *strings.Builder, prefix, indent string) {
-	buf.WriteString(prefix)
-	buf.WriteString(line1(n.content))
+func (n *Node) render(buf *strings.Builder, segs []string, depth int, conn string, treeSty treeStyle) {
+	for childIdx := range depth - 1 {
+		buf.WriteString(segs[childIdx])
+	}
 
-	for _, line := range tailLines(n.content) {
+	buf.WriteString(conn)
+
+	pfx := strings.IndexByte(n.content, '\n')
+	if pfx < 0 {
+		buf.WriteString(n.content)
+	} else {
+		n.renderMultilineContent(buf, segs, depth, pfx)
+	}
+
+	nChildren := len(n.children)
+	if nChildren == 0 {
+		return
+	}
+
+	lastIdx := nChildren - 1
+	for childIdx := range lastIdx {
 		buf.WriteByte('\n')
-		buf.WriteString(indent)
-		buf.WriteString(line)
+
+		segs[depth] = treeSty.midInd
+		n.children[childIdx].render(buf, segs, depth+1, treeSty.midConn, treeSty)
 	}
 
-	for i, child := range n.children {
-		isLast := i == len(n.children)-1
+	buf.WriteByte('\n')
 
+	segs[depth] = treeSty.lastInd
+	n.children[lastIdx].render(buf, segs, depth+1, treeSty.lastConn, treeSty)
+}
+
+func (n *Node) renderMultilineContent(buf *strings.Builder, segs []string, depth int, pfx int) {
+	buf.WriteString(n.content[:pfx])
+
+	remaining := n.content[pfx+1:]
+	for len(remaining) > 0 {
 		buf.WriteByte('\n')
-		child.render(buf, indent+n.conn(isLast), indent+n.ind(isLast))
-	}
-}
 
-func line1(str string) string {
-	before, _, ok := strings.Cut(str, "\n")
-	if ok {
-		return before
-	}
-
-	return str
-}
-
-func tailLines(s string) []string {
-	_, after, ok := strings.Cut(s, "\n")
-	if !ok {
-		return nil
-	}
-
-	return strings.Split(after, "\n")
-}
-
-func (n *Node) conn(isLast bool) string {
-	if n.connMid != "" {
-		if isLast {
-			return n.connLast
+		for childIdx := range depth {
+			buf.WriteString(segs[childIdx])
 		}
 
-		return n.connMid
-	}
+		nxt := strings.IndexByte(remaining, '\n')
+		if nxt >= 0 {
+			buf.WriteString(remaining[:nxt])
+			remaining = remaining[nxt+1:]
+		} else {
+			buf.WriteString(remaining)
 
-	if isLast {
-		if n.enumType == EnumeratorRounded {
-			return "╰── "
+			break
 		}
-
-		return "└── "
 	}
-
-	return "├── "
 }
 
-func (n *Node) ind(isLast bool) string {
-	if n.indMid != "" {
-		if isLast {
-			return n.indLast
+func (n *Node) renderBytes(
+	buf []byte, pfxBuf []byte, pfxEnd []int, depth int, conn string, treeSty treeStyle, isRoot bool,
+) []byte {
+	if isRoot { //nolint:nestif // performance: single function avoids extra call overhead
+		buf = append(buf, n.content...)
+	} else {
+		pfxLen := pfxEnd[depth-1]
+		buf = append(buf, pfxBuf[:pfxLen]...)
+		buf = append(buf, conn...)
+
+		pfx := strings.IndexByte(n.content, '\n')
+		if pfx < 0 {
+			buf = append(buf, n.content...)
+		} else {
+			buf = append(buf, n.content[:pfx]...)
+
+			remaining := n.content[pfx+1:]
+			contPfxLen := pfxEnd[depth]
+
+			for len(remaining) > 0 {
+				buf = append(buf, '\n')
+				buf = append(buf, pfxBuf[:contPfxLen]...)
+
+				nxt := strings.IndexByte(remaining, '\n')
+				if nxt >= 0 {
+					buf = append(buf, remaining[:nxt]...)
+					remaining = remaining[nxt+1:]
+				} else {
+					buf = append(buf, remaining...)
+
+					break
+				}
+			}
+		}
+	}
+
+	nChildren := len(n.children)
+	if nChildren == 0 {
+		return buf
+	}
+
+	lastIdx := nChildren - 1
+	for childIdx := range lastIdx {
+		buf = append(buf, '\n')
+
+		off := pfxEnd[depth]
+		copy(pfxBuf[off:], treeSty.midInd)
+		pfxEnd[depth+1] = off + treeSty.midIndLen
+		buf = n.children[childIdx].renderBytes(buf, pfxBuf, pfxEnd, depth+1, treeSty.midConn, treeSty, false)
+	}
+
+	buf = append(buf, '\n')
+
+	off := pfxEnd[depth]
+	copy(pfxBuf[off:], treeSty.lastInd)
+	pfxEnd[depth+1] = off + treeSty.lastIndLen
+	buf = n.children[lastIdx].renderBytes(buf, pfxBuf, pfxEnd, depth+1, treeSty.lastConn, treeSty, false)
+
+	return buf
+}
+
+func (n *Node) measureSize(treeSty treeStyle) int {
+	size := len(n.content)
+	n.addSize(&size, 0, 0, treeSty)
+
+	return size + sizePadding
+}
+
+func (n *Node) addSize(total *int, depth int, prefixLen int, treeSty treeStyle) {
+	nChildren := len(n.children)
+	childPrefix := prefixLen + treeSty.midIndLen
+
+	for childIdx := range nChildren {
+		child := n.children[childIdx]
+
+		if childIdx == nChildren-1 {
+			*total += prefixLen + treeSty.lastConnLen + len(child.content) + 1
+		} else {
+			*total += prefixLen + treeSty.midConnLen + len(child.content) + 1
 		}
 
-		return n.indMid
+		if len(child.children) > 0 {
+			child.addSize(total, depth+1, childPrefix, treeSty)
+		}
 	}
-
-	if isLast {
-		return "    "
-	}
-
-	return "│   "
 }
 
 func (n *Node) inheritStyle(parent *Node) {
@@ -189,7 +312,6 @@ func (n *Node) inheritStyle(parent *Node) {
 		n.indMid = parent.indMid
 		n.indLast = parent.indLast
 
-		n.enumType = parent.enumType
 		for _, child := range n.children {
 			child.inheritStyle(n)
 		}

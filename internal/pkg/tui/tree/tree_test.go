@@ -38,7 +38,7 @@ func buildEqualStructures(depth, breadth int) (*Node, *lptree.Tree) {
 	var buildOur func(d int) *Node
 
 	buildOur = func(d int) *Node {
-		node := New().Root("node").Enumerator(EnumeratorRounded).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+		node := New().Root("node").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 
 		if d > 0 {
 			for range breadth {
@@ -80,7 +80,7 @@ func TestSingleNode(t *testing.T) {
 func TestSingleChild(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").Enumerator(EnumeratorRounded).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	our.Child(New().Root("child"))
 
 	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
@@ -92,7 +92,7 @@ func TestSingleChild(t *testing.T) {
 func TestMultipleChildren(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").Enumerator(EnumeratorRounded).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	for _, s := range []string{"a", "b", "c"} {
 		our.Child(New().Root(s))
 	}
@@ -108,7 +108,7 @@ func TestMultipleChildren(t *testing.T) {
 func TestNested(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").Enumerator(EnumeratorRounded).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	for _, s := range []string{"a", "b"} {
 		child := New().Root(s)
 		for _, s2 := range []string{"x", "y"} {
@@ -137,24 +137,8 @@ func TestNoStyle(t *testing.T) {
 	our := New().Root("root")
 	our.Child(New().Root("child"))
 
-	lptNode := lptree.New().Root("root")
-	lptNode.Child(lptree.New().Root("child"))
-
-	assertTreesEqual(t, our.String(), lptNode.String())
-}
-
-func TestUnstyledEnumerators(t *testing.T) {
-	t.Parallel()
-
-	our := New().Root("root").Enumerator(EnumeratorRounded)
-	for _, s := range []string{"a", "b"} {
-		our.Child(New().Root(s))
-	}
-
 	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator)
-	for _, s := range []string{"a", "b"} {
-		lptNode.Child(lptree.New().Root(s))
-	}
+	lptNode.Child(lptree.New().Root("child"))
 
 	assertTreesEqual(t, our.String(), lptNode.String())
 }
@@ -162,7 +146,7 @@ func TestUnstyledEnumerators(t *testing.T) {
 func TestDeepNesting(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("r").Enumerator(EnumeratorRounded).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := New().Root("r").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	{
 		a := New().Root("a")
 		a.Child(New().Root("a1"))
@@ -196,7 +180,7 @@ func TestDeepNesting(t *testing.T) {
 func TestMixedStringAndNodeChildren(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").Enumerator(EnumeratorRounded).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	our.ChildString("string child")
 	our.Child(New().Root("node child"))
 
@@ -211,7 +195,7 @@ func TestMultiline(t *testing.T) {
 	t.Parallel()
 
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
-	our := New().Root("r").Enumerator(EnumeratorRounded).EnumeratorStyle(style).IndenterStyle(style)
+	our := New().Root("r").EnumeratorStyle(style).IndenterStyle(style)
 	our.ChildString("line1\nline2\nline3")
 
 	a := New().Root("a")

@@ -227,7 +227,6 @@ func buildComparisonFlake(
 ) (*lptree.Tree, *tuittree.Node) {
 	if useSimple {
 		return nil, tuittree.New().Root(fmtNode(colorScheme.Flake, flake.Name)).
-			Enumerator(tuittree.EnumeratorRounded).
 			EnumeratorStyle(colorScheme.Tree.Enumerator).
 			IndenterStyle(colorScheme.Tree.Enumerator)
 	}
