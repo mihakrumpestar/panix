@@ -88,6 +88,17 @@ func (n *Node) String() string {
 	return b.String()
 }
 
+func (n *Node) RenderTo(buf *strings.Builder) {
+	if len(n.children) == 0 {
+		buf.WriteString(n.content)
+
+		return
+	}
+
+	buf.WriteByte('\n')
+	n.renderRoot(buf)
+}
+
 func (n *Node) renderRoot(buf *strings.Builder) {
 	buf.WriteString(n.content)
 

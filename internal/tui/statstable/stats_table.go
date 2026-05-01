@@ -120,8 +120,6 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 }
 
 func (s *StatsTable) View(width int, colorScheme *colorscheme.ColorScheme) string {
-	width -= 2 // For scrollbar
-
 	return s.cache.Get(
 		func() (string, bool) {
 			return s.buildStatsTable(width, colorScheme), true

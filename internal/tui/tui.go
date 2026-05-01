@@ -275,12 +275,14 @@ func (m *model) viewMainContent() string {
 
 	var builder strings.Builder
 
+	contentWidth := resetable.viewports.ContentWidth()
+
 	if !m.conf.Flags.DryRun {
 		if slices.Contains(m.conf.Phases, phase.Inspect) {
-			builder.WriteString(m.conf.Fleet.StatsTable.View(m.dimensions.Width, m.conf.ColorScheme))
+			builder.WriteString(m.conf.Fleet.StatsTable.View(contentWidth, m.conf.ColorScheme))
 		}
 
-		builder.WriteString(m.conf.Fleet.PhaseStatus.View(m.dimensions.Width, m.conf.ColorScheme))
+		builder.WriteString(m.conf.Fleet.PhaseStatus.View(contentWidth, m.conf.ColorScheme))
 	}
 
 	builder.WriteString(m.buildLogs.View(resetable.viewports, m.spinners))

@@ -2,155 +2,64 @@ package viewports
 
 import (
 	"fmt"
+	"image/color"
+	"os"
 	"sort"
 	"strings"
 
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/cache"
+	tuiviewport "github.com/mihakrumpestar/panix/internal/pkg/tui/viewport"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
-)
-
-const (
-	scrollThumb    = "█"
-	scrollTrack    = "│"
-	scrollbarWidth = 2
-	borderOverhead = 2
 )
 
 type Dimensions struct{ Width, Height int }
 
 type Viewports struct {
-	items      *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
-	dimensions *Dimensions
-	conf       *config.Config
-	activation activation
-}
-
-type activation struct {
-	fullscreen  xpath.Xpath
-	mainXpath   xpath.Xpath
-	activeXpath xpath.Xpath
-}
-
-type viewportCacheKey struct {
-	width     int
-	height    int
-	scrollPct float64
-	version   uint64
+	items        *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
+	dimensions   *Dimensions
+	conf         *config.Config
+	fullscreenXp xpath.Xpath
+	mainXpath    xpath.Xpath
+	activeXpath  xpath.Xpath
 }
 
 type item struct {
-	model          viewport.Model
+	model          tuiviewport.Viewport
 	content        string
 	contentVersion uint64
-	cache          cache.Cache[string, viewportCacheKey]
-}
-
-type renderConfig struct {
-	bordered        bool
-	highlightActive bool
-	maxHeight       int
-	explicitHeight  int
-	explicitWidth   int
-	indent          int
-	output          *command.AtomicCommandOutput
-	version         uint64
 }
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
 	mainXpath := xpath.New("main")
 
 	return &Viewports{
-		items:      atomicorderedmap.New[xpath.Xpath, *item](),
-		dimensions: dimensions,
-		conf:       conf,
-		activation: activation{
-			mainXpath:   mainXpath,
-			activeXpath: mainXpath,
-		},
+		items:       atomicorderedmap.New[xpath.Xpath, *item](),
+		dimensions:  dimensions,
+		conf:        conf,
+		mainXpath:   mainXpath,
+		activeXpath: mainXpath,
 	}
-}
-
-// Fullscreen
-
-func (v *Viewports) IsFullscreen() bool {
-	return v.activation.fullscreen.Depth() > 0
-}
-
-func (v *Viewports) GetFullscreenXpath() xpath.Xpath {
-	return v.activation.fullscreen
-}
-
-func (v *Viewports) SetFullscreen(xp xpath.Xpath) {
-	v.activation.fullscreen = xp
-}
-
-func (v *Viewports) ExitFullscreen() {
-	v.activation.fullscreen = xpath.New()
 }
 
 // Dimensions
 
-func (v *Viewports) ContentWidth() int { return v.dimensions.Width - scrollbarWidth }
+func (v *Viewports) ContentWidth() int { return v.dimensions.Width - tuiviewport.ScrollbarColWidth() }
 
-// Factory methods
+// Fullscreen
 
-func (v *Viewports) GetOrCreateViewportVersioned(xp xpath.Xpath, output *command.AtomicCommandOutput, indent int) string {
-	return v.render(xp, "", renderConfig{
-		bordered:  true,
-		maxHeight: v.conf.Flags.Tui.CommandOutputMaxHeight,
-		indent:    indent,
-		output:    output,
-	})
-}
-
-func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, version uint64, indent int) string {
-	return v.render(xp, content, renderConfig{
-		highlightActive: true,
-		indent:          indent,
-		version:         version,
-	})
-}
-
-func (v *Viewports) GetOrCreateMainViewport(content string, version uint64, footerHeaderHeight int) string {
-	h := v.dimensions.Height - footerHeaderHeight
-
-	return v.render(v.activation.mainXpath, content, renderConfig{
-		explicitHeight: h,
-		version:        version,
-	}) + "\n"
-}
-
-func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, version uint64, footerHeaderHeight int) string {
-	h := max(1, v.dimensions.Height-footerHeaderHeight-borderOverhead)
-	w := max(1, v.dimensions.Width-scrollbarWidth-borderOverhead)
-
-	return v.render(xp, content, renderConfig{
-		bordered:       true,
-		explicitHeight: h,
-		explicitWidth:  w,
-		version:        version,
-	}) + "\n"
-}
-
-func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
-	v.items.Del(xp)
-
-	if v.activation.activeXpath == xp {
-		v.activation.activeXpath = v.activation.mainXpath
-	}
-}
+func (v *Viewports) IsFullscreen() bool              { return v.fullscreenXp.Depth() > 0 }
+func (v *Viewports) GetFullscreenXpath() xpath.Xpath { return v.fullscreenXp }
+func (v *Viewports) SetFullscreen(xp xpath.Xpath)    { v.fullscreenXp = xp }
+func (v *Viewports) ExitFullscreen()                 { v.fullscreenXp = xpath.New() }
 
 // Active queries
 
 func (v *Viewports) HasActiveInner() bool {
-	return v.activation.activeXpath.Depth() > 0 && v.activation.activeXpath != v.activation.mainXpath
+	return v.activeXpath.Depth() > 0 && v.activeXpath != v.mainXpath
 }
 
 func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
@@ -158,7 +67,7 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 		return "", false
 	}
 
-	it, ok := v.items.Get(v.activation.activeXpath)
+	it, ok := v.items.Get(v.activeXpath)
 	if !ok {
 		return "", false
 	}
@@ -168,7 +77,7 @@ func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
 
 func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 	if v.HasActiveInner() {
-		return v.activation.activeXpath
+		return v.activeXpath
 	}
 
 	return ""
@@ -183,8 +92,16 @@ func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
 	return ""
 }
 
-func (v *Viewports) DeselectAll() {
-	v.activation.activeXpath = v.activation.mainXpath
+func (v *Viewports) DeselectAll() { v.activeXpath = v.mainXpath }
+
+// RemoveIfExistsViewport removes a viewport by xpath.
+
+func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
+	v.items.Del(xp)
+
+	if v.activeXpath == xp {
+		v.activeXpath = v.mainXpath
+	}
 }
 
 // Update
@@ -194,46 +111,67 @@ func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
-	// Set active viewport by click
-	mouseClick, ok := msg.(tea.MouseClickMsg)
+	click, ok := msg.(tea.MouseClickMsg)
 	if ok {
-		clicked := v.mostSpecific(v.underMouse(mouseClick))
-
+		clicked := v.clickTarget(click)
 		if clicked.Depth() > 0 {
-			v.activation.activeXpath = clicked
+			v.activeXpath = clicked
 		} else {
-			v.activation.activeXpath = v.activation.mainXpath
+			v.activeXpath = v.mainXpath
 		}
 
 		return nil
 	}
 
-	itm := v.activeViewport()
-	if itm == nil {
-		return nil
+	itm := v.activeItem()
+	if itm != nil {
+		itm.model.Update(msg)
 	}
 
-	var cmd tea.Cmd
+	return nil
+}
 
-	itm.model, cmd = itm.model.Update(msg)
+// Render methods
 
-	return cmd
+func (v *Viewports) GetOrCreateViewportVersioned(xp xpath.Xpath, output *command.AtomicCommandOutput, indent int) string {
+	return v.render(xp, "", indent, 0, 0, true, true, false, output, 0)
+}
+
+func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, version uint64, indent int) string {
+	return v.render(xp, content, indent, 0, 0, false, false, true, nil, version)
+}
+
+func (v *Viewports) GetOrCreateMainViewport(content string, version uint64, footerHeaderHeight int) string {
+	height := v.dimensions.Height - footerHeaderHeight
+
+	return v.render(v.mainXpath, content, 0, height, 0, false, true, false, nil, version) + "\n"
+}
+
+func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, version uint64, footerHeaderHeight int) string {
+	height := max(1, v.dimensions.Height-footerHeaderHeight)
+	width := max(1, v.dimensions.Width)
+
+	return v.render(xp, content, 0, height, width, true, true, false, nil, version) + "\n"
 }
 
 // Debug
 
 func (v *Viewports) Debug() string {
 	var builder strings.Builder
-	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d)\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height)
+	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d) ContentWidth=%d\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height, v.ContentWidth())
 
 	for _, pair := range v.items.Pairs() {
-		fmt.Fprintf(&builder, "  '%s': %dx%d l:%d", pair.Key, pair.Value.model.Width(), pair.Value.model.Height(), pair.Value.model.TotalLineCount())
+		mdl := pair.Value.model
+		fmt.Fprintf(&builder, "  '%s': %dx%d l:%d sb:%v sr:%v main:%v overflows:%v",
+			pair.Key, mdl.Width(), mdl.Height(), mdl.TotalLineCount(),
+			mdl.HasScrollbar(), mdl.HasScrollbarReserve(), mdl.IsMain(),
+			mdl.TotalLineCount() > mdl.Height())
 
-		if pair.Key == v.activation.activeXpath {
+		if pair.Key == v.activeXpath {
 			builder.WriteString(" [A]")
 		}
 
-		if pair.Value.model.ScrollPercent() == 1 {
+		if mdl.ScrollPercent() == 1 {
 			builder.WriteString(" @btm")
 		}
 
@@ -243,228 +181,145 @@ func (v *Viewports) Debug() string {
 	return builder.String()
 }
 
-func (v *Viewports) viewWidth(cfg renderConfig) int {
-	if cfg.explicitWidth > 0 {
-		return cfg.explicitWidth
+// Internal
+
+func (v *Viewports) render(
+	xpath xpath.Xpath,
+	content string,
+	indent, explicitHeight, explicitWidth int,
+	bordered, scrollbar, highlightActive bool,
+	output *command.AtomicCommandOutput,
+	version uint64,
+) string {
+	active := xpath == v.activeXpath
+	itm := v.getOrCreateItem(xpath, content, indent, explicitHeight, explicitWidth, bordered, scrollbar)
+
+	version = v.resolveVersion(output, version)
+	content = v.resolveContent(itm, version, content, output)
+
+	if bordered {
+		itm.model.SetBorderStyle(v.borderColor(active))
 	}
 
-	return max(1, v.dimensions.Width-cfg.indent-scrollbarWidth)
+	width := v.viewWidth(indent, explicitWidth)
+
+	err := itm.model.Sync(content, width, explicitHeight)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "viewport: %v\n", err)
+	}
+
+	view := itm.model.View()
+
+	if highlightActive && active {
+		view = v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(view)
+	}
+
+	return zone.Mark(xpath.String(), view)
 }
 
-func (v *Viewports) finalHeight(totalLines int, cfg renderConfig) int {
-	if cfg.explicitHeight > 0 {
-		return max(1, cfg.explicitHeight)
+func (v *Viewports) viewWidth(indent, explicitWidth int) int {
+	if explicitWidth > 0 {
+		return explicitWidth
 	}
 
-	if cfg.maxHeight > 0 && totalLines > cfg.maxHeight {
-		return cfg.maxHeight
+	width := v.dimensions.Width - indent
+	if indent > 0 {
+		width -= tuiviewport.ScrollbarColWidth()
 	}
 
-	return totalLines
+	return max(1, width)
 }
 
-func (v *Viewports) syncItem(itm *item, xp xpath.Xpath, content string, cfg renderConfig) {
-	wasAtBottom := itm.model.ScrollPercent() == 1 && xp != v.activation.mainXpath
-	yOffset := itm.model.YOffset()
-
-	width := v.viewWidth(cfg)
-	itm.model.SetWidth(width)
-	itm.model.SetContent(lipgloss.Wrap(content, width, ""))
-
-	totalLines := max(1, itm.model.TotalLineCount())
-
-	if cfg.maxHeight > 0 && totalLines > cfg.maxHeight {
-		contentW := max(1, width-scrollbarWidth)
-		itm.model.SetWidth(contentW)
-		itm.model.SetContent(lipgloss.Wrap(content, contentW, ""))
-		totalLines = max(1, itm.model.TotalLineCount())
+func (v *Viewports) resolveVersion(output *command.AtomicCommandOutput, version uint64) uint64 {
+	if output != nil {
+		return output.Version()
 	}
 
-	finalH := v.finalHeight(totalLines, cfg)
-	itm.model.SetHeight(finalH)
+	return version
+}
 
-	if wasAtBottom {
-		itm.model.GotoBottom()
+func (v *Viewports) resolveContent(itm *item, version uint64, content string, output *command.AtomicCommandOutput) string {
+	if itm.contentVersion == version {
+		return itm.content
+	}
+
+	if output != nil {
+		itm.content = output.String()
 	} else {
-		itm.model.SetYOffset(min(yOffset, max(0, totalLines-finalH)))
-	}
-}
-
-func (v *Viewports) render(xpath xpath.Xpath, content string, cfg renderConfig) string {
-	version := v.resolveVersion(cfg)
-
-	itm := v.getOrCreateItem(xpath, content, cfg)
-	content = v.resolveContent(itm, version, content, cfg)
-
-	width := v.viewWidth(cfg)
-
-	if itm.contentVersion == version && itm.model.Width() == width {
-		key := viewportCacheKey{
-			width:     width,
-			height:    itm.model.Height(),
-			scrollPct: itm.model.ScrollPercent(),
-			version:   version,
-		}
-
-		view, hit := itm.cache.GetCheck(key)
-		if hit {
-			active := xpath == v.activation.activeXpath
-			view = v.applyActiveStyle(view, cfg, active)
-			view = zone.Mark(xpath.String(), view)
-
-			return view
-		}
+		itm.content = content
 	}
 
-	v.syncItem(itm, xpath, content, cfg)
-
-	key := viewportCacheKey{
-		width:     itm.model.Width(),
-		height:    itm.model.Height(),
-		scrollPct: itm.model.ScrollPercent(),
-		version:   version,
-	}
-
-	view := itm.cache.Get(
-		func() (string, bool) {
-			scrollbar, _ := v.scrollbar(itm.model.ScrollPercent(), itm.model.TotalLineCount(), itm.model.Height())
-
-			return v.withScrollbar(itm.model.View(), scrollbar), true
-		},
-		key,
-	)
-
-	active := xpath == v.activation.activeXpath
-	view = v.applyActiveStyle(view, cfg, active)
-	view = zone.Mark(xpath.String(), view)
-
-	return view
-}
-
-func (v *Viewports) resolveVersion(cfg renderConfig) uint64 {
-	if cfg.output != nil {
-		return cfg.output.Version()
-	}
-
-	return cfg.version
-}
-
-func (v *Viewports) resolveContent(itm *item, version uint64, currentContent string, cfg renderConfig) string {
-	if itm.contentVersion != version {
-		if cfg.output != nil {
-			itm.content = cfg.output.String()
-		} else {
-			itm.content = currentContent
-		}
-
-		itm.contentVersion = version
-	}
+	itm.contentVersion = version
 
 	return itm.content
 }
 
-func (v *Viewports) getOrCreateItem(xpath xpath.Xpath, content string, cfg renderConfig) *item {
+func (v *Viewports) getOrCreateItem(
+	xpath xpath.Xpath,
+	content string,
+	indent, explicitHeight, explicitWidth int,
+	bordered, scrollbar bool,
+) *item {
 	itm, exists := v.items.Get(xpath)
 	if exists {
 		return itm
 	}
 
-	w := v.viewWidth(cfg)
-	h := max(1, cfg.explicitHeight)
+	opts := []tuiviewport.Option{
+		tuiviewport.WithWidth(v.viewWidth(indent, explicitWidth)),
+		tuiviewport.WithHeight(max(1, explicitHeight)),
+	}
+
+	if scrollbar {
+		sbColor := v.borderColor(false)
+		opts = append(opts, tuiviewport.WithScrollbar("█", "│", sbColor, sbColor))
+	}
+
+	if bordered {
+		opts = append(opts, tuiviewport.WithBorder(v.borderColor(false)))
+	}
+
+	if bordered && scrollbar {
+		maxH := v.conf.Flags.Tui.CommandOutputMaxHeight
+		if maxH > 0 {
+			opts = append(opts, tuiviewport.WithMaxHeight(maxH))
+		}
+	}
+
+	// Main viewport: indent==0 and explicitWidth==0 and it's the mainXpath
+	if xpath == v.mainXpath {
+		opts = append(opts, tuiviewport.WithMain())
+	}
 
 	itm = &item{
-		model:   viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		model:   tuiviewport.New(opts...),
 		content: content,
 	}
-	itm.model.GotoBottom()
+
+	if xpath != v.mainXpath {
+		itm.model.GotoBottom()
+	}
+
 	v.items.Set(xpath, itm)
 
 	return itm
 }
 
-func (v *Viewports) applyActiveStyle(view string, cfg renderConfig, active bool) string {
-	switch {
-	case cfg.highlightActive:
-		if active {
-			return v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(view)
-		}
-
-		return view
-	case cfg.bordered:
-		border := v.conf.ColorScheme.Table.Border.GetForeground()
-		if active {
-			border = v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
-		}
-
-		return lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(border).
-			Render(view)
-	default:
-		return view
+func (v *Viewports) borderColor(active bool) color.Color {
+	if active {
+		return v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
 	}
+
+	return v.conf.ColorScheme.Table.Border.GetForeground()
 }
 
-// scrollbar renders a vertical scrollbar when content exceeds visible area.
-func (v *Viewports) scrollbar(pct float64, total, visible int) (string, int) {
-	if total <= visible {
-		return "", 0
+func (v *Viewports) activeItem() *item {
+	xp := v.activeXpath
+	if xp.String() == "" {
+		xp = v.mainXpath
 	}
 
-	thumb := max(1, visible*visible/total)
-	pos := int(float64(visible-thumb) * clamp(pct, 0, 1))
-	end := pos + thumb
-
-	var builder strings.Builder
-
-	for i := range visible {
-		if i > 0 {
-			builder.WriteByte('\n')
-		}
-
-		if i >= pos && i < end {
-			builder.WriteString(scrollThumb)
-		} else {
-			builder.WriteString(scrollTrack)
-		}
-	}
-
-	return lipgloss.NewStyle().
-		Foreground(v.conf.ColorScheme.Table.Border.GetForeground()).
-		Render(builder.String()), 1
-}
-
-// withScrollbar appends scrollbar lines to the right side of the viewport view.
-func (v *Viewports) withScrollbar(view, bar string) string {
-	if bar == "" {
-		return view
-	}
-
-	vLines := strings.Split(view, "\n")
-	bLines := strings.Split(bar, "\n")
-	result := make([]string, len(vLines))
-
-	for i, line := range vLines {
-		if i < len(bLines) {
-			result[i] = line + " " + bLines[i]
-		} else {
-			result[i] = line
-		}
-	}
-
-	return strings.Join(result, "\n")
-}
-
-// Input helpers
-
-func (v *Viewports) activeViewport() *item {
-	activeXpath := v.activation.activeXpath
-
-	if activeXpath.String() == "" {
-		activeXpath = v.activation.mainXpath
-	}
-
-	it, ok := v.items.Get(activeXpath)
+	it, ok := v.items.Get(xp)
 	if ok {
 		return it
 	}
@@ -472,36 +327,20 @@ func (v *Viewports) activeViewport() *item {
 	return nil
 }
 
-func (v *Viewports) underMouse(m tea.MouseMsg) []xpath.Xpath {
-	var result []xpath.Xpath
+func (v *Viewports) clickTarget(m tea.MouseClickMsg) xpath.Xpath {
+	var candidates []xpath.Xpath
 
 	for xp := range v.items.Records() {
 		if zone.Get(xp.String()).InBounds(m) {
-			result = append(result, xp)
+			candidates = append(candidates, xp)
 		}
 	}
 
-	return result
-}
-
-func (v *Viewports) mostSpecific(xpathI []xpath.Xpath) xpath.Xpath {
-	if len(xpathI) == 0 {
+	if len(candidates) == 0 {
 		return ""
 	}
 
-	sort.Slice(xpathI, func(i, j int) bool { return xpathI[i].Depth() > xpathI[j].Depth() })
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Depth() > candidates[j].Depth() })
 
-	return xpathI[0]
-}
-
-func clamp(v, low, high float64) float64 { //nolint:varnamelen
-	if v < low {
-		return low
-	}
-
-	if v > high {
-		return high
-	}
-
-	return v
+	return candidates[0]
 }

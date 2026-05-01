@@ -48,3 +48,6 @@ panix.*.log
 tests/e2e/.cache/
 tests/e2e/log/
 tests/e2e/testflakes/ssh-key.pub
+
+# Benchmarks
+/bench

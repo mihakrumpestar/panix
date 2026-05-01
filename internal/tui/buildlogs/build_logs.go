@@ -73,7 +73,7 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 		}
 
 		if flakeNode.Length() > 0 {
-			stringBuilder.WriteString("\n" + flakeNode.String())
+			flakeNode.RenderTo(&stringBuilder)
 		}
 	}
 
@@ -246,7 +246,7 @@ func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI 
 		layoutIndent -= 2
 	}
 
-	line := b.layoutLine(layoutIndent, left, durStyled, len(leftRaw), durWidth)
+	line := b.layoutLine(layoutIndent, left, durStyled, lipgloss.Width(leftRaw), durWidth)
 
 	phaseNode := tree.New().Root(b.conf.ColorScheme.Phase.Color.Render(line))
 	hasError := b.addCommands(phaseNode, phaseLog, phaseI, phaseXpath, indent)
@@ -327,9 +327,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
 	if output.Len() > 0 {
-		cmdNode.ChildString(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep*2-1))
-	} else {
-		b.viewports.RemoveIfExistsViewport(outputXpath)
+		cmdNode.ChildString(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep))
 	}
 
 	errXpath := cmdXpath.NewXpathWithAppend("error")
@@ -340,8 +338,6 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		cmdNode.ChildString(b.conf.ColorScheme.Error.Color.Render(
 			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, 0, cmdIndent+treeStep),
 		))
-	} else {
-		b.viewports.RemoveIfExistsViewport(errXpath)
 	}
 
 	parent.Child(cmdNode)
@@ -357,7 +353,7 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 	rightRaw := fmt.Sprintf(" (%.2fs)", dur)
 	left := style.Color.Render(leftRaw)
 	right := style.Color.Render(rightRaw)
-	line := b.layoutLine(indent, left, right, len(leftRaw), len(rightRaw))
+	line := b.layoutLine(indent, left, right, lipgloss.Width(leftRaw), lipgloss.Width(rightRaw))
 
 	treeI := tree.New().Root(line)
 	if isRoot {
@@ -370,8 +366,6 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 }
 
 func (b *BuildLogs) layoutLine(indent int, left, right string, leftWidth, rightWidth int) string {
-	leftWidth -= 2
-
 	level := indent / treeStep
 	available := b.viewports.ContentWidth() - indent - (timerIndent - level)
 	pad := max(available-rightWidth-leftWidth, leftWidth)
@@ -399,5 +393,5 @@ func (b *BuildLogs) durationText(style colorscheme.ColorSchemeLogEntity, tas *at
 
 	text := fmt.Sprintf(" (%.2fs)", d.Seconds())
 
-	return style.Color.Render(text), len(text)
+	return style.Color.Render(text), lipgloss.Width(text)
 }
