@@ -75,3 +75,4 @@ formatters:
 issues:
   max-issues-per-linter: 1000
   max-same-issues: 100
+  fix: true

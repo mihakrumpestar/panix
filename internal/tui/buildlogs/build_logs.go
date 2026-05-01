@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/tree"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
@@ -17,6 +16,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
@@ -67,12 +67,12 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 			cfgNode := b.entityNode(treeStep, b.conf.ColorScheme.Configuration, cfg.Name, cfg.Logs, false)
 			b.buildConfigTree(cfgNode, cfg)
 
-			if cfgNode.Children().Length() > 0 {
+			if cfgNode.Length() > 0 {
 				flakeNode.Child(cfgNode)
 			}
 		}
 
-		if flakeNode.Children().Length() > 0 {
+		if flakeNode.Length() > 0 {
 			stringBuilder.WriteString("\n" + flakeNode.String())
 		}
 	}
@@ -80,7 +80,7 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 	return stringBuilder.String()
 }
 
-func (b *BuildLogs) buildConfigTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
+func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
 	switch {
 	case b.conf.Fleet.StatsTable.Selected.Index >= 0:
 		b.buildMachineSelectedTree(cfgNode, cfg)
@@ -91,7 +91,7 @@ func (b *BuildLogs) buildConfigTree(cfgNode *tree.Tree, cfg *configuration.Confi
 	}
 }
 
-func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
+func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
 	for _, mp := range cfg.Machines.Pairs() {
 		machine := mp.Value
 		if machine == nil || machine.Xpath != b.conf.Fleet.StatsTable.Selected.Xpath {
@@ -114,7 +114,7 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configurat
 			}
 		}
 
-		if node.Children().Length() > 0 {
+		if node.Length() > 0 {
 			cfgNode.Child(node)
 		}
 
@@ -122,7 +122,7 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Tree, cfg *configurat
 	}
 }
 
-func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
+func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
 	phaseI := b.conf.Fleet.PhaseStatus.Selected.Phase
 
 	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
@@ -140,7 +140,7 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Tree, cfg *configuratio
 	}
 }
 
-func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Configuration) {
+func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
 	var machinePhases []phase.Phase
 
 	flush := func() {
@@ -171,7 +171,7 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Tree, cfg *configuration.Conf
 	flush()
 }
 
-func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, machine *machine.Machine, indent int, allowed ...phase.Phase) {
+func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Machine, indent int, allowed ...phase.Phase) {
 	if machine == nil || machine.Logs == nil {
 		return
 	}
@@ -179,7 +179,7 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Tree, machine *machine.Mac
 	node := b.entityNode(indent, b.conf.ColorScheme.Machine, machine.Name, machine.Logs, false)
 	b.addPhases(node, machine.Logs, machine.Xpath, indent+treeStep, false, allowed...)
 
-	if node.Children().Length() > 0 {
+	if node.Length() > 0 {
 		parent.Child(node)
 	}
 }
@@ -204,7 +204,7 @@ func (b *BuildLogs) shouldHidePhase(p phase.Phase, phaseLog *phaselogs.PhaseLog)
 }
 
 func (b *BuildLogs) addPhases(
-	parent *tree.Tree,
+	parent *tree.Node,
 	logNode *logs.Logs,
 	entityXpath xpath.Xpath,
 	indent int, stopAtError bool,
@@ -227,7 +227,7 @@ func (b *BuildLogs) addPhases(
 	return false
 }
 
-func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, phaseI phase.Phase, phaseLog *phaselogs.PhaseLog, indent int) bool {
+func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI phase.Phase, phaseLog *phaselogs.PhaseLog, indent int) bool {
 	if phaseLog == nil || b.shouldHidePhase(phaseI, phaseLog) {
 		return false
 	}
@@ -255,7 +255,7 @@ func (b *BuildLogs) addPhase(parent *tree.Tree, entityXpath xpath.Xpath, phaseI 
 	return hasError
 }
 
-func (b *BuildLogs) addCommands(phaseNode *tree.Tree, phaseLog *phaselogs.PhaseLog, p phase.Phase, phaseXpath xpath.Xpath, indent int) bool {
+func (b *BuildLogs) addCommands(phaseNode *tree.Node, phaseLog *phaselogs.PhaseLog, p phase.Phase, phaseXpath xpath.Xpath, indent int) bool {
 	hideable := b.isHideable(p)
 	cmds := phaseLog.CommandLogs
 
@@ -287,7 +287,7 @@ func (b *BuildLogs) addCommands(phaseNode *tree.Tree, phaseLog *phaselogs.PhaseL
 	return hasError
 }
 
-func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx int, phaseXpath xpath.Xpath, indent int) {
+func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx int, phaseXpath xpath.Xpath, indent int) {
 	if cmd == nil || b.viewports == nil {
 		return
 	}
@@ -327,7 +327,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
 	if output.Len() > 0 {
-		cmdNode.Child(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep*2-1))
+		cmdNode.ChildString(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep*2-1))
 	} else {
 		b.viewports.RemoveIfExistsViewport(outputXpath)
 	}
@@ -337,7 +337,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	err := tasCached.EndError
 	if err != nil {
 		errMsg := "✗ Command failed: " + err.Error()
-		cmdNode.Child(b.conf.ColorScheme.Error.Color.Render(
+		cmdNode.ChildString(b.conf.ColorScheme.Error.Color.Render(
 			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, 0, cmdIndent+treeStep),
 		))
 	} else {
@@ -347,7 +347,7 @@ func (b *BuildLogs) addCommand(parent *tree.Tree, cmd *command.CommandLog, idx i
 	parent.Child(cmdNode)
 }
 
-func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntity, name string, logNode *logs.Logs, isRoot bool) *tree.Tree {
+func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntity, name string, logNode *logs.Logs, isRoot bool) *tree.Node {
 	dur := 0.0
 	if logNode != nil {
 		dur = logNode.DurationAndErrorCache.Duration.Seconds()
@@ -361,7 +361,7 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 
 	treeI := tree.New().Root(line)
 	if isRoot {
-		treeI = treeI.Enumerator(tree.RoundedEnumerator).
+		treeI = treeI.Enumerator(tree.EnumeratorRounded).
 			EnumeratorStyle(b.conf.ColorScheme.Tree.Enumerator).
 			IndenterStyle(b.conf.ColorScheme.Tree.Enumerator)
 	}

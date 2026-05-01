@@ -933,6 +933,18 @@ fleet:
 
 `build_mode` can be set at fleet, flake, or configuration level (inherited like other `nix` options). It cannot be set at machine level — a configuration's machines share the same build mode (since build is a configuration level phase).
 
+### Advanced
+
+For more advanced remote/distributed builds, you can use additional `nix` command flags or set it up in your NixOS config.
+
+Some documentation is available at:
+
+- <https://wiki.nixos.org/wiki/Distributed_build>
+- <https://nix.dev/manual/nix/latest/advanced-topics/distributed-builds>
+- <https://nix.dev/tutorials/nixos/distributed-builds-setup.html>
+- <https://docs.nixbuild.net/remote-builds/>
+- <https://docs.nixbuild.net/use-as-substituter/>
+
 </details>
 
 <details>
