@@ -294,6 +294,8 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 
 	cmdIndent := indent + treeStep
 
+	cmdXpath := phaseXpath.NewXpathWithAppend(cmd.Description)
+
 	label := cmd.Description
 	if b.conf.Flags.Tui.ShowCommandsInLabels && len(cmd.Command) > 2 {
 		label = cmd.Command
@@ -304,7 +306,6 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		labelShowsCommands = 1
 	}
 
-	cmdXpath := phaseXpath.NewXpathWithAppend(label)
 	tasCached := cmd.TimeAndState.Load()
 
 	icon := b.spinnerOrIcon(cmdXpath, strconv.Itoa(idx+1), tasCached)

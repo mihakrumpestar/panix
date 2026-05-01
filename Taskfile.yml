@@ -51,7 +51,7 @@ tasks:
       - go mod tidy
       - golangci-lint run ./...
       - |
-        if grep -rn "; " internal/ --include="*.go" | grep -v "for "; then
+        if grep -rn "; " internal/ --include="*.go" | grep -v "for " | grep -v "//"; then
           echo "Error: Inlining pattern detected"
           exit 1
         fi

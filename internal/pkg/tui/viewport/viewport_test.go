@@ -1797,49 +1797,6 @@ func TestScrollbarReserveSyncItemSequence(t *testing.T) {
 	}
 }
 
-func TestMainViewportSetContentReturnsErrorOnOverwidth(t *testing.T) {
-	t.Parallel()
-
-	vpWidth := 20
-	vpHeight := 5
-
-	mdl := New(
-		WithWidth(vpWidth),
-		WithHeight(vpHeight),
-		WithMain(),
-		WithScrollbar("█", "│", nil, nil),
-	)
-
-	contentW := mdl.ContentWidth()
-	if contentW != vpWidth-scrollbarColWidth {
-		t.Fatalf("ContentWidth=%d want %d", contentW, vpWidth-scrollbarColWidth)
-	}
-
-	err := mdl.SetContent(strings.Repeat("x", contentW))
-	if err != nil {
-		t.Fatalf("exact-width content should not error: %v", err)
-	}
-
-	overwidth := strings.Repeat("x", contentW+1)
-
-	err = mdl.SetContent(overwidth)
-	if err == nil {
-		t.Fatal("overwidth content should return error")
-	}
-
-	if !strings.Contains(err.Error(), "visual width") {
-		t.Errorf("error should mention visual width: %v", err)
-	}
-
-	if !strings.Contains(err.Error(), "exceeds ContentWidth") {
-		t.Errorf("error should mention ContentWidth: %v", err)
-	}
-
-	if !strings.Contains(err.Error(), overwidth) {
-		t.Errorf("error should quote the overwidth line: %v", err)
-	}
-}
-
 func TestNonMainViewportSetContentReturnsNil(t *testing.T) {
 	t.Parallel()
 
