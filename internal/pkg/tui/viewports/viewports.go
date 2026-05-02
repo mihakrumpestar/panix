@@ -7,11 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
-	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	tuiviewport "github.com/mihakrumpestar/panix/internal/pkg/tui/viewport"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
@@ -106,12 +105,12 @@ func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
 
 // Update
 
-func (v *Viewports) Update(msg tea.Msg) tea.Cmd {
+func (v *Viewports) Update(msg render.Msg) render.Cmd {
 	if v == nil {
 		return nil
 	}
 
-	click, ok := msg.(tea.MouseClickMsg)
+	click, ok := msg.(render.MouseClickMsg)
 	if ok {
 		clicked := v.clickTarget(click)
 		if clicked.Depth() > 0 {
@@ -214,7 +213,7 @@ func (v *Viewports) render(
 		view = v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(view)
 	}
 
-	return zone.Mark(xpath.String(), view)
+	return render.Mark(xpath.String(), view)
 }
 
 func (v *Viewports) viewWidth(indent, explicitWidth int) int {
@@ -272,7 +271,7 @@ func (v *Viewports) getOrCreateItem(
 
 	if scrollbar {
 		sbColor := v.borderColor(false)
-		opts = append(opts, tuiviewport.WithScrollbar("█", "│", sbColor, sbColor))
+		opts = append(opts, tuiviewport.WithScrollbar("█", "░", sbColor, sbColor))
 	}
 
 	if bordered {
@@ -327,11 +326,11 @@ func (v *Viewports) activeItem() *item {
 	return nil
 }
 
-func (v *Viewports) clickTarget(m tea.MouseClickMsg) xpath.Xpath {
+func (v *Viewports) clickTarget(m render.MouseClickMsg) xpath.Xpath {
 	var candidates []xpath.Xpath
 
 	for xp := range v.items.Records() {
-		if zone.Get(xp.String()).InBounds(m) {
+		if render.IsZoneAt(render.CurrentBuf(), m.X, m.Y, xp.String()) {
 			candidates = append(candidates, xp)
 		}
 	}

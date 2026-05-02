@@ -151,7 +151,7 @@ func parseBenchmarkOutput(reader *bufio.Reader) ([]benchmark, environment, bool)
 }
 
 func isReference(name string) bool {
-	return strings.HasPrefix(name, "Bubbles") || strings.HasPrefix(name, "Lipgloss")
+	return strings.HasPrefix(name, "Bubbles") || strings.HasPrefix(name, "Lipgloss") || strings.HasPrefix(name, "Bubbletea")
 }
 
 func classify(results []benchmark) (map[string][]benchmark, map[string][]benchmark) {
@@ -170,7 +170,7 @@ func classify(results []benchmark) (map[string][]benchmark, map[string][]benchma
 }
 
 func stripReferencePrefix(name string) string {
-	for _, prefix := range []string{"Bubbles", "Lipgloss"} {
+	for _, prefix := range []string{"Bubbles", "Lipgloss", "Bubbletea"} {
 		if strings.HasPrefix(name, prefix) {
 			return name[len(prefix):]
 		}

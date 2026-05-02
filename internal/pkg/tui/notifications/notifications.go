@@ -5,8 +5,8 @@ import (
 	"image/color"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 )
 
 const (
@@ -30,7 +30,7 @@ type Notification struct {
 
 func New() *Notification { return &Notification{} }
 
-func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
+func (n *Notification) Set(text string, color lipgloss.Style) render.Cmd {
 	n.text, n.started = text, time.Now()
 	n.fgR, n.fgG, n.fgB = 180, 180, 180
 
@@ -42,10 +42,10 @@ func (n *Notification) Set(text string, color lipgloss.Style) tea.Cmd {
 		n.fgR, n.fgG, n.fgB = uint8(r>>rgbaShift), uint8(g>>rgbaShift), uint8(b>>rgbaShift)
 	}
 
-	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return notificationTickMsg{} })
+	return render.TickCmd(tickInterval, func(time.Time) render.Msg { return notificationTickMsg{} })
 }
 
-func (n *Notification) Update(msg tea.Msg) tea.Cmd {
+func (n *Notification) Update(msg render.Msg) render.Cmd {
 	_, ok := msg.(notificationTickMsg)
 	if !ok {
 		return nil
@@ -61,7 +61,7 @@ func (n *Notification) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 
-	return tea.Tick(tickInterval, func(time.Time) tea.Msg { return notificationTickMsg{} })
+	return render.TickCmd(tickInterval, func(time.Time) render.Msg { return notificationTickMsg{} })
 }
 
 func (n *Notification) Clear() {

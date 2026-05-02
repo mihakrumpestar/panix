@@ -47,7 +47,7 @@ func TestWorkflowDoneMsg_WithErr_SetsModelError(t *testing.T) {
 	workflowErr := errors.New("workflow completed with 1 machine(s) failed")
 	msg := workflowDoneMsg{err: workflowErr}
 
-	_, _ = mdl.Update(msg)
+	_ = mdl.Update(msg)
 
 	assert.False(t, mdl.quitting, "TUI should stay open on workflowDoneMsg even with error")
 	assert.Equal(t, workflowErr, mdl.err, "m.err should be set from workflowDoneMsg.err")
@@ -60,7 +60,7 @@ func TestWorkflowDoneMsg_WithoutErr_NoError(t *testing.T) {
 
 	msg := workflowDoneMsg{}
 
-	_, _ = mdl.Update(msg)
+	_ = mdl.Update(msg)
 
 	assert.False(t, mdl.quitting)
 	assert.NoError(t, mdl.err)
@@ -73,7 +73,7 @@ func TestErrMsg_AlwaysQuits(t *testing.T) {
 
 	msg := errMsg{err: errors.New("something fatal")}
 
-	_, _ = mdl.Update(msg)
+	_ = mdl.Update(msg)
 
 	assert.True(t, mdl.quitting, "errMsg should always quit the TUI")
 	assert.Error(t, mdl.err)
@@ -135,7 +135,7 @@ func TestHandleQuit_DetectsFailedMachinesFromFleetState(t *testing.T) {
 		break
 	}
 
-	_, _ = mdl.handleQuit()
+	_ = mdl.handleQuit()
 
 	assert.True(t, mdl.quitting)
 	assert.ErrorIs(t, mdl.err, errMachinesFailed, "handleQuit should set m.err from fleet state when machines are failed")
@@ -148,7 +148,7 @@ func TestHandleQuit_PreservesExistingError(t *testing.T) {
 	existingErr := errors.New("workflow completed with 2 machine(s) failed")
 	mdl.err = existingErr
 
-	_, _ = mdl.handleQuit()
+	_ = mdl.handleQuit()
 
 	assert.True(t, mdl.quitting)
 	assert.Equal(t, existingErr, mdl.err, "handleQuit should preserve already-set m.err")
@@ -159,14 +159,13 @@ func TestHandleQuit_NoErrorWhenAllSucceeded(t *testing.T) {
 
 	mdl := newTestModel(t)
 
-	// Mark all machines as done (not failed)
 	for _, fleetLeaf := range mdl.conf.Fleet.AllMachines() {
 		fleetLeaf.Machine.State.Store(&machine.State{
 			Status: stats.Done,
 		})
 	}
 
-	_, _ = mdl.handleQuit()
+	_ = mdl.handleQuit()
 
 	assert.True(t, mdl.quitting)
 	assert.NoError(t, mdl.err, "handleQuit should not set m.err when all machines succeeded")

@@ -9,14 +9,13 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
-	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"go.uber.org/atomic"
 )
@@ -68,10 +67,10 @@ func (p *PhaseStatus) Reset() {
 	p.Selected.Index = -1
 }
 
-func (p *PhaseStatus) HandleMouseClick(msg tea.MouseClickMsg) bool {
+func (p *PhaseStatus) HandleMouseClick(msg render.MouseClickMsg) bool {
 	for idx := range p.CacheStatisticsPerPhase.Len() {
-		z := zone.Get(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, idx))
-		if z != nil && z.InBounds(msg) {
+		zoneName := fmt.Sprintf("%s-%d", phaseStatusZonePrefix, idx)
+		if render.IsZoneAt(render.CurrentBuf(), msg.X, msg.Y, zoneName) {
 			if p.Selected.Index == idx {
 				p.Selected.Index = -1
 				p.Selected.Phase = ""
@@ -237,7 +236,7 @@ func (p *PhaseStatus) createPhaseGroup(name string, statsPack stats.StatsPack, p
 
 	content := lipgloss.JoinVertical(lipgloss.Center, phaseName, statusLine)
 	if phaseIdx >= 0 {
-		return zone.Mark(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, phaseIdx), content)
+		return render.Mark(fmt.Sprintf("%s-%d", phaseStatusZonePrefix, phaseIdx), content)
 	}
 
 	return content

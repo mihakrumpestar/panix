@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"testing"
 
-	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
@@ -22,7 +21,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	zone.NewGlobal()
 	os.Exit(m.Run())
 }
 

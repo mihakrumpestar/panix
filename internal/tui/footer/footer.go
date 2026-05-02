@@ -5,19 +5,19 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
 )
 
 type KeyDef struct {
 	Keys    []string
 	Help    string
-	Handler func() (tea.Model, tea.Cmd)
+	Handler func() []render.Cmd
 }
 
 var notificationBaseStyle = lipgloss.NewStyle().Bold(true)
@@ -99,7 +99,7 @@ func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) header.Co
 	return header.ContentAndHeight{Content: finalContent, Height: helpText.Height}
 }
 
-func (f *Footer) Update(msg tea.Msg) tea.Cmd {
+func (f *Footer) Update(msg render.Msg) render.Cmd {
 	return f.notification.Update(msg)
 }
 
@@ -153,7 +153,7 @@ func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth in
 	linesString := strings.Join(lines, "\n")
 	linesString += "\n"
 
-	if len(lines) == 1 { // Keep at least 3 in full height, so that notification can appear normally
+	if len(lines) == 1 {
 		linesString += "\n"
 	}
 

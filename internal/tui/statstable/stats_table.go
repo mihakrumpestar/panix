@@ -5,15 +5,14 @@ import (
 	"strconv"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
-	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -33,6 +32,8 @@ type StatsTable struct {
 
 	CacheMachineInfos  []MachineInfo `json:"-"`
 	CacheFlattenedLogs []*logs.Logs  `json:"-"`
+
+	ZoneStartY int
 
 	cache cache.Cache[string, statsTableCacheKey]
 }
@@ -59,9 +60,8 @@ func (s *StatsTable) Reset() {
 	s.Selected.Index = -1
 }
 
-func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
-	zoneInfo := zone.Get(statsTableZonePrefix)
-	if zoneInfo == nil || !zoneInfo.InBounds(msg) {
+func (s *StatsTable) HandleMouseClick(msg render.MouseClickMsg) bool {
+	if !render.IsZoneAt(render.CurrentBuf(), msg.X, msg.Y, statsTableZonePrefix) {
 		return false
 	}
 
@@ -70,8 +70,7 @@ func (s *StatsTable) HandleMouseClick(msg tea.MouseClickMsg) bool {
 		return false
 	}
 
-	mouse := msg.Mouse()
-	relY := mouse.Y - zoneInfo.StartY
+	relY := msg.Y - s.ZoneStartY
 	headerLines := 3
 
 	if relY < headerLines {
@@ -149,7 +148,7 @@ func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorSc
 
 	builder.WriteString(colorScheme.Header.Title.Render("=== Stats Table ===\n"))
 
-	indexWidth := len(strconv.Itoa(len(s.CacheMachineInfos))) // Get width of the string representation of the number
+	indexWidth := len(strconv.Itoa(len(s.CacheMachineInfos)))
 	headers, styleFunc := makeTableColumns(colorScheme, indexWidth, s.Selected.Index)
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
@@ -191,7 +190,7 @@ func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorSc
 		)
 	}
 
-	tableContent := zone.Mark(statsTableZonePrefix, tbl.String())
+	tableContent := render.Mark(statsTableZonePrefix, tbl.String())
 	builder.WriteString("\n" + tableContent + "\n\n")
 
 	result := builder.String()

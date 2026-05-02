@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -44,7 +44,7 @@ func (s *Spinners) View(xpath xpath.Xpath) string {
 	return model.View()
 }
 
-func (s *Spinners) ProcessPendingTicks() tea.Cmd {
+func (s *Spinners) ProcessPendingTicks() render.Cmd {
 	if s == nil || s.ticking {
 		return nil
 	}
@@ -58,7 +58,7 @@ func (s *Spinners) ProcessPendingTicks() tea.Cmd {
 	return s.nextTick()
 }
 
-func (s *Spinners) Update(msg tea.Msg) tea.Cmd {
+func (s *Spinners) Update(msg render.Msg) render.Cmd {
 	_, ok := msg.(tickMsg)
 	if !ok {
 		return nil
@@ -94,6 +94,6 @@ func (s *Spinners) Debug() string {
 
 // helpers
 
-func (s *Spinners) nextTick() tea.Cmd {
-	return tea.Tick(spinner.Dot.FPS, func(time.Time) tea.Msg { return tickMsg{} })
+func (s *Spinners) nextTick() render.Cmd {
+	return render.TickCmd(spinner.Dot.FPS, func(time.Time) render.Msg { return tickMsg{} })
 }

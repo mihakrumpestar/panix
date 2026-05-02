@@ -1,29 +1,33 @@
 package style
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/rivo/uniseg"
+)
 
 // CellWidth returns the terminal cell width of a string, accounting for ANSI
-// escape sequences (zero width) and East Asian wide characters (2-cell width).
-// It replaces lipgloss.Width in hot paths, avoiding the heavy uax29 grapheme
-// clustering used by the upstream implementation.
+// escape sequences (zero width) and grapheme clusters with proper width
+// (emoji ZWJ sequences, skin tone modifiers, etc.).
 func CellWidth(str string) int {
 	width := 0
 	pos := 0
+	gs := -1
 
 	for pos < len(str) {
-		switch {
-		case str[pos] == '\x1b':
+		switch str[pos] {
+		case '\x1b':
+			gs = -1
 			pos = skipANSI(str, pos)
-		case str[pos] < 0x80: //nolint:mnd
-			width++
-			pos++
-		case str[pos] < 0xC0: //nolint:mnd
-			width++
+		case '\n', '\r':
+			gs = -1
 			pos++
 		default:
-			decodedRune, size := decodeUTF8(str, pos)
-			pos += size
-			width += runeWidth(decodedRune)
+			cluster, rest, w, newState := uniseg.FirstGraphemeCluster([]byte(str[pos:]), gs)
+			gs = newState
+			pos = len(str) - len(rest)
+			width += w
+			_ = cluster
 		}
 	}
 
@@ -110,9 +114,8 @@ func CountLines(str string) int {
 	return 1 + strings.Count(str, "\n")
 }
 
-//nolint:cyclop,mnd
-//nolint:cyclop,mnd
-func runeWidth(r rune) int { //nolint:varnamelen
+// RuneWidth returns the display width of a rune (1 for ASCII, 2 for East Asian Wide).
+func RuneWidth(r rune) int {
 	if r >= 0x1100 &&
 		(r <= 0x115F ||
 			r == 0x2329 ||

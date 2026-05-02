@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unsafe"
 
-	tea "charm.land/bubbletea/v2"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/pkg/errors"
 )
@@ -464,11 +464,11 @@ func (m *Viewport) AtBottom() bool {
 	return m.yOffset >= m.maxYOffset()
 }
 
-func (m *Viewport) Update(msg tea.Msg) {
+func (m *Viewport) Update(msg render.Msg) {
 	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	case render.KeyPressMsg:
 		m.handleKeyPress(msg)
-	case tea.MouseWheelMsg:
+	case render.MouseWheelMsg:
 		m.handleMouseWheel(msg)
 	}
 }
@@ -770,7 +770,7 @@ func (m *Viewport) maxYOffset() int {
 	return max(len(m.lines)-m.contentHeight(), 0)
 }
 
-func (m *Viewport) handleKeyPress(msg tea.KeyPressMsg) {
+func (m *Viewport) handleKeyPress(msg render.KeyPressMsg) {
 	switch msg.String() {
 	case "down", "j":
 		m.ScrollDown(1)
@@ -787,11 +787,11 @@ func (m *Viewport) handleKeyPress(msg tea.KeyPressMsg) {
 	}
 }
 
-func (m *Viewport) handleMouseWheel(msg tea.MouseWheelMsg) {
+func (m *Viewport) handleMouseWheel(msg render.MouseWheelMsg) {
 	switch msg.Button {
-	case tea.MouseWheelUp:
+	case render.MouseWheelUp:
 		m.ScrollUp(mouseWheelDelta)
-	case tea.MouseWheelDown:
+	case render.MouseWheelDown:
 		m.ScrollDown(mouseWheelDelta)
 	}
 }

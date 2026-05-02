@@ -132,3 +132,25 @@ func TestCountLines_Equivalence(t *testing.T) {
 		}
 	}
 }
+
+func TestCellWidth_EmojiGrapheme(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"👍🏽", 2},     // skin tone modifier: single grapheme, width 2
+		{"👨‍👩‍👧", 2},  // ZWJ family: single grapheme, width 2
+		{"🚀", 2},     // simple emoji, width 2
+		{"👍🏽Hi", 4},   // emoji(2) + H(1) + i(1)
+		{"🇺🇸", 2},     // flag: single grapheme, width 2
+	}
+
+	for _, tc := range tests {
+		got := CellWidth(tc.input)
+		if got != tc.want {
+			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.want)
+		}
+	}
+}

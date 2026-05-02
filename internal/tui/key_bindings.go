@@ -4,10 +4,10 @@ import (
 	"context"
 	"slices"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/pkg/errors"
@@ -40,14 +40,14 @@ func (m *model) keyDefs() []footer.KeyDef {
 	return kds
 }
 
-func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *model) HandleKeyInput(msg render.KeyPressMsg) []render.Cmd {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
 
 	resetable := m.resetable.Load()
 	if resetable == nil {
-		return m, nil
+		return nil
 	}
 
 	hasActiveInner := resetable.viewports.HasActiveInner()
@@ -56,14 +56,14 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if statsTable.HandleNavigation(msg.String(), hasActiveInner) {
 		m.conf.Fleet.PhaseStatus.Reset()
 
-		return m, nil
+		return nil
 	}
 
 	phaseStatus := m.conf.Fleet.PhaseStatus
 	if phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
 		m.conf.Fleet.StatsTable.Reset()
 
-		return m, nil
+		return nil
 	}
 
 	for _, kd := range m.footer.KeyDefs() {
@@ -72,33 +72,33 @@ func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleCopy() (tea.Model, tea.Cmd) {
+func (m *model) handleCopy() []render.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil {
-		return m, nil
+		return nil
 	}
 
 	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m, m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning)
+		return []render.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning)}
 	}
 
 	if content == "" {
-		return m, m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning)
+		return []render.Cmd{m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning)}
 	}
 
 	err := clipboard.CopyToClipboard(content)
 	if err != nil {
-		return m, m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed)
+		return []render.Cmd{m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed)}
 	}
 
-	return m, m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK)
+	return []render.Cmd{m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK)}
 }
 
-func (m *model) handleQuit() (tea.Model, tea.Cmd) {
+func (m *model) handleQuit() []render.Cmd {
 	m.quitting = true
 	resetable := m.resetable.Load()
 
@@ -119,12 +119,9 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 
 	log.Debug().Msg("Context done, exiting TUI")
 
-	return m, tea.Quit
+	return []render.Cmd{func() render.Msg { return render.QuitCmd() }}
 }
 
-// setFailedMachinesErrorIfNil checks fleet state for failed machines and sets
-// m.err when it's nil. This handles the case where the user quits while the
-// workflow is still retrying (no workflowDoneMsg received yet).
 func (m *model) setFailedMachinesErrorIfNil() {
 	if m.err != nil {
 		return
@@ -142,28 +139,28 @@ func (m *model) setFailedMachinesErrorIfNil() {
 	}
 }
 
-func (m *model) handleToggle() (tea.Model, tea.Cmd) {
+func (m *model) handleToggle() []render.Cmd {
 	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleToggleCommands() (tea.Model, tea.Cmd) {
+func (m *model) handleToggleCommands() []render.Cmd {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
+func (m *model) handleToggleActiveOnly() []render.Cmd {
 	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleRetry() (tea.Model, tea.Cmd) {
+func (m *model) handleRetry() []render.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil || resetable.workflow == nil {
-		return m, nil
+		return nil
 	}
 
 	if m.conf.Flags.Snapshot.OnRetry {
@@ -172,26 +169,28 @@ func (m *model) handleRetry() (tea.Model, tea.Cmd) {
 
 	resetable.workflow.State().Retry.Trigger()
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleRestart() (tea.Model, tea.Cmd) {
-	return m, tea.Batch(
+func (m *model) handleRestart() []render.Cmd {
+	cmds := []render.Cmd{
 		m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK),
-		func() tea.Msg { return restartMsg{} },
-	)
+		func() render.Msg { return restartMsg{} },
+	}
+
+	return cmds
 }
 
-func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
+func (m *model) handleFullscreen() []render.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil {
-		return m, nil
+		return nil
 	}
 
 	if resetable.viewports.IsFullscreen() {
 		resetable.viewports.ExitFullscreen()
 
-		return m, nil
+		return nil
 	}
 
 	activeInnerXpath := resetable.viewports.GetActiveInnerViewportXpath()
@@ -199,20 +198,20 @@ func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
 	if activeInnerXpath.Depth() > 0 {
 		resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m, m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning)
+		return []render.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning)}
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleEsc() (tea.Model, tea.Cmd) {
+func (m *model) handleEsc() []render.Cmd {
 	resetable := m.resetable.Load()
 
 	statsTable := m.conf.Fleet.StatsTable
 	phaseStatus := m.conf.Fleet.PhaseStatus
 
 	if resetable == nil {
-		return m, nil
+		return nil
 	}
 
 	switch {
@@ -226,13 +225,13 @@ func (m *model) handleEsc() (tea.Model, tea.Cmd) {
 		phaseStatus.Reset()
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleSnapshot() (tea.Model, tea.Cmd) {
+func (m *model) handleSnapshot() []render.Cmd {
 	m.captureSnapshot(config.SnaphsotReasonManual)
 
-	return m, m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK)
+	return []render.Cmd{m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK)}
 }
 
 func (m *model) captureSnapshot(reason config.SnaphsotReason) {

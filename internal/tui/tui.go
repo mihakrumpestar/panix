@@ -11,10 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
-	zone "github.com/lrstanley/bubblezone/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/profile"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
@@ -35,7 +34,6 @@ const (
 type (
 	workflowUpdateHookMsg struct{}
 
-	// restartMsg signals the workflow should be restarted.
 	restartMsg struct{}
 )
 
@@ -47,7 +45,6 @@ func (e errMsg) Error() string {
 	return e.err.Error()
 }
 
-// Model holds the complete TUI state.
 type model struct {
 	ctx                context.Context
 	conf               *config.Config
@@ -65,13 +62,7 @@ type model struct {
 	spinners  *spinners.Spinners
 }
 
-// New initializes and runs the TUI application.
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
-	zone.NewGlobal()
-
-	defer zone.Close()
-
-	// Handle SIGINT as a keybinding instead of terminating the process
 	defer setupSIGINTHandler(ctx)()
 
 	profileStop, err := profile.Start(conf.Flags.Profile)
@@ -92,41 +83,35 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
 
-	program := tea.NewProgram(mdl, tea.WithEnvironment(suppressDECRQMEnv()))
+	program := render.NewProgram(mdl)
 
-	m, err := program.Run()
-	if err != nil {
+	if err := program.Run(); err != nil {
 		return errors.Wrap(err, "TUI runtime error")
 	}
 
-	finalModel, ok := m.(*model)
-	if !ok {
-		return ErrTypeAssertionFinalModel
-	}
+	if mdl.quitting {
+		content := mdl.header.View(mdl.dimensions.Width, mdl.conf.ColorScheme).Content
 
-	if finalModel.quitting {
-		content := finalModel.header.View(finalModel.dimensions.Width, finalModel.conf.ColorScheme).Content
-
-		r := finalModel.resetable.Load()
+		r := mdl.resetable.Load()
 		if r != nil {
-			content += finalModel.viewMainContent()
+			content += mdl.viewMainContent()
 		}
 
-		if finalModel.err != nil {
-			content += fmt.Sprintf("\n\n=== Error ===\n\n%s\n", finalModel.err.Error())
+		if mdl.err != nil {
+			content += fmt.Sprintf("\n\n=== Error ===\n\n%s\n", mdl.err.Error())
 		}
 
 		fmt.Println(content)
 	}
 
-	if finalModel.err != nil {
-		return finalModel.err
+	if mdl.err != nil {
+		return mdl.err
 	}
 
 	return nil
 }
 
-func (m *model) Init() tea.Cmd {
+func (m *model) Init() []render.Cmd {
 	if m.isSnapshot {
 		m.resetable.Store(&resetable{
 			viewports: viewports.NewViewports(m.dimensions, m.conf),
@@ -134,25 +119,36 @@ func (m *model) Init() tea.Cmd {
 
 		m.conf.Fleet.RecalculateCachesOnly(m.conf.Phases)
 
-		return tea.RequestWindowSize
+		return nil
 	}
 
-	return tea.Batch(
-		tea.RequestWindowSize,
+	return []render.Cmd{
 		m.startResetableWorkflow(),
 		m.workflowUpdateHook(),
-	)
+	}
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+//nolint:cyclop
+func (m *model) Update(msg render.Msg) []render.Cmd {
+	var cmds []render.Cmd
 
 	resetable := m.resetable.Load()
 	if resetable != nil {
-		cmd = tea.Batch(cmd, m.spinners.ProcessPendingTicks())
-		cmd = tea.Batch(cmd, resetable.viewports.Update(msg))
-		cmd = tea.Batch(cmd, m.footer.Update(msg))
-		cmd = tea.Batch(cmd, m.spinners.Update(msg))
+		if cmd := m.spinners.ProcessPendingTicks(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		if cmd := resetable.viewports.Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		if cmd := m.footer.Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		if cmd := m.spinners.Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -166,7 +162,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.quitting = true
 
-		return m, tea.Batch(cmd, tea.Quit)
+		cmds = append(cmds, func() render.Msg { return render.QuitCmd() })
 
 	case workflowDoneMsg:
 		if msg.err != nil {
@@ -174,37 +170,33 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			log.Error().Err(msg.err).Msg("workflowDoneMsg error")
 		}
 
-		return m.handleWorkflowDone(cmd)
+		return m.handleWorkflowDone(cmds)
 
 	case restartMsg:
-		cmd = tea.Batch(cmd, m.restartWorkflow())
+		cmds = append(cmds, m.restartWorkflow())
 
 	case workflowUpdateHookMsg:
-		cmd = tea.Batch(cmd, m.workflowUpdateHook())
+		cmds = append(cmds, m.workflowUpdateHook())
 
-	case tea.KeyPressMsg:
-		_, keyCmd := m.HandleKeyInput(msg)
-		cmd = tea.Batch(cmd, keyCmd)
+	case render.KeyPressMsg:
+		keyCmds := m.HandleKeyInput(msg)
+		cmds = append(cmds, keyCmds...)
 
-	case tea.MouseClickMsg:
+	case render.MouseClickMsg:
 		m.handleMouseClick(msg)
 
-	case tea.WindowSizeMsg:
+	case render.WindowSizeMsg:
 		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
 	}
 
-	return m, cmd
+	return cmds
 }
 
-func (m *model) View() tea.View {
-	view := tea.NewView("")
-	view.AltScreen = true
-	view.MouseMode = tea.MouseModeCellMotion
-
+func (m *model) Render(buf *render.CellBuf) {
 	resetable := m.resetable.Load()
 	if resetable == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
-		return view
+		return
 	}
 
 	if m.buildLogs == nil {
@@ -232,14 +224,13 @@ func (m *model) View() tea.View {
 	builder.WriteString(main)
 	builder.WriteString(footer.Content)
 
-	view.SetContent(zone.Scan(builder.String()))
-
-	return view
+	_, endY := buf.WriteANSIString(0, 0, builder.String())
+	buf.ClearLinesBelow(endY + 1)
 }
 
-func (m *model) handleWorkflowDone(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *model) handleWorkflowDone(cmds []render.Cmd) []render.Cmd {
 	if m.isSnapshot {
-		return m, cmd
+		return cmds
 	}
 
 	log.Debug().Msg("workflowDoneMsg")
@@ -254,12 +245,10 @@ func (m *model) handleWorkflowDone(cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	if m.conf.Flags.ExitOnComplete {
 		m.quitting = true
 
-		return m, tea.Batch(cmd, tea.Quit)
+		return append(cmds, func() render.Msg { return render.QuitCmd() })
 	}
 
-	// Stay open — user can press 'q' to quit or 'r' to retry
-
-	return m, cmd
+	return cmds
 }
 
 func (m *model) viewMainContent() string {
@@ -311,8 +300,8 @@ func (m *model) viewMainContent() string {
 	return builder.String()
 }
 
-func (m *model) workflowUpdateHook() tea.Cmd {
-	return func() tea.Msg {
+func (m *model) workflowUpdateHook() render.Cmd {
+	return func() render.Msg {
 		resetable := m.resetable.Load()
 		if resetable == nil || resetable.workflow == nil {
 			time.Sleep(workflowUpdateHookPollInterval)
@@ -355,7 +344,7 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 	return fullscreenViewport
 }
 
-func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
+func (m *model) handleMouseClick(msg render.MouseClickMsg) {
 	if m.conf.Fleet.StatsTable.HandleMouseClick(msg) {
 		m.conf.Fleet.PhaseStatus.Reset()
 
@@ -367,10 +356,6 @@ func (m *model) handleMouseClick(msg tea.MouseClickMsg) {
 	}
 }
 
-// Helpers
-
-// setupSIGINTHandler captures SIGINT signals and routes them as keybindings
-// instead of terminating the process. Returns a cleanup function.
 func setupSIGINTHandler(ctx context.Context) func() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT)
@@ -380,7 +365,7 @@ func setupSIGINTHandler(ctx context.Context) func() {
 			select {
 			case <-ctx.Done():
 				return
-			case <-sigChan: // SIGINT is handled as a keybinding
+			case <-sigChan:
 			}
 		}
 	}()
@@ -388,18 +373,4 @@ func setupSIGINTHandler(ctx context.Context) func() {
 	return func() {
 		signal.Stop(sigChan)
 	}
-}
-
-// suppressDECRQMEnv returns the current environment with SSH_TTY set.
-// This prevents Bubble Tea from sending DECRQM queries for mode 2026/2027,
-// which cause escape sequence leaks when the TUI exits before the terminal
-// responds.
-// See:
-// https://github.com/charmbracelet/bubbletea/issues/1590
-// https://github.com/charmbracelet/bubbletea/issues/1627
-func suppressDECRQMEnv() []string {
-	env := os.Environ()
-	env = append(env, "SSH_TTY=panix")
-
-	return env
 }

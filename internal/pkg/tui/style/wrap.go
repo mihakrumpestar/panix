@@ -85,7 +85,7 @@ func Wrap(str string, limit int, breakpoints string) string {
 		rn, size := utf8.DecodeRuneInString(str[pos:]) //nolint:varnamelen
 		end := pos + size
 		pos = end
-		rw := runeWidth(rn) //nolint:varnamelen
+		rw := RuneWidth(rn) //nolint:varnamelen
 
 		switch {
 		case rn == '\n':
@@ -305,7 +305,7 @@ func lineExceedsLimit(str string, limit int) bool {
 			rn, size := utf8.DecodeRuneInString(str[pos:])
 			pos += size
 
-			width += runeWidth(rn)
+			width += RuneWidth(rn)
 			if width > limit {
 				return true
 			}
