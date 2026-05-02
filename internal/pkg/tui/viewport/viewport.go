@@ -6,7 +6,7 @@ import (
 	"unsafe"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/pkg/errors"
 )
 
@@ -34,19 +34,6 @@ var horizBorderBytes = func() []byte {
 
 	return bytes
 }()
-
-// fastWidth returns the visual cell width of a single-line string.
-// For ASCII-only text (no ANSI escapes, no multi-byte Unicode), len(s)
-// equals the visual width. Falls back to lipgloss.Width otherwise.
-func fastWidth(str string) int {
-	for i := range len(str) {
-		if str[i] == '\x1b' || str[i] >= 0x80 {
-			return lipgloss.Width(str)
-		}
-	}
-
-	return len(str)
-}
 
 // Viewport renders scrollable, optionally bordered content with a scrollbar.
 type Viewport struct {
@@ -112,8 +99,8 @@ func WithScrollbar(thumbChar, trackChar string, thumbColor, trackColor color.Col
 		viewport.scrollbar = true
 		viewport.thumbChar = thumbChar
 		viewport.trackChar = trackChar
-		viewport.thumbStyle = colorToAnsi(thumbColor)
-		viewport.trackStyle = colorToAnsi(trackColor)
+		viewport.thumbStyle = style.ColorToPrefix(thumbColor)
+		viewport.trackStyle = style.ColorToPrefix(trackColor)
 		viewport.buildScrollbarCells()
 	}
 }
@@ -134,7 +121,7 @@ func WithScrollbarReserve() Option {
 func WithBorder(borderColor color.Color) Option {
 	return func(m *Viewport) {
 		m.bordered = true
-		m.borderStyle = colorToAnsi(borderColor)
+	m.borderStyle = style.ColorToPrefix(borderColor)
 		m.buildBorderStrings()
 	}
 }
@@ -218,7 +205,7 @@ func (m *Viewport) SetHeight(h int) {
 }
 
 func (m *Viewport) SetBorderStyle(borderColor color.Color) {
-	m.borderStyle = colorToAnsi(borderColor)
+	m.borderStyle = style.ColorToPrefix(borderColor)
 	m.cacheValid = false
 	m.buildBorderStrings()
 }
@@ -243,7 +230,7 @@ func (m *Viewport) MaxLineWidth() int {
 
 	for idx, lineWidth := range m.lineWidths {
 		if lineWidth < 0 {
-			lineWidth = fastWidth(m.lines[idx])
+			lineWidth = style.CellWidth(m.lines[idx])
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -298,12 +285,12 @@ func (m *Viewport) SetContent(content string) error {
 
 	contentW = max(1, contentW)
 
-	wrapped := lipgloss.Wrap(content, contentW, "")
+	wrapped := style.Wrap(content, contentW, "")
 	m.SetContentLines(strings.Split(wrapped, "\n"))
 
 	if m.scrollbar && !m.scrollbarReserve && len(m.lines) > m.contentHeight() {
 		scrollbarW := max(1, contentW-scrollbarColWidth)
-		wrapped = lipgloss.Wrap(content, scrollbarW, "")
+		wrapped = style.Wrap(content, scrollbarW, "")
 		m.SetContentLines(strings.Split(wrapped, "\n"))
 	}
 
@@ -590,7 +577,7 @@ func (m *Viewport) ensurePaddedCache(contentW int) {
 
 		lineWidth := m.lineWidths[idx]
 		if lineWidth < 0 {
-			lineWidth = fastWidth(line)
+			lineWidth = style.CellWidth(line)
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -841,20 +828,4 @@ func (m *Viewport) finalHeight(height int) int {
 	}
 
 	return max(1, contentH)
-}
-
-// colorToAnsi renders a space with the given foreground color and extracts
-// the ANSI escape sequence prefix. Returns "" if extraction fails.
-func colorToAnsi(c color.Color) string {
-	rendered := lipgloss.NewStyle().Foreground(c).Render(" ")
-
-	prefixEnd := strings.LastIndex(rendered, "\x1b[")
-	if prefixEnd > 0 {
-		suffixStart := strings.Index(rendered, " ")
-		if suffixStart > 0 {
-			return rendered[:suffixStart]
-		}
-	}
-
-	return ""
 }
