@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
@@ -114,9 +115,31 @@ func (m *model) handleQuit() (tea.Model, tea.Cmd) {
 		}
 	}
 
+	m.setFailedMachinesErrorIfNil()
+
 	log.Debug().Msg("Context done, exiting TUI")
 
 	return m, tea.Quit
+}
+
+// setFailedMachinesErrorIfNil checks fleet state for failed machines and sets
+// m.err when it's nil. This handles the case where the user quits while the
+// workflow is still retrying (no workflowDoneMsg received yet).
+func (m *model) setFailedMachinesErrorIfNil() {
+	if m.err != nil {
+		return
+	}
+
+	m.conf.Fleet.Recalculate(m.conf.Phases)
+	logFinalState(m.conf)
+
+	for _, fleetLeaf := range m.conf.Fleet.AllMachines() {
+		if fleetLeaf.Machine.State.Load().Status == stats.Failed {
+			m.err = errMachinesFailed
+
+			return
+		}
+	}
 }
 
 func (m *model) handleToggle() (tea.Model, tea.Cmd) {

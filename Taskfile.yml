@@ -94,8 +94,7 @@ tasks:
   nix:build:
     desc: Build the package using nix
     cmds:
-      - nix build path:$(pwd)#default --extra-experimental-features "nix-command
-        flakes"
+      - nix build .#default --extra-experimental-features "nix-command flakes"
       - ls -sh result/bin/panix
 
   update:

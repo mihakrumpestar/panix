@@ -1,12 +1,10 @@
 package tui
 
 import (
-	"context"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/workflow"
-	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 type resetable struct {
@@ -14,14 +12,16 @@ type resetable struct {
 	viewports *viewports.Viewports
 }
 
-// workflowDoneMsg signals the workflow has completed.
-type workflowDoneMsg struct{}
+// workflowDoneMsg signals the workflow has completed, with an optional error for non-fatal failures.
+type workflowDoneMsg struct {
+	err error
+}
 
 func (m *model) startResetableWorkflow() tea.Cmd {
 	return func() tea.Msg {
 		workflow, err := workflow.NewWorkflow(m.ctx, m.conf)
 		if err != nil {
-			return errMsg{err}
+			return errMsg{err: err}
 		}
 
 		m.resetable.Store(&resetable{
@@ -30,11 +30,10 @@ func (m *model) startResetableWorkflow() tea.Cmd {
 		})
 
 		err = workflow.StartWorkflow()
-		if err != nil {
-			return errMsg{err}
-		}
 
-		return workflowDoneMsg{}
+		// Non-fatal workflow errors (e.g. "N machines failed") are included in
+		// workflowDoneMsg so the TUI stays open for retry/restart.
+		return workflowDoneMsg{err: err}
 	}
 }
 
@@ -42,10 +41,8 @@ func (m *model) restartWorkflow() tea.Cmd {
 	r := m.resetable.Load()
 	if r != nil {
 		err := r.workflow.Cancel()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return func() tea.Msg {
-				return errMsg{errors.Wrap(err, "failed to cancel workflow")}
-			}
+		if err != nil {
+			log.Debug().Err(err).Msg("workflow cancelled for restart")
 		}
 	}
 

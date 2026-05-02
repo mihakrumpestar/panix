@@ -169,6 +169,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmd, tea.Quit)
 
 	case workflowDoneMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			log.Error().Err(msg.err).Msg("workflowDoneMsg error")
+		}
+
 		return m.handleWorkflowDone(cmd)
 
 	case restartMsg:

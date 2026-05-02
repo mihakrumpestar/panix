@@ -201,9 +201,12 @@ func (w *Workflow) StartWorkflow() error {
 		return errors.Wrap(err, "workflow execution failed")
 	}
 
-	n := failedCount.Load()
-	if n > 0 {
-		return errors.Errorf("workflow completed with %d machine(s) failed", n)
+	// Don't report failed machines when the workflow was cancelled (e.g. for restart)
+	if w.ctx.Err() == nil {
+		n := failedCount.Load()
+		if n > 0 {
+			return errors.Errorf("workflow completed with %d machine(s) failed", n)
+		}
 	}
 
 	return nil
