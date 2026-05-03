@@ -51,9 +51,5 @@ func (m *model) restartWorkflow() render.Cmd {
 	m.err = nil
 	m.buildLogs = nil
 
-	if m.invalidateDiff != nil {
-		m.invalidateDiff()
-	}
-
 	return m.startResetableWorkflow()
 }

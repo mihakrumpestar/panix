@@ -57,7 +57,6 @@ type model struct {
 	lastWorkflowUpdate time.Time
 	err                error
 	contentVersion     uint64
-	invalidateDiff    render.InvalidateDiffFunc
 	header      *header.Header
 	buildLogs   *buildlogs.BuildLogs
 	footer      *footer.Footer
@@ -89,7 +88,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
 
-	program := render.NewProgram(mdl)
+	program := render.NewProgram(mdl, render.WithRaw())
 
 	if err := program.Run(); err != nil {
 		return errors.Wrap(err, "TUI runtime error")
@@ -115,10 +114,6 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	}
 
 	return nil
-}
-
-func (m *model) SetInvalidateDiff(f render.InvalidateDiffFunc) {
-	m.invalidateDiff = f
 }
 
 func (m *model) Init() []render.Cmd {

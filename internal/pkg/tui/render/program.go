@@ -17,10 +17,16 @@ type Program struct {
 	stopCh      chan struct{}
 	width       int
 	height      int
+	raw       bool
 	mu          sync.Mutex
 }
 
 type ProgramOption func(*Program)
+
+// WithRaw disables frame diffing; every render writes all lines directly.
+func WithRaw() ProgramOption {
+	return func(p *Program) { p.raw = true }
+}
 
 func NewProgram(model Model, opts ...ProgramOption) *Program {
 	p := &Program{
@@ -74,16 +80,6 @@ func (p *Program) Run() error {
 	sizeCmds := p.model.Update(WindowSizeMsg{Width: p.width, Height: p.height})
 	allCmds := append(initCmds, sizeCmds...)
 	p.processCmds(allCmds)
-
-	// Give the model a way to invalidate the diff cache. The model calls
-	// this when it knows the terminal state is inconsistent with prevLines
-	// (e.g. after a workflow restart).
-	p.model.SetInvalidateDiff(func() {
-		p.mu.Lock()
-		p.prevLines = p.prevLines[:0]
-		p.mu.Unlock()
-	})
-
 	p.renderFrame()
 
 	sigCh := term.WatchResize()
@@ -161,15 +157,18 @@ func (p *Program) renderFrame() {
 	// Store lines for zone resolution on mouse clicks
 	SetCurrentLines(lines)
 
+	if p.raw {
+		p.prevLines = p.prevLines[:0]
+	}
+
 	prevCount := len(p.prevLines)
 
 	// Diff against previous frame
 	diffs := DiffLines(lines, p.prevLines)
 
-	if len(diffs) == 0 && len(lines) >= len(p.prevLines) {
+	if !p.raw && len(diffs) == 0 && len(lines) >= len(p.prevLines) {
 		// Nothing changed — update prevLines and return
 		p.updatePrevLines(lines)
-
 		return
 	}
 
