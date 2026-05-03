@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -10,16 +9,15 @@ import (
 )
 
 type Program struct {
-	model    Model
-	terminal *Terminal
-	writer   *Writer
-	buf      *CellBuf
-	prevBuf  *CellBuf
-	msgCh    chan Msg
-	stopCh   chan struct{}
-	width    int
-	height   int
-	mu       sync.Mutex
+	model      Model
+	terminal    *Terminal
+	prevLines   []string
+	outBuf      []byte
+	msgCh       chan Msg
+	stopCh      chan struct{}
+	width       int
+	height      int
+	mu          sync.Mutex
 }
 
 type ProgramOption func(*Program)
@@ -29,7 +27,9 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 		model:  model,
 		msgCh:  make(chan Msg, 1024),
 		stopCh: make(chan struct{}),
+		outBuf: make([]byte, 0, 8192),
 	}
+
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -63,20 +63,14 @@ func (p *Program) Run() error {
 	defer term.DisableMouse()
 
 	p.width, p.height = term.Size()
-	p.buf = NewCellBuf(p.width, p.height)
-	p.prevBuf = NewCellBuf(p.width, p.height)
-	p.writer = NewWriter(out)
 
-	p.writer.WriteClearScreen()
-
-	if err := p.writer.Flush(); err != nil {
+	// Clear screen
+	p.outBuf = append(p.outBuf[:0], "\x1b[2J\x1b[H"...)
+	if _, err := out.Write(p.outBuf); err != nil {
 		return errors.Wrap(err, "failed to clear screen")
 	}
 
 	initCmds := p.model.Init()
-	// Send initial window size so the model knows the terminal dimensions.
-	// Without this, models that check dimensions in Render() will always
-	// return early and produce no output.
 	sizeCmds := p.model.Update(WindowSizeMsg{Width: p.width, Height: p.height})
 	allCmds := append(initCmds, sizeCmds...)
 	p.processCmds(allCmds)
@@ -88,10 +82,6 @@ func (p *Program) Run() error {
 	inputDone := make(chan struct{})
 	go p.readInput(inputDone)
 
-	// Defer order matters (LIFO): stopCh must be closed before waiting on
-	// inputDone so that readInput can unblock. The leaked Read() sub-goroutine
-	// will exit when ExitRawMode restores the terminal (enabling ICANON
-	// unblocks the read on the next keypress) or when the process exits.
 	defer func() { <-inputDone }()
 	defer close(p.stopCh)
 
@@ -100,11 +90,8 @@ func (p *Program) Run() error {
 	}
 
 	// Clear the alt screen buffer and move cursor home before exiting.
-	// This ensures a clean handoff when ExitAltScreen switches back
-	// to the main screen buffer.
-	p.writer.WriteClearScreen()
-	p.writer.setStyle(DefaultColor, DefaultColor, 0)
-	p.writer.Flush()
+	p.outBuf = append(p.outBuf[:0], "\x1b[2J\x1b[H"...)
+	out.Write(p.outBuf)
 
 	return nil
 }
@@ -142,12 +129,9 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 			if w != p.width || h != p.height {
 				p.width = w
 				p.height = h
-				p.buf.Resize(w, h)
-				p.prevBuf.Resize(w, h)
-				// After resize, terminal content may not match prevBuf.
-				// Force full redraw by clearing prevBuf so Diff detects
-				// all lines as changed.
-				p.prevBuf.Clear()
+				// After resize, force full redraw by clearing prevLines
+				// so all lines are detected as changed.
+				p.prevLines = p.prevLines[:0]
 				cmds := p.model.Update(WindowSizeMsg{Width: w, Height: h})
 				p.processCmds(cmds)
 				p.renderFrame()
@@ -157,47 +141,50 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 }
 
 func (p *Program) renderFrame() {
-	prevVersion := p.buf.Version()
-	SetCurrentBuf(p.buf)
-	p.model.Render(p.buf)
+	lines := p.model.Render()
 
-	// If no cells changed during Render, skip the entire terminal write.
-	// This makes idle frames (no spinner tick, no content update)
-	// essentially free — the model still runs but detects no cell diffs.
-	if p.buf.Version() == prevVersion {
+	// nil means nothing changed (model-level cache hit)
+	if lines == nil {
 		return
 	}
 
-	// Incremental Diff: only write lines that actually changed.
-	// For a 1/4-screen change (~12 lines), this writes ~75% fewer
-	// lines than fullRedraw. For no-change frames (where version-skip
-	// didn't fire because ClearLinesBelow bumped the version), Diff's
-	// lineChanged() check catches the false positive and returns empty diffs.
-	diffs := Diff(p.buf, p.prevBuf)
-	if len(diffs) == 0 {
+	// Store lines for zone resolution on mouse clicks
+	SetCurrentLines(lines)
+
+	// Diff against previous frame
+	diffs := DiffLines(lines, p.prevLines)
+
+	if len(diffs) == 0 && len(lines) >= len(p.prevLines) {
+		// Nothing changed — update prevLines and return
+		p.updatePrevLines(lines)
+
 		return
 	}
 
-	p.writer.Reset()
-	p.writer.WriteDiff(diffs, p.buf)
+	// Render changed lines
+	prevCount := len(p.prevLines)
+	p.outBuf = p.outBuf[:0]
+	p.outBuf = RenderLines(p.outBuf, diffs, lines, prevCount, p.height)
 
-	err := p.writer.Flush()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "render error: %v\n", err)
-	}
-
-	// Selective copy: only update prevBuf for changed lines instead of
-	// copying the entire buffer. O(changed_lines × width) instead of
-	// O(height × width). For 1/4 change, this is ~75% less memmove work.
-	for _, d := range diffs {
-		y := d.Y
-		if y >= 0 && y < p.prevBuf.height && y < p.buf.height && p.prevBuf.width == p.buf.width {
-			off := y * p.buf.width
-			copy(p.prevBuf.cells[off:off+p.buf.width], p.buf.cells[off:off+p.buf.width])
-			p.prevBuf.lineVersions[y] = p.buf.lineVersions[y]
+	if len(p.outBuf) > 0 {
+		if _, err := p.terminal.out.Write(p.outBuf); err != nil {
+			_, _ = os.Stderr.WriteString("render error: write error\n")
 		}
 	}
-	p.prevBuf.version = p.buf.version
+
+	p.updatePrevLines(lines)
+}
+
+// updatePrevLines stores the current lines for next frame's diff.
+// Reuses the backing array when possible to minimize allocations.
+func (p *Program) updatePrevLines(lines []string) {
+	if cap(p.prevLines) >= len(lines) {
+		p.prevLines = p.prevLines[:len(lines)]
+	} else {
+		p.prevLines = make([]string, len(lines))
+	}
+
+	copy(p.prevLines, lines)
 }
 
 func (p *Program) processCmds(cmds []Cmd) {
@@ -218,10 +205,6 @@ func (p *Program) readInput(done chan<- struct{}) {
 
 	buf := make([]byte, 1024)
 	for {
-		// Read in a sub-goroutine so the select below can also watch stopCh.
-		// When stopCh is closed, readInput returns immediately, and the
-		// sub-goroutine is leaked (it will be cleaned up on process exit
-		// when the fd is closed by ExitRawMode).
 		readCh := make(chan readResult, 1)
 
 		go func() {
@@ -258,8 +241,6 @@ type readResult struct {
 	n   int
 	err error
 }
-
-func (p *Program) Buf() *CellBuf { return p.buf }
 
 func TickCmd(d time.Duration, f func(time.Time) Msg) Cmd {
 	return func() Msg {

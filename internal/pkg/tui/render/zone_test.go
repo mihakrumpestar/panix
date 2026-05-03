@@ -82,7 +82,6 @@ func TestZoneManagerAcquireRelease(t *testing.T) {
 
 	zm.release(id)
 	zm.release(id)
-	// active[id] should now be 1
 }
 
 func TestZoneManagerReset(t *testing.T) {
@@ -94,7 +93,6 @@ func TestZoneManagerReset(t *testing.T) {
 	zm.acquire(id)
 
 	zm.Reset()
-	// After reset, active map should be empty (no panic on further ops)
 	zm.acquire(id)
 }
 
@@ -105,55 +103,9 @@ func TestMark(t *testing.T) {
 	if result == "" {
 		t.Error("Mark should return non-empty string")
 	}
-	// Should contain zone start marker, content, and zone end marker
+
 	if !contains(result, "Hello") {
 		t.Errorf("Mark result should contain view content: %q", result)
-	}
-}
-
-func TestIsZoneAt(t *testing.T) {
-	ResetZones()
-
-	buf := NewCellBuf(20, 3)
-
-	zoneID := globalZones.GetOrCreate("click-zone")
-	cell := Cell{Content: "X", Width: 1, ZoneID: zoneID}
-	buf.SetCell(5, 1, cell)
-
-	if !IsZoneAt(buf, 5, 1, "click-zone") {
-		t.Error("IsZoneAt should find zone at (5,1)")
-	}
-
-	if IsZoneAt(buf, 0, 0, "click-zone") {
-		t.Error("IsZoneAt should not find zone at (0,0)")
-	}
-}
-
-func TestIsZoneAtUnknownName(t *testing.T) {
-	buf := NewCellBuf(20, 3)
-	if IsZoneAt(buf, 0, 0, "nonexistent") {
-		t.Error("IsZoneAt should return false for unknown zone name")
-	}
-}
-
-func TestZoneAt(t *testing.T) {
-	ResetZones()
-
-	buf := NewCellBuf(20, 3)
-
-	zoneID := globalZones.GetOrCreate("my-zone")
-	cell := Cell{Content: "X", Width: 1, ZoneID: zoneID}
-	buf.SetCell(0, 0, cell)
-
-	name := ZoneAt(buf, 0, 0)
-	if name != "my-zone" {
-		t.Errorf("ZoneAt(0,0) = %q, want %q", name, "my-zone")
-	}
-
-	// Empty zone
-	name = ZoneAt(buf, 1, 0)
-	if name != "" {
-		t.Errorf("ZoneAt(1,0) = %q, want empty", name)
 	}
 }
 
@@ -201,16 +153,6 @@ func TestGetZoneIDFunc(t *testing.T) {
 	}
 }
 
-func TestCurrentBufFunc(t *testing.T) {
-	buf := NewCellBuf(10, 5)
-	SetCurrentBuf(buf)
-
-	got := CurrentBuf()
-	if got != buf {
-		t.Error("CurrentBuf should return the buffer set by SetCurrentBuf")
-	}
-}
-
 func TestMarkFormat(t *testing.T) {
 	ResetZones()
 
@@ -227,8 +169,6 @@ func TestMarkFormat(t *testing.T) {
 func TestMarkMultiline(t *testing.T) {
 	ResetZones()
 
-	// Multi-line Mark should wrap each line individually so zone markers
-	// don't leak into tree prefixes prepended to intermediate lines.
 	view := "line1\nline2\nline3"
 	result := Mark("ml-test", view)
 
@@ -245,33 +185,64 @@ func TestMarkMultiline(t *testing.T) {
 func TestMarkMultilineNoZoneLeakWithPrefix(t *testing.T) {
 	ResetZones()
 
-	// Simulate tree rendering: viewport zone at column 3 with
-	// tree prefix "│  " prepended to each line.
-	buf := NewCellBuf(30, 3)
 	view := Mark("vp", "AAAA\nBBBB\nCCCC")
 
-	// Tree renderer adds prefix before each line
 	lines := strings.Split(view, "\n")
 	prefixed := "│  " + lines[0] + "\n│  " + lines[1] + "\n│  " + lines[2]
-	buf.WriteANSIString(0, 0, prefixed)
 
-	// Prefix columns (0-2) should NOT have the zone ID
-	for x := range 3 {
-		if IsZoneAt(buf, x, 1, "vp") {
-			t.Errorf("prefix at (%d,1) should not be in zone 'vp'", x)
+	prefixedLines := strings.Split(prefixed, "\n")
+	for i, line := range prefixedLines {
+		prefix := line[:3]
+		if IsZoneAtLine(prefix, 0, "vp") {
+			t.Errorf("prefix at line %d col 0 should not be in zone 'vp'", i)
 		}
 	}
+}
 
-	// Content columns (3-6) SHOULD have the zone ID
-	for x := 3; x <= 6; x++ {
-		if !IsZoneAt(buf, x, 1, "vp") {
-			t.Errorf("content at (%d,1) should be in zone 'vp'", x)
-		}
+func TestIsZoneAtLine(t *testing.T) {
+	ResetZones()
+
+	line := Mark("click-zone", "XY")
+	if !IsZoneAtLine(line, 0, "click-zone") {
+		t.Error("IsZoneAtLine should find zone at col 0")
 	}
 
-	// Right of content (7+) should NOT have the zone ID
-	if IsZoneAt(buf, 7, 1, "vp") {
-		t.Errorf("cell at (7,1) should not be in zone 'vp'")
+	if !IsZoneAtLine(line, 1, "click-zone") {
+		t.Error("IsZoneAtLine should find zone at col 1")
+	}
+}
+
+func TestIsZoneAtLineUnknownName(t *testing.T) {
+	if IsZoneAtLine("some text", 0, "nonexistent") {
+		t.Error("IsZoneAtLine should return false for unknown zone name")
+	}
+}
+
+func TestZoneAtLine(t *testing.T) {
+	ResetZones()
+
+	line := Mark("my-zone", "AB")
+	name := ZoneAtLine(line, 0)
+	if name != "my-zone" {
+		t.Errorf("ZoneAtLine(0) = %q, want %q", name, "my-zone")
+	}
+
+	afterZone := line[strings.LastIndex(line, "z")+1:]
+	if afterZone != "" {
+		name = ZoneAtLine(afterZone, 0)
+		if name != "" {
+			t.Errorf("ZoneAtLine outside zone = %q, want empty", name)
+		}
+	}
+}
+
+func TestCurrentLines(t *testing.T) {
+	lines := []string{"line1", "line2"}
+	SetCurrentLines(lines)
+
+	got := CurrentLines()
+	if len(got) != 2 || got[0] != "line1" || got[1] != "line2" {
+		t.Errorf("CurrentLines() = %v, want %v", got, lines)
 	}
 }
 

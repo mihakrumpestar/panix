@@ -1,7 +1,6 @@
 package render
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,11 +16,11 @@ type ZoneManager struct {
 
 var globalZones = newZoneManager()
 
-var currentBuf *CellBuf
+var currentLines []string
 
-func SetCurrentBuf(buf *CellBuf) { currentBuf = buf }
+func SetCurrentLines(lines []string) { currentLines = lines }
 
-func CurrentBuf() *CellBuf { return currentBuf }
+func CurrentLines() []string { return currentLines }
 
 func newZoneManager() *ZoneManager {
 	return &ZoneManager{
@@ -95,21 +94,13 @@ func (z *ZoneManager) Reset() {
 
 func Mark(name string, view string) string {
 	id := globalZones.GetOrCreate(name)
-	// Pre-compute zone marker strings to avoid repeated concatenation.
 	start := "\x1b[" + strconv.Itoa(int(id)) + "z"
 	end := "\x1b[/" + strconv.Itoa(int(id)) + "z"
 
-	// Estimate output size: original + markers per line.
-	// Each line gets start+len(end) extra bytes. Estimate ~1.5 newlines.
 	estimatedLen := len(view) + (len(start)+len(end))*max(1, strings.Count(view, "\n")+1)
 	var b strings.Builder
 	b.Grow(estimatedLen)
 
-	// Wrap each line individually so that zone markers don't leak into
-	// tree prefixes or other content prepended to intermediate lines.
-	// A single pair wrapping the whole multi-line string would cause the
-	// zone ID to persist across newlines, assigning it to tree prefixes
-	// on subsequent lines.
 	first := true
 	for line := range strings.SplitSeq(view, "\n") {
 		if !first {
@@ -149,27 +140,116 @@ func ZoneNames() []string {
 	return names
 }
 
-func IsZoneAt(buf *CellBuf, x, y int, zoneName string) bool {
+func IsZoneAtLine(line string, x int, zoneName string) bool {
 	id := globalZones.ID(zoneName)
 	if id == 0 {
 		return false
 	}
 
-	cell := buf.CellAt(x, y)
-
-	return cell.ZoneID == id
+	return zoneIDAtCol(line, x) == id
 }
 
-func ZoneAt(buf *CellBuf, x, y int) string {
-	cell := buf.CellAt(x, y)
-	if cell.ZoneID == 0 {
+func ZoneAtLine(line string, x int) string {
+	id := zoneIDAtCol(line, x)
+	if id == 0 {
 		return ""
 	}
 
-	return globalZones.Name(cell.ZoneID)
+	return globalZones.Name(id)
 }
 
-//nolint:unused
-func fmtMark(id uint16) string {
-	return fmt.Sprintf("\x1b[%dz", id)
+//nolint:gocognit
+func zoneIDAtCol(line string, targetCol int) uint16 {
+	col := 0
+	pos := 0
+	activeZone := uint16(0)
+	zoneStack := make([]uint16, 0, 8)
+
+	for pos < len(line) {
+		ch := line[pos]
+
+		if ch == '\x1b' {
+			pos++
+
+			if pos >= len(line) {
+				break
+			}
+
+			next := line[pos]
+			pos++
+
+			if next != '[' {
+				continue
+			}
+
+			paramStart := pos
+			for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
+				pos++
+			}
+
+			intermediateStart := pos
+			for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x2F {
+				pos++
+			}
+
+			for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
+				pos++
+			}
+
+			if pos >= len(line) || line[pos] < 0x40 || line[pos] > 0x7E {
+				continue
+			}
+
+			finalByte := line[pos]
+			params := line[paramStart:intermediateStart]
+			pos++
+
+			if finalByte == 'z' {
+				if len(params) > 0 && params[0] == '/' {
+					id, err := strconv.ParseUint(params[1:], 10, 16)
+					if err == nil {
+						if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1] == uint16(id) {
+							zoneStack = zoneStack[:len(zoneStack)-1]
+						}
+
+						if len(zoneStack) == 0 {
+							activeZone = 0
+						} else {
+							activeZone = zoneStack[len(zoneStack)-1]
+						}
+					}
+				} else {
+					id, err := strconv.ParseUint(params, 10, 16)
+					if err == nil {
+						activeZone = uint16(id)
+						zoneStack = append(zoneStack, uint16(id))
+					}
+				}
+			}
+
+			continue
+		}
+
+		if ch >= 0x20 && ch < 0x7F {
+			if col == targetCol {
+				return activeZone
+			}
+
+			col++
+		} else if ch >= 0xC0 {
+			if col == targetCol {
+				return activeZone
+			}
+
+			col++
+		}
+
+		pos++
+	}
+
+	if targetCol >= col {
+		return activeZone
+	}
+
+	return 0
 }

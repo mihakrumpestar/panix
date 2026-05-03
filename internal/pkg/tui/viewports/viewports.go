@@ -338,8 +338,10 @@ func (v *Viewports) activeItem() *item {
 func (v *Viewports) clickTarget(m render.MouseClickMsg) xpath.Xpath {
 	var candidates []xpath.Xpath
 
+	lines := render.CurrentLines()
+
 	for xp := range v.items.Records() {
-		if render.IsZoneAt(render.CurrentBuf(), m.X, m.Y, xp.String()) {
+		if m.Y >= 0 && m.Y < len(lines) && render.IsZoneAtLine(lines[m.Y], m.X, xp.String()) {
 			candidates = append(candidates, xp)
 		}
 	}

@@ -44,5 +44,7 @@ type Cmd func() Msg
 type Model interface {
 	Init() []Cmd
 	Update(msg Msg) []Cmd
-	Render(buf *CellBuf)
+	// Render returns the screen lines as ANSI strings (one per line).
+	// Returns nil if nothing changed since the last call (cache hit).
+	Render() []string
 }

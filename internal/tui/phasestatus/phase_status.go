@@ -68,9 +68,14 @@ func (p *PhaseStatus) Reset() {
 }
 
 func (p *PhaseStatus) HandleMouseClick(msg render.MouseClickMsg) bool {
+	lines := render.CurrentLines()
+	if msg.Y < 0 || msg.Y >= len(lines) {
+		return false
+	}
+
 	for idx := range p.CacheStatisticsPerPhase.Len() {
 		zoneName := fmt.Sprintf("%s-%d", phaseStatusZonePrefix, idx)
-		if render.IsZoneAt(render.CurrentBuf(), msg.X, msg.Y, zoneName) {
+		if render.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
 			if p.Selected.Index == idx {
 				p.Selected.Index = -1
 				p.Selected.Phase = ""

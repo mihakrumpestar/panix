@@ -61,7 +61,12 @@ func (s *StatsTable) Reset() {
 }
 
 func (s *StatsTable) HandleMouseClick(msg render.MouseClickMsg) bool {
-	if !render.IsZoneAt(render.CurrentBuf(), msg.X, msg.Y, statsTableZonePrefix) {
+	lines := render.CurrentLines()
+	if msg.Y < 0 || msg.Y >= len(lines) {
+		return false
+	}
+
+	if !render.IsZoneAtLine(lines[msg.Y], msg.X, statsTableZonePrefix) {
 		return false
 	}
 

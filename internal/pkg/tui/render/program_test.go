@@ -1,9 +1,8 @@
 package render
 
 import (
-	"errors"
 	"fmt"
-	"io"
+	"os"
 	"testing"
 	"time"
 )
@@ -95,9 +94,9 @@ func TestProgramNew(t *testing.T) {
 
 type dummyModel struct{}
 
-func (m *dummyModel) Init() []Cmd          { return nil }
-func (m *dummyModel) Update(msg Msg) []Cmd { return nil }
-func (m *dummyModel) Render(buf *CellBuf)  {}
+func (m *dummyModel) Init() []Cmd            { return nil }
+func (m *dummyModel) Update(msg Msg) []Cmd   { return nil }
+func (m *dummyModel) Render() []string       { return nil }
 
 func TestProcessCmdsWithNil(t *testing.T) {
 	t.Parallel()
@@ -115,9 +114,9 @@ func TestRenderFrameWithEmptyModel(t *testing.T) {
 
 	m := &dummyModel{}
 	p := NewProgram(m)
-	p.buf = NewCellBuf(80, 24)
-	p.prevBuf = NewCellBuf(80, 24)
-	p.writer = NewWriter(io.Discard)
+	p.terminal = &Terminal{out: os.Stderr}
+	p.width = 80
+	p.height = 24
 
 	p.renderFrame()
 }
@@ -127,14 +126,14 @@ func TestRenderFrameDetectsChanges(t *testing.T) {
 
 	renderModel := &renderTestModel{content: "Hello World"}
 	p := NewProgram(renderModel)
-	p.buf = NewCellBuf(80, 24)
-	p.prevBuf = NewCellBuf(80, 24)
-	p.writer = NewWriter(io.Discard)
+	p.terminal = &Terminal{out: os.Stderr}
+	p.width = 80
+	p.height = 24
 
 	p.renderFrame()
 
-	if p.buf.CellAt(0, 0).Content != "H" {
-		t.Error("buffer should have content after renderFrame")
+	if len(p.prevLines) == 0 || p.prevLines[0] != "Hello World" {
+		t.Error("prevLines should have content after renderFrame")
 	}
 }
 
@@ -142,22 +141,10 @@ type renderTestModel struct {
 	content string
 }
 
-func (m *renderTestModel) Init() []Cmd          { return nil }
-func (m *renderTestModel) Update(msg Msg) []Cmd { return nil }
-func (m *renderTestModel) Render(buf *CellBuf) {
-	buf.WriteANSIString(0, 0, m.content)
-}
-
-func TestBufReturnsCellBuf(t *testing.T) {
-	t.Parallel()
-
-	m := &dummyModel{}
-	p := NewProgram(m)
-	p.buf = NewCellBuf(80, 24)
-
-	if p.Buf() != p.buf {
-		t.Error("Buf() should return the internal cell buffer")
-	}
+func (m *renderTestModel) Init() []Cmd            { return nil }
+func (m *renderTestModel) Update(msg Msg) []Cmd   { return nil }
+func (m *renderTestModel) Render() []string       {
+	return []string{m.content}
 }
 
 func TestNewProgramWithOptions(t *testing.T) {
@@ -212,17 +199,11 @@ func TestRenderFrameFlushError(t *testing.T) {
 
 	m := &renderTestModel{content: "Test"}
 	p := NewProgram(m)
-	p.buf = NewCellBuf(80, 24)
-	p.prevBuf = NewCellBuf(80, 24)
-	p.writer = NewWriter(&errorWriterProg{})
+	p.terminal = &Terminal{out: os.Stderr}
+	p.width = 80
+	p.height = 24
 
 	p.renderFrame()
-}
-
-type errorWriterProg struct{}
-
-func (e *errorWriterProg) Write(p []byte) (int, error) {
-	return 0, errors.New("write error")
 }
 
 func TestInitialWindowSizeMsgSent(t *testing.T) {
@@ -232,11 +213,10 @@ func TestInitialWindowSizeMsgSent(t *testing.T) {
 
 	m := &sizeTrackingModel{}
 	p := NewProgram(m)
-	p.buf = NewCellBuf(80, 24)
-	p.prevBuf = NewCellBuf(80, 24)
-	p.writer = NewWriter(io.Discard)
+	p.terminal = &Terminal{out: os.Stderr}
+	p.width = 80
+	p.height = 24
 
-	// Simulate what Run() does: send initial WindowSizeMsg
 	sizeCmds := p.model.Update(WindowSizeMsg{Width: 80, Height: 24})
 	p.processCmds(sizeCmds)
 	p.renderFrame()
@@ -259,8 +239,8 @@ func (m *sizeTrackingModel) Update(msg Msg) []Cmd {
 
 	return nil
 }
-func (m *sizeTrackingModel) Render(buf *CellBuf) {
-	buf.WriteANSIString(0, 0, fmt.Sprintf("%dx%d", m.lastSize.Width, m.lastSize.Height))
+func (m *sizeTrackingModel) Render() []string {
+	return []string{fmt.Sprintf("%dx%d", m.lastSize.Width, m.lastSize.Height)}
 }
 
 func TestStopChClosesOnExit(t *testing.T) {

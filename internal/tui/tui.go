@@ -194,10 +194,10 @@ func (m *model) Update(msg render.Msg) []render.Cmd {
 	return cmds
 }
 
-func (m *model) Render(buf *render.CellBuf) {
+func (m *model) Render() []string {
 	resetable := m.resetable.Load()
 	if resetable == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
-		return
+		return nil
 	}
 
 	if m.buildLogs == nil {
@@ -227,16 +227,13 @@ func (m *model) Render(buf *render.CellBuf) {
 
 	renderStr := builder.String()
 
-	// Skip WriteANSIString when the rendered string is identical to the
-	// previous frame. This eliminates the ~48µs ANSI parse cost for idle
-	// frames where no content changed (viewport cache hit, no spinner tick).
 	if renderStr == m.lastRenderStr {
-		return
+		return nil
 	}
+
 	m.lastRenderStr = renderStr
 
-	_, endY := buf.WriteANSIString(0, 0, renderStr)
-	buf.ClearLinesBelow(endY + 1)
+	return strings.Split(renderStr, "\n")
 }
 
 func (m *model) handleWorkflowDone(cmds []render.Cmd) []render.Cmd {
