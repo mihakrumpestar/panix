@@ -41,10 +41,19 @@ func (m *model) restartWorkflow() render.Cmd {
 		if err != nil {
 			log.Debug().Err(err).Msg("workflow cancelled for restart")
 		}
+
+		r.viewports.Reset()
 	}
 
 	m.conf.Fleet.ResetState()
+	m.statsTable.Reset()
+	m.phaseStatus.Reset()
 	m.err = nil
+	m.buildLogs = nil
+
+	if m.invalidateDiff != nil {
+		m.invalidateDiff()
+	}
 
 	return m.startResetableWorkflow()
 }

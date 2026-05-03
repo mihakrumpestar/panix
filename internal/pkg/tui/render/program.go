@@ -74,6 +74,16 @@ func (p *Program) Run() error {
 	sizeCmds := p.model.Update(WindowSizeMsg{Width: p.width, Height: p.height})
 	allCmds := append(initCmds, sizeCmds...)
 	p.processCmds(allCmds)
+
+	// Give the model a way to invalidate the diff cache. The model calls
+	// this when it knows the terminal state is inconsistent with prevLines
+	// (e.g. after a workflow restart).
+	p.model.SetInvalidateDiff(func() {
+		p.mu.Lock()
+		p.prevLines = p.prevLines[:0]
+		p.mu.Unlock()
+	})
+
 	p.renderFrame()
 
 	sigCh := term.WatchResize()
@@ -151,6 +161,8 @@ func (p *Program) renderFrame() {
 	// Store lines for zone resolution on mouse clicks
 	SetCurrentLines(lines)
 
+	prevCount := len(p.prevLines)
+
 	// Diff against previous frame
 	diffs := DiffLines(lines, p.prevLines)
 
@@ -162,7 +174,6 @@ func (p *Program) renderFrame() {
 	}
 
 	// Render changed lines
-	prevCount := len(p.prevLines)
 	p.outBuf = p.outBuf[:0]
 	p.outBuf = RenderLines(p.outBuf, diffs, lines, prevCount, p.height)
 

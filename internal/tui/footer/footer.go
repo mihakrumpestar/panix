@@ -3,14 +3,13 @@ package footer
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
-	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
 )
 
@@ -20,7 +19,7 @@ type KeyDef struct {
 	Handler func() []render.Cmd
 }
 
-var notificationBaseStyle = lipgloss.NewStyle().Bold(true)
+var notificationBaseStyle = style.NewStyle().Bold(true)
 
 type footerCacheKey struct {
 	width int
@@ -28,7 +27,6 @@ type footerCacheKey struct {
 
 type Footer struct {
 	keyDefs      []KeyDef
-	keymapHelp   help.Model
 	notification *notifications.Notification
 	conf         *config.Config
 
@@ -36,11 +34,8 @@ type Footer struct {
 }
 
 func New(keyDefs []KeyDef, conf *config.Config) *Footer {
-	h := help.New()
-
 	return &Footer{
 		keyDefs:      keyDefs,
-		keymapHelp:   h,
 		notification: notifications.New(),
 		conf:         conf,
 	}
@@ -70,31 +65,28 @@ func (k Keymap) ShortHelp() []key.Binding  { return k.bindings }
 func (k Keymap) FullHelp() [][]key.Binding { return [][]key.Binding{k.bindings} }
 
 func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) header.ContentAndHeight {
-	f.keymapHelp.Styles.ShortKey = colorScheme.Footer.HelpKey
-	f.keymapHelp.Styles.FullKey = colorScheme.Footer.HelpKey
-
 	notifBox, notifWidth := f.notification.View(notificationBaseStyle)
 
 	helpText := f.cache.Get(func() (header.ContentAndHeight, bool) {
-		content := wrapKeybindingsByPair(f.keymapHelp, f.Keymap(), width)
-		height := lipgloss.Height(content)
+		content := wrapKeybindingsByPair(f.Keymap(), width, colorScheme.Footer.HelpKey)
+		height := style.CountLines(content)
 
 		return header.ContentAndHeight{Content: content, Height: height}, true
 	}, footerCacheKey{width: width})
 
-	style := lipgloss.NewStyle().Width(width).MaxWidth(width - notifWidth)
+	sty := style.NewStyle().Width(width).MaxWidth(width - notifWidth)
 	if f.conf.Flags.Debug {
-		style = style.Background(colorScheme.Footer.DebugBackground.GetBackground())
+		sty = sty.Background(colorScheme.Footer.DebugBackground.GetBackground())
 	}
 
-	styledHelp := style.Render("\n" + helpText.Content)
+	styledHelp := sty.Render("\n" + helpText.Content)
 
 	parts := []string{styledHelp}
 	if notifWidth != 0 {
 		parts = append(parts, notifBox)
 	}
 
-	finalContent := lipgloss.JoinHorizontal(lipgloss.Center, parts...)
+	finalContent := style.JoinHorizontal(style.Center, parts...)
 
 	return header.ContentAndHeight{Content: finalContent, Height: helpText.Height}
 }
@@ -103,14 +95,14 @@ func (f *Footer) Update(msg render.Msg) render.Cmd {
 	return f.notification.Update(msg)
 }
 
-func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth int) string {
+func wrapKeybindingsByPair(keyMap Keymap, maxWidth int, keyStyle style.Style) string {
 	bindings := keyMap.ShortHelp()
 	if len(bindings) == 0 {
 		return ""
 	}
 
-	separator := helpModel.Styles.ShortSeparator.Render(helpModel.ShortSeparator)
-	sepWidth := lipgloss.Width(separator)
+	separator := keyStyle.Render(" • ")
+	sepWidth := style.CellWidth(separator)
 
 	var (
 		lines        []string
@@ -123,10 +115,10 @@ func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth in
 			continue
 		}
 
-		item := helpModel.Styles.ShortKey.Render(binding.Help().Key)
-		item += " " + helpModel.Styles.ShortDesc.Render(binding.Help().Desc)
+		item := keyStyle.Render(binding.Help().Key)
+		item += " " + keyStyle.Render(binding.Help().Desc)
 
-		itemWidth := lipgloss.Width(item)
+		itemWidth := style.CellWidth(item)
 
 		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
 			lines = append(lines, currentLine.String())

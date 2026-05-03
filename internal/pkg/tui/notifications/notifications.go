@@ -5,8 +5,8 @@ import (
 	"image/color"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 )
 
 const (
@@ -30,11 +30,11 @@ type Notification struct {
 
 func New() *Notification { return &Notification{} }
 
-func (n *Notification) Set(text string, color lipgloss.Style) render.Cmd {
+func (n *Notification) Set(text string, sty style.Style) render.Cmd {
 	n.text, n.started = text, time.Now()
 	n.fgR, n.fgG, n.fgB = 180, 180, 180
 
-	fg := color.GetForeground()
+	fg := sty.GetForeground()
 	if fg != nil {
 		r, g, b, _ := fg.RGBA()
 
@@ -69,21 +69,21 @@ func (n *Notification) Clear() {
 	n.started = time.Time{}
 }
 
-func (n *Notification) View(baseStyle lipgloss.Style) (string, int) {
+func (n *Notification) View(baseStyle style.Style) (string, int) {
 	if n.isExpired() {
 		return "", 0
 	}
 
 	fg := n.fadedColor()
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+	box := style.NewStyle().
+		Border(style.RoundedBorder()).
 		BorderForeground(fg).
 		Render(n.render(baseStyle))
 
-	return box + "\n", lipgloss.Width(box)
+	return box + "\n", style.CellWidth(box)
 }
 
-func (n *Notification) render(baseStyle lipgloss.Style) string {
+func (n *Notification) render(baseStyle style.Style) string {
 	if n.isExpired() {
 		return ""
 	}
@@ -98,13 +98,13 @@ func (n *Notification) isExpired() bool {
 func (n *Notification) fadedColor() color.Color {
 	elapsed := time.Since(n.started)
 	if elapsed < fadeStart {
-		return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))
+		return style.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))
 	}
 
 	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
 	factor := 1.0 - (progress * fadeFactor)
 
-	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x",
+	return style.Color(fmt.Sprintf("#%02x%02x%02x",
 		uint8(float64(n.fgR)*factor),
 		uint8(float64(n.fgG)*factor),
 		uint8(float64(n.fgB)*factor)))

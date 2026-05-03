@@ -55,8 +55,8 @@ func BenchmarkLipglossJoinHorizontal_Top_DiffHeight(b *testing.B) {
 }
 
 func BenchmarkJoinHorizontal_Top_WithANSI(b *testing.B) {
-	lgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
-	ansi := NewANSIStyle(lgStyle)
+	sty := NewStyle().Foreground(Color("#8BE9FD"))
+	ansi := NewANSIStyle(sty)
 	icon := ansi.Render("📋 ")
 	label := ansi.Render("flake1\nflake2\nflake3")
 	dur := ansi.Render(" (1.23s)")
@@ -69,10 +69,10 @@ func BenchmarkJoinHorizontal_Top_WithANSI(b *testing.B) {
 }
 
 func BenchmarkLipglossJoinHorizontal_Top_WithANSI(b *testing.B) {
-	lgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
-	icon := lgStyle.Render("📋 ")
-	label := lgStyle.Render("flake1\nflake2\nflake3")
-	dur := lgStyle.Render(" (1.23s)")
+	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
+	icon := ls.Render("📋 ")
+	label := ls.Render("flake1\nflake2\nflake3")
+	dur := ls.Render(" (1.23s)")
 
 	b.ResetTimer()
 

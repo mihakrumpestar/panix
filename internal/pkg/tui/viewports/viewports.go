@@ -95,6 +95,13 @@ func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
 
 func (v *Viewports) DeselectAll() { v.activeXpath = v.mainXpath }
 
+// Reset clears all viewport items and resets fullscreen/active state.
+func (v *Viewports) Reset() {
+	v.items.Clear()
+	v.fullscreenXp = xpath.New()
+	v.activeXpath = v.mainXpath
+}
+
 // RemoveIfExistsViewport removes a viewport by xpath.
 
 func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {

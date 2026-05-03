@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 )
 
 const (
@@ -30,14 +30,14 @@ func (n *Node) Root(content string) *Node {
 	return n
 }
 
-func (n *Node) EnumeratorStyle(s lipgloss.Style) *Node {
+func (n *Node) EnumeratorStyle(s style.Style) *Node {
 	n.connMid = s.Render("├──")
 	n.connLast = s.Render("╰──")
 
 	return n
 }
 
-func (n *Node) IndenterStyle(s lipgloss.Style) *Node {
+func (n *Node) IndenterStyle(s style.Style) *Node {
 	n.indMid = s.Render("│  ")
 	n.indLast = s.Render("   ")
 

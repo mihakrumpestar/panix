@@ -94,9 +94,10 @@ func TestProgramNew(t *testing.T) {
 
 type dummyModel struct{}
 
-func (m *dummyModel) Init() []Cmd            { return nil }
-func (m *dummyModel) Update(msg Msg) []Cmd   { return nil }
-func (m *dummyModel) Render() []string       { return nil }
+func (m *dummyModel) Init() []Cmd                        { return nil }
+func (m *dummyModel) Update(msg Msg) []Cmd               { return nil }
+func (m *dummyModel) Render() []string                   { return nil }
+func (m *dummyModel) SetInvalidateDiff(InvalidateDiffFunc) {}
 
 func TestProcessCmdsWithNil(t *testing.T) {
 	t.Parallel()
@@ -146,6 +147,7 @@ func (m *renderTestModel) Update(msg Msg) []Cmd   { return nil }
 func (m *renderTestModel) Render() []string       {
 	return []string{m.content}
 }
+func (m *renderTestModel) SetInvalidateDiff(InvalidateDiffFunc) {}
 
 func TestNewProgramWithOptions(t *testing.T) {
 	t.Parallel()
@@ -242,6 +244,7 @@ func (m *sizeTrackingModel) Update(msg Msg) []Cmd {
 func (m *sizeTrackingModel) Render() []string {
 	return []string{fmt.Sprintf("%dx%d", m.lastSize.Width, m.lastSize.Height)}
 }
+func (m *sizeTrackingModel) SetInvalidateDiff(InvalidateDiffFunc) {}
 
 func TestStopChClosesOnExit(t *testing.T) {
 	t.Parallel()

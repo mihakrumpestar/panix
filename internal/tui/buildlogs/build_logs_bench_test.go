@@ -34,7 +34,9 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.Helper()
 
 	conf := makeTestConfig(flakesCount, configsCount, machinesN, colorscheme.DefaultColorScheme())
-	buildLogs := New(conf)
+	st := statstable.NewStatsTable(conf.Fleet, conf.ColorScheme)
+	ps := phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases)
+	buildLogs := New(conf, st, ps)
 	viewportsInst := viewports.NewViewports(&viewports.Dimensions{Width: 200, Height: 80}, conf)
 	spinnersInst := spinners.NewSpinners()
 
@@ -88,9 +90,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 	return &config.Config{
 		ColorScheme: colorScheme,
 		Fleet: &fleet.Fleet{
-			Flakes:      flakesMap,
-			StatsTable:  statstable.NewStatsTable(),
-			PhaseStatus: phasestatus.NewPhaseStatus(),
+			Flakes: flakesMap,
 		},
 		Phases: allPhases,
 	}

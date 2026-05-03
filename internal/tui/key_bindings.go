@@ -52,16 +52,14 @@ func (m *model) HandleKeyInput(msg render.KeyPressMsg) []render.Cmd {
 
 	hasActiveInner := resetable.viewports.HasActiveInner()
 
-	statsTable := m.conf.Fleet.StatsTable
-	if statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		m.conf.Fleet.PhaseStatus.Reset()
+	if m.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
+		m.phaseStatus.Reset()
 
 		return nil
 	}
 
-	phaseStatus := m.conf.Fleet.PhaseStatus
-	if phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
-		m.conf.Fleet.StatsTable.Reset()
+	if m.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
+		m.statsTable.Reset()
 
 		return nil
 	}
@@ -207,9 +205,6 @@ func (m *model) handleFullscreen() []render.Cmd {
 func (m *model) handleEsc() []render.Cmd {
 	resetable := m.resetable.Load()
 
-	statsTable := m.conf.Fleet.StatsTable
-	phaseStatus := m.conf.Fleet.PhaseStatus
-
 	if resetable == nil {
 		return nil
 	}
@@ -219,10 +214,10 @@ func (m *model) handleEsc() []render.Cmd {
 		resetable.viewports.ExitFullscreen()
 	case resetable.viewports.HasActiveInner():
 		resetable.viewports.DeselectAll()
-	case statsTable.Selected.Index >= 0:
-		statsTable.Reset()
-	case phaseStatus.Selected.Index >= 0:
-		phaseStatus.Reset()
+	case m.statsTable.SelectedIndex() >= 0:
+		m.statsTable.Reset()
+	case m.phaseStatus.Selected.Index >= 0:
+		m.phaseStatus.Reset()
 	}
 
 	return nil

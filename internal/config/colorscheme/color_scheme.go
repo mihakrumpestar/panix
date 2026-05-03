@@ -3,43 +3,43 @@ package colorscheme
 import (
 	"fmt"
 
-	"charm.land/lipgloss/v2"
 	"github.com/lucasb-eyer/go-colorful"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 )
 
 type ColorSchemeLogEntity struct {
-	Color lipgloss.Style
+	Color style.Style
 	Icon  rune
 }
 
 type ColorSchemeFooter struct {
-	HelpKey         lipgloss.Style
-	DebugBackground lipgloss.Style
+	HelpKey         style.Style
+	DebugBackground style.Style
 }
 
 type ColorSchemeHeader struct {
-	Title  lipgloss.Style
-	Border lipgloss.Style
+	Title  style.Style
+	Border style.Style
 }
 
 type ColorSchemeStatus struct {
-	OK      lipgloss.Style
-	Warning lipgloss.Style
-	Failed  lipgloss.Style
-	Running lipgloss.Style
+	OK      style.Style
+	Warning style.Style
+	Failed  style.Style
+	Running style.Style
 }
 
 type ColorSchemeTableAndLogs struct {
-	Header                       lipgloss.Style
-	Border                       lipgloss.Style
-	Row                          lipgloss.Style
-	RowAlt                       lipgloss.Style
-	SelectionHighlightBackground lipgloss.Style
-	SelectionHighlightBorder     lipgloss.Style
+	Header                       style.Style
+	Border                       style.Style
+	Row                          style.Style
+	RowAlt                       style.Style
+	SelectionHighlightBackground style.Style
+	SelectionHighlightBorder     style.Style
 }
 
 type ColorSchemeTree struct {
-	Enumerator lipgloss.Style
+	Enumerator style.Style
 }
 
 type ColorScheme struct {
@@ -49,7 +49,7 @@ type ColorScheme struct {
 	PhaseStatus ColorSchemePhaseStatus
 
 	Tree    ColorSchemeTree
-	Spinner lipgloss.Style
+	Spinner style.Style
 	Footer  ColorSchemeFooter
 
 	Flake         ColorSchemeLogEntity
@@ -65,7 +65,7 @@ type ColorSchemePhaseStatus struct {
 	Failed  ColorPair
 	Done    ColorPair
 	Default ColorPair
-	Pill    lipgloss.Style
+	Pill    style.Style
 }
 
 type ColorPair [2]colorful.Color
@@ -97,14 +97,14 @@ func DefaultColorScheme() *ColorScheme {
 			Failed:  mustColorfulHexPair("#5f1414", "#DC2626"),
 			Done:    mustColorfulHexPair("#14532D", "#11883d"),
 			Default: mustColorfulHexPair("#535862", "#6B7280"),
-			Pill:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 1),
+			Pill:    style.NewStyle().Foreground(style.Color("#FFFFFF")).Bold(true).Padding(0, 1),
 		},
 		Tree: ColorSchemeTree{
 			Enumerator: borderStyle,
 		},
 		Footer: ColorSchemeFooter{
-			HelpKey:         lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")),
-			DebugBackground: lipgloss.NewStyle().Background(lipgloss.Color("#FFC800")),
+			HelpKey:         style.NewStyle().Foreground(style.Color("#FFFFFF")),
+			DebugBackground: style.NewStyle().Background(style.Color("#FFC800")),
 		},
 		Flake:         makeLogEntity("#F1FA8C", '📁', true),
 		Configuration: makeLogEntity("#FFB86C", '📦', false),
@@ -118,27 +118,27 @@ func DefaultColorScheme() *ColorScheme {
 
 // Helpers
 
-func makeForegroundStyle(color string, bold bool) lipgloss.Style {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+func makeForegroundStyle(color string, bold bool) style.Style {
+	s := style.NewStyle().Foreground(style.Color(color))
 	if bold {
-		style = style.Bold(true)
+		s = s.Bold(true)
 	}
 
-	return style
+	return s
 }
 
-func makeBoldForegroundStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color))
+func makeBoldForegroundStyle(color string) style.Style {
+	return style.NewStyle().Bold(true).Foreground(style.Color(color))
 }
 
-func makeBackgroundStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Background(lipgloss.Color(color))
+func makeBackgroundStyle(color string) style.Style {
+	return style.NewStyle().Background(style.Color(color))
 }
 
 func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
-	style := makeForegroundStyle(color, bold)
+	sty := makeForegroundStyle(color, bold)
 
-	return ColorSchemeLogEntity{Color: style, Icon: icon}
+	return ColorSchemeLogEntity{Color: sty, Icon: icon}
 }
 
 func mustColorfulHex(hex string) colorful.Color {

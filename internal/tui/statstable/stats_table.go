@@ -1,18 +1,15 @@
 package statstable
 
 import (
-	"hash/fnv"
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
-	"github.com/mihakrumpestar/panix/internal/config/logs"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/table"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -21,151 +18,95 @@ const (
 	rowSpanMarker        = " 󱞩"
 )
 
-type statsTableCacheKey struct {
-	machineInfosHash uint64
-	width            int
-	selectedIndex    int
-}
-
 type StatsTable struct {
-	Selected Selected `json:"selected"`
-
-	CacheMachineInfos  []MachineInfo `json:"-"`
-	CacheFlattenedLogs []*logs.Logs  `json:"-"`
-
-	ZoneStartY int
-
-	cache cache.Cache[string, statsTableCacheKey]
+	fleet       *fleet.Fleet
+	tbl         *table.Table
+	colorScheme *colorscheme.ColorScheme
 }
 
-type Selected struct {
-	Xpath xpath.Xpath `json:"xpath,omitempty"`
-	Index int         `json:"index"`
-}
+func NewStatsTable(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
+	indexWidth := len(strconv.Itoa(fleet.MachineCount()))
 
-type MachineInfo struct {
-	Xpath       xpath.Xpath
-	MetaInspect machine.MetaInspect
-	State       machine.State
-}
-
-func NewStatsTable() *StatsTable {
-	return &StatsTable{
-		Selected: Selected{Index: -1},
+	columnStyles := []style.Style{
+		colorScheme.Table.Row.Width(indexWidth).Align(style.Right),
+		colorScheme.Table.Row.Width(2), //nolint:mnd
+		colorScheme.Flake.Color,
+		colorScheme.Configuration.Color,
+		colorScheme.Machine.Color,
+		colorScheme.Table.Row,
+		colorScheme.Table.Row,
+		colorScheme.Table.Row,
+		colorScheme.Table.Row,
+		colorScheme.Table.Row,
+		colorScheme.Table.Row,
 	}
+
+	headers := []string{"", "",
+		string(colorScheme.Flake.Icon) + " FLAKE",
+		string(colorScheme.Configuration.Icon) + " CONFIGURATION",
+		string(colorScheme.Machine.Icon) + " MACHINE",
+		"ARCH", "STATUS", "GEN", "DATE", "NIXOS", "KERNEL"}
+
+	tbl := table.New().
+		Border(style.NormalBorder()).
+		SetZonePrefix(statsTableZonePrefix).
+		BorderStyle(colorScheme.Table.Border).
+		Headers(headers...).
+		Wrap(false).
+		SelectionBackground(colorScheme.Table.SelectionHighlightBackground.GetBackground()).
+		ColumnStyles(columnStyles)
+
+	return &StatsTable{
+		fleet:       fleet,
+		tbl:         tbl,
+		colorScheme: colorScheme,
+	}
+}
+
+func (s *StatsTable) SelectedIndex() int {
+	return s.tbl.SelectedIndex()
+}
+
+func (s *StatsTable) SelectedXpath() xpath.Xpath {
+	idx := s.tbl.SelectedIndex()
+	if idx >= 0 && idx < len(s.fleet.CacheMachineInfos) {
+		return s.fleet.CacheMachineInfos[idx].Xpath
+	}
+
+	return ""
 }
 
 func (s *StatsTable) Reset() {
-	s.Selected.Xpath = ""
-	s.Selected.Index = -1
+	s.tbl.Deselect()
 }
 
 func (s *StatsTable) HandleMouseClick(msg render.MouseClickMsg) bool {
-	lines := render.CurrentLines()
-	if msg.Y < 0 || msg.Y >= len(lines) {
-		return false
-	}
-
-	if !render.IsZoneAtLine(lines[msg.Y], msg.X, statsTableZonePrefix) {
-		return false
-	}
-
-	dataRows := len(s.CacheMachineInfos)
-	if dataRows == 0 {
-		return false
-	}
-
-	relY := msg.Y - s.ZoneStartY
-	headerLines := 3
-
-	if relY < headerLines {
-		return false
-	}
-
-	rowIndex := relY - headerLines
-	if rowIndex < 0 || rowIndex >= dataRows || rowIndex >= len(s.CacheMachineInfos) {
-		return false
-	}
-
-	if s.Selected.Index == rowIndex {
-		s.Selected.Index = -1
-		s.Selected.Xpath = ""
-	} else {
-		s.Selected.Index = rowIndex
-		s.applyIndexToXpath()
-	}
-
-	return true
+	return s.tbl.HandleMouseClick(msg)
 }
 
 func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || len(s.CacheMachineInfos) == 0 || s.Selected.Index < 0 {
-		return false
-	}
-
-	switch key {
-	case "left":
-		if s.Selected.Index > 0 {
-			s.Selected.Index--
-			s.applyIndexToXpath()
-
-			return true
-		}
-	case "right":
-		if s.Selected.Index < len(s.CacheMachineInfos)-1 {
-			s.Selected.Index++
-			s.applyIndexToXpath()
-
-			return true
-		}
-	}
-
-	return false
+	return s.tbl.HandleNavigation(key, hasActiveInnerViewport)
 }
 
-func (s *StatsTable) View(width int, colorScheme *colorscheme.ColorScheme) string {
-	return s.cache.Get(
-		func() (string, bool) {
-			return s.buildStatsTable(width, colorScheme), true
-		},
-		statsTableCacheKey{
-			machineInfosHash: hashMachineInfos(s.CacheMachineInfos),
-			width:            width,
-			selectedIndex:    s.Selected.Index,
-		})
-}
-
-func hashMachineInfos(infos []MachineInfo) uint64 {
-	hash := fnv.New64a()
-
-	for _, info := range infos {
-		_, _ = hash.Write([]byte(info.Xpath))
-		_, _ = hash.Write([]byte(info.State.Status))
-		_, _ = hash.Write([]byte(info.State.StatusMsg))
-		_, _ = hash.Write([]byte(info.State.Phase))
-	}
-
-	return hash.Sum64()
-}
-
-func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorScheme) string {
+func (s *StatsTable) View(width int) string {
 	var builder strings.Builder
 
-	builder.WriteString(colorScheme.Header.Title.Render("=== Stats Table ===\n"))
+	builder.WriteString(s.colorScheme.Header.Title.Render("=== Stats Table ===\n"))
 
-	indexWidth := len(strconv.Itoa(len(s.CacheMachineInfos)))
-	headers, styleFunc := makeTableColumns(colorScheme, indexWidth, s.Selected.Index)
-	tbl := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(colorScheme.Table.Border).
-		Headers(headers...).
-		Width(width).
-		Wrap(false).
-		StyleFunc(styleFunc)
+	s.tbl.Width(width).SetRows(s.buildRows())
+
+	builder.WriteString("\n" + s.tbl.String() + "\n\n")
+
+	return builder.String()
+}
+
+func (s *StatsTable) buildRows() [][]string {
+	machineInfos := s.fleet.CacheMachineInfos
+	rows := make([][]string, len(machineInfos))
 
 	var prevFlakeName, prevConfigurationName string
 
-	for idx, machineInfo := range s.CacheMachineInfos {
+	for idx, machineInfo := range machineInfos {
 		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
 
 		flakeDisplay := rowSpanMarker
@@ -180,97 +121,22 @@ func (s *StatsTable) buildStatsTable(width int, colorScheme *colorscheme.ColorSc
 			prevConfigurationName = configurationName
 		}
 
-		tbl.Row(
-			strconv.Itoa(idx+1),
+		rows[idx] = []string{
+			strconv.Itoa(idx + 1),
 			getStatusIcon(machineInfo.State.Status),
 			flakeDisplay,
 			configDisplay,
 			machineName,
 			machineInfo.MetaInspect.Architecture,
-			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, colorScheme),
+			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, s.colorScheme),
 			getGeneration(machineInfo),
 			machineInfo.MetaInspect.Date,
 			machineInfo.MetaInspect.Nixos,
 			machineInfo.MetaInspect.Kernel,
-		)
-	}
-
-	tableContent := render.Mark(statsTableZonePrefix, tbl.String())
-	builder.WriteString("\n" + tableContent + "\n\n")
-
-	result := builder.String()
-
-	return result
-}
-
-func (s *StatsTable) applyIndexToXpath() {
-	s.Selected.Xpath = s.CacheMachineInfos[s.Selected.Index].Xpath
-}
-
-type tableColumn struct {
-	header string
-	style  func(*colorscheme.ColorScheme) lipgloss.Style
-}
-
-func makeTableColumns(colorScheme *colorscheme.ColorScheme, indexWidth int, selectedIndex int) ([]string, func(row, col int) lipgloss.Style) {
-	columns := []tableColumn{
-		{header: "", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row.Width(indexWidth).Align(lipgloss.Right)
-		}},
-		{header: "", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row.Width(2) //nolint:mnd
-		}},
-		{header: string(colorScheme.Flake.Icon) + " FLAKE", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Flake.Color
-		}},
-		{header: string(colorScheme.Configuration.Icon) + " CONFIGURATION", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Configuration.Color
-		}},
-		{header: string(colorScheme.Machine.Icon) + " MACHINE", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Machine.Color
-		}},
-		{header: "ARCH", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row
-		}},
-		{header: "STATUS", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row
-		}},
-		{header: "GEN", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row
-		}},
-		{header: "DATE", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row
-		}},
-		{header: "NIXOS", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row
-		}},
-		{header: "KERNEL", style: func(c *colorscheme.ColorScheme) lipgloss.Style {
-			return c.Table.Row
-		}},
-	}
-
-	headers := make([]string, len(columns))
-	for i, col := range columns {
-		headers[i] = col.header
-	}
-
-	return headers, func(row, col int) lipgloss.Style {
-		if row == table.HeaderRow {
-			return colorScheme.Table.Row
 		}
-
-		if col >= 0 && col < len(columns) {
-			style := columns[col].style(colorScheme)
-
-			if row == selectedIndex {
-				style = style.Background(colorScheme.Table.SelectionHighlightBackground.GetBackground())
-			}
-
-			return style
-		}
-
-		return colorScheme.Table.Row
 	}
+
+	return rows
 }
 
 func getStatusIcon(status stats.StatsState) string {
@@ -299,7 +165,7 @@ func getStatusText(status stats.StatsState, statusMsg string, colorScheme *color
 	}
 }
 
-func getGeneration(machineInfo MachineInfo) string {
+func getGeneration(machineInfo fleet.MachineInfo) string {
 	if machineInfo.MetaInspect.Generations == nil {
 		return ""
 	}

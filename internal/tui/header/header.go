@@ -4,10 +4,10 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/cache"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 )
 
 type headerCacheKey struct {
@@ -40,7 +40,7 @@ func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAn
 
 	return h.cache.Get(func() (ContentAndHeight, bool) {
 		content := h.render(width, colorScheme)
-		height := lipgloss.Height(content) - 1 // -1 to account for next view
+		height := style.CountLines(content) - 1 // -1 to account for next view
 
 		return ContentAndHeight{Content: content, Height: height}, true
 	}, headerCacheKey{width: width})
@@ -63,7 +63,7 @@ func (h *Header) render(width int, colorScheme *colorscheme.ColorScheme) string 
 	sep := colorScheme.Table.Border.Render(" │ ")
 	line := colorScheme.Header.Title.Render("◉ Snapshot") + colorScheme.Table.Border.Render(": ") + strings.Join(parts, sep)
 
-	return lipgloss.NewStyle().Width(width).Render(line) + "\n\n"
+	return style.NewStyle().Width(width).Render(line) + "\n\n"
 }
 
 func formatTime(t time.Time) string {

@@ -19,6 +19,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
+	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -55,12 +57,13 @@ type model struct {
 	lastWorkflowUpdate time.Time
 	err                error
 	contentVersion     uint64
-	lastRenderStr      string
-
-	header    *header.Header
-	buildLogs *buildlogs.BuildLogs
-	footer    *footer.Footer
-	spinners  *spinners.Spinners
+	invalidateDiff    render.InvalidateDiffFunc
+	header      *header.Header
+	buildLogs   *buildlogs.BuildLogs
+	footer      *footer.Footer
+	spinners    *spinners.Spinners
+	statsTable  *statstable.StatsTable
+	phaseStatus *phasestatus.PhaseStatus
 }
 
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
@@ -78,8 +81,10 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		dimensions: &viewports.Dimensions{},
 		isSnapshot: isSnapshot,
 
-		header:   header.New(isSnapshot, conf.Snapshot),
-		spinners: spinners.NewSpinners(),
+		header:      header.New(isSnapshot, conf.Snapshot),
+		spinners:    spinners.NewSpinners(),
+		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
+		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
@@ -110,6 +115,10 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	}
 
 	return nil
+}
+
+func (m *model) SetInvalidateDiff(f render.InvalidateDiffFunc) {
+	m.invalidateDiff = f
 }
 
 func (m *model) Init() []render.Cmd {
@@ -201,7 +210,7 @@ func (m *model) Render() []string {
 	}
 
 	if m.buildLogs == nil {
-		m.buildLogs = buildlogs.New(m.conf)
+		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseStatus)
 	}
 
 	header := m.header.View(m.dimensions.Width, m.conf.ColorScheme)
@@ -226,12 +235,6 @@ func (m *model) Render() []string {
 	builder.WriteString(footer.Content)
 
 	renderStr := builder.String()
-
-	if renderStr == m.lastRenderStr {
-		return nil
-	}
-
-	m.lastRenderStr = renderStr
 
 	return strings.Split(renderStr, "\n")
 }
@@ -272,7 +275,7 @@ func (m *model) viewMainContent() string {
 	}
 
 	if m.buildLogs == nil {
-		m.buildLogs = buildlogs.New(m.conf)
+		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseStatus)
 	}
 
 	var builder strings.Builder
@@ -281,10 +284,10 @@ func (m *model) viewMainContent() string {
 
 	if !m.conf.Flags.DryRun {
 		if slices.Contains(m.conf.Phases, phase.Inspect) {
-			builder.WriteString(m.conf.Fleet.StatsTable.View(contentWidth, m.conf.ColorScheme))
+			builder.WriteString(m.statsTable.View(contentWidth))
 		}
 
-		builder.WriteString(m.conf.Fleet.PhaseStatus.View(contentWidth, m.conf.ColorScheme))
+		builder.WriteString(m.phaseStatus.View(contentWidth))
 	}
 
 	builder.WriteString(m.buildLogs.View(resetable.viewports, m.spinners))
@@ -353,14 +356,14 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 }
 
 func (m *model) handleMouseClick(msg render.MouseClickMsg) {
-	if m.conf.Fleet.StatsTable.HandleMouseClick(msg) {
-		m.conf.Fleet.PhaseStatus.Reset()
+	if m.statsTable.HandleMouseClick(msg) {
+		m.phaseStatus.Reset()
 
 		return
 	}
 
-	if m.conf.Fleet.PhaseStatus.HandleMouseClick(msg) {
-		m.conf.Fleet.StatsTable.Reset()
+	if m.phaseStatus.HandleMouseClick(msg) {
+		m.statsTable.Reset()
 	}
 }
 

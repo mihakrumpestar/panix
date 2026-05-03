@@ -17,6 +17,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
+	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
@@ -51,31 +53,22 @@ var (
 )
 
 type BuildLogs struct {
-	conf *config.Config
+	conf        *config.Config
+	statsTable *statstable.StatsTable
+	phaseStatus *phasestatus.PhaseStatus
 
 	viewports *viewports.Viewports
 	spinners  *spinners.Spinners
 
 	styledTreeLine string
 	contentWidth   int
-
-	ansiFlake         style.ANSIStyle
-	ansiConfiguration style.ANSIStyle
-	ansiMachine       style.ANSIStyle
-	ansiPhase         style.ANSIStyle
-	ansiCommand       style.ANSIStyle
-	ansiError         style.ANSIStyle
 }
 
-func New(conf *config.Config) *BuildLogs {
+func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *phasestatus.PhaseStatus) *BuildLogs {
 	return &BuildLogs{
-		conf:              conf,
-		ansiFlake:         style.NewANSIStyle(conf.ColorScheme.Flake.Color),
-		ansiConfiguration: style.NewANSIStyle(conf.ColorScheme.Configuration.Color),
-		ansiMachine:       style.NewANSIStyle(conf.ColorScheme.Machine.Color),
-		ansiPhase:         style.NewANSIStyle(conf.ColorScheme.Phase.Color),
-		ansiCommand:       style.NewANSIStyle(conf.ColorScheme.Command.Color),
-		ansiError:         style.NewANSIStyle(conf.ColorScheme.Error.Color),
+		conf:        conf,
+		statsTable:  statsTable,
+		phaseStatus: phaseStatus,
 	}
 }
 
@@ -120,9 +113,9 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 
 func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
 	switch {
-	case b.conf.Fleet.StatsTable.Selected.Index >= 0:
+	case b.statsTable.SelectedIndex() >= 0:
 		b.buildMachineSelectedTree(cfgNode, cfg)
-	case b.conf.Fleet.PhaseStatus.Selected.Index >= 0:
+	case b.phaseStatus.Selected.Index >= 0:
 		b.buildPhaseSelectedTree(cfgNode, cfg)
 	default:
 		b.buildDefaultTree(cfgNode, cfg)
@@ -132,7 +125,7 @@ func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Confi
 func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
 	for _, mp := range cfg.Machines.Pairs() {
 		machine := mp.Value
-		if machine == nil || machine.Xpath != b.conf.Fleet.StatsTable.Selected.Xpath {
+		if machine == nil || machine.Xpath != b.statsTable.SelectedXpath() {
 			continue
 		}
 
@@ -161,7 +154,7 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configurat
 }
 
 func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
-	phaseI := b.conf.Fleet.PhaseStatus.Selected.Phase
+	phaseI := phase.Phase(b.phaseStatus.Selected.Phase)
 
 	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
 		b.addPhases(cfgNode, cfg.Logs, cfg.Xpath, machineInd, false, phaseI)
@@ -323,7 +316,7 @@ func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI 
 
 	tasLoaded := tas.Load()
 	icon := b.spinnerOrIcon(phaseXpath, string(b.conf.ColorScheme.Phase.Icon), tasLoaded)
-	durStyled, durWidth := b.durationText(b.ansiPhase, tas)
+	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Phase.Color, tas)
 
 	upperName := upperPhaseNames[phaseI]
 	if upperName == "" {
@@ -332,7 +325,7 @@ func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI 
 
 	leftRaw := icon + upperName
 	leftWidth := style.CellWidth(icon) + len(upperName)
-	left := b.ansiPhase.Render(leftRaw)
+	left := b.conf.ColorScheme.Phase.Color.Render(leftRaw)
 
 	layoutIndent := indent
 	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
@@ -406,9 +399,9 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	tasCached := cmd.TimeAndState.Load()
 
 	icon := b.spinnerOrIcon(cmdXpath, strconv.Itoa(idx+1), tasCached)
-	icon = b.ansiCommand.Render(icon)
+	icon = b.conf.ColorScheme.Command.Color.Render(icon)
 
-	durStyled, durWidth := b.durationText(b.ansiCommand, cmd.TimeAndState)
+	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Command.Color, cmd.TimeAndState)
 
 	iconWidth := style.CellWidth(icon)
 	labelWidth := cmdIndent + iconWidth + durWidth
@@ -421,7 +414,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		icon += strings.Repeat(treeLine, labelLineCount-1)
 	}
 
-	styledLabel := b.ansiCommand.Render(labelVP)
+	styledLabel := b.conf.ColorScheme.Command.Color.Render(labelVP)
 
 	cmdContent := style.JoinHorizontal(style.Top, icon, styledLabel, durStyled)
 	cmdNode := tree.New().Root(cmdContent)
@@ -448,7 +441,7 @@ func (b *BuildLogs) addCommandChildren(
 	err := tasCached.EndError
 	if err != nil {
 		errMsg := "\u2717 Command failed: " + err.Error()
-		cmdNode.ChildString(b.ansiError.Render(
+		cmdNode.ChildString(b.conf.ColorScheme.Error.Color.Render(
 			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, 0, cmdIndent+treeStep),
 		))
 	}
@@ -460,7 +453,7 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 		dur = logNode.DurationAndErrorCache.Duration.Seconds()
 	}
 
-	ansi := b.ansiStyleForEntity(style)
+	ansi := b.styleForEntity(style)
 
 	leftRaw := string(style.Icon) + " " + name
 	rightRaw := formatDuration(dur)
@@ -481,23 +474,8 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 	return treeI
 }
 
-func (b *BuildLogs) ansiStyleForEntity(entity colorscheme.ColorSchemeLogEntity) style.ANSIStyle {
-	switch entity.Icon {
-	case b.conf.ColorScheme.Flake.Icon:
-		return b.ansiFlake
-	case b.conf.ColorScheme.Configuration.Icon:
-		return b.ansiConfiguration
-	case b.conf.ColorScheme.Machine.Icon:
-		return b.ansiMachine
-	case b.conf.ColorScheme.Phase.Icon:
-		return b.ansiPhase
-	case b.conf.ColorScheme.Command.Icon:
-		return b.ansiCommand
-	case b.conf.ColorScheme.Error.Icon:
-		return b.ansiError
-	default:
-		return style.NewANSIStyle(entity.Color)
-	}
+func (b *BuildLogs) styleForEntity(entity colorscheme.ColorSchemeLogEntity) style.Style {
+	return entity.Color
 }
 
 func (b *BuildLogs) layoutLine(indent int, left, right string, leftWidth, rightWidth int) string {
@@ -524,7 +502,7 @@ func (b *BuildLogs) spinnerOrIcon(xpathVal xpath.Xpath, icon string, tas *atomic
 	return b.spinners.View(xpathVal)
 }
 
-func (b *BuildLogs) durationText(ansi style.ANSIStyle, tas *atomictimeandstate.AtomicTimeAndState) (string, int) {
+func (b *BuildLogs) durationText(sty style.Style, tas *atomictimeandstate.AtomicTimeAndState) (string, int) {
 	d, err := tas.DurationOrElapsedTime()
 	if err != nil {
 		return "", 0
@@ -532,7 +510,7 @@ func (b *BuildLogs) durationText(ansi style.ANSIStyle, tas *atomictimeandstate.A
 
 	text := formatDuration(d.Seconds())
 
-	return ansi.Render(text), len(text)
+	return sty.Render(text), len(text)
 }
 
 func formatDuration(secs float64) string {

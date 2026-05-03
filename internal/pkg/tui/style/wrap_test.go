@@ -10,8 +10,8 @@ import (
 func TestWrap_Equivalence(t *testing.T) {
 	t.Parallel()
 
-	lgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
-	ansi := NewANSIStyle(lgStyle)
+	sty := NewStyle().Foreground(Color("#8BE9FD"))
+	ansi := NewANSIStyle(sty)
 
 	cases := []struct {
 		name        string

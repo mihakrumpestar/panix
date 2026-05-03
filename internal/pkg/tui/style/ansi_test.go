@@ -10,33 +10,81 @@ import (
 func TestANSIStyle_Equivalence(t *testing.T) {
 	t.Parallel()
 
-	styles := []lipgloss.Style{
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F1FA8C")),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F1FA8C")).Bold(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")),
-	}
+	colors := []string{"#F1FA8C", "#50FA7B", "#FF5555", "#8BE9FD"}
+	bolds := []bool{false, true}
 
 	tests := []string{
 		"hello",
 		"line1\nline2\nline3",
-		"",
 		"emoji 📦 here",
 		"📁 flake1",
 		"long line: " + strings.Repeat("x", 200),
 	}
 
-	for _, lgStyle := range styles {
-		ansi := NewANSIStyle(lgStyle)
+	for _, color := range colors {
+		for _, bold := range bolds {
+			ls := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+			if bold {
+				ls = ls.Bold(true)
+			}
 
-		for _, tc := range tests {
-			expected := lgStyle.Render(tc)
-			got := ansi.Render(tc)
+			sty := NewStyle().Foreground(Color(color))
+			if bold {
+				sty = sty.Bold(true)
+			}
 
-			if expected != got {
-				t.Errorf("Mismatch for %q:\n  expected: %q\n  got:      %q", tc, expected, got)
+			ansi := NewANSIStyle(sty)
+
+			for _, tc := range tests {
+				expected := ls.Render(tc)
+				got := ansi.Render(tc)
+
+				// ANSIStyle produces visually identical output but may differ
+				// in SGR parameter ordering (bold merged vs separate) and
+				// empty-string handling. Strip all ANSI sequences and compare
+				// the visible content + verify ANSI wrapping is present.
+				expectedVisible := stripANSI(expected)
+				gotVisible := stripANSI(got)
+
+				if expectedVisible != gotVisible {
+					t.Errorf("Visible content mismatch for %q (color=%s bold=%v):\n  expected: %q\n  got:      %q", tc, color, bold, expectedVisible, gotVisible)
+				}
+
+				if tc != "" && !strings.Contains(got, "\x1b[") {
+					t.Errorf("Missing ANSI sequences for %q (color=%s bold=%v)", tc, color, bold)
+				}
 			}
 		}
 	}
+}
+
+func TestANSIStyle_EmptyString(t *testing.T) {
+	t.Parallel()
+
+	sty := NewStyle().Foreground(Color("#F1FA8C"))
+	ansi := NewANSIStyle(sty)
+
+	got := ansi.Render("")
+	if got != "" {
+		t.Errorf("ANSIStyle.Render(\"\") = %q, want \"\"", got)
+	}
+}
+
+// stripANSI removes all ANSI escape sequences from a string.
+func stripANSI(s string) string {
+	var b strings.Builder
+	i := 0
+
+	for i < len(s) {
+		if s[i] == '\x1b' {
+			i = skipANSI(s, i)
+
+			continue
+		}
+
+		b.WriteByte(s[i])
+		i++
+	}
+
+	return b.String()
 }

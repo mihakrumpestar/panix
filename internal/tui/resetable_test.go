@@ -23,8 +23,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
+	"github.com/stretchr/testify/require")
 
 func TestStartResetableWorkflow_ReturnsWorkflowDoneMsg(t *testing.T) {
 	t.Parallel()
@@ -178,11 +177,13 @@ func newTestModel(t *testing.T) *model {
 	conf.Flags.DryRun = true
 
 	mdl := &model{
-		ctx:        context.Background(),
-		conf:       conf,
-		dimensions: &viewports.Dimensions{Width: 200, Height: 80},
-		header:     header.New(false, config.Snapshot{}),
-		spinners:   spinners.NewSpinners(),
+		ctx:         context.Background(),
+		conf:        conf,
+		dimensions:  &viewports.Dimensions{Width: 200, Height: 80},
+		header:      header.New(false, config.Snapshot{}),
+		spinners:    spinners.NewSpinners(),
+		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
+		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
 	mdl.footer = footer.New(mdl.keyDefs(), conf)
 
@@ -211,13 +212,13 @@ func makeTestConfig() *config.Config {
 	flakeObj.Configurations.Set("cfg0", cfg)
 	flakesMap.Set("flake0", flakeObj)
 
+	colorScheme := colorscheme.DefaultColorScheme()
+
 	return &config.Config{
-		ColorScheme: colorscheme.DefaultColorScheme(),
+		ColorScheme: colorScheme,
 		Fleet: &fleet.Fleet{
-			Flakes:      flakesMap,
-			Logs:        logs.New(),
-			StatsTable:  statstable.NewStatsTable(),
-			PhaseStatus: phasestatus.NewPhaseStatus(),
+			Flakes: flakesMap,
+			Logs:   logs.New(),
 		},
 		Phases: []phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 	}

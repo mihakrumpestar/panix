@@ -5,14 +5,16 @@ import (
 	"strings"
 )
 
-// Position represents vertical alignment for JoinHorizontal.
-// 0.0 = Top, 0.5 = Center, 1.0 = Bottom.
+// Position represents alignment for JoinHorizontal and JoinVertical.
+// 0.0 = Top/Left, 0.5 = Center, 1.0 = Bottom/Right.
 type Position float64
 
 const (
 	Top    Position = 0.0
+	Left   Position = 0.0
 	Center Position = 0.5
 	Bottom Position = 1.0
+	Right  Position = 1.0
 )
 
 const maxPadSpaces = 512
@@ -109,6 +111,99 @@ func mergeBlocks(blocks [][]string, maxWidths []int, maxHeight int) string {
 	}
 
 	return builder.String()
+}
+
+// JoinVertical joins strings vertically, aligning them by position
+// (Left, Center, Right). It replaces lipgloss.JoinVertical in hot paths,
+// using CellWidth instead of the heavy uax29-based ansi.StringWidth.
+func JoinVertical(pos Position, strs ...string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+
+	if len(strs) == 1 {
+		return strs[0]
+	}
+
+	maxWidth := 0
+	lines := make([][]string, len(strs))
+
+	for i, str := range strs {
+		lines[i] = splitLines(str)
+
+		for _, line := range lines[i] {
+			w := CellWidth(line)
+			if w > maxWidth {
+				maxWidth = w
+			}
+		}
+	}
+
+	var b strings.Builder
+
+	for i, block := range lines {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+
+		for _, line := range block {
+			w := CellWidth(line)
+			pad := maxWidth - w
+
+			switch {
+			case pos >= Right:
+				if pad > 0 {
+					if pad <= maxPadSpaces {
+						b.WriteString(padSpaces[:pad])
+					} else {
+						b.WriteString(strings.Repeat(" ", pad))
+					}
+				}
+
+				b.WriteString(line)
+			case pos == Center:
+				left := pad / 2
+				right := pad - left
+
+				if left > 0 {
+					if left <= maxPadSpaces {
+						b.WriteString(padSpaces[:left])
+					} else {
+						b.WriteString(strings.Repeat(" ", left))
+					}
+				}
+
+				b.WriteString(line)
+
+				if right > 0 {
+					if right <= maxPadSpaces {
+						b.WriteString(padSpaces[:right])
+					} else {
+						b.WriteString(strings.Repeat(" ", right))
+					}
+				}
+			default:
+				b.WriteString(line)
+
+				if pad > 0 {
+					if pad <= maxPadSpaces {
+						b.WriteString(padSpaces[:pad])
+					} else {
+						b.WriteString(strings.Repeat(" ", pad))
+					}
+				}
+			}
+
+			b.WriteByte('\n')
+		}
+	}
+
+	result := b.String()
+	if len(result) > 0 && result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+
+	return result
 }
 
 // splitLines splits a string by newline, returning each line as a separate

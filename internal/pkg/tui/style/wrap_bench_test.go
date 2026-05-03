@@ -48,8 +48,8 @@ func BenchmarkLipglossWrap_LongParagraph(b *testing.B) {
 }
 
 func BenchmarkWrap_WithANSI(b *testing.B) {
-	lgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
-	ansi := NewANSIStyle(lgStyle)
+	sty := NewStyle().Foreground(Color("#8BE9FD"))
+	ansi := NewANSIStyle(sty)
 	input := ansi.Render("📋 flake1 ") + "nix build .#nixosConfigurations.machine " + ansi.Render("(1.23s)")
 
 	b.ResetTimer()
@@ -60,8 +60,8 @@ func BenchmarkWrap_WithANSI(b *testing.B) {
 }
 
 func BenchmarkLipglossWrap_WithANSI(b *testing.B) {
-	lgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
-	input := lgStyle.Render("📋 flake1 ") + "nix build .#nixosConfigurations.machine " + lgStyle.Render("(1.23s)")
+	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
+	input := ls.Render("📋 flake1 ") + "nix build .#nixosConfigurations.machine " + ls.Render("(1.23s)")
 
 	b.ResetTimer()
 

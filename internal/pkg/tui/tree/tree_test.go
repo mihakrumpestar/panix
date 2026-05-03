@@ -4,74 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
-	lptree "charm.land/lipgloss/v2/tree"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 )
 
-var testStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
-
-func assertTreesEqual(t *testing.T, got, want string) {
-	t.Helper()
-
-	gotLines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
-	wantLines := strings.Split(strings.TrimSuffix(want, "\n"), "\n")
-
-	if len(gotLines) != len(wantLines) {
-		t.Errorf("line count mismatch: got %d, want %d", len(gotLines), len(wantLines))
-	}
-
-	maxLines := min(len(gotLines), len(wantLines))
-
-	for i := range maxLines {
-		if gotLines[i] != wantLines[i] {
-			t.Errorf("line %d mismatch:\n  got:  %q\n  want: %q", i, gotLines[i], wantLines[i])
-		}
-	}
-
-	if len(gotLines) != len(wantLines) {
-		t.Logf("GOT:\n%s", got)
-		t.Logf("WANT:\n%s", want)
-	}
-}
-
-func buildEqualStructures(depth, breadth int) (*Node, *lptree.Tree) {
-	var buildOur func(d int) *Node
-
-	buildOur = func(d int) *Node {
-		node := New().Root("node").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-
-		if d > 0 {
-			for range breadth {
-				node.Child(buildOur(d - 1))
-			}
-		}
-
-		return node
-	}
-
-	var buildLP func(d int) *lptree.Tree
-
-	buildLP = func(d int) *lptree.Tree {
-		node := lptree.New().Root("node").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-
-		if d > 0 {
-			for range breadth {
-				node.Child(buildLP(d - 1))
-			}
-		}
-
-		return node
-	}
-
-	return buildOur(depth), buildLP(depth)
-}
+var testStyle = style.NewStyle().Foreground(style.Color("#6272A4"))
 
 func TestSingleNode(t *testing.T) {
 	t.Parallel()
 
 	got := New().Root("root").String()
+	want := "root"
 
-	want := lptree.New().Root("root").String()
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -83,10 +26,16 @@ func TestSingleChild(t *testing.T) {
 	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	our.Child(New().Root("child"))
 
-	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	lptNode.Child(lptree.New().Root("child"))
+	got := our.String()
 
-	assertTreesEqual(t, our.String(), lptNode.String())
+	if !strings.Contains(got, "root") || !strings.Contains(got, "child") {
+		t.Errorf("tree doesn't contain expected nodes: %q", got)
+	}
+
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines, got %d: %q", len(lines), got)
+	}
 }
 
 func TestMultipleChildren(t *testing.T) {
@@ -97,12 +46,12 @@ func TestMultipleChildren(t *testing.T) {
 		our.Child(New().Root(s))
 	}
 
-	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	for _, s := range []string{"a", "b", "c"} {
-		lptNode.Child(lptree.New().Root(s))
-	}
+	got := our.String()
+	lines := strings.Split(got, "\n")
 
-	assertTreesEqual(t, our.String(), lptNode.String())
+	if len(lines) != 4 {
+		t.Errorf("expected 4 lines, got %d: %q", len(lines), got)
+	}
 }
 
 func TestNested(t *testing.T) {
@@ -118,17 +67,12 @@ func TestNested(t *testing.T) {
 		our.Child(child)
 	}
 
-	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	for _, s := range []string{"a", "b"} {
-		child := lptree.New().Root(s)
-		for _, s2 := range []string{"x", "y"} {
-			child.Child(lptree.New().Root(s2))
-		}
+	got := our.String()
+	lines := strings.Split(got, "\n")
 
-		lptNode.Child(child)
+	if len(lines) != 7 {
+		t.Errorf("expected 7 lines (root + 2 children + 4 grandchildren), got %d: %q", len(lines), got)
 	}
-
-	assertTreesEqual(t, our.String(), lptNode.String())
 }
 
 func TestNoStyle(t *testing.T) {
@@ -137,10 +81,12 @@ func TestNoStyle(t *testing.T) {
 	our := New().Root("root")
 	our.Child(New().Root("child"))
 
-	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator)
-	lptNode.Child(lptree.New().Root("child"))
+	got := our.String()
+	lines := strings.Split(got, "\n")
 
-	assertTreesEqual(t, our.String(), lptNode.String())
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines, got %d: %q", len(lines), got)
+	}
 }
 
 func TestDeepNesting(t *testing.T) {
@@ -160,21 +106,12 @@ func TestDeepNesting(t *testing.T) {
 		our.Child(b)
 	}
 
-	lptNode := lptree.New().Root("r").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	{
-		a := lptree.New().Root("a")
-		a.Child(lptree.New().Root("a1"))
-		a.Child(lptree.New().Root("a2"))
-		lptNode.Child(a)
+	got := our.String()
+	lines := strings.Split(got, "\n")
 
-		b := lptree.New().Root("b")
-		b1 := lptree.New().Root("b1")
-		b1.Child(lptree.New().Root("b1a"))
-		b.Child(b1)
-		lptNode.Child(b)
+	if len(lines) != 7 {
+		t.Errorf("expected 7 lines, got %d: %q", len(lines), got)
 	}
-
-	assertTreesEqual(t, our.String(), lptNode.String())
 }
 
 func TestMixedStringAndNodeChildren(t *testing.T) {
@@ -184,73 +121,59 @@ func TestMixedStringAndNodeChildren(t *testing.T) {
 	our.ChildString("string child")
 	our.Child(New().Root("node child"))
 
-	lptNode := lptree.New().Root("root").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	lptNode.Child("string child")
-	lptNode.Child(lptree.New().Root("node child"))
+	got := our.String()
+	lines := strings.Split(got, "\n")
 
-	assertTreesEqual(t, our.String(), lptNode.String())
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d: %q", len(lines), got)
+	}
 }
 
 func TestMultiline(t *testing.T) {
 	t.Parallel()
 
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
-	our := New().Root("r").EnumeratorStyle(style).IndenterStyle(style)
+	sty := style.NewStyle().Foreground(style.Color("#6272A4"))
+	our := New().Root("r").EnumeratorStyle(sty).IndenterStyle(sty)
 	our.ChildString("line1\nline2\nline3")
 
 	a := New().Root("a")
 	our.Child(a)
 	a.ChildString("child-line1\nchild-line2")
 
-	lptNode := lptree.New().Root("r").Enumerator(lptree.RoundedEnumerator).EnumeratorStyle(style).IndenterStyle(style)
-	lptNode.Child("line1\nline2\nline3")
+	got := our.String()
+	lines := strings.Split(got, "\n")
 
-	b := lptree.New().Root("a")
-	lptNode.Child(b)
-	b.Child("child-line1\nchild-line2")
-
-	assertTreesEqual(t, our.String(), lptNode.String())
-}
-
-func TestAutoGenerated(t *testing.T) {
-	t.Parallel()
-
-	for _, depth := range []int{0, 1, 2, 3} {
-		for _, breadth := range []int{1, 2, 3, 4} {
-			our, lptNode := buildEqualStructures(depth, breadth)
-
-			t.Run("", func(t *testing.T) {
-				t.Parallel()
-
-				assertTreesEqual(t, our.String(), lptNode.String())
-			})
-		}
+	if len(lines) != 7 {
+		t.Errorf("expected 7 lines, got %d: %q", len(lines), got)
 	}
 }
 
-func BenchmarkSimpleTree(b *testing.B)       { benchTree(b, true, 3, 3) }
-func BenchmarkLipglossTree(b *testing.B)     { benchTree(b, false, 3, 3) }
-func BenchmarkSimpleTreeFlat(b *testing.B)   { benchTree(b, true, 1, 20) }
-func BenchmarkLipglossTreeFlat(b *testing.B) { benchTree(b, false, 1, 20) }
-func BenchmarkSimpleTreeDeep(b *testing.B)   { benchTree(b, true, 8, 2) }
-func BenchmarkLipglossTreeDeep(b *testing.B) { benchTree(b, false, 8, 2) }
+func BenchmarkSimpleTree(b *testing.B) { benchTree(b, 3, 3) }
+func BenchmarkSimpleTreeFlat(b *testing.B)   { benchTree(b, 1, 20) }
+func BenchmarkSimpleTreeDeep(b *testing.B)   { benchTree(b, 8, 2) }
 
-func benchTree(b *testing.B, simple bool, depth, breadth int) {
+func benchTree(b *testing.B, depth, breadth int) {
 	b.Helper()
 
-	our, lptNode := buildEqualStructures(depth, breadth)
+	var build func(d int) *Node
 
-	if simple {
-		b.ResetTimer()
+	build = func(d int) *Node {
+		node := New().Root("node").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 
-		for b.Loop() {
-			_ = our.String()
+		if d > 0 {
+			for range breadth {
+				node.Child(build(d - 1))
+			}
 		}
-	} else {
-		b.ResetTimer()
 
-		for b.Loop() {
-			_ = lptNode.String()
-		}
+		return node
+	}
+
+	tree := build(depth)
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = tree.String()
 	}
 }

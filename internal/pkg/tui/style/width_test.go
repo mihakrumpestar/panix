@@ -112,7 +112,7 @@ func TestSkipANSI(t *testing.T) {
 	}
 }
 
-func TestCountLines_Equivalence(t *testing.T) {
+func TestCountLines(t *testing.T) {
 	t.Parallel()
 
 	tests := []string{
