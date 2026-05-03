@@ -2,6 +2,7 @@ package style
 
 import (
 	"strings"
+	"unsafe"
 
 	"github.com/rivo/uniseg"
 )
@@ -9,13 +10,34 @@ import (
 // CellWidth returns the terminal cell width of a string, accounting for ANSI
 // escape sequences (zero width) and grapheme clusters with proper width
 // (emoji ZWJ sequences, skin tone modifiers, etc.).
+//
+// Fast paths:
+//   - ASCII printable chars (0x20-0x7E): counted as width 1 without uniseg
+//   - Zero-copy []byte via unsafe.Slice (avoids O(n²) []byte(str[pos:]) copies)
 func CellWidth(str string) int {
 	width := 0
 	pos := 0
 	gs := -1
 
-	for pos < len(str) {
-		switch str[pos] {
+	// Zero-copy string→[]byte for uniseg calls. Safe because:
+	// 1. uniseg.FirstGraphemeCluster doesn't modify the input
+	// 2. str is alive for the duration of this function
+	b := unsafe.Slice(unsafe.StringData(str), len(str))
+
+	for pos < len(b) {
+		ch := b[pos]
+
+		// Fast ASCII path for printable characters (0x20-0x7E).
+		// Handles >90% of terminal content without calling uniseg.
+		if ch >= 0x20 && ch < 0x7F {
+			gs = -1
+			width++
+			pos++
+
+			continue
+		}
+
+		switch ch {
 		case '\x1b':
 			gs = -1
 			pos = skipANSI(str, pos)
@@ -23,9 +45,11 @@ func CellWidth(str string) int {
 			gs = -1
 			pos++
 		default:
-			cluster, rest, w, newState := uniseg.FirstGraphemeCluster([]byte(str[pos:]), gs)
+			// Non-ASCII: use uniseg for proper grapheme cluster handling
+			// (emoji ZWJ, skin tone modifiers, CJK wide chars, etc.)
+			cluster, rest, w, newState := uniseg.FirstGraphemeCluster(b[pos:], gs)
 			gs = newState
-			pos = len(str) - len(rest)
+			pos = len(b) - len(rest)
 			width += w
 			_ = cluster
 		}

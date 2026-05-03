@@ -2,6 +2,7 @@ package render
 
 import (
 	"strconv"
+	"unsafe"
 
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/rivo/uniseg"
@@ -25,8 +26,14 @@ func NewCellBuf(width, height int) *CellBuf {
 	n := width * height
 	if n > 0 {
 		c.cells = make([]Cell, n)
-		for i := range c.cells {
-			c.cells[i] = EmptyCell
+		// Fill first row with EmptyCell, then bulk-copy to remaining rows.
+		// This is faster than per-cell assignment for large buffers because
+		// copy uses memmove internally.
+		for x := range width {
+			c.cells[x] = EmptyCell
+		}
+		for y := 1; y < height; y++ {
+			copy(c.cells[y*width:(y+1)*width], c.cells[:width])
 		}
 	}
 
@@ -43,12 +50,14 @@ func (b *CellBuf) Resize(width, height int) {
 	}
 
 	newCells := make([]Cell, width*height)
-	for i := range newCells {
-		newCells[i] = EmptyCell
+	for x := range width {
+		newCells[x] = EmptyCell
+	}
+	for y := 1; y < height; y++ {
+		copy(newCells[y*width:(y+1)*width], newCells[:width])
 	}
 
 	minH := min(b.height, height)
-
 	minW := min(b.width, width)
 
 	for y := range minH {
@@ -67,8 +76,13 @@ func (b *CellBuf) Resize(width, height int) {
 }
 
 func (b *CellBuf) Clear() {
-	for i := range b.cells {
-		b.cells[i] = EmptyCell
+	// Bulk-fill with EmptyCell using first-row + copy pattern.
+	for x := range b.width {
+		b.cells[x] = EmptyCell
+	}
+	w := b.width
+	for y := 1; y < b.height; y++ {
+		copy(b.cells[y*w:(y+1)*w], b.cells[:w])
 	}
 
 	for i := range b.lineVersions {
@@ -94,7 +108,7 @@ func (b *CellBuf) SetCell(x, y int, c Cell) {
 	idx := y*b.width + x
 
 	old := b.cells[idx]
-	if old.VisualEqual(c) && old.ZoneID == c.ZoneID {
+	if old.Content == c.Content && old.Fg == c.Fg && old.Bg == c.Bg && old.Attrs == c.Attrs && old.Width == c.Width && old.ZoneID == c.ZoneID {
 		return
 	}
 
@@ -143,10 +157,30 @@ func (b *CellBuf) WriteANSIString(x, y int, s string) (endX, endY int) {
 }
 
 func (b *CellBuf) ClearLinesBelow(y int) {
+	if y < 0 || y >= b.height {
+		return
+	}
+
+	width := b.width
+	anyChanged := false
+
 	for row := y; row < b.height; row++ {
-		for col := range b.width {
-			b.SetCell(col, row, EmptyCell)
+		startIdx := row * width
+		rowChanged := false
+		for i := startIdx; i < startIdx+width; i++ {
+			if b.cells[i] != EmptyCell {
+				b.cells[i] = EmptyCell
+				rowChanged = true
+			}
 		}
+		if rowChanged {
+			b.lineVersions[row]++
+			anyChanged = true
+		}
+	}
+
+	if anyChanged {
+		b.version++
 	}
 }
 
@@ -155,33 +189,61 @@ func (b *CellBuf) WriteStyledText(x, y int, text string, fg, bg Color, attrs Att
 	startX := x
 	pos := 0
 	gs := -1
+	// Zero-copy string→[]byte for uniseg calls. Same safety rationale
+	// as ansiParser.parse: uniseg doesn't modify input, text is alive
+	// for the duration of this method.
+	bText := unsafe.Slice(unsafe.StringData(text), len(text))
 
-	for pos < len(text) {
+	for pos < len(bText) {
 		if curY >= b.height {
 			break
 		}
 
-		r, size := decodeRune(text, pos)
-		if r == '\n' {
+		ch := bText[pos]
+
+		if ch == '\n' {
 			gs = -1
-			pos += size
+			pos++
 			curX = startX
 			curY++
 
 			continue
 		}
 
-		if r == '\r' {
+		if ch == '\r' {
 			gs = -1
-			pos += size
+			pos++
 			curX = startX
 
 			continue
 		}
 
-		cluster, rest, w, newState := uniseg.FirstGraphemeCluster([]byte(text[pos:]), gs)
+		// Fast ASCII path for printable characters (0x20-0x7E).
+		// Bypasses uniseg.FirstGraphemeCluster and string([]byte) allocation.
+		if ch >= 0x20 && ch < 0x7F {
+			gs = -1
+			w := 1
+			if curX+w <= b.width && curY < b.height {
+				b.SetCell(curX, curY, Cell{
+					Content: asciiStrings[ch],
+					Width:   1,
+					Fg:      fg,
+					Bg:      bg,
+					Attrs:   attrs,
+					ZoneID:  zoneID,
+				})
+			}
+
+			curX += w
+			pos++
+
+			continue
+		}
+
+		// Non-ASCII: use uniseg for proper grapheme cluster handling (emoji, CJK, etc.)
+		cluster, rest, w, newState := uniseg.FirstGraphemeCluster(bText[pos:], gs)
 		gs = newState
-		pos = len(text) - len(rest)
+		pos = len(bText) - len(rest)
 
 		if curX+w-1 < b.width && curY < b.height {
 			b.SetCell(curX, curY, Cell{
@@ -224,50 +286,53 @@ type ansiParser struct {
 
 //nolint:cyclop,funlen,gocognit
 func (p *ansiParser) parse(s string) {
+	// Zero-copy string→[]byte for grapheme cluster analysis.
+	// Avoids a heap allocation per call — for a 10KB ANSI string,
+	// this saves ~10KB of allocation + copy per frame.
+	// Safe because: uniseg doesn't modify the input, and s is alive
+	// for the duration of parse(). The escape-sequence parsing
+	// functions still use the string s (cold path).
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
 	pos := 0
-	gs := -1 // uniseg state for FirstGraphemeCluster
+	gs := -1
 	startX := p.curX
 
-	for pos < len(s) {
-		if s[pos] == '\x1b' {
+	for pos < len(b) {
+		ch := b[pos]
+
+		if ch == '\x1b' {
 			gs = -1
 			pos = p.parseEscape(s, pos)
 
 			continue
 		}
 
-		r, size := decodeRune(s, pos)
-		if r == '\n' {
+		switch ch {
+		case '\n':
 			gs = -1
-
 			p.padLineToWidth(startX)
-
-			pos += size
+			pos++
 			p.curX = startX
 			p.curY++
 
 			continue
-		}
-
-		if r == '\r' {
+		case '\r':
 			gs = -1
-			pos += size
+			pos++
 			p.curX = startX
 
 			continue
-		}
-
-		if r == '\t' {
+		case '\t':
 			gs = -1
-			pos += size
+			pos++
 			p.curX = ((p.curX / 8) + 1) * 8
 
 			continue
 		}
 
-		if r < 0x20 && r != 0 {
+		if ch < 0x20 {
 			gs = -1
-			pos += size
+			pos++
 
 			continue
 		}
@@ -276,13 +341,55 @@ func (p *ansiParser) parse(s string) {
 			return
 		}
 
-		cluster, rest, w, newState := uniseg.FirstGraphemeCluster([]byte(s[pos:]), gs)
+		// Fast ASCII path for printable characters (0x20-0x7E).
+		// This handles >90% of terminal content and avoids:
+		//  - uniseg.FirstGraphemeCluster call
+		//  - []byte(s[pos:]) allocation
+		//  - string(cluster) allocation (uses pre-interned asciiStrings)
+		//  - SetCell function call + bounds check (direct array access)
+		if ch < 0x7F {
+			gs = -1
+			w := 1
+
+			if p.curX >= p.buf.width {
+				p.curX = 0
+				p.curY++
+				if p.curY >= p.buf.height {
+					return
+				}
+			}
+
+			if p.curX+w <= p.buf.width {
+				idx := p.curY*p.buf.width + p.curX
+				newCell := Cell{
+					Content: asciiStrings[ch],
+					Width:   1,
+					Fg:      p.fg,
+					Bg:      p.bg,
+					Attrs:   p.attrs,
+					ZoneID:  p.zoneID,
+				}
+				old := p.buf.cells[idx]
+				if old.Content != newCell.Content || old.Fg != newCell.Fg || old.Bg != newCell.Bg || old.Attrs != newCell.Attrs || old.Width != newCell.Width || old.ZoneID != newCell.ZoneID {
+					p.buf.cells[idx] = newCell
+					p.buf.lineVersions[p.curY]++
+					p.buf.version++
+				}
+			}
+
+			p.curX += w
+			pos++
+
+			continue
+		}
+
+		// Non-ASCII: use uniseg for proper grapheme cluster handling.
+		cluster, rest, w, newState := uniseg.FirstGraphemeCluster(b[pos:], gs)
 		gs = newState
-		pos = len(s) - len(rest)
+		pos = len(b) - len(rest)
 
 		if p.curX >= p.buf.width {
 			p.curX = 0
-
 			p.curY++
 			if p.curY >= p.buf.height {
 				return
@@ -318,12 +425,23 @@ func (p *ansiParser) parse(s string) {
 }
 
 func (p *ansiParser) padLineToWidth(startX int) {
-	if p.curY >= p.buf.height {
+	if p.curY >= p.buf.height || p.curX >= p.buf.width {
 		return
 	}
 
+	offset := p.curY * p.buf.width
+	changed := false
 	for x := p.curX; x < p.buf.width; x++ {
-		p.buf.SetCell(x, p.curY, EmptyCell)
+		c := &p.buf.cells[offset+x]
+		if c.Content != " " || c.Fg != DefaultColor || c.Bg != DefaultColor || c.Attrs != 0 || c.Width != 1 || c.ZoneID != 0 {
+			*c = EmptyCell
+			changed = true
+		}
+	}
+
+	if changed {
+		p.buf.lineVersions[p.curY]++
+		p.buf.version++
 	}
 }
 
@@ -392,83 +510,146 @@ func (p *ansiParser) applySGR(params string) {
 		return
 	}
 
-	parts := splitParams(params)
+	// Parse SGR integers directly from the param string.
+	// This avoids string allocations from splitParams + strconv.Atoi.
+	var ints [16]int
+	n := parseSGRInts(params, &ints)
 
 	i := 0
-	for i < len(parts) {
-		switch parts[i] {
-		case "0":
+	for i < n {
+		switch ints[i] {
+		case 0:
 			p.fg = DefaultColor
 			p.bg = DefaultColor
 			p.attrs = 0
-		case "1":
+		case 1:
 			p.attrs |= AttrBold
-		case "2":
+		case 2:
 			p.attrs |= AttrDim
-		case "3":
+		case 3:
 			p.attrs |= AttrItalic
-		case "4":
+		case 4:
 			p.attrs |= AttrUnderline
-		case "5":
+		case 5:
 			p.attrs |= AttrBlink
-		case "7":
+		case 7:
 			p.attrs |= AttrReverse
-		case "8":
+		case 8:
 			p.attrs |= AttrHidden
-		case "9":
+		case 9:
 			p.attrs |= AttrStrikethrough
-		case "22":
+		case 22:
 			p.attrs &^= AttrBold | AttrDim
-		case "23":
+		case 23:
 			p.attrs &^= AttrItalic
-		case "24":
+		case 24:
 			p.attrs &^= AttrUnderline
-		case "25":
+		case 25:
 			p.attrs &^= AttrBlink
-		case "27":
+		case 27:
 			p.attrs &^= AttrReverse
-		case "28":
+		case 28:
 			p.attrs &^= AttrHidden
-		case "29":
+		case 29:
 			p.attrs &^= AttrStrikethrough
-		case "30", "31", "32", "33", "34", "35", "36", "37":
-			n, _ := strconv.Atoi(parts[i])
-			p.fg = color16(uint8(n - 30))
-		case "38":
-			c, adv := p.parseColor(parts, i)
+		case 30, 31, 32, 33, 34, 35, 36, 37:
+			p.fg = color16(uint8(ints[i] - 30))
+		case 38:
+			c, adv := p.parseColorInts(ints[:n], i)
 			if adv > 0 {
 				p.fg = c
 				i += adv
 
 				continue
 			}
-		case "39":
+		case 39:
 			p.fg = DefaultColor
-		case "40", "41", "42", "43", "44", "45", "46", "47":
-			n, _ := strconv.Atoi(parts[i])
-			p.bg = color16(uint8(n - 40))
-		case "48":
-			c, adv := p.parseColor(parts, i)
+		case 40, 41, 42, 43, 44, 45, 46, 47:
+			p.bg = color16(uint8(ints[i] - 40))
+		case 48:
+			c, adv := p.parseColorInts(ints[:n], i)
 			if adv > 0 {
 				p.bg = c
 				i += adv
 
 				continue
 			}
-		case "49":
+		case 49:
 			p.bg = DefaultColor
-		case "90", "91", "92", "93", "94", "95", "96", "97":
-			n, _ := strconv.Atoi(parts[i])
-			p.fg = color16(uint8(n - 90 + 8))
-		case "100", "101", "102", "103", "104", "105", "106", "107":
-			n, _ := strconv.Atoi(parts[i])
-			p.bg = color16(uint8(n - 100 + 8))
+		case 90, 91, 92, 93, 94, 95, 96, 97:
+			p.fg = color16(uint8(ints[i] - 90 + 8))
+		case 100, 101, 102, 103, 104, 105, 106, 107:
+			p.bg = color16(uint8(ints[i] - 100 + 8))
 		}
 
 		i++
 	}
 }
 
+// parseSGRInts parses semicolon-separated integers from an SGR parameter string
+// directly into a pre-allocated array, avoiding string allocations.
+// Empty sub-params (e.g., "1;;3") are treated as 0.
+func parseSGRInts(s string, buf *[16]int) (n int) {
+	val := 0
+	hasDigit := false
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == ';' {
+			if hasDigit {
+				buf[n] = val
+			} else {
+				buf[n] = 0
+			}
+
+			n++
+			if n >= len(buf) {
+				return n
+			}
+
+			val = 0
+			hasDigit = false
+		} else if s[i] >= '0' && s[i] <= '9' {
+			val = val*10 + int(s[i]-'0')
+			hasDigit = true
+		}
+	}
+
+	if hasDigit || n == 0 {
+		if n < len(buf) {
+			buf[n] = val
+			n++
+		}
+	}
+
+	return n
+}
+
+//nolint:mnd
+func (p *ansiParser) parseColorInts(parts []int, i int) (Color, int) {
+	if i+1 >= len(parts) {
+		return DefaultColor, 0
+	}
+
+	switch parts[i+1] {
+	case 2:
+		if i+4 < len(parts) {
+			return NewColor(uint8(parts[i+2]), uint8(parts[i+3]), uint8(parts[i+4])), 5
+		}
+
+		return DefaultColor, 0
+	case 5:
+		if i+2 < len(parts) {
+			return color256(uint8(parts[i+2])), 3
+		}
+
+		return DefaultColor, 0
+	default:
+		return DefaultColor, 0
+	}
+}
+
+// Keep parseColor for backward compat with tests that pass []string.
+//
 //nolint:mnd
 func (p *ansiParser) parseColor(parts []string, i int) (Color, int) {
 	if i+1 >= len(parts) {
@@ -534,6 +715,8 @@ func (p *ansiParser) skipOSC(s string, pos int) int {
 	return pos
 }
 
+// splitParams is kept for backward compatibility with tests.
+// The hot path (applySGR) now uses parseSGRInts instead.
 func splitParams(s string) []string {
 	var parts []string
 
@@ -608,4 +791,17 @@ func runeDisplayWidth(r rune) int {
 	}
 
 	return width
+}
+
+// copyFrom copies all cells, line versions, and version from src.
+// Used by tests and benchmarks for Diff comparison. Not called by
+// renderFrame since fullRedraw always marks all lines dirty.
+func (b *CellBuf) copyFrom(src *CellBuf) {
+	if b.width != src.width || b.height != src.height {
+		b.Resize(src.width, src.height)
+	}
+
+	copy(b.cells, src.cells)
+	copy(b.lineVersions, src.lineVersions)
+	b.version = src.version
 }

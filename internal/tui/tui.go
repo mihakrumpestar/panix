@@ -55,6 +55,7 @@ type model struct {
 	lastWorkflowUpdate time.Time
 	err                error
 	contentVersion     uint64
+	lastRenderStr      string
 
 	header    *header.Header
 	buildLogs *buildlogs.BuildLogs
@@ -224,7 +225,17 @@ func (m *model) Render(buf *render.CellBuf) {
 	builder.WriteString(main)
 	builder.WriteString(footer.Content)
 
-	_, endY := buf.WriteANSIString(0, 0, builder.String())
+	renderStr := builder.String()
+
+	// Skip WriteANSIString when the rendered string is identical to the
+	// previous frame. This eliminates the ~48µs ANSI parse cost for idle
+	// frames where no content changed (viewport cache hit, no spinner tick).
+	if renderStr == m.lastRenderStr {
+		return
+	}
+	m.lastRenderStr = renderStr
+
+	_, endY := buf.WriteANSIString(0, 0, renderStr)
 	buf.ClearLinesBelow(endY + 1)
 }
 

@@ -205,7 +205,12 @@ func (m *Viewport) SetHeight(h int) {
 }
 
 func (m *Viewport) SetBorderStyle(borderColor color.Color) {
-	m.borderStyle = style.ColorToPrefix(borderColor)
+	newStyle := style.ColorToPrefix(borderColor)
+	if m.borderStyle == newStyle {
+		return
+	}
+
+	m.borderStyle = newStyle
 	m.cacheValid = false
 	m.buildBorderStrings()
 }
@@ -301,7 +306,23 @@ var ErrLineOverWidth = errors.New("line exceeds ContentWidth")
 
 // SetContentLines sets the content lines. Visual widths are computed lazily
 // on first access so that SetContentLines itself is O(1).
+// If the lines slice is identical to the current content (same length,
+// same strings), no caches are invalidated — subsequent View() calls
+// hit the cached result directly.
 func (m *Viewport) SetContentLines(lines []string) {
+	if len(lines) == len(m.lines) {
+		same := true
+		for i := range lines {
+			if lines[i] != m.lines[i] {
+				same = false
+				break
+			}
+		}
+		if same {
+			return
+		}
+	}
+
 	m.lines = lines
 	m.lineWidths = nil
 	m.cacheValid = false
@@ -334,6 +355,8 @@ func (m *Viewport) ensureLineWidths() {
 // Sync updates the viewport with new content and dimensions in the correct order.
 // If height > 0, it is used as a fixed viewport height (e.g. main/fullscreen).
 // If height == 0, the viewport auto-sizes up to maxHeight.
+// Sync is a no-op when content, width, and height are all unchanged —
+// SetWidth/SetHeight/SetContentLines all short-circuit internally.
 func (m *Viewport) Sync(content string, width, height int) error {
 	wasAtBottom := m.ScrollPercent() == 1 && !m.main
 	yOffset := m.yOffset

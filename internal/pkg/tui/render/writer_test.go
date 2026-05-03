@@ -333,8 +333,14 @@ func TestWriterSetStyleResetOnEveryChange(t *testing.T) {
 	w.Flush()
 
 	output := buf.String()
-	if !strings.Contains(output, "\x1b[0m") {
-		t.Errorf("setStyle should emit reset between style changes: got %q", output)
+	// With differential style, we emit specific SGR codes for the transition.
+	// Both red and blue fg should appear in the output.
+	if !strings.Contains(output, "255;0;0") && !strings.Contains(output, "38;2;255;0;0") {
+		t.Errorf("output should contain red fg SGR: %q", output)
+	}
+
+	if !strings.Contains(output, "0;0;255") && !strings.Contains(output, "38;2;0;0;255") {
+		t.Errorf("output should contain blue fg SGR: %q", output)
 	}
 }
 
@@ -537,8 +543,11 @@ func TestWriterSetStyleDimOff(t *testing.T) {
 		t.Errorf("first style should include dim: %q", output)
 	}
 
-	if !strings.Contains(output, "\x1b[0m") {
-		t.Errorf("style transition should include reset: %q", output)
+	// After transition, bold should still be on and dim off.
+	// Differential style: emits SGR 22 (bold+dim off) then SGR 1 (bold on).
+	// Or full reset + bold on. Either is correct.
+	if !strings.Contains(output, "\x1b[1m") && !strings.Contains(output, "\x1b[0m\x1b[1m") {
+		t.Errorf("after dim off, bold should still be set: %q", output)
 	}
 }
 

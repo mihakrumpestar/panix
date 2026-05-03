@@ -95,20 +95,34 @@ func (z *ZoneManager) Reset() {
 
 func Mark(name string, view string) string {
 	id := globalZones.GetOrCreate(name)
+	// Pre-compute zone marker strings to avoid repeated concatenation.
 	start := "\x1b[" + strconv.Itoa(int(id)) + "z"
 	end := "\x1b[/" + strconv.Itoa(int(id)) + "z"
+
+	// Estimate output size: original + markers per line.
+	// Each line gets start+len(end) extra bytes. Estimate ~1.5 newlines.
+	estimatedLen := len(view) + (len(start)+len(end))*max(1, strings.Count(view, "\n")+1)
+	var b strings.Builder
+	b.Grow(estimatedLen)
 
 	// Wrap each line individually so that zone markers don't leak into
 	// tree prefixes or other content prepended to intermediate lines.
 	// A single pair wrapping the whole multi-line string would cause the
 	// zone ID to persist across newlines, assigning it to tree prefixes
 	// on subsequent lines.
-	lines := strings.Split(view, "\n")
-	for i, line := range lines {
-		lines[i] = start + line + end
+	first := true
+	for line := range strings.SplitSeq(view, "\n") {
+		if !first {
+			b.WriteByte('\n')
+		}
+
+		b.WriteString(start)
+		b.WriteString(line)
+		b.WriteString(end)
+		first = false
 	}
 
-	return strings.Join(lines, "\n")
+	return b.String()
 }
 
 func GetZoneName(id uint16) string {

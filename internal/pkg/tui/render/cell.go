@@ -26,6 +26,20 @@ const (
 	colorPaletteMask = 0xFF
 )
 
+// asciiStrings pre-allocates string representations for bytes 0-127.
+// This eliminates per-cell heap allocations for ASCII content in the
+// hot parse path — instead of string([]byte{ch}), we index this table.
+var asciiStrings [128]string
+
+// emptyStr is the pre-allocated continuation cell content string.
+var emptyStr = ""
+
+func init() {
+	for i := range asciiStrings {
+		asciiStrings[i] = string([]byte{byte(i)})
+	}
+}
+
 func NewColor(r, g, b uint8) Color {
 	return Color(uint32(r)<<24 | uint32(g)<<16 | uint32(b)<<8 | colorTypeTrue<<colorTypeShift | 0x1)
 }
@@ -42,14 +56,14 @@ func ColorFromRGBA(r, g, b, a uint32) Color {
 	return Color((r>>8)<<24 | (g>>8)<<16 | (b>>8)<<8 | colorTypeTrue<<colorTypeShift | 0x1)
 }
 
-func (c Color) R() uint8      { return uint8(c >> 24) }
-func (c Color) G() uint8      { return uint8(c >> 16) }
-func (c Color) B() uint8      { return uint8(c >> 8) }
-func (c Color) A() uint8      { return uint8(c) & 0x1 }
+func (c Color) R() uint8       { return uint8(c >> 24) }
+func (c Color) G() uint8       { return uint8(c >> 16) }
+func (c Color) B() uint8       { return uint8(c >> 8) }
+func (c Color) A() uint8       { return uint8(c) & 0x1 }
 func (c Color) IsDefault() bool { return c == 0 }
 func (c Color) IsRGB() bool     { return c != 0 }
 
-func (c Color) ColorType() int { return int((c >> colorTypeShift) & colorTypeMask) }
+func (c Color) ColorType() int     { return int((c >> colorTypeShift) & colorTypeMask) }
 func (c Color) PaletteIndex() uint8 { return uint8(c >> 24) }
 
 type Cell struct {

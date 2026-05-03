@@ -30,6 +30,8 @@ type item struct {
 	model          tuiviewport.Viewport
 	content        string
 	contentVersion uint64
+	lastWidth      int
+	lastHeight     int
 }
 
 func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
@@ -194,6 +196,7 @@ func (v *Viewports) render(
 	itm := v.getOrCreateItem(xpath, content, indent, explicitHeight, explicitWidth, bordered, scrollbar)
 
 	version = v.resolveVersion(output, version)
+	contentChanged := itm.contentVersion != version
 	content = v.resolveContent(itm, version, content, output)
 
 	if bordered {
@@ -201,10 +204,16 @@ func (v *Viewports) render(
 	}
 
 	width := v.viewWidth(indent, explicitWidth)
+	dimsChanged := width != itm.lastWidth || explicitHeight != itm.lastHeight
 
-	err := itm.model.Sync(content, width, explicitHeight)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "viewport: %v\n", err)
+	if contentChanged || dimsChanged {
+		itm.lastWidth = width
+		itm.lastHeight = explicitHeight
+
+		err := itm.model.Sync(content, width, explicitHeight)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "viewport: %v\n", err)
+		}
 	}
 
 	view := itm.model.View()

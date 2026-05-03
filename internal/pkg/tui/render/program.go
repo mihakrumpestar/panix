@@ -144,6 +144,10 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 				p.height = h
 				p.buf.Resize(w, h)
 				p.prevBuf.Resize(w, h)
+				// After resize, terminal content may not match prevBuf.
+				// Force full redraw by clearing prevBuf so Diff detects
+				// all lines as changed.
+				p.prevBuf.Clear()
 				cmds := p.model.Update(WindowSizeMsg{Width: w, Height: h})
 				p.processCmds(cmds)
 				p.renderFrame()
@@ -153,14 +157,26 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 }
 
 func (p *Program) renderFrame() {
+	prevVersion := p.buf.Version()
 	SetCurrentBuf(p.buf)
 	p.model.Render(p.buf)
 
-	// Always write all lines. The terminal state can diverge from
-	// prevBuf after layout changes (e.g., exiting fullscreen),
-	// so we cannot rely on Diff to detect only changed lines.
-	// We still use Diff for the line list but force all lines dirty.
-	diffs := fullRedraw(p.buf)
+	// If no cells changed during Render, skip the entire terminal write.
+	// This makes idle frames (no spinner tick, no content update)
+	// essentially free — the model still runs but detects no cell diffs.
+	if p.buf.Version() == prevVersion {
+		return
+	}
+
+	// Incremental Diff: only write lines that actually changed.
+	// For a 1/4-screen change (~12 lines), this writes ~75% fewer
+	// lines than fullRedraw. For no-change frames (where version-skip
+	// didn't fire because ClearLinesBelow bumped the version), Diff's
+	// lineChanged() check catches the false positive and returns empty diffs.
+	diffs := Diff(p.buf, p.prevBuf)
+	if len(diffs) == 0 {
+		return
+	}
 
 	p.writer.Reset()
 	p.writer.WriteDiff(diffs, p.buf)
@@ -170,7 +186,18 @@ func (p *Program) renderFrame() {
 		_, _ = fmt.Fprintf(os.Stderr, "render error: %v\n", err)
 	}
 
-	p.prevBuf.copyFrom(p.buf)
+	// Selective copy: only update prevBuf for changed lines instead of
+	// copying the entire buffer. O(changed_lines × width) instead of
+	// O(height × width). For 1/4 change, this is ~75% less memmove work.
+	for _, d := range diffs {
+		y := d.Y
+		if y >= 0 && y < p.prevBuf.height && y < p.buf.height && p.prevBuf.width == p.buf.width {
+			off := y * p.buf.width
+			copy(p.prevBuf.cells[off:off+p.buf.width], p.buf.cells[off:off+p.buf.width])
+			p.prevBuf.lineVersions[y] = p.buf.lineVersions[y]
+		}
+	}
+	p.prevBuf.version = p.buf.version
 }
 
 func (p *Program) processCmds(cmds []Cmd) {
@@ -258,14 +285,4 @@ func BatchCmd(cmds ...Cmd) Cmd {
 
 type batchMsg struct {
 	msgs []Msg
-}
-
-func (b *CellBuf) copyFrom(src *CellBuf) {
-	if b.width != src.width || b.height != src.height {
-		b.Resize(src.width, src.height)
-	}
-
-	copy(b.cells, src.cells)
-	copy(b.lineVersions, src.lineVersions)
-	b.version = src.version
 }
