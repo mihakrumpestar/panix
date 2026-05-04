@@ -14,6 +14,8 @@ type ColorSchemeLogEntity struct {
 
 type ColorSchemeFooter struct {
 	HelpKey         style.Style
+	HelpDesc        style.Style
+	HelpSeparator   style.Style
 	DebugBackground style.Style
 }
 
@@ -104,6 +106,8 @@ func DefaultColorScheme() *ColorScheme {
 		},
 		Footer: ColorSchemeFooter{
 			HelpKey:         style.NewStyle().Foreground(style.Color("#FFFFFF")),
+			HelpDesc:        style.NewStyle().Foreground(style.Color("#8e8e8e")),
+			HelpSeparator:   style.NewStyle().Foreground(style.Color("#6272A4")),
 			DebugBackground: style.NewStyle().Background(style.Color("#FFC800")),
 		},
 		Flake:         makeLogEntity("#F1FA8C", '📁', true),

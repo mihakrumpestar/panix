@@ -222,6 +222,7 @@ func TestZoneAtLine(t *testing.T) {
 	ResetZones()
 
 	line := Mark("my-zone", "AB")
+
 	name := ZoneAtLine(line, 0)
 	if name != "my-zone" {
 		t.Errorf("ZoneAtLine(0) = %q, want %q", name, "my-zone")

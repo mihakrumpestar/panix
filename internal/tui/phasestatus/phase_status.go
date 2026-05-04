@@ -71,6 +71,7 @@ func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
 
 func colorToStyleColor(c color.Color) style.Color {
 	r, g, b, _ := c.RGBA()
+
 	return style.Color(fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8))
 }
 
@@ -133,6 +134,7 @@ func (p *PhaseStatus) Reset() {
 func (p *PhaseStatus) HandleMouseClick(msg render.MouseClickMsg) bool {
 	if p.pf.HandleMouseClick(msg) {
 		p.syncSelection()
+
 		return true
 	}
 
@@ -142,6 +144,7 @@ func (p *PhaseStatus) HandleMouseClick(msg render.MouseClickMsg) bool {
 func (p *PhaseStatus) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 	if p.pf.HandleNavigation(key, hasActiveInnerViewport) {
 		p.syncSelection()
+
 		return true
 	}
 

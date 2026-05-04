@@ -21,18 +21,19 @@ func buildLargeRows() [][]string {
 	rows := make([][]string, 50)
 	for i := range 50 {
 		rows[i] = []string{
-			fmt.Sprintf("%d", i+1), "✅",
+			strconv.Itoa(i + 1), "✅",
 			fmt.Sprintf("flake-%d", i%5), fmt.Sprintf("config-%d", i%10),
 			fmt.Sprintf("machine-%d", i), "x86_64", "done", "42",
 			"2024-01-01", "24.05", "6.1.0",
 		}
 	}
+
 	return rows
 }
 
 func buildLargeLipglossRows() []string {
 	return []string{
-		fmt.Sprintf("%d", 1), "✅", "flake-0", "config-0",
+		strconv.Itoa(1), "✅", "flake-0", "config-0",
 		"machine-0", "x86_64", "done", "42",
 		"2024-01-01", "24.05", "6.1.0",
 	}
@@ -100,7 +101,7 @@ func BenchmarkLipglossTable_Large(b *testing.B) {
 		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
 
 	for i := range 50 {
-		tbl.Row(fmt.Sprintf("%d", i+1), "✅",
+		tbl.Row(strconv.Itoa(i+1), "✅",
 			fmt.Sprintf("flake-%d", i%5), fmt.Sprintf("config-%d", i%10),
 			fmt.Sprintf("machine-%d", i), "x86_64", "done", "42",
 			"2024-01-01", "24.05", "6.1.0")
@@ -225,7 +226,7 @@ func BenchmarkLipglossTable_NoChange(b *testing.B) {
 		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
 
 	for i := range 50 {
-		tbl.Row(fmt.Sprintf("%d", i+1), "✅",
+		tbl.Row(strconv.Itoa(i+1), "✅",
 			fmt.Sprintf("flake-%d", i%5), fmt.Sprintf("config-%d", i%10),
 			fmt.Sprintf("machine-%d", i), "x86_64", "done", "42",
 			"2024-01-01", "24.05", "6.1.0")
@@ -268,7 +269,7 @@ func BenchmarkLipglossTable_SelectionChange(b *testing.B) {
 		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
 
 	for i := range 50 {
-		tbl.Row(fmt.Sprintf("%d", i+1), "✅",
+		tbl.Row(strconv.Itoa(i+1), "✅",
 			fmt.Sprintf("flake-%d", i%5), fmt.Sprintf("config-%d", i%10),
 			fmt.Sprintf("machine-%d", i), "x86_64", "done", "42",
 			"2024-01-01", "24.05", "6.1.0")

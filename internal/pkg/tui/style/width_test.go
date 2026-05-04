@@ -16,6 +16,10 @@ func TestCellWidth_Equivalence(t *testing.T) {
 		"",
 		"📋 📦 💻 📋 ⚙ ✗",
 		"nix build .#nixosConfigurations.machine",
+		// Multi-line: should return max line width, not sum
+		"line1\nline2longer\nline3",
+		"╭──────╮\n│ text │\n╰──────╯\n",
+		"short\nthis is a much longer line\nmid",
 	}
 
 	for _, tc := range tests {

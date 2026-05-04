@@ -121,7 +121,7 @@ func WithScrollbarReserve() Option {
 func WithBorder(borderColor color.Color) Option {
 	return func(m *Viewport) {
 		m.bordered = true
-	m.borderStyle = style.ColorToPrefix(borderColor)
+		m.borderStyle = style.ColorToPrefix(borderColor)
 		m.buildBorderStrings()
 	}
 }
@@ -312,12 +312,15 @@ var ErrLineOverWidth = errors.New("line exceeds ContentWidth")
 func (m *Viewport) SetContentLines(lines []string) {
 	if len(lines) == len(m.lines) {
 		same := true
+
 		for i := range lines {
 			if lines[i] != m.lines[i] {
 				same = false
+
 				break
 			}
 		}
+
 		if same {
 			return
 		}

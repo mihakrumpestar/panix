@@ -378,10 +378,10 @@ func TestTruncateToWidth(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := truncateToWidth(tc.input, tc.maxW)
+		got := truncateToWidth(tc.input, tc.maxW, false)
 
 		if got != tc.want {
-			t.Errorf("truncateToWidth(%q, %d) = %q, want %q", tc.input, tc.maxW, got, tc.want)
+			t.Errorf("truncateToWidth(%q, %d, false) = %q, want %q", tc.input, tc.maxW, got, tc.want)
 		}
 	}
 }
@@ -391,10 +391,126 @@ func TestTruncateToWidth_WithANSI(t *testing.T) {
 
 	// ANSI sequences should be preserved but not count toward width
 	colored := "\x1b[38;2;255;0;0mhello\x1b[m"
-	got := truncateToWidth(colored, 3)
+	got := truncateToWidth(colored, 3, false)
 
 	visible := stripANSI(got)
 	if visible != "hel" {
 		t.Errorf("truncateToWidth with ANSI visible = %q, want \"hel\"", visible)
+	}
+}
+
+func TestTruncateToWidth_Ellipsis(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		input string
+		maxW  int
+		want  string
+	}{
+		{"hello world", 8, "hello .."},
+		{"hello", 5, "hello"},
+		{"hello", 3, "h.."},
+		{"abcdef", 4, "ab.."},
+		{"hi", 4, "hi"},
+		{"", 5, ""},
+	}
+
+	for _, tc := range cases {
+		got := truncateToWidth(tc.input, tc.maxW, true)
+
+		if got != tc.want {
+			t.Errorf("truncateToWidth(%q, %d, true) = %q, want %q", tc.input, tc.maxW, got, tc.want)
+		}
+	}
+}
+
+func TestTruncateToWidth_EllipsisWithANSI(t *testing.T) {
+	t.Parallel()
+
+	colored := "\x1b[38;2;255;0;0mhello world\x1b[m"
+	got := truncateToWidth(colored, 8, true)
+
+	visible := stripANSI(got)
+	if visible != "hello .." {
+		t.Errorf("truncateToWidth with ANSI+ellipsis visible = %q, want \"hello ..\"", visible)
+	}
+}
+
+func TestStyle_TruncateEllipsis(t *testing.T) {
+	t.Parallel()
+
+	s := NewStyle().Width(5).MaxWidth(5).TruncateEllipsis(true)
+	got := s.Render("hello world")
+	visible := stripANSI(got)
+
+	if visible != "hel.." {
+		t.Errorf("TruncateEllipsis(true) visible = %q, want \"hel..\"", visible)
+	}
+}
+
+// maxLineWidth returns the maximum CellWidth across all lines in s.
+func maxLineWidth(s string) int {
+	maxW := 0
+	for line := range strings.SplitSeq(s, "\n") {
+		if w := CellWidth(line); w > maxW {
+			maxW = w
+		}
+	}
+
+	return maxW
+}
+
+func TestWidthWithMaxWidth_ContentClipped(t *testing.T) {
+	t.Parallel()
+
+	s := NewStyle().Width(20).MaxWidth(10)
+	got := s.Render("hello world and more")
+
+	if w := maxLineWidth(got); w > 10 {
+		t.Errorf("Width(20).MaxWidth(10) produced width %d, want <= 10: %q", w, stripANSI(got))
+	}
+}
+
+func TestWidthWithMaxWidth_ShortContentNotOverPadded(t *testing.T) {
+	t.Parallel()
+
+	s := NewStyle().Width(30).MaxWidth(10)
+	got := s.Render("hi")
+
+	if w := maxLineWidth(got); w > 10 {
+		t.Errorf("Width(30).MaxWidth(10) on short content produced width %d, want <= 10: %q", w, stripANSI(got))
+	}
+}
+
+func TestWidthWithMaxWidth_WithBorder(t *testing.T) {
+	t.Parallel()
+
+	s := NewStyle().Width(20).MaxWidth(10).Border(RoundedBorder())
+	got := s.Render("hello world and more")
+
+	if w := maxLineWidth(got); w > 10 {
+		t.Errorf("Width(20).MaxWidth(10) with border produced width %d, want <= 10: %q", w, stripANSI(got))
+	}
+}
+
+func TestWidthWithMaxWidth_WithPadding(t *testing.T) {
+	t.Parallel()
+
+	s := NewStyle().Width(20).MaxWidth(10).Padding(0, 1)
+	got := s.Render("hello world and more")
+
+	if w := maxLineWidth(got); w > 10 {
+		t.Errorf("Width(20).MaxWidth(10) with padding produced width %d, want <= 10: %q", w, stripANSI(got))
+	}
+}
+
+func TestWidthWithMaxWidth_EqualValues(t *testing.T) {
+	t.Parallel()
+
+	s := NewStyle().Width(10).MaxWidth(10)
+	got := s.Render("hi")
+
+	if w := maxLineWidth(got); w != 10 {
+		t.Errorf("Width(10).MaxWidth(10) on short content produced width %d, want 10: %q", w, stripANSI(got))
 	}
 }

@@ -9,16 +9,16 @@ import (
 )
 
 type Program struct {
-	model      Model
-	terminal    *Terminal
-	prevLines   []string
-	outBuf      []byte
-	msgCh       chan Msg
-	stopCh      chan struct{}
-	width       int
-	height      int
+	model     Model
+	terminal  *Terminal
+	prevLines []string
+	outBuf    []byte
+	msgCh     chan Msg
+	stopCh    chan struct{}
+	width     int
+	height    int
 	raw       bool
-	mu          sync.Mutex
+	mu        sync.Mutex
 }
 
 type ProgramOption func(*Program)
@@ -169,6 +169,7 @@ func (p *Program) renderFrame() {
 	if !p.raw && len(diffs) == 0 && len(lines) >= len(p.prevLines) {
 		// Nothing changed — update prevLines and return
 		p.updatePrevLines(lines)
+
 		return
 	}
 

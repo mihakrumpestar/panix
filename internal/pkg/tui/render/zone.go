@@ -98,6 +98,7 @@ func Mark(name string, view string) string {
 	end := "\x1b[/" + strconv.Itoa(int(id)) + "z"
 
 	estimatedLen := len(view) + (len(start)+len(end))*max(1, strings.Count(view, "\n")+1)
+
 	var b strings.Builder
 	b.Grow(estimatedLen)
 
@@ -110,6 +111,7 @@ func Mark(name string, view string) string {
 		b.WriteString(start)
 		b.WriteString(line)
 		b.WriteString(end)
+
 		first = false
 	}
 

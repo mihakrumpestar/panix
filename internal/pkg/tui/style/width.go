@@ -7,15 +7,19 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// CellWidth returns the terminal cell width of a string, accounting for ANSI
-// escape sequences (zero width) and grapheme clusters with proper width
-// (emoji ZWJ sequences, skin tone modifiers, etc.).
+// CellWidth returns the maximum terminal cell width across all lines in a
+// string, accounting for ANSI escape sequences (zero width) and grapheme
+// clusters with proper width (emoji ZWJ sequences, skin tone modifiers, CJK
+// wide chars, etc.). For single-line strings this is equivalent to the total
+// visible width. For multi-line strings it returns the widest line, matching
+// lipgloss.Width behavior.
 //
 // Fast paths:
 //   - ASCII printable chars (0x20-0x7E): counted as width 1 without uniseg
 //   - Zero-copy []byte via unsafe.Slice (avoids O(n²) []byte(str[pos:]) copies)
 func CellWidth(str string) int {
 	width := 0
+	maxWidth := 0
 	pos := 0
 	gs := -1
 
@@ -43,6 +47,12 @@ func CellWidth(str string) int {
 			pos = skipANSI(str, pos)
 		case '\n', '\r':
 			gs = -1
+
+			if width > maxWidth {
+				maxWidth = width
+			}
+
+			width = 0
 			pos++
 		default:
 			// Non-ASCII: use uniseg for proper grapheme cluster handling
@@ -55,7 +65,11 @@ func CellWidth(str string) int {
 		}
 	}
 
-	return width
+	if width > maxWidth {
+		maxWidth = width
+	}
+
+	return maxWidth
 }
 
 // skipANSI skips a complete ANSI escape sequence starting at pos (which points

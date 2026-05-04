@@ -26,28 +26,28 @@ type Table struct {
 	borderLeft   bool
 	borderColumn bool
 
-	selectedIndex  int
-	selBg          color.Color
-	selBgPrefix    string
-	zonePrefix     string
+	selectedIndex int
+	selBg         color.Color
+	selBgPrefix   string
+	zonePrefix    string
 
 	colWidths       []int
 	colWidthsCached bool
 
-	rowCache         []string
-	rowCacheData     [][]string
-	rowCacheSelIdx   int
-	rowCacheWidth    int
+	rowCache          []string
+	rowCacheData      [][]string
+	rowCacheSelIdx    int
+	rowCacheWidth     int
 	rowCacheColWidths []int
 }
 
 func New() *Table {
 	return &Table{
 		borderTop:     true,
-		borderRight:  true,
+		borderRight:   true,
 		borderBottom:  true,
 		borderLeft:    true,
-		borderColumn: true,
+		borderColumn:  true,
 		selectedIndex: -1,
 	}
 }
@@ -393,7 +393,6 @@ func (t *Table) renderRow(cells []string, colWidths []int,
 	// selection background. Since Style.Render emits \x1b[m resets that
 	// clear the bg, we re-emit selBgPrefix after every reset inside
 	// the block so the bg spans uninterrupted.
-
 	selBgPrefix := ""
 	if rowIdx >= 0 && rowIdx == t.selectedIndex {
 		selBgPrefix = t.selBgPrefix
@@ -425,7 +424,7 @@ func (t *Table) renderRow(cells []string, colWidths []int,
 		if t.wrap {
 			sty = sty.Width(w)
 		} else {
-			sty = sty.Width(w).MaxWidth(w)
+			sty = sty.Width(w).MaxWidth(w).TruncateEllipsis(true)
 		}
 
 		inner.WriteString(sty.Render(cell))
@@ -525,6 +524,7 @@ func (t *Table) distributeWidths(numCols int) []int {
 
 	for i := range numCols {
 		sty := t.columnStyle(i)
+
 		fw := sty.GetWidth()
 		if fw > 0 {
 			fixedWidths[i] = fw
@@ -543,10 +543,8 @@ func (t *Table) distributeWidths(numCols int) []int {
 	}
 
 	borderCharsWidth := t.totalBorderWidth(numCols)
-	availableWidth := t.width - borderCharsWidth
-	if availableWidth < 0 {
-		availableWidth = 0
-	}
+
+	availableWidth := max(t.width-borderCharsWidth, 0)
 
 	distributed := make([]int, numCols)
 	copy(distributed, contentWidths)
@@ -562,10 +560,7 @@ func (t *Table) distributeWidths(numCols int) []int {
 	}
 
 	// Calculate how much space the non-fixed columns need/have
-	nonFixedAvailable := availableWidth - fixedTotal
-	if nonFixedAvailable < 0 {
-		nonFixedAvailable = 0
-	}
+	nonFixedAvailable := max(availableWidth-fixedTotal, 0)
 
 	nonFixedContent := 0
 
@@ -583,6 +578,7 @@ func (t *Table) distributeWidths(numCols int) []int {
 		// Expand non-fixed columns to fill remaining width
 		for {
 			total := 0
+
 			for i := range numCols {
 				if fixedWidths[i] == 0 {
 					total += distributed[i]
@@ -649,6 +645,7 @@ func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []
 	// Phase 1: Shrink columns that are > half the available width (skip fixed)
 	for {
 		total := 0
+
 		for i, w := range distributed {
 			if fixedWidths[i] == 0 {
 				total += w
@@ -681,15 +678,13 @@ func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []
 
 	for i := range numCols {
 		if fixedWidths[i] == 0 {
-			medians[i] = contentWidths[i] / 2
-			if medians[i] < 1 {
-				medians[i] = 1
-			}
+			medians[i] = max(contentWidths[i]/2, 1)
 		}
 	}
 
 	for {
 		total := 0
+
 		for i, w := range distributed {
 			if fixedWidths[i] == 0 {
 				total += w
@@ -723,6 +718,7 @@ func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []
 	// Phase 3: Shrink the biggest non-fixed columns overall
 	for {
 		total := 0
+
 		for i, w := range distributed {
 			if fixedWidths[i] == 0 {
 				total += w

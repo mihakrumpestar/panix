@@ -25,44 +25,46 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 
 	fullFrame := []string{
 		"=== Header ===",       // 0
-		"",                      // 1
+		"",                     // 1
 		"=== Stats Table ===",  // 2
-		"",                      // 3
+		"",                     // 3
 		"row1 | data1",         // 4
 		"row2 | data2",         // 5
-		"",                      // 6
+		"",                     // 6
 		"=== Phase Status ===", // 7
-		"",                      // 8
+		"",                     // 8
 		"INSPECT  BUILD  DONE", // 9
 		"   1      2      3",   // 10
-		"",                      // 11
+		"",                     // 11
 		"=== Build Logs ===",   // 12
-		"",                      // 13
+		"",                     // 13
 		"flake1 (5.23s)",       // 14
 		"  machine (2.50s)",    // 15
-		"===",                   // 16
+		"===",                  // 16
 	}
 
 	// After restart: some lines match fullFrame by coincidence
 	shortFrame := []string{
-		"=== Header ===",       // 0  - SAME
-		"",                      // 1  - SAME
-		"=== Stats Table ===",  // 2  - SAME
-		"",                      // 3  - SAME
-		"",                      // 4  - DIFFERENT
-		"",                      // 5  - DIFFERENT
-		"",                      // 6  - SAME
-		"=== Build Logs ===",   // 7  - DIFFERENT
-		"",                      // 8  - SAME
-		"",                      // 9  - DIFFERENT
-		"",                      // 10 - DIFFERENT
-		"",                      // 11 - SAME
-		"=== Build Logs ===",   // 12 - SAME
-		"",                      // 13 - SAME
+		"=== Header ===",      // 0  - SAME
+		"",                    // 1  - SAME
+		"=== Stats Table ===", // 2  - SAME
+		"",                    // 3  - SAME
+		"",                    // 4  - DIFFERENT
+		"",                    // 5  - DIFFERENT
+		"",                    // 6  - SAME
+		"=== Build Logs ===",  // 7  - DIFFERENT
+		"",                    // 8  - SAME
+		"",                    // 9  - DIFFERENT
+		"",                    // 10 - DIFFERENT
+		"",                    // 11 - SAME
+		"=== Build Logs ===",  // 12 - SAME
+		"",                    // 13 - SAME
 	}
 
-	var prevLines []string
-	var buf []byte
+	var (
+		prevLines []string
+		buf       []byte
+	)
 
 	// Step 1: initial full frame (prevLines empty → all lines are diffs)
 	diffs1 := DiffLines(fullFrame, prevLines)
@@ -72,13 +74,16 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	// Step 2: shrink to short frame — prevLines must be cleared so
 	// DiffLines returns ALL lines as changed
 	diffs2 := DiffLines(shortFrame, prevLines)
+
 	prevCount2 := len(prevLines)
 	if len(shortFrame) < prevCount2 {
 		prevLines = prevLines[:0]
 		diffs2 = DiffLines(shortFrame, prevLines)
 	}
+
 	buf = RenderLines(buf[:0], diffs2, shortFrame, prevCount2, terminalHeight)
 	out2 := string(buf)
+
 	t.Logf("Step 2 shrink: %d lines vs prev %d, %d diffs",
 		len(shortFrame), prevCount2, len(diffs2))
 	updatePrev(&prevLines, shortFrame)
@@ -96,6 +101,7 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	// at their original row positions
 	for i := len(shortFrame); i < len(fullFrame); i++ {
 		oldPrefix := "\x1b[" + itoa(i+1) + ";1H"
+
 		oldLine := oldPrefix + fullFrame[i]
 		if strings.Contains(out2, oldLine) {
 			t.Errorf("stale fullFrame[%d]=%q at row %d leaked", i, fullFrame[i], i+1)
@@ -110,9 +116,11 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	if len(fullFrame) < prevCount3 {
 		prevLines = prevLines[:0]
 	}
+
 	diffs3 := DiffLines(fullFrame, prevLines)
 	buf = RenderLines(buf[:0], diffs3, fullFrame, prevCount3, terminalHeight)
 	out3 := string(buf)
+
 	t.Logf("Step 3 grow-back: %d lines vs prev %d, %d diffs",
 		len(fullFrame), prevCount3, len(diffs3))
 	updatePrev(&prevLines, fullFrame)
@@ -122,6 +130,7 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 		if i < len(shortFrame) && line == shortFrame[i] {
 			continue // same as short → already on terminal from step 2
 		}
+
 		prefix := "\x1b[" + itoa(i+1) + ";1H"
 		if !strings.Contains(out3, prefix+line) {
 			t.Errorf("grow-back missing line %d at row %d: %q%q",
@@ -159,7 +168,9 @@ func TestShrinkThenGrow(t *testing.T) {
 	var prevLines []string
 
 	diffs1 := DiffLines(fullFrame, prevLines)
+
 	var buf []byte
+
 	buf = RenderLines(buf[:0], diffs1, fullFrame, 0, terminalHeight)
 	updatePrev(&prevLines, fullFrame)
 
@@ -189,6 +200,7 @@ func TestShrinkThenGrow(t *testing.T) {
 
 	for i := range fullFrame {
 		want := fullFrame[i]
+
 		prefix := "\x1b[" + itoa(i+1) + ";1H"
 		if !strings.Contains(output3, prefix+want) {
 			t.Errorf("Render3 line %d not positioned at row %d. Expected %q%q in output",
@@ -243,7 +255,9 @@ func TestRenderFrameWithANSIContent(t *testing.T) {
 	var prevLines []string
 
 	diffs1 := DiffLines(ansiFull, prevLines)
+
 	var buf []byte
+
 	buf = RenderLines(buf[:0], diffs1, ansiFull, 0, terminalHeight)
 	updatePrev(&prevLines, ansiFull)
 
@@ -329,6 +343,7 @@ func TestDiffLinesPartialIdentical(t *testing.T) {
 	if len(diffs) != 2 {
 		t.Errorf("expected 2 diffs, got %d", len(diffs))
 	}
+
 	for _, d := range diffs {
 		if d.Y != 1 && d.Y != 3 {
 			t.Errorf("unexpected diff at line %d", d.Y)
@@ -342,6 +357,7 @@ func updatePrev(prevLines *[]string, lines []string) {
 	} else {
 		*prevLines = make([]string, len(lines))
 	}
+
 	copy(*prevLines, lines)
 }
 
@@ -349,8 +365,10 @@ func itoa(n int) string {
 	if n < 10 {
 		return string([]byte{byte('0' + n)})
 	}
+
 	if n < 100 {
 		return string([]byte{byte('0' + n/10), byte('0' + n%10)})
 	}
+
 	return "BIG"
 }

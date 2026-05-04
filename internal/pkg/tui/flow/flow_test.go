@@ -84,7 +84,7 @@ func TestPhaseFlow_MultiplePhases_EvenDistribution(t *testing.T) {
 
 	visible := stripANSI(got)
 
-	for _, line := range strings.Split(visible, "\n") {
+	for line := range strings.SplitSeq(visible, "\n") {
 		if line == "" {
 			continue
 		}
@@ -242,6 +242,7 @@ func TestPhaseFlow_Selection_LastPhaseNavigable(t *testing.T) {
 	// Navigate to the last phase (DONE)
 	pf.HandleNavigation("right", false) // A
 	pf.HandleNavigation("right", false) // B
+
 	if !pf.HandleNavigation("right", false) {
 		t.Error("Should be able to navigate to DONE")
 	}
@@ -327,9 +328,9 @@ func TestDetermineState(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		data   PhaseData
-		want   PhaseState
-		name   string
+		data PhaseData
+		want PhaseState
+		name string
 	}{
 		{PhaseData{}, Idle, "empty"},
 		{PhaseData{Running: 1}, StateRunning, "running"},
@@ -352,6 +353,7 @@ func TestDetermineState(t *testing.T) {
 
 func stripANSI(s string) string {
 	var b strings.Builder
+
 	i := 0
 
 	for i < len(s) {

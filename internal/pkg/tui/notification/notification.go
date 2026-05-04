@@ -1,4 +1,4 @@
-package notifications
+package notification
 
 import (
 	"fmt"
@@ -69,18 +69,19 @@ func (n *Notification) Clear() {
 	n.started = time.Time{}
 }
 
-func (n *Notification) View(baseStyle style.Style) (string, int) {
+func (n *Notification) View(baseStyle style.Style) string {
 	if n.isExpired() {
-		return "", 0
+		return ""
 	}
 
 	fg := n.fadedColor()
 	box := style.NewStyle().
 		Border(style.RoundedBorder()).
 		BorderForeground(fg).
+		Padding(0, 1).
 		Render(n.render(baseStyle))
 
-	return box + "\n", style.CellWidth(box)
+	return box
 }
 
 func (n *Notification) render(baseStyle style.Style) string {

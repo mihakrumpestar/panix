@@ -73,6 +73,7 @@ func TestANSIStyle_EmptyString(t *testing.T) {
 // stripANSI removes all ANSI escape sequences from a string.
 func stripANSI(s string) string {
 	var b strings.Builder
+
 	i := 0
 
 	for i < len(s) {

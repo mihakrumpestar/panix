@@ -15,6 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/profile"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
@@ -86,7 +87,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
 
-	mdl.footer = footer.New(mdl.keyDefs(), conf)
+	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 
 	program := render.NewProgram(mdl, render.WithRaw())
 
@@ -212,7 +213,7 @@ func (m *model) Render() []string {
 	mainContent := m.viewMainContent()
 	footer := m.footer.View(m.dimensions.Width, m.conf.ColorScheme)
 
-	headerFooterHeight := header.Height + footer.Height
+	headerFooterHeight := header.Height + style.CountLines(footer)
 
 	m.contentVersion++
 
@@ -227,7 +228,7 @@ func (m *model) Render() []string {
 
 	builder.WriteString(header.Content)
 	builder.WriteString(main)
-	builder.WriteString(footer.Content)
+	builder.WriteString(footer)
 
 	renderStr := builder.String()
 
@@ -297,7 +298,7 @@ func (m *model) viewMainContent() string {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := fmt.Sprintf("terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width)
 		debugContent += fmt.Sprintf("header - h: %d\n", m.header.View(m.dimensions.Width, m.conf.ColorScheme).Height)
-		debugContent += fmt.Sprintf("footer - h: %d\n", m.footer.View(m.dimensions.Width, m.conf.ColorScheme).Height)
+		debugContent += fmt.Sprintf("footer - h: %d\n", style.CountLines(m.footer.View(m.dimensions.Width, m.conf.ColorScheme)))
 		debugContent += m.spinners.Debug()
 		debugContent += resetable.viewports.Debug()
 		builder.WriteString(debugHeader + debugContent)

@@ -81,6 +81,7 @@ func BenchmarkRenderPipe(b *testing.B) {
 	copy(prevLines, lines)
 
 	var outBuf []byte
+
 	outBuf = make([]byte, 0, 8192)
 
 	b.ResetTimer()
@@ -129,6 +130,7 @@ func BenchmarkRenderPipeNoChange(b *testing.B) {
 	copy(prevLines, lines)
 
 	var outBuf []byte
+
 	outBuf = make([]byte, 0, 8192)
 
 	b.ResetTimer()
@@ -208,6 +210,7 @@ func BenchmarkRenderLinesFullChange(b *testing.B) {
 	}
 
 	var outBuf []byte
+
 	outBuf = make([]byte, 0, 8192)
 
 	b.ResetTimer()
@@ -259,6 +262,7 @@ func BenchmarkRenderLinesQuarterChange(b *testing.B) {
 	}
 
 	var outBuf []byte
+
 	outBuf = make([]byte, 0, 8192)
 
 	b.ResetTimer()
@@ -273,6 +277,7 @@ func BenchmarkBubbleteaRenderLinesQuarterChange(b *testing.B) {
 	content := makeANSIContent(width, height)
 
 	var termBuf bytes.Buffer
+
 	renderer := uv.NewTerminalRenderer(&termBuf, []string{"TERM=xterm-256color"})
 	renderer.SetScrollOptim(true)
 
@@ -290,6 +295,7 @@ func BenchmarkBubbleteaRenderLinesQuarterChange(b *testing.B) {
 		for y := 0; y < height; y += 4 {
 			changeSS.Draw(screen, image.Rect(0, y, width, y+1))
 		}
+
 		renderer.Render(screen.RenderBuffer)
 		termBuf.Reset()
 		ss.Draw(screen, screen.Bounds())
@@ -331,7 +337,7 @@ func BenchmarkZoneAtLine(b *testing.B) {
 type mouseMsg struct{ x, y int }
 
 func (m mouseMsg) Mouse() tea.Mouse { return tea.Mouse{X: m.x, Y: m.y} }
-func (m mouseMsg) String() string    { return fmt.Sprintf("mouse(%d,%d)", m.x, m.y) }
+func (m mouseMsg) String() string   { return fmt.Sprintf("mouse(%d,%d)", m.x, m.y) }
 
 func BenchmarkBubbleteaZoneAtLine(b *testing.B) {
 	marked := makeZoneContent(200, 50)

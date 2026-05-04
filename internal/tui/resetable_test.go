@@ -185,7 +185,7 @@ func newTestModel(t *testing.T) *model {
 		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
 		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
-	mdl.footer = footer.New(mdl.keyDefs(), conf)
+	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 
 	return mdl
 }

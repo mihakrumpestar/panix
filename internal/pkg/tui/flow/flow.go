@@ -97,6 +97,7 @@ func (pf *PhaseFlow) Width(w int) *PhaseFlow {
 	if w == pf.width {
 		return pf
 	}
+
 	pf.width = w
 	pf.cacheResult = ""
 

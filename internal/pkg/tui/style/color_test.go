@@ -242,6 +242,7 @@ func intToStr(n int) string {
 	}
 
 	digits := []byte{}
+
 	neg := n < 0
 	if neg {
 		n = -n

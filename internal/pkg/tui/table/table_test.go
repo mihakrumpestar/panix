@@ -144,7 +144,7 @@ func TestTable_WidthExpandsToFill(t *testing.T) {
 	got := tbl.String()
 
 	visible := stripANSI(got)
-	for _, line := range strings.Split(visible, "\n") {
+	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth != 30 {
 			t.Errorf("Line width = %d, want 30. Line: %q", lineWidth, line)
@@ -162,7 +162,7 @@ func TestTable_WidthShrinksToShrink(t *testing.T) {
 	got := tbl.String()
 
 	visible := stripANSI(got)
-	for _, line := range strings.Split(visible, "\n") {
+	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth > 14 {
 			t.Errorf("Line too wide: width=%d, line: %q", lineWidth, line)
@@ -179,7 +179,7 @@ func TestTable_WidthNoBorder(t *testing.T) {
 	got := tbl.String()
 
 	visible := stripANSI(got)
-	for _, line := range strings.Split(visible, "\n") {
+	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth != 20 {
 			t.Errorf("Line width = %d, want 20. Line: %q", lineWidth, line)
@@ -237,7 +237,7 @@ func TestTable_WrapFalse_Truncates(t *testing.T) {
 	got := tbl.String()
 
 	visible := stripANSI(got)
-	for _, line := range strings.Split(visible, "\n") {
+	for line := range strings.SplitSeq(visible, "\n") {
 		content := strings.Trim(line, "│ ")
 		if content == "abcdefghijXYZ" {
 			t.Errorf("Content should have been truncated, got: %q", content)
@@ -422,16 +422,17 @@ func TestTable_SelectionBackgroundNoOuterBorderBg(t *testing.T) {
 	got := tbl.String()
 
 	bgPrefix := "\x1b[48;2;51;51;51m"
-	lines := strings.Split(got, "\n")
-	for _, line := range lines {
+
+	lines := strings.SplitSeq(got, "\n")
+	for line := range lines {
 		visible := stripANSI(line)
 		if !strings.Contains(visible, "x") || !strings.Contains(visible, "y") {
 			continue
 		}
 
 		// The bg prefix must NOT appear before the left border │
-		leftBorderIdx := strings.Index(line, "│")
-		if leftBorderIdx >= 0 && strings.Contains(line[:leftBorderIdx], bgPrefix) {
+		before, _, ok := strings.Cut(line, "│")
+		if ok && strings.Contains(before, bgPrefix) {
 			t.Errorf("Selection bg must not appear before left border:\n%s", line)
 		}
 
@@ -464,6 +465,7 @@ func TestTable_SelectionBackgroundWithFgColor(t *testing.T) {
 	// re-emitted after each cell's reset so the bg continues.
 	lines := strings.Split(got, "\n")
 	selLine := ""
+
 	for _, line := range lines {
 		if strings.Contains(stripANSI(line), "x") && strings.Contains(stripANSI(line), "y") {
 			selLine = line
@@ -479,6 +481,7 @@ func TestTable_SelectionBackgroundWithFgColor(t *testing.T) {
 	// Count occurrences of the bg prefix — should appear at least twice
 	// (after left border + after first cell reset + possibly after inner border)
 	bgPrefix := "\x1b[48;2;51;51;51m"
+
 	count := strings.Count(selLine, bgPrefix)
 	if count < 2 {
 		t.Errorf("Selection bg should be re-emitted after cell resets, found %d occurrences in:\n%s", count, selLine)
@@ -493,6 +496,7 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 
 	// Simulate click on Y line that has no zone markers — should deselect and return true
 	render.SetCurrentLines([]string{"no zones here", "another line"})
+
 	changed := tbl.HandleMouseClick(render.MouseClickMsg{X: 0, Y: 0})
 
 	if !changed {
@@ -590,7 +594,7 @@ func TestTable_FixedWidthColumns(t *testing.T) {
 	got := tbl.String()
 
 	visible := stripANSI(got)
-	for _, line := range strings.Split(visible, "\n") {
+	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth != 20 {
 			t.Errorf("Line width = %d, want 20. Line: %q", lineWidth, line)
@@ -634,10 +638,10 @@ func TestTable_FixedWidthRespected(t *testing.T) {
 	got := tbl.String()
 
 	visible := stripANSI(got)
-	lines := strings.Split(visible, "\n")
+	lines := strings.SplitSeq(visible, "\n")
 
 	// Data row should have the index column at width 4
-	for _, line := range lines {
+	for line := range lines {
 		if strings.Contains(line, "1") && strings.Contains(line, "test") {
 			// The "1" should be right-aligned in a 4-char column
 			if !strings.Contains(line, "   1") {
@@ -732,9 +736,9 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 	result := tbl.String()
 
 	visible := stripANSI(result)
-	lines := strings.Split(visible, "\n")
+	lines := strings.SplitSeq(visible, "\n")
 
-	for _, line := range lines {
+	for line := range lines {
 		if line == "" {
 			continue
 		}
@@ -748,6 +752,7 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 
 func stripANSI(s string) string {
 	var b strings.Builder
+
 	i := 0
 
 	for i < len(s) {

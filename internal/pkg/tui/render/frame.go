@@ -92,6 +92,7 @@ func RenderLines(buf []byte, diffs []ChangedLine, lines []string, prevLineCount 
 // RenderLinesTo writes changed lines directly to the terminal.
 func RenderLinesTo(out *os.File, diffs []ChangedLine, lines []string, prevLineCount int, terminalHeight int) {
 	var buf []byte
+
 	buf = RenderLines(buf[:0], diffs, lines, prevLineCount, terminalHeight)
 
 	if len(buf) > 0 {
