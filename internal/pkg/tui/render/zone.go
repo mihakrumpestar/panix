@@ -194,6 +194,7 @@ func zoneIDAtCol(line string, targetCol int) uint16 {
 				pos++
 			}
 
+			trailingParamStart := pos
 			for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
 				pos++
 			}
@@ -204,11 +205,15 @@ func zoneIDAtCol(line string, targetCol int) uint16 {
 
 			finalByte := line[pos]
 			params := line[paramStart:intermediateStart]
+			intermediates := line[intermediateStart:trailingParamStart]
+			trailingParams := line[trailingParamStart:pos]
 			pos++
 
+			// Zone open marker: \x1b[<id>z
+			// Zone close marker: \x1b[/<id>z  ('/' is an ANSI intermediate byte)
 			if finalByte == 'z' {
-				if len(params) > 0 && params[0] == '/' {
-					id, err := strconv.ParseUint(params[1:], 10, 16)
+				if len(intermediates) > 0 && intermediates[0] == '/' {
+					id, err := strconv.ParseUint(trailingParams, 10, 16)
 					if err == nil {
 						if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1] == uint16(id) {
 							zoneStack = zoneStack[:len(zoneStack)-1]

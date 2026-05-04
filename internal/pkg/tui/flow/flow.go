@@ -197,8 +197,7 @@ func (pf *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) b
 }
 
 // HandleMouseClick processes a mouse click. Returns true if the selection
-// changed. Clicking a selected phase toggles it off. Clicking outside any
-// phase zone deselects.
+// changed. Clicking outside any phase zone deselects.
 func (pf *PhaseFlow) HandleMouseClick(msg render.MouseClickMsg) bool {
 	if len(pf.phases) == 0 {
 		return false
@@ -224,15 +223,14 @@ func (pf *PhaseFlow) HandleMouseClick(msg render.MouseClickMsg) bool {
 
 		zoneName := fmt.Sprintf("%s-%d", pf.zonePrefix, idx)
 		if render.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
-			if pf.selectedIndex == idx {
-				pf.selectedIndex = -1
-			} else {
+			if pf.selectedIndex != idx {
 				pf.selectedIndex = idx
+				pf.cacheResult = ""
+
+				return true
 			}
 
-			pf.cacheResult = ""
-
-			return true
+			return false
 		}
 	}
 
@@ -328,27 +326,34 @@ func (pf *PhaseFlow) buildCell(name string, data PhaseData, colWidth int, isSele
 	state := determineState(data)
 	pill := pf.createAnimatedGradient(name, state)
 
-	phaseName := style.NewStyle().Width(colWidth).Align(style.Center).Render(pill)
+	pillWidth := style.CellWidth(pill)
 
-	statusLine := pf.buildStatusLine(data)
+	statusContent := pf.buildStatusLine(data, isSelected)
 
 	if isSelected {
-		statusLine = style.NewStyle().
-			Background(pf.styles.SelectionBg).
-			Width(colWidth).
-			Align(style.Center).
-			Render(statusLine)
-	} else {
-		statusLine = style.NewStyle().Width(colWidth).Align(style.Center).Render(statusLine)
+		contentWidth := style.CellWidth(statusContent)
+		pad := pillWidth - contentWidth
+		if pad > 0 {
+			left := pad / 2
+			right := pad - left
+			bgSpace := style.NewStyle().Background(pf.styles.SelectionBg).Render(" ")
+			statusContent = strings.Repeat(bgSpace, left) + statusContent + strings.Repeat(bgSpace, right)
+		}
 	}
 
-	content := phaseName + "\n" + statusLine
+	// Build both rows at pillWidth so the zone matches the visual pill span.
+	pillRow := style.NewStyle().Width(pillWidth).Align(style.Center).Render(pill)
+	statusRow := style.NewStyle().Width(pillWidth).Align(style.Center).Render(statusContent)
 
+	cell := pillRow + "\n" + statusRow
 	if pf.zonePrefix != "" {
-		content = render.Mark(fmt.Sprintf("%s-%d", pf.zonePrefix, idx), content)
+		cell = render.Mark(fmt.Sprintf("%s-%d", pf.zonePrefix, idx), cell)
 	}
 
-	return content
+	// Center the zoned cell into the column.
+	cell = style.NewStyle().Width(colWidth).Align(style.Center).Render(cell)
+
+	return cell
 }
 
 func (pf *PhaseFlow) createAnimatedGradient(text string, state PhaseState) string {
@@ -384,7 +389,25 @@ func (pf *PhaseFlow) createAnimatedGradient(text string, state PhaseState) strin
 	return pf.styles.Pill.Background(style.Color(finalColor.Hex())).Render(text)
 }
 
-func (pf *PhaseFlow) buildStatusLine(data PhaseData) string {
+func (pf *PhaseFlow) buildStatusLine(data PhaseData, isSelected bool) string {
+	if isSelected {
+		selBg := pf.styles.SelectionBg
+		sep := style.NewStyle().Background(selBg).Render("/")
+
+		var parts []string
+		if data.Running > 0 {
+			parts = append(parts, pf.styles.StatusRunning.Background(selBg).Render(strconv.Itoa(data.Running)))
+		}
+		if data.Failed > 0 {
+			parts = append(parts, pf.styles.StatusFailed.Background(selBg).Render(strconv.Itoa(data.Failed)))
+		}
+		if data.Done > 0 {
+			parts = append(parts, pf.styles.StatusDone.Background(selBg).Render(strconv.Itoa(data.Done)))
+		}
+
+		return strings.Join(parts, sep)
+	}
+
 	var parts []string
 
 	if data.Running > 0 {

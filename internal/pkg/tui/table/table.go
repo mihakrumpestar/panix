@@ -174,9 +174,9 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 }
 
 // HandleMouseClick checks if a mouse click landed on a data row and
-// updates the selection accordingly. Clicking an already-selected row
-// deselects it. Clicking outside any row zone deselects the current
-// selection. Returns true if the selection state was changed.
+// updates the selection accordingly. Clicking outside any row zone
+// deselects the current selection. Returns true if the selection state
+// was changed.
 func (t *Table) HandleMouseClick(msg render.MouseClickMsg) bool {
 	if t.zonePrefix == "" || len(t.rows) == 0 {
 		return false
@@ -196,13 +196,13 @@ func (t *Table) HandleMouseClick(msg render.MouseClickMsg) bool {
 	for idx := range len(t.rows) {
 		zoneName := fmt.Sprintf("%s-%d", t.zonePrefix, idx)
 		if render.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
-			if t.selectedIndex == idx {
-				t.selectedIndex = -1
-			} else {
+			if t.selectedIndex != idx {
 				t.selectedIndex = idx
+
+				return true
 			}
 
-			return true
+			return false
 		}
 	}
 

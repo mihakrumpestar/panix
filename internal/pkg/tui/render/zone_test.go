@@ -247,6 +247,27 @@ func TestCurrentLines(t *testing.T) {
 	}
 }
 
+func TestZoneAtLineOutside(t *testing.T) {
+	ResetZones()
+
+	// Mark a short zone, pad it to simulate centering in a wider column.
+	marked := Mark("padded", "AB")
+	padded := "   " + marked + "   "
+
+	// Zone should be active only at cols 3-4 (the "AB" content)
+	if name := ZoneAtLine(padded, 3); name != "padded" {
+		t.Errorf("ZoneAtLine(3) = %q, want %q", name, "padded")
+	}
+
+	if name := ZoneAtLine(padded, 0); name != "" {
+		t.Errorf("ZoneAtLine(0) = %q, want empty (before zone)", name)
+	}
+
+	if name := ZoneAtLine(padded, 6); name != "" {
+		t.Errorf("ZoneAtLine(6) = %q, want empty (after zone)", name)
+	}
+}
+
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
