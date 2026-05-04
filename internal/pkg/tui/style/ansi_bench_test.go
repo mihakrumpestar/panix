@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func BenchmarkRender_SingleLine(b *testing.B) {
+func Benchmark__Render_SingleLine(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#FF79C6"))
 	ansi := NewANSIStyle(sty)
 
@@ -18,7 +18,7 @@ func BenchmarkRender_SingleLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossRender_SingleLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Render_SingleLine(b *testing.B) {
 	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
 
 	b.ResetTimer()
@@ -28,7 +28,7 @@ func BenchmarkLipglossRender_SingleLine(b *testing.B) {
 	}
 }
 
-func BenchmarkRender_MultiLine(b *testing.B) {
+func Benchmark__Render_MultiLine(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#FF79C6"))
 	ansi := NewANSIStyle(sty)
 	content := "line1\nline2\nline3"
@@ -40,7 +40,7 @@ func BenchmarkRender_MultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossRender_MultiLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Render_MultiLine(b *testing.B) {
 	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
 	content := "line1\nline2\nline3"
 
@@ -51,7 +51,7 @@ func BenchmarkLipglossRender_MultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkRender_LongLine(b *testing.B) {
+func Benchmark__Render_LongLine(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#FF79C6"))
 	ansi := NewANSIStyle(sty)
 	content := strings.Repeat("x", 200)
@@ -63,7 +63,7 @@ func BenchmarkRender_LongLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossRender_LongLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Render_LongLine(b *testing.B) {
 	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
 	content := strings.Repeat("x", 200)
 
@@ -74,7 +74,7 @@ func BenchmarkLipglossRender_LongLine(b *testing.B) {
 	}
 }
 
-func BenchmarkRender_WithEmoji(b *testing.B) {
+func Benchmark__Render_WithEmoji(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#8BE9FD")).Bold(true)
 	ansi := NewANSIStyle(sty)
 	content := "📁 flake1  (0.50s)"
@@ -86,7 +86,7 @@ func BenchmarkRender_WithEmoji(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossRender_WithEmoji(b *testing.B) {
+func BenchmarkRef_Lipgloss__Render_WithEmoji(b *testing.B) {
 	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Bold(true)
 	content := "📁 flake1  (0.50s)"
 

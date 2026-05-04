@@ -26,9 +26,9 @@ func TestMain(m *testing.M) {
 
 var allPhases = phase.PhasesInOrder()
 
-func BenchmarkView_1x3x1(b *testing.B)  { benchView(b, 1, 3, 1) }
-func BenchmarkView_1x3x4(b *testing.B)  { benchView(b, 1, 3, 4) }
-func BenchmarkView_2x16x4(b *testing.B) { benchView(b, 2, 16, 4) }
+func Benchmark__View_1x3x1(b *testing.B)  { benchView(b, 1, 3, 1) }
+func Benchmark__View_1x3x4(b *testing.B)  { benchView(b, 1, 3, 4) }
+func Benchmark__View_2x16x4(b *testing.B) { benchView(b, 2, 16, 4) }
 
 func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.Helper()

@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func BenchmarkWrap_ShortLine(b *testing.B) {
+func Benchmark__Wrap_ShortLine(b *testing.B) {
 	input := "hello world foo bar"
 
 	b.ResetTimer()
@@ -17,7 +17,7 @@ func BenchmarkWrap_ShortLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWrap_ShortLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Wrap_ShortLine(b *testing.B) {
 	input := "hello world foo bar"
 
 	b.ResetTimer()
@@ -27,7 +27,7 @@ func BenchmarkLipglossWrap_ShortLine(b *testing.B) {
 	}
 }
 
-func BenchmarkWrap_LongParagraph(b *testing.B) {
+func Benchmark__Wrap_LongParagraph(b *testing.B) {
 	input := strings.Repeat("hello world foo bar baz ", 20)
 
 	b.ResetTimer()
@@ -37,7 +37,7 @@ func BenchmarkWrap_LongParagraph(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWrap_LongParagraph(b *testing.B) {
+func BenchmarkRef_Lipgloss__Wrap_LongParagraph(b *testing.B) {
 	input := strings.Repeat("hello world foo bar baz ", 20)
 
 	b.ResetTimer()
@@ -47,7 +47,7 @@ func BenchmarkLipglossWrap_LongParagraph(b *testing.B) {
 	}
 }
 
-func BenchmarkWrap_WithANSI(b *testing.B) {
+func Benchmark__Wrap_WithANSI(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#8BE9FD"))
 	ansi := NewANSIStyle(sty)
 	input := ansi.Render("📋 flake1 ") + "nix build .#nixosConfigurations.machine " + ansi.Render("(1.23s)")
@@ -59,7 +59,7 @@ func BenchmarkWrap_WithANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWrap_WithANSI(b *testing.B) {
+func BenchmarkRef_Lipgloss__Wrap_WithANSI(b *testing.B) {
 	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
 	input := ls.Render("📋 flake1 ") + "nix build .#nixosConfigurations.machine " + ls.Render("(1.23s)")
 
@@ -70,7 +70,7 @@ func BenchmarkLipglossWrap_WithANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkWrap_MultiLine(b *testing.B) {
+func Benchmark__Wrap_MultiLine(b *testing.B) {
 	input := "line1\nline2 word line3 more text here that needs wrapping"
 
 	b.ResetTimer()
@@ -80,7 +80,7 @@ func BenchmarkWrap_MultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWrap_MultiLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Wrap_MultiLine(b *testing.B) {
 	input := "line1\nline2 word line3 more text here that needs wrapping"
 
 	b.ResetTimer()

@@ -73,7 +73,7 @@ func makePlainContent(width, lines int) string {
 
 // --- Full Render Pipeline ---
 
-func BenchmarkRenderPipe(b *testing.B) {
+func Benchmark__RenderPipe(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
@@ -100,7 +100,7 @@ func BenchmarkRenderPipe(b *testing.B) {
 	}
 }
 
-func BenchmarkBubbleteaRenderPipe(b *testing.B) {
+func BenchmarkRef_Bubbletea__RenderPipe(b *testing.B) {
 	width, height := 200, 50
 	content := makeANSIContent(width, height)
 
@@ -122,7 +122,7 @@ func BenchmarkBubbleteaRenderPipe(b *testing.B) {
 
 // --- No change (cache hit at model level) ---
 
-func BenchmarkRenderPipeNoChange(b *testing.B) {
+func Benchmark__RenderPipeNoChange(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
@@ -141,7 +141,7 @@ func BenchmarkRenderPipeNoChange(b *testing.B) {
 	}
 }
 
-func BenchmarkBubbleteaRenderPipeNoChange(b *testing.B) {
+func BenchmarkRef_Bubbletea__RenderPipeNoChange(b *testing.B) {
 	width, height := 200, 50
 	content := makeANSIContent(width, height)
 
@@ -165,7 +165,7 @@ func BenchmarkBubbleteaRenderPipeNoChange(b *testing.B) {
 
 // --- DiffLines only ---
 
-func BenchmarkDiffLinesNoChange(b *testing.B) {
+func Benchmark__DiffLinesNoChange(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
@@ -179,7 +179,7 @@ func BenchmarkDiffLinesNoChange(b *testing.B) {
 	}
 }
 
-func BenchmarkDiffLinesPartialChange(b *testing.B) {
+func Benchmark__DiffLinesPartialChange(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
@@ -200,7 +200,7 @@ func BenchmarkDiffLinesPartialChange(b *testing.B) {
 
 // --- RenderLines only (full change) ---
 
-func BenchmarkRenderLinesFullChange(b *testing.B) {
+func Benchmark__RenderLinesFullChange(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
@@ -220,7 +220,7 @@ func BenchmarkRenderLinesFullChange(b *testing.B) {
 	}
 }
 
-func BenchmarkBubbleteaRenderLinesFullChange(b *testing.B) {
+func BenchmarkRef_Bubbletea__RenderLinesFullChange(b *testing.B) {
 	width, height := 200, 50
 	content1 := makeANSIContent(width, height)
 	content2 := makePlainContent(width, height)
@@ -252,7 +252,7 @@ func BenchmarkBubbleteaRenderLinesFullChange(b *testing.B) {
 
 // --- RenderLines only (partial change, ~12 lines) ---
 
-func BenchmarkRenderLinesQuarterChange(b *testing.B) {
+func Benchmark__RenderLinesQuarterChange(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
@@ -272,7 +272,7 @@ func BenchmarkRenderLinesQuarterChange(b *testing.B) {
 	}
 }
 
-func BenchmarkBubbleteaRenderLinesQuarterChange(b *testing.B) {
+func BenchmarkRef_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
 	width, height := 200, 50
 	content := makeANSIContent(width, height)
 
@@ -304,7 +304,7 @@ func BenchmarkBubbleteaRenderLinesQuarterChange(b *testing.B) {
 
 // --- Zone ---
 
-func BenchmarkZoneMark(b *testing.B) {
+func Benchmark__ZoneMark(b *testing.B) {
 	content := makePlainContent(200, 50)
 
 	b.ResetTimer()
@@ -314,7 +314,7 @@ func BenchmarkZoneMark(b *testing.B) {
 	}
 }
 
-func BenchmarkBubbleteaZoneMark(b *testing.B) {
+func BenchmarkRef_Bubbletea__ZoneMark(b *testing.B) {
 	content := makePlainContent(200, 50)
 
 	b.ResetTimer()
@@ -324,7 +324,7 @@ func BenchmarkBubbleteaZoneMark(b *testing.B) {
 	}
 }
 
-func BenchmarkZoneAtLine(b *testing.B) {
+func Benchmark__ZoneAtLine(b *testing.B) {
 	line := "\x1b[5z\x1b[1;31mBold Red\x1b[0m some text \x1b[/5z\x1b[32mGreen\x1b[0m"
 
 	b.ResetTimer()
@@ -339,7 +339,7 @@ type mouseMsg struct{ x, y int }
 func (m mouseMsg) Mouse() tea.Mouse { return tea.Mouse{X: m.x, Y: m.y} }
 func (m mouseMsg) String() string   { return fmt.Sprintf("mouse(%d,%d)", m.x, m.y) }
 
-func BenchmarkBubbleteaZoneAtLine(b *testing.B) {
+func BenchmarkRef_Bubbletea__ZoneAtLine(b *testing.B) {
 	marked := makeZoneContent(200, 50)
 	_ = zone.Scan(marked)
 

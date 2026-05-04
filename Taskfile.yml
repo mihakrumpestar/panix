@@ -70,11 +70,12 @@ tasks:
         --profile={{.COVER_PROFILE}} --badge-file-name=gen/coverage.svg
 
   go:test:bench:
-    desc: Run benchmarks with comparison table (use CLI_ARGS for specific packages,
+    desc: |
+      Run benchmarks with comparison table (use CLI_ARGS for specific packages,
       e.g. task go:test:bench -- ./internal/pkg/tui/...)
+      Flags: -benchtime=500ms  -parallel=false  -cores=4
     cmds:
-      - go test -bench=. -benchmem -count=1 -run=^$ {{.CLI_ARGS | default
-        "./..."}} 2>/dev/null | go run ./tests/bench/
+      - go run ./tests/bench/ {{.CLI_ARGS}}
 
   go:test:e2e:
     desc: |

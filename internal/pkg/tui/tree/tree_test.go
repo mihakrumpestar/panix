@@ -148,9 +148,9 @@ func TestMultiline(t *testing.T) {
 	}
 }
 
-func BenchmarkSimpleTree(b *testing.B) { benchTree(b, 3, 3) }
-func BenchmarkSimpleTreeFlat(b *testing.B)   { benchTree(b, 1, 20) }
-func BenchmarkSimpleTreeDeep(b *testing.B)   { benchTree(b, 8, 2) }
+func Benchmark__SimpleTree(b *testing.B)      { benchTree(b, 3, 3) }
+func Benchmark__SimpleTreeFlat(b *testing.B)   { benchTree(b, 1, 20) }
+func Benchmark__SimpleTreeDeep(b *testing.B)   { benchTree(b, 8, 2) }
 
 func benchTree(b *testing.B, depth, breadth int) {
 	b.Helper()

@@ -37,7 +37,7 @@ func makeANSILines(n int) []string {
 
 // --- SetContentLines ---
 
-func BenchmarkSetContentLines(b *testing.B) {
+func Benchmark__SetContentLines(b *testing.B) {
 	lines := makeLines(1000)
 
 	b.ResetTimer()
@@ -48,7 +48,7 @@ func BenchmarkSetContentLines(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesSetContentLines(b *testing.B) {
+func BenchmarkRef_Bubbles__SetContentLines(b *testing.B) {
 	lines := makeLines(1000)
 
 	b.ResetTimer()
@@ -61,7 +61,7 @@ func BenchmarkBubblesSetContentLines(b *testing.B) {
 
 // --- View (large, 1000 lines) ---
 
-func BenchmarkView(b *testing.B) {
+func Benchmark__View(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
 	mdl.SetContentLines(makeLines(1000))
 	mdl.SetYOffset(500)
@@ -73,7 +73,7 @@ func BenchmarkView(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesView(b *testing.B) {
+func BenchmarkRef_Bubbles__View(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
 	mdl.SetContentLines(makeLines(1000))
 	mdl.SetYOffset(500)
@@ -85,7 +85,7 @@ func BenchmarkBubblesView(b *testing.B) {
 	}
 }
 
-func BenchmarkViewANSI(b *testing.B) {
+func Benchmark__ViewANSI(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
 	mdl.SetContentLines(makeANSILines(1000))
 	mdl.SetYOffset(500)
@@ -97,7 +97,7 @@ func BenchmarkViewANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewANSI(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewANSI(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
 	mdl.SetContentLines(makeANSILines(1000))
 	mdl.SetYOffset(500)
@@ -109,7 +109,7 @@ func BenchmarkBubblesViewANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkViewANSIScroll(b *testing.B) {
+func Benchmark__ViewANSIScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
 	mdl.SetContentLines(makeANSILines(1000))
 
@@ -121,7 +121,7 @@ func BenchmarkViewANSIScroll(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewANSIScroll(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewANSIScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
 	mdl.SetContentLines(makeANSILines(1000))
 
@@ -133,7 +133,7 @@ func BenchmarkBubblesViewANSIScroll(b *testing.B) {
 	}
 }
 
-func BenchmarkViewScroll(b *testing.B) {
+func Benchmark__ViewScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
 	mdl.SetContentLines(makeLines(1000))
 
@@ -145,7 +145,7 @@ func BenchmarkViewScroll(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewScroll(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
 	mdl.SetContentLines(makeLines(1000))
 
@@ -159,7 +159,7 @@ func BenchmarkBubblesViewScroll(b *testing.B) {
 
 // --- View (small, 50 lines) ---
 
-func BenchmarkViewSmall(b *testing.B) {
+func Benchmark__ViewSmall(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
 	mdl.SetContentLines(makeLines(50))
 	mdl.SetYOffset(20)
@@ -171,7 +171,7 @@ func BenchmarkViewSmall(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewSmall(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewSmall(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
 	mdl.SetContentLines(makeLines(50))
 	mdl.SetYOffset(20)
@@ -183,7 +183,7 @@ func BenchmarkBubblesViewSmall(b *testing.B) {
 	}
 }
 
-func BenchmarkViewSmallANSI(b *testing.B) {
+func Benchmark__ViewSmallANSI(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
 	mdl.SetContentLines(makeANSILines(50))
 	mdl.SetYOffset(20)
@@ -195,7 +195,7 @@ func BenchmarkViewSmallANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewSmallANSI(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewSmallANSI(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
 	mdl.SetContentLines(makeANSILines(50))
 	mdl.SetYOffset(20)
@@ -207,7 +207,7 @@ func BenchmarkBubblesViewSmallANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkViewSmallANSIScroll(b *testing.B) {
+func Benchmark__ViewSmallANSIScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
 	mdl.SetContentLines(makeANSILines(50))
 
@@ -219,7 +219,7 @@ func BenchmarkViewSmallANSIScroll(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewSmallANSIScroll(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewSmallANSIScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
 	mdl.SetContentLines(makeANSILines(50))
 
@@ -231,7 +231,7 @@ func BenchmarkBubblesViewSmallANSIScroll(b *testing.B) {
 	}
 }
 
-func BenchmarkViewSmallScroll(b *testing.B) {
+func Benchmark__ViewSmallScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
 	mdl.SetContentLines(makeLines(50))
 
@@ -243,7 +243,7 @@ func BenchmarkViewSmallScroll(b *testing.B) {
 	}
 }
 
-func BenchmarkBubblesViewSmallScroll(b *testing.B) {
+func BenchmarkRef_Bubbles__ViewSmallScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
 	mdl.SetContentLines(makeLines(50))
 

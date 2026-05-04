@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func BenchmarkWidth_ASCII(b *testing.B) {
+func Benchmark__Width_ASCII(b *testing.B) {
 	input := "hello world"
 
 	b.ResetTimer()
@@ -18,7 +18,7 @@ func BenchmarkWidth_ASCII(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWidth_ASCII(b *testing.B) {
+func BenchmarkRef_Lipgloss__Width_ASCII(b *testing.B) {
 	input := "hello world"
 
 	b.ResetTimer()
@@ -28,7 +28,7 @@ func BenchmarkLipglossWidth_ASCII(b *testing.B) {
 	}
 }
 
-func BenchmarkWidth_WithANSI(b *testing.B) {
+func Benchmark__Width_WithANSI(b *testing.B) {
 	input := "\x1b[38;2;255;121;198m📋BUILD\x1b[m"
 
 	b.ResetTimer()
@@ -38,7 +38,7 @@ func BenchmarkWidth_WithANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWidth_WithANSI(b *testing.B) {
+func BenchmarkRef_Lipgloss__Width_WithANSI(b *testing.B) {
 	input := "\x1b[38;2;255;121;198m📋BUILD\x1b[m"
 
 	b.ResetTimer()
@@ -48,7 +48,7 @@ func BenchmarkLipglossWidth_WithANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkWidth_Emoji(b *testing.B) {
+func Benchmark__Width_Emoji(b *testing.B) {
 	input := "📁 📦 💻 📋 ⚙ ✗"
 
 	b.ResetTimer()
@@ -58,7 +58,7 @@ func BenchmarkWidth_Emoji(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWidth_Emoji(b *testing.B) {
+func BenchmarkRef_Lipgloss__Width_Emoji(b *testing.B) {
 	input := "📁 📦 💻 📋 ⚙ ✗"
 
 	b.ResetTimer()
@@ -68,7 +68,7 @@ func BenchmarkLipglossWidth_Emoji(b *testing.B) {
 	}
 }
 
-func BenchmarkWidth_CommandNumber(b *testing.B) {
+func Benchmark__Width_CommandNumber(b *testing.B) {
 	input := "1 "
 
 	b.ResetTimer()
@@ -78,7 +78,7 @@ func BenchmarkWidth_CommandNumber(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossWidth_CommandNumber(b *testing.B) {
+func BenchmarkRef_Lipgloss__Width_CommandNumber(b *testing.B) {
 	input := "1 "
 
 	b.ResetTimer()
@@ -88,7 +88,7 @@ func BenchmarkLipglossWidth_CommandNumber(b *testing.B) {
 	}
 }
 
-func BenchmarkHeight_SingleLine(b *testing.B) {
+func Benchmark__Height_SingleLine(b *testing.B) {
 	input := "hello world"
 
 	b.ResetTimer()
@@ -98,7 +98,7 @@ func BenchmarkHeight_SingleLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossHeight_SingleLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Height_SingleLine(b *testing.B) {
 	input := "hello world"
 
 	b.ResetTimer()
@@ -108,7 +108,7 @@ func BenchmarkLipglossHeight_SingleLine(b *testing.B) {
 	}
 }
 
-func BenchmarkHeight_MultiLine(b *testing.B) {
+func Benchmark__Height_MultiLine(b *testing.B) {
 	input := "line1\nline2\nline3\nline4\nline5"
 
 	b.ResetTimer()
@@ -118,7 +118,7 @@ func BenchmarkHeight_MultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossHeight_MultiLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Height_MultiLine(b *testing.B) {
 	input := "line1\nline2\nline3\nline4\nline5"
 
 	b.ResetTimer()
@@ -128,7 +128,7 @@ func BenchmarkLipglossHeight_MultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkHeight_LongMultiLine(b *testing.B) {
+func Benchmark__Height_LongMultiLine(b *testing.B) {
 	var builder strings.Builder
 
 	for idx := range 100 {
@@ -148,7 +148,7 @@ func BenchmarkHeight_LongMultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossHeight_LongMultiLine(b *testing.B) {
+func BenchmarkRef_Lipgloss__Height_LongMultiLine(b *testing.B) {
 	var builder strings.Builder
 
 	for idx := range 100 {

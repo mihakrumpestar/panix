@@ -1,461 +1,372 @@
-// Package main implements a benchmark comparison tool that parses Go test -bench
-// output and renders a grouped, aligned table showing custom implementations
-// vs reference library implementations.
+// Package main implements a benchmark comparison tool that discovers, runs,
+// and renders Go benchmark results comparing custom vs reference implementations.
 //
-// # Benchmark Naming Convention
+// # Naming Convention
 //
-// Paired benchmarks (ours vs reference) are auto-detected by prefix:
+//	Ours:  Benchmark__<Feature>        ↔ BenchmarkRef_<Lib>__<Feature>
 //
-//	Benchmark<Class>...         → "ours" (custom implementation)
-//	BenchmarkLipgloss<Class>... → "reference" (lipgloss/charm.land library)
-//	BenchmarkBubbles<Class>...  → "reference" (bubbles library)
+// The __ separator splits prefix from feature name. Ref_ prefix marks reference
+// benchmarks. Library name between Ref_ and __ is auto-detected.
 //
-// The tool strips the "Lipgloss" or "Bubbles" prefix, then matches the
-// remaining name with either the exact stripped name or "Simple" + stripped name.
+// # Usage
 //
-// # Pairing Examples
-//
-//	BenchmarkView                    ↔ BenchmarkBubblesView
-//	BenchmarkSimpleTree              ↔ BenchmarkLipglossTree
-//	BenchmarkSimpleTreeComparison_2x2x4 ↔ BenchmarkLipglossTreeComparison_2x2x4
-//	BenchmarkSetContentLines         ↔ BenchmarkBubblesSetContentLines
-//
-// # Adding New Comparison Benchmarks
-//
-// When adding a new comparison benchmark, always add both variants:
-//
-//	func BenchmarkSimpleWidget(b *testing.B)   { ... } // ours
-//	func BenchmarkLipglossWidget(b *testing.B) { ... } // reference
-//
-// or:
-//
-//	func BenchmarkWidget(b *testing.B)      { ... } // ours
-//	func BenchmarkBubblesWidget(b *testing.B) { ... } // reference
-//
-// Unpaired benchmarks (no reference counterpart) display with "-" in the
-// Ref columns. They are still useful for tracking performance regressions.
+//	go run ./tests/bench/ [flags] [packages...]
+//	  -benchtime duration   per benchmark (default 500ms)
+//	  -parallel bool        run packages in parallel (default true)
+//	  -cores int            max parallel packages, 0=unlimited (default 0)
 package main
 
 import (
 	"bufio"
+	"bytes"
+	"context"
+	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
-const (
-	nsPerUs    = 1e3
-	nsPerMs    = 1e6
-	nsPerSec   = 1e9
-	ratioHuge  = 100
-	ratioLarge = 10
-	ratioUnit  = 1
-)
+var benchLineRe = regexp.MustCompile(`^Benchmark(\S+?)-\d+\s+\d+\s+([\d.]+)\s+ns/op(?:\s+\d+\s+B/op\s+(\d+)\s+allocs/op)?`)
+var metaLineRe = regexp.MustCompile(`^(goos|goarch|pkg|cpu|benchtime|timestamp):\s+(.+?)\s*$`)
 
-var (
-	benchLineRe  = regexp.MustCompile(`^Benchmark(\S+?)-\d+\s+\d+\s+([\d.]+)\s+ns/op(?:\s+\d+\s+B/op\s+(\d+)\s+allocs/op)?`)
-	pkgLineRe    = regexp.MustCompile(`^pkg:\s+(.+)`)
-	goosLineRe   = regexp.MustCompile(`^goos:\s+(.+)`)
-	goarchLineRe = regexp.MustCompile(`^goarch:\s+(.+)`)
-	cpuLineRe    = regexp.MustCompile(`^cpu:\s+(.+)`)
-)
-
-func abbreviatePackage(pkgPath string) string {
-	return strings.TrimPrefix(pkgPath, "github.com/mihakrumpestar/panix/")
+type bench struct {
+	name, pkg string
+	ns        float64
+	allocs    int
 }
-
-type benchmark struct {
-	name    string
-	pkg     string
-	nsPerOp float64
-	allocs  int
-}
-
-type environment struct {
-	goos   string
-	goarch string
-	pkg    string
-	cpu    string
-}
-
-type pairResult struct {
+type pair struct {
 	name string
-	ours benchmark
-	ref  benchmark
+	ours, ref bench
+	lib  string
+}
+type env struct{ goos, goarch, cpu, benchtime, timestamp string }
+
+func parseName(name string) (feature, lib string, isRef bool) {
+	i := strings.Index(name, "__")
+	if i < 0 {
+		return name, "", false
+	}
+	prefix, feat := name[:i], name[i+2:]
+	if strings.HasPrefix(prefix, "Ref_") {
+		return feat, strings.TrimPrefix(prefix, "Ref_"), true
+	}
+	return feat, "", false
 }
 
-type packageGroup struct {
-	pkg      string
-	pairs    []pairResult
-	unpaired []benchmark
-}
+func abbrevPkg(p string) string { return strings.TrimPrefix(p, "github.com/mihakrumpestar/panix/") }
 
-func parseBenchmarkOutput(reader *bufio.Reader) ([]benchmark, environment, bool) {
-	var results []benchmark
-
-	env := environment{}
-	hasData := false
-
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		line := strings.TrimRight(scanner.Text(), "\r")
-
-		if match := goosLineRe.FindStringSubmatch(line); match != nil {
-			env.goos = match[1]
-
-			continue
-		}
-
-		if match := goarchLineRe.FindStringSubmatch(line); match != nil {
-			env.goarch = match[1]
-
-			continue
-		}
-
-		if match := cpuLineRe.FindStringSubmatch(line); match != nil {
-			env.cpu = match[1]
-
-			continue
-		}
-
-		if match := pkgLineRe.FindStringSubmatch(line); match != nil {
-			env.pkg = match[1]
-
-			continue
-		}
-
-		if match := benchLineRe.FindStringSubmatch(line); match != nil {
-			hasData = true
-			nsPerOp, _ := strconv.ParseFloat(match[2], 64)
-
-			allocs := 0
-			if match[3] != "" {
-				allocs, _ = strconv.Atoi(match[3])
+func parse(data []byte) ([]bench, env, bool) {
+	var bs []bench
+	var e env
+	var curPkg string
+	has := false
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), "\r")
+		if m := metaLineRe.FindStringSubmatch(line); m != nil {
+			switch m[1] {
+			case "goos":
+				e.goos = m[2]
+			case "goarch":
+				e.goarch = m[2]
+			case "cpu":
+				e.cpu = m[2]
+			case "pkg":
+				curPkg = m[2]
+			case "benchtime":
+				e.benchtime = m[2]
+			case "timestamp":
+				e.timestamp = m[2]
 			}
-
-			results = append(results, benchmark{
-				name:    match[1],
-				pkg:     env.pkg,
-				nsPerOp: nsPerOp,
-				allocs:  allocs,
-			})
-
 			continue
 		}
-	}
-
-	return results, env, hasData
-}
-
-func isReference(name string) bool {
-	return strings.HasPrefix(name, "Bubbles") || strings.HasPrefix(name, "Lipgloss") || strings.HasPrefix(name, "Bubbletea")
-}
-
-func classify(results []benchmark) (map[string][]benchmark, map[string][]benchmark) {
-	ours := make(map[string][]benchmark)
-	refs := make(map[string][]benchmark)
-
-	for _, result := range results {
-		if isReference(result.name) {
-			refs[result.name] = append(refs[result.name], result)
-		} else {
-			ours[result.name] = append(ours[result.name], result)
+		if m := benchLineRe.FindStringSubmatch(line); m != nil {
+			has = true
+			ns, _ := strconv.ParseFloat(m[2], 64)
+			a, _ := strconv.Atoi(m[3])
+			bs = append(bs, bench{m[1], curPkg, ns, a})
 		}
 	}
-
-	return ours, refs
+	if e.timestamp == "" {
+		e.timestamp = time.Now().UTC().Format(time.RFC3339)
+	}
+	return bs, e, has
 }
 
-func stripReferencePrefix(name string) string {
-	for _, prefix := range []string{"Bubbles", "Lipgloss", "Bubbletea"} {
-		if strings.HasPrefix(name, prefix) {
-			return name[len(prefix):]
+func pairUp(bs []bench) (pairs []pair, unpaired []bench) {
+	type key struct{ f, p string }
+	oursIdx := map[key]bench{}
+	oursUsed := map[key]bool{}
+
+	for _, b := range bs {
+		f, _, ref := parseName(b.name)
+		if ref {
+			continue
+		}
+		k := key{f, b.pkg}
+		if _, ok := oursIdx[k]; !ok {
+			oursIdx[k] = b
 		}
 	}
-
-	return name
+	for _, b := range bs {
+		f, lib, ref := parseName(b.name)
+		if !ref {
+			continue
+		}
+		k := key{f, b.pkg}
+		if o, ok := oursIdx[k]; ok {
+			oursUsed[k] = true
+			pairs = append(pairs, pair{f, o, b, lib})
+		}
+	}
+	for _, b := range bs {
+		if _, _, ref := parseName(b.name); ref {
+			continue
+		}
+		f, _, _ := parseName(b.name)
+		if !oursUsed[key{f, b.pkg}] {
+			unpaired = append(unpaired, b)
+		}
+	}
+	srt := func(s func(int) string) func(int, int) bool {
+		return func(i, j int) bool { return s(i) < s(j) }
+	}
+	sort.Slice(pairs, srt(func(i int) string { return pairs[i].ours.pkg + pairs[i].name }))
+	sort.Slice(unpaired, srt(func(i int) string { return unpaired[i].pkg + unpaired[i].name }))
+	return
 }
 
-func buildIndex(ours map[string][]benchmark) map[string]benchmark {
-	index := make(map[string]benchmark)
-
-	for name, results := range ours {
-		for _, result := range results {
-			key := name + "\n" + result.pkg
-			if _, exists := index[key]; !exists {
-				index[key] = result
-			}
-		}
-	}
-
-	return index
-}
-
-func tryPair(ref benchmark, candidateNames []string, index map[string]benchmark, matched map[string]bool) (pairResult, bool) {
-	for _, candidate := range candidateNames {
-		key := candidate + "\n" + ref.pkg
-		if currentOurs, found := index[key]; found {
-			matched[currentOurs.name] = true
-
-			return pairResult{
-				name: candidate,
-				ours: currentOurs,
-				ref:  ref,
-			}, true
-		}
-	}
-
-	return pairResult{}, false
-}
-
-func findRefCandidates(refName string) (string, []string) {
-	refBase := stripReferencePrefix(refName)
-
-	return refBase, []string{refBase, "Simple" + refBase}
-}
-
-func pairBenchmarks(ours, refs map[string][]benchmark) ([]pairResult, []benchmark) {
-	var pairs []pairResult
-
-	matched := make(map[string]bool)
-
-	index := buildIndex(ours)
-
-	for refName, refResults := range refs {
-		displayName, candidateNames := findRefCandidates(refName)
-
-		for _, ref := range refResults {
-			pair, ok := tryPair(ref, candidateNames, index, matched)
-			if ok {
-				pair.name = displayName
-				pairs = append(pairs, pair)
-			}
-		}
-	}
-
-	// Collect unpaired
-	var unpaired []benchmark
-
-	for _, results := range ours {
-		for _, result := range results {
-			if !matched[result.name] {
-				unpaired = append(unpaired, result)
-			}
-		}
-	}
-
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].ours.pkg != pairs[j].ours.pkg {
-			return pairs[i].ours.pkg < pairs[j].ours.pkg
-		}
-
-		return pairs[i].name < pairs[j].name
-	})
-
-	sort.Slice(unpaired, func(i, j int) bool {
-		if unpaired[i].pkg != unpaired[j].pkg {
-			return unpaired[i].pkg < unpaired[j].pkg
-		}
-
-		return unpaired[i].name < unpaired[j].name
-	})
-
-	return pairs, unpaired
-}
-
-func groupByPackage(pairs []pairResult, unpaired []benchmark) (map[string]*packageGroup, []string) {
-	groups := make(map[string]*packageGroup)
-	pkgKeys := make([]string, 0)
-
-	for _, pair := range pairs {
-		pkg := pair.ours.pkg
-		if _, exists := groups[pkg]; !exists {
-			groups[pkg] = &packageGroup{pkg: pkg}
-			pkgKeys = append(pkgKeys, pkg)
-		}
-
-		groups[pkg].pairs = append(groups[pkg].pairs, pair)
-	}
-
-	for _, bench := range unpaired {
-		if _, exists := groups[bench.pkg]; !exists {
-			groups[bench.pkg] = &packageGroup{pkg: bench.pkg}
-			pkgKeys = append(pkgKeys, bench.pkg)
-		}
-
-		groups[bench.pkg].unpaired = append(groups[bench.pkg].unpaired, bench)
-	}
-
-	sort.Strings(pkgKeys)
-
-	return groups, pkgKeys
-}
-
-func formatNanos(nanos float64) string {
+func fmtNs(n float64) string {
 	switch {
-	case nanos < 1:
-		return fmt.Sprintf("%.2f ns", nanos)
-	case nanos < nsPerUs:
-		return fmt.Sprintf("%.0f ns", nanos)
-	case nanos < nsPerMs:
-		return fmt.Sprintf("%.1f µs", nanos/nsPerUs)
-	case nanos < nsPerSec:
-		return fmt.Sprintf("%.1f ms", nanos/nsPerMs)
+	case n < 1:
+		return fmt.Sprintf("%.2f ns", n)
+	case n < 1e3:
+		return fmt.Sprintf("%.0f ns", n)
+	case n < 1e6:
+		return fmt.Sprintf("%.1f µs", n/1e3)
+	case n < 1e9:
+		return fmt.Sprintf("%.1f ms", n/1e6)
 	default:
-		return fmt.Sprintf("%.2f s", nanos/nsPerSec)
+		return fmt.Sprintf("%.2f s", n/1e9)
 	}
 }
 
-func formatRatio(ours, ref float64) string {
-	if ours == 0 {
+func fmtRatio(o, r float64) string {
+	if o == 0 {
 		return "-"
 	}
-
-	ratio := ref / ours
+	ratio := r / o
 	switch {
-	case ratio >= ratioHuge:
+	case ratio >= 100:
 		return fmt.Sprintf("%.0f×", ratio)
-	case ratio >= ratioLarge:
+	case ratio >= 10:
 		return fmt.Sprintf("%.1f×", ratio)
-	case ratio >= ratioUnit:
+	case ratio >= 1:
 		return fmt.Sprintf("%.2f×", ratio)
 	default:
 		return fmt.Sprintf("%.3f×", ratio)
 	}
 }
 
-func formatAllocRatio(ours, ref int) string {
-	if ours == 0 {
-		return "-"
+func printTable(pkg string, pairs []pair, unpaired []bench) {
+	hdr := []string{"Benchmark", "Ours", "Ref", "Speedup", "Allocs", "RefAllocs", "A-Ratio"}
+	right := map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true, 6: true}
+
+	var rows [][]string
+	for _, p := range pairs {
+		rows = append(rows, []string{
+			p.name, fmtNs(p.ours.ns), fmtNs(p.ref.ns), fmtRatio(p.ours.ns, p.ref.ns),
+			strconv.Itoa(p.ours.allocs), strconv.Itoa(p.ref.allocs), fmtRatio(float64(p.ours.allocs), float64(p.ref.allocs)),
+		})
+	}
+	for _, b := range unpaired {
+		f, _, _ := parseName(b.name)
+		rows = append(rows, []string{f, fmtNs(b.ns), "-", "-", strconv.Itoa(b.allocs), "-", "-"})
+	}
+	if len(rows) == 0 {
+		return
 	}
 
-	return formatRatio(float64(ours), float64(ref))
-}
-
-func pad(s string, width int, right bool) string {
-	if right {
-		return fmt.Sprintf("%*s", width, s)
+	w := make([]int, len(hdr))
+	for i, h := range hdr {
+		w[i] = len(h)
 	}
-
-	return fmt.Sprintf("%-*s", width, s)
-}
-
-func computeCellWidths(header []string, rowData [][]string) []int {
-	widths := make([]int, len(header))
-	for index, headerCell := range header {
-		widths[index] = len(headerCell)
-	}
-
-	for _, row := range rowData {
-		for index, cell := range row {
-			if len(cell) > widths[index] {
-				widths[index] = len(cell)
+	for _, r := range rows {
+		for i, c := range r {
+			if len(c) > w[i] {
+				w[i] = len(c)
 			}
 		}
 	}
 
-	return widths
+	pad := func(s string, n int, r bool) string {
+		if r {
+			return fmt.Sprintf("%*s", n, s)
+		}
+		return fmt.Sprintf("%-*s", n, s)
+	}
+	printRow := func(row []string) {
+		parts := make([]string, len(row))
+		for i, c := range row {
+			parts[i] = pad(c, w[i], right[i])
+		}
+		fmt.Println(strings.Join(parts, " │ "))
+	}
+	printSep := func() {
+		parts := make([]string, len(w))
+		for i, n := range w {
+			parts[i] = strings.Repeat("─", n)
+		}
+		fmt.Println(strings.Join(parts, "─┼─"))
+	}
+
+	fmt.Printf("\n  %s\n\n", abbrevPkg(pkg))
+	printRow(hdr)
+	printSep()
+	for _, r := range rows {
+		printRow(r)
+	}
 }
 
-func printSeparator(widths []int) {
-	parts := make([]string, len(widths))
-	for index, width := range widths {
-		parts[index] = strings.Repeat("─", width)
+func printFooter(e env) {
+	sysParts := []string{"goos: " + e.goos, "goarch: " + e.goarch}
+	if e.cpu != "" {
+		sysParts = append(sysParts, "cpu: "+e.cpu)
 	}
-
-	fmt.Println(strings.Join(parts, "─┼─"))
+	fmt.Printf("\n  %s\n", strings.Join(sysParts, "  "))
+	if e.benchtime != "" {
+		fmt.Printf("  benchtime: %s\n", e.benchtime)
+	}
+	if e.timestamp != "" {
+		t, err := time.Parse(time.RFC3339, e.timestamp)
+		ts := e.timestamp
+		if err == nil {
+			ts = t.Format("2006-01-02 15:04:05")
+		}
+		fmt.Printf("  ran: %s\n", ts)
+	}
 }
 
-func printRow(row []string, widths []int, rightAligned map[int]bool) {
-	parts := make([]string, len(row))
-	for index, cell := range row {
-		parts[index] = pad(cell, widths[index], rightAligned[index])
+func runBenchmarks(ctx context.Context, pkgs []string, benchtime string, parallel bool, cores int) ([]byte, error) {
+	var sem chan struct{}
+	if parallel && cores > 0 {
+		sem = make(chan struct{}, cores)
 	}
 
-	fmt.Println(strings.Join(parts, " │ "))
+	type result struct {
+		data []byte
+		ok   bool
+	}
+	results := make([]result, len(pkgs))
+	var wg sync.WaitGroup
+
+	for i, pkg := range pkgs {
+		wg.Add(1)
+		go func(idx int, pkg string) {
+			defer wg.Done()
+			if sem != nil {
+				sem <- struct{}{}
+				defer func() { <-sem }()
+			}
+			cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-benchmem", "-count=1", "-run=^$", "-benchtime="+benchtime, pkg)
+			var buf bytes.Buffer
+			cmd.Stdout = &buf
+			cmd.Run()
+			results[idx] = result{buf.Bytes(), true}
+		}(i, pkg)
+	}
+	wg.Wait()
+
+	var combined bytes.Buffer
+	fmt.Fprintf(&combined, "benchtime: %s\ntimestamp: %s\n", benchtime, time.Now().UTC().Format(time.RFC3339))
+	for _, r := range results {
+		combined.Write(r.data)
+	}
+	return combined.Bytes(), nil
 }
 
-func printGroup(group *packageGroup) bool {
-	header := []string{"Benchmark", "Ours", "Ref", "Speedup", "Allocs", "RefAllocs", "A-Ratio"}
-	rightAligned := map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true, 6: true}
-
-	var rows [][]string
-	for _, pair := range group.pairs {
-		rows = append(rows, []string{
-			pair.name,
-			formatNanos(pair.ours.nsPerOp),
-			formatNanos(pair.ref.nsPerOp),
-			formatRatio(pair.ours.nsPerOp, pair.ref.nsPerOp),
-			strconv.Itoa(pair.ours.allocs),
-			strconv.Itoa(pair.ref.allocs),
-			formatAllocRatio(pair.ours.allocs, pair.ref.allocs),
-		})
+func resolvePkgs(ctx context.Context, patterns []string) ([]string, error) {
+	if len(patterns) == 0 {
+		patterns = []string{"./..."}
 	}
-
-	for _, bench := range group.unpaired {
-		rows = append(rows, []string{
-			bench.name,
-			formatNanos(bench.nsPerOp),
-			"-",
-			"-",
-			strconv.Itoa(bench.allocs),
-			"-",
-			"-",
-		})
+	args := append([]string{"list"}, patterns...)
+	out, err := exec.CommandContext(ctx, "go", args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("go list: %w", err)
 	}
-
-	if len(rows) == 0 {
-		return false
+	var pkgs []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			pkgs = append(pkgs, line)
+		}
 	}
-
-	widths := computeCellWidths(header, rows)
-
-	abbrev := abbreviatePackage(group.pkg)
-	fmt.Printf("\n  %s\n\n", abbrev)
-	printRow(header, widths, rightAligned)
-	printSeparator(widths)
-
-	for _, row := range rows {
-		printRow(row, widths, rightAligned)
-	}
-
-	return true
+	return pkgs, nil
 }
 
-func printSummary(env environment) {
-	fmt.Printf("\n  goos: %s  goarch: %s", env.goos, env.goarch)
+func run() error {
+	benchtime := flag.String("benchtime", "500ms", "benchmark duration per function")
+	parallel := flag.Bool("parallel", true, "run packages in parallel")
+	cores := flag.Int("cores", 0, "max parallel packages (0 = unlimited)")
+	flag.Parse()
 
-	if env.cpu != "" {
-		fmt.Printf("  cpu: %s", env.cpu)
+	pkgs, err := resolvePkgs(context.Background(), flag.Args())
+	if err != nil {
+		return err
 	}
 
-	fmt.Println()
-}
+	data, err := runBenchmarks(context.Background(), pkgs, *benchtime, *parallel, *cores)
+	if err != nil {
+		return err
+	}
 
-func run() {
-	reader := bufio.NewReader(os.Stdin)
-	results, env, hasData := parseBenchmarkOutput(reader)
-
-	if !hasData {
+	bs, e, has := parse(data)
+	if !has {
 		fmt.Println("No benchmarks found")
-
-		return
+		return nil
 	}
 
-	ours, refs := classify(results)
-	pairs, unpaired := pairBenchmarks(ours, refs)
-	groups, keys := groupByPackage(pairs, unpaired)
+	pairs, unpaired := pairUp(bs)
 
-	for _, key := range keys {
-		printGroup(groups[key])
+	type group struct {
+		pairs    []pair
+		unpaired []bench
+	}
+	gm := map[string]*group{}
+	var pkgOrder []string
+	for _, p := range pairs {
+		pkg := p.ours.pkg
+		if _, ok := gm[pkg]; !ok {
+			gm[pkg] = &group{}
+			pkgOrder = append(pkgOrder, pkg)
+		}
+		gm[pkg].pairs = append(gm[pkg].pairs, p)
+	}
+	for _, b := range unpaired {
+		if _, ok := gm[b.pkg]; !ok {
+			gm[b.pkg] = &group{}
+			pkgOrder = append(pkgOrder, b.pkg)
+		}
+		gm[b.pkg].unpaired = append(gm[b.pkg].unpaired, b)
+	}
+	sort.Strings(pkgOrder)
+	for _, pkg := range pkgOrder {
+		g := gm[pkg]
+		printTable(pkg, g.pairs, g.unpaired)
 	}
 
-	printSummary(env)
+	printFooter(e)
+	return nil
 }
 
 func main() {
-	run()
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 }

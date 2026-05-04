@@ -42,7 +42,7 @@ func buildLargeLipglossRows() []string {
 
 // --- Small (3 cols, 10 rows) ---
 
-func BenchmarkTable_Small(b *testing.B) {
+func Benchmark__Table_Small(b *testing.B) {
 	tbl := New().Width(60).Border(style.NormalBorder()).
 		Headers("Name", "Status", "Time").
 		ColumnStyles(defaultColumnStyles[:3])
@@ -58,7 +58,7 @@ func BenchmarkTable_Small(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossTable_Small(b *testing.B) {
+func BenchmarkRef_Lipgloss__Table_Small(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(60).
 		Border(lipgloss.NormalBorder()).
@@ -78,7 +78,7 @@ func BenchmarkLipglossTable_Small(b *testing.B) {
 
 // --- Large (11 cols, 50 rows) ---
 
-func BenchmarkTable_Large(b *testing.B) {
+func Benchmark__Table_Large(b *testing.B) {
 	tbl := New().Width(120).Border(style.NormalBorder()).
 		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
 		ColumnStyles(largeColumnStyles[:11])
@@ -94,7 +94,7 @@ func BenchmarkTable_Large(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossTable_Large(b *testing.B) {
+func BenchmarkRef_Lipgloss__Table_Large(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -117,7 +117,7 @@ func BenchmarkLipglossTable_Large(b *testing.B) {
 
 // --- LongContent (wide cells that need truncation) ---
 
-func BenchmarkTable_LongContent(b *testing.B) {
+func Benchmark__Table_LongContent(b *testing.B) {
 	longCell := strings.Repeat("x", 200)
 
 	tbl := New().Width(60).Border(style.NormalBorder()).
@@ -131,7 +131,7 @@ func BenchmarkTable_LongContent(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossTable_LongContent(b *testing.B) {
+func BenchmarkRef_Lipgloss__Table_LongContent(b *testing.B) {
 	longCell := strings.Repeat("x", 200)
 
 	tbl := lipglosstable.New().
@@ -150,7 +150,7 @@ func BenchmarkLipglossTable_LongContent(b *testing.B) {
 
 // --- WithColumnStyles (styled columns) ---
 
-func BenchmarkTable_WithColumnStyles(b *testing.B) {
+func Benchmark__Table_WithColumnStyles(b *testing.B) {
 	styledCols := []style.Style{
 		style.NewStyle().Foreground(style.Color("#8BE9FD")),
 		style.NewStyle().Foreground(style.Color("#FF5555")),
@@ -172,7 +172,7 @@ func BenchmarkTable_WithColumnStyles(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossTable_WithColumnStyles(b *testing.B) {
+func BenchmarkRef_Lipgloss__Table_WithColumnStyles(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -201,7 +201,7 @@ func BenchmarkLipglossTable_WithColumnStyles(b *testing.B) {
 
 // --- NoChange (SetRows with identical data — cache hit) ---
 
-func BenchmarkTable_NoChange(b *testing.B) {
+func Benchmark__Table_NoChange(b *testing.B) {
 	rows := buildLargeRows()
 
 	tbl := New().Width(120).Border(style.NormalBorder()).
@@ -219,7 +219,7 @@ func BenchmarkTable_NoChange(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossTable_NoChange(b *testing.B) {
+func BenchmarkRef_Lipgloss__Table_NoChange(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -244,7 +244,7 @@ func BenchmarkLipglossTable_NoChange(b *testing.B) {
 
 // --- SelectionChange (only selection index changes between renders) ---
 
-func BenchmarkTable_SelectionChange(b *testing.B) {
+func Benchmark__Table_SelectionChange(b *testing.B) {
 	tbl := New().Width(120).Border(style.NormalBorder()).
 		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
 		SelectionBackground(style.Color("#333333")).
@@ -262,7 +262,7 @@ func BenchmarkTable_SelectionChange(b *testing.B) {
 	}
 }
 
-func BenchmarkLipglossTable_SelectionChange(b *testing.B) {
+func BenchmarkRef_Lipgloss__Table_SelectionChange(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
