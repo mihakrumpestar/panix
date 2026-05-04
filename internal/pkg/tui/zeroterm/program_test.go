@@ -1,4 +1,4 @@
-package render
+package zeroterm
 
 import (
 	"fmt"
@@ -94,9 +94,9 @@ func TestProgramNew(t *testing.T) {
 
 type dummyModel struct{}
 
-func (m *dummyModel) Init() []Cmd            { return nil }
-func (m *dummyModel) Update(msg Msg) []Cmd   { return nil }
-func (m *dummyModel) Render() []string       { return nil }
+func (m *dummyModel) Init() []Cmd          { return nil }
+func (m *dummyModel) Update(msg Msg) []Cmd { return nil }
+func (m *dummyModel) Render() []string     { return nil }
 
 func TestProcessCmdsWithNil(t *testing.T) {
 	t.Parallel()
@@ -141,9 +141,9 @@ type renderTestModel struct {
 	content string
 }
 
-func (m *renderTestModel) Init() []Cmd            { return nil }
-func (m *renderTestModel) Update(msg Msg) []Cmd   { return nil }
-func (m *renderTestModel) Render() []string       {
+func (m *renderTestModel) Init() []Cmd          { return nil }
+func (m *renderTestModel) Update(msg Msg) []Cmd { return nil }
+func (m *renderTestModel) Render() []string {
 	return []string{m.content}
 }
 

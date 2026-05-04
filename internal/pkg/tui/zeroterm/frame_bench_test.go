@@ -1,4 +1,4 @@
-package render
+package zeroterm
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/bubbletea/v2"
+	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	zone "github.com/lrstanley/bubblezone/v2"
 )

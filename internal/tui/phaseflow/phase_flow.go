@@ -1,4 +1,4 @@
-package phasestatus
+package phaseflow
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/flow"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
@@ -16,7 +16,7 @@ type Selected struct {
 	Index int    `json:"index"`
 }
 
-type PhaseStatus struct {
+type PhaseFlow struct {
 	fleet       *fleet.Fleet
 	colorScheme *colorscheme.ColorScheme
 	pf          *flow.PhaseFlow
@@ -24,7 +24,7 @@ type PhaseStatus struct {
 	Selected    Selected
 }
 
-func NewPhaseStatus(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseStatus {
+func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
 	cs := colorScheme
 
 	pfStyles := flow.Styles{
@@ -54,7 +54,7 @@ func NewPhaseStatus(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, wo
 		Styles(pfStyles).
 		SetZonePrefix("phase-status")
 
-	return &PhaseStatus{
+	return &PhaseFlow{
 		fleet:       fleet,
 		colorScheme: colorScheme,
 		pf:          pf,
@@ -67,7 +67,7 @@ func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
 	return flow.GradientPair{Dark: cp[0], Light: cp[1]}
 }
 
-func (p *PhaseStatus) View(width int) string {
+func (p *PhaseFlow) View(width int) string {
 	spp := p.fleet.CacheStatisticsPerPhase
 	if spp == nil {
 		return ""
@@ -98,12 +98,39 @@ func (p *PhaseStatus) View(width int) string {
 	result := p.pf.String()
 	p.syncSelection()
 
-	header := p.colorScheme.Header.Title.Render("=== Phase Status ===")
+	header := p.colorScheme.Header.Title.Render("=== Phase Flow ===")
 
 	return header + "\n\n" + result + "\n\n"
 }
 
-func (p *PhaseStatus) syncSelection() {
+func (p *PhaseFlow) Reset() {
+	p.pf.Reset()
+	p.syncSelection()
+}
+
+func (p *PhaseFlow) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
+	if p.pf.HandleMouseClick(msg) {
+		p.syncSelection()
+
+		return true
+	}
+
+	return false
+}
+
+func (p *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
+	if p.pf.HandleNavigation(key, hasActiveInnerViewport) {
+		p.syncSelection()
+
+		return true
+	}
+
+	return false
+}
+
+// Helpers
+
+func (p *PhaseFlow) syncSelection() {
 	idx := p.pf.SelectedIndex()
 	p.Selected.Index = idx
 
@@ -116,29 +143,4 @@ func (p *PhaseStatus) syncSelection() {
 	} else {
 		p.Selected.Phase = ""
 	}
-}
-
-func (p *PhaseStatus) Reset() {
-	p.pf.Reset()
-	p.syncSelection()
-}
-
-func (p *PhaseStatus) HandleMouseClick(msg render.MouseClickMsg) bool {
-	if p.pf.HandleMouseClick(msg) {
-		p.syncSelection()
-
-		return true
-	}
-
-	return false
-}
-
-func (p *PhaseStatus) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if p.pf.HandleNavigation(key, hasActiveInnerViewport) {
-		p.syncSelection()
-
-		return true
-	}
-
-	return false
 }

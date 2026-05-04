@@ -399,6 +399,62 @@ func TestTruncateToWidth_WithANSI(t *testing.T) {
 	}
 }
 
+func TestTruncateToWidth_Emoji(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		input string
+		maxW  int
+		want  string
+	}{
+		{"emoji fits", "📁test", 6, "📁test"},
+		{"truncate after emoji", "📁test", 5, "📁tes"},
+		{"truncate inside emoji", "📁test", 1, ""},
+		{"emoji at end", "hi📁", 4, "hi📁"},
+		{"emoji at end truncate", "hi📁", 3, "hi"},
+		{"multiple emoji", "📁📦💻", 6, "📁📦💻"},
+		{"multiple emoji truncate", "📁📦💻", 4, "📁📦"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := truncateToWidth(tc.input, tc.maxW, false)
+			if got != tc.want {
+				t.Errorf("truncateToWidth(%q, %d, false) = %q, want %q", tc.input, tc.maxW, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTruncateToWidth_EmojiEllipsis(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		input string
+		maxW  int
+		want  string
+	}{
+		{"emoji fits", "📁 FLAKE", 8, "📁 FLAKE"},
+		{"emoji truncate with ellipsis", "📁 CONFIGURATION", 8, "📁 CON.."},
+		{"emoji too wide for ellipsis", "📁 CONFIGURATION", 2, "📁"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := truncateToWidth(tc.input, tc.maxW, true)
+			if got != tc.want {
+				t.Errorf("truncateToWidth(%q, %d, true) = %q, want %q", tc.input, tc.maxW, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTruncateToWidth_Ellipsis(t *testing.T) {
 	t.Parallel()
 

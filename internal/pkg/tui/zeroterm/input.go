@@ -1,18 +1,39 @@
-package render
+package zeroterm
 
 import (
 	"strings"
 )
 
+const x10MouseLen = 6
+
+// parseInput parses raw terminal input bytes into Messages.
+// canHaveMoreData indicates that the read buffer was full and more data
+// may be available — incomplete sequences should not be flushed.
+//
 //nolint:cyclop,funlen,gocognit,mnd
-func parseInput(data []byte) []Msg {
+func parseInput(data []byte, canHaveMoreData bool) ([]Msg, int) {
 	var msgs []Msg
 
 	pos := 0
 	for pos < len(data) {
+		// Detect X10 mouse events first (before CSI parsing).
+		// X10 format: ESC[M Cb Cx Cy — the 3 bytes after M are raw
+		// (offset by 32), not valid CSI parameters, so they MUST be
+		// consumed here before the CSI parser misinterprets them.
+		if pos+x10MouseLen <= len(data) && data[pos] == '\x1b' && data[pos+1] == '[' && data[pos+2] == 'M' {
+			msgs = append(msgs, parseX10Mouse(data, pos+3))
+			pos += x10MouseLen
+
+			continue
+		}
+
 		b := data[pos]
 		if b == '\x1b' {
 			if pos+1 >= len(data) {
+				if canHaveMoreData {
+					return msgs, pos
+				}
+
 				msgs = append(msgs, KeyPressMsg{Key: "esc"})
 				pos++
 
@@ -20,7 +41,7 @@ func parseInput(data []byte) []Msg {
 			}
 
 			if data[pos+1] == '[' {
-				msg, adv := parseCSI(data, pos+2)
+				msg, adv := parseCSI(data, pos+2, canHaveMoreData)
 				if msg != nil {
 					msgs = append(msgs, msg)
 				}
@@ -75,11 +96,11 @@ func parseInput(data []byte) []Msg {
 		msgs = append(msgs, KeyPressMsg{Key: string(r)})
 	}
 
-	return msgs
+	return msgs, pos
 }
 
 //nolint:cyclop,funlen,mnd
-func parseCSI(data []byte, pos int) (Msg, int) {
+func parseCSI(data []byte, pos int, canHaveMoreData bool) (Msg, int) {
 	start := pos
 
 	var params []int
@@ -122,6 +143,10 @@ func parseCSI(data []byte, pos int) (Msg, int) {
 	}
 
 	if pos >= len(data) {
+		if canHaveMoreData {
+			return nil, start
+		}
+
 		return nil, pos
 	}
 
@@ -151,8 +176,6 @@ func parseCSI(data []byte, pos int) (Msg, int) {
 		return KeyPressMsg{Key: keyWithMod("end", params)}, pos
 	case '~':
 		return parseTilde(params, start), pos
-	case 'M', 'm':
-		return parseSGRMouse(params, final), pos
 	case 'Z':
 		return KeyPressMsg{Key: "backtab"}, pos
 	}
@@ -251,6 +274,78 @@ func applyModifier(base string, mod int) string {
 	}
 }
 
+// parseX10Mouse parses an X10 mouse event.
+// Format: ESC[M Cb Cx Cy — Cb, Cx, Cy are single bytes offset by 32.
+// cbPos points to the first byte after 'M' in data.
+//
+// Button field bits (after subtracting 32):
+//   - bits 0-1: button (0=left, 1=middle, 2=right, 3=release)
+//   - bit 2: shift
+//   - bit 3: meta (alt)
+//   - bit 4: ctrl
+//   - bit 5: motion
+//   - bit 6: scroll wheel
+//   - bit 7: additional buttons 8-11
+//
+//nolint:mnd
+func parseX10Mouse(data []byte, cbPos int) Msg {
+	cb := int(data[cbPos]) - 32
+	cx := int(data[cbPos+1]) - 32
+	cy := int(data[cbPos+2]) - 32
+
+	x := cx - 1
+	y := cy - 1
+
+	if x < 0 {
+		x = 0
+	}
+
+	if y < 0 {
+		y = 0
+	}
+
+	const (
+		bitWheel  = 0b0100_0000
+		bitAdd    = 0b1000_0000
+		bitsMask  = 0b0000_0011
+		bitMotion = 0b0010_0000
+	)
+
+	if cb&bitWheel != 0 {
+		switch cb & bitsMask {
+		case 0:
+			return MouseWheelMsg{X: x, Y: y, Button: MouseWheelUp}
+		case 1:
+			return MouseWheelMsg{X: x, Y: y, Button: MouseWheelDown}
+		}
+
+		return nil
+	}
+
+	if cb&bitAdd != 0 {
+		return nil
+	}
+
+	// Motion events (button held + drag) — not needed for TUI
+	if cb&bitMotion != 0 {
+		return nil
+	}
+
+	switch cb & bitsMask {
+	case 0:
+		return MouseClickMsg{X: x, Y: y, Button: MouseLeft}
+	case 1:
+		return MouseClickMsg{X: x, Y: y, Button: MouseMiddle}
+	case 2:
+		return MouseClickMsg{X: x, Y: y, Button: MouseRight}
+	case 3:
+		// Button release — not reported as click
+		return nil
+	default:
+		return nil
+	}
+}
+
 //nolint:mnd
 func parseSGRMouse(params []int, final byte) Msg {
 	if len(params) < 3 {
@@ -275,20 +370,39 @@ func parseSGRMouse(params []int, final byte) Msg {
 		return nil
 	}
 
-	// Button field bits: bits 0-1 = button (0=left, 1=middle, 2=right),
-	// bit 2 = shift, bit 3 = meta, bit 4 = ctrl, bit 5 = motion flag,
-	// bit 6 = scroll wheel.
-	switch button {
+	const (
+		bitWheel  = 0b0100_0000
+		bitAdd    = 0b1000_0000
+		bitsMask  = 0b0000_0011
+		bitMotion = 0b0010_0000
+	)
+
+	if button&bitWheel != 0 {
+		switch button & bitsMask {
+		case 0:
+			return MouseWheelMsg{X: x, Y: y, Button: MouseWheelUp}
+		case 1:
+			return MouseWheelMsg{X: x, Y: y, Button: MouseWheelDown}
+		}
+
+		return nil
+	}
+
+	if button&bitAdd != 0 {
+		return nil
+	}
+
+	if button&bitMotion != 0 {
+		return nil
+	}
+
+	switch button & bitsMask {
 	case 0:
 		return MouseClickMsg{X: x, Y: y, Button: MouseLeft}
 	case 1:
 		return MouseClickMsg{X: x, Y: y, Button: MouseMiddle}
 	case 2:
 		return MouseClickMsg{X: x, Y: y, Button: MouseRight}
-	case 64:
-		return MouseWheelMsg{X: x, Y: y, Button: MouseWheelUp}
-	case 65:
-		return MouseWheelMsg{X: x, Y: y, Button: MouseWheelDown}
 	default:
 		return nil
 	}

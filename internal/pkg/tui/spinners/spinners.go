@@ -7,7 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -23,7 +23,7 @@ type entry struct {
 	model    spinner.Model
 }
 
-func NewSpinners() *Spinners {
+func New() *Spinners {
 	return &Spinners{entries: atomicorderedmap.New[xpath.Xpath, *entry]()}
 }
 
@@ -44,7 +44,7 @@ func (s *Spinners) View(xpath xpath.Xpath) string {
 	return model.View()
 }
 
-func (s *Spinners) ProcessPendingTicks() render.Cmd {
+func (s *Spinners) ProcessPendingTicks() zeroterm.Cmd {
 	if s == nil || s.ticking {
 		return nil
 	}
@@ -58,7 +58,7 @@ func (s *Spinners) ProcessPendingTicks() render.Cmd {
 	return s.nextTick()
 }
 
-func (s *Spinners) Update(msg render.Msg) render.Cmd {
+func (s *Spinners) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	_, ok := msg.(tickMsg)
 	if !ok {
 		return nil
@@ -94,6 +94,6 @@ func (s *Spinners) Debug() string {
 
 // helpers
 
-func (s *Spinners) nextTick() render.Cmd {
-	return render.TickCmd(spinner.Dot.FPS, func(time.Time) render.Msg { return tickMsg{} })
+func (s *Spinners) nextTick() zeroterm.Cmd {
+	return zeroterm.TickCmd(spinner.Dot.FPS, func(time.Time) zeroterm.Msg { return tickMsg{} })
 }

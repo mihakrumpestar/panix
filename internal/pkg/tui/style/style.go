@@ -2,6 +2,9 @@ package style
 
 import (
 	"strings"
+	"unsafe"
+
+	"github.com/rivo/uniseg"
 )
 
 // Style defines terminal styling properties: colors, bold, width, padding,
@@ -577,27 +580,34 @@ func (s Style) buildHorizontalBorder(left, mid, right, fg, reset string) string 
 // any ANSI escape sequences. When ellipsis is true and the string is actually
 // truncated, ".." replaces the last 2 cells so overflowing content is visually
 // distinguishable.
+//
+// Uses uniseg for grapheme cluster width (consistent with CellWidth) so emoji
+// and other wide characters are measured correctly.
 func truncateToWidth(str string, maxW int, ellipsis bool) string {
 	if maxW <= 0 {
 		return ""
 	}
 
-	// First pass: determine if truncation is needed and find the cut position
-	// at maxW cells.
 	width := 0
 	pos := 0
 	needsTruncation := false
+	gs := -1
 
-	for pos < len(str) {
-		ch := str[pos]
+	b := unsafe.Slice(unsafe.StringData(str), len(str))
+
+	for pos < len(b) {
+		ch := b[pos]
 
 		if ch == '\x1b' {
+			gs = -1
 			pos = skipANSI(str, pos)
 
 			continue
 		}
 
 		if ch >= 0x20 && ch < 0x7F {
+			gs = -1
+
 			if width+1 > maxW {
 				needsTruncation = true
 
@@ -612,21 +622,24 @@ func truncateToWidth(str string, maxW int, ellipsis bool) string {
 
 		if ch < 0x80 {
 			pos++
+			gs = -1
 
 			continue
 		}
 
-		_, size := decodeUTF8(str, pos)
-		rw := RuneWidth(rune(str[pos]))
+		// Non-ASCII: use uniseg for proper grapheme cluster width
+		// (emoji ZWJ, skin tone modifiers, CJK wide chars, etc.)
+		_, rest, w, newState := uniseg.FirstGraphemeCluster(b[pos:], gs)
+		gs = newState
 
-		if width+rw > maxW {
+		if width+w > maxW {
 			needsTruncation = true
 
 			break
 		}
 
-		width += rw
-		pos += size
+		width += w
+		pos = len(b) - len(rest)
 	}
 
 	if !needsTruncation {

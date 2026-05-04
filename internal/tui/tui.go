@@ -13,14 +13,14 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/pkg/profile"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/tui/buildlogs"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
-	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
@@ -63,7 +63,7 @@ type model struct {
 	footer             *footer.Footer
 	spinners           *spinners.Spinners
 	statsTable         *statstable.StatsTable
-	phaseStatus        *phasestatus.PhaseStatus
+	phaseFlow          *phaseflow.PhaseFlow
 }
 
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
@@ -81,15 +81,15 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		dimensions: &viewports.Dimensions{},
 		isSnapshot: isSnapshot,
 
-		header:      header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
-		spinners:    spinners.NewSpinners(),
-		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
-		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
+		header:     header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
+		spinners:   spinners.New(),
+		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
+		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 
-	program := render.NewProgram(mdl /*, render.WithRaw() */)
+	program := zeroterm.NewProgram(mdl /*, render.WithRaw() */)
 
 	err = program.Run()
 	if err != nil {
@@ -118,10 +118,10 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	return nil
 }
 
-func (m *model) Init() []render.Cmd {
+func (m *model) Init() []zeroterm.Cmd {
 	if m.isSnapshot {
 		m.resetable.Store(&resetable{
-			viewports: viewports.NewViewports(m.dimensions, m.conf),
+			viewports: viewports.New(m.dimensions, m.conf),
 		})
 
 		m.conf.Fleet.RecalculateCachesOnly(m.conf.Phases)
@@ -129,14 +129,14 @@ func (m *model) Init() []render.Cmd {
 		return nil
 	}
 
-	return []render.Cmd{
+	return []zeroterm.Cmd{
 		m.startResetableWorkflow(),
 		m.workflowUpdateHook(),
 	}
 }
 
-func (m *model) Update(msg render.Msg) []render.Cmd {
-	var cmds []render.Cmd
+func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
+	var cmds []zeroterm.Cmd
 
 	resetable := m.resetable.Load()
 	if resetable != nil {
@@ -158,7 +158,7 @@ func (m *model) Update(msg render.Msg) []render.Cmd {
 
 		m.quitting = true
 
-		cmds = append(cmds, render.QuitCmd)
+		cmds = append(cmds, zeroterm.QuitCmd)
 
 	case workflowDoneMsg:
 		if msg.err != nil {
@@ -174,14 +174,14 @@ func (m *model) Update(msg render.Msg) []render.Cmd {
 	case workflowUpdateHookMsg:
 		cmds = append(cmds, m.workflowUpdateHook())
 
-	case render.KeyPressMsg:
+	case zeroterm.KeyPressMsg:
 		keyCmds := m.HandleKeyInput(msg)
 		cmds = append(cmds, keyCmds...)
 
-	case render.MouseClickMsg:
+	case zeroterm.MouseClickMsg:
 		m.handleMouseClick(msg)
 
-	case render.WindowSizeMsg:
+	case zeroterm.WindowSizeMsg:
 		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
 	}
@@ -196,7 +196,7 @@ func (m *model) Render() []string {
 	}
 
 	if m.buildLogs == nil {
-		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseStatus)
+		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseFlow)
 	}
 
 	header := m.header.View(m.dimensions.Width)
@@ -225,7 +225,7 @@ func (m *model) Render() []string {
 	return strings.Split(renderStr, "\n")
 }
 
-func (m *model) handleWorkflowDone(cmds []render.Cmd) []render.Cmd {
+func (m *model) handleWorkflowDone(cmds []zeroterm.Cmd) []zeroterm.Cmd {
 	if m.isSnapshot {
 		return cmds
 	}
@@ -242,7 +242,7 @@ func (m *model) handleWorkflowDone(cmds []render.Cmd) []render.Cmd {
 	if m.conf.Flags.ExitOnComplete {
 		m.quitting = true
 
-		return append(cmds, render.QuitCmd)
+		return append(cmds, zeroterm.QuitCmd)
 	}
 
 	return cmds
@@ -261,7 +261,7 @@ func (m *model) viewMainContent() string {
 	}
 
 	if m.buildLogs == nil {
-		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseStatus)
+		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseFlow)
 	}
 
 	var builder strings.Builder
@@ -273,7 +273,7 @@ func (m *model) viewMainContent() string {
 			builder.WriteString(m.statsTable.View(contentWidth))
 		}
 
-		builder.WriteString(m.phaseStatus.View(contentWidth))
+		builder.WriteString(m.phaseFlow.View(contentWidth))
 	}
 
 	builder.WriteString(m.buildLogs.View(resetable.viewports, m.spinners))
@@ -297,8 +297,8 @@ func (m *model) viewMainContent() string {
 	return builder.String()
 }
 
-func (m *model) workflowUpdateHook() render.Cmd {
-	return func() render.Msg {
+func (m *model) workflowUpdateHook() zeroterm.Cmd {
+	return func() zeroterm.Msg {
 		resetable := m.resetable.Load()
 		if resetable == nil || resetable.workflow == nil {
 			time.Sleep(workflowUpdateHookPollInterval)
@@ -341,14 +341,12 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 	return fullscreenViewport
 }
 
-func (m *model) handleMouseClick(msg render.MouseClickMsg) {
+func (m *model) handleMouseClick(msg zeroterm.MouseClickMsg) {
 	if m.statsTable.HandleMouseClick(msg) {
-		m.phaseStatus.Reset()
-
-		return
+		m.phaseFlow.Reset()
 	}
 
-	if m.phaseStatus.HandleMouseClick(msg) {
+	if m.phaseFlow.HandleMouseClick(msg) {
 		m.statsTable.Reset()
 	}
 }

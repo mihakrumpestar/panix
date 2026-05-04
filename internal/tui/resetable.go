@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/rs/zerolog/log"
 )
@@ -16,8 +16,8 @@ type workflowDoneMsg struct {
 	err error
 }
 
-func (m *model) startResetableWorkflow() render.Cmd {
-	return func() render.Msg {
+func (m *model) startResetableWorkflow() zeroterm.Cmd {
+	return func() zeroterm.Msg {
 		workflow, err := workflow.NewWorkflow(m.ctx, m.conf)
 		if err != nil {
 			return errMsg{err: err}
@@ -25,7 +25,7 @@ func (m *model) startResetableWorkflow() render.Cmd {
 
 		m.resetable.Store(&resetable{
 			workflow:  workflow,
-			viewports: viewports.NewViewports(m.dimensions, m.conf),
+			viewports: viewports.New(m.dimensions, m.conf),
 		})
 
 		err = workflow.StartWorkflow()
@@ -34,7 +34,7 @@ func (m *model) startResetableWorkflow() render.Cmd {
 	}
 }
 
-func (m *model) restartWorkflow() render.Cmd {
+func (m *model) restartWorkflow() zeroterm.Cmd {
 	r := m.resetable.Load()
 	if r != nil {
 		err := r.workflow.Cancel()
@@ -47,7 +47,7 @@ func (m *model) restartWorkflow() render.Cmd {
 
 	m.conf.Fleet.ResetState()
 	m.statsTable.Reset()
-	m.phaseStatus.Reset()
+	m.phaseFlow.Reset()
 	m.err = nil
 	m.buildLogs = nil
 

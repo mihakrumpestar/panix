@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 )
 
 func TestNew_Defaults(t *testing.T) {
@@ -495,9 +495,9 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 	tbl.Select(0)
 
 	// Simulate click on Y line that has no zone markers — should deselect and return true
-	render.SetCurrentLines([]string{"no zones here", "another line"})
+	zeroterm.SetCurrentLines([]string{"no zones here", "another line"})
 
-	changed := tbl.HandleMouseClick(render.MouseClickMsg{X: 0, Y: 0})
+	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0})
 
 	if !changed {
 		t.Error("HandleMouseClick should return true when deselecting via outside click")

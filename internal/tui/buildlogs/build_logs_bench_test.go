@@ -15,7 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
-	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
@@ -26,19 +26,19 @@ func TestMain(m *testing.M) {
 
 var allPhases = phase.PhasesInOrder()
 
-func BenchmarkView_1x3x1(b *testing.B) { benchView(b, 1, 3, 1) }
-func BenchmarkView_1x3x4(b *testing.B) { benchView(b, 1, 3, 4) }
+func BenchmarkView_1x3x1(b *testing.B)  { benchView(b, 1, 3, 1) }
+func BenchmarkView_1x3x4(b *testing.B)  { benchView(b, 1, 3, 4) }
 func BenchmarkView_2x16x4(b *testing.B) { benchView(b, 2, 16, 4) }
 
 func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.Helper()
 
 	conf := makeTestConfig(flakesCount, configsCount, machinesN, colorscheme.DefaultColorScheme())
-	st := statstable.NewStatsTable(conf.Fleet, conf.ColorScheme)
-	ps := phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases)
+	st := statstable.New(conf.Fleet, conf.ColorScheme)
+	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
-	viewportsInst := viewports.NewViewports(&viewports.Dimensions{Width: 200, Height: 80}, conf)
-	spinnersInst := spinners.NewSpinners()
+	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80}, conf)
+	spinnersInst := spinners.New()
 
 	b.ResetTimer()
 

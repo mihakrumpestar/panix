@@ -9,9 +9,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	tuiviewport "github.com/mihakrumpestar/panix/internal/pkg/tui/viewport"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -34,7 +34,7 @@ type item struct {
 	lastHeight     int
 }
 
-func NewViewports(dimensions *Dimensions, conf *config.Config) *Viewports {
+func New(dimensions *Dimensions, conf *config.Config) *Viewports {
 	mainXpath := xpath.New("main")
 
 	return &Viewports{
@@ -114,12 +114,12 @@ func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
 
 // Update
 
-func (v *Viewports) Update(msg render.Msg) render.Cmd {
+func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	if v == nil {
 		return nil
 	}
 
-	click, ok := msg.(render.MouseClickMsg)
+	click, ok := msg.(zeroterm.MouseClickMsg)
 	if ok {
 		clicked := v.clickTarget(click)
 		if clicked.Depth() > 0 {
@@ -229,7 +229,7 @@ func (v *Viewports) render(
 		view = v.conf.ColorScheme.Table.SelectionHighlightBackground.Render(view)
 	}
 
-	return render.Mark(xpath.String(), view)
+	return zeroterm.Mark(xpath.String(), view)
 }
 
 func (v *Viewports) viewWidth(indent, explicitWidth int) int {
@@ -342,13 +342,13 @@ func (v *Viewports) activeItem() *item {
 	return nil
 }
 
-func (v *Viewports) clickTarget(m render.MouseClickMsg) xpath.Xpath {
+func (v *Viewports) clickTarget(m zeroterm.MouseClickMsg) xpath.Xpath {
 	var candidates []xpath.Xpath
 
-	lines := render.CurrentLines()
+	lines := zeroterm.CurrentLines()
 
 	for xp := range v.items.Records() {
-		if m.Y >= 0 && m.Y < len(lines) && render.IsZoneAtLine(lines[m.Y], m.X, xp.String()) {
+		if m.Y >= 0 && m.Y < len(lines) && zeroterm.IsZoneAtLine(lines[m.Y], m.X, xp.String()) {
 			candidates = append(candidates, xp)
 		}
 	}

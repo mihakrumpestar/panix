@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 )
 
 const HeaderRow = -1
@@ -26,7 +26,7 @@ type Table struct {
 	borderColumn bool
 
 	selectedIndex int
-	selBg       style.Color
+	selBg         style.Color
 	selBgPrefix   string
 	zonePrefix    string
 
@@ -177,12 +177,12 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 // updates the selection accordingly. Clicking outside any row zone
 // deselects the current selection. Returns true if the selection state
 // was changed.
-func (t *Table) HandleMouseClick(msg render.MouseClickMsg) bool {
+func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if t.zonePrefix == "" || len(t.rows) == 0 {
 		return false
 	}
 
-	lines := render.CurrentLines()
+	lines := zeroterm.CurrentLines()
 	if msg.Y < 0 || msg.Y >= len(lines) {
 		if t.selectedIndex >= 0 {
 			t.selectedIndex = -1
@@ -195,7 +195,7 @@ func (t *Table) HandleMouseClick(msg render.MouseClickMsg) bool {
 
 	for idx := range len(t.rows) {
 		zoneName := fmt.Sprintf("%s-%d", t.zonePrefix, idx)
-		if render.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
+		if zeroterm.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
 			if t.selectedIndex != idx {
 				t.selectedIndex = idx
 
@@ -220,7 +220,7 @@ func (t *Table) HandleMouseClick(msg render.MouseClickMsg) bool {
 // the navigation was consumed. Allows initial selection with left/right
 // when nothing is selected.
 func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || len(t.rows) == 0 {
+	if hasActiveInnerViewport || len(t.rows) == 0 || t.selectedIndex == -1 {
 		return false
 	}
 
@@ -361,7 +361,7 @@ func (t *Table) String() string {
 	for rowIdx, rowStr := range t.rowCache {
 		if t.zonePrefix != "" {
 			zoneName := fmt.Sprintf("%s-%d", t.zonePrefix, rowIdx)
-			b.WriteString(render.Mark(zoneName, rowStr))
+			b.WriteString(zeroterm.Mark(zoneName, rowStr))
 		} else {
 			b.WriteString(rowStr)
 		}

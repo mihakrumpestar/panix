@@ -1,4 +1,4 @@
-package render
+package zeroterm
 
 import (
 	"os"
@@ -73,12 +73,12 @@ func (t *Terminal) ExitAltScreen() {
 }
 
 func (t *Terminal) EnableMouse() {
-	t.out.WriteString("\x1b[?1000h\x1b[?1006h\x1b[?1015h")
+	t.out.WriteString("\x1b[?1000h\x1b[?1002h\x1b[?1006h")
 	t.out.Sync()
 }
 
 func (t *Terminal) DisableMouse() {
-	t.out.WriteString("\x1b[?1000l\x1b[?1006l\x1b[?1015l")
+	t.out.WriteString("\x1b[?1000l\x1b[?1002l\x1b[?1006l")
 	t.out.Sync()
 }
 

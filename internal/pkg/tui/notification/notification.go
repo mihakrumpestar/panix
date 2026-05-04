@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 )
 
 const (
@@ -29,7 +29,7 @@ func New(defaultColor style.Color) *Notification {
 	return &Notification{defaultColor: defaultColor}
 }
 
-func (n *Notification) Set(text string, c style.Color) render.Cmd {
+func (n *Notification) Set(text string, c style.Color) zeroterm.Cmd {
 	n.text, n.started = text, time.Now()
 	n.currentColor = n.defaultColor
 
@@ -37,10 +37,10 @@ func (n *Notification) Set(text string, c style.Color) render.Cmd {
 		n.currentColor = c
 	}
 
-	return render.TickCmd(tickInterval, func(time.Time) render.Msg { return notificationTickMsg{} })
+	return zeroterm.TickCmd(tickInterval, func(time.Time) zeroterm.Msg { return notificationTickMsg{} })
 }
 
-func (n *Notification) Update(msg render.Msg) render.Cmd {
+func (n *Notification) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	_, ok := msg.(notificationTickMsg)
 	if !ok {
 		return nil
@@ -56,7 +56,7 @@ func (n *Notification) Update(msg render.Msg) render.Cmd {
 		return nil
 	}
 
-	return render.TickCmd(tickInterval, func(time.Time) render.Msg { return notificationTickMsg{} })
+	return zeroterm.TickCmd(tickInterval, func(time.Time) zeroterm.Msg { return notificationTickMsg{} })
 }
 
 func (n *Notification) Clear() {

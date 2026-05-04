@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lucasb-eyer/go-colorful"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"go.uber.org/atomic"
 )
 
@@ -158,7 +158,7 @@ func (pf *PhaseFlow) Reset() {
 // selection changed. When hasActiveInnerViewport is true, navigation is
 // ignored.
 func (pf *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || len(pf.phases) == 0 {
+	if hasActiveInnerViewport || len(pf.phases) == 0 || pf.selectedIndex == -1 {
 		return false
 	}
 
@@ -198,12 +198,12 @@ func (pf *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) b
 
 // HandleMouseClick processes a mouse click. Returns true if the selection
 // changed. Clicking outside any phase zone deselects.
-func (pf *PhaseFlow) HandleMouseClick(msg render.MouseClickMsg) bool {
+func (pf *PhaseFlow) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if len(pf.phases) == 0 {
 		return false
 	}
 
-	lines := render.CurrentLines()
+	lines := zeroterm.CurrentLines()
 
 	if msg.Y < 0 || msg.Y >= len(lines) {
 		if pf.selectedIndex >= 0 {
@@ -222,7 +222,7 @@ func (pf *PhaseFlow) HandleMouseClick(msg render.MouseClickMsg) bool {
 		}
 
 		zoneName := fmt.Sprintf("%s-%d", pf.zonePrefix, idx)
-		if render.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
+		if zeroterm.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
 			if pf.selectedIndex != idx {
 				pf.selectedIndex = idx
 				pf.cacheResult = ""
@@ -348,7 +348,7 @@ func (pf *PhaseFlow) buildCell(name string, data PhaseData, colWidth int, isSele
 
 	cell := pillRow + "\n" + statusRow
 	if pf.zonePrefix != "" {
-		cell = render.Mark(fmt.Sprintf("%s-%d", pf.zonePrefix, idx), cell)
+		cell = zeroterm.Mark(fmt.Sprintf("%s-%d", pf.zonePrefix, idx), cell)
 	}
 
 	// Center the zoned cell into the column.

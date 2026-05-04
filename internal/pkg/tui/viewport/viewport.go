@@ -4,8 +4,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
 )
 
@@ -489,11 +489,11 @@ func (m *Viewport) AtBottom() bool {
 	return m.yOffset >= m.maxYOffset()
 }
 
-func (m *Viewport) Update(msg render.Msg) {
+func (m *Viewport) Update(msg zeroterm.Msg) {
 	switch msg := msg.(type) {
-	case render.KeyPressMsg:
+	case zeroterm.KeyPressMsg:
 		m.handleKeyPress(msg)
-	case render.MouseWheelMsg:
+	case zeroterm.MouseWheelMsg:
 		m.handleMouseWheel(msg)
 	}
 }
@@ -795,7 +795,7 @@ func (m *Viewport) maxYOffset() int {
 	return max(len(m.lines)-m.contentHeight(), 0)
 }
 
-func (m *Viewport) handleKeyPress(msg render.KeyPressMsg) {
+func (m *Viewport) handleKeyPress(msg zeroterm.KeyPressMsg) {
 	switch msg.String() {
 	case "down", "j":
 		m.ScrollDown(1)
@@ -812,11 +812,11 @@ func (m *Viewport) handleKeyPress(msg render.KeyPressMsg) {
 	}
 }
 
-func (m *Viewport) handleMouseWheel(msg render.MouseWheelMsg) {
+func (m *Viewport) handleMouseWheel(msg zeroterm.MouseWheelMsg) {
 	switch msg.Button {
-	case render.MouseWheelUp:
+	case zeroterm.MouseWheelUp:
 		m.ScrollUp(mouseWheelDelta)
-	case render.MouseWheelDown:
+	case zeroterm.MouseWheelDown:
 		m.ScrollDown(mouseWheelDelta)
 	}
 }

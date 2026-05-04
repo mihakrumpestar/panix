@@ -7,7 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/pkg/errors"
@@ -33,7 +33,7 @@ func (m *model) keyDefs() []footer.KeyDef {
 			footer.KeyDef{Keys: []string{"s"}, Help: "snapshot", Handler: m.handleSnapshot},
 		)
 
-		if !m.conf.Flags.ExitOnComplete {
+		if !m.conf.Flags.RequireAllSuccess {
 			kds = append(kds,
 				footer.KeyDef{Keys: []string{"r"}, Help: "retry", Handler: m.handleRetry},
 				footer.KeyDef{Keys: []string{"ctrl+r"}, Help: "restart", Handler: m.handleRestart},
@@ -44,7 +44,7 @@ func (m *model) keyDefs() []footer.KeyDef {
 	return kds
 }
 
-func (m *model) HandleKeyInput(msg render.KeyPressMsg) []render.Cmd {
+func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) []zeroterm.Cmd {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
@@ -56,20 +56,22 @@ func (m *model) HandleKeyInput(msg render.KeyPressMsg) []render.Cmd {
 
 	hasActiveInner := resetable.viewports.HasActiveInner()
 
-	if m.statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		m.phaseStatus.Reset()
+	key := msg.String()
+
+	if m.statsTable.HandleNavigation(key, hasActiveInner) {
+		m.phaseFlow.Reset()
 
 		return nil
 	}
 
-	if m.phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
+	if m.phaseFlow.HandleNavigation(key, hasActiveInner) {
 		m.statsTable.Reset()
 
 		return nil
 	}
 
 	for _, kd := range m.footer.KeyDefs() {
-		if slices.Contains(kd.Keys, msg.String()) {
+		if slices.Contains(kd.Keys, key) {
 			return kd.Handler()
 		}
 	}
@@ -77,7 +79,7 @@ func (m *model) HandleKeyInput(msg render.KeyPressMsg) []render.Cmd {
 	return nil
 }
 
-func (m *model) handleCopy() []render.Cmd {
+func (m *model) handleCopy() []zeroterm.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil {
 		return nil
@@ -85,22 +87,22 @@ func (m *model) handleCopy() []render.Cmd {
 
 	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return []render.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
+		return []zeroterm.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
 
 	if content == "" {
-		return []render.Cmd{m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
+		return []zeroterm.Cmd{m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
 
 	err := clipboard.CopyToClipboard(content)
 	if err != nil {
-		return []render.Cmd{m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())}
+		return []zeroterm.Cmd{m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())}
 	}
 
-	return []render.Cmd{m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())}
+	return []zeroterm.Cmd{m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())}
 }
 
-func (m *model) handleQuit() []render.Cmd {
+func (m *model) handleQuit() []zeroterm.Cmd {
 	m.quitting = true
 	resetable := m.resetable.Load()
 
@@ -121,7 +123,7 @@ func (m *model) handleQuit() []render.Cmd {
 
 	log.Debug().Msg("Context done, exiting TUI")
 
-	return []render.Cmd{func() render.Msg { return render.QuitCmd() }}
+	return []zeroterm.Cmd{zeroterm.QuitCmd}
 }
 
 func (m *model) setFailedMachinesErrorIfNil() {
@@ -141,25 +143,25 @@ func (m *model) setFailedMachinesErrorIfNil() {
 	}
 }
 
-func (m *model) handleToggle() []render.Cmd {
+func (m *model) handleToggle() []zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
 
 	return nil
 }
 
-func (m *model) handleToggleCommands() []render.Cmd {
+func (m *model) handleToggleCommands() []zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
 
 	return nil
 }
 
-func (m *model) handleToggleActiveOnly() []render.Cmd {
+func (m *model) handleToggleActiveOnly() []zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
 
 	return nil
 }
 
-func (m *model) handleRetry() []render.Cmd {
+func (m *model) handleRetry() []zeroterm.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil || resetable.workflow == nil {
 		return nil
@@ -174,16 +176,16 @@ func (m *model) handleRetry() []render.Cmd {
 	return nil
 }
 
-func (m *model) handleRestart() []render.Cmd {
-	cmds := []render.Cmd{
+func (m *model) handleRestart() []zeroterm.Cmd {
+	cmds := []zeroterm.Cmd{
 		m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground()),
-		func() render.Msg { return restartMsg{} },
+		func() zeroterm.Msg { return restartMsg{} },
 	}
 
 	return cmds
 }
 
-func (m *model) handleFullscreen() []render.Cmd {
+func (m *model) handleFullscreen() []zeroterm.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil {
 		return nil
@@ -200,13 +202,13 @@ func (m *model) handleFullscreen() []render.Cmd {
 	if activeInnerXpath.Depth() > 0 {
 		resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return []render.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())}
+		return []zeroterm.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
 
 	return nil
 }
 
-func (m *model) handleEsc() []render.Cmd {
+func (m *model) handleEsc() []zeroterm.Cmd {
 	resetable := m.resetable.Load()
 
 	if resetable == nil {
@@ -220,17 +222,17 @@ func (m *model) handleEsc() []render.Cmd {
 		resetable.viewports.DeselectAll()
 	case m.statsTable.SelectedIndex() >= 0:
 		m.statsTable.Reset()
-	case m.phaseStatus.Selected.Index >= 0:
-		m.phaseStatus.Reset()
+	case m.phaseFlow.Selected.Index >= 0:
+		m.phaseFlow.Reset()
 	}
 
 	return nil
 }
 
-func (m *model) handleSnapshot() []render.Cmd {
+func (m *model) handleSnapshot() []zeroterm.Cmd {
 	m.captureSnapshot(config.SnaphsotReasonManual)
 
-	return []render.Cmd{m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())}
+	return []zeroterm.Cmd{m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())}
 }
 
 func (m *model) captureSnapshot(reason config.SnaphsotReason) {

@@ -7,9 +7,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/table"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
 
@@ -23,7 +23,7 @@ type StatsTable struct {
 	colorScheme *colorscheme.ColorScheme
 }
 
-func NewStatsTable(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
+func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 	indexWidth := len(strconv.Itoa(fleet.MachineCount()))
 
 	columnStyles := []style.Style{
@@ -79,7 +79,7 @@ func (s *StatsTable) Reset() {
 	s.tbl.Deselect()
 }
 
-func (s *StatsTable) HandleMouseClick(msg render.MouseClickMsg) bool {
+func (s *StatsTable) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	return s.tbl.HandleMouseClick(msg)
 }
 

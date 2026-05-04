@@ -18,12 +18,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/internal/tui/header"
-	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require")
+	"github.com/stretchr/testify/require"
+)
 
 func TestStartResetableWorkflow_ReturnsWorkflowDoneMsg(t *testing.T) {
 	t.Parallel()
@@ -177,13 +178,13 @@ func newTestModel(t *testing.T) *model {
 	conf.Flags.DryRun = true
 
 	mdl := &model{
-		ctx:         context.Background(),
-		conf:        conf,
-		dimensions:  &viewports.Dimensions{Width: 200, Height: 80},
-		header:      header.New(false, config.Snapshot{}, nil),
-		spinners:    spinners.NewSpinners(),
-		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
-		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
+		ctx:        context.Background(),
+		conf:       conf,
+		dimensions: &viewports.Dimensions{Width: 200, Height: 80},
+		header:     header.New(false, config.Snapshot{}, nil),
+		spinners:   spinners.New(),
+		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
+		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
 	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 

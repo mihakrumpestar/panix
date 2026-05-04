@@ -5,15 +5,15 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/keymap"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/notification"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 )
 
 type KeyDef struct {
 	Keys    []string
 	Help    string
 	Active  func() bool
-	Handler func() []render.Cmd
+	Handler func() []zeroterm.Cmd
 }
 
 const minFooterHeight = 3
@@ -69,7 +69,7 @@ func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) string {
 	return style.JoinHorizontal(style.Center, parts...)
 }
 
-func (f *Footer) Update(msg render.Msg) render.Cmd {
+func (f *Footer) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	return f.notification.Update(msg)
 }
 

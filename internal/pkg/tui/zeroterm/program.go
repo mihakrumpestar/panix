@@ -1,4 +1,4 @@
-package render
+package zeroterm
 
 import (
 	"os"
@@ -215,6 +215,9 @@ func (p *Program) readInput(done chan<- struct{}) {
 	defer close(done)
 
 	buf := make([]byte, 1024)
+
+	var leftover []byte
+
 	for {
 		readCh := make(chan readResult, 1)
 
@@ -240,9 +243,26 @@ func (p *Program) readInput(done chan<- struct{}) {
 				continue
 			}
 
-			msgs := parseInput(buf[:r.n])
+			// Prepend any leftover bytes from a previous partial read.
+			data := buf[:r.n]
+			if len(leftover) > 0 {
+				data = append(leftover, data...)
+				leftover = nil
+			}
+
+			// If we filled the buffer, more data may be available;
+			// partial sequences should be deferred.
+			canHaveMoreData := r.n == len(buf)
+
+			msgs, consumed := parseInput(data, canHaveMoreData)
 			for _, msg := range msgs {
 				p.msgCh <- msg
+			}
+
+			if consumed < len(data) && canHaveMoreData {
+				// Incomplete sequence at end of buffer — save for next read.
+				leftover = make([]byte, 0, len(data[consumed:])+len(buf))
+				leftover = append(leftover, data[consumed:]...)
 			}
 		}
 	}

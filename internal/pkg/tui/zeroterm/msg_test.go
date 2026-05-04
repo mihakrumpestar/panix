@@ -1,4 +1,4 @@
-package render
+package zeroterm
 
 import (
 	"testing"
@@ -58,9 +58,9 @@ func TestQuitCmd(t *testing.T) {
 
 type mockModel struct{}
 
-func (m *mockModel) Init() []Cmd            { return nil }
-func (m *mockModel) Update(msg Msg) []Cmd   { return nil }
-func (m *mockModel) Render() []string       { return nil }
+func (m *mockModel) Init() []Cmd          { return nil }
+func (m *mockModel) Update(msg Msg) []Cmd { return nil }
+func (m *mockModel) Render() []string     { return nil }
 
 func TestModelInterface(t *testing.T) {
 	t.Parallel()

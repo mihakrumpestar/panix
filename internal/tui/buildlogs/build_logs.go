@@ -17,7 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
-	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
+	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
@@ -55,7 +55,7 @@ var (
 type BuildLogs struct {
 	conf        *config.Config
 	statsTable  *statstable.StatsTable
-	phaseStatus *phasestatus.PhaseStatus
+	phaseStatus *phaseflow.PhaseFlow
 
 	viewports *viewports.Viewports
 	spinners  *spinners.Spinners
@@ -64,7 +64,7 @@ type BuildLogs struct {
 	contentWidth   int
 }
 
-func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *phasestatus.PhaseStatus) *BuildLogs {
+func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *phaseflow.PhaseFlow) *BuildLogs {
 	return &BuildLogs{
 		conf:        conf,
 		statsTable:  statsTable,

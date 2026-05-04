@@ -1,4 +1,4 @@
-package render
+package zeroterm
 
 type MouseButton uint8
 
