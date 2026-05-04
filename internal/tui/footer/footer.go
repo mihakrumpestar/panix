@@ -55,9 +55,6 @@ func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) string {
 	}
 
 	sty := style.NewStyle().Width(width).MaxWidth(width - notifWidth)
-	if f.conf.Flags.Debug {
-		sty = sty.Background(colorScheme.Footer.DebugBackground.GetBackground())
-	}
 
 	styledHelp := sty.Render(content)
 

@@ -2,6 +2,7 @@ package colorscheme
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
@@ -18,7 +19,6 @@ type ColorSchemeFooter struct {
 	HelpSeparator         style.Style
 	HelpSelectedKey       style.Style
 	HelpSelectedDesc      style.Style
-	DebugBackground       style.Style
 	NotificationBaseStyle style.Style
 }
 
@@ -67,6 +67,11 @@ type ColorSchemeTree struct {
 	Enumerator style.Style
 }
 
+type ColorSchemeSpinner struct {
+	Frames   []string
+	Interval time.Duration
+}
+
 type ColorScheme struct {
 	Header      ColorSchemeHeader
 	Status      ColorSchemeStatus
@@ -75,7 +80,7 @@ type ColorScheme struct {
 
 	Chars        ColorSchemeChars
 	Tree         ColorSchemeTree
-	Spinner      style.Style
+	Spinner      ColorSchemeSpinner
 	Footer       ColorSchemeFooter
 	Notification ColorSchemeNotification
 
@@ -148,7 +153,6 @@ func DefaultColorScheme() *ColorScheme {
 			HelpSeparator:         style.NewStyle().Foreground(style.Color("#6272A4")),
 			HelpSelectedKey:       style.NewStyle().Foreground(style.Color("#8BE9FD")).Bold(true),
 			HelpSelectedDesc:      style.NewStyle().Foreground(style.Color("#568CAF")),
-			DebugBackground:       style.NewStyle().Background(style.Color("#FFC800")),
 			NotificationBaseStyle: style.NewStyle().Bold(true),
 		},
 		Notification: ColorSchemeNotification{
@@ -160,7 +164,10 @@ func DefaultColorScheme() *ColorScheme {
 		Phase:         makeLogEntity("#FF79C6", '📋', false),
 		Command:       makeLogEntity("#BD93F9", '⚙', false),
 		Error:         makeLogEntity("#FF5555", '✗', false),
-		Spinner:       makeForegroundStyle("#8BE9FD", false),
+		Spinner: ColorSchemeSpinner{
+			Frames:   []string{"⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ "},
+			Interval: time.Second / 10,
+		},
 	}
 }
 

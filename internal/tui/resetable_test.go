@@ -182,7 +182,7 @@ func newTestModel(t *testing.T) *model {
 		conf:       conf,
 		dimensions: &viewports.Dimensions{Width: 200, Height: 80},
 		header:     header.New(false, config.Snapshot{}, nil),
-		spinners:   spinners.New(),
+		spinners:   spinners.New(conf.ColorScheme.Spinner),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}

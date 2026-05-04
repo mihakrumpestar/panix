@@ -82,7 +82,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		isSnapshot: isSnapshot,
 
 		header:     header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
-		spinners:   spinners.New(),
+		spinners:   spinners.New(conf.ColorScheme.Spinner),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
@@ -140,8 +140,6 @@ func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
 
 	resetable := m.resetable.Load()
 	if resetable != nil {
-		cmds = append(cmds, m.spinners.ProcessPendingTicks())
-
 		cmds = append(cmds, resetable.viewports.Update(msg))
 		cmds = append(cmds, m.footer.Update(msg))
 		cmds = append(cmds, m.spinners.Update(msg))
@@ -173,6 +171,9 @@ func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
 
 	case workflowUpdateHookMsg:
 		cmds = append(cmds, m.workflowUpdateHook())
+
+	case zeroterm.PostRenderMsg:
+		cmds = append(cmds, m.spinners.ProcessPendingTicks())
 
 	case zeroterm.KeyPressMsg:
 		keyCmds := m.HandleKeyInput(msg)

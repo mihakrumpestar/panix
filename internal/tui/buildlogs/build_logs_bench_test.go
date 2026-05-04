@@ -38,7 +38,7 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
 	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80}, conf)
-	spinnersInst := spinners.New()
+	spinnersInst := spinners.New(conf.ColorScheme.Spinner)
 
 	b.ResetTimer()
 

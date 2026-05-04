@@ -48,6 +48,7 @@ func (m *model) restartWorkflow() zeroterm.Cmd {
 	m.conf.Fleet.ResetState()
 	m.statsTable.Reset()
 	m.phaseFlow.Reset()
+	m.spinners.Reset()
 	m.err = nil
 	m.buildLogs = nil
 

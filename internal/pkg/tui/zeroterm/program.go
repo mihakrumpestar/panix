@@ -82,6 +82,11 @@ func (p *Program) Run() error {
 	p.processCmds(allCmds)
 	p.renderFrame()
 
+	// Post-render update lets the model emit ticks (e.g. spinners) after
+	// the first render has populated view state.
+	postCmds := p.model.Update(PostRenderMsg{})
+	p.processCmds(postCmds)
+
 	sigCh := term.WatchResize()
 	defer term.StopWatchResize()
 
@@ -130,6 +135,11 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 			}
 
 			p.renderFrame()
+
+			// Post-render update lets the model emit cmds based on what
+			// was rendered (e.g. spinners that were viewed need ticks).
+			postCmds := p.model.Update(PostRenderMsg{})
+			p.processCmds(postCmds)
 		case <-sigCh:
 			w, h := p.terminal.UpdateSize()
 			if w != p.width || h != p.height {
@@ -141,6 +151,9 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 				cmds := p.model.Update(WindowSizeMsg{Width: w, Height: h})
 				p.processCmds(cmds)
 				p.renderFrame()
+
+				postCmds := p.model.Update(PostRenderMsg{})
+				p.processCmds(postCmds)
 			}
 		}
 	}

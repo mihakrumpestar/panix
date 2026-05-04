@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/spinner"
+	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinner"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
@@ -14,75 +15,68 @@ import (
 type tickMsg struct{}
 
 type Spinners struct {
-	entries *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *entry]
+	entries *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *spinner.Spinner]
+	cs      colorscheme.ColorSchemeSpinner
+	viewed  bool
 	ticking bool
 }
 
-type entry struct {
-	lastUsed time.Time
-	model    spinner.Model
-}
-
-func New() *Spinners {
-	return &Spinners{entries: atomicorderedmap.New[xpath.Xpath, *entry]()}
+func New(cs colorscheme.ColorSchemeSpinner) *Spinners {
+	return &Spinners{
+		entries: atomicorderedmap.New[xpath.Xpath, *spinner.Spinner](),
+		cs:      cs,
+	}
 }
 
 func (s *Spinners) View(xpath xpath.Xpath) string {
-	e, ok := s.entries.Get(xpath)
-	if ok {
-		e.lastUsed = time.Now()
+	s.viewed = true
 
-		return e.model.View()
+	sp, ok := s.entries.Get(xpath)
+	if ok {
+		return sp.View()
 	}
 
-	model := spinner.New(spinner.WithSpinner(spinner.Dot))
-	s.entries.Set(xpath, &entry{
-		lastUsed: time.Now(),
-		model:    model,
-	})
+	sp = spinner.New(s.cs.Frames, s.cs.Interval)
+	s.entries.Set(xpath, sp)
 
-	return model.View()
+	return sp.View()
 }
 
 func (s *Spinners) ProcessPendingTicks() zeroterm.Cmd {
-	if s == nil || s.ticking {
+	if s == nil || s.ticking || !s.viewed {
 		return nil
 	}
 
-	if s.entries.Len() == 0 {
-		return nil
-	}
-
+	s.viewed = false
 	s.ticking = true
 
 	return s.nextTick()
 }
 
 func (s *Spinners) Update(msg zeroterm.Msg) zeroterm.Cmd {
-	_, ok := msg.(tickMsg)
-	if !ok {
-		return nil
-	}
-
-	now := time.Now()
-	for _, pair := range s.entries.Pairs() {
-		if now.Sub(pair.Value.lastUsed).Seconds() > 1 {
-			s.entries.Del(pair.Key)
-		}
-	}
-
-	if s.entries.Len() == 0 {
-		s.ticking = false
-
+	if _, ok := msg.(tickMsg); !ok {
 		return nil
 	}
 
 	for _, pair := range s.entries.Pairs() {
-		newModel, _ := pair.Value.model.Update(spinner.TickMsg{})
-		pair.Value.model = newModel
+		pair.Value.Update()
 	}
 
-	return s.nextTick()
+	if s.viewed {
+		s.viewed = false
+
+		return s.nextTick()
+	}
+
+	s.ticking = false
+
+	return nil
+}
+
+func (s *Spinners) Reset() {
+	s.entries.Clear()
+	s.viewed = false
+	s.ticking = false
 }
 
 func (s *Spinners) Debug() string {
@@ -92,8 +86,6 @@ func (s *Spinners) Debug() string {
 	return str.String()
 }
 
-// helpers
-
 func (s *Spinners) nextTick() zeroterm.Cmd {
-	return zeroterm.TickCmd(spinner.Dot.FPS, func(time.Time) zeroterm.Msg { return tickMsg{} })
+	return zeroterm.TickCmd(s.cs.Interval, func(time.Time) zeroterm.Msg { return tickMsg{} })
 }

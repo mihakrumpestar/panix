@@ -37,6 +37,8 @@ type WindowSizeMsg struct {
 
 type QuitMsg struct{}
 
+type PostRenderMsg struct{}
+
 func QuitCmd() Msg { return QuitMsg{} }
 
 type Cmd func() Msg
