@@ -1,7 +1,6 @@
 package style
 
 import (
-	"image/color"
 	"testing"
 )
 
@@ -165,48 +164,46 @@ func TestColor_RGBA_Invalid256(t *testing.T) {
 func TestColorToFgPrefix(t *testing.T) {
 	t.Parallel()
 
-	// nil color returns empty
-	if got := colorToFgPrefix(nil); got != "" {
-		t.Errorf("colorToFgPrefix(nil) = %q, want \"\"", got)
+	// Empty color returns empty
+	if got := colorToFgPrefix(""); got != "" {
+		t.Errorf("colorToFgPrefix(\"\") = %q, want \"\"", got)
 	}
 
-	// Zero-alpha color returns empty
-	zeroAlpha := color.RGBA{R: 255, G: 0, B: 0, A: 0}
-	if got := colorToFgPrefix(zeroAlpha); got != "" {
-		t.Errorf("colorToFgPrefix(zeroAlpha) = %q, want \"\"", got)
+	// Invalid color returns empty
+	if got := colorToFgPrefix(Color("#XYZ")); got != "" {
+		t.Errorf("colorToFgPrefix(#XYZ) = %q, want \"\"", got)
 	}
 
 	// Valid color produces true-color foreground sequence
-	c := color.RGBA{R: 255, G: 128, B: 0, A: 255}
+	c := Color("#FF8000")
 	got := colorToFgPrefix(c)
 	expected := "\x1b[38;2;255;128;0m"
 
 	if got != expected {
-		t.Errorf("colorToFgPrefix(RGBA{255,128,0,255}) = %q, want %q", got, expected)
+		t.Errorf("colorToFgPrefix(#FF8000) = %q, want %q", got, expected)
 	}
 }
 
 func TestColorToBgPrefix(t *testing.T) {
 	t.Parallel()
 
-	// nil color returns empty
-	if got := colorToBgPrefix(nil); got != "" {
-		t.Errorf("colorToBgPrefix(nil) = %q, want \"\"", got)
+	// Empty color returns empty
+	if got := colorToBgPrefix(""); got != "" {
+		t.Errorf("colorToBgPrefix(\"\") = %q, want \"\"", got)
 	}
 
-	// Zero-alpha color returns empty
-	zeroAlpha := color.RGBA{R: 255, G: 0, B: 0, A: 0}
-	if got := colorToBgPrefix(zeroAlpha); got != "" {
-		t.Errorf("colorToBgPrefix(zeroAlpha) = %q, want \"\"", got)
+	// Invalid color returns empty
+	if got := colorToBgPrefix(Color("#XYZ")); got != "" {
+		t.Errorf("colorToBgPrefix(#XYZ) = %q, want \"\"", got)
 	}
 
 	// Valid color produces true-color background sequence
-	c := color.RGBA{R: 100, G: 200, B: 50, A: 255}
+	c := Color("#64C832")
 	got := colorToBgPrefix(c)
 	expected := "\x1b[48;2;100;200;50m"
 
 	if got != expected {
-		t.Errorf("colorToBgPrefix(RGBA{100,200,50,255}) = %q, want %q", got, expected)
+		t.Errorf("colorToBgPrefix(#64C832) = %q, want %q", got, expected)
 	}
 }
 

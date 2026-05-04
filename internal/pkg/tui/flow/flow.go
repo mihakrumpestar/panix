@@ -15,7 +15,6 @@ import (
 
 const (
 	gradientCycleTime = 4 * time.Second
-	phaseArrow        = "\xf3\xb0\x9c\xb4"
 	animInterval      = 100 * time.Millisecond
 	animAmplitude     = 0.5
 	arrowCellWidth    = 1
@@ -50,7 +49,8 @@ type Styles struct {
 	StatusDone      style.Style
 	StatusSeparator style.Style
 
-	Arrow       style.Style
+	Arrow      style.Style
+	PhaseArrow string
 	SelectionBg style.Color
 }
 
@@ -305,7 +305,7 @@ func (pf *PhaseFlow) render() string {
 		cells[i] = pf.buildCell(pf.phases[i], d, colWidths[i], isSelected, i)
 	}
 
-	arrowStyled := pf.styles.Arrow.Width(1).Align(style.Center).Render(phaseArrow)
+	arrowStyled := pf.styles.Arrow.Width(1).Align(style.Center).Render(pf.styles.PhaseArrow)
 
 	parts := make([]string, 0, 2*n-1)
 

@@ -23,6 +23,7 @@ func (m *model) keyDefs() []footer.KeyDef {
 		{Keys: []string{"ctrl+c"}, Help: "copy", Handler: m.handleCopy},
 		{Keys: []string{"m"}, Help: "fullscreen", Active: func() bool {
 			resetable := m.resetable.Load()
+
 			return resetable != nil && resetable.viewports.IsFullscreen()
 		}, Handler: m.handleFullscreen},
 	}
@@ -84,19 +85,19 @@ func (m *model) handleCopy() []render.Cmd {
 
 	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return []render.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning)}
+		return []render.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
 
 	if content == "" {
-		return []render.Cmd{m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning)}
+		return []render.Cmd{m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
 
 	err := clipboard.CopyToClipboard(content)
 	if err != nil {
-		return []render.Cmd{m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed)}
+		return []render.Cmd{m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())}
 	}
 
-	return []render.Cmd{m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK)}
+	return []render.Cmd{m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())}
 }
 
 func (m *model) handleQuit() []render.Cmd {
@@ -175,7 +176,7 @@ func (m *model) handleRetry() []render.Cmd {
 
 func (m *model) handleRestart() []render.Cmd {
 	cmds := []render.Cmd{
-		m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK),
+		m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground()),
 		func() render.Msg { return restartMsg{} },
 	}
 
@@ -199,7 +200,7 @@ func (m *model) handleFullscreen() []render.Cmd {
 	if activeInnerXpath.Depth() > 0 {
 		resetable.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return []render.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning)}
+		return []render.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
 
 	return nil
@@ -229,7 +230,7 @@ func (m *model) handleEsc() []render.Cmd {
 func (m *model) handleSnapshot() []render.Cmd {
 	m.captureSnapshot(config.SnaphsotReasonManual)
 
-	return []render.Cmd{m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK)}
+	return []render.Cmd{m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())}
 }
 
 func (m *model) captureSnapshot(reason config.SnaphsotReason) {

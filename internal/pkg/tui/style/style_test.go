@@ -128,12 +128,12 @@ func TestStyle_GetForegroundGetBackground(t *testing.T) {
 	c := Color("#FF0000")
 	s := NewStyle().Foreground(c).Background(c)
 
-	if s.GetForeground() == nil {
-		t.Error("GetForeground() = nil, want non-nil")
+	if s.GetForeground() == "" {
+		t.Error("GetForeground() = \"\", want non-empty")
 	}
 
-	if s.GetBackground() == nil {
-		t.Error("GetBackground() = nil, want non-nil")
+	if s.GetBackground() == "" {
+		t.Error("GetBackground() = \"\", want non-empty")
 	}
 }
 

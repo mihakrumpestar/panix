@@ -48,20 +48,22 @@ func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAn
 
 func (h *Header) render(width int, colorScheme *colorscheme.ColorScheme) string {
 	reason := h.snapshot.Reason.String()
+	sep := colorScheme.Table.Border.Render(" " + colorScheme.Chars.HeaderSeparator + " ")
 
 	parts := []string{
 		colorScheme.Status.Running.Render("v" + h.snapshot.PanixVersion),
 		colorScheme.Table.Border.Render(reason),
-		colorScheme.Table.Border.Render("started:", formatTime(h.snapshot.StartTime)),
-		colorScheme.Table.Border.Render("taken:", formatTime(h.snapshot.SnapshotTime)),
+		colorScheme.Table.Border.Render("started: ", formatTime(h.snapshot.StartTime)),
+		colorScheme.Table.Border.Render("taken: ", formatTime(h.snapshot.SnapshotTime)),
 	}
 
 	if h.snapshot.WorkflowError != nil {
 		parts = append(parts, colorScheme.Status.Failed.Render(h.snapshot.WorkflowError.Error()))
 	}
 
-	sep := colorScheme.Table.Border.Render(" │ ")
-	line := colorScheme.Header.Title.Render("◉ Snapshot") + colorScheme.Table.Border.Render(": ") + strings.Join(parts, sep)
+	line := colorScheme.Header.Title.Render(
+		colorScheme.Chars.SnapshotIcon+" Snapshot",
+	) + colorScheme.Table.Border.Render(colorScheme.Chars.HeaderTitleSep) + " " + strings.Join(parts, sep)
 
 	return style.NewStyle().Width(width).Render(line) + "\n\n"
 }

@@ -2,7 +2,6 @@ package viewports
 
 import (
 	"fmt"
-	"image/color"
 	"os"
 	"sort"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
+	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	tuiviewport "github.com/mihakrumpestar/panix/internal/pkg/tui/viewport"
 	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 )
@@ -320,7 +320,7 @@ func (v *Viewports) getOrCreateItem(
 	return itm
 }
 
-func (v *Viewports) borderColor(active bool) color.Color {
+func (v *Viewports) borderColor(active bool) style.Color {
 	if active {
 		return v.conf.ColorScheme.Table.SelectionHighlightBorder.GetBackground()
 	}

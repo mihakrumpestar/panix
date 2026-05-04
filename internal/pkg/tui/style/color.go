@@ -1,7 +1,7 @@
 package style
 
 import (
-	"image/color"
+	"fmt"
 	"strconv"
 )
 
@@ -92,8 +92,8 @@ func hexVal(s string) uint8 {
 	return v
 }
 
-func colorToFgPrefix(c color.Color) string {
-	if c == nil {
+func colorToFgPrefix(c Color) string {
+	if c == "" {
 		return ""
 	}
 
@@ -108,8 +108,8 @@ func colorToFgPrefix(c color.Color) string {
 		strconv.Itoa(int(b>>8)) + "m"
 }
 
-func colorToBgPrefix(c color.Color) string {
-	if c == nil {
+func colorToBgPrefix(c Color) string {
+	if c == "" {
 		return ""
 	}
 
@@ -122,4 +122,16 @@ func colorToBgPrefix(c color.Color) string {
 		strconv.Itoa(int(r>>8)) + ";" +
 		strconv.Itoa(int(g>>8)) + ";" +
 		strconv.Itoa(int(b>>8)) + "m"
+}
+
+// ColorToRGB8 extracts 8-bit RGB components from a Color.
+func ColorToRGB8(c Color) (r, g, b uint8) {
+	ru, gu, bu, _ := c.RGBA()
+	return uint8(ru >> 8), uint8(gu >> 8), uint8(bu >> 8)
+}
+
+// ColorToStyle converts any color.Color to a style.Color hex string.
+func ColorToStyle(c Color) Color {
+	r, g, b := ColorToRGB8(c)
+	return Color(fmt.Sprintf("#%02x%02x%02x", r, g, b))
 }

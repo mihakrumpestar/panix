@@ -2,7 +2,6 @@ package table
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
@@ -27,7 +26,7 @@ type Table struct {
 	borderColumn bool
 
 	selectedIndex int
-	selBg         color.Color
+	selBg       style.Color
 	selBgPrefix   string
 	zonePrefix    string
 
@@ -127,7 +126,7 @@ func (t *Table) Wrap(v bool) *Table {
 	return t
 }
 
-func (t *Table) SelectionBackground(c color.Color) *Table {
+func (t *Table) SelectionBackground(c style.Color) *Table {
 	t.selBg = c
 	t.selBgPrefix = style.ColorToBgPrefix(c)
 

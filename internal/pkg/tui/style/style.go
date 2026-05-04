@@ -1,7 +1,6 @@
 package style
 
 import (
-	"image/color"
 	"strings"
 )
 
@@ -30,8 +29,8 @@ type Style struct {
 	borderBottom bool
 	borderLeft   bool
 
-	fgColor color.Color
-	bgColor color.Color
+	fgColor Color
+	bgColor Color
 }
 
 func NewStyle() Style {
@@ -39,7 +38,7 @@ func NewStyle() Style {
 }
 
 // Foreground sets the text foreground color. Returns a copy.
-func (s Style) Foreground(c color.Color) Style {
+func (s Style) Foreground(c Color) Style {
 	s.fgPrefix = colorToFgPrefix(c)
 	s.fgColor = c
 
@@ -47,7 +46,7 @@ func (s Style) Foreground(c color.Color) Style {
 }
 
 // Background sets the text background color. Returns a copy.
-func (s Style) Background(c color.Color) Style {
+func (s Style) Background(c Color) Style {
 	s.bgPrefix = colorToBgPrefix(c)
 	s.bgColor = c
 
@@ -165,45 +164,44 @@ func (s Style) Border(b Border, sides ...bool) Style {
 }
 
 // BorderForeground sets the foreground color for all border edges. Returns a copy.
-func (s Style) BorderForeground(c color.Color) Style {
+func (s Style) BorderForeground(c Color) Style {
 	s.borderFg = colorToFgPrefix(c)
 
 	return s
 }
 
 // BorderTopForeground sets the foreground color for the top border edge. Returns a copy.
-func (s Style) BorderTopForeground(c color.Color) Style {
+func (s Style) BorderTopForeground(c Color) Style {
 	s.border.topFg = colorToFgPrefix(c)
 
 	return s
 }
 
 // BorderRightForeground sets the foreground color for the right border edge. Returns a copy.
-func (s Style) BorderRightForeground(c color.Color) Style {
+func (s Style) BorderRightForeground(c Color) Style {
 	s.border.rightFg = colorToFgPrefix(c)
 
 	return s
 }
 
 // BorderBottomForeground sets the foreground color for the bottom border edge. Returns a copy.
-func (s Style) BorderBottomForeground(c color.Color) Style {
+func (s Style) BorderBottomForeground(c Color) Style {
 	s.border.bottomFg = colorToFgPrefix(c)
 
 	return s
 }
 
 // BorderLeftForeground sets the foreground color for the left border edge. Returns a copy.
-func (s Style) BorderLeftForeground(c color.Color) Style {
+func (s Style) BorderLeftForeground(c Color) Style {
 	s.border.leftFg = colorToFgPrefix(c)
 
 	return s
 }
 
 // GetForeground returns the foreground color, or nil if unset.
-func (s Style) GetForeground() color.Color { return s.fgColor }
+func (s Style) GetForeground() Color { return s.fgColor }
 
-// GetBackground returns the background color, or nil if unset.
-func (s Style) GetBackground() color.Color { return s.bgColor }
+func (s Style) GetBackground() Color { return s.bgColor }
 
 // GetWidth returns the explicit width set on the style, or 0 if none.
 func (s Style) GetWidth() int { return s.width }

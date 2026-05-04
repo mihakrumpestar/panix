@@ -13,11 +13,11 @@ import (
 type cliCmd struct {
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
-	Init        commands_standalone.InitCmd     `cmd:"" help:"Initialize a new panix configuration file"`
-	Schema      commands_standalone.SchemaCmd   `cmd:"" help:"Generate YAML schema for configuration files"`
-	Template    commands_standalone.TemplateCmd `cmd:"" help:"Process templates and anchors, output the result"`
-	Eval        commands_standalone.EvalCmd     `cmd:"" help:"Fully evaluate and validate configuration (including templating) for execution, output the result"`
-	SnapshotCmd commands_standalone.SnapshotCmd `cmd:"" help:"View snapshot in TUI"`
+	Init     commands_standalone.InitCmd     `cmd:"" help:"Initialize a new panix configuration file"`
+	Schema   commands_standalone.SchemaCmd   `cmd:"" help:"Generate YAML schema for configuration files"`
+	Template commands_standalone.TemplateCmd `cmd:"" help:"Process templates and anchors, output the result"`
+	Eval     commands_standalone.EvalCmd     `cmd:"" help:"Fully evaluate and validate configuration (including templating) for execution, output the result"`
+	Snapshot commands_standalone.SnapshotCmd `cmd:"" help:"View snapshot in TUI"`
 
 	Inspect  commands_workflow.InspectCmd  `cmd:"" help:"Inspect machines"`
 	Build    commands_workflow.BuildCmd    `cmd:"" help:"Build NixOS closures"`

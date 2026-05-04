@@ -8,8 +8,8 @@ import (
 )
 
 func TestViewRendersBorderedBox(t *testing.T) {
-	n := New()
-	_ = n.Set("hello", style.NewStyle().Foreground(style.Color("#50FA7B")))
+	n := New(style.Color("#B4B4B4"))
+	_ = n.Set("hello", style.Color("#50FA7B"))
 
 	result := n.View(style.NewStyle().Bold(true))
 	if result == "" {
@@ -52,7 +52,7 @@ func TestViewRendersBorderedBox(t *testing.T) {
 }
 
 func TestViewEmptyWhenExpired(t *testing.T) {
-	n := New()
+	n := New(style.Color("#B4B4B4"))
 
 	result := n.View(style.NewStyle())
 	if result != "" {
@@ -61,14 +61,14 @@ func TestViewEmptyWhenExpired(t *testing.T) {
 }
 
 func TestViewBorderWidthMatchesContent(t *testing.T) {
-	n := New()
-	_ = n.Set("short", style.NewStyle().Foreground(style.Color("#50FA7B")))
+	n := New(style.Color("#B4B4B4"))
+	_ = n.Set("short", style.Color("#50FA7B"))
 
 	result := n.View(style.NewStyle())
 	topWidth := style.CellWidth(strings.Split(strings.TrimRight(result, "\n"), "\n")[0])
 
-	n2 := New()
-	_ = n2.Set("a much longer message text", style.NewStyle().Foreground(style.Color("#50FA7B")))
+	n2 := New(style.Color("#B4B4B4"))
+	_ = n2.Set("a much longer message text", style.Color("#50FA7B"))
 
 	result2 := n2.View(style.NewStyle())
 	topWidth2 := style.CellWidth(strings.Split(strings.TrimRight(result2, "\n"), "\n")[0])
@@ -79,8 +79,8 @@ func TestViewBorderWidthMatchesContent(t *testing.T) {
 }
 
 func TestViewAllLinesEqualWidth(t *testing.T) {
-	n := New()
-	_ = n.Set("Here is a notification", style.NewStyle().Foreground(style.Color("#50FA7B")))
+	n := New(style.Color("#B4B4B4"))
+	_ = n.Set("Here is a notification", style.Color("#50FA7B"))
 
 	result := n.View(style.NewStyle().Bold(true))
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
@@ -98,8 +98,8 @@ func TestViewAllLinesEqualWidth(t *testing.T) {
 }
 
 func TestViewContentHasHorizontalPadding(t *testing.T) {
-	n := New()
-	_ = n.Set("hello", style.NewStyle().Foreground(style.Color("#50FA7B")))
+	n := New(style.Color("#B4B4B4"))
+	_ = n.Set("hello", style.Color("#50FA7B"))
 
 	result := n.View(style.NewStyle().Bold(true))
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")

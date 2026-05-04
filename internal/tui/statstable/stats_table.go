@@ -15,7 +15,6 @@ import (
 
 const (
 	statsTableZonePrefix = "stats-table"
-	rowSpanMarker        = " 󱞩"
 )
 
 type StatsTable struct {
@@ -42,9 +41,9 @@ func NewStatsTable(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *St
 	}
 
 	headers := []string{"", "",
-		string(colorScheme.Flake.Icon) + " FLAKE",
-		string(colorScheme.Configuration.Icon) + " CONFIGURATION",
-		string(colorScheme.Machine.Icon) + " MACHINE",
+		colorScheme.Flake.Icon + " FLAKE",
+		colorScheme.Configuration.Icon + " CONFIGURATION",
+		colorScheme.Machine.Icon + " MACHINE",
 		"ARCH", "STATUS", "GEN", "DATE", "NIXOS", "KERNEL"}
 
 	tbl := table.New().
@@ -109,13 +108,15 @@ func (s *StatsTable) buildRows() [][]string {
 	for idx, machineInfo := range machineInfos {
 		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
 
-		flakeDisplay := rowSpanMarker
+		marker := " " + s.colorScheme.Chars.RowSpanMarker
+
+		flakeDisplay := marker
 		if flakeName != prevFlakeName {
 			flakeDisplay = flakeName
 			prevFlakeName = flakeName
 		}
 
-		configDisplay := rowSpanMarker
+		configDisplay := marker
 		if configurationName != prevConfigurationName || flakeName != prevFlakeName {
 			configDisplay = configurationName
 			prevConfigurationName = configurationName
@@ -123,7 +124,7 @@ func (s *StatsTable) buildRows() [][]string {
 
 		rows[idx] = []string{
 			strconv.Itoa(idx + 1),
-			getStatusIcon(machineInfo.State.Status),
+			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,
 			machineName,
@@ -139,14 +140,14 @@ func (s *StatsTable) buildRows() [][]string {
 	return rows
 }
 
-func getStatusIcon(status stats.StatsState) string {
+func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme) string {
 	switch status {
 	case stats.Running:
-		return "🔄"
+		return colorScheme.Status.Icons.Running
 	case stats.Failed:
-		return "🔴"
+		return colorScheme.Status.Icons.Failed
 	case stats.Done:
-		return "✅"
+		return colorScheme.Status.Icons.OK
 	default:
 		return "invalid"
 	}

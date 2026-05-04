@@ -1,8 +1,6 @@
 package phasestatus
 
 import (
-	"fmt"
-	"image/color"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -10,7 +8,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/flow"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
@@ -41,7 +38,8 @@ func NewPhaseStatus(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, wo
 		StatusDone:      cs.Status.OK,
 		StatusSeparator: cs.Table.Border,
 		Arrow:           cs.Table.Border,
-		SelectionBg:     colorToStyleColor(cs.Table.SelectionHighlightBackground.GetBackground()),
+		PhaseArrow:      cs.Chars.PhaseArrow,
+		SelectionBg:     cs.Table.SelectionHighlightBackground.GetBackground(),
 	}
 
 	names := make([]string, 0, len(workflowPhases)+1)
@@ -67,12 +65,6 @@ func NewPhaseStatus(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, wo
 
 func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
 	return flow.GradientPair{Dark: cp[0], Light: cp[1]}
-}
-
-func colorToStyleColor(c color.Color) style.Color {
-	r, g, b, _ := c.RGBA()
-
-	return style.Color(fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8))
 }
 
 func (p *PhaseStatus) View(width int) string {

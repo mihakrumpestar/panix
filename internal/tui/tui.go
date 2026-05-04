@@ -58,12 +58,12 @@ type model struct {
 	lastWorkflowUpdate time.Time
 	err                error
 	contentVersion     uint64
-	header      *header.Header
-	buildLogs   *buildlogs.BuildLogs
-	footer      *footer.Footer
-	spinners    *spinners.Spinners
-	statsTable  *statstable.StatsTable
-	phaseStatus *phasestatus.PhaseStatus
+	header             *header.Header
+	buildLogs          *buildlogs.BuildLogs
+	footer             *footer.Footer
+	spinners           *spinners.Spinners
+	statsTable         *statstable.StatsTable
+	phaseStatus        *phasestatus.PhaseStatus
 }
 
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
@@ -89,9 +89,10 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 
-	program := render.NewProgram(mdl, render.WithRaw())
+	program := render.NewProgram(mdl /*, render.WithRaw() */)
 
-	if err := program.Run(); err != nil {
+	err = program.Run()
+	if err != nil {
 		return errors.Wrap(err, "TUI runtime error")
 	}
 
@@ -134,27 +135,16 @@ func (m *model) Init() []render.Cmd {
 	}
 }
 
-//nolint:cyclop
 func (m *model) Update(msg render.Msg) []render.Cmd {
 	var cmds []render.Cmd
 
 	resetable := m.resetable.Load()
 	if resetable != nil {
-		if cmd := m.spinners.ProcessPendingTicks(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		cmds = append(cmds, m.spinners.ProcessPendingTicks())
 
-		if cmd := resetable.viewports.Update(msg); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-
-		if cmd := m.footer.Update(msg); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-
-		if cmd := m.spinners.Update(msg); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		cmds = append(cmds, resetable.viewports.Update(msg))
+		cmds = append(cmds, m.footer.Update(msg))
+		cmds = append(cmds, m.spinners.Update(msg))
 	}
 
 	switch msg := msg.(type) {
@@ -168,7 +158,7 @@ func (m *model) Update(msg render.Msg) []render.Cmd {
 
 		m.quitting = true
 
-		cmds = append(cmds, func() render.Msg { return render.QuitCmd() })
+		cmds = append(cmds, render.QuitCmd)
 
 	case workflowDoneMsg:
 		if msg.err != nil {
@@ -252,7 +242,7 @@ func (m *model) handleWorkflowDone(cmds []render.Cmd) []render.Cmd {
 	if m.conf.Flags.ExitOnComplete {
 		m.quitting = true
 
-		return append(cmds, func() render.Msg { return render.QuitCmd() })
+		return append(cmds, render.QuitCmd)
 	}
 
 	return cmds

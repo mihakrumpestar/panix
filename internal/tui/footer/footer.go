@@ -16,8 +16,6 @@ type KeyDef struct {
 	Handler func() []render.Cmd
 }
 
-var notificationBaseStyle = style.NewStyle().Bold(true)
-
 const minFooterHeight = 3
 
 type Footer struct {
@@ -28,18 +26,16 @@ type Footer struct {
 }
 
 func New(keyDefs []KeyDef, conf *config.Config, colorScheme *colorscheme.ColorScheme) *Footer {
-	pairs := pairsFromKeyDefs(keyDefs)
-
 	return &Footer{
 		keyDefs: keyDefs,
-		keymap: keymap.New(pairs, keymap.Styles{
+		keymap: keymap.New(pairsFromKeyDefs(keyDefs), keymap.Styles{
 			Key:          colorScheme.Footer.HelpKey,
 			Desc:         colorScheme.Footer.HelpDesc,
 			Separator:    colorScheme.Footer.HelpSeparator,
 			SelectedKey:  colorScheme.Footer.HelpSelectedKey,
 			SelectedDesc: colorScheme.Footer.HelpSelectedDesc,
 		}),
-		notification: notification.New(),
+		notification: notification.New(colorScheme.Notification.DefaultFgColor),
 		conf:         conf,
 	}
 }
@@ -49,7 +45,7 @@ func (f *Footer) KeyDefs() []KeyDef { return f.keyDefs }
 func (f *Footer) Notification() *notification.Notification { return f.notification }
 
 func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) string {
-	notifBox := f.notification.View(notificationBaseStyle)
+	notifBox := f.notification.View(colorScheme.Footer.NotificationBaseStyle)
 	notifWidth := style.CellWidth(notifBox)
 
 	content := "\n" + f.keymap.View(width)

@@ -1,7 +1,6 @@
 package style
 
 import (
-	"image/color"
 	"strings"
 )
 
@@ -83,14 +82,14 @@ func (a ANSIStyle) Reset() string { return a.reset }
 // ColorToPrefix extracts the ANSI escape sequence prefix for the given
 // foreground color (e.g. "\x1b[38;2;241;250;140m"). Returns "" if the
 // color produces no prefix.
-func ColorToPrefix(c color.Color) string {
+func ColorToPrefix(c Color) string {
 	return colorToFgPrefix(c)
 }
 
 // ColorToBgPrefix extracts the ANSI escape sequence prefix for the given
 // background color (e.g. "\x1b[48;2;51;51;51m"). Returns "" if the
 // color produces no prefix.
-func ColorToBgPrefix(c color.Color) string {
+func ColorToBgPrefix(c Color) string {
 	return colorToBgPrefix(c)
 }
 

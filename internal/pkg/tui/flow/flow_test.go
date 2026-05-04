@@ -34,6 +34,7 @@ func testStyles() Styles {
 		StatusDone:      style.NewStyle().Foreground(style.Color("#50FA7B")),
 		StatusSeparator: style.NewStyle().Foreground(style.Color("#6272A4")),
 		Arrow:           style.NewStyle().Foreground(style.Color("#6272A4")),
+		PhaseArrow:      string(rune(0x1FB74)),
 		SelectionBg:     style.Color("#3B3258"),
 	}
 }

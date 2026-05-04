@@ -2,7 +2,6 @@ package notification
 
 import (
 	"fmt"
-	"image/color"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/render"
@@ -12,34 +11,30 @@ import (
 const (
 	duration     = 3 * time.Second
 	fadeStart    = 1 * time.Second
-	tickInterval = 250 * time.Millisecond
+	tickInterval = 150 * time.Millisecond
 
 	fadeFactor = 0.4
-	rgbaShift  = 8
 )
 
 type notificationTickMsg struct{}
 
 type Notification struct {
-	text    string
-	fgR     uint8
-	fgG     uint8
-	fgB     uint8
-	started time.Time
+	text         string
+	defaultColor style.Color
+	currentColor style.Color
+	started      time.Time
 }
 
-func New() *Notification { return &Notification{} }
+func New(defaultColor style.Color) *Notification {
+	return &Notification{defaultColor: defaultColor}
+}
 
-func (n *Notification) Set(text string, sty style.Style) render.Cmd {
+func (n *Notification) Set(text string, c style.Color) render.Cmd {
 	n.text, n.started = text, time.Now()
-	n.fgR, n.fgG, n.fgB = 180, 180, 180
+	n.currentColor = n.defaultColor
 
-	fg := sty.GetForeground()
-	if fg != nil {
-		r, g, b, _ := fg.RGBA()
-
-		// #nosec G115 -- rgba values are 0-65535, >>8 safely converts to 0-255 range
-		n.fgR, n.fgG, n.fgB = uint8(r>>rgbaShift), uint8(g>>rgbaShift), uint8(b>>rgbaShift)
+	if c != "" {
+		n.currentColor = c
 	}
 
 	return render.TickCmd(tickInterval, func(time.Time) render.Msg { return notificationTickMsg{} })
@@ -96,17 +91,19 @@ func (n *Notification) isExpired() bool {
 	return n.text == "" || time.Since(n.started) >= duration
 }
 
-func (n *Notification) fadedColor() color.Color {
+func (n *Notification) fadedColor() style.Color {
 	elapsed := time.Since(n.started)
+	r, g, b := style.ColorToRGB8(n.currentColor)
+
 	if elapsed < fadeStart {
-		return style.Color(fmt.Sprintf("#%02x%02x%02x", n.fgR, n.fgG, n.fgB))
+		return style.Color(fmt.Sprintf("#%02x%02x%02x", r, g, b))
 	}
 
 	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
 	factor := 1.0 - (progress * fadeFactor)
 
 	return style.Color(fmt.Sprintf("#%02x%02x%02x",
-		uint8(float64(n.fgR)*factor),
-		uint8(float64(n.fgG)*factor),
-		uint8(float64(n.fgB)*factor)))
+		uint8(float64(r)*factor),
+		uint8(float64(g)*factor),
+		uint8(float64(b)*factor)))
 }

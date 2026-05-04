@@ -54,7 +54,7 @@ var (
 
 type BuildLogs struct {
 	conf        *config.Config
-	statsTable *statstable.StatsTable
+	statsTable  *statstable.StatsTable
 	phaseStatus *phasestatus.PhaseStatus
 
 	viewports *viewports.Viewports
@@ -315,7 +315,7 @@ func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI 
 	tas := phaseLog.TimeAndState
 
 	tasLoaded := tas.Load()
-	icon := b.spinnerOrIcon(phaseXpath, string(b.conf.ColorScheme.Phase.Icon), tasLoaded)
+	icon := b.spinnerOrIcon(phaseXpath, b.conf.ColorScheme.Phase.Icon, tasLoaded)
 	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Phase.Color, tas)
 
 	upperName := upperPhaseNames[phaseI]
@@ -440,7 +440,7 @@ func (b *BuildLogs) addCommandChildren(
 
 	err := tasCached.EndError
 	if err != nil {
-		errMsg := "\u2717 Command failed: " + err.Error()
+		errMsg := b.conf.ColorScheme.Chars.ErrorIcon + " Command failed: " + err.Error()
 		cmdNode.ChildString(b.conf.ColorScheme.Error.Color.Render(
 			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, 0, cmdIndent+treeStep),
 		))
@@ -455,7 +455,7 @@ func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntit
 
 	ansi := b.styleForEntity(style)
 
-	leftRaw := string(style.Icon) + " " + name
+	leftRaw := style.Icon + " " + name
 	rightRaw := formatDuration(dur)
 	left := ansi.Render(leftRaw)
 	right := ansi.Render(rightRaw)

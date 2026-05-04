@@ -9,16 +9,21 @@ import (
 
 type ColorSchemeLogEntity struct {
 	Color style.Style
-	Icon  rune
+	Icon  string
 }
 
 type ColorSchemeFooter struct {
-	HelpKey          style.Style
-	HelpDesc         style.Style
-	HelpSeparator    style.Style
-	HelpSelectedKey  style.Style
-	HelpSelectedDesc style.Style
-	DebugBackground  style.Style
+	HelpKey               style.Style
+	HelpDesc              style.Style
+	HelpSeparator         style.Style
+	HelpSelectedKey       style.Style
+	HelpSelectedDesc      style.Style
+	DebugBackground       style.Style
+	NotificationBaseStyle style.Style
+}
+
+type ColorSchemeNotification struct {
+	DefaultFgColor style.Color
 }
 
 type ColorSchemeHeader struct {
@@ -26,11 +31,27 @@ type ColorSchemeHeader struct {
 	Border style.Style
 }
 
+type ColorSchemeStatusIcons struct {
+	OK      string
+	Failed  string
+	Running string
+}
+
 type ColorSchemeStatus struct {
 	OK      style.Style
 	Warning style.Style
 	Failed  style.Style
 	Running style.Style
+	Icons   ColorSchemeStatusIcons
+}
+
+type ColorSchemeChars struct {
+	HeaderSeparator string
+	SnapshotIcon    string
+	ErrorIcon       string
+	RowSpanMarker   string
+	HeaderTitleSep  string
+	PhaseArrow      string
 }
 
 type ColorSchemeTableAndLogs struct {
@@ -52,9 +73,11 @@ type ColorScheme struct {
 	Table       ColorSchemeTableAndLogs
 	PhaseStatus ColorSchemePhaseStatus
 
-	Tree    ColorSchemeTree
-	Spinner style.Style
-	Footer  ColorSchemeFooter
+	Chars        ColorSchemeChars
+	Tree         ColorSchemeTree
+	Spinner      style.Style
+	Footer       ColorSchemeFooter
+	Notification ColorSchemeNotification
 
 	Flake         ColorSchemeLogEntity
 	Configuration ColorSchemeLogEntity
@@ -87,6 +110,11 @@ func DefaultColorScheme() *ColorScheme {
 			Warning: makeForegroundStyle("#FFB86C", false),
 			Failed:  makeForegroundStyle("#FF5555", false),
 			Running: makeForegroundStyle("#00BFFF", false),
+			Icons: ColorSchemeStatusIcons{
+				OK:      makeRune('✅'),
+				Failed:  makeRune('🔴'),
+				Running: makeRune('🔄'),
+			},
 		},
 		Table: ColorSchemeTableAndLogs{
 			Header:                       makeBoldForegroundStyle("#F8F8F2"),
@@ -103,16 +131,28 @@ func DefaultColorScheme() *ColorScheme {
 			Default: mustColorfulHexPair("#535862", "#6B7280"),
 			Pill:    style.NewStyle().Foreground(style.Color("#FFFFFF")).Bold(true).Padding(0, 1),
 		},
+		Chars: ColorSchemeChars{
+			HeaderSeparator: "│",
+			SnapshotIcon:    makeRune('◉'),
+			ErrorIcon:       makeRune('✗'),
+			RowSpanMarker:   makeRune('󱞩'),
+			HeaderTitleSep:  ":",
+			PhaseArrow:      makeRune('󰜴'),
+		},
 		Tree: ColorSchemeTree{
 			Enumerator: borderStyle,
 		},
 		Footer: ColorSchemeFooter{
-			HelpKey:          style.NewStyle().Foreground(style.Color("#FFFFFF")),
-			HelpDesc:         style.NewStyle().Foreground(style.Color("#8e8e8e")),
-			HelpSeparator:    style.NewStyle().Foreground(style.Color("#6272A4")),
-			HelpSelectedKey:  style.NewStyle().Foreground(style.Color("#8BE9FD")).Bold(true),
-			HelpSelectedDesc: style.NewStyle().Foreground(style.Color("#568CAF")),
-			DebugBackground:  style.NewStyle().Background(style.Color("#FFC800")),
+			HelpKey:               style.NewStyle().Foreground(style.Color("#FFFFFF")),
+			HelpDesc:              style.NewStyle().Foreground(style.Color("#8e8e8e")),
+			HelpSeparator:         style.NewStyle().Foreground(style.Color("#6272A4")),
+			HelpSelectedKey:       style.NewStyle().Foreground(style.Color("#8BE9FD")).Bold(true),
+			HelpSelectedDesc:      style.NewStyle().Foreground(style.Color("#568CAF")),
+			DebugBackground:       style.NewStyle().Background(style.Color("#FFC800")),
+			NotificationBaseStyle: style.NewStyle().Bold(true),
+		},
+		Notification: ColorSchemeNotification{
+			DefaultFgColor: style.Color("#B4B4B4"),
 		},
 		Flake:         makeLogEntity("#F1FA8C", '📁', true),
 		Configuration: makeLogEntity("#FFB86C", '📦', false),
@@ -146,7 +186,11 @@ func makeBackgroundStyle(color string) style.Style {
 func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
 	sty := makeForegroundStyle(color, bold)
 
-	return ColorSchemeLogEntity{Color: sty, Icon: icon}
+	return ColorSchemeLogEntity{Color: sty, Icon: makeRune(icon)}
+}
+
+func makeRune(r rune) string {
+	return string(r)
 }
 
 func mustColorfulHex(hex string) colorful.Color {

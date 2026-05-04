@@ -1,7 +1,6 @@
 package viewport
 
 import (
-	"image/color"
 	"strings"
 	"unsafe"
 
@@ -94,7 +93,7 @@ func WithHeight(h int) Option {
 	}
 }
 
-func WithScrollbar(thumbChar, trackChar string, thumbColor, trackColor color.Color) Option {
+func WithScrollbar(thumbChar, trackChar string, thumbColor, trackColor style.Color) Option {
 	return func(viewport *Viewport) {
 		viewport.scrollbar = true
 		viewport.thumbChar = thumbChar
@@ -118,7 +117,7 @@ func WithScrollbarReserve() Option {
 	}
 }
 
-func WithBorder(borderColor color.Color) Option {
+func WithBorder(borderColor style.Color) Option {
 	return func(m *Viewport) {
 		m.bordered = true
 		m.borderStyle = style.ColorToPrefix(borderColor)
@@ -204,7 +203,7 @@ func (m *Viewport) SetHeight(h int) {
 	}
 }
 
-func (m *Viewport) SetBorderStyle(borderColor color.Color) {
+func (m *Viewport) SetBorderStyle(borderColor style.Color) {
 	newStyle := style.ColorToPrefix(borderColor)
 	if m.borderStyle == newStyle {
 		return

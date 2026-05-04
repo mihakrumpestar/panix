@@ -530,7 +530,7 @@ func TestScrollbarVisibleWidthWithOverflow(t *testing.T) {
 	// When content overflows and scrollbar is enabled, every line's visible width
 	// must equal the viewport's configured width (content + scrollbar).
 	vpWidth := 20
-	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3", "l4", "l5"})
 
 	view := mdl.View()
@@ -550,7 +550,7 @@ func TestScrollbarContentWidthSmallerThanTotal(t *testing.T) {
 	// Content area is width-2 when scrollbar is shown. Short content should be
 	// padded to contentWidth, then scrollbar appended, totaling width.
 	vpWidth := 10
-	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"hi", "there", "x", "overflow1", "overflow2"})
 
 	view := mdl.View()
@@ -580,7 +580,7 @@ func TestScrollbarHiddenContentFits(t *testing.T) {
 	// When content fits in viewport, no scrollbar should appear even if
 	// WithScrollbar was specified. Width should be full contentWidth.
 	vpWidth := 20
-	mdl := New(WithWidth(vpWidth), WithHeight(10), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(10), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3"})
 
 	view := mdl.View()
@@ -624,7 +624,7 @@ func TestScrollbarThumbAtTop(t *testing.T) {
 	// At yOffset=0, thumb should be in the first visible lines.
 	vpWidth := 20
 	vpHeight := 3
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"})
 
 	view := mdl.View()
@@ -650,7 +650,7 @@ func TestScrollbarThumbAtBottom(t *testing.T) {
 
 	vpWidth := 20
 	vpHeight := 3
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"})
 	mdl.GotoBottom()
 
@@ -674,7 +674,7 @@ func TestScrollbarThumbSizeProportional(t *testing.T) {
 	t.Parallel()
 
 	// With 9 lines and height 3: thumb = max(1, 3*3/9) = 1
-	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"})
 
 	view := mdl.View()
@@ -693,7 +693,7 @@ func TestScrollbarThumbSizeProportional(t *testing.T) {
 	}
 
 	// With 30 lines and height 10: thumb = max(1, 10*10/30) = 3
-	mdl2 := New(WithWidth(20), WithHeight(10), WithScrollbar("█", "│", nil, nil))
+	mdl2 := New(WithWidth(20), WithHeight(10), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	longContent := make([]string, 30)
 	for idx := range longContent {
@@ -754,7 +754,7 @@ func TestScrollbarFillLinesAlsoGetScrollbar(t *testing.T) {
 
 	// When content is shorter than height but still overflows (2 content, 3 height, 5 total lines),
 	// the fill lines should also have the scrollbar.
-	mdl := New(WithWidth(10), WithHeight(5), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(10), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"})
 
 	view := mdl.View()
@@ -782,7 +782,7 @@ func TestScrollbarNoScrollbarWhenContentFitsExactly(t *testing.T) {
 	t.Parallel()
 
 	// When totalLines == height, content fits exactly — no scrollbar
-	mdl := New(WithWidth(20), WithHeight(5), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(20), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"l1", "l2", "l3", "l4", "l5"})
 
 	view := mdl.View()
@@ -804,7 +804,7 @@ func TestScrollbarContentWidth(t *testing.T) {
 	t.Parallel()
 
 	// With scrollbar but no content: ContentWidth returns full width (no overflow yet)
-	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"a", "b"}) // 2 lines, fits in height=3
 
 	if mdl.ContentWidth() != 20 {
@@ -812,7 +812,7 @@ func TestScrollbarContentWidth(t *testing.T) {
 	}
 
 	// With scrollbar and content that overflows: ContentWidth deducts scrollbar
-	mdl2 := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", nil, nil))
+	mdl2 := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl2.SetContentLines([]string{"a", "b", "c", "d", "e"}) // 5 lines, overflows height=3
 
 	if mdl2.ContentWidth() != 18 {
@@ -832,7 +832,7 @@ func TestScrollbarExactLineComposition(t *testing.T) {
 	// Verify exact structure of each line:
 	// content (padded to contentWidth=8) + " " + scrollbarChar
 	vpWidth := 10
-	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"hi", "there", "x", "y", "z"})
 
 	view := mdl.View()
@@ -869,7 +869,7 @@ func TestScrollbarExactLineComposition(t *testing.T) {
 func TestScrollbarScrollingMovesThumb(t *testing.T) {
 	t.Parallel()
 
-	mdl := New(WithWidth(20), WithHeight(5), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(20), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	content := make([]string, 20)
 	for idx := range content {
@@ -944,7 +944,7 @@ func stripScrollbar(line string) string {
 func TestBorderBasic(t *testing.T) {
 	t.Parallel()
 
-	mdl := New(WithWidth(6), WithHeight(3), WithBorder(nil))
+	mdl := New(WithWidth(6), WithHeight(3), WithBorder(style.Color("")))
 	mdl.SetContentLines([]string{"AB"})
 	view := mdl.View()
 
@@ -959,7 +959,7 @@ func TestBorderOutputSize(t *testing.T) {
 
 	width := 10
 	height := 4
-	mdl := New(WithWidth(width), WithHeight(height), WithBorder(nil))
+	mdl := New(WithWidth(width), WithHeight(height), WithBorder(style.Color("")))
 	mdl.SetContentLines([]string{"line1", "line2"})
 	view := mdl.View()
 
@@ -980,7 +980,7 @@ func TestBorderWithOverflowAndScrollbar(t *testing.T) {
 
 	width := 12
 	height := 5
-	mdl := New(WithWidth(width), WithHeight(height), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(width), WithHeight(height), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"a", "b", "c", "d", "e", "f", "g", "h"})
 	view := mdl.View()
 
@@ -999,13 +999,13 @@ func TestBorderWithOverflowAndScrollbar(t *testing.T) {
 func TestBorderContentWidth(t *testing.T) {
 	t.Parallel()
 
-	mdl := New(WithWidth(10), WithHeight(3), WithBorder(nil))
+	mdl := New(WithWidth(10), WithHeight(3), WithBorder(style.Color("")))
 	if mdl.ContentWidth() != 8 {
 		t.Errorf("bordered ContentWidth = %d, want 8", mdl.ContentWidth())
 	}
 
 	// Bordered+scrollbar with content that fits: no scrollbar deduction
-	mdl2 := New(WithWidth(10), WithHeight(5), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl2 := New(WithWidth(10), WithHeight(5), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl2.SetContentLines([]string{"a", "b"}) // fits in contentH=3
 
 	if mdl2.ContentWidth() != 8 {
@@ -1013,7 +1013,7 @@ func TestBorderContentWidth(t *testing.T) {
 	}
 
 	// Bordered+scrollbar with content that overflows: scrollbar deducted
-	mdl3 := New(WithWidth(10), WithHeight(5), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl3 := New(WithWidth(10), WithHeight(5), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl3.SetContentLines([]string{"a", "b", "c", "d", "e", "f"}) // 6 lines > contentH=3
 
 	if mdl3.ContentWidth() != 6 {
@@ -1025,7 +1025,7 @@ func TestBorderScrolling(t *testing.T) {
 	t.Parallel()
 
 	// height=5 → contentH=3 (5-2 for border), 6 lines → maxYOffset=3
-	mdl := New(WithWidth(8), WithHeight(5), WithBorder(nil))
+	mdl := New(WithWidth(8), WithHeight(5), WithBorder(style.Color("")))
 	mdl.SetContentLines([]string{"a", "b", "c", "d", "e", "f"})
 
 	if mdl.AtBottom() {
@@ -1070,7 +1070,7 @@ func TestBorderStyled(t *testing.T) {
 func TestBorderIsBordered(t *testing.T) {
 	t.Parallel()
 
-	mdl := New(WithWidth(10), WithHeight(3), WithBorder(nil))
+	mdl := New(WithWidth(10), WithHeight(3), WithBorder(style.Color("")))
 	if !mdl.IsBordered() {
 		t.Error("IsBordered should be true")
 	}
@@ -1100,7 +1100,7 @@ func TestScrollbarAlwaysReservesWidth(t *testing.T) {
 	vpWidth := 20
 	vpHeight := 10
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	// Content fits — no scrollbar drawn, but 2-char area is spaces
 	mdl.SetContentLines([]string{"short", "content"})
@@ -1133,7 +1133,7 @@ func TestScrollbarVisibleAtBottom(t *testing.T) {
 	vpWidth := 20
 	vpHeight := 5
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	content := make([]string, 20)
 	for idx := range content {
@@ -1171,7 +1171,7 @@ func TestScrollbarVisibleAtEveryScrollPosition(t *testing.T) {
 	vpWidth := 20
 	vpHeight := 5
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	content := make([]string, 30)
 	for idx := range content {
@@ -1205,7 +1205,7 @@ func TestScrollbarColumnIsSpacesWhenContentFits(t *testing.T) {
 	vpWidth := 20
 	vpHeight := 10
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"a", "b"})
 
 	view := mdl.View()
@@ -1229,7 +1229,7 @@ func TestBorderedScrollbarWidthConsistency(t *testing.T) {
 	vpWidth := 16
 	vpHeight := 6
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	content := make([]string, 20)
 	for idx := range content {
@@ -1271,7 +1271,7 @@ func TestBorderedScrollbarVisibleAtBottom(t *testing.T) {
 	vpWidth := 14
 	vpHeight := 6
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	content := make([]string, 20)
 	for idx := range content {
@@ -1304,7 +1304,7 @@ func TestSetContentWrapsAtScrollbarWidth(t *testing.T) {
 	vpWidth := 10
 	vpHeight := 3
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	// 10 chars at full content width (10) fits in 1 line, no overflow → no rewrap
 	_ = mdl.SetContent("abcdefghij")
 
@@ -1313,7 +1313,7 @@ func TestSetContentWrapsAtScrollbarWidth(t *testing.T) {
 	}
 
 	// 50 chars at full content width (10) = 5 lines > height 3 → overflow → rewrap at 8
-	mdl2 := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl2 := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	_ = mdl2.SetContent(strings.Repeat("abcdefghij", 5))
 
 	if mdl2.TotalLineCount() < 5 {
@@ -1339,7 +1339,7 @@ func TestBorderedSetContentWrapsCorrectly(t *testing.T) {
 	vpWidth := 14
 	vpHeight := 6
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	fullContentWidth := vpWidth - 2       // 12, no scrollbar initially
 	narrowContentWidth := vpWidth - 2 - 2 // 10, with scrollbar
 
@@ -1355,7 +1355,7 @@ func TestBorderedSetContentWrapsCorrectly(t *testing.T) {
 	}
 
 	// Content that fits at full width should NOT rewrap
-	mdl2 := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl2 := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	shortContent := strings.Repeat("x", fullContentWidth) // 12 chars, fits in 1 line
 	_ = mdl2.SetContent(shortContent)
 
@@ -1398,7 +1398,7 @@ func TestBorderedScrollbarFitsContentFitsExactly(t *testing.T) {
 	vpWidth := 12
 	vpHeight := 5
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"line1", "line2", "line3"})
 
 	view := mdl.View()
@@ -1428,7 +1428,7 @@ func TestBorderedScrollbarContentOverflowsByOne(t *testing.T) {
 	vpWidth := 12
 	vpHeight := 5
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines([]string{"line1", "line2", "line3", "line4"})
 
 	view := mdl.View()
@@ -1451,7 +1451,7 @@ func TestSetContentScrollbarAtTopAndBottom(t *testing.T) {
 	vpWidth := 10
 	vpHeight := 3
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	// 50 chars, wraps to ~7 lines at contentWidth=8, overflows viewport
 	_ = mdl.SetContent(strings.Repeat("abcdefghij", 5))
@@ -1494,7 +1494,7 @@ func TestBorderedSetContentScrollbarAtTopAndBottom(t *testing.T) {
 	vpWidth := 14
 	vpHeight := 6
 
-	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(nil), WithScrollbar("█", "│", nil, nil))
+	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	// At full content width (12): 50 chars → 5 lines > contentH=4 → overflow → rewrap at 10
 	_ = mdl.SetContent(strings.Repeat("x", 50))
@@ -1530,7 +1530,7 @@ func TestMainViewportScrollbarOnAllLines(t *testing.T) {
 	mdl := New(
 		WithWidth(vpWidth),
 		WithHeight(vpHeight),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 	)
 
 	var content strings.Builder
@@ -1585,7 +1585,7 @@ func TestMainViewportScrollbarWithANSIContent(t *testing.T) {
 	mdl := New(
 		WithWidth(vpWidth),
 		WithHeight(vpHeight),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithScrollbarReserve(),
 	)
 
@@ -1651,7 +1651,7 @@ func TestScrollbarReserveContentFits(t *testing.T) {
 	mdl := New(
 		WithWidth(vpWidth),
 		WithHeight(vpHeight),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithScrollbarReserve(),
 	)
 
@@ -1683,7 +1683,7 @@ func TestScrollbarReserveWidthMatchesOverflow(t *testing.T) {
 	mdl := New(
 		WithWidth(vpWidth),
 		WithHeight(vpHeight),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithScrollbarReserve(),
 	)
 
@@ -1711,7 +1711,7 @@ func TestScrollbarReserveWithWideContent(t *testing.T) {
 	mdl := New(
 		WithWidth(vpWidth),
 		WithHeight(vpHeight),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithScrollbarReserve(),
 	)
 
@@ -1741,7 +1741,7 @@ func TestScrollbarReserveSyncItemSequence(t *testing.T) {
 	mdl := New(
 		WithWidth(vpWidth),
 		WithHeight(vpHeight),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithScrollbarReserve(),
 	)
 
@@ -1806,7 +1806,7 @@ func TestNonMainViewportSetContentReturnsNil(t *testing.T) {
 	mdl := New(
 		WithWidth(20),
 		WithHeight(5),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 	)
 
 	err := mdl.SetContent(strings.Repeat("x", 500))
@@ -1821,7 +1821,7 @@ func TestSyncFixedHeight(t *testing.T) {
 	mdl := New(
 		WithWidth(20),
 		WithHeight(5),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 	)
 
 	err := mdl.Sync("line1\nline2\nline3", 20, 5)
@@ -1848,9 +1848,9 @@ func TestSyncAutoHeightWithMaxHeight(t *testing.T) {
 	mdl := New(
 		WithWidth(20),
 		WithHeight(1),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithMaxHeight(3),
-		WithBorder(nil),
+		WithBorder(style.Color("")),
 	)
 
 	err := mdl.Sync("line1\nline2", 20, 0)
@@ -1869,9 +1869,9 @@ func TestSyncAutoHeightClampedByMaxHeight(t *testing.T) {
 	mdl := New(
 		WithWidth(20),
 		WithHeight(1),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 		WithMaxHeight(2),
-		WithBorder(nil),
+		WithBorder(style.Color("")),
 	)
 
 	err := mdl.Sync("line1\nline2\nline3\nline4\nline5", 20, 0)
@@ -1890,7 +1890,7 @@ func TestSyncAutoScrollToBottom(t *testing.T) {
 	mdl := New(
 		WithWidth(20),
 		WithHeight(3),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 	)
 
 	_ = mdl.Sync("line1\nline2\nline3\nline4\nline5", 20, 0)
@@ -1915,7 +1915,7 @@ func TestSyncMainNoAutoScroll(t *testing.T) {
 		WithWidth(20),
 		WithHeight(3),
 		WithMain(),
-		WithScrollbar("█", "│", nil, nil),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
 	)
 
 	_ = mdl.Sync("line1\nline2\nline3", 20, 3)
