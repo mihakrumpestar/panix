@@ -25,7 +25,7 @@ type Keymap struct {
 	styles Styles
 
 	cacheWidth  int
-	cacheActive  uint64 // bitmask of active states for cache invalidation
+	cacheActive uint64 // bitmask of active states for cache invalidation
 	cacheResult string
 }
 
@@ -42,11 +42,13 @@ func (k *Keymap) SetPairs(pairs []Pair) {
 // activeMask computes a bitmask of current active states for cache comparison.
 func (k *Keymap) activeMask() uint64 {
 	var mask uint64
+
 	for i, pair := range k.pairs {
 		if pair.Active != nil && pair.Active() {
 			mask |= 1 << i
 		}
 	}
+
 	return mask
 }
 
@@ -75,6 +77,7 @@ func (k *Keymap) View(maxWidth int) string {
 
 	for _, pair := range k.pairs {
 		keySty := k.styles.Key
+
 		descSty := k.styles.Desc
 		if pair.Active != nil && pair.Active() {
 			keySty = k.styles.SelectedKey

@@ -60,9 +60,9 @@ func (c Color) RGBA() (r, g, b, a uint32) {
 	} else if idx < 232 {
 		idx -= 16
 
-		bv = uint8(idx % 6) * 51
-		gv = uint8((idx / 6) % 6) * 51
-		rv = uint8((idx / 36) % 6) * 51
+		bv = uint8(idx%6) * 51
+		gv = uint8((idx/6)%6) * 51
+		rv = uint8((idx/36)%6) * 51
 	} else {
 		v := uint8(8 + (idx-232)*10)
 		rv, gv, bv = v, v, v
@@ -127,11 +127,13 @@ func colorToBgPrefix(c Color) string {
 // ColorToRGB8 extracts 8-bit RGB components from a Color.
 func ColorToRGB8(c Color) (r, g, b uint8) {
 	ru, gu, bu, _ := c.RGBA()
+
 	return uint8(ru >> 8), uint8(gu >> 8), uint8(bu >> 8)
 }
 
 // ColorToStyle converts any color.Color to a style.Color hex string.
 func ColorToStyle(c Color) Color {
 	r, g, b := ColorToRGB8(c)
+
 	return Color(fmt.Sprintf("#%02x%02x%02x", r, g, b))
 }

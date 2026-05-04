@@ -6,66 +6,71 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
-	"github.com/mihakrumpestar/panix/internal/pkg/cache"
 	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
 )
 
-type headerCacheKey struct {
-	width int
-}
-
+// Header renders a static snapshot banner. All styled content is pre-rendered
+// at construction time since snapshot data and colors never change; only the
+// terminal width varies at view time. The rendered output is cached by width
+// so re-rendering only happens on resize.
 type Header struct {
-	isSnapshot bool
-	snapshot   config.Snapshot
-
-	cache cache.Cache[ContentAndHeight, headerCacheKey]
+	isSnapshot  bool
+	line        string
+	cachedWidth int
+	cachedView  string
 }
 
-type ContentAndHeight struct {
-	Content string
-	Height  int
-}
-
-func New(isSnapshot bool, snapshot config.Snapshot) *Header {
-	return &Header{
-		isSnapshot: isSnapshot,
-		snapshot:   snapshot,
+// New creates a Header. When isSnapshot is true the styled line is rendered
+// immediately so that View() only needs to apply a width constraint.
+func New(isSnapshot bool, snapshot config.Snapshot, colorScheme *colorscheme.ColorScheme) *Header {
+	header := &Header{
+		isSnapshot:  isSnapshot,
+		cachedWidth: -1,
 	}
+
+	if isSnapshot {
+		header.line = renderLine(snapshot, colorScheme)
+	}
+
+	return header
 }
 
-func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAndHeight {
+func (h *Header) View(width int) string {
 	if !h.isSnapshot {
-		return ContentAndHeight{}
+		return ""
 	}
 
-	return h.cache.Get(func() (ContentAndHeight, bool) {
-		content := h.render(width, colorScheme)
-		height := style.CountLines(content) - 1 // -1 to account for next view
+	if width == h.cachedWidth {
+		return h.cachedView
+	}
 
-		return ContentAndHeight{Content: content, Height: height}, true
-	}, headerCacheKey{width: width})
+	h.cachedWidth = width
+	h.cachedView = style.NewStyle().Width(width).Render(h.line) + "\n\n"
+
+	return h.cachedView
 }
 
-func (h *Header) render(width int, colorScheme *colorscheme.ColorScheme) string {
-	reason := h.snapshot.Reason.String()
+// renderLine builds the fully-styled, width-independent header line from the
+// snapshot data. Called once at construction time.
+func renderLine(snapshot config.Snapshot, colorScheme *colorscheme.ColorScheme) string {
+	reason := snapshot.Reason.String()
 	sep := colorScheme.Table.Border.Render(" " + colorScheme.Chars.HeaderSeparator + " ")
 
 	parts := []string{
-		colorScheme.Status.Running.Render("v" + h.snapshot.PanixVersion),
+		colorScheme.Status.Running.Render("v" + snapshot.PanixVersion),
 		colorScheme.Table.Border.Render(reason),
-		colorScheme.Table.Border.Render("started: ", formatTime(h.snapshot.StartTime)),
-		colorScheme.Table.Border.Render("taken: ", formatTime(h.snapshot.SnapshotTime)),
+		colorScheme.Table.Border.Render("started: ", formatTime(snapshot.StartTime)),
+		colorScheme.Table.Border.Render("taken: ", formatTime(snapshot.SnapshotTime)),
 	}
 
-	if h.snapshot.WorkflowError != nil {
-		parts = append(parts, colorScheme.Status.Failed.Render(h.snapshot.WorkflowError.Error()))
+	if snapshot.WorkflowError != nil {
+		parts = append(parts, colorScheme.Status.Failed.Render(snapshot.WorkflowError.Error()))
 	}
 
-	line := colorScheme.Header.Title.Render(
-		colorScheme.Chars.SnapshotIcon+" Snapshot",
-	) + colorScheme.Table.Border.Render(colorScheme.Chars.HeaderTitleSep) + " " + strings.Join(parts, sep)
+	line := colorScheme.Header.Title.Render(colorScheme.Chars.SnapshotIcon+" Snapshot") +
+		colorScheme.Table.Border.Render(colorScheme.Chars.HeaderTitleSep) + " " + strings.Join(parts, sep)
 
-	return style.NewStyle().Width(width).Render(line) + "\n\n"
+	return line
 }
 
 func formatTime(t time.Time) string {

@@ -49,8 +49,8 @@ type Styles struct {
 	StatusDone      style.Style
 	StatusSeparator style.Style
 
-	Arrow      style.Style
-	PhaseArrow string
+	Arrow       style.Style
+	PhaseArrow  string
 	SelectionBg style.Color
 }
 
@@ -332,6 +332,7 @@ func (pf *PhaseFlow) buildCell(name string, data PhaseData, colWidth int, isSele
 
 	if isSelected {
 		contentWidth := style.CellWidth(statusContent)
+
 		pad := pillWidth - contentWidth
 		if pad > 0 {
 			left := pad / 2
@@ -398,9 +399,11 @@ func (pf *PhaseFlow) buildStatusLine(data PhaseData, isSelected bool) string {
 		if data.Running > 0 {
 			parts = append(parts, pf.styles.StatusRunning.Background(selBg).Render(strconv.Itoa(data.Running)))
 		}
+
 		if data.Failed > 0 {
 			parts = append(parts, pf.styles.StatusFailed.Background(selBg).Render(strconv.Itoa(data.Failed)))
 		}
+
 		if data.Done > 0 {
 			parts = append(parts, pf.styles.StatusDone.Background(selBg).Render(strconv.Itoa(data.Done)))
 		}

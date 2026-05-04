@@ -111,24 +111,28 @@ func (s Style) Padding(vertical, horizontal int) Style {
 // PaddingTop sets top padding. Returns a copy.
 func (s Style) PaddingTop(v int) Style {
 	s.padTop = v
+
 	return s
 }
 
 // PaddingRight sets right padding. Returns a copy.
 func (s Style) PaddingRight(v int) Style {
 	s.padRight = v
+
 	return s
 }
 
 // PaddingBottom sets bottom padding. Returns a copy.
 func (s Style) PaddingBottom(v int) Style {
 	s.padBottom = v
+
 	return s
 }
 
 // PaddingLeft sets left padding. Returns a copy.
 func (s Style) PaddingLeft(v int) Style {
 	s.padLeft = v
+
 	return s
 }
 

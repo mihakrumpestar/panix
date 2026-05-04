@@ -81,7 +81,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		dimensions: &viewports.Dimensions{},
 		isSnapshot: isSnapshot,
 
-		header:      header.New(isSnapshot, conf.Snapshot),
+		header:      header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
 		spinners:    spinners.NewSpinners(),
 		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
 		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
@@ -97,7 +97,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	}
 
 	if mdl.quitting {
-		content := mdl.header.View(mdl.dimensions.Width, mdl.conf.ColorScheme).Content
+		content := mdl.header.View(mdl.dimensions.Width)
 
 		r := mdl.resetable.Load()
 		if r != nil {
@@ -199,11 +199,11 @@ func (m *model) Render() []string {
 		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseStatus)
 	}
 
-	header := m.header.View(m.dimensions.Width, m.conf.ColorScheme)
+	header := m.header.View(m.dimensions.Width)
 	mainContent := m.viewMainContent()
 	footer := m.footer.View(m.dimensions.Width, m.conf.ColorScheme)
 
-	headerFooterHeight := header.Height + style.CountLines(footer)
+	headerFooterHeight := style.CountLines(header) - 1 + style.CountLines(footer)
 
 	m.contentVersion++
 
@@ -216,7 +216,7 @@ func (m *model) Render() []string {
 
 	var builder strings.Builder
 
-	builder.WriteString(header.Content)
+	builder.WriteString(header)
 	builder.WriteString(main)
 	builder.WriteString(footer)
 
@@ -287,7 +287,7 @@ func (m *model) viewMainContent() string {
 	if m.conf.Flags.Logging.Debug {
 		debugHeader := "\n\n=== Debug ===\n"
 		debugContent := fmt.Sprintf("terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width)
-		debugContent += fmt.Sprintf("header - h: %d\n", m.header.View(m.dimensions.Width, m.conf.ColorScheme).Height)
+		debugContent += fmt.Sprintf("header - h: %d\n", style.CountLines(m.header.View(m.dimensions.Width))-1)
 		debugContent += fmt.Sprintf("footer - h: %d\n", style.CountLines(m.footer.View(m.dimensions.Width, m.conf.ColorScheme)))
 		debugContent += m.spinners.Debug()
 		debugContent += resetable.viewports.Debug()

@@ -180,7 +180,7 @@ func newTestModel(t *testing.T) *model {
 		ctx:         context.Background(),
 		conf:        conf,
 		dimensions:  &viewports.Dimensions{Width: 200, Height: 80},
-		header:      header.New(false, config.Snapshot{}),
+		header:      header.New(false, config.Snapshot{}, nil),
 		spinners:    spinners.NewSpinners(),
 		statsTable:  statstable.NewStatsTable(conf.Fleet, conf.ColorScheme),
 		phaseStatus: phasestatus.NewPhaseStatus(conf.Fleet, conf.ColorScheme, conf.Phases),
