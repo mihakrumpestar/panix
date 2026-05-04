@@ -12,6 +12,7 @@ import (
 type KeyDef struct {
 	Keys    []string
 	Help    string
+	Active  func() bool
 	Handler func() []render.Cmd
 }
 
@@ -27,20 +28,16 @@ type Footer struct {
 }
 
 func New(keyDefs []KeyDef, conf *config.Config, colorScheme *colorscheme.ColorScheme) *Footer {
-	pairs := make([]keymap.Pair, len(keyDefs))
-	for i := range keyDefs {
-		pairs[i] = keymap.Pair{
-			Key:  keyDefs[i].Keys[0],
-			Desc: keyDefs[i].Help,
-		}
-	}
+	pairs := pairsFromKeyDefs(keyDefs)
 
 	return &Footer{
 		keyDefs: keyDefs,
 		keymap: keymap.New(pairs, keymap.Styles{
-			Key:       colorScheme.Footer.HelpKey,
-			Desc:      colorScheme.Footer.HelpDesc,
-			Separator: colorScheme.Footer.HelpSeparator,
+			Key:          colorScheme.Footer.HelpKey,
+			Desc:         colorScheme.Footer.HelpDesc,
+			Separator:    colorScheme.Footer.HelpSeparator,
+			SelectedKey:  colorScheme.Footer.HelpSelectedKey,
+			SelectedDesc: colorScheme.Footer.HelpSelectedDesc,
 		}),
 		notification: notification.New(),
 		conf:         conf,
@@ -78,4 +75,19 @@ func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) string {
 
 func (f *Footer) Update(msg render.Msg) render.Cmd {
 	return f.notification.Update(msg)
+}
+
+// Helpers
+
+func pairsFromKeyDefs(keyDefs []KeyDef) []keymap.Pair {
+	pairs := make([]keymap.Pair, len(keyDefs))
+	for i := range keyDefs {
+		pairs[i] = keymap.Pair{
+			Key:    keyDefs[i].Keys[0],
+			Desc:   keyDefs[i].Help,
+			Active: keyDefs[i].Active,
+		}
+	}
+
+	return pairs
 }

@@ -13,10 +13,12 @@ type ColorSchemeLogEntity struct {
 }
 
 type ColorSchemeFooter struct {
-	HelpKey         style.Style
-	HelpDesc        style.Style
-	HelpSeparator   style.Style
-	DebugBackground style.Style
+	HelpKey          style.Style
+	HelpDesc         style.Style
+	HelpSeparator    style.Style
+	HelpSelectedKey  style.Style
+	HelpSelectedDesc style.Style
+	DebugBackground  style.Style
 }
 
 type ColorSchemeHeader struct {
@@ -105,10 +107,12 @@ func DefaultColorScheme() *ColorScheme {
 			Enumerator: borderStyle,
 		},
 		Footer: ColorSchemeFooter{
-			HelpKey:         style.NewStyle().Foreground(style.Color("#FFFFFF")),
-			HelpDesc:        style.NewStyle().Foreground(style.Color("#8e8e8e")),
-			HelpSeparator:   style.NewStyle().Foreground(style.Color("#6272A4")),
-			DebugBackground: style.NewStyle().Background(style.Color("#FFC800")),
+			HelpKey:          style.NewStyle().Foreground(style.Color("#FFFFFF")),
+			HelpDesc:         style.NewStyle().Foreground(style.Color("#8e8e8e")),
+			HelpSeparator:    style.NewStyle().Foreground(style.Color("#6272A4")),
+			HelpSelectedKey:  style.NewStyle().Foreground(style.Color("#8BE9FD")).Bold(true),
+			HelpSelectedDesc: style.NewStyle().Foreground(style.Color("#568CAF")),
+			DebugBackground:  style.NewStyle().Background(style.Color("#FFC800")),
 		},
 		Flake:         makeLogEntity("#F1FA8C", '📁', true),
 		Configuration: makeLogEntity("#FFB86C", '📦', false),

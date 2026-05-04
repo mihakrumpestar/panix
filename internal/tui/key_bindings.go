@@ -17,11 +17,14 @@ import (
 func (m *model) keyDefs() []footer.KeyDef {
 	kds := []footer.KeyDef{
 		{Keys: []string{"q"}, Help: "quit", Handler: m.handleQuit},
-		{Keys: []string{"h"}, Help: "toggle inspect/secrets logs", Handler: m.handleToggle},
-		{Keys: []string{"a"}, Help: "toggle active only", Handler: m.handleToggleActiveOnly},
-		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Handler: m.handleToggleCommands},
+		{Keys: []string{"h"}, Help: "toggle inspect/secrets logs", Active: func() bool { return m.conf.Flags.Tui.ShowAllBuildLogs }, Handler: m.handleToggle},
+		{Keys: []string{"a"}, Help: "toggle active only", Active: func() bool { return m.conf.Flags.Tui.ShowActiveOnly }, Handler: m.handleToggleActiveOnly},
+		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Active: func() bool { return m.conf.Flags.Tui.ShowCommandsInLabels }, Handler: m.handleToggleCommands},
 		{Keys: []string{"ctrl+c"}, Help: "copy", Handler: m.handleCopy},
-		{Keys: []string{"m"}, Help: "fullscreen", Handler: m.handleFullscreen},
+		{Keys: []string{"m"}, Help: "fullscreen", Active: func() bool {
+			resetable := m.resetable.Load()
+			return resetable != nil && resetable.viewports.IsFullscreen()
+		}, Handler: m.handleFullscreen},
 	}
 
 	if !m.isSnapshot {

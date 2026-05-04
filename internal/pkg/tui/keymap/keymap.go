@@ -7,14 +7,17 @@ import (
 )
 
 type Pair struct {
-	Key  string
-	Desc string
+	Key    string
+	Desc   string
+	Active func() bool
 }
 
 type Styles struct {
-	Key       style.Style
-	Desc      style.Style
-	Separator style.Style
+	Key          style.Style
+	Desc         style.Style
+	Separator    style.Style
+	SelectedKey  style.Style
+	SelectedDesc style.Style
 }
 
 type Keymap struct {
@@ -22,6 +25,7 @@ type Keymap struct {
 	styles Styles
 
 	cacheWidth  int
+	cacheActive  uint64 // bitmask of active states for cache invalidation
 	cacheResult string
 }
 
@@ -35,15 +39,28 @@ func (k *Keymap) SetPairs(pairs []Pair) {
 	k.cacheResult = ""
 }
 
+// activeMask computes a bitmask of current active states for cache comparison.
+func (k *Keymap) activeMask() uint64 {
+	var mask uint64
+	for i, pair := range k.pairs {
+		if pair.Active != nil && pair.Active() {
+			mask |= 1 << i
+		}
+	}
+	return mask
+}
+
 // View renders the keymap as a horizontal list of keybinding pairs separated
 // by a centered dot, wrapping to a new line at pair boundaries when the
-// available width would be exceeded. Results are cached by maxWidth.
+// available width would be exceeded. Results are cached by maxWidth and
+// active state.
 func (k *Keymap) View(maxWidth int) string {
 	if len(k.pairs) == 0 {
 		return ""
 	}
 
-	if k.cacheResult != "" && k.cacheWidth == maxWidth {
+	mask := k.activeMask()
+	if k.cacheResult != "" && k.cacheWidth == maxWidth && k.cacheActive == mask {
 		return k.cacheResult
 	}
 
@@ -57,7 +74,14 @@ func (k *Keymap) View(maxWidth int) string {
 	)
 
 	for _, pair := range k.pairs {
-		item := k.styles.Key.Render(pair.Key) + " " + k.styles.Desc.Render(pair.Desc)
+		keySty := k.styles.Key
+		descSty := k.styles.Desc
+		if pair.Active != nil && pair.Active() {
+			keySty = k.styles.SelectedKey
+			descSty = k.styles.SelectedDesc
+		}
+
+		item := keySty.Render(pair.Key) + " " + descSty.Render(pair.Desc)
 		itemWidth := style.CellWidth(item)
 
 		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
@@ -85,6 +109,7 @@ func (k *Keymap) View(maxWidth int) string {
 	result := strings.Join(lines, "\n")
 
 	k.cacheWidth = maxWidth
+	k.cacheActive = mask
 	k.cacheResult = result
 
 	return result
