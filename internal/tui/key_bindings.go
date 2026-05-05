@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+//nolint:lll
 func (m *model) keyDefs() []footer.KeyDef {
 	kds := []footer.KeyDef{
 		{Keys: []string{"q"}, Help: "quit", Handler: m.handleQuit},
@@ -63,14 +64,19 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) []zeroterm.Cmd {
 
 	for _, kd := range m.footer.KeyDefs() {
 		if slices.Contains(kd.Keys, key) {
-			return kd.Handler()
+			cmd := kd.Handler()
+			if cmd != nil {
+				return []zeroterm.Cmd{cmd}
+			}
+
+			return nil
 		}
 	}
 
 	return nil
 }
 
-func (m *model) handleCopy() []zeroterm.Cmd {
+func (m *model) handleCopy() zeroterm.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil {
 		return nil
@@ -78,22 +84,22 @@ func (m *model) handleCopy() []zeroterm.Cmd {
 
 	content, isInner := m.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return []zeroterm.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
+		return m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
 	if content == "" {
-		return []zeroterm.Cmd{m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
+		return m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
 	err := clipboard.CopyToClipboard(content)
 	if err != nil {
-		return []zeroterm.Cmd{m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())}
+		return m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())
 	}
 
-	return []zeroterm.Cmd{m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())}
+	return m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
-func (m *model) handleQuit() []zeroterm.Cmd {
+func (m *model) handleQuit() zeroterm.Cmd {
 	m.quitting = true
 	resetable := m.resetable.Load()
 
@@ -114,7 +120,7 @@ func (m *model) handleQuit() []zeroterm.Cmd {
 
 	log.Debug().Msg("Context done, exiting TUI")
 
-	return []zeroterm.Cmd{zeroterm.QuitCmd}
+	return zeroterm.QuitCmd
 }
 
 func (m *model) setFailedMachinesErrorIfNil() {
@@ -134,25 +140,25 @@ func (m *model) setFailedMachinesErrorIfNil() {
 	}
 }
 
-func (m *model) handleToggle() []zeroterm.Cmd {
+func (m *model) handleToggle() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
 
 	return nil
 }
 
-func (m *model) handleToggleCommands() []zeroterm.Cmd {
+func (m *model) handleToggleCommands() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
 
 	return nil
 }
 
-func (m *model) handleToggleActiveOnly() []zeroterm.Cmd {
+func (m *model) handleToggleActiveOnly() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
 
 	return nil
 }
 
-func (m *model) handleRetry() []zeroterm.Cmd {
+func (m *model) handleRetry() zeroterm.Cmd {
 	resetable := m.resetable.Load()
 	if resetable == nil || resetable.workflow == nil {
 		return nil
@@ -167,16 +173,20 @@ func (m *model) handleRetry() []zeroterm.Cmd {
 	return nil
 }
 
-func (m *model) handleRestart() []zeroterm.Cmd {
-	cmds := []zeroterm.Cmd{
-		m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground()),
-		func() zeroterm.Msg { return restartMsg{} },
-	}
+func (m *model) handleRestart() zeroterm.Cmd {
+	// The notification cmd also dispatches the restartMsg as a side effect,
+	// so both actions are triggered from a single cmd.
+	notifCmd := m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground())
 
-	return cmds
+	return func() zeroterm.Msg {
+		// Run the notification first, then send restartMsg.
+		notifCmd()
+
+		return restartMsg{}
+	}
 }
 
-func (m *model) handleFullscreen() []zeroterm.Cmd {
+func (m *model) handleFullscreen() zeroterm.Cmd {
 	if m.viewports.IsFullscreen() {
 		m.viewports.ExitFullscreen()
 
@@ -188,7 +198,7 @@ func (m *model) handleFullscreen() []zeroterm.Cmd {
 	if activeInnerXpath.Depth() > 0 {
 		m.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return []zeroterm.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())}
+		return m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
 	return nil
@@ -209,10 +219,10 @@ func (m *model) handleEsc() []zeroterm.Cmd {
 	return nil
 }
 
-func (m *model) handleSnapshot() []zeroterm.Cmd {
+func (m *model) handleSnapshot() zeroterm.Cmd {
 	m.captureSnapshot(config.SnaphsotReasonManual)
 
-	return []zeroterm.Cmd{m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())}
+	return m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
 func (m *model) captureSnapshot(reason config.SnaphsotReason) {

@@ -1,519 +1,476 @@
 package zeroterm
 
 import (
+	"fmt"
 	"testing"
 )
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputLetter(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte("a"), false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	kp, ok := msgs[0].(KeyPressMsg)
-	if !ok {
-		t.Fatalf("expected KeyPressMsg, got %T", msgs[0])
-	}
+	keyPress := asKeyPress(msgs[0])
 
-	if kp.Key != "a" {
-		t.Errorf("key = %q, want %q", kp.Key, "a")
+	if keyPress.Key != "a" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "a")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEnter(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x0D}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "enter" {
-		t.Errorf("key = %q, want %q", kp.Key, "enter")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "enter" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "enter")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputTab(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x09}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "tab" {
-		t.Errorf("key = %q, want %q", kp.Key, "tab")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "tab" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "tab")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputBackspace(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x7F}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "backspace" {
-		t.Errorf("key = %q, want %q", kp.Key, "backspace")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "backspace" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "backspace")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlC(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x03}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+c" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+c")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+c" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+c")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlD(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x04}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+d" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+d")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+d" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+d")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlZ(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1A}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+z" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+z")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+z" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+z")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlA(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x01}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+a" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+a")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+a" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+a")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlE(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x05}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+e" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+e")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+e" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+e")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlK(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x0B}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+k" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+k")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+k" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+k")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlU(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x15}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+u" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+u")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+u" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+u")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlW(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x17}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+w" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+w")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+w" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+w")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlR(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x12}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+r" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+r")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+r" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+r")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputNewline(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x0A}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "enter" {
-		t.Errorf("key = %q, want %q (LF should be enter)", kp.Key, "enter")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "enter" {
+		t.Errorf("key = %q, want %q (LF should be enter)", keyPress.Key, "enter")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEscapeAlone(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "esc" {
-		t.Errorf("key = %q, want %q", kp.Key, "esc")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "esc" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "esc")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputArrowUp(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'A'}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "up" {
-		t.Errorf("key = %q, want %q", kp.Key, "up")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "up" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "up")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputArrowDown(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'B'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "down" {
-		t.Errorf("key = %q, want %q", kp.Key, "down")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "down" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "down")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputArrowRight(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'C'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "right" {
-		t.Errorf("key = %q, want %q", kp.Key, "right")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "right" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "right")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputArrowLeft(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'D'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "left" {
-		t.Errorf("key = %q, want %q", kp.Key, "left")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "left" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "left")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputHome(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'H'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "home" {
-		t.Errorf("key = %q, want %q", kp.Key, "home")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "home" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "home")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEnd(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'F'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "end" {
-		t.Errorf("key = %q, want %q", kp.Key, "end")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "end" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "end")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputDelete(t *testing.T) {
-	t.Parallel()
-
 	// CSI 3~
 	msgs, _ := parseInput([]byte{0x1B, '[', '3', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "delete" {
-		t.Errorf("key = %q, want %q", kp.Key, "delete")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "delete" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "delete")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputPageUp(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '5', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "pgup" {
-		t.Errorf("key = %q, want %q", kp.Key, "pgup")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "pgup" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "pgup")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputPageDown(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '6', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "pgdown" {
-		t.Errorf("key = %q, want %q", kp.Key, "pgdown")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "pgdown" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "pgdown")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF1VT(t *testing.T) {
-	t.Parallel()
-
 	// ESC O P
 	msgs, _ := parseInput([]byte{0x1B, 'O', 'P'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f1" {
-		t.Errorf("key = %q, want %q", kp.Key, "f1")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f1" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f1")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF2VT(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, 'O', 'Q'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f2" {
-		t.Errorf("key = %q, want %q", kp.Key, "f2")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f2" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f2")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF3VT(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, 'O', 'R'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f3" {
-		t.Errorf("key = %q, want %q", kp.Key, "f3")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f3" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f3")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF4VT(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, 'O', 'S'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f4" {
-		t.Errorf("key = %q, want %q", kp.Key, "f4")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f4" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f4")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF1CSI(t *testing.T) {
-	t.Parallel()
-
 	// CSI 11~
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', '1', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f1" {
-		t.Errorf("key = %q, want %q", kp.Key, "f1")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f1" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f1")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF5(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', '5', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f5" {
-		t.Errorf("key = %q, want %q", kp.Key, "f5")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f5" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f5")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF12(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '2', '4', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "f12" {
-		t.Errorf("key = %q, want %q", kp.Key, "f12")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "f12" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "f12")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputBacktab(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'Z'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "backtab" {
-		t.Errorf("key = %q, want %q", kp.Key, "backtab")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "backtab" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "backtab")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseLeftClick(t *testing.T) {
-	t.Parallel()
-
 	// SGR mode 1006: ESC[<0;10;5M (left click at (9,4))
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '0', ';', '1', '0', ';', '5', 'M'}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	mc, ok := msgs[0].(MouseClickMsg)
+	click, ok := msgs[0].(MouseClickMsg)
 	if !ok {
 		t.Fatalf("expected MouseClickMsg, got %T", msgs[0])
 	}
 
-	if mc.X != 9 || mc.Y != 4 {
-		t.Errorf("mouse at (%d,%d), want (9,4)", mc.X, mc.Y)
+	if click.X != 9 || click.Y != 4 {
+		t.Errorf("mouse at (%d,%d), want (9,4)", click.X, click.Y)
 	}
 
-	if mc.Button != MouseLeft {
-		t.Errorf("button = %d, want MouseLeft", mc.Button)
+	if click.Button != MouseLeft {
+		t.Errorf("button = %d, want MouseLeft", click.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseRightClick(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<2;5;3M (right click at (4,2))
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '2', ';', '5', ';', '3', 'M'}, false)
 
-	mc := msgs[0].(MouseClickMsg)
-	if mc.Button != MouseRight {
-		t.Errorf("button = %d, want MouseRight", mc.Button)
+	click := asMouseClick(msgs[0])
+	if click.Button != MouseRight {
+		t.Errorf("button = %d, want MouseRight", click.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseWheelUp(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<64;10;5M (scroll up at (9,4))
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '6', '4', ';', '1', '0', ';', '5', 'M'}, false)
 
-	mw, ok := msgs[0].(MouseWheelMsg)
+	wheel, ok := msgs[0].(MouseWheelMsg)
 	if !ok {
 		t.Fatalf("expected MouseWheelMsg, got %T", msgs[0])
 	}
 
-	if mw.Button != MouseWheelUp {
-		t.Errorf("button = %d, want MouseWheelUp", mw.Button)
+	if wheel.Button != MouseWheelUp {
+		t.Errorf("button = %d, want MouseWheelUp", wheel.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseWheelDown(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<65;10;5M (scroll down at (9,4))
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '6', '5', ';', '1', '0', ';', '5', 'M'}, false)
 
-	mw := msgs[0].(MouseWheelMsg)
-	if mw.Button != MouseWheelDown {
-		t.Errorf("button = %d, want MouseWheelDown", mw.Button)
+	wheel := asMouseWheel(msgs[0])
+	if wheel.Button != MouseWheelDown {
+		t.Errorf("button = %d, want MouseWheelDown", wheel.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputMultipleKeys(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte("abc"), false)
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 msgs, got %d", len(msgs))
 	}
 
 	for i, want := range []string{"a", "b", "c"} {
-		kp := msgs[i].(KeyPressMsg)
-		if kp.Key != want {
-			t.Errorf("msg[%d].Key = %q, want %q", i, kp.Key, want)
+		keyPress := asKeyPress(msgs[i])
+		if keyPress.Key != want {
+			t.Errorf("msg[%d].Key = %q, want %q", i, keyPress.Key, want)
 		}
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputX11MouseLeftClick(t *testing.T) {
-	t.Parallel()
-
 	// X11 format: ESC[M Cb Cx Cy (each byte offset by 32)
 	// Left click at (9,4): Cb=0+32=32(' '), Cx=10+32=42('*'), Cy=5+32=37('%')
 	msgs, _ := parseInput([]byte{0x1B, '[', 'M', 32, 42, 37}, false)
 
-	mc, ok := msgs[0].(MouseClickMsg)
+	click, ok := msgs[0].(MouseClickMsg)
 	if !ok {
 		t.Fatalf("expected MouseClickMsg, got %T", msgs[0])
 	}
 
-	if mc.Button != MouseLeft {
-		t.Errorf("button = %d, want MouseLeft", mc.Button)
+	if click.Button != MouseLeft {
+		t.Errorf("button = %d, want MouseLeft", click.Button)
 	}
 
-	if mc.X != 9 || mc.Y != 4 {
-		t.Errorf("pos = (%d,%d), want (9,4)", mc.X, mc.Y)
+	if click.X != 9 || click.Y != 4 {
+		t.Errorf("pos = (%d,%d), want (9,4)", click.X, click.Y)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputX11MouseWheelUp(t *testing.T) {
-	t.Parallel()
-
 	// X11 wheel up at (9,4): Cb=64+32=96('`'), Cx=10+32=42('*'), Cy=5+32=37('%')
 	msgs, _ := parseInput([]byte{0x1B, '[', 'M', 96, 42, 37}, false)
 
-	mw, ok := msgs[0].(MouseWheelMsg)
+	wheel, ok := msgs[0].(MouseWheelMsg)
 	if !ok {
 		t.Fatalf("expected MouseWheelMsg, got %T", msgs[0])
 	}
 
-	if mw.Button != MouseWheelUp {
-		t.Errorf("button = %d, want MouseWheelUp", mw.Button)
+	if wheel.Button != MouseWheelUp {
+		t.Errorf("button = %d, want MouseWheelUp", wheel.Button)
 	}
 
-	if mw.X != 9 || mw.Y != 4 {
-		t.Errorf("pos = (%d,%d), want (9,4)", mw.X, mw.Y)
+	if wheel.X != 9 || wheel.Y != 4 {
+		t.Errorf("pos = (%d,%d), want (9,4)", wheel.X, wheel.Y)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputX11MouseWheelDown(t *testing.T) {
-	t.Parallel()
-
 	// X11 wheel down at (9,4): Cb=65+32=97('a'), Cx=10+32=42('*'), Cy=5+32=37('%')
 	msgs, _ := parseInput([]byte{0x1B, '[', 'M', 97, 42, 37}, false)
 
-	mw, ok := msgs[0].(MouseWheelMsg)
+	wheel, ok := msgs[0].(MouseWheelMsg)
 	if !ok {
 		t.Fatalf("expected MouseWheelMsg, got %T", msgs[0])
 	}
 
-	if mw.Button != MouseWheelDown {
-		t.Errorf("button = %d, want MouseWheelDown", mw.Button)
+	if wheel.Button != MouseWheelDown {
+		t.Errorf("button = %d, want MouseWheelDown", wheel.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputX11MouseDoesNotConsumeExtraBytes(t *testing.T) {
-	t.Parallel()
-
 	// X11 click followed by 'a' keypress
 	msgs, _ := parseInput([]byte{0x1B, '[', 'M', 32, 42, 37, 'a'}, false)
 
@@ -525,15 +482,14 @@ func TestParseInputX11MouseDoesNotConsumeExtraBytes(t *testing.T) {
 		t.Errorf("first msg = %T, want MouseClickMsg", msgs[0])
 	}
 
-	kp, ok := msgs[1].(KeyPressMsg)
-	if !ok || kp.Key != "a" {
+	keyPress, ok := msgs[1].(KeyPressMsg)
+	if !ok || keyPress.Key != "a" {
 		t.Errorf("second msg = %v, want KeyPressMsg{a}", msgs[1])
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputX10MousePartialRead(t *testing.T) {
-	t.Parallel()
-
 	// Only 4 bytes — not enough for X10 mouse (needs 6).
 	// parseInput processes what it can; partial mouse data is handled
 	// by the readInput leftover buffer at the program level.
@@ -546,8 +502,8 @@ func TestParseInputX10MousePartialRead(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputX10MouseMotionIgnored(t *testing.T) {
-	t.Parallel()
 
 	// X10 motion event: bit 5 (motion=32) set, button=left(0)
 	// Before offset: cb_raw = 32 (motion) + 0 (left) = 32
@@ -565,96 +521,88 @@ func TestParseInputX10MouseMotionIgnored(t *testing.T) {
 	// This is why SGR mode (1006) is preferred.
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputUTF8(t *testing.T) {
-	t.Parallel()
-
 	// é = 0xc3 0xa9
 	msgs, _ := parseInput([]byte{0xc3, 0xa9}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "é" {
-		t.Errorf("key = %q, want %q", kp.Key, "é")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "é" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "é")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputShiftModifier(t *testing.T) {
-	t.Parallel()
-
 	// CSI 1;2A = shift+up
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', ';', '2', 'A'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "shift+up" {
-		t.Errorf("key = %q, want %q", kp.Key, "shift+up")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "shift+up" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "shift+up")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlModifier(t *testing.T) {
-	t.Parallel()
-
 	// CSI 1;5A = ctrl+up
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', ';', '5', 'A'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+up" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+up")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+up" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+up")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputAltModifier(t *testing.T) {
-	t.Parallel()
-
 	// CSI 1;3A = alt+up
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', ';', '3', 'A'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "alt+up" {
-		t.Errorf("key = %q, want %q", kp.Key, "alt+up")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "alt+up" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "alt+up")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlShiftModifier(t *testing.T) {
-	t.Parallel()
-
 	// CSI 1;6A = ctrl+shift+up
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', ';', '6', 'A'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+shift+up" {
-		t.Errorf("key = %q, want %q", kp.Key, "ctrl+shift+up")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+shift+up" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "ctrl+shift+up")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputIncompleteEscape(t *testing.T) {
-	t.Parallel()
-
 	// Lone ESC at end of buffer
 	msgs, _ := parseInput([]byte{0x1B}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "esc" {
-		t.Errorf("key = %q, want %q", kp.Key, "esc")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "esc" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "esc")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEmptyInput(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{}, false)
 	if len(msgs) != 0 {
 		t.Errorf("empty input should produce 0 msgs, got %d", len(msgs))
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMatchKeyExact(t *testing.T) {
-	t.Parallel()
-
 	if !MatchKey("enter", "enter") {
 		t.Error("MatchKey should match exact keys")
 	}
@@ -664,9 +612,8 @@ func TestMatchKeyExact(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMatchKeyCtrl(t *testing.T) {
-	t.Parallel()
-
 	if !MatchKey("ctrl+c", "ctrl+c") {
 		t.Error("MatchKey should match ctrl+key")
 	}
@@ -676,9 +623,8 @@ func TestMatchKeyCtrl(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMatchKeyCtrlNonCtrl(t *testing.T) {
-	t.Parallel()
-
 	if MatchKey("ctrl+c", "c") {
 		t.Error("MatchKey should not match ctrl+key against plain key")
 	}
@@ -688,9 +634,8 @@ func TestMatchKeyCtrlNonCtrl(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestApplyModifier(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		base string
 		mod  int
@@ -714,67 +659,62 @@ func TestApplyModifier(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseControlRange(t *testing.T) {
-	t.Parallel()
-
 	// All ctrl+A through ctrl+Z
-	for b := byte(1); b <= 26; b++ {
-		msgs, _ := parseInput([]byte{b}, false)
+	for ctrlByte := byte(1); ctrlByte <= 26; ctrlByte++ {
+		msgs, _ := parseInput([]byte{ctrlByte}, false)
 		if len(msgs) != 1 {
-			t.Errorf("byte %d: expected 1 msg, got %d", b, len(msgs))
+			t.Errorf("byte %d: expected 1 msg, got %d", ctrlByte, len(msgs))
 
 			continue
 		}
 
-		kp, ok := msgs[0].(KeyPressMsg)
+		keyPress, ok := msgs[0].(KeyPressMsg)
 		if !ok {
-			t.Errorf("byte %d: expected KeyPressMsg, got %T", b, msgs[0])
+			t.Errorf("byte %d: expected KeyPressMsg, got %T", ctrlByte, msgs[0])
 
 			continue
 		}
 
-		if kp.Key == "" {
-			t.Errorf("byte %d: key should not be empty", b)
+		if keyPress.Key == "" {
+			t.Errorf("byte %d: key should not be empty", ctrlByte)
 		}
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputInsertKey(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '2', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "insert" {
-		t.Errorf("key = %q, want %q", kp.Key, "insert")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "insert" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "insert")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputHomeCSI(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "home" {
-		t.Errorf("key = %q, want %q", kp.Key, "home")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "home" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "home")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEndCSI(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '4', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "end" {
-		t.Errorf("key = %q, want %q", kp.Key, "end")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "end" {
+		t.Errorf("key = %q, want %q", keyPress.Key, "end")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF6ThroughF10(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		code   string
 		wanted string
@@ -790,16 +730,15 @@ func TestParseInputF6ThroughF10(t *testing.T) {
 		input = append(input, '~')
 		msgs, _ := parseInput(input, false)
 
-		kp := msgs[0].(KeyPressMsg)
-		if kp.Key != tt.wanted {
-			t.Errorf("CSI %s~: key = %q, want %q", tt.code, kp.Key, tt.wanted)
+		keyPress := asKeyPress(msgs[0])
+		if keyPress.Key != tt.wanted {
+			t.Errorf("CSI %s~: key = %q, want %q", tt.code, keyPress.Key, tt.wanted)
 		}
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputF11F12(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		code   string
 		wanted string
@@ -812,353 +751,324 @@ func TestParseInputF11F12(t *testing.T) {
 		input = append(input, '~')
 		msgs, _ := parseInput(input, false)
 
-		kp := msgs[0].(KeyPressMsg)
-		if kp.Key != tt.wanted {
-			t.Errorf("CSI %s~: key = %q, want %q", tt.code, kp.Key, tt.wanted)
+		keyPress := asKeyPress(msgs[0])
+		if keyPress.Key != tt.wanted {
+			t.Errorf("CSI %s~: key = %q, want %q", tt.code, keyPress.Key, tt.wanted)
 		}
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputHomeTilde(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '1', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "home" {
-		t.Errorf("CSI 1~ key = %q, want %q", kp.Key, "home")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "home" {
+		t.Errorf("CSI 1~ key = %q, want %q", keyPress.Key, "home")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEndTilde(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '4', '~'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "end" {
-		t.Errorf("CSI 4~ key = %q, want %q", kp.Key, "end")
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "end" {
+		t.Errorf("CSI 4~ key = %q, want %q", keyPress.Key, "end")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseMiddle(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<1;5;3M (middle click)
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '1', ';', '5', ';', '3', 'M'}, false)
 
-	mc := msgs[0].(MouseClickMsg)
-	if mc.Button != MouseMiddle {
-		t.Errorf("button = %d, want MouseMiddle", mc.Button)
+	click := asMouseClick(msgs[0])
+	if click.Button != MouseMiddle {
+		t.Errorf("button = %d, want MouseMiddle", click.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseWheelDownAlt(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<65;5;3M (scroll down, SGR encoding 65)
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '6', '5', ';', '5', ';', '3', 'M'}, false)
 
-	mw := msgs[0].(MouseWheelMsg)
-	if mw.Button != MouseWheelDown {
-		t.Errorf("button = %d, want MouseWheelDown (SGR encoding 65)", mw.Button)
+	wheel := asMouseWheel(msgs[0])
+	if wheel.Button != MouseWheelDown {
+		t.Errorf("button = %d, want MouseWheelDown (SGR encoding 65)", wheel.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseWheelUpAlt(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<64;5;3M (scroll up, SGR encoding 64)
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '6', '4', ';', '5', ';', '3', 'M'}, false)
 
-	mw := msgs[0].(MouseWheelMsg)
-	if mw.Button != MouseWheelUp {
-		t.Errorf("button = %d, want MouseWheelUp (SGR encoding 64)", mw.Button)
+	wheel := asMouseWheel(msgs[0])
+	if wheel.Button != MouseWheelUp {
+		t.Errorf("button = %d, want MouseWheelUp (SGR encoding 64)", wheel.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseWheelDownStandard(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<65;5;3M (scroll down)
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '6', '5', ';', '5', ';', '3', 'M'}, false)
 
-	mw := msgs[0].(MouseWheelMsg)
-	if mw.Button != MouseWheelDown {
-		t.Errorf("button = %d, want MouseWheelDown", mw.Button)
+	wheel := asMouseWheel(msgs[0])
+	if wheel.Button != MouseWheelDown {
+		t.Errorf("button = %d, want MouseWheelDown", wheel.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseUnknownButton(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '9', ';', '5', ';', '3', 'M'}, false)
 	if len(msgs) != 0 {
 		t.Errorf("unknown mouse button should produce no msg, got %d", len(msgs))
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouseInsufficientParams(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '0', ';', '5', 'M'}, false)
 	if len(msgs) != 0 {
 		t.Errorf("mouse with <3 params should produce no msg, got %d", len(msgs))
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlLFallback(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x06}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+f" {
-		t.Errorf("byte 0x06 should be ctrl+f, got %q", kp.Key)
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+f" {
+		t.Errorf("byte 0x06 should be ctrl+f, got %q", keyPress.Key)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlB(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x02}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+b" {
-		t.Errorf("byte 0x02 should be ctrl+b, got %q", kp.Key)
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+b" {
+		t.Errorf("byte 0x02 should be ctrl+b, got %q", keyPress.Key)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCtrlN(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x0E}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "ctrl+n" {
-		t.Errorf("byte 0x0E should be ctrl+n, got %q", kp.Key)
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "ctrl+n" {
+		t.Errorf("byte 0x0E should be ctrl+n, got %q", keyPress.Key)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneContinuationByte(t *testing.T) {
-	t.Parallel()
-
-	r, size := decodeInputRune([]byte{0x80}, 0)
+	decoded, size := decodeInputRune([]byte{0x80}, 0)
 	if size != 1 {
 		t.Errorf("continuation byte should have size 1, got %d", size)
 	}
 
-	if r != 0x80 {
-		t.Errorf("continuation byte should return as-is, got %U", r)
+	if decoded != 0x80 {
+		t.Errorf("continuation byte should return as-is, got %U", decoded)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneIncomplete2Byte(t *testing.T) {
-	t.Parallel()
-
-	r, size := decodeInputRune([]byte{0xC3}, 0)
+	decoded, size := decodeInputRune([]byte{0xC3}, 0)
 	if size != 1 {
 		t.Errorf("incomplete 2-byte should have size 1, got %d", size)
 	}
 
-	_ = r
+	_ = decoded
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneIncomplete3Byte(t *testing.T) {
-	t.Parallel()
-
-	r, size := decodeInputRune([]byte{0xE4, 0xB8}, 0)
+	decoded, size := decodeInputRune([]byte{0xE4, 0xB8}, 0)
 	if size != 1 {
 		t.Errorf("incomplete 3-byte should have size 1, got %d", size)
 	}
 
-	_ = r
+	_ = decoded
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneIncomplete4Byte(t *testing.T) {
-	t.Parallel()
-
-	r, size := decodeInputRune([]byte{0xF0, 0x9F, 0x93}, 0)
+	decoded, size := decodeInputRune([]byte{0xF0, 0x9F, 0x93}, 0)
 	if size != 1 {
 		t.Errorf("incomplete 4-byte should have size 1, got %d", size)
 	}
 
-	_ = r
+	_ = decoded
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneOutOfBounds(t *testing.T) {
-	t.Parallel()
-
-	r, size := decodeInputRune([]byte{}, 0)
-	if r != 0 || size != 0 {
-		t.Errorf("out of bounds: got (%U, %d), want (0, 0)", r, size)
+	decoded, size := decodeInputRune([]byte{}, 0)
+	if decoded != 0 || size != 0 {
+		t.Errorf("out of bounds: got (%U, %d), want (0, 0)", decoded, size)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneComplete2Byte(t *testing.T) {
-	t.Parallel()
-
 	data := []byte{0xC3, 0xA9}
 
-	r, size := decodeInputRune(data, 0)
+	decoded, size := decodeInputRune(data, 0)
 	if size != 2 {
 		t.Errorf("complete 2-byte should have size 2, got %d", size)
 	}
 
-	if r != 0xE9 {
-		t.Errorf("2-byte é should be U+00E9, got %U", r)
+	if decoded != 0xE9 {
+		t.Errorf("2-byte é should be U+00E9, got %U", decoded)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneComplete3Byte(t *testing.T) {
-	t.Parallel()
-
 	data := []byte{0xE4, 0xB8, 0x96}
 
-	r, size := decodeInputRune(data, 0)
+	decoded, size := decodeInputRune(data, 0)
 	if size != 3 {
 		t.Errorf("complete 3-byte should have size 3, got %d", size)
 	}
 
-	if r != 0x4E16 {
-		t.Errorf("3-byte 世 should be U+4E16, got %U", r)
+	if decoded != 0x4E16 {
+		t.Errorf("3-byte 世 should be U+4E16, got %U", decoded) //nolint:gosmopolitan
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestDecodeInputRuneComplete4Byte(t *testing.T) {
-	t.Parallel()
-
 	data := []byte{0xF0, 0x9F, 0x93, 0xA6}
 
-	r, size := decodeInputRune(data, 0)
+	decoded, size := decodeInputRune(data, 0)
 	if size != 4 {
 		t.Errorf("complete 4-byte should have size 4, got %d", size)
 	}
 
-	if r != 0x1F4E6 {
-		t.Errorf("4-byte emoji should be U+1F4E6, got %U", r)
+	if decoded != 0x1F4E6 {
+		t.Errorf("4-byte emoji should be U+1F4E6, got %U", decoded)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEscNonCSINonO(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, 'a'}, false)
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 msgs (esc + a), got %d", len(msgs))
 	}
 
-	kp0 := msgs[0].(KeyPressMsg)
-	if kp0.Key != "esc" {
-		t.Errorf("first msg key = %q, want esc", kp0.Key)
+	keyPress0 := asKeyPress(msgs[0])
+	if keyPress0.Key != "esc" {
+		t.Errorf("first msg key = %q, want esc", keyPress0.Key)
 	}
 
-	kp1 := msgs[1].(KeyPressMsg)
-	if kp1.Key != "a" {
-		t.Errorf("second msg key = %q, want a", kp1.Key)
+	keyPress1 := asKeyPress(msgs[1])
+	if keyPress1.Key != "a" {
+		t.Errorf("second msg key = %q, want a", keyPress1.Key)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseControlNUL(t *testing.T) {
-	t.Parallel()
-
 	msg := parseControl(0x00)
 	if msg != nil {
 		t.Errorf("NUL byte should produce nil msg, got %v", msg)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseControlBackspace(t *testing.T) {
-	t.Parallel()
-
 	msg := parseControl(0x7F)
 
-	kp := msg.(KeyPressMsg)
-	if kp.Key != "backspace" {
-		t.Errorf("0x7F in parseControl = %q, want backspace", kp.Key)
+	keyPress := asKeyPress(msg)
+	if keyPress.Key != "backspace" {
+		t.Errorf("0x7F in parseControl = %q, want backspace", keyPress.Key)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputUnknownCSIFinalByte(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', 'X'}, false)
 	if len(msgs) != 0 {
 		t.Errorf("unknown CSI final byte should produce no msg, got %d", len(msgs))
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputEscOUnknown(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, 'O', 'X'}, false)
 
-	kp := msgs[0].(KeyPressMsg)
-	if kp.Key != "esc" {
-		t.Errorf("ESC O X should produce esc, got %q", kp.Key)
+	keyPress := asKeyPress(msgs[0])
+	if keyPress.Key != "esc" {
+		t.Errorf("ESC O X should produce esc, got %q", keyPress.Key)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputTildeUnknownCode(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '[', '9', '9', '~'}, false)
 	if len(msgs) != 0 {
 		t.Errorf("unknown tilde code should produce no msg, got %d", len(msgs))
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputCSIIncomplete(t *testing.T) {
-	t.Parallel()
-
 	msgs, _ := parseInput([]byte{0x1B, '['}, false)
 	if len(msgs) != 0 {
 		t.Errorf("incomplete CSI should produce no msg, got %d", len(msgs))
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouse1006LeftClick(t *testing.T) {
-	t.Parallel()
-
 	// SGR mode 1006: ESC[<0;10;5M (left click at (9,4))
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '0', ';', '1', '0', ';', '5', 'M'}, false)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 msg, got %d", len(msgs))
 	}
 
-	mc, ok := msgs[0].(MouseClickMsg)
+	click, ok := msgs[0].(MouseClickMsg)
 	if !ok {
 		t.Fatalf("expected MouseClickMsg, got %T", msgs[0])
 	}
 
-	if mc.X != 9 || mc.Y != 4 {
-		t.Errorf("mouse at (%d,%d), want (9,4)", mc.X, mc.Y)
+	if click.X != 9 || click.Y != 4 {
+		t.Errorf("mouse at (%d,%d), want (9,4)", click.X, click.Y)
 	}
 
-	if mc.Button != MouseLeft {
-		t.Errorf("button = %d, want MouseLeft", mc.Button)
+	if click.Button != MouseLeft {
+		t.Errorf("button = %d, want MouseLeft", click.Button)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouse1006RightClick(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<2;5;3M (right click at (4,2))
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '2', ';', '5', ';', '3', 'M'}, false)
 
-	mc := msgs[0].(MouseClickMsg)
-	if mc.Button != MouseRight {
-		t.Errorf("button = %d, want MouseRight", mc.Button)
+	click := asMouseClick(msgs[0])
+	if click.Button != MouseRight {
+		t.Errorf("button = %d, want MouseRight", click.Button)
 	}
 
-	if mc.X != 4 || mc.Y != 2 {
-		t.Errorf("mouse at (%d,%d), want (4,2)", mc.X, mc.Y)
+	if click.X != 4 || click.Y != 2 {
+		t.Errorf("mouse at (%d,%d), want (4,2)", click.X, click.Y)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouse1006Release(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<0;10;5m (release event — lowercase 'm')
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '0', ';', '1', '0', ';', '5', 'm'}, false)
 	if len(msgs) != 0 {
@@ -1166,14 +1076,40 @@ func TestParseInputSGRMouse1006Release(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestParseInputSGRMouse1006WheelUp(t *testing.T) {
-	t.Parallel()
-
 	// ESC[<64;10;5M (scroll up)
 	msgs, _ := parseInput([]byte{0x1B, '[', '<', '6', '4', ';', '1', '0', ';', '5', 'M'}, false)
 
-	mw := msgs[0].(MouseWheelMsg)
-	if mw.Button != MouseWheelUp {
-		t.Errorf("button = %d, want MouseWheelUp", mw.Button)
+	wheel := asMouseWheel(msgs[0])
+	if wheel.Button != MouseWheelUp {
+		t.Errorf("button = %d, want MouseWheelUp", wheel.Button)
 	}
+}
+
+func asKeyPress(msg Msg) KeyPressMsg {
+	kp, ok := msg.(KeyPressMsg)
+	if !ok {
+		panic(fmt.Sprintf("expected KeyPressMsg, got %T", msg))
+	}
+
+	return kp
+}
+
+func asMouseClick(msg Msg) MouseClickMsg {
+	c, ok := msg.(MouseClickMsg)
+	if !ok {
+		panic(fmt.Sprintf("expected MouseClickMsg, got %T", msg))
+	}
+
+	return c
+}
+
+func asMouseWheel(msg Msg) MouseWheelMsg {
+	w, ok := msg.(MouseWheelMsg)
+	if !ok {
+		panic(fmt.Sprintf("expected MouseWheelMsg, got %T", msg))
+	}
+
+	return w
 }

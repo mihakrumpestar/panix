@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"strings"
+	"sync"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,63 +13,77 @@ import (
 	zone "github.com/lrstanley/bubblezone/v2"
 )
 
-func init() {
-	zone.NewGlobal()
+var zoneOnce sync.Once
+
+func ensureZoneGlobal() {
+	zoneOnce.Do(func() { zone.NewGlobal() })
 }
 
+//nolint:unparam
 func makeANSILines(width, lines int) []string {
-	var b strings.Builder
+	var builder strings.Builder
 
-	for i := range lines {
+	for lineIdx := range lines {
 		switch {
-		case i%10 == 0:
-			fmt.Fprintf(&b, "\x1b[1;34msrc/pkg%-4d\x1b[0m \x1b[32mOK\x1b[0m package with a longer description that fills the line", i)
-		case i%3 == 0:
-			fmt.Fprintf(&b, "\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix to fill width", i%6, i)
+		case lineIdx%10 == 0:
+			fmt.Fprintf(&builder, "\x1b[1;34msrc/pkg%-4d\x1b[0m \x1b[32mOK\x1b[0m package with a longer description that fills the line", lineIdx)
+		case lineIdx%3 == 0:
+			fmt.Fprintf(&builder, "\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix to fill width", lineIdx%6, lineIdx)
 		default:
-			fmt.Fprintf(&b, "line %d: plain text with some content that is reasonably long for testing purposes here  ", i)
+			fmt.Fprintf(&builder, "line %d: plain text with some content that is reasonably long for testing purposes here  ", lineIdx)
 		}
 
-		if i < lines-1 {
-			b.WriteByte('\n')
+		if lineIdx < lines-1 {
+			builder.WriteByte('\n')
 		}
 	}
 
-	return strings.Split(b.String(), "\n")
+	return strings.Split(builder.String(), "\n")
 }
 
+//nolint:unparam
 func makeANSIContent(width, lines int) string {
-	var b strings.Builder
+	var builder strings.Builder
 
-	for i := range lines {
+	for lineIdx := range lines {
 		switch {
-		case i%10 == 0:
-			fmt.Fprintf(&b, "\x1b[1;34msrc/%s\x1b[0m \x1b[32mOK\x1b[0m package with a longer description that fills the line", fmt.Sprintf("pkg%-4d", i))
-		case i%3 == 0:
-			fmt.Fprintf(&b, "\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix to fill width", i%6, i)
+		case lineIdx%10 == 0:
+			fmt.Fprintf(&builder,
+				"\x1b[1;34msrc/%s\x1b[0m \x1b[32mOK\x1b[0m package with a longer description that fills the line",
+				fmt.Sprintf("pkg%-4d", lineIdx),
+			)
+		case lineIdx%3 == 0:
+			fmt.Fprintf(&builder,
+				"\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix to fill width",
+				lineIdx%6, lineIdx,
+			)
 		default:
-			fmt.Fprintf(&b, "line %d: plain text with some content that is reasonably long for testing purposes here  ", i)
+			fmt.Fprintf(&builder,
+				"line %d: plain text with some content that is reasonably long for testing purposes here  ",
+				lineIdx,
+			)
 		}
 
-		if i < lines-1 {
-			b.WriteByte('\n')
+		if lineIdx < lines-1 {
+			builder.WriteByte('\n')
 		}
 	}
 
-	return b.String()
+	return builder.String()
 }
 
+//nolint:unparam
 func makePlainContent(width, lines int) string {
-	var b strings.Builder
-	for i := range lines {
-		fmt.Fprintf(&b, "line %d: plain text with some content that is reasonably long for testing purposes here  ", i)
+	var builder strings.Builder
+	for lineIdx := range lines {
+		fmt.Fprintf(&builder, "line %d: plain text with some content that is reasonably long for testing purposes here  ", lineIdx)
 
-		if i < lines-1 {
-			b.WriteByte('\n')
+		if lineIdx < lines-1 {
+			builder.WriteByte('\n')
 		}
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // --- Full Render Pipeline ---
@@ -113,8 +128,8 @@ func BenchmarkRef_Bubbletea__RenderPipe(b *testing.B) {
 
 	for b.Loop() {
 		screen := uv.NewScreenBuffer(width, height)
-		ss := uv.NewStyledString(content)
-		ss.Draw(screen, screen.Bounds())
+		styledStr := uv.NewStyledString(content)
+		styledStr.Draw(screen, screen.Bounds())
 		renderer.Render(screen.RenderBuffer)
 		termBuf.Reset()
 	}
@@ -151,8 +166,8 @@ func BenchmarkRef_Bubbletea__RenderPipeNoChange(b *testing.B) {
 	renderer.SetScrollOptim(true)
 
 	screen := uv.NewScreenBuffer(width, height)
-	ss := uv.NewStyledString(content)
-	ss.Draw(screen, screen.Bounds())
+	styledContent := uv.NewStyledString(content)
+	styledContent.Draw(screen, screen.Bounds())
 	renderer.Render(screen.RenderBuffer)
 
 	b.ResetTimer()
@@ -282,8 +297,8 @@ func BenchmarkRef_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
 	renderer.SetScrollOptim(true)
 
 	screen := uv.NewScreenBuffer(width, height)
-	ss := uv.NewStyledString(content)
-	ss.Draw(screen, screen.Bounds())
+	styledContent := uv.NewStyledString(content)
+	styledContent.Draw(screen, screen.Bounds())
 	renderer.Render(screen.RenderBuffer)
 
 	changedContent := "\x1b[31mCHANGED\x1b[0m line with different content for quarter screen update testing"
@@ -298,13 +313,15 @@ func BenchmarkRef_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
 
 		renderer.Render(screen.RenderBuffer)
 		termBuf.Reset()
-		ss.Draw(screen, screen.Bounds())
+		styledContent.Draw(screen, screen.Bounds())
 	}
 }
 
 // --- Zone ---
 
 func Benchmark__ZoneMark(b *testing.B) {
+	ensureZoneGlobal()
+
 	content := makePlainContent(200, 50)
 
 	b.ResetTimer()
@@ -340,6 +357,8 @@ func (m mouseMsg) Mouse() tea.Mouse { return tea.Mouse{X: m.x, Y: m.y} }
 func (m mouseMsg) String() string   { return fmt.Sprintf("mouse(%d,%d)", m.x, m.y) }
 
 func BenchmarkRef_Bubbletea__ZoneAtLine(b *testing.B) {
+	ensureZoneGlobal()
+
 	marked := makeZoneContent(200, 50)
 	_ = zone.Scan(marked)
 
@@ -353,17 +372,18 @@ func BenchmarkRef_Bubbletea__ZoneAtLine(b *testing.B) {
 	}
 }
 
+//nolint:unparam
 func makeZoneContent(width, lines int) string {
-	var b strings.Builder
+	var builder strings.Builder
 
-	for i := range lines {
-		line := fmt.Sprintf("line %d: plain text with some content that is reasonably long for testing purposes here  ", i)
-		b.WriteString(zone.Mark(fmt.Sprintf("zone-%d", i), line))
+	for lineIdx := range lines {
+		line := fmt.Sprintf("line %d: plain text with some content that is reasonably long for testing purposes here  ", lineIdx)
+		builder.WriteString(zone.Mark(fmt.Sprintf("zone-%d", lineIdx), line))
 
-		if i < lines-1 {
-			b.WriteByte('\n')
+		if lineIdx < lines-1 {
+			builder.WriteByte('\n')
 		}
 	}
 
-	return b.String()
+	return builder.String()
 }

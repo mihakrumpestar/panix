@@ -6,96 +6,90 @@ import (
 	"testing"
 )
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerGetOrCreate(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
 
-	zm := newZoneManager()
+	id1 := mgr.GetOrCreate("zone-a")
 
-	id1 := zm.GetOrCreate("zone-a")
-
-	id2 := zm.GetOrCreate("zone-a")
+	id2 := mgr.GetOrCreate("zone-a")
 	if id1 != id2 {
 		t.Errorf("same name should return same ID: %d != %d", id1, id2)
 	}
 
-	id3 := zm.GetOrCreate("zone-b")
+	id3 := mgr.GetOrCreate("zone-b")
 	if id3 == id1 {
 		t.Error("different names should return different IDs")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerName(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
+	zoneID := mgr.GetOrCreate("my-zone")
 
-	zm := newZoneManager()
-	id := zm.GetOrCreate("my-zone")
-
-	name := zm.Name(id)
+	name := mgr.Name(zoneID)
 	if name != "my-zone" {
-		t.Errorf("Name(%d) = %q, want %q", id, name, "my-zone")
+		t.Errorf("Name(%d) = %q, want %q", zoneID, name, "my-zone")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerNameInvalidID(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
 
-	zm := newZoneManager()
-
-	name := zm.Name(999)
+	name := mgr.Name(999)
 	if name != "" {
 		t.Errorf("Name(999) = %q, want empty string", name)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerID(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
+	zoneID := mgr.GetOrCreate("test")
 
-	zm := newZoneManager()
-	id := zm.GetOrCreate("test")
-
-	found := zm.ID("test")
-	if found != id {
-		t.Errorf("ID(test) = %d, want %d", found, id)
+	found := mgr.ID("test")
+	if found != zoneID {
+		t.Errorf("ID(test) = %d, want %d", found, zoneID)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerIDNotFound(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
 
-	zm := newZoneManager()
-
-	id := zm.ID("nonexistent")
-	if id != 0 {
-		t.Errorf("ID(nonexistent) = %d, want 0", id)
+	zoneID := mgr.ID("nonexistent")
+	if zoneID != 0 {
+		t.Errorf("ID(nonexistent) = %d, want 0", zoneID)
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerAcquireRelease(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
+	zoneID := mgr.GetOrCreate("zone1")
 
-	zm := newZoneManager()
-	id := zm.GetOrCreate("zone1")
+	mgr.acquire(zoneID)
+	mgr.acquire(zoneID)
+	mgr.acquire(zoneID)
 
-	zm.acquire(id)
-	zm.acquire(id)
-	zm.acquire(id)
-
-	zm.release(id)
-	zm.release(id)
+	mgr.release(zoneID)
+	mgr.release(zoneID)
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneManagerReset(t *testing.T) {
-	t.Parallel()
+	mgr := newZoneManager()
+	zoneID := mgr.GetOrCreate("zone1")
+	mgr.acquire(zoneID)
+	mgr.acquire(zoneID)
 
-	zm := newZoneManager()
-	id := zm.GetOrCreate("zone1")
-	zm.acquire(id)
-	zm.acquire(id)
-
-	zm.Reset()
-	zm.acquire(id)
+	mgr.Reset()
+	mgr.acquire(zoneID)
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMark(t *testing.T) {
 	ResetZones()
 
@@ -109,6 +103,7 @@ func TestMark(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneNames(t *testing.T) {
 	ResetZones()
 	globalZones.GetOrCreate("alpha")
@@ -120,6 +115,7 @@ func TestZoneNames(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestGetZoneIDAndName(t *testing.T) {
 	ResetZones()
 
@@ -131,6 +127,7 @@ func TestGetZoneIDAndName(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestGetZoneNameFunc(t *testing.T) {
 	ResetZones()
 
@@ -142,6 +139,7 @@ func TestGetZoneNameFunc(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestGetZoneIDFunc(t *testing.T) {
 	ResetZones()
 
@@ -153,6 +151,7 @@ func TestGetZoneIDFunc(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMarkFormat(t *testing.T) {
 	ResetZones()
 
@@ -166,6 +165,7 @@ func TestMarkFormat(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMarkMultiline(t *testing.T) {
 	ResetZones()
 
@@ -182,6 +182,7 @@ func TestMarkMultiline(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMarkMultilineNoZoneLeakWithPrefix(t *testing.T) {
 	ResetZones()
 
@@ -199,6 +200,7 @@ func TestMarkMultilineNoZoneLeakWithPrefix(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestIsZoneAtLine(t *testing.T) {
 	ResetZones()
 
@@ -212,12 +214,14 @@ func TestIsZoneAtLine(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestIsZoneAtLineUnknownName(t *testing.T) {
 	if IsZoneAtLine("some text", 0, "nonexistent") {
 		t.Error("IsZoneAtLine should return false for unknown zone name")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneAtLine(t *testing.T) {
 	ResetZones()
 
@@ -237,6 +241,7 @@ func TestZoneAtLine(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestCurrentLines(t *testing.T) {
 	lines := []string{"line1", "line2"}
 	SetCurrentLines(lines)
@@ -247,6 +252,7 @@ func TestCurrentLines(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestZoneAtLineOutside(t *testing.T) {
 	ResetZones()
 

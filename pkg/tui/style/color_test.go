@@ -20,45 +20,46 @@ func TestColor_RGBA_Hex(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		r, g, b, a := Color(tc.hex).RGBA()
+		red, green, blue, alpha := Color(tc.hex).RGBA()
 
-		if r != tc.want[0] || g != tc.want[1] || b != tc.want[2] || a != tc.want[3] {
+		if red != tc.want[0] || green != tc.want[1] || blue != tc.want[2] || alpha != tc.want[3] {
 			t.Errorf("Color(%q).RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, %d)",
-				tc.hex, r, g, b, a, tc.want[0], tc.want[1], tc.want[2], tc.want[3])
+				tc.hex, red, green, blue, alpha, tc.want[0], tc.want[1], tc.want[2], tc.want[3])
 		}
 	}
 }
 
+//nolint:cyclop
 func TestColor_RGBA_HexInvalid(t *testing.T) {
 	t.Parallel()
 
 	// Too short: len != 6 after # -> returns zero alpha
-	r, g, b, a := Color("#FF").RGBA()
-	if a != 0 || r != 0 || g != 0 || b != 0 {
-		t.Errorf("Color(\"#FF\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", r, g, b, a)
+	red, green, blue, alpha := Color("#FF").RGBA()
+	if alpha != 0 || red != 0 || green != 0 || blue != 0 {
+		t.Errorf("Color(\"#FF\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", red, green, blue, alpha)
 	}
 
 	// Too long: len != 6 after # -> returns zero alpha
-	r, g, b, a = Color("#FF0000FF").RGBA()
-	if a != 0 || r != 0 || g != 0 || b != 0 {
-		t.Errorf("Color(\"#FF0000FF\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", r, g, b, a)
+	red, green, blue, alpha = Color("#FF0000FF").RGBA()
+	if alpha != 0 || red != 0 || green != 0 || blue != 0 {
+		t.Errorf("Color(\"#FF0000FF\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", red, green, blue, alpha)
 	}
 
 	// No hash prefix: treated as 256-color index. "FF0000" parsed as int fails -> zero alpha
-	r, g, b, a = Color("FF0000").RGBA()
-	if a != 0 || r != 0 || g != 0 || b != 0 {
-		t.Errorf("Color(\"FF0000\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", r, g, b, a)
+	red, green, blue, alpha = Color("FF0000").RGBA()
+	if alpha != 0 || red != 0 || green != 0 || blue != 0 {
+		t.Errorf("Color(\"FF0000\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", red, green, blue, alpha)
 	}
 
 	// Invalid hex chars: hexVal treats non-hex as 0, so "#ZZZZZZ" -> RGB(0,0,0) with full alpha.
 	// This is a known limitation — invalid hex chars silently produce 0 rather than error.
-	r, g, b, a = Color("#ZZZZZZ").RGBA()
-	if a != 0xFFFF {
-		t.Errorf("Color(\"#ZZZZZZ\").RGBA() alpha = %d, want 0xFFFF (invalid hex chars silently treated as 0)", a)
+	red, green, blue, alpha = Color("#ZZZZZZ").RGBA()
+	if alpha != 0xFFFF {
+		t.Errorf("Color(\"#ZZZZZZ\").RGBA() alpha = %d, want 0xFFFF (invalid hex chars silently treated as 0)", alpha)
 	}
 
-	if r != 0 || g != 0 || b != 0 {
-		t.Errorf("Color(\"#ZZZZZZ\").RGBA() = (%d, %d, %d), want (0,0,0) since Z is treated as 0", r, g, b)
+	if red != 0 || green != 0 || blue != 0 {
+		t.Errorf("Color(\"#ZZZZZZ\").RGBA() = (%d, %d, %d), want (0,0,0) since Z is treated as 0", red, green, blue)
 	}
 }
 
@@ -85,57 +86,58 @@ func TestColor_RGBA_16Color(t *testing.T) {
 		{255, 255, 255}, // 15: bright white
 	}
 
-	for i, want := range expected16 {
-		c := Color(intToStr(i))
-		r, g, b, a := c.RGBA()
+	for colorIdx, want := range expected16 {
+		c := Color(intToStr(colorIdx))
+		red, green, blue, alpha := c.RGBA()
 
 		ru, gu, bu := uint32(want[0]), uint32(want[1]), uint32(want[2])
 
-		if r != ru|ru<<8 || g != gu|gu<<8 || b != bu|bu<<8 || a != 0xFFFF {
+		if red != ru|ru<<8 || green != gu|gu<<8 || blue != bu|bu<<8 || alpha != 0xFFFF {
 			t.Errorf("Color(%d).RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, %d)",
-				i, r, g, b, a, ru|ru<<8, gu|gu<<8, bu|bu<<8, uint32(0xFFFF))
+				colorIdx, red, green, blue, alpha, ru|ru<<8, gu|gu<<8, bu|bu<<8, uint32(0xFFFF))
 		}
 	}
 }
 
+//nolint:cyclop
 func TestColor_RGBA_256Color(t *testing.T) {
 	t.Parallel()
 
 	// Color 16 = 6x6x6 cube index 0,0,0 -> RGB(0,0,0)
-	r, g, b, a := Color("16").RGBA()
+	red, green, blue, alpha := Color("16").RGBA()
 
-	if r != 0 || g != 0 || b != 0 || a != 0xFFFF {
-		t.Errorf("Color(\"16\").RGBA() = (%d, %d, %d, %d), want (0, 0, 0, 65535)", r, g, b, a)
+	if red != 0 || green != 0 || blue != 0 || alpha != 0xFFFF {
+		t.Errorf("Color(\"16\").RGBA() = (%d, %d, %d, %d), want (0, 0, 0, 65535)", red, green, blue, alpha)
 	}
 
 	// Color 196 = cube index (5,0,0) -> idx-16=180, R=(180/36)%6=5, 5*51=255, G=0, B=0
-	r, g, b, a = Color("196").RGBA()
+	red, green, blue, alpha = Color("196").RGBA()
 
 	wantR := uint32(255)
-	wantR = wantR | wantR<<8
+	wantR |= wantR << 8
 
-	if r != wantR || g != 0 || b != 0 || a != 0xFFFF {
-		t.Errorf("Color(\"196\").RGBA() = (%d, %d, %d, %d), want (%d, 0, 0, 65535)", r, g, b, a, wantR)
+	if red != wantR || green != 0 || blue != 0 || alpha != 0xFFFF {
+		t.Errorf("Color(\"196\").RGBA() = (%d, %d, %d, %d), want (%d, 0, 0, 65535)", red, green, blue, alpha, wantR)
 	}
 
 	// Color 232 = grayscale start -> R=G=B=8
-	r, g, b, a = Color("232").RGBA()
+	red, green, blue, alpha = Color("232").RGBA()
 
 	wantV := uint32(8)
-	wantV = wantV | wantV<<8
+	wantV |= wantV << 8
 
-	if r != wantV || g != wantV || b != wantV || a != 0xFFFF {
-		t.Errorf("Color(\"232\").RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, 65535)", r, g, b, a, wantV, wantV, wantV)
+	if red != wantV || green != wantV || blue != wantV || alpha != 0xFFFF {
+		t.Errorf("Color(\"232\").RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, 65535)", red, green, blue, alpha, wantV, wantV, wantV)
 	}
 
 	// Color 255 = grayscale end -> R=G=B=238
-	r, g, b, a = Color("255").RGBA()
+	red, green, blue, alpha = Color("255").RGBA()
 
 	wantV = uint32(238)
-	wantV = wantV | wantV<<8
+	wantV |= wantV << 8
 
-	if r != wantV || g != wantV || b != wantV || a != 0xFFFF {
-		t.Errorf("Color(\"255\").RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, 65535)", r, g, b, a, wantV, wantV, wantV)
+	if red != wantV || green != wantV || blue != wantV || alpha != 0xFFFF {
+		t.Errorf("Color(\"255\").RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, 65535)", red, green, blue, alpha, wantV, wantV, wantV)
 	}
 }
 
@@ -153,10 +155,10 @@ func TestColor_RGBA_Invalid256(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		r, g, b, a := Color(tc.value).RGBA()
+		red, green, blue, alpha := Color(tc.value).RGBA()
 
-		if a != 0 || r != 0 || g != 0 || b != 0 {
-			t.Errorf("Color(%q).RGBA() = (%d, %d, %d, %d), want (0, 0, 0, 0)", tc.value, r, g, b, a)
+		if alpha != 0 || red != 0 || green != 0 || blue != 0 {
+			t.Errorf("Color(%q).RGBA() = (%d, %d, %d, %d), want (0, 0, 0, 0)", tc.value, red, green, blue, alpha)
 		}
 	}
 }
@@ -233,21 +235,21 @@ func TestHexVal(t *testing.T) {
 }
 
 // intToStr converts an int to its string representation without importing strconv.
-func intToStr(n int) string {
-	if n == 0 {
+func intToStr(val int) string {
+	if val == 0 {
 		return "0"
 	}
 
 	digits := []byte{}
 
-	neg := n < 0
+	neg := val < 0
 	if neg {
-		n = -n
+		val = -val
 	}
 
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
+	for val > 0 {
+		digits = append([]byte{byte('0' + val%10)}, digits...)
+		val /= 10
 	}
 
 	if neg {

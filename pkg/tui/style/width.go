@@ -21,32 +21,33 @@ func CellWidth(str string) int {
 	width := 0
 	maxWidth := 0
 	pos := 0
-	gs := -1
+	graphemeState := -1
 
 	// Zero-copy string→[]byte for uniseg calls. Safe because:
 	// 1. uniseg.FirstGraphemeCluster doesn't modify the input
 	// 2. str is alive for the duration of this function
-	b := unsafe.Slice(unsafe.StringData(str), len(str))
+	//nolint:gosec // G103: audited — zero-copy byte view of str, str outlives byteSlice
+	byteSlice := unsafe.Slice(unsafe.StringData(str), len(str))
 
-	for pos < len(b) {
-		ch := b[pos]
+	for pos < len(byteSlice) {
+		char := byteSlice[pos]
 
 		// Fast ASCII path for printable characters (0x20-0x7E).
 		// Handles >90% of terminal content without calling uniseg.
-		if ch >= 0x20 && ch < 0x7F {
-			gs = -1
+		if char >= 0x20 && char < 0x7F {
+			graphemeState = -1
 			width++
 			pos++
 
 			continue
 		}
 
-		switch ch {
+		switch char {
 		case '\x1b':
-			gs = -1
+			graphemeState = -1
 			pos = skipANSI(str, pos)
 		case '\n', '\r':
-			gs = -1
+			graphemeState = -1
 
 			if width > maxWidth {
 				maxWidth = width
@@ -55,12 +56,10 @@ func CellWidth(str string) int {
 			width = 0
 			pos++
 		default:
-			// Non-ASCII: use uniseg for proper grapheme cluster handling
-			// (emoji ZWJ, skin tone modifiers, CJK wide chars, etc.)
-			cluster, rest, w, newState := uniseg.FirstGraphemeCluster(b[pos:], gs)
-			gs = newState
-			pos = len(b) - len(rest)
-			width += w
+			cluster, rest, charWidth, newState := uniseg.FirstGraphemeCluster(byteSlice[pos:], graphemeState)
+			graphemeState = newState
+			pos = len(byteSlice) - len(rest)
+			width += charWidth
 			_ = cluster
 		}
 	}
@@ -153,20 +152,22 @@ func CountLines(str string) int {
 }
 
 // RuneWidth returns the display width of a rune (1 for ASCII, 2 for East Asian Wide).
-func RuneWidth(r rune) int {
-	if r >= 0x1100 &&
-		(r <= 0x115F ||
-			r == 0x2329 ||
-			r == 0x27C2 ||
-			(r >= 0x2E80 && r <= 0xA4CF && r != 0x303F) ||
-			(r >= 0xAC00 && r <= 0xD7A3) ||
-			(r >= 0xF900 && r <= 0xFAFF) ||
-			(r >= 0xFE10 && r <= 0xFE19) ||
-			(r >= 0xFE30 && r <= 0xFE6F) ||
-			(r >= 0xFF01 && r <= 0xFF60) ||
-			(r >= 0xFFE0 && r <= 0xFFE6) ||
-			(r >= 0x1F300 && r <= 0x1F9FF)) {
-		return 2
+//
+//nolint:cyclop
+func RuneWidth(runeVal rune) int {
+	if runeVal >= 0x1100 &&
+		(runeVal <= 0x115F ||
+			runeVal == 0x2329 ||
+			runeVal == 0x27C2 ||
+			(runeVal >= 0x2E80 && runeVal <= 0xA4CF && runeVal != 0x303F) ||
+			(runeVal >= 0xAC00 && runeVal <= 0xD7A3) ||
+			(runeVal >= 0xF900 && runeVal <= 0xFAFF) ||
+			(runeVal >= 0xFE10 && runeVal <= 0xFE19) ||
+			(runeVal >= 0xFE30 && runeVal <= 0xFE6F) ||
+			(runeVal >= 0xFF01 && runeVal <= 0xFF60) ||
+			(runeVal >= 0xFFE0 && runeVal <= 0xFFE6) ||
+			(runeVal >= 0x1F300 && runeVal <= 0x1F9FF)) {
+		return 2 //nolint:mnd
 	}
 
 	return 1

@@ -16,11 +16,11 @@ type ChangedLine struct {
 // because Go's memequal short-circuits on the first differing byte, and
 // most lines are identical between frames.
 func DiffLines(newLines, oldLines []string) []ChangedLine {
-	n := min(len(newLines), len(oldLines))
+	commonLen := min(len(newLines), len(oldLines))
 
 	var diffs []ChangedLine
 
-	for y := range n {
+	for y := range commonLen {
 		if newLines[y] == oldLines[y] {
 			continue
 		}
@@ -28,7 +28,7 @@ func DiffLines(newLines, oldLines []string) []ChangedLine {
 		diffs = append(diffs, ChangedLine{Y: y})
 	}
 
-	for y := n; y < len(newLines); y++ {
+	for y := commonLen; y < len(newLines); y++ {
 		diffs = append(diffs, ChangedLine{Y: y})
 	}
 
@@ -47,16 +47,16 @@ func DiffLines(newLines, oldLines []string) []ChangedLine {
 // clears below if the frame shrank.
 func RenderLines(buf []byte, diffs []ChangedLine, lines []string, prevLineCount int, terminalHeight int) []byte {
 	for _, d := range diffs {
-		y := d.Y
+		rowIdx := d.Y
 
-		if y >= terminalHeight {
+		if rowIdx >= terminalHeight {
 			break
 		}
 
 		// Always position explicitly — avoids cursor drift from wrapped
 		// lines or \r characters in content.
 		buf = append(buf, "\x1b["...)
-		buf = appendInt(buf, y+1)
+		buf = appendInt(buf, rowIdx+1)
 		buf = append(buf, ";1H"...)
 
 		// Strip \r from line content. lipgloss and ANSI renderers may
@@ -65,7 +65,7 @@ func RenderLines(buf []byte, diffs []ChangedLine, lines []string, prevLineCount 
 		// handled by resetting curX. In the line-based pipeline, \r
 		// would cause the terminal to jump to column 0 mid-line,
 		// overwriting the beginning of the content.
-		line := lines[y]
+		line := lines[rowIdx]
 		if strings.ContainsRune(line, '\r') {
 			line = strings.ReplaceAll(line, "\r", "")
 		}
@@ -100,26 +100,28 @@ func RenderLinesTo(out *os.File, diffs []ChangedLine, lines []string, prevLineCo
 	}
 }
 
-func appendInt(b []byte, n int) []byte {
-	if n < 0 {
-		b = append(b, '-')
-		n = -n
+//nolint:mnd
+func appendInt(buf []byte, val int) []byte {
+	if val < 0 {
+		buf = append(buf, '-')
+		val = -val
 	}
 
-	if n < 10 {
-		return append(b, byte('0'+n))
+	if val < 10 {
+		//nolint:gosec // G115: safe — val<10, so '0'+val is in ['0','9']
+		return append(buf, byte('0'+val))
 	}
 
-	if n < 100 {
-		return append(b, byte('0'+n/10), byte('0'+n%10))
+	if val < 100 {
+		return append(buf, byte('0'+val/10), byte('0'+val%10))
 	}
 
-	if n < 1000 {
-		b = append(b, byte('0'+n/100))
-		b = append(b, byte('0'+(n/10)%10))
+	if val < 1000 {
+		buf = append(buf, byte('0'+val/100))
+		buf = append(buf, byte('0'+(val/10)%10))
 
-		return append(b, byte('0'+n%10))
+		return append(buf, byte('0'+val%10))
 	}
 
-	return strconv.AppendInt(b, int64(n), 10)
+	return strconv.AppendInt(buf, int64(val), 10)
 }

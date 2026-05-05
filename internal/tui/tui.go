@@ -78,15 +78,19 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 
 	dimensions := &viewports.Dimensions{}
 
+	tableS := conf.ColorScheme.Table
+
 	mdl := &model{
 		ctx:        ctx,
 		conf:       conf,
 		dimensions: dimensions,
 		isSnapshot: isSnapshot,
 
-		header:     header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
-		spinners:   spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
-		viewports:  viewports.New(dimensions, conf.Flags.CommandOutputMaxHeight, conf.ColorScheme.Table.Border, conf.ColorScheme.Table.SelectionHighlightBackground, conf.ColorScheme.Table.SelectionHighlightBorder),
+		header:   header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
+		spinners: spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
+		viewports: viewports.New(dimensions, conf.Flags.CommandOutputMaxHeight, tableS.Border,
+			tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
+		),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
@@ -147,41 +151,19 @@ func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
 
 	switch msg := msg.(type) {
 	case errMsg:
-		m.err = msg.err
-
-		m.conf.Fleet.Recalculate(m.conf.Phases)
-		logFinalState(m.conf)
-
-		log.Error().Err(msg.err).Msg("errMsg")
-
-		m.quitting = true
-
-		cmds = append(cmds, zeroterm.QuitCmd)
-
+		return m.handleErrMsg(msg, cmds)
 	case workflowDoneMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			log.Error().Err(msg.err).Msg("workflowDoneMsg error")
-		}
-
-		return m.handleWorkflowDone(cmds)
-
+		return m.handleWorkflowDoneMsg(msg, cmds)
 	case restartMsg:
 		cmds = append(cmds, m.restartWorkflow())
-
 	case workflowUpdateHookMsg:
 		cmds = append(cmds, m.workflowUpdateHook())
-
 	case zeroterm.PostRenderMsg:
 		cmds = append(cmds, m.spinners.ProcessPendingTicks())
-
 	case zeroterm.KeyPressMsg:
-		keyCmds := m.HandleKeyInput(msg)
-		cmds = append(cmds, keyCmds...)
-
+		cmds = append(cmds, m.HandleKeyInput(msg)...)
 	case zeroterm.MouseClickMsg:
 		m.handleMouseClick(msg)
-
 	case zeroterm.WindowSizeMsg:
 		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
@@ -224,6 +206,28 @@ func (m *model) Render() []string {
 	renderStr := builder.String()
 
 	return strings.Split(renderStr, "\n")
+}
+
+func (m *model) handleErrMsg(msg errMsg, cmds []zeroterm.Cmd) []zeroterm.Cmd {
+	m.err = msg.err
+
+	m.conf.Fleet.Recalculate(m.conf.Phases)
+	logFinalState(m.conf)
+
+	log.Error().Err(msg.err).Msg("errMsg")
+
+	m.quitting = true
+
+	return append(cmds, zeroterm.QuitCmd)
+}
+
+func (m *model) handleWorkflowDoneMsg(msg workflowDoneMsg, cmds []zeroterm.Cmd) []zeroterm.Cmd {
+	if msg.err != nil {
+		m.err = msg.err
+		log.Error().Err(msg.err).Msg("workflowDoneMsg error")
+	}
+
+	return m.handleWorkflowDone(cmds)
 }
 
 func (m *model) handleWorkflowDone(cmds []zeroterm.Cmd) []zeroterm.Cmd {

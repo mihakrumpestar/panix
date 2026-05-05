@@ -38,16 +38,16 @@ func (z *ZoneManager) GetOrCreate(name string) uint16 {
 	}
 
 	z.nextID++
-	id := z.nextID
+	zoneID := z.nextID
 
-	z.byName[name] = id
-	for int(id) >= len(z.names) {
+	z.byName[name] = zoneID
+	for int(zoneID) >= len(z.names) {
 		z.names = append(z.names, "")
 	}
 
-	z.names[id] = name
+	z.names[zoneID] = name
 
-	return id
+	return zoneID
 }
 
 func (z *ZoneManager) Name(id uint16) string {
@@ -68,27 +68,23 @@ func (z *ZoneManager) ID(name string) uint16 {
 	return z.byName[name]
 }
 
-func (z *ZoneManager) acquire(id uint16) uint16 {
+func (z *ZoneManager) Reset() {
+	z.mu.Lock()
+	z.active = make(map[uint16]int)
+	z.mu.Unlock()
+}
+
+func (z *ZoneManager) acquire(id uint16) {
 	z.mu.Lock()
 	z.active[id]++
 	z.mu.Unlock()
-
-	return id
 }
 
-func (z *ZoneManager) release(id uint16) uint16 {
+func (z *ZoneManager) release(id uint16) {
 	z.mu.Lock()
 	if z.active[id] > 0 {
 		z.active[id]--
 	}
-	z.mu.Unlock()
-
-	return id
-}
-
-func (z *ZoneManager) Reset() {
-	z.mu.Lock()
-	z.active = make(map[uint16]int)
 	z.mu.Unlock()
 }
 
@@ -99,23 +95,23 @@ func Mark(name string, view string) string {
 
 	estimatedLen := len(view) + (len(start)+len(end))*max(1, strings.Count(view, "\n")+1)
 
-	var b strings.Builder
-	b.Grow(estimatedLen)
+	var builder strings.Builder
+	builder.Grow(estimatedLen)
 
 	first := true
 	for line := range strings.SplitSeq(view, "\n") {
 		if !first {
-			b.WriteByte('\n')
+			builder.WriteByte('\n')
 		}
 
-		b.WriteString(start)
-		b.WriteString(line)
-		b.WriteString(end)
+		builder.WriteString(start)
+		builder.WriteString(line)
+		builder.WriteString(end)
 
 		first = false
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 func GetZoneName(id uint16) string {
@@ -148,17 +144,17 @@ func ZoneNames() []string {
 	return names
 }
 
-func IsZoneAtLine(line string, x int, zoneName string) bool {
+func IsZoneAtLine(line string, col int, zoneName string) bool {
 	id := globalZones.ID(zoneName)
 	if id == 0 {
 		return false
 	}
 
-	return zoneIDAtCol(line, x) == id
+	return zoneIDAtCol(line, col) == id
 }
 
-func ZoneAtLine(line string, x int) string {
-	id := zoneIDAtCol(line, x)
+func ZoneAtLine(line string, col int) string {
+	id := zoneIDAtCol(line, col)
 	if id == 0 {
 		return ""
 	}
@@ -166,90 +162,25 @@ func ZoneAtLine(line string, x int) string {
 	return globalZones.Name(id)
 }
 
-//nolint:gocognit
 func zoneIDAtCol(line string, targetCol int) uint16 {
 	col := 0
 	pos := 0
 	activeZone := uint16(0)
-	zoneStack := make([]uint16, 0, 8)
+	zoneStack := make([]uint16, 0, 8) //nolint:mnd
 
 	for pos < len(line) {
-		ch := line[pos]
+		char := line[pos]
 
-		if ch == '\x1b' {
-			pos++
-
-			if pos >= len(line) {
-				break
-			}
-
-			next := line[pos]
-			pos++
-
-			if next != '[' {
-				continue
-			}
-
-			paramStart := pos
-			for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
-				pos++
-			}
-
-			intermediateStart := pos
-			for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x2F {
-				pos++
-			}
-
-			trailingParamStart := pos
-			for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
-				pos++
-			}
-
-			if pos >= len(line) || line[pos] < 0x40 || line[pos] > 0x7E {
-				continue
-			}
-
-			finalByte := line[pos]
-			params := line[paramStart:intermediateStart]
-			intermediates := line[intermediateStart:trailingParamStart]
-			trailingParams := line[trailingParamStart:pos]
-			pos++
-
-			// Zone open marker: \x1b[<id>z
-			// Zone close marker: \x1b[/<id>z  ('/' is an ANSI intermediate byte)
-			if finalByte == 'z' {
-				if len(intermediates) > 0 && intermediates[0] == '/' {
-					id, err := strconv.ParseUint(trailingParams, 10, 16)
-					if err == nil {
-						if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1] == uint16(id) {
-							zoneStack = zoneStack[:len(zoneStack)-1]
-						}
-
-						if len(zoneStack) == 0 {
-							activeZone = 0
-						} else {
-							activeZone = zoneStack[len(zoneStack)-1]
-						}
-					}
-				} else {
-					id, err := strconv.ParseUint(params, 10, 16)
-					if err == nil {
-						activeZone = uint16(id)
-						zoneStack = append(zoneStack, uint16(id))
-					}
-				}
-			}
+		if char == '\x1b' {
+			newPos, newActive, newStack := parseZoneEscape(line, pos, activeZone, zoneStack)
+			pos = newPos
+			activeZone = newActive
+			zoneStack = newStack
 
 			continue
 		}
 
-		if ch >= 0x20 && ch < 0x7F {
-			if col == targetCol {
-				return activeZone
-			}
-
-			col++
-		} else if ch >= 0xC0 {
+		if advanceCol(char) {
 			if col == targetCol {
 				return activeZone
 			}
@@ -265,4 +196,102 @@ func zoneIDAtCol(line string, targetCol int) uint16 {
 	}
 
 	return 0
+}
+
+// advanceCol reports whether the byte at the current position occupies a visible
+// cell and should increment the column counter.
+func advanceCol(char byte) bool {
+	return (char >= 0x20 && char < 0x7F) || char >= 0xC0
+}
+
+// parseZoneEscape parses an ANSI escape sequence starting at pos (the ESC byte).
+// It returns the new position, updated activeZone, and updated zoneStack.
+func parseZoneEscape(line string, pos int, activeZone uint16, zoneStack []uint16) (int, uint16, []uint16) {
+	pos++
+
+	if pos >= len(line) {
+		return pos, activeZone, zoneStack
+	}
+
+	next := line[pos]
+	pos++
+
+	if next != '[' {
+		return pos, activeZone, zoneStack
+	}
+
+	paramStart := pos
+	pos = scanCSIParams(line, pos)
+
+	intermediateStart := pos
+	for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x2F {
+		pos++
+	}
+
+	trailingParamStart := pos
+	pos = scanCSITrailingParams(line, pos)
+
+	if pos >= len(line) || line[pos] < 0x40 || line[pos] > 0x7E {
+		return pos, activeZone, zoneStack
+	}
+
+	finalByte := line[pos]
+	params := line[paramStart:intermediateStart]
+	intermediates := line[intermediateStart:trailingParamStart]
+	trailingParams := line[trailingParamStart:pos]
+	pos++
+
+	if finalByte == 'z' {
+		activeZone, zoneStack = applyZoneMarker(params, intermediates, trailingParams, activeZone, zoneStack)
+	}
+
+	return pos, activeZone, zoneStack
+}
+
+// scanCSIParams advances pos past CSI parameter bytes (0x30-0x3F).
+func scanCSIParams(line string, pos int) int {
+	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
+		pos++
+	}
+
+	return pos
+}
+
+// scanCSITrailingParams advances pos past trailing CSI parameter bytes (0x30-0x3F).
+func scanCSITrailingParams(line string, pos int) int {
+	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
+		pos++
+	}
+
+	return pos
+}
+
+// applyZoneMarker updates the active zone and stack based on an open or close
+// zone marker that was already identified by its final byte 'z'.
+func applyZoneMarker(params, intermediates, trailingParams string, activeZone uint16, zoneStack []uint16) (uint16, []uint16) {
+	if len(intermediates) > 0 && intermediates[0] == '/' {
+		// Close marker: \x1b[/<id>z
+		id, err := strconv.ParseUint(trailingParams, 10, 16)
+		if err != nil {
+			return activeZone, zoneStack
+		}
+
+		if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1] == uint16(id) {
+			zoneStack = zoneStack[:len(zoneStack)-1]
+		}
+
+		if len(zoneStack) == 0 {
+			return 0, zoneStack
+		}
+
+		return zoneStack[len(zoneStack)-1], zoneStack
+	}
+
+	// Open marker: \x1b[<id>z
+	id, err := strconv.ParseUint(params, 10, 16)
+	if err != nil {
+		return activeZone, zoneStack
+	}
+
+	return uint16(id), append(zoneStack, uint16(id))
 }

@@ -4,52 +4,46 @@ import (
 	"testing"
 )
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestKeyPressMsg(t *testing.T) {
-	t.Parallel()
-
 	msg := KeyPressMsg{Key: "enter"}
 	if msg.String() != "enter" {
 		t.Errorf("KeyPressMsg.String() = %q, want %q", msg.String(), "enter")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMouseClickMsg(t *testing.T) {
-	t.Parallel()
-
 	msg := MouseClickMsg{X: 10, Y: 5, Button: MouseLeft}
 	if msg.X != 10 || msg.Y != 5 || msg.Button != MouseLeft {
 		t.Error("MouseClickMsg fields mismatch")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMouseWheelMsg(t *testing.T) {
-	t.Parallel()
-
 	msg := MouseWheelMsg{X: 10, Y: 5, Button: MouseWheelUp}
 	if msg.Button != MouseWheelUp {
 		t.Error("MouseWheelMsg button mismatch")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestWindowSizeMsg(t *testing.T) {
-	t.Parallel()
-
 	msg := WindowSizeMsg{Width: 80, Height: 24}
 	if msg.Width != 80 || msg.Height != 24 {
 		t.Error("WindowSizeMsg fields mismatch")
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestQuitMsg(t *testing.T) {
-	t.Parallel()
-
 	msg := QuitMsg{}
 	_ = msg
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestQuitCmd(t *testing.T) {
-	t.Parallel()
-
 	msg := QuitCmd()
 	if _, ok := msg.(QuitMsg); !ok {
 		t.Error("QuitCmd should return QuitMsg")
@@ -62,15 +56,13 @@ func (m *mockModel) Init() []Cmd          { return nil }
 func (m *mockModel) Update(msg Msg) []Cmd { return nil }
 func (m *mockModel) Render() []string     { return nil }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestModelInterface(t *testing.T) {
-	t.Parallel()
-
 	var _ Model = &mockModel{}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestCmdFunc(t *testing.T) {
-	t.Parallel()
-
 	var called bool
 
 	cmd := func() Msg {
@@ -90,9 +82,8 @@ func TestCmdFunc(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMouseButtonValues(t *testing.T) {
-	t.Parallel()
-
 	if MouseLeft != 0 {
 		t.Errorf("MouseLeft = %d, want 0", MouseLeft)
 	}

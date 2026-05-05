@@ -93,17 +93,17 @@ func (n *Notification) isExpired() bool {
 
 func (n *Notification) fadedColor() style.Color {
 	elapsed := time.Since(n.started)
-	r, g, b := style.ColorToRGB8(n.currentColor)
+	red, green, blue := style.ColorToRGB8(n.currentColor)
 
 	if elapsed < fadeStart {
-		return style.Color(fmt.Sprintf("#%02x%02x%02x", r, g, b))
+		return style.Color(fmt.Sprintf("#%02x%02x%02x", red, green, blue))
 	}
 
 	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
 	factor := 1.0 - (progress * fadeFactor)
 
 	return style.Color(fmt.Sprintf("#%02x%02x%02x",
-		uint8(float64(r)*factor),
-		uint8(float64(g)*factor),
-		uint8(float64(b)*factor)))
+		uint8(float64(red)*factor),
+		uint8(float64(green)*factor),
+		uint8(float64(blue)*factor)))
 }

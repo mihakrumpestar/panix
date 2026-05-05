@@ -311,80 +311,12 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 
 	switch key {
 	case "left":
-		if t.selectedIndex > 0 {
-			t.selectedIndex--
-			t.outDirty = true
-
-			return true
-		}
-
-		if t.selectedIndex < 0 && len(t.rows) > 0 {
-			t.selectedIndex = 0
-			t.outDirty = true
-
-			return true
-		}
+		return t.navigateLeft()
 	case "right":
-		if t.selectedIndex < 0 && len(t.rows) > 0 {
-			t.selectedIndex = 0
-			t.outDirty = true
-
-			return true
-		}
-
-		if t.selectedIndex < len(t.rows)-1 {
-			t.selectedIndex++
-			t.outDirty = true
-
-			return true
-		}
+		return t.navigateRight()
 	}
 
 	return false
-}
-
-func (t *Table) updateColumnANSI() {
-	n := len(t.columnStyles)
-	if n == 0 {
-		t.colANSI = t.colANSI[:0]
-		t.colAlign = t.colAlign[:0]
-		t.colANSIOK = true
-
-		return
-	}
-
-	if cap(t.colANSI) < n {
-		t.colANSI = make([]style.ANSIStyle, n)
-		t.colAlign = make([]style.Position, n)
-	} else {
-		t.colANSI = t.colANSI[:n]
-		t.colAlign = t.colAlign[:n]
-	}
-
-	for i, sty := range t.columnStyles {
-		t.colANSI[i] = style.NewANSIStyle(sty)
-		t.colAlign[i] = sty.GetAlign()
-	}
-
-	t.colANSIOK = true
-}
-
-func (t *Table) updateZoneMarkers() {
-	n := len(t.rows)
-	if cap(t.zoneStarts) < n {
-		t.zoneStarts = make([]string, n)
-		t.zoneEnds = make([]string, n)
-	} else {
-		t.zoneStarts = t.zoneStarts[:n]
-		t.zoneEnds = t.zoneEnds[:n]
-	}
-
-	for i := range n {
-		zoneName := t.zonePrefix + "-" + strconv.Itoa(i)
-		id := zeroterm.EnsureZone(zoneName)
-		t.zoneStarts[i] = "\x1b[" + strconv.Itoa(int(id)) + "z"
-		t.zoneEnds[i] = "\x1b[/" + strconv.Itoa(int(id)) + "z"
-	}
 }
 
 //nolint:cyclop,funlen
@@ -461,15 +393,15 @@ func (t *Table) String() string {
 		}
 	}
 
-	for i, rowBytes := range t.rowCacheBytes {
-		if t.zonePrefix != "" && i < len(t.zoneStarts) {
-			t.outBuf = append(t.outBuf, t.zoneStarts[i]...)
+	for rowIdx, rowBytes := range t.rowCacheBytes {
+		if t.zonePrefix != "" && rowIdx < len(t.zoneStarts) {
+			t.outBuf = append(t.outBuf, t.zoneStarts[rowIdx]...)
 		}
 
 		t.outBuf = append(t.outBuf, rowBytes...)
 
-		if t.zonePrefix != "" && i < len(t.zoneEnds) {
-			t.outBuf = append(t.outBuf, t.zoneEnds[i]...)
+		if t.zonePrefix != "" && rowIdx < len(t.zoneEnds) {
+			t.outBuf = append(t.outBuf, t.zoneEnds[rowIdx]...)
 		}
 
 		t.outBuf = append(t.outBuf, '\n')
@@ -497,58 +429,146 @@ func (t *Table) String() string {
 	return t.outCache
 }
 
+func (t *Table) navigateLeft() bool {
+	if t.selectedIndex > 0 {
+		t.selectedIndex--
+		t.outDirty = true
+
+		return true
+	}
+
+	if t.selectedIndex < 0 && len(t.rows) > 0 {
+		t.selectedIndex = 0
+		t.outDirty = true
+
+		return true
+	}
+
+	return false
+}
+
+func (t *Table) navigateRight() bool {
+	if t.selectedIndex < 0 && len(t.rows) > 0 {
+		t.selectedIndex = 0
+		t.outDirty = true
+
+		return true
+	}
+
+	if t.selectedIndex < len(t.rows)-1 {
+		t.selectedIndex++
+		t.outDirty = true
+
+		return true
+	}
+
+	return false
+}
+
+func (t *Table) updateColumnANSI() {
+	numCols := len(t.columnStyles)
+	if numCols == 0 {
+		t.colANSI = t.colANSI[:0]
+		t.colAlign = t.colAlign[:0]
+		t.colANSIOK = true
+
+		return
+	}
+
+	if cap(t.colANSI) < numCols {
+		t.colANSI = make([]style.ANSIStyle, numCols)
+		t.colAlign = make([]style.Position, numCols)
+	} else {
+		t.colANSI = t.colANSI[:numCols]
+		t.colAlign = t.colAlign[:numCols]
+	}
+
+	for i, sty := range t.columnStyles {
+		t.colANSI[i] = style.NewANSIStyle(sty)
+		t.colAlign[i] = sty.GetAlign()
+	}
+
+	t.colANSIOK = true
+}
+
+func (t *Table) updateZoneMarkers() {
+	numRows := len(t.rows)
+	if cap(t.zoneStarts) < numRows {
+		t.zoneStarts = make([]string, numRows)
+		t.zoneEnds = make([]string, numRows)
+	} else {
+		t.zoneStarts = t.zoneStarts[:numRows]
+		t.zoneEnds = t.zoneEnds[:numRows]
+	}
+
+	for rowIdx := range numRows {
+		zoneName := t.zonePrefix + "-" + strconv.Itoa(rowIdx)
+		id := zeroterm.EnsureZone(zoneName)
+		t.zoneStarts[rowIdx] = "\x1b[" + strconv.Itoa(int(id)) + "z"
+		t.zoneEnds[rowIdx] = "\x1b[/" + strconv.Itoa(int(id)) + "z"
+	}
+}
+
 // syncRowCache ensures rowCacheBytes[i] contains the rendered bytes for
 // rows[i]. Only rows whose data or selection state changed since the
 // last render are re-rendered; all others reuse their cached bytes.
 func (t *Table) syncRowCache(colWidths []int, hasBorder bool, bfg, borderReset string) {
-	n := len(t.rows)
+	numRows := len(t.rows)
 	selChanged := t.rowCacheSel != t.selectedIndex
 
 	// Full rebuild: structural change (row count, width, etc.)
-	if t.rowCacheBytes == nil || len(t.rowCacheBytes) != n ||
-		len(t.rowCacheData) != n {
-		if cap(t.rowCacheBytes) < n {
-			t.rowCacheBytes = make([][]byte, n)
-			t.rowCacheData = make([][]string, n)
-		} else {
-			t.rowCacheBytes = t.rowCacheBytes[:n]
-			t.rowCacheData = t.rowCacheData[:n]
-		}
-
-		for i, row := range t.rows {
-			t.buildRow(row, colWidths, i, hasBorder, bfg, borderReset)
-			buf := make([]byte, len(t.rowBuf))
-			copy(buf, t.rowBuf)
-			t.rowCacheBytes[i] = buf
-			t.rowCacheData[i] = row
-		}
-
-		t.rowCacheSel = t.selectedIndex
+	if t.rowCacheBytes == nil || len(t.rowCacheBytes) != numRows ||
+		len(t.rowCacheData) != numRows {
+		t.fullRowCacheRebuild(colWidths, numRows, hasBorder, bfg, borderReset)
 
 		return
 	}
 
 	// Incremental: re-render only dirty rows.
-	for i, row := range t.rows {
-		dirty := !cellsEqual(t.rowCacheData[i], row)
+	t.incrementalRowCacheUpdate(colWidths, selChanged, hasBorder, bfg, borderReset)
+}
+
+func (t *Table) fullRowCacheRebuild(colWidths []int, numRows int, hasBorder bool, bfg, borderReset string) {
+	if cap(t.rowCacheBytes) < numRows {
+		t.rowCacheBytes = make([][]byte, numRows)
+		t.rowCacheData = make([][]string, numRows)
+	} else {
+		t.rowCacheBytes = t.rowCacheBytes[:numRows]
+		t.rowCacheData = t.rowCacheData[:numRows]
+	}
+
+	for rowIdx, row := range t.rows {
+		t.buildRow(row, colWidths, rowIdx, hasBorder, bfg, borderReset)
+		buf := make([]byte, len(t.rowBuf))
+		copy(buf, t.rowBuf)
+		t.rowCacheBytes[rowIdx] = buf
+		t.rowCacheData[rowIdx] = row
+	}
+
+	t.rowCacheSel = t.selectedIndex
+}
+
+func (t *Table) incrementalRowCacheUpdate(colWidths []int, selChanged bool, hasBorder bool, bfg, borderReset string) {
+	for rowIdx, row := range t.rows {
+		dirty := !cellsEqual(t.rowCacheData[rowIdx], row)
 
 		if !dirty && selChanged {
 			// Selection affects rendering only for the previously-
 			// selected and newly-selected rows.
-			dirty = i == t.rowCacheSel || i == t.selectedIndex
+			dirty = rowIdx == t.rowCacheSel || rowIdx == t.selectedIndex
 		}
 
 		if dirty {
-			t.buildRow(row, colWidths, i, hasBorder, bfg, borderReset)
+			t.buildRow(row, colWidths, rowIdx, hasBorder, bfg, borderReset)
 			// Reuse existing byte slice if it fits, else allocate.
-			if cap(t.rowCacheBytes[i]) < len(t.rowBuf) {
-				t.rowCacheBytes[i] = make([]byte, len(t.rowBuf))
+			if cap(t.rowCacheBytes[rowIdx]) < len(t.rowBuf) {
+				t.rowCacheBytes[rowIdx] = make([]byte, len(t.rowBuf))
 			} else {
-				t.rowCacheBytes[i] = t.rowCacheBytes[i][:len(t.rowBuf)]
+				t.rowCacheBytes[rowIdx] = t.rowCacheBytes[rowIdx][:len(t.rowBuf)]
 			}
 
-			copy(t.rowCacheBytes[i], t.rowBuf)
-			t.rowCacheData[i] = row
+			copy(t.rowCacheBytes[rowIdx], t.rowBuf)
+			t.rowCacheData[rowIdx] = row
 		}
 	}
 
@@ -581,101 +601,7 @@ func (t *Table) buildRow(cells []string, colWidths []int,
 		t.rowBuf = append(t.rowBuf, selBg...)
 	}
 
-	for i, w := range colWidths {
-		if i > 0 && hasBorder && t.borderColumn {
-			t.rowBuf = append(t.rowBuf, bfg...)
-			t.rowBuf = append(t.rowBuf, t.border.Vertical...)
-			t.rowBuf = append(t.rowBuf, borderReset...)
-
-			if selBg != "" {
-				t.rowBuf = append(t.rowBuf, selBg...)
-			}
-		}
-
-		cell := ""
-		if i < len(cells) {
-			cell = cells[i]
-		}
-
-		var (
-			prefix, reset string
-			align         style.Position
-		)
-
-		if rowIdx == HeaderRow || i >= len(t.colANSI) {
-			// No ANSI wrapping for headers or beyond column styles.
-		} else {
-			prefix = t.colANSI[i].Prefix()
-			reset = t.colANSI[i].Reset()
-			align = t.colAlign[i]
-		}
-
-		if hasNewline(cell) {
-			var sty style.Style
-			if rowIdx == HeaderRow {
-				sty = style.NewStyle()
-			} else {
-				sty = t.columnStyle(i)
-			}
-
-			if t.wrap {
-				sty = sty.Width(w)
-			} else {
-				sty = sty.Width(w).MaxWidth(w).TruncateEllipsis(true)
-			}
-
-			rendered := sty.Render(cell)
-			t.rowBuf = append(t.rowBuf, rendered...)
-
-			continue
-		}
-
-		if prefix != "" {
-			t.rowBuf = append(t.rowBuf, prefix...)
-		}
-
-		cw := style.CellWidth(cell)
-
-		switch {
-		case cw < w:
-			pad := w - cw
-
-			switch {
-			case align >= style.Right:
-				t.rowBuf = appendPad(t.rowBuf, pad)
-				t.rowBuf = append(t.rowBuf, cell...)
-			case align == style.Center:
-				left := pad / 2
-				right := pad - left
-				t.rowBuf = appendPad(t.rowBuf, left)
-				t.rowBuf = append(t.rowBuf, cell...)
-				t.rowBuf = appendPad(t.rowBuf, right)
-			default:
-				t.rowBuf = append(t.rowBuf, cell...)
-				t.rowBuf = appendPad(t.rowBuf, pad)
-			}
-
-		case cw > w:
-			truncated := style.TruncateToWidth(cell, w, !t.wrap)
-			t.rowBuf = append(t.rowBuf, truncated...)
-
-			remaining := w - style.CellWidth(truncated)
-			if remaining > 0 {
-				t.rowBuf = appendPad(t.rowBuf, remaining)
-			}
-
-		default:
-			t.rowBuf = append(t.rowBuf, cell...)
-		}
-
-		if reset != "" {
-			t.rowBuf = append(t.rowBuf, reset...)
-
-			if selBg != "" {
-				t.rowBuf = append(t.rowBuf, selBg...)
-			}
-		}
-	}
+	t.rowBuf = t.renderRowCells(cells, colWidths, hasBorder, bfg, borderReset, selBg, rowIdx)
 
 	if selBg != "" {
 		t.rowBuf = append(t.rowBuf, style.ANSIReset()...)
@@ -686,6 +612,127 @@ func (t *Table) buildRow(cells []string, colWidths []int,
 		t.rowBuf = append(t.rowBuf, t.border.Vertical...)
 		t.rowBuf = append(t.rowBuf, borderReset...)
 	}
+}
+
+func (t *Table) renderRowCells(cells []string, colWidths []int, hasBorder bool, bfg, borderReset, selBg string, rowIdx int) []byte {
+	buf := t.rowBuf
+
+	for colIdx, colWidth := range colWidths {
+		if colIdx > 0 && hasBorder && t.borderColumn {
+			buf = append(buf, bfg...)
+			buf = append(buf, t.border.Vertical...)
+			buf = append(buf, borderReset...)
+
+			if selBg != "" {
+				buf = append(buf, selBg...)
+			}
+		}
+
+		cell := ""
+		if colIdx < len(cells) {
+			cell = cells[colIdx]
+		}
+
+		prefix, reset, align := t.cellANSI(rowIdx, colIdx)
+		buf = t.renderCell(buf, cell, colWidth, colIdx, prefix, reset, align, selBg, rowIdx)
+	}
+
+	return buf
+}
+
+// cellANSI returns the ANSI prefix, reset, and alignment for a cell.
+func (t *Table) cellANSI(rowIdx, colIdx int) (string, string, style.Position) {
+	if rowIdx == HeaderRow || colIdx >= len(t.colANSI) {
+		return "", "", 0
+	}
+
+	return t.colANSI[colIdx].Prefix(), t.colANSI[colIdx].Reset(), t.colAlign[colIdx]
+}
+
+// renderCell appends a single cell's content to buf, handling alignment,
+// truncation, wrapping, and ANSI sequences.
+func (t *Table) renderCell(
+	buf []byte, cell string, colWidth, colIdx int,
+	prefix, reset string, align style.Position, selBg string, rowIdx int,
+) []byte {
+	if hasNewline(cell) {
+		var sty style.Style
+		if rowIdx == HeaderRow {
+			sty = style.NewStyle()
+		} else {
+			sty = t.columnStyle(colIdx)
+		}
+
+		sty = t.cellStyle(sty, colWidth)
+		rendered := sty.Render(cell)
+		buf = append(buf, rendered...)
+
+		return buf
+	}
+
+	if prefix != "" {
+		buf = append(buf, prefix...)
+	}
+
+	buf = t.alignCellContent(buf, cell, colWidth, align)
+
+	if reset != "" {
+		buf = append(buf, reset...)
+
+		if selBg != "" {
+			buf = append(buf, selBg...)
+		}
+	}
+
+	return buf
+}
+
+// alignCellContent appends cell content to buf with proper alignment and truncation.
+func (t *Table) alignCellContent(buf []byte, cell string, colWidth int, align style.Position) []byte {
+	cellWidth := style.CellWidth(cell)
+
+	switch {
+	case cellWidth < colWidth:
+		pad := colWidth - cellWidth
+
+		switch {
+		case align >= style.Right:
+			buf = appendPad(buf, pad)
+			buf = append(buf, cell...)
+		case align == style.Center:
+			left := pad / 2 //nolint:mnd
+			right := pad - left
+			buf = appendPad(buf, left)
+			buf = append(buf, cell...)
+			buf = appendPad(buf, right)
+		default:
+			buf = append(buf, cell...)
+			buf = appendPad(buf, pad)
+		}
+
+	case cellWidth > colWidth:
+		truncated := style.TruncateToWidth(cell, colWidth, !t.wrap)
+		buf = append(buf, truncated...)
+
+		remaining := colWidth - style.CellWidth(truncated)
+		if remaining > 0 {
+			buf = appendPad(buf, remaining)
+		}
+
+	default:
+		buf = append(buf, cell...)
+	}
+
+	return buf
+}
+
+// cellStyle configures width and truncation for a cell that contains newlines.
+func (t *Table) cellStyle(sty style.Style, colWidth int) style.Style {
+	if t.wrap {
+		return sty.Width(colWidth)
+	}
+
+	return sty.Width(colWidth).MaxWidth(colWidth).TruncateEllipsis(true)
 }
 
 func appendPad(buf []byte, n int) []byte {
@@ -725,7 +772,7 @@ func (t *Table) columnStyle(col int) style.Style {
 //	[2*numCols, 3*numCols) = distributed
 //	[3*numCols, 4*numCols) = medians (for shrinkNonFixedColumns)
 func (t *Table) ensureWidthsBuf(numCols int) {
-	need := numCols * 4
+	need := numCols * 4 //nolint:mnd
 	if cap(t.widthsBuf) < need {
 		t.widthsBuf = make([]int, need)
 	} else {
@@ -780,51 +827,51 @@ func (t *Table) distributeWidths(numCols int) []int {
 	distributed := buf[2*numCols : 3*numCols]
 
 	t.contentWidths(numCols, contentWidths)
+	t.computeFixedWidths(numCols, fixedWidths)
 
+	if t.width <= 0 {
+		return t.distributeWidthsNoTableWidth(numCols, contentWidths, fixedWidths)
+	}
+
+	availableWidth := max(t.width-t.totalBorderWidth(numCols), 0)
+
+	copy(distributed, contentWidths)
+
+	fixedTotal, nonFixedContent := t.applyFixedWidths(numCols, distributed, fixedWidths)
+	nonFixedAvailable := max(availableWidth-fixedTotal, 0)
+
+	return t.resolveDistributedWidths(numCols, buf, distributed, contentWidths, fixedWidths, nonFixedAvailable, nonFixedContent)
+}
+
+func (t *Table) computeFixedWidths(numCols int, fixedWidths []int) {
 	for i := range numCols {
 		fw := t.columnStyle(i).GetWidth()
 		if fw > 0 {
 			fixedWidths[i] = fw
 		}
 	}
+}
 
-	if t.width <= 0 {
-		result := make([]int, numCols)
-		for i := range numCols {
-			if fixedWidths[i] > 0 {
-				result[i] = fixedWidths[i]
-			} else {
-				result[i] = contentWidths[i]
-			}
-		}
-
-		return result
-	}
-
-	borderCharsWidth := t.totalBorderWidth(numCols)
-	availableWidth := max(t.width-borderCharsWidth, 0)
-
-	copy(distributed, contentWidths)
-
+func (t *Table) applyFixedWidths(numCols int, distributed, fixedWidths []int) (int, int) {
 	fixedTotal := 0
+	nonFixedContent := 0
 
 	for i := range numCols {
 		if fixedWidths[i] > 0 {
 			distributed[i] = fixedWidths[i]
 			fixedTotal += fixedWidths[i]
-		}
-	}
-
-	nonFixedAvailable := max(availableWidth-fixedTotal, 0)
-
-	nonFixedContent := 0
-
-	for i := range numCols {
-		if fixedWidths[i] == 0 {
+		} else {
 			nonFixedContent += distributed[i]
 		}
 	}
 
+	return fixedTotal, nonFixedContent
+}
+
+func (t *Table) resolveDistributedWidths(
+	numCols int, buf, distributed, contentWidths, fixedWidths []int,
+	nonFixedAvailable, nonFixedContent int,
+) []int {
 	if nonFixedContent == nonFixedAvailable {
 		result := make([]int, numCols)
 		copy(result, distributed)
@@ -833,37 +880,7 @@ func (t *Table) distributeWidths(numCols int) []int {
 	}
 
 	if nonFixedContent < nonFixedAvailable {
-		for {
-			total := 0
-
-			for i := range numCols {
-				if fixedWidths[i] == 0 {
-					total += distributed[i]
-				}
-			}
-
-			if total >= nonFixedAvailable {
-				break
-			}
-
-			shortestIdx := -1
-			shortestW := 0
-
-			for i, w := range distributed {
-				if fixedWidths[i] == 0 {
-					if shortestIdx < 0 || w < shortestW {
-						shortestW = w
-						shortestIdx = i
-					}
-				}
-			}
-
-			if shortestIdx < 0 {
-				break
-			}
-
-			distributed[shortestIdx]++
-		}
+		t.growNonFixedColumns(distributed, fixedWidths, nonFixedAvailable)
 	} else {
 		medians := buf[3*numCols : 4*numCols]
 		t.shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians, nonFixedAvailable)
@@ -875,130 +892,196 @@ func (t *Table) distributeWidths(numCols int) []int {
 	return result
 }
 
+// distributeWidthsNoTableWidth returns column widths when no table width is set.
+func (t *Table) distributeWidthsNoTableWidth(numCols int, contentWidths, fixedWidths []int) []int {
+	result := make([]int, numCols)
+	for i := range numCols {
+		if fixedWidths[i] > 0 {
+			result[i] = fixedWidths[i]
+		} else {
+			result[i] = contentWidths[i]
+		}
+	}
+
+	return result
+}
+
 func (t *Table) totalBorderWidth(numCols int) int {
 	if t.border.Vertical == "" {
 		return 0
 	}
 
-	w := 0
+	borderWidth := 0
 
 	if t.borderLeft {
-		w++
+		borderWidth++
 	}
 
 	if t.borderRight {
-		w++
+		borderWidth++
 	}
 
 	if t.borderColumn {
-		w += numCols - 1
+		borderWidth += numCols - 1
 	}
 
-	return w
+	return borderWidth
 }
 
-//nolint:cyclop
-func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians []int, availableWidth int) {
-	numCols := len(distributed)
-
+// growNonFixedColumns distributes surplus width to the shortest non-fixed columns
+// until the total reaches nonFixedAvailable.
+func (t *Table) growNonFixedColumns(distributed, fixedWidths []int, nonFixedAvailable int) {
 	for {
 		total := 0
 
-		for i, w := range distributed {
+		for i := range distributed {
 			if fixedWidths[i] == 0 {
-				total += w
+				total += distributed[i]
 			}
 		}
 
+		if total >= nonFixedAvailable {
+			break
+		}
+
+		shortestIdx := -1
+		shortestW := 0
+
+		for i, w := range distributed {
+			if fixedWidths[i] == 0 {
+				if shortestIdx < 0 || w < shortestW {
+					shortestW = w
+					shortestIdx = i
+				}
+			}
+		}
+
+		if shortestIdx < 0 {
+			break
+		}
+
+		distributed[shortestIdx]++
+	}
+}
+
+func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians []int, availableWidth int) {
+	t.shrinkWideColumns(distributed, fixedWidths, availableWidth)
+	t.computeMedians(medians, contentWidths, fixedWidths)
+	t.shrinkByMedianDeviation(distributed, fixedWidths, medians, availableWidth)
+	t.shrinkAnyRemaining(distributed, fixedWidths, availableWidth)
+}
+
+func (t *Table) shrinkWideColumns(distributed, fixedWidths []int, availableWidth int) {
+	for {
+		total := nonFixedTotal(distributed, fixedWidths)
 		if total <= availableWidth {
 			break
 		}
 
-		bigIdx := -1
-		bigW := -1
-
-		for i, w := range distributed {
-			if fixedWidths[i] == 0 && w >= availableWidth/2 && w > bigW {
-				bigW = w
-				bigIdx = i
-			}
-		}
-
+		bigIdx := biggestNonFixedAtLeastHalf(distributed, fixedWidths, availableWidth)
 		if bigIdx < 0 || distributed[bigIdx] == 0 {
 			break
 		}
 
 		distributed[bigIdx]--
 	}
+}
 
-	for i := range numCols {
+func (t *Table) computeMedians(medians, contentWidths, fixedWidths []int) {
+	for i := range medians {
 		if fixedWidths[i] == 0 {
-			medians[i] = max(contentWidths[i]/2, 1)
+			medians[i] = max(contentWidths[i]/2, 1) //nolint:mnd
 		}
 	}
+}
 
+func (t *Table) shrinkByMedianDeviation(distributed, fixedWidths, medians []int, availableWidth int) {
 	for {
-		total := 0
-
-		for i, w := range distributed {
-			if fixedWidths[i] == 0 {
-				total += w
-			}
-		}
-
+		total := nonFixedTotal(distributed, fixedWidths)
 		if total <= availableWidth {
 			break
 		}
 
-		bigDiffIdx := -1
-		bigDiff := -1
-
-		for i, w := range distributed {
-			if fixedWidths[i] == 0 {
-				diff := w - medians[i]
-				if diff > 0 && diff > bigDiff {
-					bigDiff = diff
-					bigDiffIdx = i
-				}
-			}
-		}
-
+		bigDiffIdx := biggestMedianDeviation(distributed, fixedWidths, medians)
 		if bigDiffIdx < 0 || distributed[bigDiffIdx] == 0 {
 			break
 		}
 
 		distributed[bigDiffIdx]--
 	}
+}
 
+func (t *Table) shrinkAnyRemaining(distributed, fixedWidths []int, availableWidth int) {
 	for {
-		total := 0
-
-		for i, w := range distributed {
-			if fixedWidths[i] == 0 {
-				total += w
-			}
-		}
-
+		total := nonFixedTotal(distributed, fixedWidths)
 		if total <= availableWidth {
 			break
 		}
 
-		bigIdx := -1
-		bigW := -1
-
-		for i, w := range distributed {
-			if fixedWidths[i] == 0 && w > bigW {
-				bigW = w
-				bigIdx = i
-			}
-		}
-
+		bigIdx := biggestNonFixed(distributed, fixedWidths)
 		if bigIdx < 0 || distributed[bigIdx] == 0 {
 			break
 		}
 
 		distributed[bigIdx]--
 	}
+}
+
+func nonFixedTotal(distributed, fixedWidths []int) int {
+	total := 0
+
+	for i, w := range distributed {
+		if fixedWidths[i] == 0 {
+			total += w
+		}
+	}
+
+	return total
+}
+
+func biggestNonFixedAtLeastHalf(distributed, fixedWidths []int, availableWidth int) int {
+	bigIdx := -1
+	bigW := -1
+
+	for i, w := range distributed {
+		if fixedWidths[i] == 0 && w >= availableWidth/2 && w > bigW {
+			bigW = w
+			bigIdx = i
+		}
+	}
+
+	return bigIdx
+}
+
+func biggestMedianDeviation(distributed, fixedWidths, medians []int) int {
+	bigDiffIdx := -1
+	bigDiff := -1
+
+	for i, w := range distributed {
+		if fixedWidths[i] == 0 {
+			diff := w - medians[i]
+			if diff > 0 && diff > bigDiff {
+				bigDiff = diff
+				bigDiffIdx = i
+			}
+		}
+	}
+
+	return bigDiffIdx
+}
+
+func biggestNonFixed(distributed, fixedWidths []int) int {
+	bigIdx := -1
+	bigW := -1
+
+	for i, w := range distributed {
+		if fixedWidths[i] == 0 && w > bigW {
+			bigW = w
+			bigIdx = i
+		}
+	}
+
+	return bigIdx
 }
 
 func (t *Table) writeHorizontalBorder(left, mid, right string,
@@ -1007,13 +1090,13 @@ func (t *Table) writeHorizontalBorder(left, mid, right string,
 	t.outBuf = append(t.outBuf, fg...)
 	t.outBuf = append(t.outBuf, left...)
 
-	for i, w := range colWidths {
-		if i > 0 && t.borderColumn {
+	for colIdx, colWidth := range colWidths {
+		if colIdx > 0 && t.borderColumn {
 			t.outBuf = append(t.outBuf, mid...)
 		}
 
-		if w > 0 {
-			t.outBuf = appendRepeatStr(t.outBuf, t.border.Horizontal, w)
+		if colWidth > 0 {
+			t.outBuf = appendRepeatStr(t.outBuf, t.border.Horizontal, colWidth)
 		}
 	}
 
@@ -1031,13 +1114,13 @@ func appendRepeatStr(buf []byte, s string, n int) []byte {
 	return buf
 }
 
-func cellsEqual(a, b []string) bool {
-	if len(a) != len(b) {
+func cellsEqual(left, right []string) bool {
+	if len(left) != len(right) {
 		return false
 	}
 
-	for i := range a {
-		if a[i] != b[i] {
+	for idx := range left {
+		if left[idx] != right[idx] {
 			return false
 		}
 	}

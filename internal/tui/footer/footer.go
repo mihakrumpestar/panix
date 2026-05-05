@@ -13,7 +13,7 @@ type KeyDef struct {
 	Keys    []string
 	Help    string
 	Active  func() bool
-	Handler func() []zeroterm.Cmd
+	Handler func() zeroterm.Cmd
 }
 
 const minFooterHeight = 3

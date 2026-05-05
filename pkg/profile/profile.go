@@ -62,7 +62,8 @@ func Start(conf Profile) (StopFunc, error) {
 }
 
 func startCPU(path string, stops *[]func()) error {
-	if err := os.MkdirAll(path, dirPermissions); err != nil {
+	err := os.MkdirAll(path, dirPermissions)
+	if err != nil {
 		return errors.Wrap(err, "failed to create directory for CPU profile")
 	}
 
@@ -94,7 +95,8 @@ func stopMem(path string) func() {
 	return func() {
 		runtime.GC()
 
-		if err := os.MkdirAll(path, dirPermissions); err != nil {
+		err := os.MkdirAll(path, dirPermissions)
+		if err != nil {
 			log.Error().Err(err).Msg("failed to create directory for memory profile")
 
 			return
@@ -134,7 +136,8 @@ func stopRuntimeProfile(name, path string, disable func()) func() {
 }
 
 func writeProfile(name, path string) error {
-	if err := os.MkdirAll(path, dirPermissions); err != nil {
+	err := os.MkdirAll(path, dirPermissions)
+	if err != nil {
 		return errors.Wrapf(err, "failed to create directory for %s profile", name)
 	}
 

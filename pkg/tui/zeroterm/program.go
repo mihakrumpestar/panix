@@ -2,6 +2,7 @@ package zeroterm
 
 import (
 	"os"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -27,32 +28,30 @@ func WithRaw() ProgramOption {
 }
 
 func NewProgram(model Model, opts ...ProgramOption) *Program {
-	p := &Program{
+	prog := &Program{
 		model:  model,
-		msgCh:  make(chan Msg, 1024),
+		msgCh:  make(chan Msg, 1024), //nolint:mnd
 		stopCh: make(chan struct{}),
-		outBuf: make([]byte, 0, 8192),
+		outBuf: make([]byte, 0, 8192), //nolint:mnd
 	}
 
 	for _, opt := range opts {
-		opt(p)
+		opt(prog)
 	}
 
-	return p
+	return prog
 }
 
 func (p *Program) Run() error {
-	in := os.Stdin
-	out := os.Stdout
-
-	term, err := NewTerminal(in, out)
+	term, err := NewTerminal(os.Stdin, os.Stdout)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize terminal")
 	}
 
 	p.terminal = term
 
-	if err := term.EnterRawMode(); err != nil {
+	err = term.EnterRawMode()
+	if err != nil {
 		return errors.Wrap(err, "failed to enter raw mode")
 	}
 	defer term.ExitRawMode()
@@ -70,20 +69,13 @@ func (p *Program) Run() error {
 
 	// Clear screen
 	p.outBuf = append(p.outBuf[:0], "\x1b[2J\x1b[H"...)
-	if _, err := out.Write(p.outBuf); err != nil {
+
+	_, err = os.Stdout.Write(p.outBuf)
+	if err != nil {
 		return errors.Wrap(err, "failed to clear screen")
 	}
 
-	initCmds := p.model.Init()
-	sizeCmds := p.model.Update(WindowSizeMsg{Width: p.width, Height: p.height})
-	allCmds := append(initCmds, sizeCmds...)
-	p.processCmds(allCmds)
-	p.renderFrame()
-
-	// Post-render update lets the model emit ticks (e.g. spinners) after
-	// the first render has populated view state.
-	postCmds := p.model.Update(PostRenderMsg{})
-	p.processCmds(postCmds)
+	p.processInitCmds()
 
 	sigCh := term.WatchResize()
 	defer term.StopWatchResize()
@@ -94,18 +86,33 @@ func (p *Program) Run() error {
 	defer func() { <-inputDone }()
 	defer close(p.stopCh)
 
-	if err := p.eventLoop(sigCh); err != nil {
+	err = p.eventLoop(sigCh)
+	if err != nil {
 		return err
 	}
 
 	// Clear the alt screen buffer and move cursor home before exiting.
 	p.outBuf = append(p.outBuf[:0], "\x1b[2J\x1b[H"...)
-	out.Write(p.outBuf)
+	_, _ = os.Stdout.Write(p.outBuf)
 
 	return nil
 }
 
-//nolint:cyclop
+// processInitCmds runs the model's Init and initial WindowSize update, then
+// renders the first frame.
+func (p *Program) processInitCmds() {
+	initCmds := p.model.Init()
+	sizeCmds := p.model.Update(WindowSizeMsg{Width: p.width, Height: p.height})
+	allCmds := slices.Clone(initCmds)
+	allCmds = append(allCmds, sizeCmds...)
+	p.processCmds(allCmds)
+	p.renderFrame()
+
+	postCmds := p.model.Update(PostRenderMsg{})
+	p.processCmds(postCmds)
+}
+
+//nolint:cyclop,unparam
 func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 	for {
 		select {
@@ -114,17 +121,20 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 				return nil
 			}
 
-			if _, ok := msg.(QuitMsg); ok {
+			_, ok = msg.(QuitMsg)
+			if ok {
 				return nil
 			}
 
-			if batch, ok := msg.(batchMsg); ok {
-				for _, m := range batch.msgs {
-					if _, ok := m.(QuitMsg); ok {
+			batch, ok := msg.(batchMsg)
+			if ok {
+				for _, msg := range batch.msgs {
+					_, ok = msg.(QuitMsg)
+					if ok {
 						return nil
 					}
 
-					cmds := p.model.Update(m)
+					cmds := p.model.Update(msg)
 					p.processCmds(cmds)
 				}
 			} else {
@@ -139,14 +149,14 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 			postCmds := p.model.Update(PostRenderMsg{})
 			p.processCmds(postCmds)
 		case <-sigCh:
-			w, h := p.terminal.UpdateSize()
-			if w != p.width || h != p.height {
-				p.width = w
-				p.height = h
+			newWidth, newHeight := p.terminal.UpdateSize()
+			if newWidth != p.width || newHeight != p.height {
+				p.width = newWidth
+				p.height = newHeight
 				// After resize, force full redraw by clearing prevLines
 				// so all lines are detected as changed.
 				p.prevLines = p.prevLines[:0]
-				cmds := p.model.Update(WindowSizeMsg{Width: w, Height: h})
+				cmds := p.model.Update(WindowSizeMsg{Width: newWidth, Height: newHeight})
 				p.processCmds(cmds)
 				p.renderFrame()
 
@@ -189,7 +199,8 @@ func (p *Program) renderFrame() {
 	p.outBuf = RenderLines(p.outBuf, diffs, lines, prevCount, p.height)
 
 	if len(p.outBuf) > 0 {
-		if _, err := p.terminal.out.Write(p.outBuf); err != nil {
+		_, err := p.terminal.out.Write(p.outBuf)
+		if err != nil {
 			_, _ = os.Stderr.WriteString("render error: write error\n")
 		}
 	}
@@ -222,10 +233,11 @@ func (p *Program) processCmds(cmds []Cmd) {
 	}
 }
 
+//nolint:cyclop
 func (p *Program) readInput(done chan<- struct{}) {
 	defer close(done)
 
-	buf := make([]byte, 1024)
+	buf := make([]byte, 1024) //nolint:mnd
 
 	var leftover []byte
 
@@ -240,8 +252,8 @@ func (p *Program) readInput(done chan<- struct{}) {
 		select {
 		case <-p.stopCh:
 			return
-		case r := <-readCh:
-			if r.err != nil {
+		case readRes := <-readCh:
+			if readRes.err != nil {
 				select {
 				case p.msgCh <- QuitMsg{}:
 				default:
@@ -250,12 +262,12 @@ func (p *Program) readInput(done chan<- struct{}) {
 				return
 			}
 
-			if r.n == 0 {
+			if readRes.n == 0 {
 				continue
 			}
 
 			// Prepend any leftover bytes from a previous partial read.
-			data := buf[:r.n]
+			data := buf[:readRes.n]
 			if len(leftover) > 0 {
 				data = append(leftover, data...)
 				leftover = nil
@@ -263,7 +275,7 @@ func (p *Program) readInput(done chan<- struct{}) {
 
 			// If we filled the buffer, more data may be available;
 			// partial sequences should be deferred.
-			canHaveMoreData := r.n == len(buf)
+			canHaveMoreData := readRes.n == len(buf)
 
 			msgs, consumed := parseInput(data, canHaveMoreData)
 			for _, msg := range msgs {

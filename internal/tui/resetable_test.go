@@ -179,6 +179,8 @@ func newTestModel(t *testing.T) *model {
 
 	dims := &viewports.Dimensions{Width: 200, Height: 80}
 
+	tableS := conf.ColorScheme.Table
+
 	mdl := &model{
 		ctx:        context.Background(),
 		conf:       conf,
@@ -187,7 +189,9 @@ func newTestModel(t *testing.T) *model {
 		spinners:   spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
-		viewports:  viewports.New(dims, 0, conf.ColorScheme.Table.Border, conf.ColorScheme.Table.SelectionHighlightBackground, conf.ColorScheme.Table.SelectionHighlightBorder),
+		viewports: viewports.New(dims, 0, tableS.Border,
+			tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
+		),
 	}
 	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 

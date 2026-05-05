@@ -155,7 +155,7 @@ func (s Style) Border(b Border, sides ...bool) Style {
 		s.borderRight = true
 		s.borderBottom = true
 		s.borderLeft = true
-	case 4:
+	case 4: //nolint:mnd
 		s.borderTop = sides[0]
 		s.borderRight = sides[1]
 		s.borderBottom = sides[2]
@@ -234,25 +234,25 @@ func (s Style) BgPrefix() string { return s.bgPrefix }
 // String returns the ANSI escape sequence for this style's color/bold
 // attributes, without applying any layout.
 func (s Style) String() string {
-	var b strings.Builder
+	var builder strings.Builder
 
 	if s.fgPrefix != "" {
-		b.WriteString(s.fgPrefix)
+		builder.WriteString(s.fgPrefix)
 	}
 
 	if s.bgPrefix != "" {
-		b.WriteString(s.bgPrefix)
+		builder.WriteString(s.bgPrefix)
 	}
 
 	if s.bold {
-		b.WriteString("\x1b[1m")
+		builder.WriteString("\x1b[1m")
 	}
 
-	if b.Len() > 0 {
-		b.WriteString(ansiReset)
+	if builder.Len() > 0 {
+		builder.WriteString(ansiReset)
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // Render applies the style to the given content and returns the result.
@@ -267,94 +267,96 @@ func (s Style) String() string {
 //  6. Pad or truncate each line to contentWidth (using alignment)
 //  7. Apply borders around the content
 //  8. Apply ANSI color/bold sequences to every line
-//
-//nolint:cyclop,funlen
 func (s Style) Render(content ...string) string {
-	var combined string
-	if len(content) == 1 {
-		combined = content[0]
-	} else {
-		var b strings.Builder
-		for _, c := range content {
-			b.WriteString(c)
-		}
-
-		combined = b.String()
-	}
+	combined := joinContent(content)
 
 	if combined == "" && !s.hasBorder && s.padTop == 0 && s.padBottom == 0 && s.width == 0 {
 		return ""
 	}
 
-	hasLayout := s.width > 0 || s.maxWidth > 0 || s.hasBorder ||
-		s.padTop > 0 || s.padRight > 0 || s.padBottom > 0 || s.padLeft > 0
-
-	if !hasLayout {
+	if !s.hasLayoutProperties() {
 		return s.renderColorOnly(combined)
 	}
 
+	result := s.applyLayout(combined)
+
+	return s.renderColorOnly(result)
+}
+
+// applyLayout applies padding, alignment, borders, and width constraints.
+func (s Style) applyLayout(combined string) string {
 	lines := splitLines(combined)
 
-	// When a border is set without an explicit width, derive the width from
-	// the widest content line so the border frames the content correctly.
-	if s.hasBorder && s.width == 0 {
-		maxW := 0
-		for _, line := range lines {
-			if w := CellWidth(line); w > maxW {
-				maxW = w
-			}
-		}
-
-		if maxW > 0 {
-			bw := 0
-			if s.borderLeft {
-				bw++
-			}
-
-			if s.borderRight {
-				bw++
-			}
-
-			s.width = maxW + s.padLeft + s.padRight + bw
-		}
+	if derived := s.deriveBorderWidth(lines); derived > 0 {
+		s.width = derived
 	}
 
-	// When MaxWidth is set and smaller than Width, cap the effective width.
-	// This ensures borders, padding, and content all honor the limit,
-	// producing a properly framed block at maxWidth rather than a truncated
-	// mess with missing right borders (which lipgloss v2 does by truncating
-	// the final output).
 	if s.maxWidth > 0 && s.width > s.maxWidth {
 		s.width = s.maxWidth
 	}
 
-	if s.padLeft > 0 || s.padRight > 0 {
-		pad := strings.Repeat(" ", s.padLeft) + "%s" + strings.Repeat(" ", s.padRight)
+	s.applyHorizontalPadding(lines)
+	lines = s.applyVerticalPadding(lines)
 
-		for i, line := range lines {
-			lines[i] = strings.Replace(pad, "%s", line, 1)
-		}
+	borderWidth := s.borderCharWidth()
+	innerWidth := max(s.width-borderWidth, 0)
+	alignLines(lines, innerWidth, s.maxWidth, borderWidth, s.align, s.ellipsis)
+
+	if s.hasBorder {
+		lines = s.applyBorder(lines)
 	}
 
+	return strings.Join(lines, "\n")
+}
+
+// hasLayoutProperties reports whether any layout properties are set.
+func (s Style) hasLayoutProperties() bool {
+	return s.width > 0 || s.maxWidth > 0 || s.hasBorder ||
+		s.padTop > 0 || s.padRight > 0 || s.padBottom > 0 || s.padLeft > 0
+}
+
+// joinContent concatenates content strings.
+func joinContent(content []string) string {
+	if len(content) == 1 {
+		return content[0]
+	}
+
+	var builder strings.Builder
+	for _, c := range content {
+		builder.WriteString(c)
+	}
+
+	return builder.String()
+}
+
+// applyHorizontalPadding adds left/right padding to each line in-place.
+func (s Style) applyHorizontalPadding(lines []string) {
+	if s.padLeft <= 0 && s.padRight <= 0 {
+		return
+	}
+
+	pad := strings.Repeat(" ", s.padLeft) + "%s" + strings.Repeat(" ", s.padRight)
+
+	for i, line := range lines {
+		lines[i] = strings.Replace(pad, "%s", line, 1)
+	}
+}
+
+// applyVerticalPadding prepends top and appends bottom padding lines.
+func (s Style) applyVerticalPadding(lines []string) []string {
 	if s.padTop > 0 {
-		padLine := strings.Repeat(" ", s.padLeft) + strings.Repeat(" ", s.width-s.padLeft-s.padRight) + strings.Repeat(" ", s.padRight)
-		if s.width == 0 {
-			padLine = strings.Repeat(" ", s.padLeft) + strings.Repeat(" ", s.padRight)
+		padLine := s.padLine()
+
+		padded := make([]string, 0, s.padTop+len(lines))
+		for range s.padTop {
+			padded = append(padded, padLine)
 		}
 
-		top := make([]string, s.padTop)
-		for i := range top {
-			top[i] = padLine
-		}
-
-		lines = append(top, lines...)
+		lines = append(padded, lines...)
 	}
 
 	if s.padBottom > 0 {
-		padLine := strings.Repeat(" ", s.padLeft) + strings.Repeat(" ", s.width-s.padLeft-s.padRight) + strings.Repeat(" ", s.padRight)
-		if s.width == 0 {
-			padLine = strings.Repeat(" ", s.padLeft) + strings.Repeat(" ", s.padRight)
-		}
+		padLine := s.padLine()
 
 		bot := make([]string, s.padBottom)
 		for i := range bot {
@@ -364,74 +366,121 @@ func (s Style) Render(content ...string) string {
 		lines = append(lines, bot...)
 	}
 
-	// contentWidth is the text area inside borders and padding.
-	contentWidth := s.width
+	return lines
+}
+
+// padLine returns a blank line matching the style's width and horizontal padding.
+func (s Style) padLine() string {
+	if s.width == 0 {
+		return strings.Repeat(" ", s.padLeft) + strings.Repeat(" ", s.padRight)
+	}
+
+	return strings.Repeat(" ", s.padLeft) + strings.Repeat(" ", s.width-s.padLeft-s.padRight) + strings.Repeat(" ", s.padRight)
+}
+
+// borderCharWidth returns the number of border character columns (left + right).
+func (s Style) borderCharWidth() int {
+	if !s.hasBorder {
+		return 0
+	}
+
 	borderWidth := 0
-
-	if s.hasBorder {
-		if s.borderLeft {
-			borderWidth++
-		}
-
-		if s.borderRight {
-			borderWidth++
-		}
-
-		contentWidth -= borderWidth
+	if s.borderLeft {
+		borderWidth++
 	}
 
-	contentWidth -= s.padLeft + s.padRight
-	if contentWidth < 0 {
-		contentWidth = 0
+	if s.borderRight {
+		borderWidth++
 	}
 
-	// Pad shorter lines to innerWidth, truncate longer ones.
-	// innerWidth is the space inside borders (content + padding).
-	// Only apply when the style has a fixed width or a maxWidth constraint.
-	innerWidth := max(s.width-borderWidth, 0)
+	return borderWidth
+}
 
-	if innerWidth > 0 || s.maxWidth > 0 {
-		// maxWidthInner is used when Width is 0 but MaxWidth is set:
-		// it defines the inner-space limit without a fixed block width.
-		maxWidthInner := 0
-		if s.maxWidth > 0 && s.width == 0 {
-			maxWidthInner = max(s.maxWidth-borderWidth, 0)
+// alignLines pads or truncates each line to targetWidth according to the
+// given alignment, falling back to maxWidthInner when innerWidth is 0.
+func alignLines(lines []string, innerWidth, maxWidth, borderWidth int, align Position, ellipsis bool) {
+	if innerWidth <= 0 && maxWidth <= 0 {
+		return
+	}
+
+	maxWidthInner := computeMaxWidthInner(maxWidth, innerWidth, borderWidth)
+
+	for lineIdx, line := range lines {
+		targetWidth := resolveTargetWidth(innerWidth, maxWidthInner)
+		alignLine(lines, lineIdx, line, targetWidth, align, ellipsis)
+	}
+}
+
+func computeMaxWidthInner(maxWidth, innerWidth, borderWidth int) int {
+	if maxWidth > 0 && innerWidth == 0 {
+		return max(maxWidth-borderWidth, 0)
+	}
+
+	return 0
+}
+
+func resolveTargetWidth(innerWidth, maxWidthInner int) int {
+	if innerWidth > 0 {
+		return innerWidth
+	}
+
+	return maxWidthInner
+}
+
+func alignLine(lines []string, lineIdx int, line string, targetWidth int, align Position, ellipsis bool) {
+	lineWidth := CellWidth(line)
+
+	if lineWidth < targetWidth {
+		lines[lineIdx] = padLineAlignment(line, targetWidth-lineWidth, align)
+	} else if lineWidth > targetWidth && targetWidth > 0 {
+		lines[lineIdx] = truncateToWidth(line, targetWidth, ellipsis)
+	}
+}
+
+// padLineAlignment pads a line to the given alignment.
+func padLineAlignment(line string, pad int, align Position) string {
+	switch {
+	case align == Center:
+		left := pad / 2 //nolint:mnd
+		right := pad - left
+
+		return strings.Repeat(" ", left) + line + strings.Repeat(" ", right)
+	case align >= Right:
+		return strings.Repeat(" ", pad) + line
+	default:
+		return line + strings.Repeat(" ", pad)
+	}
+}
+
+// deriveBorderWidth returns the width derived from the widest content line when
+// a border is present but no explicit width has been set. Returns 0 if the
+// width should not be overridden.
+func (s Style) deriveBorderWidth(lines []string) int {
+	if !s.hasBorder || s.width != 0 {
+		return 0
+	}
+
+	maxW := 0
+	for _, line := range lines {
+		if w := CellWidth(line); w > maxW {
+			maxW = w
 		}
-
-		for i, line := range lines {
-			w := CellWidth(line)
-			targetWidth := innerWidth
-
-			if targetWidth == 0 && maxWidthInner > 0 {
-				targetWidth = maxWidthInner
-			}
-
-			if w < targetWidth {
-				pad := targetWidth - w
-
-				switch {
-				case s.align == Center:
-					left := pad / 2
-					right := pad - left
-					lines[i] = strings.Repeat(" ", left) + line + strings.Repeat(" ", right)
-				case s.align >= Right:
-					lines[i] = strings.Repeat(" ", pad) + line
-				default:
-					lines[i] = line + strings.Repeat(" ", pad)
-				}
-			} else if w > targetWidth && targetWidth > 0 {
-				lines[i] = truncateToWidth(line, targetWidth, s.ellipsis)
-			}
-		}
 	}
 
-	if s.hasBorder {
-		lines = s.applyBorder(lines)
+	if maxW == 0 {
+		return 0
 	}
 
-	result := strings.Join(lines, "\n")
+	borderWidth := 0
+	if s.borderLeft {
+		borderWidth++
+	}
 
-	return s.renderColorOnly(result)
+	if s.borderRight {
+		borderWidth++
+	}
+
+	return maxW + s.padLeft + s.padRight + borderWidth
 }
 
 // renderColorOnly applies ANSI foreground/background/bold sequences to every
@@ -452,38 +501,38 @@ func (s Style) renderColorOnly(content string) string {
 		return prefix + content + reset
 	}
 
-	var b strings.Builder
+	var builder strings.Builder
 
-	for i, line := range strings.Split(content, "\n") {
-		if i > 0 {
-			b.WriteByte('\n')
+	for lineIdx, line := range strings.Split(content, "\n") {
+		if lineIdx > 0 {
+			builder.WriteByte('\n')
 		}
 
-		b.WriteString(prefix)
-		b.WriteString(line)
-		b.WriteString(reset)
+		builder.WriteString(prefix)
+		builder.WriteString(line)
+		builder.WriteString(reset)
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // stylePrefix builds the ANSI escape sequence for fg/bg/bold.
 func (s Style) stylePrefix() string {
-	var b strings.Builder
+	var builder strings.Builder
 
 	if s.fgPrefix != "" {
-		b.WriteString(s.fgPrefix)
+		builder.WriteString(s.fgPrefix)
 	}
 
 	if s.bgPrefix != "" {
-		b.WriteString(s.bgPrefix)
+		builder.WriteString(s.bgPrefix)
 	}
 
 	if s.bold {
-		b.WriteString("\x1b[1m")
+		builder.WriteString("\x1b[1m")
 	}
 
-	return b.String()
+	return builder.String()
 }
 
 // applyBorder wraps each line with vertical border runes and adds
@@ -493,31 +542,52 @@ func (s Style) applyBorder(lines []string) []string {
 		return lines
 	}
 
-	b := s.border
+	topFg, rightFg, bottomFg, leftFg, reset := s.borderColors()
 
-	fg := s.borderFg
-	if fg == "" {
-		fg = s.fgPrefix
+	var result []string
+
+	if s.borderTop {
+		topBorder := s.buildHorizontalBorder(s.border.TopLeft, s.border.Horizontal, s.border.TopRight, topFg, reset)
+		result = append(result, topBorder)
 	}
 
-	topFg := b.topFg
+	for _, line := range lines {
+		result = append(result, s.wrapBorderLine(line, leftFg, rightFg, reset))
+	}
+
+	if s.borderBottom {
+		bottomBorder := s.buildHorizontalBorder(s.border.BottomLeft, s.border.Horizontal, s.border.BottomRight, bottomFg, reset)
+		result = append(result, bottomBorder)
+	}
+
+	return result
+}
+
+// borderColors resolves the per-side border foreground colors and reset sequence.
+func (s Style) borderColors() (string, string, string, string, string) {
+	borderFg := s.borderFg
+	if borderFg == "" {
+		borderFg = s.fgPrefix
+	}
+
+	topFg := s.border.topFg
 	if topFg == "" {
-		topFg = fg
+		topFg = borderFg
 	}
 
-	rightFg := b.rightFg
+	rightFg := s.border.rightFg
 	if rightFg == "" {
-		rightFg = fg
+		rightFg = borderFg
 	}
 
-	bottomFg := b.bottomFg
+	bottomFg := s.border.bottomFg
 	if bottomFg == "" {
-		bottomFg = fg
+		bottomFg = borderFg
 	}
 
-	leftFg := b.leftFg
+	leftFg := s.border.leftFg
 	if leftFg == "" {
-		leftFg = fg
+		leftFg = borderFg
 	}
 
 	reset := ""
@@ -525,48 +595,37 @@ func (s Style) applyBorder(lines []string) []string {
 		reset = ansiReset
 	}
 
-	var result []string
+	return topFg, rightFg, bottomFg, leftFg, reset
+}
 
-	if s.borderTop {
-		topBorder := s.buildHorizontalBorder(b.TopLeft, b.Horizontal, b.TopRight, topFg, reset)
-		result = append(result, topBorder)
+// wrapBorderLine wraps a content line with left/right vertical borders.
+func (s Style) wrapBorderLine(line, leftFg, rightFg, reset string) string {
+	var lineBuilder strings.Builder
+
+	if s.borderLeft {
+		lineBuilder.WriteString(leftFg)
+		lineBuilder.WriteString(s.border.Vertical)
+		lineBuilder.WriteString(reset)
 	}
 
-	for _, line := range lines {
-		var sb strings.Builder
+	lineBuilder.WriteString(line)
 
-		if s.borderLeft {
-			sb.WriteString(leftFg)
-			sb.WriteString(b.Vertical)
-			sb.WriteString(reset)
-		}
-
-		sb.WriteString(line)
-
-		if s.borderRight {
-			sb.WriteString(rightFg)
-			sb.WriteString(b.Vertical)
-			sb.WriteString(reset)
-		}
-
-		result = append(result, sb.String())
+	if s.borderRight {
+		lineBuilder.WriteString(rightFg)
+		lineBuilder.WriteString(s.border.Vertical)
+		lineBuilder.WriteString(reset)
 	}
 
-	if s.borderBottom {
-		bottomBorder := s.buildHorizontalBorder(b.BottomLeft, b.Horizontal, b.BottomRight, bottomFg, reset)
-		result = append(result, bottomBorder)
-	}
-
-	return result
+	return lineBuilder.String()
 }
 
 // buildHorizontalBorder renders a top or bottom border line: corner + fill + corner.
 // The fill width is s.width minus the left and right border rune cells.
-func (s Style) buildHorizontalBorder(left, mid, right, fg, reset string) string {
-	var sb strings.Builder
+func (s Style) buildHorizontalBorder(left, mid, right, borderFg, reset string) string {
+	var lineBuilder strings.Builder
 
-	sb.WriteString(fg)
-	sb.WriteString(left)
+	lineBuilder.WriteString(borderFg)
+	lineBuilder.WriteString(left)
 
 	width := max(s.width, 0)
 
@@ -579,13 +638,13 @@ func (s Style) buildHorizontalBorder(left, mid, right, fg, reset string) string 
 	}
 
 	if width > 0 {
-		sb.WriteString(strings.Repeat(mid, width))
+		lineBuilder.WriteString(strings.Repeat(mid, width))
 	}
 
-	sb.WriteString(right)
-	sb.WriteString(reset)
+	lineBuilder.WriteString(right)
+	lineBuilder.WriteString(reset)
 
-	return sb.String()
+	return lineBuilder.String()
 }
 
 // truncateToWidth truncates str to at most maxW visible cell width, preserving
@@ -600,59 +659,7 @@ func truncateToWidth(str string, maxW int, ellipsis bool) string {
 		return ""
 	}
 
-	width := 0
-	pos := 0
-	needsTruncation := false
-	gs := -1
-
-	b := unsafe.Slice(unsafe.StringData(str), len(str))
-
-	for pos < len(b) {
-		ch := b[pos]
-
-		if ch == '\x1b' {
-			gs = -1
-			pos = skipANSI(str, pos)
-
-			continue
-		}
-
-		if ch >= 0x20 && ch < 0x7F {
-			gs = -1
-
-			if width+1 > maxW {
-				needsTruncation = true
-
-				break
-			}
-
-			width++
-			pos++
-
-			continue
-		}
-
-		if ch < 0x80 {
-			pos++
-			gs = -1
-
-			continue
-		}
-
-		// Non-ASCII: use uniseg for proper grapheme cluster width
-		// (emoji ZWJ, skin tone modifiers, CJK wide chars, etc.)
-		_, rest, w, newState := uniseg.FirstGraphemeCluster(b[pos:], gs)
-		gs = newState
-
-		if width+w > maxW {
-			needsTruncation = true
-
-			break
-		}
-
-		width += w
-		pos = len(b) - len(rest)
-	}
+	pos, needsTruncation := scanTruncationPoint(str, maxW)
 
 	if !needsTruncation {
 		return str
@@ -661,8 +668,64 @@ func truncateToWidth(str string, maxW int, ellipsis bool) string {
 	// Content exceeds maxW — truncate.
 	if ellipsis && maxW > 2 {
 		// Reserve 2 cells for ".." and truncate content to maxW-2.
-		return truncateToWidth(str, maxW-2, false) + ".."
+		return truncateToWidth(str, maxW-2, false) + ".." //nolint:mnd
 	}
 
 	return str[:pos]
+}
+
+// scanTruncationPoint scans str and returns the byte position where content
+// would exceed maxW, plus whether truncation is needed.
+func scanTruncationPoint(str string, maxW int) (int, bool) {
+	width := 0
+	pos := 0
+	graphemeState := -1
+
+	//nolint:gosec // G103: audited — zero-copy byte view of str, str outlives byteSlice
+	byteSlice := unsafe.Slice(unsafe.StringData(str), len(str))
+
+	for pos < len(byteSlice) {
+		char := byteSlice[pos]
+
+		if char == '\x1b' {
+			graphemeState = -1
+			pos = skipANSI(str, pos)
+
+			continue
+		}
+
+		if char >= 0x20 && char < 0x7F {
+			graphemeState = -1
+
+			if width+1 > maxW {
+				return pos, true
+			}
+
+			width++
+			pos++
+
+			continue
+		}
+
+		if char < 0x80 { //nolint:mnd
+			pos++
+			graphemeState = -1
+
+			continue
+		}
+
+		// Non-ASCII: use uniseg for proper grapheme cluster width
+		// (emoji ZWJ, skin tone modifiers, CJK wide chars, etc.)
+		_, rest, clusterWidth, newState := uniseg.FirstGraphemeCluster(byteSlice[pos:], graphemeState)
+		graphemeState = newState
+
+		if width+clusterWidth > maxW {
+			return pos, true
+		}
+
+		width += clusterWidth
+		pos = len(byteSlice) - len(rest)
+	}
+
+	return pos, false
 }

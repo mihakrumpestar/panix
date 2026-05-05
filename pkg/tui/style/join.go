@@ -125,8 +125,15 @@ func JoinVertical(pos Position, strs ...string) string {
 		return strs[0]
 	}
 
-	maxWidth := 0
+	lines, maxWidth := splitAndMeasureLines(strs)
+
+	return buildVerticalOutput(lines, maxWidth, pos)
+}
+
+// splitAndMeasureLines splits each string into lines and finds the max width.
+func splitAndMeasureLines(strs []string) ([][]string, int) {
 	lines := make([][]string, len(strs))
+	maxWidth := 0
 
 	for i, str := range strs {
 		lines[i] = splitLines(str)
@@ -139,71 +146,66 @@ func JoinVertical(pos Position, strs ...string) string {
 		}
 	}
 
-	var b strings.Builder
+	return lines, maxWidth
+}
 
-	for i, block := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
+// buildVerticalOutput writes aligned lines into a builder.
+func buildVerticalOutput(lines [][]string, maxWidth int, pos Position) string {
+	var builder strings.Builder
+
+	for blockIdx, block := range lines {
+		if blockIdx > 0 {
+			builder.WriteByte('\n')
 		}
 
 		for _, line := range block {
 			w := CellWidth(line)
 			pad := maxWidth - w
 
-			switch {
-			case pos >= Right:
-				if pad > 0 {
-					if pad <= maxPadSpaces {
-						b.WriteString(padSpaces[:pad])
-					} else {
-						b.WriteString(strings.Repeat(" ", pad))
-					}
-				}
-
-				b.WriteString(line)
-			case pos == Center:
-				left := pad / 2
-				right := pad - left
-
-				if left > 0 {
-					if left <= maxPadSpaces {
-						b.WriteString(padSpaces[:left])
-					} else {
-						b.WriteString(strings.Repeat(" ", left))
-					}
-				}
-
-				b.WriteString(line)
-
-				if right > 0 {
-					if right <= maxPadSpaces {
-						b.WriteString(padSpaces[:right])
-					} else {
-						b.WriteString(strings.Repeat(" ", right))
-					}
-				}
-			default:
-				b.WriteString(line)
-
-				if pad > 0 {
-					if pad <= maxPadSpaces {
-						b.WriteString(padSpaces[:pad])
-					} else {
-						b.WriteString(strings.Repeat(" ", pad))
-					}
-				}
-			}
-
-			b.WriteByte('\n')
+			writeAlignedLine(&builder, pos, line, pad)
+			builder.WriteByte('\n')
 		}
 	}
 
-	result := b.String()
+	result := builder.String()
 	if len(result) > 0 && result[len(result)-1] == '\n' {
 		result = result[:len(result)-1]
 	}
 
 	return result
+}
+
+// writeAlignedLine writes a line to the builder with padding applied according
+// to the given position (Left, Center, Right).
+func writeAlignedLine(builder *strings.Builder, pos Position, line string, pad int) {
+	switch {
+	case pos >= Right:
+		writePad(builder, pad)
+		builder.WriteString(line)
+	case pos == Center:
+		left := pad / 2 //nolint:mnd
+		right := pad - left
+		writePad(builder, left)
+		builder.WriteString(line)
+		writePad(builder, right)
+	default:
+		builder.WriteString(line)
+		writePad(builder, pad)
+	}
+}
+
+// writePad appends count spaces to the builder, using the pre-allocated
+// padSpaces buffer for small counts and strings.Repeat for larger ones.
+func writePad(builder *strings.Builder, count int) {
+	if count <= 0 {
+		return
+	}
+
+	if count <= maxPadSpaces {
+		builder.WriteString(padSpaces[:count])
+	} else {
+		builder.WriteString(strings.Repeat(" ", count))
+	}
 }
 
 // splitLines splits a string by newline, returning each line as a separate

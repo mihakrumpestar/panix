@@ -42,8 +42,8 @@ func testStyles() Styles {
 func TestPhaseFlow_Empty(t *testing.T) {
 	t.Parallel()
 
-	pf := New()
-	if got := pf.String(); got != "" {
+	flowObj := New()
+	if got := flowObj.String(); got != "" {
 		t.Errorf("Empty PhaseFlow should return \"\", got %q", got)
 	}
 }
@@ -51,8 +51,8 @@ func TestPhaseFlow_Empty(t *testing.T) {
 func TestPhaseFlow_NoPhases(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(80).Styles(testStyles())
-	if got := pf.String(); got != "" {
+	flowObj := New().Width(80).Styles(testStyles())
+	if got := flowObj.String(); got != "" {
 		t.Errorf("No phases should return \"\", got %q", got)
 	}
 }
@@ -60,8 +60,8 @@ func TestPhaseFlow_NoPhases(t *testing.T) {
 func TestPhaseFlow_SinglePhase(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(20).Phases("INSPECT").Styles(testStyles())
-	got := pf.String()
+	flowObj := New().Width(20).Phases("INSPECT").Styles(testStyles())
+	got := flowObj.String()
 
 	if got == "" {
 		t.Fatal("Should produce output")
@@ -80,8 +80,8 @@ func TestPhaseFlow_SinglePhase(t *testing.T) {
 func TestPhaseFlow_MultiplePhases_EvenDistribution(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(60).Phases("A", "B", "C").Styles(testStyles())
-	got := pf.String()
+	flowObj := New().Width(60).Phases("A", "B", "C").Styles(testStyles())
+	got := flowObj.String()
 
 	visible := stripANSI(got)
 
@@ -100,13 +100,13 @@ func TestPhaseFlow_MultiplePhases_EvenDistribution(t *testing.T) {
 func TestPhaseFlow_StatusLine(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(60).Phases("A", "B").Styles(testStyles())
-	pf.SetData([]PhaseData{
+	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
+	flowObj.SetData([]PhaseData{
 		{Running: 2, Failed: 1, Done: 0},
 		{Running: 0, Failed: 0, Done: 3},
 	})
 
-	got := pf.String()
+	got := flowObj.String()
 	visible := stripANSI(got)
 	lines := strings.Split(visible, "\n")
 
@@ -131,11 +131,11 @@ func TestPhaseFlow_StatusLine(t *testing.T) {
 func TestPhaseFlow_Cache_SameData(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(60).Phases("A", "B").Styles(testStyles())
-	pf.SetData([]PhaseData{{Running: 1}, {Running: 1}})
+	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
+	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
-	result1 := pf.String()
-	result2 := pf.String()
+	result1 := flowObj.String()
+	result2 := flowObj.String()
 
 	if result1 != result2 {
 		t.Error("Same data should produce same cached result")
@@ -145,12 +145,12 @@ func TestPhaseFlow_Cache_SameData(t *testing.T) {
 func TestPhaseFlow_Cache_DataChange(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(60).Phases("A", "B").Styles(testStyles())
-	pf.SetData([]PhaseData{{Running: 1}, {Running: 1}})
-	result1 := pf.String()
+	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
+	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
+	result1 := flowObj.String()
 
-	pf.SetData([]PhaseData{{Running: 2}, {Running: 1}})
-	result2 := pf.String()
+	flowObj.SetData([]PhaseData{{Running: 2}, {Running: 1}})
+	result2 := flowObj.String()
 
 	visible1 := stripANSI(result1)
 	visible2 := stripANSI(result2)
@@ -163,74 +163,75 @@ func TestPhaseFlow_Cache_DataChange(t *testing.T) {
 func TestPhaseFlow_Cache_WidthChange(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(60).Phases("A", "B").Styles(testStyles())
-	pf.SetData([]PhaseData{{Running: 1}, {Running: 1}})
-	result1 := pf.String()
+	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
+	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
+	result1 := flowObj.String()
 
-	pf.Width(40)
-	result2 := pf.String()
+	flowObj.Width(40)
+	result2 := flowObj.String()
 
 	if result1 == result2 {
 		t.Error("Width change should produce different output")
 	}
 }
 
+//nolint:cyclop
 func TestPhaseFlow_Selection_Navigation(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Phases("A", "B", "C").Styles(testStyles())
+	flowObj := New().Phases("A", "B", "C").Styles(testStyles())
 
-	if pf.SelectedIndex() != -1 {
-		t.Errorf("Initial selection = %d, want -1", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != -1 {
+		t.Errorf("Initial selection = %d, want -1", flowObj.SelectedIndex())
 	}
 
-	if !pf.HandleNavigation("right", false) {
+	if !flowObj.HandleNavigation("right", false) {
 		t.Error("Right should select first phase")
 	}
 
-	if pf.SelectedIndex() != 0 {
-		t.Errorf("After first right, selection = %d, want 0", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != 0 {
+		t.Errorf("After first right, selection = %d, want 0", flowObj.SelectedIndex())
 	}
 
-	if !pf.HandleNavigation("right", false) {
+	if !flowObj.HandleNavigation("right", false) {
 		t.Error("Right should move to next phase")
 	}
 
-	if pf.SelectedIndex() != 1 {
-		t.Errorf("After second right, selection = %d, want 1", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != 1 {
+		t.Errorf("After second right, selection = %d, want 1", flowObj.SelectedIndex())
 	}
 
-	if !pf.HandleNavigation("right", false) {
+	if !flowObj.HandleNavigation("right", false) {
 		t.Error("Right should move to last phase")
 	}
 
-	if pf.SelectedIndex() != 2 {
-		t.Errorf("After third right, selection = %d, want 2", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != 2 {
+		t.Errorf("After third right, selection = %d, want 2", flowObj.SelectedIndex())
 	}
 
 	// Right at end should not move
-	if pf.HandleNavigation("right", false) {
+	if flowObj.HandleNavigation("right", false) {
 		t.Error("Right at last phase should return false")
 	}
 
-	if !pf.HandleNavigation("left", false) {
+	if !flowObj.HandleNavigation("left", false) {
 		t.Error("Left should move to previous phase")
 	}
 
-	if pf.SelectedIndex() != 1 {
-		t.Errorf("After left, selection = %d, want 1", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != 1 {
+		t.Errorf("After left, selection = %d, want 1", flowObj.SelectedIndex())
 	}
 
-	if !pf.HandleNavigation("left", false) {
+	if !flowObj.HandleNavigation("left", false) {
 		t.Error("Left should move to first phase")
 	}
 
-	if pf.SelectedIndex() != 0 {
-		t.Errorf("After second left, selection = %d, want 0", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != 0 {
+		t.Errorf("After second left, selection = %d, want 0", flowObj.SelectedIndex())
 	}
 
 	// Left at start should not move
-	if pf.HandleNavigation("left", false) {
+	if flowObj.HandleNavigation("left", false) {
 		t.Error("Left at first phase should return false")
 	}
 }
@@ -238,27 +239,27 @@ func TestPhaseFlow_Selection_Navigation(t *testing.T) {
 func TestPhaseFlow_Selection_LastPhaseNavigable(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Phases("A", "B", "DONE").Styles(testStyles())
+	flowObj := New().Phases("A", "B", "DONE").Styles(testStyles())
 
 	// Navigate to the last phase (DONE)
-	pf.HandleNavigation("right", false) // A
-	pf.HandleNavigation("right", false) // B
+	flowObj.HandleNavigation("right", false) // A
+	flowObj.HandleNavigation("right", false) // B
 
-	if !pf.HandleNavigation("right", false) {
+	if !flowObj.HandleNavigation("right", false) {
 		t.Error("Should be able to navigate to DONE")
 	}
 
-	if pf.SelectedIndex() != 2 {
-		t.Errorf("Selection = %d, want 2 (DONE)", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != 2 {
+		t.Errorf("Selection = %d, want 2 (DONE)", flowObj.SelectedIndex())
 	}
 }
 
 func TestPhaseFlow_Selection_IgnoresInnerViewport(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Phases("A", "B").Styles(testStyles())
+	flowObj := New().Phases("A", "B").Styles(testStyles())
 
-	if pf.HandleNavigation("right", true) {
+	if flowObj.HandleNavigation("right", true) {
 		t.Error("Navigation should be ignored when inner viewport is active")
 	}
 }
@@ -266,25 +267,25 @@ func TestPhaseFlow_Selection_IgnoresInnerViewport(t *testing.T) {
 func TestPhaseFlow_Deselect(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Phases("A", "B").Styles(testStyles())
-	pf.HandleNavigation("right", false)
-	pf.Deselect()
+	flowObj := New().Phases("A", "B").Styles(testStyles())
+	flowObj.HandleNavigation("right", false)
+	flowObj.Deselect()
 
-	if pf.SelectedIndex() != -1 {
-		t.Errorf("After Deselect, selection = %d, want -1", pf.SelectedIndex())
+	if flowObj.SelectedIndex() != -1 {
+		t.Errorf("After Deselect, selection = %d, want -1", flowObj.SelectedIndex())
 	}
 }
 
 func TestPhaseFlow_SelectionReRender(t *testing.T) {
 	t.Parallel()
 
-	pf := New().Width(60).Phases("A", "B").Styles(testStyles())
-	pf.SetData([]PhaseData{{Running: 1}, {Running: 1}})
+	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
+	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
-	resultNoSel := pf.String()
+	resultNoSel := flowObj.String()
 
-	pf.HandleNavigation("right", false)
-	resultWithSel := pf.String()
+	flowObj.HandleNavigation("right", false)
+	resultWithSel := flowObj.String()
 
 	if resultNoSel == resultWithSel {
 		t.Error("Selection change should produce different output")
@@ -297,10 +298,10 @@ func TestPhaseFlow_ArrowOnPhaseNameRow(t *testing.T) {
 	// The arrow character should appear on the same line as phase names,
 	// not on the status line. With Top alignment in JoinHorizontal,
 	// arrows appear on line 0.
-	pf := New().Width(40).Phases("A", "B").Styles(testStyles())
-	pf.SetData([]PhaseData{{Running: 1}, {Running: 1}})
+	flowObj := New().Width(40).Phases("A", "B").Styles(testStyles())
+	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
-	got := pf.String()
+	got := flowObj.String()
 	visible := stripANSI(got)
 	lines := strings.Split(visible, "\n")
 
@@ -352,29 +353,29 @@ func TestDetermineState(t *testing.T) {
 	}
 }
 
-func stripANSI(s string) string {
-	var b strings.Builder
+func stripANSI(str string) string {
+	var builder strings.Builder
 
-	i := 0
+	pos := 0
 
-	for i < len(s) {
-		if s[i] == '\x1b' {
-			i++
+	for pos < len(str) {
+		if str[pos] == '\x1b' {
+			pos++
 
-			for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
-				i++
+			for pos < len(str) && (str[pos] < 'A' || str[pos] > 'Z') && (str[pos] < 'a' || str[pos] > 'z') {
+				pos++
 			}
 
-			if i < len(s) {
-				i++
+			if pos < len(str) {
+				pos++
 			}
 
 			continue
 		}
 
-		b.WriteByte(s[i])
-		i++
+		builder.WriteByte(str[pos])
+		pos++
 	}
 
-	return b.String()
+	return builder.String()
 }

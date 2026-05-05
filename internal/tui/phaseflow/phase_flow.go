@@ -24,22 +24,20 @@ type PhaseFlow struct {
 	Selected    Selected
 }
 
-func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
-	cs := colorScheme
-
+func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
 	pfStyles := flow.Styles{
-		GradientRunning: colorfulPair(cs.PhaseStatus.Running),
-		GradientFailed:  colorfulPair(cs.PhaseStatus.Failed),
-		GradientDone:    colorfulPair(cs.PhaseStatus.Done),
-		GradientDefault: colorfulPair(cs.PhaseStatus.Default),
-		Pill:            cs.PhaseStatus.Pill,
-		StatusRunning:   cs.Status.Running,
-		StatusFailed:    cs.Status.Failed,
-		StatusDone:      cs.Status.OK,
-		StatusSeparator: cs.Table.Border,
-		Arrow:           cs.Table.Border,
-		PhaseArrow:      cs.Chars.PhaseArrow,
-		SelectionBg:     cs.Table.SelectionHighlightBackground.GetBackground(),
+		GradientRunning: colorfulPair(scheme.PhaseStatus.Running),
+		GradientFailed:  colorfulPair(scheme.PhaseStatus.Failed),
+		GradientDone:    colorfulPair(scheme.PhaseStatus.Done),
+		GradientDefault: colorfulPair(scheme.PhaseStatus.Default),
+		Pill:            scheme.PhaseStatus.Pill,
+		StatusRunning:   scheme.Status.Running,
+		StatusFailed:    scheme.Status.Failed,
+		StatusDone:      scheme.Status.OK,
+		StatusSeparator: scheme.Table.Border,
+		Arrow:           scheme.Table.Border,
+		PhaseArrow:      scheme.Chars.PhaseArrow,
+		SelectionBg:     scheme.Table.SelectionHighlightBackground.GetBackground(),
 	}
 
 	names := make([]string, 0, len(workflowPhases)+1)
@@ -49,15 +47,15 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme, workflowPhase
 
 	names = append(names, "DONE")
 
-	pf := flow.New().
+	phaseFlow := flow.New().
 		Phases(names...).
 		Styles(pfStyles).
 		SetZonePrefix("phase-status")
 
 	return &PhaseFlow{
 		fleet:       fleet,
-		colorScheme: colorScheme,
-		pf:          pf,
+		colorScheme: scheme,
+		pf:          phaseFlow,
 		phases:      workflowPhases,
 		Selected:    Selected{Index: -1},
 	}
@@ -77,13 +75,13 @@ func (p *PhaseFlow) View(width int) string {
 	data := make([]flow.PhaseData, 0, len(pairs)+1)
 
 	for _, pair := range pairs {
-		pd := flow.PhaseData{}
+		phaseData := flow.PhaseData{}
 		if pair.Value != nil {
-			pd.Running = len(pair.Value[stats.Running])
-			pd.Failed = len(pair.Value[stats.Failed])
+			phaseData.Running = len(pair.Value[stats.Running])
+			phaseData.Failed = len(pair.Value[stats.Failed])
 		}
 
-		data = append(data, pd)
+		data = append(data, phaseData)
 	}
 
 	lastPair, _ := spp.Last()

@@ -271,44 +271,44 @@ func (pf *PhaseFlow) String() string {
 }
 
 func (pf *PhaseFlow) render() string {
-	n := len(pf.phases)
+	numPhases := len(pf.phases)
 
-	totalArrowWidth := arrowCellWidth * (n - 1)
+	totalArrowWidth := arrowCellWidth * (numPhases - 1)
 	available := pf.width - totalArrowWidth
 
 	if available <= 0 {
 		return ""
 	}
 
-	base := available / n
-	extra := available % n
+	base := available / numPhases
+	extra := available % numPhases
 
-	colWidths := make([]int, n)
-	for i := range n {
-		colWidths[i] = base
-		if i < extra {
-			colWidths[i]++
+	colWidths := make([]int, numPhases)
+	for phaseIdx := range numPhases {
+		colWidths[phaseIdx] = base
+		if phaseIdx < extra {
+			colWidths[phaseIdx]++
 		}
 	}
 
-	cells := make([]string, n)
+	cells := make([]string, numPhases)
 
-	for i := range pf.phases {
-		d := PhaseData{}
-		if i < len(pf.data) {
-			d = pf.data[i]
+	for phaseIdx := range pf.phases {
+		phaseData := PhaseData{}
+		if phaseIdx < len(pf.data) {
+			phaseData = pf.data[phaseIdx]
 		}
 
-		isSelected := i == pf.selectedIndex
-		cells[i] = pf.buildCell(pf.phases[i], d, colWidths[i], isSelected, i)
+		isSelected := phaseIdx == pf.selectedIndex
+		cells[phaseIdx] = pf.buildCell(pf.phases[phaseIdx], phaseData, colWidths[phaseIdx], isSelected, phaseIdx)
 	}
 
 	arrowStyled := pf.styles.Arrow.Width(1).Align(style.Center).Render(pf.styles.PhaseArrow)
 
-	parts := make([]string, 0, 2*n-1)
+	parts := make([]string, 0, 2*numPhases-1)
 
-	for i, cell := range cells {
-		if i > 0 {
+	for cellIdx, cell := range cells {
+		if cellIdx > 0 {
 			parts = append(parts, arrowStyled)
 		}
 
@@ -335,7 +335,7 @@ func (pf *PhaseFlow) buildCell(name string, data PhaseData, colWidth int, isSele
 
 		pad := pillWidth - contentWidth
 		if pad > 0 {
-			left := pad / 2
+			left := pad / 2 //nolint:mnd
 			right := pad - left
 			bgSpace := style.NewStyle().Background(pf.styles.SelectionBg).Render(" ")
 			statusContent = strings.Repeat(bgSpace, left) + statusContent + strings.Repeat(bgSpace, right)
@@ -372,20 +372,20 @@ func (pf *PhaseFlow) createAnimatedGradient(text string, state PhaseState) strin
 
 	progress := math.Float64frombits(pf.animation.progress.Load())
 
-	var gp GradientPair
+	var gradient GradientPair
 
 	switch state {
 	case StateRunning:
-		gp = pf.styles.GradientRunning
+		gradient = pf.styles.GradientRunning
 	case StateFailed:
-		gp = pf.styles.GradientFailed
+		gradient = pf.styles.GradientFailed
 	case StateDone:
-		gp = pf.styles.GradientDone
+		gradient = pf.styles.GradientDone
 	default:
-		gp = pf.styles.GradientDefault
+		gradient = pf.styles.GradientDefault
 	}
 
-	finalColor := gp.Dark.BlendLuv(gp.Light, progress)
+	finalColor := gradient.Dark.BlendLuv(gradient.Light, progress)
 
 	return pf.styles.Pill.Background(style.Color(finalColor.Hex())).Render(text)
 }
@@ -453,13 +453,13 @@ func determineState(data PhaseData) PhaseState {
 	return Idle
 }
 
-func phaseDataEqual(a, b []PhaseData) bool {
-	if len(a) != len(b) {
+func phaseDataEqual(left, right []PhaseData) bool {
+	if len(left) != len(right) {
 		return false
 	}
 
-	for i := range a {
-		if a[i] != b[i] {
+	for idx := range left {
+		if left[idx] != right[idx] {
 			return false
 		}
 	}

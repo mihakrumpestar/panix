@@ -102,6 +102,7 @@ type ColorSchemePhaseStatus struct {
 
 type ColorPair [2]colorful.Color
 
+//nolint:funlen
 func DefaultColorScheme() *ColorScheme {
 	borderStyle := makeForegroundStyle("#6272A4", false)
 
@@ -166,7 +167,7 @@ func DefaultColorScheme() *ColorScheme {
 		Error:         makeLogEntity("#FF5555", '✗', false),
 		Spinner: ColorSchemeSpinner{
 			Frames:   []string{"⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ "},
-			Interval: time.Second / 10,
+			Interval: time.Second / 10, //nolint:mnd
 		},
 	}
 }

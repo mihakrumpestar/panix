@@ -37,7 +37,13 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	st := statstable.New(conf.Fleet, conf.ColorScheme)
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
-	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80}, conf.Flags.CommandOutputMaxHeight, conf.ColorScheme.Table.Border, conf.ColorScheme.Table.SelectionHighlightBackground, conf.ColorScheme.Table.SelectionHighlightBorder)
+
+	tableS := conf.ColorScheme.Table
+
+	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80},
+		conf.Flags.CommandOutputMaxHeight, tableS.Border,
+		tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
+	)
 	spinnersInst := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
 	b.ResetTimer()

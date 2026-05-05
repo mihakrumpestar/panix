@@ -331,13 +331,13 @@ func (v *Viewports) activeItem() *item {
 	return nil
 }
 
-func (v *Viewports) clickTarget(m zeroterm.MouseClickMsg) xpath.Xpath {
+func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 	var candidates []xpath.Xpath
 
 	lines := zeroterm.CurrentLines()
 
 	for xp := range v.items.Records() {
-		if m.Y >= 0 && m.Y < len(lines) && zeroterm.IsZoneAtLine(lines[m.Y], m.X, xp.String()) {
+		if click.Y >= 0 && click.Y < len(lines) && zeroterm.IsZoneAtLine(lines[click.Y], click.X, xp.String()) {
 			candidates = append(candidates, xp)
 		}
 	}

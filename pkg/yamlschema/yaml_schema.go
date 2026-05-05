@@ -105,22 +105,108 @@ var formatConstraints = map[string]struct {
 }
 
 func NewSchema(cfg SchemaConfig) *generator {
-	g := &generator{
+	gen := &generator{
 		config:      cfg,
 		definitions: make(map[string]any),
 		defTypes:    make(map[reflect.Type]string),
 		typeCounts:  make(map[reflect.Type]int),
 	}
 
-	g.countStructOccurrences(cfg.RootType, make(map[reflect.Type]bool))
+	gen.countStructOccurrences(cfg.RootType, make(map[reflect.Type]bool))
 
-	for typ, count := range g.typeCounts {
+	for typ, count := range gen.typeCounts {
 		if count > 1 {
-			g.defTypes[typ] = typ.Name()
+			gen.defTypes[typ] = typ.Name()
 		}
 	}
 
-	return g
+	return gen
+}
+
+// findMapValueType detects map-like struct wrappers: structs with no YAML-visible
+// properties that contain a map[K]V field (e.g., ordered map implementations).
+// It prefers the map field with validate:"dive" tag as the main content field.
+// Returns the value type V, or nil if the struct is not a map-like wrapper.
+func findMapValueType(typ reflect.Type) reflect.Type {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	if typ.Kind() != reflect.Struct {
+		return nil
+	}
+
+	// If the struct has any YAML-visible properties, it's not a map wrapper
+	if hasYAMLVisibleFields(typ) {
+		return nil
+	}
+
+	// No YAML-visible properties — look for a map[K]V field.
+	// Prefer the field with validate:"dive" as it marks the main content.
+	return findMapFieldType(typ)
+}
+
+// hasYAMLVisibleFields reports whether the struct has any exported fields
+// not tagged with yaml:"-".
+func hasYAMLVisibleFields(typ reflect.Type) bool {
+	for field := range typ.Fields() {
+		if !field.IsExported() || field.Tag.Get("yaml") == "-" {
+			continue
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// findMapFieldType finds the value type of a map field in the struct,
+// preferring fields with validate:"dive".
+func findMapFieldType(typ reflect.Type) reflect.Type {
+	// Prefer the field with validate:"dive" as it marks the main content.
+	for field := range typ.Fields() {
+		if field.Type.Kind() != reflect.Map {
+			continue
+		}
+
+		if strings.Contains(field.Tag.Get("validate"), "dive") {
+			return field.Type.Elem()
+		}
+	}
+
+	// Fallback: any map field
+	for field := range typ.Fields() {
+		if field.Type.Kind() == reflect.Map {
+			return field.Type.Elem()
+		}
+	}
+
+	return nil
+}
+
+func (g *generator) Generate() (*Schema, error) {
+	properties, required, _, err := g.processStruct(g.config.RootType)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to process root struct")
+	}
+
+	schema := &Schema{
+		Schema:               "http://json-schema.org/draft-07/schema#",
+		ID:                   g.config.SchemaID,
+		Version:              g.config.Version,
+		Title:                g.config.Title,
+		Description:          g.config.Description,
+		Type:                 "object",
+		Properties:           properties,
+		Required:             required,
+		AdditionalProperties: true,
+	}
+
+	if len(g.definitions) > 0 {
+		schema.Definitions = g.definitions
+	}
+
+	return schema, nil
 }
 
 // countStructOccurrences traverses the type tree and counts how many times
@@ -196,75 +282,6 @@ func (g *generator) countFieldTypeInfo(typ reflect.Type) {
 		g.typeCounts[typ]++
 		g.countStructOccurrences(typ, make(map[reflect.Type]bool))
 	}
-}
-
-// findMapValueType detects map-like struct wrappers: structs with no YAML-visible
-// properties that contain a map[K]V field (e.g., ordered map implementations).
-// It prefers the map field with validate:"dive" tag as the main content field.
-// Returns the value type V, or nil if the struct is not a map-like wrapper.
-func findMapValueType(typ reflect.Type) reflect.Type {
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-
-	if typ.Kind() != reflect.Struct {
-		return nil
-	}
-
-	// If the struct has any YAML-visible properties, it's not a map wrapper
-	for field := range typ.Fields() {
-		if !field.IsExported() || field.Tag.Get("yaml") == "-" {
-			continue
-		}
-
-		return nil
-	}
-
-	// No YAML-visible properties — look for a map[K]V field.
-	// Prefer the field with validate:"dive" as it marks the main content.
-	for field := range typ.Fields() {
-		if field.Type.Kind() != reflect.Map {
-			continue
-		}
-
-		if strings.Contains(field.Tag.Get("validate"), "dive") {
-			return field.Type.Elem()
-		}
-	}
-
-	// Fallback: any map field
-	for field := range typ.Fields() {
-		if field.Type.Kind() == reflect.Map {
-			return field.Type.Elem()
-		}
-	}
-
-	return nil
-}
-
-func (g *generator) Generate() (*Schema, error) {
-	properties, required, _, err := g.processStruct(g.config.RootType)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to process root struct")
-	}
-
-	schema := &Schema{
-		Schema:               "http://json-schema.org/draft-07/schema#",
-		ID:                   g.config.SchemaID,
-		Version:              g.config.Version,
-		Title:                g.config.Title,
-		Description:          g.config.Description,
-		Type:                 "object",
-		Properties:           properties,
-		Required:             required,
-		AdditionalProperties: true,
-	}
-
-	if len(g.definitions) > 0 {
-		schema.Definitions = g.definitions
-	}
-
-	return schema, nil
 }
 
 func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, dependenciesMap, error) {

@@ -7,9 +7,8 @@ import (
 	"time"
 )
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestTickCmd(t *testing.T) {
-	t.Parallel()
-
 	cmd := TickCmd(1*time.Millisecond, func(t time.Time) Msg {
 		return KeyPressMsg{Key: "tick"}
 	})
@@ -20,9 +19,8 @@ func TestTickCmd(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestBatchCmd(t *testing.T) {
-	t.Parallel()
-
 	cmd := BatchCmd(
 		func() Msg { return KeyPressMsg{Key: "a"} },
 		func() Msg { return KeyPressMsg{Key: "b"} },
@@ -40,9 +38,8 @@ func TestBatchCmd(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestBatchCmdWithNil(t *testing.T) {
-	t.Parallel()
-
 	cmd := BatchCmd(
 		func() Msg { return KeyPressMsg{Key: "a"} },
 		nil,
@@ -61,9 +58,8 @@ func TestBatchCmdWithNil(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestBatchCmdEmpty(t *testing.T) {
-	t.Parallel()
-
 	cmd := BatchCmd()
 	result := cmd()
 
@@ -77,17 +73,16 @@ func TestBatchCmdEmpty(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestProgramNew(t *testing.T) {
-	t.Parallel()
-
 	m := &dummyModel{}
 
-	p := NewProgram(m)
-	if p == nil {
-		t.Error("NewProgram returned nil")
+	prog := NewProgram(m)
+	if prog == nil {
+		t.Fatal("NewProgram returned nil")
 	}
 
-	if p.model == nil {
+	if prog.model == nil {
 		t.Error("Program.model should be set")
 	}
 }
@@ -98,20 +93,18 @@ func (m *dummyModel) Init() []Cmd          { return nil }
 func (m *dummyModel) Update(msg Msg) []Cmd { return nil }
 func (m *dummyModel) Render() []string     { return nil }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestProcessCmdsWithNil(t *testing.T) {
-	t.Parallel()
-
 	m := &dummyModel{}
-	p := NewProgram(m)
+	prog := NewProgram(m)
 
 	// Should not panic with nil cmds
-	p.processCmds(nil)
-	p.processCmds([]Cmd{nil, nil})
+	prog.processCmds(nil)
+	prog.processCmds([]Cmd{nil, nil})
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestRenderFrameWithEmptyModel(t *testing.T) {
-	t.Parallel()
-
 	m := &dummyModel{}
 	p := NewProgram(m)
 	p.terminal = &Terminal{out: os.Stderr}
@@ -121,18 +114,17 @@ func TestRenderFrameWithEmptyModel(t *testing.T) {
 	p.renderFrame()
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestRenderFrameDetectsChanges(t *testing.T) {
-	t.Parallel()
-
 	renderModel := &renderTestModel{content: "Hello World"}
-	p := NewProgram(renderModel)
-	p.terminal = &Terminal{out: os.Stderr}
-	p.width = 80
-	p.height = 24
+	prog := NewProgram(renderModel)
+	prog.terminal = &Terminal{out: os.Stderr}
+	prog.width = 80
+	prog.height = 24
 
-	p.renderFrame()
+	prog.renderFrame()
 
-	if len(p.prevLines) == 0 || p.prevLines[0] != "Hello World" {
+	if len(prog.prevLines) == 0 || prog.prevLines[0] != "Hello World" {
 		t.Error("prevLines should have content after renderFrame")
 	}
 }
@@ -147,30 +139,28 @@ func (m *renderTestModel) Render() []string {
 	return []string{m.content}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestNewProgramWithOptions(t *testing.T) {
-	t.Parallel()
-
 	var applied bool
 
 	opt := func(p *Program) {
 		applied = true
 	}
 	m := &dummyModel{}
-	p := NewProgram(m, opt)
+	prog := NewProgram(m, opt)
 
 	if !applied {
 		t.Error("ProgramOption should have been applied")
 	}
 
-	_ = p
+	_ = prog
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestProcessCmdsAsync(t *testing.T) {
-	t.Parallel()
-
 	m := &dummyModel{}
-	p := NewProgram(m)
-	p.msgCh = make(chan Msg, 10)
+	prog := NewProgram(m)
+	prog.msgCh = make(chan Msg, 10)
 
 	var called bool
 
@@ -180,9 +170,9 @@ func TestProcessCmdsAsync(t *testing.T) {
 		return KeyPressMsg{Key: "async"}
 	}
 
-	p.processCmds([]Cmd{cmd})
+	prog.processCmds([]Cmd{cmd})
 
-	msg := <-p.msgCh
+	msg := <-prog.msgCh
 
 	kp, ok := msg.(KeyPressMsg)
 	if !ok || kp.Key != "async" {
@@ -194,34 +184,32 @@ func TestProcessCmdsAsync(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestRenderFrameFlushError(t *testing.T) {
-	t.Parallel()
-
 	m := &renderTestModel{content: "Test"}
-	p := NewProgram(m)
-	p.terminal = &Terminal{out: os.Stderr}
-	p.width = 80
-	p.height = 24
+	prog := NewProgram(m)
+	prog.terminal = &Terminal{out: os.Stderr}
+	prog.width = 80
+	prog.height = 24
 
-	p.renderFrame()
+	prog.renderFrame()
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestInitialWindowSizeMsgSent(t *testing.T) {
-	t.Parallel()
-
 	var receivedSize WindowSizeMsg
 
-	m := &sizeTrackingModel{}
-	p := NewProgram(m)
-	p.terminal = &Terminal{out: os.Stderr}
-	p.width = 80
-	p.height = 24
+	model := &sizeTrackingModel{}
+	prog := NewProgram(model)
+	prog.terminal = &Terminal{out: os.Stderr}
+	prog.width = 80
+	prog.height = 24
 
-	sizeCmds := p.model.Update(WindowSizeMsg{Width: 80, Height: 24})
-	p.processCmds(sizeCmds)
-	p.renderFrame()
+	sizeCmds := prog.model.Update(WindowSizeMsg{Width: 80, Height: 24})
+	prog.processCmds(sizeCmds)
+	prog.renderFrame()
 
-	receivedSize = m.lastSize
+	receivedSize = model.lastSize
 	if receivedSize.Width != 80 || receivedSize.Height != 24 {
 		t.Errorf("model should have received initial WindowSizeMsg: got %dx%d", receivedSize.Width, receivedSize.Height)
 	}
@@ -243,22 +231,21 @@ func (m *sizeTrackingModel) Render() []string {
 	return []string{fmt.Sprintf("%dx%d", m.lastSize.Width, m.lastSize.Height)}
 }
 
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestStopChClosesOnExit(t *testing.T) {
-	t.Parallel()
-
 	m := &dummyModel{}
-	p := NewProgram(m)
+	prog := NewProgram(m)
 
 	select {
-	case <-p.stopCh:
+	case <-prog.stopCh:
 		t.Error("stopCh should not be closed before Run returns")
 	default:
 	}
 
-	close(p.stopCh)
+	close(prog.stopCh)
 
 	select {
-	case <-p.stopCh:
+	case <-prog.stopCh:
 	default:
 		t.Error("stopCh should be closable")
 	}

@@ -707,7 +707,7 @@ func TestTable_SetRows_RowCountChange_FullRebuild(t *testing.T) {
 	tbl := New().Width(20).Border(style.NormalBorder()).
 		Headers("A").
 		Row("a").Row("b")
-	tbl.String()
+	_ = tbl.String()
 
 	tbl.SetRows([][]string{{"a"}, {"b"}, {"c"}})
 	result := tbl.String()
@@ -730,7 +730,7 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 
 	// First: wide row + narrow row
 	tbl.SetRows([][]string{{"WWWWWWWWWW", "x"}, {"y", "z"}})
-	tbl.String()
+	_ = tbl.String()
 
 	// Replace wide row with narrow — column widths change
 	tbl.SetRows([][]string{{"a", "x"}, {"y", "z"}})
@@ -751,29 +751,29 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 	}
 }
 
-func stripANSI(s string) string {
-	var b strings.Builder
+func stripANSI(str string) string {
+	var builder strings.Builder
 
-	i := 0
+	pos := 0
 
-	for i < len(s) {
-		if s[i] == '\x1b' {
-			i++
+	for pos < len(str) {
+		if str[pos] == '\x1b' {
+			pos++
 
-			for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
-				i++
+			for pos < len(str) && (str[pos] < 'A' || str[pos] > 'Z') && (str[pos] < 'a' || str[pos] > 'z') {
+				pos++
 			}
 
-			if i < len(s) {
-				i++
+			if pos < len(str) {
+				pos++
 			}
 
 			continue
 		}
 
-		b.WriteByte(s[i])
-		i++
+		builder.WriteByte(str[pos])
+		pos++
 	}
 
-	return b.String()
+	return builder.String()
 }

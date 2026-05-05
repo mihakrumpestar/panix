@@ -4,82 +4,83 @@ import (
 	"testing"
 )
 
+//nolint:cyclop
 func TestNormalBorder(t *testing.T) {
 	t.Parallel()
 
-	b := NormalBorder()
+	brd :=NormalBorder()
 
-	if b.TopLeft != "┌" || b.TopRight != "┐" {
-		t.Errorf("NormalBorder corners = (%q, %q), want (┌, ┐)", b.TopLeft, b.TopRight)
+	if brd.TopLeft != "┌" || brd.TopRight != "┐" {
+		t.Errorf("NormalBorder corners = (%q, %q), want (┌, ┐)", brd.TopLeft, brd.TopRight)
 	}
 
-	if b.BottomLeft != "└" || b.BottomRight != "┘" {
-		t.Errorf("NormalBorder bottom corners = (%q, %q), want (└, ┘)", b.BottomLeft, b.BottomRight)
+	if brd.BottomLeft != "└" || brd.BottomRight != "┘" {
+		t.Errorf("NormalBorder bottom corners = (%q, %q), want (└, ┘)", brd.BottomLeft, brd.BottomRight)
 	}
 
-	if b.Horizontal != "─" || b.Vertical != "│" {
-		t.Errorf("NormalBorder lines = (%q, %q), want (─, │)", b.Horizontal, b.Vertical)
+	if brd.Horizontal != "─" || brd.Vertical != "│" {
+		t.Errorf("NormalBorder lines = (%q, %q), want (─, │)", brd.Horizontal, brd.Vertical)
 	}
 
-	if b.TopMid != "┬" || b.BottomMid != "┴" || b.LeftMid != "├" || b.RightMid != "┤" {
+	if brd.TopMid != "┬" || brd.BottomMid != "┴" || brd.LeftMid != "├" || brd.RightMid != "┤" {
 		t.Errorf("NormalBorder mids = (%q, %q, %q, %q), want (┬, ┴, ├, ┤)",
-			b.TopMid, b.BottomMid, b.LeftMid, b.RightMid)
+			brd.TopMid, brd.BottomMid, brd.LeftMid, brd.RightMid)
 	}
 
-	if b.MidMid != "┼" {
-		t.Errorf("NormalBorder MidMid = %q, want ┼", b.MidMid)
+	if brd.MidMid != "┼" {
+		t.Errorf("NormalBorder MidMid = %q, want ┼", brd.MidMid)
 	}
 }
 
 func TestRoundedBorder(t *testing.T) {
 	t.Parallel()
 
-	b := RoundedBorder()
+	brd :=RoundedBorder()
 
-	if b.TopLeft != "╭" || b.TopRight != "╮" {
-		t.Errorf("RoundedBorder top corners = (%q, %q), want (╭, ╮)", b.TopLeft, b.TopRight)
+	if brd.TopLeft != "╭" || brd.TopRight != "╮" {
+		t.Errorf("RoundedBorder top corners = (%q, %q), want (╭, ╮)", brd.TopLeft, brd.TopRight)
 	}
 
-	if b.BottomLeft != "╰" || b.BottomRight != "╯" {
-		t.Errorf("RoundedBorder bottom corners = (%q, %q), want (╰, ╯)", b.BottomLeft, b.BottomRight)
+	if brd.BottomLeft != "╰" || brd.BottomRight != "╯" {
+		t.Errorf("RoundedBorder bottom corners = (%q, %q), want (╰, ╯)", brd.BottomLeft, brd.BottomRight)
 	}
 
-	if b.Horizontal != "─" || b.Vertical != "│" {
-		t.Errorf("RoundedBorder lines = (%q, %q), want (─, │)", b.Horizontal, b.Vertical)
+	if brd.Horizontal != "─" || brd.Vertical != "│" {
+		t.Errorf("RoundedBorder lines = (%q, %q), want (─, │)", brd.Horizontal, brd.Vertical)
 	}
 }
 
 func TestHiddenBorder(t *testing.T) {
 	t.Parallel()
 
-	b := HiddenBorder()
+	brd :=HiddenBorder()
 
-	if b.TopLeft != "" || b.Horizontal != "" || b.Vertical != "" {
+	if brd.TopLeft != "" || brd.Horizontal != "" || brd.Vertical != "" {
 		t.Errorf("HiddenBorder should have all empty strings, got TopLeft=%q Horizontal=%q Vertical=%q",
-			b.TopLeft, b.Horizontal, b.Vertical)
+			brd.TopLeft, brd.Horizontal, brd.Vertical)
 	}
 }
 
 func TestMarkdownBorder(t *testing.T) {
 	t.Parallel()
 
-	b := MarkdownBorder()
+	brd :=MarkdownBorder()
 
-	if b.TopLeft != "|" || b.TopRight != "|" || b.BottomLeft != "|" || b.BottomRight != "|" {
+	if brd.TopLeft != "|" || brd.TopRight != "|" || brd.BottomLeft != "|" || brd.BottomRight != "|" {
 		t.Errorf("MarkdownBorder corners should all be |")
 	}
 
-	if b.Horizontal != "-" || b.Vertical != "|" {
-		t.Errorf("MarkdownBorder lines = (%q, %q), want (-, |)", b.Horizontal, b.Vertical)
+	if brd.Horizontal != "-" || brd.Vertical != "|" {
+		t.Errorf("MarkdownBorder lines = (%q, %q), want (-, |)", brd.Horizontal, brd.Vertical)
 	}
 }
 
 func TestBorder_NoPerSideColorByDefault(t *testing.T) {
 	t.Parallel()
 
-	b := NormalBorder()
+	brd :=NormalBorder()
 
-	if b.topFg != "" || b.rightFg != "" || b.bottomFg != "" || b.leftFg != "" {
+	if brd.topFg != "" || brd.rightFg != "" || brd.bottomFg != "" || brd.leftFg != "" {
 		t.Error("New border should have empty per-side color prefixes")
 	}
 }

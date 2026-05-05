@@ -23,9 +23,9 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 
 	for _, color := range colors {
 		for _, bold := range bolds {
-			ls := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+			lgSty := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 			if bold {
-				ls = ls.Bold(true)
+				lgSty = lgSty.Bold(true)
 			}
 
 			sty := NewStyle().Foreground(Color(color))
@@ -35,9 +35,9 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 
 			ansi := NewANSIStyle(sty)
 
-			for _, tc := range tests {
-				expected := ls.Render(tc)
-				got := ansi.Render(tc)
+			for _, input := range tests {
+				expected := lgSty.Render(input)
+				got := ansi.Render(input)
 
 				// ANSIStyle produces visually identical output but may differ
 				// in SGR parameter ordering (bold merged vs separate) and
@@ -47,11 +47,11 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 				gotVisible := stripANSI(got)
 
 				if expectedVisible != gotVisible {
-					t.Errorf("Visible content mismatch for %q (color=%s bold=%v):\n  expected: %q\n  got:      %q", tc, color, bold, expectedVisible, gotVisible)
+					t.Errorf("Visible content mismatch for %q (color=%s bold=%v):\n  expected: %q\n  got:      %q", input, color, bold, expectedVisible, gotVisible)
 				}
 
-				if tc != "" && !strings.Contains(got, "\x1b[") {
-					t.Errorf("Missing ANSI sequences for %q (color=%s bold=%v)", tc, color, bold)
+				if input != "" && !strings.Contains(got, "\x1b[") {
+					t.Errorf("Missing ANSI sequences for %q (color=%s bold=%v)", input, color, bold)
 				}
 			}
 		}
@@ -71,21 +71,21 @@ func TestANSIStyle_EmptyString(t *testing.T) {
 }
 
 // stripANSI removes all ANSI escape sequences from a string.
-func stripANSI(s string) string {
-	var b strings.Builder
+func stripANSI(str string) string {
+	var builder strings.Builder
 
-	i := 0
+	pos := 0
 
-	for i < len(s) {
-		if s[i] == '\x1b' {
-			i = skipANSI(s, i)
+	for pos < len(str) {
+		if str[pos] == '\x1b' {
+			pos = skipANSI(str, pos)
 
 			continue
 		}
 
-		b.WriteByte(s[i])
-		i++
+		builder.WriteByte(str[pos])
+		pos++
 	}
 
-	return b.String()
+	return builder.String()
 }

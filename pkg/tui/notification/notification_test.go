@@ -8,6 +8,8 @@ import (
 )
 
 func TestViewRendersBorderedBox(t *testing.T) {
+	t.Parallel()
+
 	n := New(style.Color("#B4B4B4"))
 	_ = n.Set("hello", style.Color("#50FA7B"))
 
@@ -52,6 +54,8 @@ func TestViewRendersBorderedBox(t *testing.T) {
 }
 
 func TestViewEmptyWhenExpired(t *testing.T) {
+	t.Parallel()
+
 	n := New(style.Color("#B4B4B4"))
 
 	result := n.View(style.NewStyle())
@@ -61,6 +65,8 @@ func TestViewEmptyWhenExpired(t *testing.T) {
 }
 
 func TestViewBorderWidthMatchesContent(t *testing.T) {
+	t.Parallel()
+
 	n := New(style.Color("#B4B4B4"))
 	_ = n.Set("short", style.Color("#50FA7B"))
 
@@ -79,6 +85,8 @@ func TestViewBorderWidthMatchesContent(t *testing.T) {
 }
 
 func TestViewAllLinesEqualWidth(t *testing.T) {
+	t.Parallel()
+
 	n := New(style.Color("#B4B4B4"))
 	_ = n.Set("Here is a notification", style.Color("#50FA7B"))
 
@@ -98,6 +106,8 @@ func TestViewAllLinesEqualWidth(t *testing.T) {
 }
 
 func TestViewContentHasHorizontalPadding(t *testing.T) {
+	t.Parallel()
+
 	n := New(style.Color("#B4B4B4"))
 	_ = n.Set("hello", style.Color("#50FA7B"))
 
@@ -111,24 +121,24 @@ func TestViewContentHasHorizontalPadding(t *testing.T) {
 	}
 }
 
-func stripANSI(s string) string {
-	var b strings.Builder
+func stripANSI(str string) string {
+	var builder strings.Builder
 
-	i := 0
-	for i < len(s) {
-		if s[i] == '\x1b' {
-			for i < len(s) && s[i] != 'm' {
-				i++
+	pos := 0
+	for pos < len(str) {
+		if str[pos] == '\x1b' {
+			for pos < len(str) && str[pos] != 'm' {
+				pos++
 			}
 
-			i++
+			pos++
 
 			continue
 		}
 
-		b.WriteByte(s[i])
-		i++
+		builder.WriteByte(str[pos])
+		pos++
 	}
 
-	return b.String()
+	return builder.String()
 }

@@ -39,19 +39,6 @@ func (k *Keymap) SetPairs(pairs []Pair) {
 	k.cacheResult = ""
 }
 
-// activeMask computes a bitmask of current active states for cache comparison.
-func (k *Keymap) activeMask() uint64 {
-	var mask uint64
-
-	for i, pair := range k.pairs {
-		if pair.Active != nil && pair.Active() {
-			mask |= 1 << i
-		}
-	}
-
-	return mask
-}
-
 // View renders the keymap as a horizontal list of keybinding pairs separated
 // by a centered dot, wrapping to a new line at pair boundaries when the
 // available width would be exceeded. Results are cached by maxWidth and
@@ -76,16 +63,7 @@ func (k *Keymap) View(maxWidth int) string {
 	)
 
 	for _, pair := range k.pairs {
-		keySty := k.styles.Key
-
-		descSty := k.styles.Desc
-		if pair.Active != nil && pair.Active() {
-			keySty = k.styles.SelectedKey
-			descSty = k.styles.SelectedDesc
-		}
-
-		item := keySty.Render(pair.Key) + " " + descSty.Render(pair.Desc)
-		itemWidth := style.CellWidth(item)
+		item, itemWidth := k.renderPair(pair)
 
 		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
 			lines = append(lines, currentLine.String())
@@ -116,4 +94,32 @@ func (k *Keymap) View(maxWidth int) string {
 	k.cacheResult = result
 
 	return result
+}
+
+// renderPair returns the rendered key+desc string and its cell width.
+func (k *Keymap) renderPair(pair Pair) (string, int) {
+	keySty := k.styles.Key
+
+	descSty := k.styles.Desc
+	if pair.Active != nil && pair.Active() {
+		keySty = k.styles.SelectedKey
+		descSty = k.styles.SelectedDesc
+	}
+
+	item := keySty.Render(pair.Key) + " " + descSty.Render(pair.Desc)
+
+	return item, style.CellWidth(item)
+}
+
+// activeMask computes a bitmask of current active states for cache comparison.
+func (k *Keymap) activeMask() uint64 {
+	var mask uint64
+
+	for i, pair := range k.pairs {
+		if pair.Active != nil && pair.Active() {
+			mask |= 1 << i
+		}
+	}
+
+	return mask
 }
