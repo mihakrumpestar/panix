@@ -17,8 +17,8 @@ func TestNew_Defaults(t *testing.T) {
 		t.Errorf("Default width = %d, want 0", tbl.width)
 	}
 
-	if tbl.borderSet {
-		t.Error("Default borderSet should be false")
+	if tbl.border.Vertical != "" {
+		t.Error("Default border.Vertical should be empty")
 	}
 
 	if !tbl.borderTop || !tbl.borderRight || !tbl.borderBottom || !tbl.borderLeft || !tbl.borderColumn {
@@ -264,7 +264,8 @@ func TestTable_CalculateColumnWidths(t *testing.T) {
 
 	tbl := New().Headers("Name", "Value").
 		Row("longkey", "v")
-	widths := tbl.contentWidths(2)
+	widths := make([]int, 2)
+	tbl.contentWidths(2, widths)
 
 	if widths[0] < 7 {
 		t.Errorf("Col 0 width = %d, want >= 7", widths[0])
@@ -709,10 +710,10 @@ func TestTable_SetRows_RowCountChange_FullRebuild(t *testing.T) {
 	tbl.String()
 
 	tbl.SetRows([][]string{{"a"}, {"b"}, {"c"}})
-	tbl.String()
+	result := tbl.String()
 
-	if len(tbl.rowCache) != 3 {
-		t.Errorf("rowCache len = %d, want 3", len(tbl.rowCache))
+	if !strings.Contains(result, "c") {
+		t.Errorf("Full rebuild should include new row data, got: %s", result)
 	}
 }
 

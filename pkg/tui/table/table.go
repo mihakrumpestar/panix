@@ -2,7 +2,7 @@ package table
 
 import (
 	"fmt"
-	"strings"
+	"strconv"
 
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
@@ -18,7 +18,6 @@ type Table struct {
 	rows         [][]string
 	columnStyles []style.Style
 	wrap         bool
-	borderSet    bool
 	borderTop    bool
 	borderRight  bool
 	borderBottom bool
@@ -26,28 +25,57 @@ type Table struct {
 	borderColumn bool
 
 	selectedIndex int
-	selBg         style.Color
 	selBgPrefix   string
 	zonePrefix    string
 
 	colWidths       []int
 	colWidthsCached bool
 
-	rowCache          []string
-	rowCacheData      [][]string
-	rowCacheSelIdx    int
-	rowCacheWidth     int
-	rowCacheColWidths []int
+	// Pre-computed column ANSI styles and alignment. Computed once,
+	// reused for every cell render.
+	colANSI   []style.ANSIStyle
+	colAlign  []style.Position
+	colANSIOK bool
+
+	// Full output cache. When outDirty is false, String() returns
+	// outCache immediately with zero allocations.
+	outCache string
+	outDirty bool
+
+	// Reusable byte buffers. rowBuf is used by buildRow; outBuf is
+	// used by String().
+	rowBuf []byte
+	outBuf []byte
+
+	// Pre-computed zone markers per row. Built once when rows or
+	// zone prefix change, reused every render. nil means "needs
+	// recomputation".
+	zoneStarts []string
+	zoneEnds   []string
+
+	// Per-row render cache: cached rendered bytes and the data that
+	// produced them. On selection-only changes, only the 2 affected
+	// rows are re-rendered instead of all N.
+	rowCacheBytes [][]byte
+	rowCacheData  [][]string
+	rowCacheSel   int
+
+	// Reusable buffer for distributeWidths: partitioned into regions
+	// for contentWidths, fixedWidths, distributed, and medians.
+	// Grows once, reused forever. Eliminates 4 make([]int) per call.
+	widthsBuf []int
 }
 
 func New() *Table {
 	return &Table{
-		borderTop:     true,
-		borderRight:   true,
-		borderBottom:  true,
-		borderLeft:    true,
-		borderColumn:  true,
+		borderTop:    true,
+		borderRight:  true,
+		borderBottom: true,
+		borderLeft:   true,
+		borderColumn: true,
 		selectedIndex: -1,
+		outDirty:      true,
+		rowCacheSel:   -2, // force mismatch on first render
 	}
 }
 
@@ -58,14 +86,17 @@ func (t *Table) Width(w int) *Table {
 
 	t.width = w
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.rowCacheBytes = nil // structural change, invalidate all
 
 	return t
 }
 
 func (t *Table) Border(b style.Border) *Table {
 	t.border = b
-	t.borderSet = true
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -76,6 +107,8 @@ func (t *Table) Borders(top, right, bottom, left bool) *Table {
 	t.borderBottom = bottom
 	t.borderLeft = left
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -83,12 +116,16 @@ func (t *Table) Borders(top, right, bottom, left bool) *Table {
 func (t *Table) BorderColumn(v bool) *Table {
 	t.borderColumn = v
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
 
 func (t *Table) BorderStyle(s style.Style) *Table {
 	t.borderSty = s
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -96,6 +133,8 @@ func (t *Table) BorderStyle(s style.Style) *Table {
 func (t *Table) Headers(h ...string) *Table {
 	t.headers = h
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -103,6 +142,9 @@ func (t *Table) Headers(h ...string) *Table {
 func (t *Table) Row(cells ...string) *Table {
 	t.rows = append(t.rows, cells)
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.zoneStarts = nil
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -110,35 +152,63 @@ func (t *Table) Row(cells ...string) *Table {
 func (t *Table) Rows(rows ...[]string) *Table {
 	t.rows = append(t.rows, rows...)
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.zoneStarts = nil
+	t.rowCacheBytes = nil
 
 	return t
 }
 
 func (t *Table) ColumnStyles(styles []style.Style) *Table {
 	t.columnStyles = styles
+	t.colANSIOK = false
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
 
 func (t *Table) Wrap(v bool) *Table {
 	t.wrap = v
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
 
 func (t *Table) SelectionBackground(c style.Color) *Table {
-	t.selBg = c
 	t.selBgPrefix = style.ColorToBgPrefix(c)
+	t.outDirty = true
+	t.rowCacheBytes = nil
 
 	return t
 }
 
-// SetRows replaces all row data. Selection is preserved. The render
-// cache is diffed — only rows whose data actually changed are
-// re-rendered on the next String() call.
+// SetRows replaces all row data. Selection is preserved. Detects
+// identical data and skips cache invalidation, avoiding all
+// allocations for the common "same data, re-render" pattern.
 func (t *Table) SetRows(rows [][]string) *Table {
+	if len(t.rows) == len(rows) {
+		anyChanged := false
+
+		for i, row := range rows {
+			if !cellsEqual(t.rows[i], row) {
+				anyChanged = true
+
+				break
+			}
+		}
+
+		if !anyChanged {
+			return t
+		}
+	}
+
 	t.rows = rows
 	t.colWidthsCached = false
+	t.outDirty = true
+	t.zoneStarts = nil
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -156,11 +226,21 @@ func (t *Table) Select(idx int) {
 		idx = len(t.rows) - 1
 	}
 
+	if t.selectedIndex == idx {
+		return
+	}
+
 	t.selectedIndex = idx
+	t.outDirty = true
 }
 
 func (t *Table) Deselect() {
+	if t.selectedIndex == -1 {
+		return
+	}
+
 	t.selectedIndex = -1
+	t.outDirty = true
 }
 
 func (t *Table) ZonePrefix() string {
@@ -169,6 +249,9 @@ func (t *Table) ZonePrefix() string {
 
 func (t *Table) SetZonePrefix(prefix string) *Table {
 	t.zonePrefix = prefix
+	t.outDirty = true
+	t.zoneStarts = nil
+	t.rowCacheBytes = nil
 
 	return t
 }
@@ -186,6 +269,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if msg.Y < 0 || msg.Y >= len(lines) {
 		if t.selectedIndex >= 0 {
 			t.selectedIndex = -1
+			t.outDirty = true
 
 			return true
 		}
@@ -198,6 +282,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 		if zeroterm.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
 			if t.selectedIndex != idx {
 				t.selectedIndex = idx
+				t.outDirty = true
 
 				return true
 			}
@@ -206,9 +291,9 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 		}
 	}
 
-	// Click was not inside any row zone — deselect
 	if t.selectedIndex >= 0 {
 		t.selectedIndex = -1
+		t.outDirty = true
 
 		return true
 	}
@@ -220,7 +305,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 // the navigation was consumed. Allows initial selection with left/right
 // when nothing is selected.
 func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || len(t.rows) == 0 || t.selectedIndex == -1 {
+	if hasActiveInnerViewport || len(t.rows) == 0 {
 		return false
 	}
 
@@ -228,24 +313,28 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 	case "left":
 		if t.selectedIndex > 0 {
 			t.selectedIndex--
+			t.outDirty = true
 
 			return true
 		}
 
 		if t.selectedIndex < 0 && len(t.rows) > 0 {
 			t.selectedIndex = 0
+			t.outDirty = true
 
 			return true
 		}
 	case "right":
 		if t.selectedIndex < 0 && len(t.rows) > 0 {
 			t.selectedIndex = 0
+			t.outDirty = true
 
 			return true
 		}
 
 		if t.selectedIndex < len(t.rows)-1 {
 			t.selectedIndex++
+			t.outDirty = true
 
 			return true
 		}
@@ -254,10 +343,61 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 	return false
 }
 
-//nolint:funlen,cyclop
+func (t *Table) updateColumnANSI() {
+	n := len(t.columnStyles)
+	if n == 0 {
+		t.colANSI = t.colANSI[:0]
+		t.colAlign = t.colAlign[:0]
+		t.colANSIOK = true
+
+		return
+	}
+
+	if cap(t.colANSI) < n {
+		t.colANSI = make([]style.ANSIStyle, n)
+		t.colAlign = make([]style.Position, n)
+	} else {
+		t.colANSI = t.colANSI[:n]
+		t.colAlign = t.colAlign[:n]
+	}
+
+	for i, sty := range t.columnStyles {
+		t.colANSI[i] = style.NewANSIStyle(sty)
+		t.colAlign[i] = sty.GetAlign()
+	}
+
+	t.colANSIOK = true
+}
+
+func (t *Table) updateZoneMarkers() {
+	n := len(t.rows)
+	if cap(t.zoneStarts) < n {
+		t.zoneStarts = make([]string, n)
+		t.zoneEnds = make([]string, n)
+	} else {
+		t.zoneStarts = t.zoneStarts[:n]
+		t.zoneEnds = t.zoneEnds[:n]
+	}
+
+	for i := range n {
+		zoneName := t.zonePrefix + "-" + strconv.Itoa(i)
+		id := zeroterm.EnsureZone(zoneName)
+		t.zoneStarts[i] = "\x1b[" + strconv.Itoa(int(id)) + "z"
+		t.zoneEnds[i] = "\x1b[/" + strconv.Itoa(int(id)) + "z"
+	}
+}
+
+//nolint:cyclop,funlen
 func (t *Table) String() string {
+	if !t.outDirty && t.outCache != "" {
+		return t.outCache
+	}
+
 	numCols := t.numCols()
 	if numCols == 0 {
+		t.outCache = ""
+		t.outDirty = false
+
 		return ""
 	}
 
@@ -271,7 +411,11 @@ func (t *Table) String() string {
 		t.colWidthsCached = true
 	}
 
-	hasBorder := t.borderSet && t.border.Vertical != ""
+	if !t.colANSIOK {
+		t.updateColumnANSI()
+	}
+
+	hasBorder := t.border.Vertical != ""
 
 	bfg := t.borderSty.FgPrefix()
 	if bfg == "" {
@@ -283,128 +427,169 @@ func (t *Table) String() string {
 		borderReset = style.ANSIReset()
 	}
 
-	// Build or update per-row render cache.
-	// A cached entry is valid when:
-	//   1. The cache was rendered at the same width
-	//   2. The row data matches what was cached (rowCacheData[i] == rows[i])
-	//   3. The selection index matches (otherwise the row's sel bg is wrong)
-	//
-	// Strategy: iterate rows, find which need re-rendering, then
-	// additionally re-render the previously-selected and newly-selected
-	// rows if selection changed.
-	widthMatch := t.rowCacheWidth == t.width &&
-		len(t.rowCacheData) == len(t.rows) &&
-		colWidthsMatch(colWidths, t.rowCacheColWidths)
-
-	rowsToRerender := make(map[int]struct{})
-
-	if !widthMatch {
-		// Full rebuild — width changed or row count changed
-		t.rowCache = make([]string, len(t.rows))
-		t.rowCacheData = make([][]string, len(t.rows))
-
-		for i := range t.rows {
-			rowsToRerender[i] = struct{}{}
-		}
-	} else {
-		// Diff per-row data
-		for i, row := range t.rows {
-			if !cellsEqual(t.rowCacheData[i], row) {
-				rowsToRerender[i] = struct{}{}
-			}
-		}
-
-		// Selection diff: if selection changed, the old and new selected
-		// rows need re-rendering (their bg differs)
-		if t.rowCacheSelIdx != t.selectedIndex {
-			if t.rowCacheSelIdx >= 0 && t.rowCacheSelIdx < len(t.rows) {
-				rowsToRerender[t.rowCacheSelIdx] = struct{}{}
-			}
-
-			if t.selectedIndex >= 0 && t.selectedIndex < len(t.rows) {
-				rowsToRerender[t.selectedIndex] = struct{}{}
-			}
-		}
+	if t.zonePrefix != "" && (t.zoneStarts == nil || len(t.zoneStarts) != len(t.rows)) {
+		t.updateZoneMarkers()
 	}
 
-	// Re-render dirty rows
-	for i := range rowsToRerender {
-		if i >= 0 && i < len(t.rows) {
-			t.rowCache[i] = t.renderRow(t.rows[i], colWidths, i, hasBorder, bfg, borderReset)
-			t.rowCacheData[i] = t.rows[i]
-		}
-	}
+	// Per-row diff: re-render only rows whose data or selection
+	// state changed. On selection-only changes, just 2 rows are
+	// re-rendered instead of all N.
+	t.syncRowCache(colWidths, hasBorder, bfg, borderReset)
 
-	t.rowCacheWidth = t.width
-	t.rowCacheSelIdx = t.selectedIndex
-	t.rowCacheColWidths = colWidths
-
-	// Assemble output from cached row strings
-	var b strings.Builder
+	// Assemble output from cached row bytes.
+	t.outBuf = t.outBuf[:0]
 
 	hasContent := len(t.headers) > 0 || len(t.rows) > 0
 
 	if hasBorder && t.borderTop && hasContent {
-		t.writeHorizontalBorder(&b, t.border.TopLeft, t.border.TopMid, t.border.TopRight,
-			colWidths, bfg, borderReset)
+		t.writeHorizontalBorder(
+			t.border.TopLeft, t.border.TopMid, t.border.TopRight,
+			colWidths, bfg, borderReset,
+		)
 	}
 
 	if len(t.headers) > 0 {
-		t.writeRow(&b, t.headers, colWidths, HeaderRow, hasBorder, bfg, borderReset)
+		t.buildRow(t.headers, colWidths, HeaderRow, hasBorder, bfg, borderReset)
+		t.outBuf = append(t.outBuf, t.rowBuf...)
+		t.outBuf = append(t.outBuf, '\n')
 
 		if hasBorder && t.borderColumn {
-			t.writeHorizontalBorder(&b, t.border.LeftMid, t.border.MidMid, t.border.RightMid,
-				colWidths, bfg, borderReset)
+			t.writeHorizontalBorder(
+				t.border.LeftMid, t.border.MidMid, t.border.RightMid,
+				colWidths, bfg, borderReset,
+			)
 		}
 	}
 
-	for rowIdx, rowStr := range t.rowCache {
-		if t.zonePrefix != "" {
-			zoneName := fmt.Sprintf("%s-%d", t.zonePrefix, rowIdx)
-			b.WriteString(zeroterm.Mark(zoneName, rowStr))
-		} else {
-			b.WriteString(rowStr)
+	for i, rowBytes := range t.rowCacheBytes {
+		if t.zonePrefix != "" && i < len(t.zoneStarts) {
+			t.outBuf = append(t.outBuf, t.zoneStarts[i]...)
 		}
+
+		t.outBuf = append(t.outBuf, rowBytes...)
+
+		if t.zonePrefix != "" && i < len(t.zoneEnds) {
+			t.outBuf = append(t.outBuf, t.zoneEnds[i]...)
+		}
+
+		t.outBuf = append(t.outBuf, '\n')
 	}
 
 	if hasBorder && t.borderBottom && hasContent {
-		t.writeHorizontalBorder(&b, t.border.BottomLeft, t.border.BottomMid, t.border.BottomRight,
-			colWidths, bfg, borderReset)
+		t.writeHorizontalBorder(
+			t.border.BottomLeft, t.border.BottomMid, t.border.BottomRight,
+			colWidths, bfg, borderReset,
+		)
 	}
 
-	result := b.String()
-	if len(result) > 0 && result[len(result)-1] == '\n' {
-		result = result[:len(result)-1]
+	if len(t.outBuf) > 0 && t.outBuf[len(t.outBuf)-1] == '\n' {
+		t.outBuf = t.outBuf[:len(t.outBuf)-1]
 	}
 
-	return result
+	// Convert buffer to string. This is the ONE allocation in the
+	// hot path — unavoidable because Go's string([]byte) always
+	// copies. The alternative (unsafe.String + buffer donation)
+	// eliminates the copy but forces a new buffer allocation next
+	// frame, creating GC pressure. Buffer reuse + copy is better.
+	t.outCache = string(t.outBuf)
+	t.outDirty = false
+
+	return t.outCache
 }
 
-//nolint:cyclop
-func (t *Table) renderRow(cells []string, colWidths []int,
-	rowIdx int, hasBorder bool, bfg, borderReset string,
-) string {
-	// Build the row in two parts:
-	//   1. outer borders (left │, right │) — no selection bg
-	//   2. inner content (cells + inner column borders │) — selection bg
-	//
-	// For selected rows, the inner content block is wrapped with the
-	// selection background. Since Style.Render emits \x1b[m resets that
-	// clear the bg, we re-emit selBgPrefix after every reset inside
-	// the block so the bg spans uninterrupted.
-	selBgPrefix := ""
-	if rowIdx >= 0 && rowIdx == t.selectedIndex {
-		selBgPrefix = t.selBgPrefix
+// syncRowCache ensures rowCacheBytes[i] contains the rendered bytes for
+// rows[i]. Only rows whose data or selection state changed since the
+// last render are re-rendered; all others reuse their cached bytes.
+func (t *Table) syncRowCache(colWidths []int, hasBorder bool, bfg, borderReset string) {
+	n := len(t.rows)
+	selChanged := t.rowCacheSel != t.selectedIndex
+
+	// Full rebuild: structural change (row count, width, etc.)
+	if t.rowCacheBytes == nil || len(t.rowCacheBytes) != n ||
+		len(t.rowCacheData) != n {
+		if cap(t.rowCacheBytes) < n {
+			t.rowCacheBytes = make([][]byte, n)
+			t.rowCacheData = make([][]string, n)
+		} else {
+			t.rowCacheBytes = t.rowCacheBytes[:n]
+			t.rowCacheData = t.rowCacheData[:n]
+		}
+
+		for i, row := range t.rows {
+			t.buildRow(row, colWidths, i, hasBorder, bfg, borderReset)
+			buf := make([]byte, len(t.rowBuf))
+			copy(buf, t.rowBuf)
+			t.rowCacheBytes[i] = buf
+			t.rowCacheData[i] = row
+		}
+
+		t.rowCacheSel = t.selectedIndex
+
+		return
 	}
 
-	// Build inner content (between outer borders)
-	var inner strings.Builder
+	// Incremental: re-render only dirty rows.
+	for i, row := range t.rows {
+		dirty := !cellsEqual(t.rowCacheData[i], row)
+
+		if !dirty && selChanged {
+			// Selection affects rendering only for the previously-
+			// selected and newly-selected rows.
+			dirty = i == t.rowCacheSel || i == t.selectedIndex
+		}
+
+		if dirty {
+			t.buildRow(row, colWidths, i, hasBorder, bfg, borderReset)
+			// Reuse existing byte slice if it fits, else allocate.
+			if cap(t.rowCacheBytes[i]) < len(t.rowBuf) {
+				t.rowCacheBytes[i] = make([]byte, len(t.rowBuf))
+			} else {
+				t.rowCacheBytes[i] = t.rowCacheBytes[i][:len(t.rowBuf)]
+			}
+
+			copy(t.rowCacheBytes[i], t.rowBuf)
+			t.rowCacheData[i] = row
+		}
+	}
+
+	t.rowCacheSel = t.selectedIndex
+}
+
+// buildRow renders a single row into t.rowBuf using inline cell
+// rendering that bypasses the heavy Style.Render pipeline.
+//
+// Selection background is injected inline: after every ANSI reset
+// inside the inner content, selBgPrefix is re-emitted so the
+// background spans uninterrupted between the outer borders.
+func (t *Table) buildRow(cells []string, colWidths []int,
+	rowIdx int, hasBorder bool, bfg, borderReset string,
+) {
+	selBg := ""
+	if rowIdx >= 0 && rowIdx == t.selectedIndex {
+		selBg = t.selBgPrefix
+	}
+
+	t.rowBuf = t.rowBuf[:0]
+
+	if hasBorder && t.borderLeft {
+		t.rowBuf = append(t.rowBuf, bfg...)
+		t.rowBuf = append(t.rowBuf, t.border.Vertical...)
+		t.rowBuf = append(t.rowBuf, borderReset...)
+	}
+
+	if selBg != "" {
+		t.rowBuf = append(t.rowBuf, selBg...)
+	}
 
 	for i, w := range colWidths {
 		if i > 0 && hasBorder && t.borderColumn {
-			inner.WriteString(bfg)
-			inner.WriteString(t.border.Vertical)
-			inner.WriteString(borderReset)
+			t.rowBuf = append(t.rowBuf, bfg...)
+			t.rowBuf = append(t.rowBuf, t.border.Vertical...)
+			t.rowBuf = append(t.rowBuf, borderReset...)
+
+			if selBg != "" {
+				t.rowBuf = append(t.rowBuf, selBg...)
+			}
 		}
 
 		cell := ""
@@ -412,52 +597,100 @@ func (t *Table) renderRow(cells []string, colWidths []int,
 			cell = cells[i]
 		}
 
-		var sty style.Style
+		var prefix, reset string
+		var align style.Position
 
-		if rowIdx == HeaderRow {
-			sty = style.NewStyle()
+		if rowIdx == HeaderRow || i >= len(t.colANSI) {
+			// No ANSI wrapping for headers or beyond column styles.
 		} else {
-			sty = t.columnStyle(i)
+			prefix = t.colANSI[i].Prefix()
+			reset = t.colANSI[i].Reset()
+			align = t.colAlign[i]
 		}
 
-		if t.wrap {
-			sty = sty.Width(w)
-		} else {
-			sty = sty.Width(w).MaxWidth(w).TruncateEllipsis(true)
+		if hasNewline(cell) {
+			var sty style.Style
+			if rowIdx == HeaderRow {
+				sty = style.NewStyle()
+			} else {
+				sty = t.columnStyle(i)
+			}
+
+			if t.wrap {
+				sty = sty.Width(w)
+			} else {
+				sty = sty.Width(w).MaxWidth(w).TruncateEllipsis(true)
+			}
+
+			rendered := sty.Render(cell)
+			t.rowBuf = append(t.rowBuf, rendered...)
+
+			continue
 		}
 
-		inner.WriteString(sty.Render(cell))
+		if prefix != "" {
+			t.rowBuf = append(t.rowBuf, prefix...)
+		}
+
+		cw := style.CellWidth(cell)
+
+		switch {
+		case cw < w:
+			pad := w - cw
+			switch {
+			case align >= style.Right:
+				t.rowBuf = appendPad(t.rowBuf, pad)
+				t.rowBuf = append(t.rowBuf, cell...)
+			case align == style.Center:
+				left := pad / 2
+				right := pad - left
+				t.rowBuf = appendPad(t.rowBuf, left)
+				t.rowBuf = append(t.rowBuf, cell...)
+				t.rowBuf = appendPad(t.rowBuf, right)
+			default:
+				t.rowBuf = append(t.rowBuf, cell...)
+				t.rowBuf = appendPad(t.rowBuf, pad)
+			}
+
+		case cw > w:
+			truncated := style.TruncateToWidth(cell, w, !t.wrap)
+			t.rowBuf = append(t.rowBuf, truncated...)
+
+			remaining := w - style.CellWidth(truncated)
+			if remaining > 0 {
+				t.rowBuf = appendPad(t.rowBuf, remaining)
+			}
+
+		default:
+			t.rowBuf = append(t.rowBuf, cell...)
+		}
+
+		if reset != "" {
+			t.rowBuf = append(t.rowBuf, reset...)
+
+			if selBg != "" {
+				t.rowBuf = append(t.rowBuf, selBg...)
+			}
+		}
 	}
 
-	// Assemble row: left border + inner content + right border
-	var b strings.Builder
-
-	if hasBorder && t.borderLeft {
-		b.WriteString(bfg)
-		b.WriteString(t.border.Vertical)
-		b.WriteString(borderReset)
-	}
-
-	innerStr := inner.String()
-	if selBgPrefix != "" {
-		// Re-emit selBg after every ANSI reset inside the content block
-		innerStr = strings.ReplaceAll(innerStr, style.ANSIReset(), style.ANSIReset()+selBgPrefix)
-		b.WriteString(selBgPrefix)
-		b.WriteString(innerStr)
-		b.WriteString(style.ANSIReset())
-	} else {
-		b.WriteString(innerStr)
+	if selBg != "" {
+		t.rowBuf = append(t.rowBuf, style.ANSIReset()...)
 	}
 
 	if hasBorder && t.borderRight {
-		b.WriteString(bfg)
-		b.WriteString(t.border.Vertical)
-		b.WriteString(borderReset)
+		t.rowBuf = append(t.rowBuf, bfg...)
+		t.rowBuf = append(t.rowBuf, t.border.Vertical...)
+		t.rowBuf = append(t.rowBuf, borderReset...)
+	}
+}
+
+func appendPad(buf []byte, n int) []byte {
+	for range n {
+		buf = append(buf, ' ')
 	}
 
-	b.WriteByte('\n')
-
-	return b.String()
+	return buf
 }
 
 func (t *Table) numCols() int {
@@ -480,14 +713,37 @@ func (t *Table) columnStyle(col int) style.Style {
 	return style.NewStyle()
 }
 
-func (t *Table) contentWidths(numCols int) []int {
-	widths := make([]int, numCols)
+// ensureWidthsBuf guarantees t.widthsBuf has capacity for at least
+// 4*numCols ints and returns it zeroed and sliced to that length.
+// Partition layout:
+//
+//	[0, numCols)           = contentWidths
+//	[numCols, 2*numCols)   = fixedWidths
+//	[2*numCols, 3*numCols) = distributed
+//	[3*numCols, 4*numCols) = medians (for shrinkNonFixedColumns)
+func (t *Table) ensureWidthsBuf(numCols int) {
+	need := numCols * 4
+	if cap(t.widthsBuf) < need {
+		t.widthsBuf = make([]int, need)
+	} else {
+		t.widthsBuf = t.widthsBuf[:need]
+	}
+
+	for i := range t.widthsBuf {
+		t.widthsBuf[i] = 0
+	}
+}
+
+func (t *Table) contentWidths(numCols int, dst []int) {
+	for i := range dst {
+		dst[i] = 0
+	}
 
 	for i, h := range t.headers {
 		if i < numCols {
 			w := style.CellWidth(h)
-			if w > widths[i] {
-				widths[i] = w
+			if w > dst[i] {
+				dst[i] = w
 			}
 		}
 	}
@@ -496,14 +752,12 @@ func (t *Table) contentWidths(numCols int) []int {
 		for i, cell := range row {
 			if i < numCols {
 				w := style.CellWidth(cell)
-				if w > widths[i] {
-					widths[i] = w
+				if w > dst[i] {
+					dst[i] = w
 				}
 			}
 		}
 	}
-
-	return widths
 }
 
 // distributeWidths calculates column widths that exactly fill the table
@@ -515,40 +769,40 @@ func (t *Table) distributeWidths(numCols int) []int {
 		return nil
 	}
 
-	contentWidths := t.contentWidths(numCols)
+	t.ensureWidthsBuf(numCols)
+	buf := t.widthsBuf
 
-	// Collect fixed widths from columnStyles. Columns with Width(N) set
-	// in their style are locked — they won't be expanded or shrunk.
-	fixedWidths := make([]int, numCols)
+	contentWidths := buf[0:numCols]
+	fixedWidths := buf[numCols : 2*numCols]
+	distributed := buf[2*numCols : 3*numCols]
+
+	t.contentWidths(numCols, contentWidths)
 
 	for i := range numCols {
-		sty := t.columnStyle(i)
-
-		fw := sty.GetWidth()
+		fw := t.columnStyle(i).GetWidth()
 		if fw > 0 {
 			fixedWidths[i] = fw
 		}
 	}
 
-	// No width set — use content widths, but respect fixed widths
 	if t.width <= 0 {
+		result := make([]int, numCols)
 		for i := range numCols {
 			if fixedWidths[i] > 0 {
-				contentWidths[i] = fixedWidths[i]
+				result[i] = fixedWidths[i]
+			} else {
+				result[i] = contentWidths[i]
 			}
 		}
 
-		return contentWidths
+		return result
 	}
 
 	borderCharsWidth := t.totalBorderWidth(numCols)
-
 	availableWidth := max(t.width-borderCharsWidth, 0)
 
-	distributed := make([]int, numCols)
 	copy(distributed, contentWidths)
 
-	// Lock fixed columns — they contribute their fixed width and can't change
 	fixedTotal := 0
 
 	for i := range numCols {
@@ -558,7 +812,6 @@ func (t *Table) distributeWidths(numCols int) []int {
 		}
 	}
 
-	// Calculate how much space the non-fixed columns need/have
 	nonFixedAvailable := max(availableWidth-fixedTotal, 0)
 
 	nonFixedContent := 0
@@ -570,11 +823,13 @@ func (t *Table) distributeWidths(numCols int) []int {
 	}
 
 	if nonFixedContent == nonFixedAvailable {
-		return distributed
+		result := make([]int, numCols)
+		copy(result, distributed)
+
+		return result
 	}
 
 	if nonFixedContent < nonFixedAvailable {
-		// Expand non-fixed columns to fill remaining width
 		for {
 			total := 0
 
@@ -588,7 +843,6 @@ func (t *Table) distributeWidths(numCols int) []int {
 				break
 			}
 
-			// Find shortest non-fixed column
 			shortestIdx := -1
 			shortestW := 0
 
@@ -608,15 +862,18 @@ func (t *Table) distributeWidths(numCols int) []int {
 			distributed[shortestIdx]++
 		}
 	} else {
-		// Shrink non-fixed columns to fit remaining width
-		t.shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, nonFixedAvailable)
+		medians := buf[3*numCols : 4*numCols]
+		t.shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians, nonFixedAvailable)
 	}
 
-	return distributed
+	result := make([]int, numCols)
+	copy(result, distributed)
+
+	return result
 }
 
 func (t *Table) totalBorderWidth(numCols int) int {
-	if !t.borderSet || t.border.Vertical == "" {
+	if t.border.Vertical == "" {
 		return 0
 	}
 
@@ -638,10 +895,9 @@ func (t *Table) totalBorderWidth(numCols int) int {
 }
 
 //nolint:cyclop
-func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []int, availableWidth int) {
+func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians []int, availableWidth int) {
 	numCols := len(distributed)
 
-	// Phase 1: Shrink columns that are > half the available width (skip fixed)
 	for {
 		total := 0
 
@@ -671,9 +927,6 @@ func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []
 
 		distributed[bigIdx]--
 	}
-
-	// Phase 2: Shrink columns with biggest difference from median (skip fixed)
-	medians := make([]int, numCols)
 
 	for i := range numCols {
 		if fixedWidths[i] == 0 {
@@ -714,7 +967,6 @@ func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []
 		distributed[bigDiffIdx]--
 	}
 
-	// Phase 3: Shrink the biggest non-fixed columns overall
 	for {
 		total := 0
 
@@ -746,31 +998,34 @@ func (t *Table) shrinkNonFixedColumns(distributed, contentWidths, fixedWidths []
 	}
 }
 
-func (t *Table) writeHorizontalBorder(b *strings.Builder, left, mid, right string,
+func (t *Table) writeHorizontalBorder(left, mid, right string,
 	colWidths []int, fg, reset string,
 ) {
-	b.WriteString(fg)
-	b.WriteString(left)
+	t.outBuf = append(t.outBuf, fg...)
+	t.outBuf = append(t.outBuf, left...)
 
 	for i, w := range colWidths {
 		if i > 0 && t.borderColumn {
-			b.WriteString(mid)
+			t.outBuf = append(t.outBuf, mid...)
 		}
 
 		if w > 0 {
-			b.WriteString(strings.Repeat(t.border.Horizontal, w))
+			t.outBuf = appendRepeatStr(t.outBuf, t.border.Horizontal, w)
 		}
 	}
 
-	b.WriteString(right)
-	b.WriteString(reset)
-	b.WriteByte('\n')
+	t.outBuf = append(t.outBuf, right...)
+	t.outBuf = append(t.outBuf, reset...)
+	t.outBuf = append(t.outBuf, '\n')
 }
 
-func (t *Table) writeRow(b *strings.Builder, cells []string, colWidths []int,
-	rowIdx int, hasBorder bool, bfg, borderReset string,
-) {
-	b.WriteString(t.renderRow(cells, colWidths, rowIdx, hasBorder, bfg, borderReset))
+func appendRepeatStr(buf []byte, s string, n int) []byte {
+	for n > 0 {
+		buf = append(buf, s...)
+		n--
+	}
+
+	return buf
 }
 
 func cellsEqual(a, b []string) bool {
@@ -787,16 +1042,12 @@ func cellsEqual(a, b []string) bool {
 	return true
 }
 
-func colWidthsMatch(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+func hasNewline(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			return true
 		}
 	}
 
-	return true
+	return false
 }

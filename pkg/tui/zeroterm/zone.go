@@ -122,6 +122,12 @@ func GetZoneName(id uint16) string {
 	return globalZones.Name(id)
 }
 
+// EnsureZone creates the zone if it doesn't exist and returns its ID.
+// Use this to pre-compute zone IDs at row-setup time instead of per-render.
+func EnsureZone(name string) uint16 {
+	return globalZones.GetOrCreate(name)
+}
+
 func GetZoneID(name string) uint16 {
 	return globalZones.ID(name)
 }

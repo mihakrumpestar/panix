@@ -158,7 +158,7 @@ func (pf *PhaseFlow) Reset() {
 // selection changed. When hasActiveInnerViewport is true, navigation is
 // ignored.
 func (pf *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
-	if hasActiveInnerViewport || len(pf.phases) == 0 || pf.selectedIndex == -1 {
+	if hasActiveInnerViewport || len(pf.phases) == 0 {
 		return false
 	}
 

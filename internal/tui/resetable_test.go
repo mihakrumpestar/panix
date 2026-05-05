@@ -177,14 +177,17 @@ func newTestModel(t *testing.T) *model {
 	conf := makeTestConfig()
 	conf.Flags.DryRun = true
 
+	dims := &viewports.Dimensions{Width: 200, Height: 80}
+
 	mdl := &model{
 		ctx:        context.Background(),
 		conf:       conf,
-		dimensions: &viewports.Dimensions{Width: 200, Height: 80},
+		dimensions: dims,
 		header:     header.New(false, config.Snapshot{}, nil),
 		spinners:   spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
+		viewports:  viewports.New(dims, 0, conf.ColorScheme.Table.Border, conf.ColorScheme.Table.SelectionHighlightBackground, conf.ColorScheme.Table.SelectionHighlightBorder),
 	}
 	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
 

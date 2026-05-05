@@ -213,6 +213,18 @@ func (s Style) GetBackground() Color { return s.bgColor }
 // GetWidth returns the explicit width set on the style, or 0 if none.
 func (s Style) GetWidth() int { return s.width }
 
+// GetAlign returns the text alignment set on the style.
+func (s Style) GetAlign() Position { return s.align }
+
+// TruncateToWidth truncates str to at most maxW visible cell width, preserving
+// any ANSI escape sequences. When ellipsis is true and the string is actually
+// truncated, ".." replaces the last 2 cells so overflowing content is visually
+// distinguishable. This is the exported version of truncateToWidth for use by
+// packages that need zero-allocation cell rendering.
+func TruncateToWidth(str string, maxW int, ellipsis bool) string {
+	return truncateToWidth(str, maxW, ellipsis)
+}
+
 // FgPrefix returns the pre-computed ANSI foreground prefix string.
 func (s Style) FgPrefix() string { return s.fgPrefix }
 
