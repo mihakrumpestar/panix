@@ -68,11 +68,11 @@ type Table struct {
 
 func New() *Table {
 	return &Table{
-		borderTop:    true,
-		borderRight:  true,
-		borderBottom: true,
-		borderLeft:   true,
-		borderColumn: true,
+		borderTop:     true,
+		borderRight:   true,
+		borderBottom:  true,
+		borderLeft:    true,
+		borderColumn:  true,
 		selectedIndex: -1,
 		outDirty:      true,
 		rowCacheSel:   -2, // force mismatch on first render
@@ -597,8 +597,10 @@ func (t *Table) buildRow(cells []string, colWidths []int,
 			cell = cells[i]
 		}
 
-		var prefix, reset string
-		var align style.Position
+		var (
+			prefix, reset string
+			align         style.Position
+		)
 
 		if rowIdx == HeaderRow || i >= len(t.colANSI) {
 			// No ANSI wrapping for headers or beyond column styles.
@@ -637,6 +639,7 @@ func (t *Table) buildRow(cells []string, colWidths []int,
 		switch {
 		case cw < w:
 			pad := w - cw
+
 			switch {
 			case align >= style.Right:
 				t.rowBuf = appendPad(t.rowBuf, pad)
@@ -1043,7 +1046,7 @@ func cellsEqual(a, b []string) bool {
 }
 
 func hasNewline(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '\n' {
 			return true
 		}

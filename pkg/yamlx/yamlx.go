@@ -11,9 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	dirPermissions os.FileMode = 0750
-)
+const dirPermissions os.FileMode = 0750
 
 func Encode(val any, writer io.Writer) error {
 	encoder := yaml.NewEncoder(
