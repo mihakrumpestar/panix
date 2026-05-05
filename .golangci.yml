@@ -38,9 +38,21 @@ linters:
           list-mode: lax
           files:
             - $all
+            - "!$test"
           deny:
             - pkg: errors
               desc: use github.com/pkg/errors instead
+
+            - pkg: "charm.land/bubbles/v2"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "charm.land/bubbletea/v2"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "charm.land/lipgloss/v2"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "github.com/charmbracelet/ultraviolet"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "github.com/lrstanley/bubblezone/v2"
+              desc: "benchmark reference only and testing — not for production code"
 
     lll:
       line-length: 150
@@ -65,7 +77,7 @@ linters:
         - all
         - -QF1008 # could remove embedded field from selector
         - -ST1000 # at least one file in a package should have a package comment
-        - -ST1003 # should not use underscores in package names 
+        - -ST1003 # should not use underscores in package names
     #unused:
     #  field-writes-are-uses: false
     #  post-statements-are-reads: true

@@ -2,6 +2,7 @@ package profile
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 
@@ -62,7 +63,7 @@ func Start(conf Profile) (StopFunc, error) {
 }
 
 func startCPU(path string, stops *[]func()) error {
-	err := os.MkdirAll(path, dirPermissions)
+	err := mkdirForFile(path)
 	if err != nil {
 		return errors.Wrap(err, "failed to create directory for CPU profile")
 	}
@@ -95,7 +96,7 @@ func stopMem(path string) func() {
 	return func() {
 		runtime.GC()
 
-		err := os.MkdirAll(path, dirPermissions)
+		err := mkdirForFile(path)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to create directory for memory profile")
 
@@ -136,7 +137,7 @@ func stopRuntimeProfile(name, path string, disable func()) func() {
 }
 
 func writeProfile(name, path string) error {
-	err := os.MkdirAll(path, dirPermissions)
+	err := mkdirForFile(path)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create directory for %s profile", name)
 	}
@@ -163,4 +164,12 @@ func writeProfile(name, path string) error {
 	}
 
 	return nil
+}
+
+// Helpers
+
+func mkdirForFile(path string) error {
+	err := os.MkdirAll(filepath.Dir(path), dirPermissions)
+
+	return errors.Wrap(err, "mkdir profile dir")
 }
