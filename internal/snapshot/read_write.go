@@ -8,7 +8,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
-	"github.com/mihakrumpestar/panix/internal/pkg/jsonx"
+	"github.com/mihakrumpestar/panix/pkg/jsonx"
 	"github.com/pkg/errors"
 )
 

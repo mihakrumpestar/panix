@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 	"github.com/pkg/errors"
 )
 

@@ -8,6 +8,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/pkg/errors"
 )
 
@@ -37,10 +38,10 @@ type WorkflowFlags struct {
 	DryRun               bool   `yaml:"dry_run" json:"dry_run,omitempty" help:"Show what would be done without executing"`
 	DryRunWithInspect    bool   `yaml:"dry_run_with_inspect" json:"dry_run_with_inspect,omitempty" help:"Show what would be done without executing, but with real inspect query"`
 
-	Logging  `yaml:"logging" json:"logging"` //nolint:embeddedstructfieldcheck
-	Snapshot `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."`
-	Tui      `yaml:"tui" json:"tui" embed:"" prefix:"tui."`
-	Profile  `yaml:"profile" json:"profile" embed:"" prefix:"profile."`
+	Logging         `yaml:"logging" json:"logging"` //nolint:embeddedstructfieldcheck
+	Snapshot        `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."`
+	Tui             `yaml:"tui" json:"tui" embed:"" prefix:"tui."`
+	profile.Profile `yaml:"profile" json:"profile" embed:"" prefix:"profile."`
 }
 
 //nolint:lll
@@ -92,15 +93,6 @@ type Logging struct {
 	Log     bool   `yaml:"log" json:"log,omitempty" short:"l" help:"Enable logging to file"`
 	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"filepath" default:"panix.log"`
 	Debug   bool   `yaml:"debug" json:"debug,omitempty" short:"d" help:"Debug mode (enables logging)"`
-}
-
-//nolint:lll
-type Profile struct {
-	CPU       string `yaml:"cpu" json:"cpu,omitempty" help:"Path for CPU profile output (enables CPU profiling)" validate:"omitempty,filepath"`
-	Mem       string `yaml:"mem" json:"mem,omitempty" help:"Path for memory profile output (enables memory profiling)" validate:"omitempty,filepath"`
-	Block     string `yaml:"block" json:"block,omitempty" help:"Path for block profile output (enables block profiling)" validate:"omitempty,filepath"`
-	Mutex     string `yaml:"mutex" json:"mutex,omitempty" help:"Path for mutex profile output (enables mutex profiling)" validate:"omitempty,filepath"`
-	Goroutine string `yaml:"goroutine" json:"goroutine,omitempty" help:"Path for goroutine profile output (enables goroutine profiling)" validate:"omitempty,filepath"`
 }
 
 func (f *Flags) DefautlIfNoTTY() {

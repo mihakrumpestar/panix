@@ -7,10 +7,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/table"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/table"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 const (

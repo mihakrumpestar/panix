@@ -8,8 +8,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )

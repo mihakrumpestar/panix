@@ -6,7 +6,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 // Header renders a static snapshot banner. All styled content is pre-rendered

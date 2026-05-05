@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/lucasb-eyer/go-colorful"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 type ColorSchemeLogEntity struct {

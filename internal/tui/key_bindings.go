@@ -6,10 +6,10 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
+	"github.com/mihakrumpestar/panix/pkg/tui/clipboard"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
@@ -21,11 +21,7 @@ func (m *model) keyDefs() []footer.KeyDef {
 		{Keys: []string{"a"}, Help: "toggle active only", Active: func() bool { return m.conf.Flags.Tui.ShowActiveOnly }, Handler: m.handleToggleActiveOnly},
 		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Active: func() bool { return m.conf.Flags.Tui.ShowCommandsInLabels }, Handler: m.handleToggleCommands},
 		{Keys: []string{"ctrl+c"}, Help: "copy", Handler: m.handleCopy},
-		{Keys: []string{"m"}, Help: "fullscreen", Active: func() bool {
-			resetable := m.resetable.Load()
-
-			return resetable != nil && resetable.viewports.IsFullscreen()
-		}, Handler: m.handleFullscreen},
+		{Keys: []string{"m"}, Help: "fullscreen", Active: func() bool { return m.viewports.IsFullscreen() }, Handler: m.handleFullscreen},
 	}
 
 	if !m.isSnapshot {
@@ -49,12 +45,7 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) []zeroterm.Cmd {
 		return m.handleEsc()
 	}
 
-	resetable := m.resetable.Load()
-	if resetable == nil {
-		return nil
-	}
-
-	hasActiveInner := resetable.viewports.HasActiveInner()
+	hasActiveInner := m.viewports.HasActiveInner()
 
 	key := msg.String()
 
@@ -85,7 +76,7 @@ func (m *model) handleCopy() []zeroterm.Cmd {
 		return nil
 	}
 
-	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
+	content, isInner := m.viewports.GetActiveInnerViewportContent()
 	if !isInner {
 		return []zeroterm.Cmd{m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
@@ -186,21 +177,16 @@ func (m *model) handleRestart() []zeroterm.Cmd {
 }
 
 func (m *model) handleFullscreen() []zeroterm.Cmd {
-	resetable := m.resetable.Load()
-	if resetable == nil {
-		return nil
-	}
-
-	if resetable.viewports.IsFullscreen() {
-		resetable.viewports.ExitFullscreen()
+	if m.viewports.IsFullscreen() {
+		m.viewports.ExitFullscreen()
 
 		return nil
 	}
 
-	activeInnerXpath := resetable.viewports.GetActiveInnerViewportXpath()
+	activeInnerXpath := m.viewports.GetActiveInnerViewportXpath()
 
 	if activeInnerXpath.Depth() > 0 {
-		resetable.viewports.SetFullscreen(activeInnerXpath)
+		m.viewports.SetFullscreen(activeInnerXpath)
 	} else {
 		return []zeroterm.Cmd{m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())}
 	}
@@ -209,17 +195,11 @@ func (m *model) handleFullscreen() []zeroterm.Cmd {
 }
 
 func (m *model) handleEsc() []zeroterm.Cmd {
-	resetable := m.resetable.Load()
-
-	if resetable == nil {
-		return nil
-	}
-
 	switch {
-	case resetable.viewports.IsFullscreen():
-		resetable.viewports.ExitFullscreen()
-	case resetable.viewports.HasActiveInner():
-		resetable.viewports.DeselectAll()
+	case m.viewports.IsFullscreen():
+		m.viewports.ExitFullscreen()
+	case m.viewports.HasActiveInner():
+		m.viewports.DeselectAll()
 	case m.statsTable.SelectedIndex() >= 0:
 		m.statsTable.Reset()
 	case m.phaseFlow.Selected.Index >= 0:

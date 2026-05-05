@@ -12,12 +12,12 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
 )
 
 func TestMain(m *testing.M) {
@@ -37,8 +37,8 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	st := statstable.New(conf.Fleet, conf.ColorScheme)
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
-	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80}, conf)
-	spinnersInst := spinners.New(conf.ColorScheme.Spinner)
+	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80}, conf.Flags.CommandOutputMaxHeight, conf.ColorScheme.Table.Border, conf.ColorScheme.Table.SelectionHighlightBackground, conf.ColorScheme.Table.SelectionHighlightBorder)
+	spinnersInst := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
 	b.ResetTimer()
 

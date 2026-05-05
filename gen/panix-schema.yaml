@@ -1,5 +1,5 @@
 $schema: "http://json-schema.org/draft-07/schema#"
-$id: https://panix.dev/schema.json
+$id: https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 version: 0.6.0
 title: Panix Configuration Schema
 description: Schema for Panix NixOS deployment configuration files
@@ -243,10 +243,10 @@ properties:
                             type: array
                             description: Files or directories to transfer to the remote machine
                             items:
-                              $ref: "#/definitions/FileTransfer"
+                              $ref: "#/definitions/PlainFileOrDirToTransfer"
                           ssh:
                             description: SSH configuration for remote access
-                            $ref: "#/definitions/SSH"
+                            $ref: "#/definitions/SSHClient"
                           sudo_program:
                             type: string
                             description: "Override the sudo program (default: sudo)"
@@ -265,10 +265,10 @@ properties:
                     type: array
                     description: Files or directories to transfer to the remote machine
                     items:
-                      $ref: "#/definitions/FileTransfer"
+                      $ref: "#/definitions/PlainFileOrDirToTransfer"
                   ssh:
                     description: SSH configuration for remote access
-                    $ref: "#/definitions/SSH"
+                    $ref: "#/definitions/SSHClient"
                   sudo_program:
                     type: string
                     description: "Override the sudo program (default: sudo)"
@@ -294,10 +294,10 @@ properties:
               type: array
               description: Files or directories to transfer to the remote machine
               items:
-                $ref: "#/definitions/FileTransfer"
+                $ref: "#/definitions/PlainFileOrDirToTransfer"
             ssh:
               description: SSH configuration for remote access
-              $ref: "#/definitions/SSH"
+              $ref: "#/definitions/SSHClient"
             sudo_program:
               type: string
               description: "Override the sudo program (default: sudo)"
@@ -325,10 +325,10 @@ properties:
         type: array
         description: Files or directories to transfer to the remote machine
         items:
-          $ref: "#/definitions/FileTransfer"
+          $ref: "#/definitions/PlainFileOrDirToTransfer"
       ssh:
         description: SSH configuration for remote access
-        $ref: "#/definitions/SSH"
+        $ref: "#/definitions/SSHClient"
       sudo_program:
         type: string
         description: "Override the sudo program (default: sudo)"
@@ -361,7 +361,7 @@ definitions:
         type: array
         description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
         items:
-          $ref: "#/definitions/FileTransfer"
+          $ref: "#/definitions/PlainFileOrDirToTransfer"
       force_bootstrap:
         type: boolean
         description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
@@ -388,38 +388,7 @@ definitions:
           type: string
       ssh:
         description: Bootstrap SSH configuration (used during initial provisioning)
-        $ref: "#/definitions/SSH"
-    additionalProperties: false
-  FileTransfer:
-    type: object
-    properties:
-      gid:
-        type: integer
-        description: Optional Group ID for remote
-      local_path:
-        type: string
-        description: Path to a local file or dir
-        format: file-path
-      permissions:
-        type: integer
-        description: "File permissions (default: 0700)"
-        default: 700
-      remote_path:
-        type: string
-        description: Absolute path on remote machine
-        pattern: ^/.*
-        format: uri-reference
-      uid:
-        type: integer
-        description: Optional User ID for remote
-    required:
-    - local_path
-    - remote_path
-    dependencies:
-      gid:
-      - uid
-      uid:
-      - gid
+        $ref: "#/definitions/SSHClient"
     additionalProperties: false
   KexecConfig:
     type: object
@@ -469,7 +438,38 @@ definitions:
         items:
           type: string
     additionalProperties: false
-  SSH:
+  PlainFileOrDirToTransfer:
+    type: object
+    properties:
+      gid:
+        type: integer
+        description: Optional Group ID for remote
+      local_path:
+        type: string
+        description: Path to a local file or dir
+        format: file-path
+      permissions:
+        type: integer
+        description: "File permissions (default: 0700)"
+        default: 700
+      remote_path:
+        type: string
+        description: Absolute path on remote machine
+        pattern: ^/.*
+        format: uri-reference
+      uid:
+        type: integer
+        description: Optional User ID for remote
+    required:
+    - local_path
+    - remote_path
+    dependencies:
+      gid:
+      - uid
+      uid:
+      - gid
+    additionalProperties: false
+  SSHClient:
     type: object
     properties:
       disable_auto_add_host_key:

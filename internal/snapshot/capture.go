@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
+	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 )
 
 func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr error) *config.Config {

@@ -1,15 +1,13 @@
 package tui
 
 import (
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/internal/workflow"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/rs/zerolog/log"
 )
 
 type resetable struct {
-	workflow  *workflow.Workflow
-	viewports *viewports.Viewports
+	workflow *workflow.Workflow
 }
 
 type workflowDoneMsg struct {
@@ -24,8 +22,7 @@ func (m *model) startResetableWorkflow() zeroterm.Cmd {
 		}
 
 		m.resetable.Store(&resetable{
-			workflow:  workflow,
-			viewports: viewports.New(m.dimensions, m.conf),
+			workflow: workflow,
 		})
 
 		err = workflow.StartWorkflow()
@@ -41,14 +38,13 @@ func (m *model) restartWorkflow() zeroterm.Cmd {
 		if err != nil {
 			log.Debug().Err(err).Msg("workflow cancelled for restart")
 		}
-
-		r.viewports.Reset()
 	}
 
 	m.conf.Fleet.ResetState()
 	m.statsTable.Reset()
 	m.phaseFlow.Reset()
 	m.spinners.Reset()
+	m.viewports.Reset()
 	m.err = nil
 	m.buildLogs = nil
 

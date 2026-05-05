@@ -3,10 +3,10 @@ package footer
 import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/keymap"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/notification"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/zeroterm"
+	"github.com/mihakrumpestar/panix/pkg/tui/keymap"
+	"github.com/mihakrumpestar/panix/pkg/tui/notification"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
 
 type KeyDef struct {

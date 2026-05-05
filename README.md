@@ -1141,7 +1141,7 @@ Commands:
     Fully evaluate and validate configuration (including templating) for
     execution, output the result
 
-  snapshot-cmd --path=STRING [flags]
+  snapshot --path=STRING [flags]
     View snapshot in TUI
 
   inspect [flags]
@@ -1597,7 +1597,7 @@ Contributions are welcome! Whether it's bug reports, feature requests, construct
 
 ## License
 
-Panix is licensed under [AGPL-3.0](LICENSE). Internal packages under `internal/pkg` are licensed under [MIT](internal/pkg/LICENSE).
+Panix is licensed under [AGPL-3.0](LICENSE). Packages under `pkg` are licensed under [MIT](internal/pkg/LICENSE).
 
 For more details about licenses, see [choosingalicense.com/licenses](https://www.choosingalicense.com/licenses).
 

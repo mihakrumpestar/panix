@@ -13,25 +13,25 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
 
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Nix    nix.NixConfig                                                          `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
-	Flakes *atomicorderedmap.AtomicOrderedMap[string, *flake.Flake]           `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
+	Nix    nix.NixConfig                                            `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
+	Flakes *atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 
 	// Caches for TUI representation
-	CacheMachineInfos        []MachineInfo              `yaml:"-" json:"-"`
-	CacheFlattenedLogs       []*logs.Logs                `yaml:"-" json:"-"`
-	CacheStatisticsPerPhase  *stats.StatisticsPerPhase   `yaml:"-" json:"-"`
+	CacheMachineInfos       []MachineInfo             `yaml:"-" json:"-"`
+	CacheFlattenedLogs      []*logs.Logs              `yaml:"-" json:"-"`
+	CacheStatisticsPerPhase *stats.StatisticsPerPhase `yaml:"-" json:"-"`
 }
 
 type MachineInfo struct {

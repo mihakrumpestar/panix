@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 )
 
 type CommandLog struct {

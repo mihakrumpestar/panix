@@ -11,15 +11,15 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/spinners"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/style"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/tree"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/viewports"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/tree"
+	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 const (
@@ -433,7 +433,7 @@ func (b *BuildLogs) addCommandChildren(
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
 
 	if output.Len() > 0 {
-		cmdNode.ChildString(b.viewports.GetOrCreateViewportVersioned(outputXpath, output, cmdIndent+treeStep))
+		cmdNode.ChildString(b.viewports.GetOrCreateViewportVersioned(outputXpath, output.String(), output.Version(), cmdIndent+treeStep))
 	}
 
 	errXpath := cmdXpath.NewXpathWithAppend("error")
