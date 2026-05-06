@@ -602,39 +602,6 @@ func TestParseInputEmptyInput(t *testing.T) {
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
-func TestMatchKeyExact(t *testing.T) {
-	if !MatchKey("enter", "enter") {
-		t.Error("MatchKey should match exact keys")
-	}
-
-	if MatchKey("enter", "tab") {
-		t.Error("MatchKey should not match different keys")
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestMatchKeyCtrl(t *testing.T) {
-	if !MatchKey("ctrl+c", "ctrl+c") {
-		t.Error("MatchKey should match ctrl+key")
-	}
-
-	if MatchKey("ctrl+c", "ctrl+d") {
-		t.Error("MatchKey should not match different ctrl combos")
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestMatchKeyCtrlNonCtrl(t *testing.T) {
-	if MatchKey("ctrl+c", "c") {
-		t.Error("MatchKey should not match ctrl+key against plain key")
-	}
-
-	if MatchKey("a", "ctrl+a") {
-		t.Error("MatchKey should not match plain key against ctrl+key")
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
 func TestApplyModifier(t *testing.T) {
 	tests := []struct {
 		base string

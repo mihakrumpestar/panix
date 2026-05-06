@@ -4,7 +4,6 @@ go 1.26.2
 
 require (
 	charm.land/bubbles/v2 v2.1.0
-	charm.land/bubbletea/v2 v2.0.6
 	charm.land/lipgloss/v2 v2.0.3
 	dario.cat/mergo v1.0.2
 	github.com/alecthomas/kong v1.15.0
@@ -36,6 +35,7 @@ require (
 )
 
 require (
+	charm.land/bubbletea/v2 v2.0.6 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/agnivade/levenshtein v1.2.2-0.20250519083737-420867539855 // indirect
 	github.com/boyter/gocodewalker v1.5.2-0.20260227212453-19676720409f // indirect

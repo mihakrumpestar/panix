@@ -16,11 +16,11 @@ type ZoneManager struct {
 
 var globalZones = newZoneManager()
 
-var currentLines []string
+var currentLines [][]byte
 
-func SetCurrentLines(lines []string) { currentLines = lines }
+func SetCurrentLines(lines [][]byte) { currentLines = lines }
 
-func CurrentLines() []string { return currentLines }
+func CurrentLines() [][]byte { return currentLines }
 
 func newZoneManager() *ZoneManager {
 	return &ZoneManager{
@@ -70,7 +70,9 @@ func (z *ZoneManager) ID(name string) uint16 {
 
 func (z *ZoneManager) Reset() {
 	z.mu.Lock()
-	z.active = make(map[uint16]int)
+	for k := range z.active {
+		delete(z.active, k)
+	}
 	z.mu.Unlock()
 }
 
@@ -114,37 +116,13 @@ func Mark(name string, view string) string {
 	return builder.String()
 }
 
-func GetZoneName(id uint16) string {
-	return globalZones.Name(id)
-}
-
 // EnsureZone creates the zone if it doesn't exist and returns its ID.
 // Use this to pre-compute zone IDs at row-setup time instead of per-render.
 func EnsureZone(name string) uint16 {
 	return globalZones.GetOrCreate(name)
 }
 
-func GetZoneID(name string) uint16 {
-	return globalZones.ID(name)
-}
-
-func ResetZones() {
-	globalZones.Reset()
-}
-
-func ZoneNames() []string {
-	globalZones.mu.RLock()
-	defer globalZones.mu.RUnlock()
-
-	names := make([]string, 0, len(globalZones.byName))
-	for name := range globalZones.byName {
-		names = append(names, name)
-	}
-
-	return names
-}
-
-func IsZoneAtLine(line string, col int, zoneName string) bool {
+func IsZoneAtLine(line []byte, col int, zoneName string) bool {
 	id := globalZones.ID(zoneName)
 	if id == 0 {
 		return false
@@ -153,16 +131,7 @@ func IsZoneAtLine(line string, col int, zoneName string) bool {
 	return zoneIDAtCol(line, col) == id
 }
 
-func ZoneAtLine(line string, col int) string {
-	id := zoneIDAtCol(line, col)
-	if id == 0 {
-		return ""
-	}
-
-	return globalZones.Name(id)
-}
-
-func zoneIDAtCol(line string, targetCol int) uint16 {
+func zoneIDAtCol(line []byte, targetCol int) uint16 {
 	col := 0
 	pos := 0
 	activeZone := uint16(0)
@@ -206,7 +175,7 @@ func advanceCol(char byte) bool {
 
 // parseZoneEscape parses an ANSI escape sequence starting at pos (the ESC byte).
 // It returns the new position, updated activeZone, and updated zoneStack.
-func parseZoneEscape(line string, pos int, activeZone uint16, zoneStack []uint16) (int, uint16, []uint16) {
+func parseZoneEscape(line []byte, pos int, activeZone uint16, zoneStack []uint16) (int, uint16, []uint16) {
 	pos++
 
 	if pos >= len(line) {
@@ -249,7 +218,7 @@ func parseZoneEscape(line string, pos int, activeZone uint16, zoneStack []uint16
 }
 
 // scanCSIParams advances pos past CSI parameter bytes (0x30-0x3F).
-func scanCSIParams(line string, pos int) int {
+func scanCSIParams(line []byte, pos int) int {
 	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
 		pos++
 	}
@@ -258,7 +227,7 @@ func scanCSIParams(line string, pos int) int {
 }
 
 // scanCSITrailingParams advances pos past trailing CSI parameter bytes (0x30-0x3F).
-func scanCSITrailingParams(line string, pos int) int {
+func scanCSITrailingParams(line []byte, pos int) int {
 	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
 		pos++
 	}
@@ -268,10 +237,10 @@ func scanCSITrailingParams(line string, pos int) int {
 
 // applyZoneMarker updates the active zone and stack based on an open or close
 // zone marker that was already identified by its final byte 'z'.
-func applyZoneMarker(params, intermediates, trailingParams string, activeZone uint16, zoneStack []uint16) (uint16, []uint16) {
+func applyZoneMarker(params, intermediates, trailingParams []byte, activeZone uint16, zoneStack []uint16) (uint16, []uint16) {
 	if len(intermediates) > 0 && intermediates[0] == '/' {
 		// Close marker: \x1b[/<id>z
-		id, err := strconv.ParseUint(trailingParams, 10, 16)
+		id, err := strconv.ParseUint(string(trailingParams), 10, 16)
 		if err != nil {
 			return activeZone, zoneStack
 		}
@@ -288,7 +257,7 @@ func applyZoneMarker(params, intermediates, trailingParams string, activeZone ui
 	}
 
 	// Open marker: \x1b[<id>z
-	id, err := strconv.ParseUint(params, 10, 16)
+	id, err := strconv.ParseUint(string(params), 10, 16)
 	if err != nil {
 		return activeZone, zoneStack
 	}

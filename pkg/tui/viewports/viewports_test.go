@@ -446,7 +446,13 @@ func TestUpdate_MouseClick(t *testing.T) {
 	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
 
 	output := viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
-	lines := strings.Split(output, "\n")
+	strLines := strings.Split(output, "\n")
+
+	lines := make([][]byte, len(strLines))
+	for i, l := range strLines {
+		lines[i] = []byte(l)
+	}
+
 	zeroterm.SetCurrentLines(lines)
 
 	click := zeroterm.MouseClickMsg{

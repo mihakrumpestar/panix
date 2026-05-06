@@ -20,60 +20,6 @@ func TestTickCmd(t *testing.T) {
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
-func TestBatchCmd(t *testing.T) {
-	cmd := BatchCmd(
-		func() Msg { return KeyPressMsg{Key: "a"} },
-		func() Msg { return KeyPressMsg{Key: "b"} },
-	)
-
-	result := cmd()
-
-	batch, ok := result.(batchMsg)
-	if !ok {
-		t.Fatalf("BatchCmd should return batchMsg, got %T", result)
-	}
-
-	if len(batch.msgs) != 2 {
-		t.Fatalf("batch should have 2 msgs, got %d", len(batch.msgs))
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestBatchCmdWithNil(t *testing.T) {
-	cmd := BatchCmd(
-		func() Msg { return KeyPressMsg{Key: "a"} },
-		nil,
-		func() Msg { return KeyPressMsg{Key: "c"} },
-	)
-
-	result := cmd()
-
-	batch, ok := result.(batchMsg)
-	if !ok {
-		t.Fatalf("BatchCmd should return batchMsg, got %T", result)
-	}
-
-	if len(batch.msgs) != 2 {
-		t.Errorf("batch should have 2 msgs (nil skipped), got %d", len(batch.msgs))
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestBatchCmdEmpty(t *testing.T) {
-	cmd := BatchCmd()
-	result := cmd()
-
-	batch, ok := result.(batchMsg)
-	if !ok {
-		t.Fatalf("BatchCmd should return batchMsg, got %T", result)
-	}
-
-	if len(batch.msgs) != 0 {
-		t.Errorf("empty batch should have 0 msgs, got %d", len(batch.msgs))
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
 func TestProgramNew(t *testing.T) {
 	m := &dummyModel{}
 
@@ -89,9 +35,9 @@ func TestProgramNew(t *testing.T) {
 
 type dummyModel struct{}
 
-func (m *dummyModel) Init() []Cmd          { return nil }
-func (m *dummyModel) Update(msg Msg) []Cmd { return nil }
-func (m *dummyModel) Render() []string     { return nil }
+func (m *dummyModel) Init() []Cmd            { return nil }
+func (m *dummyModel) Update(msg Msg) Cmd    { return nil }
+func (m *dummyModel) Render(rb *RenderBuffer) {}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestProcessCmdsWithNil(t *testing.T) {
@@ -100,7 +46,7 @@ func TestProcessCmdsWithNil(t *testing.T) {
 
 	// Should not panic with nil cmds
 	prog.processCmds(nil)
-	prog.processCmds([]Cmd{nil, nil})
+	prog.processCmds(nil)
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -124,7 +70,7 @@ func TestRenderFrameDetectsChanges(t *testing.T) {
 
 	prog.renderFrame()
 
-	if len(prog.prevLines) == 0 || prog.prevLines[0] != "Hello World" {
+	if len(prog.prevLines) == 0 || string(prog.prevLines[0]) != "Hello World" {
 		t.Error("prevLines should have content after renderFrame")
 	}
 }
@@ -133,10 +79,10 @@ type renderTestModel struct {
 	content string
 }
 
-func (m *renderTestModel) Init() []Cmd          { return nil }
-func (m *renderTestModel) Update(msg Msg) []Cmd { return nil }
-func (m *renderTestModel) Render() []string {
-	return []string{m.content}
+func (m *renderTestModel) Init() []Cmd         { return nil }
+func (m *renderTestModel) Update(msg Msg) Cmd  { return nil }
+func (m *renderTestModel) Render(rb *RenderBuffer) {
+	rb.WriteLine([]byte(m.content))
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -170,7 +116,7 @@ func TestProcessCmdsAsync(t *testing.T) {
 		return KeyPressMsg{Key: "async"}
 	}
 
-	prog.processCmds([]Cmd{cmd})
+	prog.processCmds(cmd)
 
 	msg := <-prog.msgCh
 
@@ -220,15 +166,15 @@ type sizeTrackingModel struct {
 }
 
 func (m *sizeTrackingModel) Init() []Cmd { return nil }
-func (m *sizeTrackingModel) Update(msg Msg) []Cmd {
+func (m *sizeTrackingModel) Update(msg Msg) Cmd {
 	if ws, ok := msg.(WindowSizeMsg); ok {
 		m.lastSize = ws
 	}
 
 	return nil
 }
-func (m *sizeTrackingModel) Render() []string {
-	return []string{fmt.Sprintf("%dx%d", m.lastSize.Width, m.lastSize.Height)}
+func (m *sizeTrackingModel) Render(rb *RenderBuffer) {
+	rb.WriteLine(fmt.Appendf(nil, "%dx%d", m.lastSize.Width, m.lastSize.Height))
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe

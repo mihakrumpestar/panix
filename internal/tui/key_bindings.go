@@ -41,7 +41,7 @@ func (m *model) keyDefs() []footer.KeyDef {
 	return kds
 }
 
-func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) []zeroterm.Cmd {
+func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
@@ -66,7 +66,7 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) []zeroterm.Cmd {
 		if slices.Contains(kd.Keys, key) {
 			cmd := kd.Handler()
 			if cmd != nil {
-				return []zeroterm.Cmd{cmd}
+				return cmd
 			}
 
 			return nil
@@ -178,12 +178,7 @@ func (m *model) handleRestart() zeroterm.Cmd {
 	// so both actions are triggered from a single cmd.
 	notifCmd := m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground())
 
-	return func() zeroterm.Msg {
-		// Run the notification first, then send restartMsg.
-		notifCmd()
-
-		return restartMsg{}
-	}
+	return zeroterm.BatchCmd(notifCmd, restartCmd)
 }
 
 func (m *model) handleFullscreen() zeroterm.Cmd {
@@ -204,7 +199,7 @@ func (m *model) handleFullscreen() zeroterm.Cmd {
 	return nil
 }
 
-func (m *model) handleEsc() []zeroterm.Cmd {
+func (m *model) handleEsc() zeroterm.Cmd {
 	switch {
 	case m.viewports.IsFullscreen():
 		m.viewports.ExitFullscreen()

@@ -26,7 +26,7 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	fullFrame := makeIdenticalPrefixFullFrame()
 	shortFrame := makeIdenticalPrefixShortFrame()
 
-	var prevLines []string
+	var prevLines [][]byte
 
 	// Step 1: initial full frame (prevLines empty → all lines are diffs)
 	diffs1 := DiffLines(fullFrame, prevLines)
@@ -42,48 +42,48 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	verifyGrowBackOutput(t, out3, fullFrame, shortFrame)
 }
 
-func makeIdenticalPrefixFullFrame() []string {
-	return []string{
-		"=== Header ===",       // 0
-		"",                     // 1
-		"=== Stats Table ===",  // 2
-		"",                     // 3
-		"row1 | data1",         // 4
-		"row2 | data2",         // 5
-		"",                     // 6
-		"=== Phase Status ===", // 7
-		"",                     // 8
-		"INSPECT  BUILD  DONE", // 9
-		"   1      2      3",   // 10
-		"",                     // 11
-		"=== Build Logs ===",   // 12
-		"",                     // 13
-		"flake1 (5.23s)",       // 14
-		"  machine (2.50s)",    // 15
-		"===",                  // 16
-	}
+func makeIdenticalPrefixFullFrame() [][]byte {
+	return toByteLines(
+		"=== Header ===",
+		"",
+		"=== Stats Table ===",
+		"",
+		"row1 | data1",
+		"row2 | data2",
+		"",
+		"=== Phase Status ===",
+		"",
+		"INSPECT  BUILD  DONE",
+		"   1      2      3",
+		"",
+		"=== Build Logs ===",
+		"",
+		"flake1 (5.23s)",
+		"  machine (2.50s)",
+		"===",
+	)
 }
 
-func makeIdenticalPrefixShortFrame() []string {
-	return []string{
-		"=== Header ===",      // 0  - SAME
-		"",                    // 1  - SAME
-		"=== Stats Table ===", // 2  - SAME
-		"",                    // 3  - SAME
-		"",                    // 4  - DIFFERENT
-		"",                    // 5  - DIFFERENT
-		"",                    // 6  - SAME
-		"=== Build Logs ===",  // 7  - DIFFERENT
-		"",                    // 8  - SAME
-		"",                    // 9  - DIFFERENT
-		"",                    // 10 - DIFFERENT
-		"",                    // 11 - SAME
-		"=== Build Logs ===",  // 12 - SAME
-		"",                    // 13 - SAME
-	}
+func makeIdenticalPrefixShortFrame() [][]byte {
+	return toByteLines(
+		"=== Header ===",
+		"",
+		"=== Stats Table ===",
+		"",
+		"",
+		"",
+		"",
+		"=== Build Logs ===",
+		"",
+		"",
+		"",
+		"",
+		"=== Build Logs ===",
+		"",
+	)
 }
 
-func renderShrinkStep(t *testing.T, shortFrame []string, prevLines *[]string, terminalHeight int) string {
+func renderShrinkStep(t *testing.T, shortFrame [][]byte, prevLines *[][]byte, terminalHeight int) string {
 	t.Helper()
 
 	diffs2 := DiffLines(shortFrame, *prevLines)
@@ -104,28 +104,28 @@ func renderShrinkStep(t *testing.T, shortFrame []string, prevLines *[]string, te
 	return out2
 }
 
-func verifyShrinkOutput(t *testing.T, out2 string, shortFrame, fullFrame []string) {
+func verifyShrinkOutput(t *testing.T, out2 string, shortFrame, fullFrame [][]byte) {
 	t.Helper()
 
 	for i, line := range shortFrame {
 		prefix := "\x1b[" + itoa(i+1) + ";1H"
-		if !strings.Contains(out2, prefix+line) {
+		if !strings.Contains(out2, prefix+string(line)) {
 			t.Errorf("shrink missing line %d at row %d: %q%q",
-				i, i+1, prefix, line)
+				i, i+1, prefix, string(line))
 		}
 	}
 
 	for i := len(shortFrame); i < len(fullFrame); i++ {
 		oldPrefix := "\x1b[" + itoa(i+1) + ";1H"
 
-		oldLine := oldPrefix + fullFrame[i]
+		oldLine := oldPrefix + string(fullFrame[i])
 		if strings.Contains(out2, oldLine) {
-			t.Errorf("stale fullFrame[%d]=%q at row %d leaked", i, fullFrame[i], i+1)
+			t.Errorf("stale fullFrame[%d]=%q at row %d leaked", i, string(fullFrame[i]), i+1)
 		}
 	}
 }
 
-func renderGrowBackStep(t *testing.T, fullFrame []string, prevLines *[]string, terminalHeight int) string {
+func renderGrowBackStep(t *testing.T, fullFrame [][]byte, prevLines *[][]byte, terminalHeight int) string {
 	t.Helper()
 
 	prevCount3 := len(*prevLines)
@@ -144,26 +144,26 @@ func renderGrowBackStep(t *testing.T, fullFrame []string, prevLines *[]string, t
 	return out3
 }
 
-func verifyGrowBackOutput(t *testing.T, out3 string, fullFrame, shortFrame []string) {
+func verifyGrowBackOutput(t *testing.T, out3 string, fullFrame, shortFrame [][]byte) {
 	t.Helper()
 
 	for lineIdx, line := range fullFrame {
-		if lineIdx < len(shortFrame) && line == shortFrame[lineIdx] {
-			continue // same as short → already on terminal from step 2
+		if lineIdx < len(shortFrame) && string(line) == string(shortFrame[lineIdx]) {
+			continue
 		}
 
 		prefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-		if !strings.Contains(out3, prefix+line) {
+		if !strings.Contains(out3, prefix+string(line)) {
 			t.Errorf("grow-back missing line %d at row %d: %q%q",
-				lineIdx, lineIdx+1, prefix, line)
+				lineIdx, lineIdx+1, prefix, string(line))
 		}
 	}
 
 	for lineIdx := len(shortFrame); lineIdx < len(fullFrame); lineIdx++ {
 		prefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-		if !strings.Contains(out3, prefix+fullFrame[lineIdx]) {
+		if !strings.Contains(out3, prefix+string(fullFrame[lineIdx])) {
 			t.Errorf("grow-back missing new line %d at row %d: %q%q",
-				lineIdx, lineIdx+1, prefix, fullFrame[lineIdx])
+				lineIdx, lineIdx+1, prefix, string(fullFrame[lineIdx]))
 		}
 	}
 }
@@ -172,19 +172,19 @@ func verifyGrowBackOutput(t *testing.T, out3 string, fullFrame, shortFrame []str
 func TestShrinkThenGrow(t *testing.T) {
 	const terminalHeight = 120
 
-	fullFrame := []string{
+	fullFrame := toByteLines(
 		"F-000", "F-001", "F-002", "F-003", "F-004",
 		"F-005", "F-006", "F-007", "F-008", "F-009",
 		"F-010", "F-011", "F-012", "F-013", "F-014",
 		"F-015", "F-016", "F-017",
-	}
+	)
 
-	shortFrame := []string{
+	shortFrame := toByteLines(
 		"S-000", "S-001", "S-002", "S-003", "S-004",
 		"S-005", "S-006", "S-007", "S-008",
-	}
+	)
 
-	var prevLines []string
+	var prevLines [][]byte
 
 	diffs1 := DiffLines(fullFrame, prevLines)
 
@@ -199,8 +199,8 @@ func TestShrinkThenGrow(t *testing.T) {
 	output2 := string(buf)
 
 	for i := 9; i < len(fullFrame); i++ {
-		if strings.Contains(output2, fullFrame[i]) {
-			t.Errorf("FULL frame[%d]=%q leaked into shrink output", i, fullFrame[i])
+		if strings.Contains(output2, string(fullFrame[i])) {
+			t.Errorf("FULL frame[%d]=%q leaked into shrink output", i, string(fullFrame[i]))
 		}
 	}
 
@@ -212,13 +212,13 @@ func TestShrinkThenGrow(t *testing.T) {
 	output3 := string(buf)
 
 	for lineIdx, line := range fullFrame {
-		if !strings.Contains(output3, line) {
-			t.Errorf("Render3 missing fullFrame[%d]=%q", lineIdx, line)
+		if !strings.Contains(output3, string(line)) {
+			t.Errorf("Render3 missing fullFrame[%d]=%q", lineIdx, string(line))
 		}
 	}
 
 	for lineIdx := range fullFrame {
-		want := fullFrame[lineIdx]
+		want := string(fullFrame[lineIdx])
 
 		prefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
 		if !strings.Contains(output3, prefix+want) {
@@ -231,7 +231,6 @@ func TestShrinkThenGrow(t *testing.T) {
 // TestRenderFrameWithANSIContent tests the render pipeline with
 // realistic ANSI-styled content that may contain \r characters
 // and escape sequences.
-//
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestRenderFrameWithANSIContent(t *testing.T) {
@@ -241,7 +240,7 @@ func TestRenderFrameWithANSIContent(t *testing.T) {
 	ansiShort := ansiShortContent()
 
 	t.Run("shrink", func(t *testing.T) {
-		var prevLines []string
+		var prevLines [][]byte
 
 		diffs1 := DiffLines(ansiFull, prevLines)
 
@@ -266,8 +265,8 @@ func TestRenderFrameWithANSIContent(t *testing.T) {
 
 		for lineIdx := 9; lineIdx < len(ansiFull); lineIdx++ {
 			oldPrefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-			if strings.Contains(output2, oldPrefix+ansiFull[lineIdx]) {
-				t.Errorf("stale ansi line %d written: prefix %q", lineIdx, oldPrefix+ansiFull[lineIdx])
+			if strings.Contains(output2, oldPrefix+string(ansiFull[lineIdx])) {
+				t.Errorf("stale ansi line %d written: prefix %q", lineIdx, oldPrefix+string(ansiFull[lineIdx]))
 			}
 		}
 
@@ -279,17 +278,17 @@ func TestRenderFrameWithANSIContent(t *testing.T) {
 
 		output3 := string(buf)
 		for i, line := range ansiFull {
-			if line != "" && !strings.Contains(output3, line) {
-				if i > 4 || (ansiShort[i] != ansiFull[i]) {
-					t.Errorf("ANSIGrow Render3 missing line %d: %q", i, line)
+			if len(line) > 0 && !strings.Contains(output3, string(line)) {
+				if i > 4 || string(ansiShort[i]) != string(ansiFull[i]) {
+					t.Errorf("ANSIGrow Render3 missing line %d: %q", i, string(line))
 				}
 			}
 		}
 	})
 }
 
-func ansiFullContent() []string {
-	return []string{
+func ansiFullContent() [][]byte {
+	return toByteLines(
 		"\x1b[1;34m=== HEADER ===\x1b[0m",
 		"",
 		"\x1b[1m=== Stats Table ===\x1b[0m",
@@ -310,11 +309,11 @@ func ansiFullContent() []string {
 		"      INSPECT  (0.50s)",
 		"        1 check (0.50s)",
 		"===",
-	}
+	)
 }
 
-func ansiShortContent() []string {
-	return []string{
+func ansiShortContent() [][]byte {
+	return toByteLines(
 		"\x1b[1;34m=== HEADER ===\x1b[0m",
 		"",
 		"\x1b[1m=== Stats Table ===\x1b[0m",
@@ -324,7 +323,7 @@ func ansiShortContent() []string {
 		"",
 		"",
 		"===",
-	}
+	)
 }
 
 // TestDiffLinesSameLengthDifferentContent ensures that when frames have
@@ -332,8 +331,8 @@ func ansiShortContent() []string {
 //
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestDiffLinesSameLengthDifferentContent(t *testing.T) {
-	a := []string{"A", "B", "C", "D", "E"}
-	b := []string{"X", "Y", "Z", "W", "V"}
+	a := toByteLines("A", "B", "C", "D", "E")
+	b := toByteLines("X", "Y", "Z", "W", "V")
 
 	diffs := DiffLines(b, a)
 	if len(diffs) != 5 {
@@ -345,8 +344,8 @@ func TestDiffLinesSameLengthDifferentContent(t *testing.T) {
 //
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestDiffLinesPartialIdentical(t *testing.T) {
-	a := []string{"A", "B", "C", "D", "E"}
-	b := []string{"A", "Y", "C", "W", "E"}
+	a := toByteLines("A", "B", "C", "D", "E")
+	b := toByteLines("A", "Y", "C", "W", "E")
 
 	diffs := DiffLines(b, a)
 	if len(diffs) != 2 {
@@ -360,14 +359,24 @@ func TestDiffLinesPartialIdentical(t *testing.T) {
 	}
 }
 
-func updatePrev(prevLines *[]string, lines []string) {
+func updatePrev(prevLines *[][]byte, lines [][]byte) {
 	if cap(*prevLines) >= len(lines) {
 		*prevLines = (*prevLines)[:len(lines)]
 	} else {
-		*prevLines = make([]string, len(lines))
+		*prevLines = make([][]byte, len(lines))
 	}
 
 	copy(*prevLines, lines)
+}
+
+// toByteLines converts string arguments to [][]byte.
+func toByteLines(lines ...string) [][]byte {
+	result := make([][]byte, len(lines))
+	for i, line := range lines {
+		result[i] = []byte(line)
+	}
+
+	return result
 }
 
 func itoa(val int) string {

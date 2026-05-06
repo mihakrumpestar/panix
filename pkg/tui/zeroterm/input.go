@@ -2,10 +2,6 @@
 
 package zeroterm
 
-import (
-	"strings"
-)
-
 const x10MouseLen = 6
 
 // parseInput parses raw terminal input bytes into Messages.
@@ -504,16 +500,4 @@ func decodeInputRune(data []byte, pos int) (rune, int) {
 	}
 
 	return decoded, size
-}
-
-func MatchKey(key string, target string) bool {
-	if key == target {
-		return true
-	}
-
-	if strings.HasPrefix(key, "ctrl+") && strings.HasPrefix(target, "ctrl+") {
-		return strings.TrimPrefix(key, "ctrl+") == strings.TrimPrefix(target, "ctrl+")
-	}
-
-	return false
 }

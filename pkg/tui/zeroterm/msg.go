@@ -47,8 +47,9 @@ type Cmd func() Msg
 
 type Model interface {
 	Init() []Cmd
-	Update(msg Msg) []Cmd
-	// Render returns the screen lines as ANSI strings (one per line).
-	// Returns nil if nothing changed since the last call (cache hit).
-	Render() []string
+	Update(msg Msg) Cmd
+	// Render writes the screen lines into the RenderBuffer.
+	// If nothing should be rendered (e.g., model not initialized),
+	// simply don't write anything to the buffer.
+	Render(buf *RenderBuffer)
 }

@@ -52,9 +52,9 @@ func TestQuitCmd(t *testing.T) {
 
 type mockModel struct{}
 
-func (m *mockModel) Init() []Cmd          { return nil }
-func (m *mockModel) Update(msg Msg) []Cmd { return nil }
-func (m *mockModel) Render() []string     { return nil }
+func (m *mockModel) Init() []Cmd         { return nil }
+func (m *mockModel) Update(msg Msg) Cmd  { return nil }
+func (m *mockModel) Render(rb *RenderBuffer) {}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestModelInterface(t *testing.T) {

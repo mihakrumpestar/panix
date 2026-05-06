@@ -31,7 +31,7 @@ var ErrTypeAssertionFinalModel = errors.New("internal error: type assertion fail
 
 const (
 	workflowUpdateHookPollInterval  = 20 * time.Millisecond
-	workflowUpdateHookThrottleDelay = 100 * time.Millisecond
+	workflowUpdateHookThrottleDelay = 40 * time.Millisecond
 )
 
 type (
@@ -39,6 +39,8 @@ type (
 
 	restartMsg struct{}
 )
+
+func restartCmd() zeroterm.Msg { return restartMsg{} }
 
 type errMsg struct { //nolint:errname
 	err error
@@ -139,7 +141,7 @@ func (m *model) Init() []zeroterm.Cmd {
 	}
 }
 
-func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
+func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	var cmds []zeroterm.Cmd
 
 	resetable := m.resetable.Load()
@@ -151,9 +153,13 @@ func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
 
 	switch msg := msg.(type) {
 	case errMsg:
-		return m.handleErrMsg(msg, cmds)
+		cmds = append(cmds, m.handleErrMsg(msg))
+
+		return zeroterm.BatchCmd(cmds...)
 	case workflowDoneMsg:
-		return m.handleWorkflowDoneMsg(msg, cmds)
+		cmds = append(cmds, m.handleWorkflowDoneMsg(msg))
+
+		return zeroterm.BatchCmd(cmds...)
 	case restartMsg:
 		cmds = append(cmds, m.restartWorkflow())
 	case workflowUpdateHookMsg:
@@ -161,7 +167,7 @@ func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
 	case zeroterm.PostRenderMsg:
 		cmds = append(cmds, m.spinners.ProcessPendingTicks())
 	case zeroterm.KeyPressMsg:
-		cmds = append(cmds, m.HandleKeyInput(msg)...)
+		cmds = append(cmds, m.HandleKeyInput(msg))
 	case zeroterm.MouseClickMsg:
 		m.handleMouseClick(msg)
 	case zeroterm.WindowSizeMsg:
@@ -169,13 +175,13 @@ func (m *model) Update(msg zeroterm.Msg) []zeroterm.Cmd {
 		m.dimensions.Height = msg.Height
 	}
 
-	return cmds
+	return zeroterm.BatchCmd(cmds...)
 }
 
-func (m *model) Render() []string {
+func (m *model) Render(buf *zeroterm.RenderBuffer) {
 	resetable := m.resetable.Load()
 	if resetable == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
-		return nil
+		return
 	}
 
 	if m.buildLogs == nil {
@@ -197,18 +203,12 @@ func (m *model) Render() []string {
 		main = m.viewports.GetOrCreateMainViewport(mainContent, m.contentVersion, headerFooterHeight)
 	}
 
-	var builder strings.Builder
-
-	builder.WriteString(header)
-	builder.WriteString(main)
-	builder.WriteString(footer)
-
-	renderStr := builder.String()
-
-	return strings.Split(renderStr, "\n")
+	buf.WriteString(header)
+	buf.WriteString(main)
+	buf.WriteString(footer)
 }
 
-func (m *model) handleErrMsg(msg errMsg, cmds []zeroterm.Cmd) []zeroterm.Cmd {
+func (m *model) handleErrMsg(msg errMsg) zeroterm.Cmd {
 	m.err = msg.err
 
 	m.conf.Fleet.Recalculate(m.conf.Phases)
@@ -218,21 +218,17 @@ func (m *model) handleErrMsg(msg errMsg, cmds []zeroterm.Cmd) []zeroterm.Cmd {
 
 	m.quitting = true
 
-	return append(cmds, zeroterm.QuitCmd)
+	return zeroterm.QuitCmd
 }
 
-func (m *model) handleWorkflowDoneMsg(msg workflowDoneMsg, cmds []zeroterm.Cmd) []zeroterm.Cmd {
+func (m *model) handleWorkflowDoneMsg(msg workflowDoneMsg) zeroterm.Cmd {
 	if msg.err != nil {
 		m.err = msg.err
 		log.Error().Err(msg.err).Msg("workflowDoneMsg error")
 	}
 
-	return m.handleWorkflowDone(cmds)
-}
-
-func (m *model) handleWorkflowDone(cmds []zeroterm.Cmd) []zeroterm.Cmd {
 	if m.isSnapshot {
-		return cmds
+		return nil
 	}
 
 	log.Debug().Msg("workflowDoneMsg")
@@ -247,10 +243,10 @@ func (m *model) handleWorkflowDone(cmds []zeroterm.Cmd) []zeroterm.Cmd {
 	if m.conf.Flags.ExitOnComplete {
 		m.quitting = true
 
-		return append(cmds, zeroterm.QuitCmd)
+		return zeroterm.QuitCmd
 	}
 
-	return cmds
+	return nil
 }
 
 func (m *model) viewMainContent() string {
@@ -303,6 +299,7 @@ func (m *model) viewMainContent() string {
 }
 
 func (m *model) workflowUpdateHook() zeroterm.Cmd {
+	// This happens in the backgound
 	return func() zeroterm.Msg {
 		resetable := m.resetable.Load()
 		if resetable == nil || resetable.workflow == nil {

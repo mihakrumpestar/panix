@@ -8,7 +8,6 @@ import (
 	"sync"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
@@ -20,7 +19,7 @@ func ensureZoneGlobal() {
 }
 
 //nolint:unparam
-func makeANSILines(width, lines int) []string {
+func makeANSILines(width, lines int) [][]byte {
 	var builder strings.Builder
 
 	for lineIdx := range lines {
@@ -38,7 +37,14 @@ func makeANSILines(width, lines int) []string {
 		}
 	}
 
-	return strings.Split(builder.String(), "\n")
+	result := strings.Split(builder.String(), "\n")
+
+	byteLines := make([][]byte, len(result))
+	for i, line := range result {
+		byteLines[i] = []byte(line)
+	}
+
+	return byteLines
 }
 
 //nolint:unparam
@@ -92,7 +98,7 @@ func Benchmark__RenderPipe(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
-	prevLines := make([]string, len(lines))
+	prevLines := make([][]byte, len(lines))
 	copy(prevLines, lines)
 
 	var outBuf []byte
@@ -108,7 +114,7 @@ func Benchmark__RenderPipe(b *testing.B) {
 		if cap(prevLines) >= len(lines) {
 			prevLines = prevLines[:len(lines)]
 		} else {
-			prevLines = make([]string, len(lines))
+			prevLines = make([][]byte, len(lines))
 		}
 
 		copy(prevLines, lines)
@@ -141,7 +147,7 @@ func Benchmark__RenderPipeNoChange(b *testing.B) {
 	width, height := 200, 50
 	lines := makeANSILines(width, height)
 
-	prevLines := make([]string, len(lines))
+	prevLines := make([][]byte, len(lines))
 	copy(prevLines, lines)
 
 	var outBuf []byte
@@ -175,41 +181,6 @@ func BenchmarkRef_Bubbletea__RenderPipeNoChange(b *testing.B) {
 	for b.Loop() {
 		renderer.Render(screen.RenderBuffer)
 		termBuf.Reset()
-	}
-}
-
-// --- DiffLines only ---
-
-func Benchmark__DiffLinesNoChange(b *testing.B) {
-	width, height := 200, 50
-	lines := makeANSILines(width, height)
-
-	prevLines := make([]string, len(lines))
-	copy(prevLines, lines)
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		DiffLines(lines, prevLines)
-	}
-}
-
-func Benchmark__DiffLinesPartialChange(b *testing.B) {
-	width, height := 200, 50
-	lines := makeANSILines(width, height)
-
-	prevLines := make([]string, len(lines))
-	copy(prevLines, lines)
-
-	changedLine := "\x1b[31mCHANGED\x1b[0m line with different content here"
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		old := prevLines[25]
-		prevLines[25] = changedLine
-		DiffLines(lines, prevLines)
-		prevLines[25] = old
 	}
 }
 
@@ -339,51 +310,4 @@ func BenchmarkRef_Bubbletea__ZoneMark(b *testing.B) {
 	for b.Loop() {
 		_ = zone.Scan(zone.Mark("test-zone", content))
 	}
-}
-
-func Benchmark__ZoneAtLine(b *testing.B) {
-	line := "\x1b[5z\x1b[1;31mBold Red\x1b[0m some text \x1b[/5z\x1b[32mGreen\x1b[0m"
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		ZoneAtLine(line, 5)
-	}
-}
-
-type mouseMsg struct{ x, y int }
-
-func (m mouseMsg) Mouse() tea.Mouse { return tea.Mouse{X: m.x, Y: m.y} }
-func (m mouseMsg) String() string   { return fmt.Sprintf("mouse(%d,%d)", m.x, m.y) }
-
-func BenchmarkRef_Bubbletea__ZoneAtLine(b *testing.B) {
-	ensureZoneGlobal()
-
-	marked := makeZoneContent(200, 50)
-	_ = zone.Scan(marked)
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		z := zone.Get("zone-25")
-		if z != nil {
-			_ = z.InBounds(mouseMsg{x: 50, y: 25})
-		}
-	}
-}
-
-//nolint:unparam
-func makeZoneContent(width, lines int) string {
-	var builder strings.Builder
-
-	for lineIdx := range lines {
-		line := fmt.Sprintf("line %d: plain text with some content that is reasonably long for testing purposes here  ", lineIdx)
-		builder.WriteString(zone.Mark(fmt.Sprintf("zone-%d", lineIdx), line))
-
-		if lineIdx < lines-1 {
-			builder.WriteByte('\n')
-		}
-	}
-
-	return builder.String()
 }

@@ -452,7 +452,7 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 	tbl.SetRows([][]string{{"a"}, {"b"}})
 	tbl.Select(0)
 
-	zeroterm.SetCurrentLines([]string{"no zones here", "another line"})
+	zeroterm.SetCurrentLines([][]byte{[]byte("no zones here"), []byte("another line")})
 
 	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0})
 

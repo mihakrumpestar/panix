@@ -1,9 +1,8 @@
 package zeroterm
 
 import (
-	"os"
+	"bytes"
 	"strconv"
-	"strings"
 )
 
 // ChangedLine represents a changed line index in a frame diff.
@@ -12,16 +11,16 @@ type ChangedLine struct {
 }
 
 // DiffLines compares two line slices and returns indices of changed lines.
-// Uses direct string comparison — O(n) per line but extremely fast in practice
-// because Go's memequal short-circuits on the first differing byte, and
+// Uses bytes.Equal — O(n) per line but extremely fast in practice
+// because memcmp short-circuits on the first differing byte, and
 // most lines are identical between frames.
-func DiffLines(newLines, oldLines []string) []ChangedLine {
+func DiffLines(newLines, oldLines [][]byte) []ChangedLine {
 	commonLen := min(len(newLines), len(oldLines))
 
 	var diffs []ChangedLine
 
 	for y := range commonLen {
-		if newLines[y] == oldLines[y] {
+		if bytes.Equal(newLines[y], oldLines[y]) {
 			continue
 		}
 
@@ -45,7 +44,7 @@ func DiffLines(newLines, oldLines []string) []ChangedLine {
 // Always uses explicit cursor positioning to avoid misalignment from
 // line-wrapping or cursor tracking drift. After all changed lines,
 // clears below if the frame shrank.
-func RenderLines(buf []byte, diffs []ChangedLine, lines []string, prevLineCount int, terminalHeight int) []byte {
+func RenderLines(buf []byte, diffs []ChangedLine, lines [][]byte, prevLineCount int, terminalHeight int) []byte {
 	for _, d := range diffs {
 		rowIdx := d.Y
 
@@ -53,29 +52,25 @@ func RenderLines(buf []byte, diffs []ChangedLine, lines []string, prevLineCount 
 			break
 		}
 
-		// Always position explicitly — avoids cursor drift from wrapped
-		// lines or \r characters in content.
 		buf = append(buf, "\x1b["...)
 		buf = appendInt(buf, rowIdx+1)
 		buf = append(buf, ";1H"...)
 
-		// Strip \r from line content. lipgloss and ANSI renderers may
-		// emit \r within a "line" (e.g. for cursor repositioning within
-		// a styled region). In the old cell-based pipeline, \r was
-		// handled by resetting curX. In the line-based pipeline, \r
-		// would cause the terminal to jump to column 0 mid-line,
-		// overwriting the beginning of the content.
+		// Strip \r from line content inline — avoids strings.ReplaceAll
+		// allocation. lipgloss and ANSI renderers may emit \r within a
+		// "line" (e.g. for cursor repositioning within a styled region).
 		line := lines[rowIdx]
-		if strings.ContainsRune(line, '\r') {
-			line = strings.ReplaceAll(line, "\r", "")
+
+		found := bytes.Contains(line, []byte{'\r'})
+		if found {
+			buf = appendStripCR(buf, line)
+		} else {
+			buf = append(buf, line...)
 		}
 
-		buf = append(buf, line...)
 		buf = append(buf, "\x1b[0m\x1b[K"...)
 	}
 
-	// Clear below content if the frame shrank, or if the terminal is
-	// taller than the content (stale lines from previous frames).
 	contentEnd := min(len(lines), terminalHeight)
 	if contentEnd < prevLineCount || contentEnd < terminalHeight {
 		clearFrom := contentEnd
@@ -89,15 +84,15 @@ func RenderLines(buf []byte, diffs []ChangedLine, lines []string, prevLineCount 
 	return buf
 }
 
-// RenderLinesTo writes changed lines directly to the terminal.
-func RenderLinesTo(out *os.File, diffs []ChangedLine, lines []string, prevLineCount int, terminalHeight int) {
-	var buf []byte
-
-	buf = RenderLines(buf[:0], diffs, lines, prevLineCount, terminalHeight)
-
-	if len(buf) > 0 {
-		_, _ = out.Write(buf)
+// appendStripCR appends line to buf with all \r bytes removed.
+func appendStripCR(buf []byte, line []byte) []byte {
+	for _, b := range line {
+		if b != '\r' {
+			buf = append(buf, b)
+		}
 	}
+
+	return buf
 }
 
 //nolint:mnd

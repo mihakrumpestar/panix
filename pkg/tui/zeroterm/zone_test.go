@@ -91,8 +91,6 @@ func TestZoneManagerReset(t *testing.T) {
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestMark(t *testing.T) {
-	ResetZones()
-
 	result := Mark("test-mark", "Hello")
 	if result == "" {
 		t.Error("Mark should return non-empty string")
@@ -104,57 +102,7 @@ func TestMark(t *testing.T) {
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
-func TestZoneNames(t *testing.T) {
-	ResetZones()
-	globalZones.GetOrCreate("alpha")
-	globalZones.GetOrCreate("beta")
-
-	names := ZoneNames()
-	if len(names) < 2 {
-		t.Errorf("ZoneNames() = %v, expected at least 2", names)
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestGetZoneIDAndName(t *testing.T) {
-	ResetZones()
-
-	id := globalZones.GetOrCreate("test-zone-unique")
-
-	name := globalZones.Name(id)
-	if name != "test-zone-unique" {
-		t.Errorf("Name(%d) = %q, want %q", id, name, "test-zone-unique")
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestGetZoneNameFunc(t *testing.T) {
-	ResetZones()
-
-	id := globalZones.GetOrCreate("named-zone")
-
-	name := GetZoneName(id)
-	if name != "named-zone" {
-		t.Errorf("GetZoneName(%d) = %q, want %q", id, name, "named-zone")
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestGetZoneIDFunc(t *testing.T) {
-	ResetZones()
-
-	id := globalZones.GetOrCreate("id-zone")
-
-	found := GetZoneID("id-zone")
-	if found != id {
-		t.Errorf("GetZoneID(%q) = %d, want %d", "id-zone", found, id)
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
 func TestMarkFormat(t *testing.T) {
-	ResetZones()
-
 	result := Mark("fmt-test", "XY")
 	if len(result) == 0 {
 		t.Fatal("Mark should return non-empty string")
@@ -167,8 +115,6 @@ func TestMarkFormat(t *testing.T) {
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestMarkMultiline(t *testing.T) {
-	ResetZones()
-
 	view := "line1\nline2\nline3"
 	result := Mark("ml-test", view)
 
@@ -184,8 +130,6 @@ func TestMarkMultiline(t *testing.T) {
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestMarkMultilineNoZoneLeakWithPrefix(t *testing.T) {
-	ResetZones()
-
 	view := Mark("vp", "AAAA\nBBBB\nCCCC")
 
 	lines := strings.Split(view, "\n")
@@ -194,7 +138,7 @@ func TestMarkMultilineNoZoneLeakWithPrefix(t *testing.T) {
 	prefixedLines := strings.Split(prefixed, "\n")
 	for i, line := range prefixedLines {
 		prefix := line[:3]
-		if IsZoneAtLine(prefix, 0, "vp") {
+		if IsZoneAtLine([]byte(prefix), 0, "vp") {
 			t.Errorf("prefix at line %d col 0 should not be in zone 'vp'", i)
 		}
 	}
@@ -202,75 +146,89 @@ func TestMarkMultilineNoZoneLeakWithPrefix(t *testing.T) {
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestIsZoneAtLine(t *testing.T) {
-	ResetZones()
-
 	line := Mark("click-zone", "XY")
-	if !IsZoneAtLine(line, 0, "click-zone") {
+	if !IsZoneAtLine([]byte(line), 0, "click-zone") {
 		t.Error("IsZoneAtLine should find zone at col 0")
 	}
 
-	if !IsZoneAtLine(line, 1, "click-zone") {
+	if !IsZoneAtLine([]byte(line), 1, "click-zone") {
 		t.Error("IsZoneAtLine should find zone at col 1")
 	}
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
+func TestZoneLifecycleAcrossFrames(t *testing.T) {
+	// Create zone content using Mark (which creates and formats properly)
+	frame1Line1 := Mark("test-zone", "line1")
+	frame1Line2 := Mark("test-zone", "line2")
+	frame1Line3 := Mark("test-zone", "line3")
+
+	// Frame 1: 3 lines with zone
+	frame1 := [][]byte{
+		[]byte(frame1Line1),
+		[]byte(frame1Line2),
+		[]byte(frame1Line3),
+	}
+	SetCurrentLines(frame1)
+
+	// Verify zone found in frame1 (col 2 is within "line1")
+	if !IsZoneAtLine(frame1[0], 2, "test-zone") {
+		t.Errorf("frame1 zone at col 2 should be test-zone (line content: %q)", frame1Line1)
+	}
+
+	// Frame 2: Only 2 lines (shrink)
+	frame2Line1 := Mark("test-zone", "lineA")
+	frame2Line2 := Mark("test-zone", "lineB")
+	frame2 := [][]byte{
+		[]byte(frame2Line1),
+		[]byte(frame2Line2),
+	}
+	SetCurrentLines(frame2)
+
+	// Verify zone found in frame2 (col 3 is within "lineA")
+	if !IsZoneAtLine(frame2[0], 3, "test-zone") {
+		t.Errorf("frame2 zone at col 3 should be test-zone (line content: %q)", frame2Line1)
+	}
+}
+
+//nolint:paralleltest // package-level globals not concurrency-safe
+func TestZoneIDOverflow(t *testing.T) {
+	mgr := newZoneManager()
+
+	// Simulate many zones (in real usage, this would be 65535 max)
+	// For test, just verify sequential IDs work
+	for idx := range 100 {
+		name := "zone" + strconv.Itoa(idx)
+		id := mgr.GetOrCreate(name)
+
+		// IDs should be sequential starting from 1
+		if int(id) != idx+1 {
+			t.Errorf("zone %s got ID %d, want %d", name, id, idx+1)
+		}
+	}
+
+	// Verify reuse returns same ID
+	id := mgr.GetOrCreate("zone50")
+	if id != 51 { // zone50 was the 51st zone (index 50 in loop)
+		t.Errorf("reused zone50 got ID %d, want 51", id)
+	}
+}
+
+//nolint:paralleltest // package-level globals not concurrency-safe
 func TestIsZoneAtLineUnknownName(t *testing.T) {
-	if IsZoneAtLine("some text", 0, "nonexistent") {
+	if IsZoneAtLine([]byte("some text"), 0, "nonexistent") {
 		t.Error("IsZoneAtLine should return false for unknown zone name")
 	}
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
-func TestZoneAtLine(t *testing.T) {
-	ResetZones()
-
-	line := Mark("my-zone", "AB")
-
-	name := ZoneAtLine(line, 0)
-	if name != "my-zone" {
-		t.Errorf("ZoneAtLine(0) = %q, want %q", name, "my-zone")
-	}
-
-	afterZone := line[strings.LastIndex(line, "z")+1:]
-	if afterZone != "" {
-		name = ZoneAtLine(afterZone, 0)
-		if name != "" {
-			t.Errorf("ZoneAtLine outside zone = %q, want empty", name)
-		}
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
 func TestCurrentLines(t *testing.T) {
-	lines := []string{"line1", "line2"}
+	lines := [][]byte{[]byte("line1"), []byte("line2")}
 	SetCurrentLines(lines)
 
 	got := CurrentLines()
-	if len(got) != 2 || got[0] != "line1" || got[1] != "line2" {
+	if len(got) != 2 || string(got[0]) != "line1" || string(got[1]) != "line2" {
 		t.Errorf("CurrentLines() = %v, want %v", got, lines)
-	}
-}
-
-//nolint:paralleltest // package-level globals not concurrency-safe
-func TestZoneAtLineOutside(t *testing.T) {
-	ResetZones()
-
-	// Mark a short zone, pad it to simulate centering in a wider column.
-	marked := Mark("padded", "AB")
-	padded := "   " + marked + "   "
-
-	// Zone should be active only at cols 3-4 (the "AB" content)
-	if name := ZoneAtLine(padded, 3); name != "padded" {
-		t.Errorf("ZoneAtLine(3) = %q, want %q", name, "padded")
-	}
-
-	if name := ZoneAtLine(padded, 0); name != "" {
-		t.Errorf("ZoneAtLine(0) = %q, want empty (before zone)", name)
-	}
-
-	if name := ZoneAtLine(padded, 6); name != "" {
-		t.Errorf("ZoneAtLine(6) = %q, want empty (after zone)", name)
 	}
 }
 

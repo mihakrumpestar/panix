@@ -4,7 +4,6 @@ package zeroterm
 
 import (
 	"os"
-	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -13,19 +12,21 @@ import (
 type Program struct {
 	model     Model
 	terminal  *Terminal
-	prevLines []string
+	prevLines [][]byte
 	outBuf    []byte
 	msgCh     chan Msg
 	stopCh    chan struct{}
 	width     int
 	height    int
 	raw       bool
+	frames    [2]RenderBuffer
+	curFrame  int
 }
 
 type ProgramOption func(*Program)
 
-// WithRaw disables frame diffing; every render writes all lines directly.
-func WithRaw() ProgramOption {
+// Raw disables frame diffing; every render writes all lines directly.
+func Raw() ProgramOption {
 	return func(p *Program) { p.raw = true }
 }
 
@@ -104,10 +105,12 @@ func (p *Program) Run() error {
 // renders the first frame.
 func (p *Program) processInitCmds() {
 	initCmds := p.model.Init()
+	for _, cmd := range initCmds {
+		p.processCmds(cmd)
+	}
+
 	sizeCmds := p.model.Update(WindowSizeMsg{Width: p.width, Height: p.height})
-	allCmds := slices.Clone(initCmds)
-	allCmds = append(allCmds, sizeCmds...)
-	p.processCmds(allCmds)
+	p.processCmds(sizeCmds)
 	p.renderFrame()
 
 	postCmds := p.model.Update(PostRenderMsg{})
@@ -146,8 +149,6 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 
 			p.renderFrame()
 
-			// Post-render update lets the model emit cmds based on what
-			// was rendered (e.g. spinners that were viewed need ticks).
 			postCmds := p.model.Update(PostRenderMsg{})
 			p.processCmds(postCmds)
 		case <-sigCh:
@@ -155,8 +156,6 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 			if newWidth != p.width || newHeight != p.height {
 				p.width = newWidth
 				p.height = newHeight
-				// After resize, force full redraw by clearing prevLines
-				// so all lines are detected as changed.
 				p.prevLines = p.prevLines[:0]
 				cmds := p.model.Update(WindowSizeMsg{Width: newWidth, Height: newHeight})
 				p.processCmds(cmds)
@@ -170,14 +169,16 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 }
 
 func (p *Program) renderFrame() {
-	lines := p.model.Render()
+	cur := &p.frames[p.curFrame]
+	cur.Reset()
+	p.model.Render(cur)
 
-	// nil means nothing changed (model-level cache hit)
-	if lines == nil {
+	if len(cur.Lines()) == 0 {
 		return
 	}
 
-	// Store lines for zone resolution on mouse clicks
+	lines := cur.Lines()
+
 	SetCurrentLines(lines)
 
 	if p.raw {
@@ -185,18 +186,15 @@ func (p *Program) renderFrame() {
 	}
 
 	prevCount := len(p.prevLines)
-
-	// Diff against previous frame
 	diffs := DiffLines(lines, p.prevLines)
 
 	if !p.raw && len(diffs) == 0 && len(lines) >= len(p.prevLines) {
-		// Nothing changed — update prevLines and return
-		p.updatePrevLines(lines)
+		p.prevLines = lines
+		p.curFrame = 1 - p.curFrame
 
 		return
 	}
 
-	// Render changed lines
 	p.outBuf = p.outBuf[:0]
 	p.outBuf = RenderLines(p.outBuf, diffs, lines, prevCount, p.height)
 
@@ -207,32 +205,19 @@ func (p *Program) renderFrame() {
 		}
 	}
 
-	p.updatePrevLines(lines)
+	p.prevLines = lines
+	p.curFrame = 1 - p.curFrame
 }
 
-// updatePrevLines stores the current lines for next frame's diff.
-// Reuses the backing array when possible to minimize allocations.
-func (p *Program) updatePrevLines(lines []string) {
-	if cap(p.prevLines) >= len(lines) {
-		p.prevLines = p.prevLines[:len(lines)]
-	} else {
-		p.prevLines = make([]string, len(lines))
+func (p *Program) processCmds(cmd Cmd) {
+	if cmd == nil {
+		return
 	}
 
-	copy(p.prevLines, lines)
-}
-
-func (p *Program) processCmds(cmds []Cmd) {
-	for _, cmd := range cmds {
-		if cmd == nil {
-			continue
-		}
-
-		go func(c Cmd) {
-			msg := c()
-			p.msgCh <- msg
-		}(cmd)
-	}
+	go func(c Cmd) {
+		msg := c()
+		p.msgCh <- msg
+	}(cmd)
 }
 
 //nolint:cyclop
@@ -243,9 +228,9 @@ func (p *Program) readInput(done chan<- struct{}) {
 
 	var leftover []byte
 
-	for {
-		readCh := make(chan readResult, 1)
+	readCh := make(chan readResult, 1)
 
+	for {
 		go func() {
 			n, err := p.terminal.in.Read(buf)
 			readCh <- readResult{n: n, err: err}
@@ -307,13 +292,27 @@ func TickCmd(d time.Duration, f func(time.Time) Msg) Cmd {
 }
 
 func BatchCmd(cmds ...Cmd) Cmd {
+	var nonNil []Cmd
+
+	for _, c := range cmds {
+		if c != nil {
+			nonNil = append(nonNil, c)
+		}
+	}
+
+	if len(nonNil) == 0 {
+		return nil
+	}
+
+	if len(nonNil) == 1 {
+		return nonNil[0]
+	}
+
 	return func() Msg {
 		var batch batchMsg
 
-		for _, c := range cmds {
-			if c != nil {
-				batch.msgs = append(batch.msgs, c())
-			}
+		for _, c := range nonNil {
+			batch.msgs = append(batch.msgs, c())
 		}
 
 		return batch
