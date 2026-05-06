@@ -4,13 +4,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/acobaugh/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/pkg/errors"
 )
 
@@ -230,7 +230,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 				mi.Bootstrapped = false
 				mi.RequiresKexec = true
-				mi.Nixos = "DRY_RUN"
+				mi.OSVersion = "DRY_RUN"
 			})
 		}),
 	)
@@ -250,7 +250,7 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 	if osr["ID"] == "nixos" && osr["VARIANT_ID"] == "installer" {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.Bootstrapped = false
-			mi.Nixos = osr["VERSION"]
+			mi.OSVersion = osr["VERSION"]
 		})
 
 		return nil
@@ -260,7 +260,7 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.RequiresKexec = true
 			mi.Bootstrapped = false
-			mi.Nixos = osr["VERSION"]
+			mi.OSVersion = osr["VERSION"]
 		})
 
 		err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
@@ -275,7 +275,7 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.Bootstrapped = false
 			mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
-			mi.Nixos = osr["VERSION"]
+			mi.OSVersion = osr["VERSION"]
 		})
 
 		if machineI.Bootstrap.ForceBootstrapKexec {
@@ -290,7 +290,7 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 
 	machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 		mi.Bootstrapped = true
-		mi.Nixos = osr["VERSION"]
+		mi.OSVersion = osr["VERSION"]
 	})
 
 	return nil
@@ -333,7 +333,7 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 				}
 
 				if currentGenInfo.Nixos != "" {
-					metaInspect.Nixos = currentGenInfo.Nixos
+					metaInspect.OSVersion = currentGenInfo.Nixos
 				}
 
 				if currentGenInfo.Kernel != "" {
@@ -350,7 +350,7 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 					Available: []uint{1},
 				}
 				metaInspect.Date = "DRY_RUN"
-				metaInspect.Nixos = "DRY_RUN"
+				metaInspect.OSVersion = "DRY_RUN"
 				metaInspect.Kernel = "DRY_RUN"
 			})
 		}),

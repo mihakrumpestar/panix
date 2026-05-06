@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/acobaugh/osrelease"
+	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"

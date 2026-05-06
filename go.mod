@@ -7,7 +7,6 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/lipgloss/v2 v2.0.3
 	dario.cat/mergo v1.0.2
-	github.com/acobaugh/osrelease v0.1.0
 	github.com/alecthomas/kong v1.15.0
 	github.com/alitto/pond/v2 v2.7.1
 	github.com/atotto/clipboard v0.1.4

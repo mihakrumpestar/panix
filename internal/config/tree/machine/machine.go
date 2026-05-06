@@ -43,7 +43,7 @@ type MetaInspect struct {
 	Architecture string       `yaml:"-" json:"architecture,omitempty"`
 	Generations  *Generations `yaml:"-" json:"generations,omitempty"`
 	Date         string       `yaml:"-" json:"date,omitempty"`
-	Nixos        string       `yaml:"-" json:"nixos,omitempty"`
+	OSVersion    string       `yaml:"-" json:"nixos,omitempty"`
 	Kernel       string       `yaml:"-" json:"kernel,omitempty"`
 }
 

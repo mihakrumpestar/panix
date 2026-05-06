@@ -44,7 +44,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		colorScheme.Flake.Icon + " FLAKE",
 		colorScheme.Configuration.Icon + " CONFIGURATION",
 		colorScheme.Machine.Icon + " MACHINE",
-		"ARCH", "STATUS", "GEN", "DATE", "NIXOS", "KERNEL"}
+		"ARCH", "STATUS", "GEN", "DATE", "OS VERSION", "KERNEL"}
 
 	tbl := table.New().
 		Border(style.NormalBorder()).
@@ -132,7 +132,7 @@ func (s *StatsTable) buildRows() [][]string {
 			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, s.colorScheme),
 			getGeneration(machineInfo),
 			machineInfo.MetaInspect.Date,
-			machineInfo.MetaInspect.Nixos,
+			machineInfo.MetaInspect.OSVersion,
 			machineInfo.MetaInspect.Kernel,
 		}
 	}
