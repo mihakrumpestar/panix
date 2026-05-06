@@ -770,7 +770,7 @@ panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
 
 This opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at the time of capture will also appear as running (loading spinners) in TUI replay.
 
-<div style="border-left: 4px solid #5bc0de; padding: 0.5em 1em; margin: 1em 0; background: #e8f4f8; border-radius: 4px;">
+<div>
 <strong>ℹ️ Note</strong><br>
 `r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
 </div>

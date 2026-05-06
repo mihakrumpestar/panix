@@ -9,10 +9,17 @@ import (
 
 var testStyle = style.NewStyle().Foreground(style.Color("#6272A4"))
 
+func viewString(n *Node) string {
+	var buf []byte
+	n.View(&buf)
+
+	return string(buf)
+}
+
 func TestSingleNode(t *testing.T) {
 	t.Parallel()
 
-	got := New().Root("root").String()
+	got := viewString(New().Root("root"))
 	want := "root"
 
 	if got != want {
@@ -26,7 +33,7 @@ func TestSingleChild(t *testing.T) {
 	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
 	our.Child(New().Root("child"))
 
-	got := our.String()
+	got := viewString(our)
 
 	if !strings.Contains(got, "root") || !strings.Contains(got, "child") {
 		t.Errorf("tree doesn't contain expected nodes: %q", got)
@@ -46,7 +53,7 @@ func TestMultipleChildren(t *testing.T) {
 		our.Child(New().Root(s))
 	}
 
-	got := our.String()
+	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
 	if len(lines) != 4 {
@@ -67,7 +74,7 @@ func TestNested(t *testing.T) {
 		our.Child(child)
 	}
 
-	got := our.String()
+	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
 	if len(lines) != 7 {
@@ -81,7 +88,7 @@ func TestNoStyle(t *testing.T) {
 	our := New().Root("root")
 	our.Child(New().Root("child"))
 
-	got := our.String()
+	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
 	if len(lines) != 2 {
@@ -106,7 +113,7 @@ func TestDeepNesting(t *testing.T) {
 		our.Child(b)
 	}
 
-	got := our.String()
+	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
 	if len(lines) != 7 {
@@ -121,7 +128,7 @@ func TestMixedStringAndNodeChildren(t *testing.T) {
 	our.ChildString("string child")
 	our.Child(New().Root("node child"))
 
-	got := our.String()
+	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
 	if len(lines) != 3 {
@@ -140,7 +147,7 @@ func TestMultiline(t *testing.T) {
 	our.Child(a)
 	a.ChildString("child-line1\nchild-line2")
 
-	got := our.String()
+	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
 	if len(lines) != 7 {
@@ -148,32 +155,26 @@ func TestMultiline(t *testing.T) {
 	}
 }
 
-func Benchmark__SimpleTree(b *testing.B)     { benchTree(b, 3, 3) }
-func Benchmark__SimpleTreeFlat(b *testing.B) { benchTree(b, 1, 20) }
-func Benchmark__SimpleTreeDeep(b *testing.B) { benchTree(b, 8, 2) }
+func TestViewReuse(t *testing.T) {
+	t.Parallel()
 
-func benchTree(b *testing.B, depth, breadth int) {
-	b.Helper()
+	tree := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	tree.Child(New().Root("a"))
+	tree.Child(New().Root("b"))
 
-	var build func(d int) *Node
+	var buf []byte
 
-	build = func(d int) *Node {
-		node := New().Root("node").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	for iteration := range 3 {
+		tree.View(&buf)
 
-		if d > 0 {
-			for range breadth {
-				node.Child(build(d - 1))
-			}
+		got := string(buf)
+		if !strings.Contains(got, "root") || !strings.Contains(got, "a") {
+			t.Errorf("iteration %d: unexpected output: %q", iteration, got)
 		}
 
-		return node
-	}
-
-	tree := build(depth)
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		_ = tree.String()
+		lines := strings.Split(got, "\n")
+		if len(lines) != 3 {
+			t.Errorf("iteration %d: expected 3 lines, got %d: %q", iteration, len(lines), got)
+		}
 	}
 }

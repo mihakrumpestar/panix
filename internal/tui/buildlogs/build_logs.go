@@ -78,8 +78,9 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 	b.contentWidth = vp.ContentWidth()
 	b.styledTreeLine = b.conf.ColorScheme.Tree.Enumerator.Render("│")
 
-	var stringBuilder strings.Builder
-	stringBuilder.WriteString(b.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n"))
+	var buf []byte
+
+	buf = append(buf, b.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n")...)
 
 	for _, fp := range b.conf.Fleet.Flakes.Pairs() {
 		flake := fp.Value
@@ -104,11 +105,12 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 		}
 
 		if flakeNode.Length() > 0 {
-			flakeNode.RenderTo(&stringBuilder)
+			buf = append(buf, '\n')
+			flakeNode.View(&buf)
 		}
 	}
 
-	return stringBuilder.String()
+	return string(buf)
 }
 
 func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
