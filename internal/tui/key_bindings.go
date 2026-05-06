@@ -8,7 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
-	"github.com/mihakrumpestar/panix/pkg/tui/clipboard"
+	"github.com/mihakrumpestar/panix/pkg/clipboard"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"

@@ -9,8 +9,6 @@ require (
 	dario.cat/mergo v1.0.2
 	github.com/alecthomas/kong v1.15.0
 	github.com/alitto/pond/v2 v2.7.1
-	github.com/atotto/clipboard v0.1.4
-	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/boyter/scc/v3 v3.7.0
 	github.com/charmbracelet/ultraviolet v0.0.0-20260428153724-66037269d7be
 	github.com/chelnak/ysmrr v0.6.0
