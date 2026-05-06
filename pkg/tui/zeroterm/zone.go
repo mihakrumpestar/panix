@@ -1,3 +1,6 @@
+// Based on github.com/lrstanley/bubblezone/v2 — Copyright (c) 2022 Liam Stanley <liam@liam.sh>
+// Licensed under the MIT License. See pkg/LICENSE for details.
+
 package zeroterm
 
 import (

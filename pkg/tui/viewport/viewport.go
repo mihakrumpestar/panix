@@ -1,3 +1,6 @@
+// Based on charm.land/bubbles/v2/viewport — Copyright (c) 2020-2026 Charmbracelet, Inc.
+// Licensed under the MIT License. See pkg/LICENSE for details.
+
 package viewport
 
 import (
