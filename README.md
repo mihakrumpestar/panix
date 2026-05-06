@@ -7,7 +7,7 @@
 *Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
 
 [![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
-[![License](https://img.shields.io/github/license/mihakrumpestar/panix)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
 ![GitHub last commit](https://img.shields.io/github/last-commit/mihakrumpestar/panix)
@@ -21,8 +21,10 @@
 
 ---
 
-> [!WARNING]
-> The tool is currently in beta stage. There might be breaking changes.
+<div style="border-left: 4px solid #f0ad4e; padding: 0.5em 1em; margin: 1em 0; background: #fff8e1; border-radius: 4px;">
+<strong>⚠️ Warning</strong><br>
+The tool is currently in beta stage. There might be breaking changes.
+</div>
 
 ## Demo
 
@@ -78,7 +80,7 @@ Inspect → Bootstrap → Build → Transfer → Secrets → Activate
 **Phase-by-phase breakdown:**
 
 | Phase | Scope | Purpose |
-|-------|-------|---------|
+| ------- | ------- | --------- |
 | **Inspect** | Per-machine | TCP reachability, SSH authentication, architecture detection, OS detection, generation discovery |
 | **Bootstrap** | Per-machine | kexec into NixOS installer (if needed), disko partitioning, encryption keys transfer (if provided) |
 | **Build** | Per-configuration | Build `config.system.build.toplevel` closure via `nix build` (local or remote mode) |
@@ -89,7 +91,7 @@ Inspect → Bootstrap → Build → Transfer → Secrets → Activate
 Standalone phases (in combination with Inpect):
 
 | Phase | Scope | Purpose |
-|-------|-------|---------|
+| ------- | ------- | --------- |
 | **Rollback** | Per-machine | Switch to a previous NixOS generation via `switch-to-configuration` |
 
 The TUI shows this unfolding in real-time:
@@ -294,8 +296,10 @@ fleet:
                   - systemd-cryptenroll --tpm2-device=auto /dev/sda2
 ```
 
-> [!WARNING]
-> When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
+<div style="border-left: 4px solid #f0ad4e; padding: 0.5em 1em; margin: 1em 0; background: #fff8e1; border-radius: 4px;">
+<strong>⚠️ Warning</strong><br>
+When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
+</div>
 
 ### Template Command
 
@@ -400,7 +404,7 @@ machines:
 Panix provides multiple hook points during bootstrap:
 
 | Hook | When it runs | SSH used |
-|------|--------------|----------|
+| ------ | -------------- | ---------- |
 | `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH |
 | `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH |
 | `post_bootstrap_provisioned_hooks` | After reboot into new system | Regular SSH |
@@ -483,12 +487,15 @@ Behavior:
 - **After kexec**: the kexec installer preserves SSH host keys from the original system on remote, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new known_hosts entry is recorded (due to `StrictHostKeyChecking=accept-new`) for the new port (same key, different `[host]:port` entry).
 - Setting `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
 
-> [!WARNING]
-> Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
->
-> - Setting `disable_strict_key_checking: true` disables **all** host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).
-> - Setting `disable_auto_add_host_key: true` prevents new host keys from being recorded. Combined with `disable_strict_key_checking: false` (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via `known_hosts_file` or manually adding entries).
-> - The defaults (`disable_strict_key_checking: false`, `disable_auto_add_host_key: false`) provide `StrictHostKeyChecking=accept-new` behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.
+<div style="border-left: 4px solid #f0ad4e; padding: 0.5em 1em; margin: 1em 0; background: #fff8e1; border-radius: 4px;">
+<strong>⚠️ Warning</strong><br>
+Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
+<ul>
+<li>Setting <code>disable_strict_key_checking: true</code> disables <strong>all</strong> host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).</li>
+<li>Setting <code>disable_auto_add_host_key: true</code> prevents new host keys from being recorded. Combined with <code>disable_strict_key_checking: false</code> (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via <code>known_hosts_file</code> or manually adding entries).</li>
+<li>The defaults (<code>disable_strict_key_checking: false</code>, <code>disable_auto_add_host_key: false</code>) provide <code>StrictHostKeyChecking=accept-new</code> behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.</li>
+</ul>
+</div>
 
 #### Disable Automatic Reboot
 
@@ -712,7 +719,7 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 #### Keybinds
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | `r` | Retry failed phases |
 | `ctrl+r` | Restart entire workflow (this does not reread the yaml config) |
 | `m` | Toggle logs fullscreen (make any build logs label or command output in build logs fullscrean for easier reading) |
@@ -742,7 +749,7 @@ An example can be found in [examples](./examples).
 Three ways to take a snapshot:
 
 | Method | Description |
-|--------|-------------|
+| -------- | ------------- |
 | Press `s` in TUI | Manual snapshot at any time |
 | `--snapshot.on-retry` | Automatic snapshot before retrying failed phases |
 | `--snapshot.on-exit` | Automatic snapshot when exiting TUI |
@@ -765,8 +772,10 @@ panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
 
 This opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at the time of capture will also appear as running (loading spinners) in TUI replay.
 
-> [!NOTE]
-> `r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
+<div style="border-left: 4px solid #5bc0de; padding: 0.5em 1em; margin: 1em 0; background: #e8f4f8; border-radius: 4px;">
+<strong>ℹ️ Note</strong><br>
+`r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
+</div>
 
 ### Configuration
 
@@ -817,7 +826,7 @@ flags:
 Panix supports three output modes via the `--output` flag:
 
 | Mode | Description |
-|------|-------------|
+| ------ | ------------- |
 | `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
 | `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
 | `json` | JSON-structured log output to stdout |
@@ -1460,11 +1469,6 @@ fleet:
               tags: [web-01]           # Accumulated: [production, critical, web, web-01]
               hardware_config_path: ./hardware/web-01
               sudo_program: sudo
-              nix:                     # Nix flags for this machine
-                extra_flags: []        # Inherits + appends from parent
-                build_flags: []        # Inherits + appends from parent
-                copy_flags: ["--compress"]  # Flags for nix copy (machine-level)
-                nixos_install_flags: []    # Flags for nixos-install (machine-level)
               ssh:
                 hostname: 10.0.0.1
                 port: 22
