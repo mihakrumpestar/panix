@@ -1,5 +1,5 @@
-// Spinner frame patterns from charm.land/bubbles/v2/spinner — Copyright (c) 2020-2026 Charmbracelet, Inc.
-// Licensed under the MIT License. See pkg/LICENSE for details.
+// Spinner frame patterns from charm.land/bubbles/v2/spinner.
+// See pkg/tui/LICENSE.charmbracelet.
 
 package spinners
 

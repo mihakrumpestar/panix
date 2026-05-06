@@ -18,6 +18,8 @@ var largeColumnStyles = []style.Style{
 	{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
 }
 
+var largeHeaders = []string{"#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel"}
+
 func buildLargeRows() [][]string {
 	rows := make([][]string, 50)
 	for i := range 50 {
@@ -35,13 +37,19 @@ func buildLargeRows() [][]string {
 // --- Small (3 cols, 10 rows) ---
 
 func Benchmark__Table_Small(b *testing.B) {
-	tbl := New().Width(60).Border(style.NormalBorder()).
-		Headers("Name", "Status", "Time").
-		ColumnStyles(defaultColumnStyles[:3])
+	tbl := New(Config{
+		Width:        60,
+		Border:       style.NormalBorder(),
+		Headers:      []string{"Name", "Status", "Time"},
+		ColumnStyles: defaultColumnStyles[:3],
+	})
 
+	rows := make([][]string, 10)
 	for i := range 10 {
-		tbl.Row(fmt.Sprintf("item-%d", i), "done", "1.23s")
+		rows[i] = []string{fmt.Sprintf("item-%d", i), "done", "1.23s"}
 	}
+
+	tbl.SetRows(rows)
 
 	b.ResetTimer()
 
@@ -71,17 +79,106 @@ func BenchmarkRef_Lipgloss__Table_Small(b *testing.B) {
 // --- Large (11 cols, 50 rows) ---
 
 func Benchmark__Table_Large(b *testing.B) {
-	tbl := New().Width(120).Border(style.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
-		ColumnStyles(largeColumnStyles[:11])
+	rows := buildLargeRows()
 
-	tbl.SetRows(buildLargeRows())
+	tbl := New(Config{
+		Width:        120,
+		Border:       style.NormalBorder(),
+		Headers:      largeHeaders,
+		ColumnStyles: largeColumnStyles[:11],
+	})
+
+	tbl.SetRows(rows)
 	_ = tbl.String()
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		tbl.SetRows(buildLargeRows())
+		tbl.SetRows(rows)
+		_ = tbl.String()
+	}
+}
+
+// Table_Large_FreshRows measures SetRows with different data each iteration
+// (simulates rows being updated from external source). The rows are pre-built
+// so the benchmark only measures table rendering, not data construction.
+func Benchmark__Table_Large_FreshRows(b *testing.B) {
+	rowsA := buildLargeRows()
+
+	rowsB := make([][]string, len(rowsA))
+	for i, row := range rowsA {
+		rowsB[i] = make([]string, len(row))
+		copy(rowsB[i], row)
+	}
+
+	rowsB[0][6] = "running"
+
+	tbl := New(Config{
+		Width:        120,
+		Border:       style.NormalBorder(),
+		Headers:      largeHeaders,
+		ColumnStyles: largeColumnStyles[:11],
+	})
+
+	tbl.SetRows(rowsA)
+	_ = tbl.String()
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		tbl.SetRows(rowsA)
+		_ = tbl.String()
+		tbl.SetRows(rowsB)
+		_ = tbl.String()
+	}
+}
+
+func BenchmarkRef_Lipgloss__Table_Large_FreshRows(b *testing.B) {
+	rowsA := buildLargeRows()
+
+	rowsB := make([][]string, len(rowsA))
+	for i, row := range rowsA {
+		rowsB[i] = make([]string, len(row))
+		copy(rowsB[i], row)
+	}
+
+	rowsB[0][6] = "running"
+
+	tbl := lipglosstable.New().
+		Width(120).
+		Border(lipgloss.NormalBorder()).
+		Headers(largeHeaders...).
+		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
+
+	for _, row := range rowsA {
+		tbl.Row(row...)
+	}
+
+	_ = tbl.String()
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		tbl = lipglosstable.New().
+			Width(120).
+			Border(lipgloss.NormalBorder()).
+			Headers(largeHeaders...).
+			StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
+		for _, row := range rowsA {
+			tbl.Row(row...)
+		}
+
+		_ = tbl.String()
+
+		tbl = lipglosstable.New().
+			Width(120).
+			Border(lipgloss.NormalBorder()).
+			Headers(largeHeaders...).
+			StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
+		for _, row := range rowsB {
+			tbl.Row(row...)
+		}
+
 		_ = tbl.String()
 	}
 }
@@ -90,7 +187,7 @@ func BenchmarkRef_Lipgloss__Table_Large(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
+		Headers(largeHeaders...).
 		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
 
 	for i := range 50 {
@@ -112,9 +209,12 @@ func BenchmarkRef_Lipgloss__Table_Large(b *testing.B) {
 func Benchmark__Table_LongContent(b *testing.B) {
 	longCell := strings.Repeat("x", 200)
 
-	tbl := New().Width(60).Border(style.NormalBorder()).
-		Headers("A", "B").
-		SetRows([][]string{{longCell, longCell}})
+	tbl := New(Config{
+		Width:   60,
+		Border:  style.NormalBorder(),
+		Headers: []string{"A", "B"},
+	})
+	tbl.SetRows([][]string{{longCell, longCell}})
 
 	b.ResetTimer()
 
@@ -149,13 +249,19 @@ func Benchmark__Table_WithColumnStyles(b *testing.B) {
 		style.NewStyle().Foreground(style.Color("#50FA7B")),
 	}
 
-	tbl := New().Width(120).Border(style.NormalBorder()).
-		Headers("Name", "Status", "Time").
-		ColumnStyles(styledCols)
+	tbl := New(Config{
+		Width:        120,
+		Border:       style.NormalBorder(),
+		Headers:      []string{"Name", "Status", "Time"},
+		ColumnStyles: styledCols,
+	})
 
+	rows := make([][]string, 50)
 	for i := range 50 {
-		tbl.Row(fmt.Sprintf("item-%d", i), "running", "1.23s")
+		rows[i] = []string{fmt.Sprintf("item-%d", i), "running", "1.23s"}
 	}
+
+	tbl.SetRows(rows)
 
 	b.ResetTimer()
 
@@ -196,9 +302,12 @@ func BenchmarkRef_Lipgloss__Table_WithColumnStyles(b *testing.B) {
 func Benchmark__Table_NoChange(b *testing.B) {
 	rows := buildLargeRows()
 
-	tbl := New().Width(120).Border(style.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
-		ColumnStyles(largeColumnStyles[:11])
+	tbl := New(Config{
+		Width:        120,
+		Border:       style.NormalBorder(),
+		Headers:      largeHeaders,
+		ColumnStyles: largeColumnStyles[:11],
+	})
 
 	tbl.SetRows(rows)
 	_ = tbl.String()
@@ -215,7 +324,7 @@ func BenchmarkRef_Lipgloss__Table_NoChange(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
+		Headers(largeHeaders...).
 		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
 
 	for i := range 50 {
@@ -237,10 +346,13 @@ func BenchmarkRef_Lipgloss__Table_NoChange(b *testing.B) {
 // --- SelectionChange (only selection index changes between renders) ---
 
 func Benchmark__Table_SelectionChange(b *testing.B) {
-	tbl := New().Width(120).Border(style.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
-		SelectionBackground(style.Color("#333333")).
-		ColumnStyles(largeColumnStyles[:11])
+	tbl := New(Config{
+		Width:               120,
+		Border:              style.NormalBorder(),
+		Headers:             largeHeaders,
+		ColumnStyles:        largeColumnStyles[:11],
+		SelectionBackground: style.Color("#333333"),
+	})
 
 	tbl.SetRows(buildLargeRows())
 	tbl.Select(0)
@@ -258,7 +370,7 @@ func BenchmarkRef_Lipgloss__Table_SelectionChange(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
+		Headers(largeHeaders...).
 		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
 
 	for i := range 50 {

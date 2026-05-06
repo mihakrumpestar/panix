@@ -223,37 +223,3 @@ func assertMap(t *testing.T, got, want map[string]string) {
 		}
 	}
 }
-
-func BenchmarkParse(b *testing.B) {
-	data := []byte(`NAME="Ubuntu"
-VERSION="22.04.3 LTS (Jammy Jellyfish)"
-ID=ubuntu
-ID_LIKE=debian
-PRETTY_NAME="Ubuntu 22.04.3 LTS"
-VERSION_ID="22.04"
-HOME_URL="https://www.ubuntu.com/"
-BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
-SUPPORT_URL="https://help.ubuntu.com/"
-PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
-VERSION_CODENAME=jammy
-UBUNTU_CODENAME=jammy
-`)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for range b.N {
-		Parse(data)
-	}
-}
-
-func BenchmarkParseNoEscape(b *testing.B) {
-	data := []byte("ID=linux\nVERSION=1.0\nNAME=myos\n")
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for range b.N {
-		Parse(data)
-	}
-}

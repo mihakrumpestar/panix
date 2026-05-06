@@ -1,6 +1,13 @@
 MIT License
 
-Copyright (c) 2026 The Panix authors
+Copyright (c) 2020-2026 Charmbracelet, Inc. (lipgloss, bubbles, bubbletea)
+
+This license applies to the following derived components within pkg/tui/:
+
+  - zeroterm/     (bubbletea — Msg, Cmd, Model, event loop, terminal, input)
+  - style/color.go (lipgloss — Color type, 16-color palette)
+  - style/join.go  (lipgloss — JoinHorizontal, JoinVertical, Position)
+  - spinners/      (bubbles — spinner frame strings)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

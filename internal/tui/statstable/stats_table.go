@@ -46,14 +46,15 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		colorScheme.Machine.Icon + " MACHINE",
 		"ARCH", "STATUS", "GEN", "DATE", "OS VERSION", "KERNEL"}
 
-	tbl := table.New().
-		Border(style.NormalBorder()).
-		SetZonePrefix(statsTableZonePrefix).
-		BorderStyle(colorScheme.Table.Border).
-		Headers(headers...).
-		Wrap(false).
-		SelectionBackground(colorScheme.Table.SelectionHighlightBackground.GetBackground()).
-		ColumnStyles(columnStyles)
+	tbl := table.New(table.Config{
+		Border:              style.NormalBorder(),
+		BorderStyle:         colorScheme.Table.Border,
+		Headers:             headers,
+		Wrap:                false,
+		SelectionBackground: colorScheme.Table.SelectionHighlightBackground.GetBackground(),
+		ColumnStyles:        columnStyles,
+	})
+	tbl.SetZonePrefix(statsTableZonePrefix)
 
 	return &StatsTable{
 		fleet:       fleet,

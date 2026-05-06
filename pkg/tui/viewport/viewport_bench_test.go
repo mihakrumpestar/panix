@@ -35,9 +35,23 @@ func makeANSILines(n int) []string {
 	return lines
 }
 
-// --- SetContentLines ---
+// --- New (viewport creation) ---
 
-func Benchmark__SetContentLines(b *testing.B) {
+func Benchmark__New(b *testing.B) {
+	for b.Loop() {
+		_ = New(WithWidth(80), WithHeight(24))
+	}
+}
+
+func BenchmarkRef_Bubbles__New(b *testing.B) {
+	for b.Loop() {
+		_ = bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
+	}
+}
+
+// --- New + SetContentLines (typical usage) ---
+
+func Benchmark__NewAndSetContentLines(b *testing.B) {
 	lines := makeLines(1000)
 
 	b.ResetTimer()
@@ -48,13 +62,37 @@ func Benchmark__SetContentLines(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Bubbles__SetContentLines(b *testing.B) {
+func BenchmarkRef_Bubbles__NewAndSetContentLines(b *testing.B) {
 	lines := makeLines(1000)
 
 	b.ResetTimer()
 
 	for b.Loop() {
 		mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
+		mdl.SetContentLines(lines)
+	}
+}
+
+// --- SetContentLines (reuse viewport) ---
+
+func Benchmark__SetContentLines(b *testing.B) {
+	lines := makeLines(1000)
+	mdl := New(WithWidth(80), WithHeight(24))
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		mdl.SetContentLines(lines)
+	}
+}
+
+func BenchmarkRef_Bubbles__SetContentLines(b *testing.B) {
+	lines := makeLines(1000)
+	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
+
+	b.ResetTimer()
+
+	for b.Loop() {
 		mdl.SetContentLines(lines)
 	}
 }

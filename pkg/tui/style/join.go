@@ -1,5 +1,4 @@
-// Based on charm.land/lipgloss/v2 — Copyright (c) 2021-2026 Charmbracelet, Inc.
-// Licensed under the MIT License. See pkg/LICENSE for details.
+// Derived from charm.land/lipgloss/v2. See pkg/tui/LICENSE.charmbracelet.
 
 package style
 

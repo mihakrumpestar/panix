@@ -6,4 +6,4 @@ They are intentionally not licensed the same as the rest of the repository (whic
 
 Note that they may change or be removed without notice. They are lacking options for customization and are meant to serve a very specific purpose.
 
-Some packages under `pkg/tui/` are reimplementations based on upstream MIT-licensed work by [Charmbracelet, Inc.](https://charmbracelet.com) (lipgloss, bubbles, bubbletea) and [Liam Stanley](https://liam.sh) (bubblezone). See individual file headers and [LICENSE](LICENSE) for details.
+Some packages under `pkg/tui/` are reimplementations based on upstream MIT-licensed work by [Charmbracelet, Inc.](https://charmbracelet.com) (lipgloss, bubbles, bubbletea). See individual file headers and [LICENSE](./tui/LICENSE.charmbracelet) for details.

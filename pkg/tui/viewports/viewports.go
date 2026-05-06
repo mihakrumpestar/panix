@@ -266,9 +266,39 @@ func (v *Viewports) getOrCreateItem(
 ) *item {
 	itm, exists := v.items.Get(xpath)
 	if exists {
-		return itm
+		// Check if configuration changed
+		// Border and scrollbar are set at creation time, so if they differ,
+		// we need to recreate the viewport
+		hasBorder := itm.model.IsBordered()
+		hasScrollbar := itm.model.HasScrollbar()
+
+		if hasBorder != bordered || hasScrollbar != scrollbar {
+			// Configuration changed - remove old and create new
+			v.items.Del(xpath)
+		} else {
+			return itm
+		}
 	}
 
+	itm = &item{
+		model:   tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, explicitWidth, bordered, scrollbar)...),
+		content: content,
+	}
+
+	if xpath != v.mainXpath {
+		itm.model.GotoBottom()
+	}
+
+	v.items.Set(xpath, itm)
+
+	return itm
+}
+
+func (v *Viewports) buildViewportOpts(
+	xpath xpath.Xpath,
+	indent, explicitHeight, explicitWidth int,
+	bordered, scrollbar bool,
+) []tuiviewport.Option {
 	opts := []tuiviewport.Option{
 		tuiviewport.WithWidth(v.viewWidth(indent, explicitWidth)),
 		tuiviewport.WithHeight(max(1, explicitHeight)),
@@ -295,18 +325,7 @@ func (v *Viewports) getOrCreateItem(
 		opts = append(opts, tuiviewport.WithMain())
 	}
 
-	itm = &item{
-		model:   tuiviewport.New(opts...),
-		content: content,
-	}
-
-	if xpath != v.mainXpath {
-		itm.model.GotoBottom()
-	}
-
-	v.items.Set(xpath, itm)
-
-	return itm
+	return opts
 }
 
 func (v *Viewports) borderColor(active bool) style.Color {
