@@ -7,7 +7,7 @@
 *Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
 
 [![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
+[![license: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
 ![GitHub last commit](https://img.shields.io/github/last-commit/mihakrumpestar/panix)
@@ -21,10 +21,8 @@
 
 ---
 
-<div style="border-left: 4px solid #f0ad4e; padding: 0.5em 1em; margin: 1em 0; background: #fff8e1; border-radius: 4px;">
-<strong>⚠️ Warning</strong><br>
-The tool is currently in beta stage. There might be breaking changes.
-</div>
+> [!WARNING]
+> The tool is currently in beta stage. There might be breaking changes.
 
 ## Demo
 
@@ -296,7 +294,7 @@ fleet:
                   - systemd-cryptenroll --tpm2-device=auto /dev/sda2
 ```
 
-<div style="border-left: 4px solid #f0ad4e; padding: 0.5em 1em; margin: 1em 0; background: #fff8e1; border-radius: 4px;">
+<div>
 <strong>⚠️ Warning</strong><br>
 When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
 </div>
@@ -487,14 +485,14 @@ Behavior:
 - **After kexec**: the kexec installer preserves SSH host keys from the original system on remote, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new known_hosts entry is recorded (due to `StrictHostKeyChecking=accept-new`) for the new port (same key, different `[host]:port` entry).
 - Setting `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
 
-<div style="border-left: 4px solid #f0ad4e; padding: 0.5em 1em; margin: 1em 0; background: #fff8e1; border-radius: 4px;">
+<div>
 <strong>⚠️ Warning</strong><br>
 Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
-<ul>
-<li>Setting <code>disable_strict_key_checking: true</code> disables <strong>all</strong> host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).</li>
-<li>Setting <code>disable_auto_add_host_key: true</code> prevents new host keys from being recorded. Combined with <code>disable_strict_key_checking: false</code> (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via <code>known_hosts_file</code> or manually adding entries).</li>
-<li>The defaults (<code>disable_strict_key_checking: false</code>, <code>disable_auto_add_host_key: false</code>) provide <code>StrictHostKeyChecking=accept-new</code> behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.</li>
-</ul>
+
+- Setting `disable_strict_key_checking: true` disables **all** host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).
+- Setting `disable_auto_add_host_key: true` prevents new host keys from being recorded. Combined with `disable_strict_key_checking: false` (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via `known_hosts_file` or manually adding entries).
+- The defaults (`disable_strict_key_checking: false`, `disable_auto_add_host_key: false`) provide `StrictHostKeyChecking=accept-new` behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.
+
 </div>
 
 #### Disable Automatic Reboot
