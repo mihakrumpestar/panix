@@ -1,11 +1,17 @@
 package onceasync
 
 import (
+	"fmt"
 	"sync"
+
+	"github.com/pkg/errors"
 )
+
+var errPanic = errors.New("onceasync: fn panicked")
 
 // OnceAsync ensures a func() error runs exactly once.
 // All callers wait for completion and get the same error result.
+// If task panics, the panic is recovered and returned as an error.
 //
 // Synchronization Guarantees:
 // The result field is safely shared between goroutines due to the
@@ -27,12 +33,21 @@ func NewOnceAsync() *OnceAsync {
 	}
 }
 
-// Do executes fn (which returns error) exactly once and blocks until completion.
+// Do executes task exactly once and blocks until completion.
 // Returns the error from the first (and only) execution.
-func (oa *OnceAsync) Do(fn func() error) error {
+// If task panics, the panic is recovered and returned as an error,
+// ensuring no callers block forever.
+func (oa *OnceAsync) Do(task func() error) error {
 	oa.once.Do(func() {
-		oa.result = fn() // Capture the error
-		close(oa.done)   // Unblock all waiters
+		defer func() {
+			if r := recover(); r != nil {
+				oa.result = fmt.Errorf("%w: %v", errPanic, r)
+			}
+
+			close(oa.done)
+		}()
+
+		oa.result = task()
 	})
 	<-oa.done // Wait for completion (immediate if already done)
 

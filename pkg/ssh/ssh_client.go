@@ -68,7 +68,7 @@ func (sC SSHClient) PortString() string {
 	return strconv.Itoa(int(sC.Port))
 }
 
-func (sC SSHClient) HostPort() string {
+func (sC SSHClient) HostPortString() string {
 	return net.JoinHostPort(sC.Hostname, sC.PortString())
 }
 

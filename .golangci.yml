@@ -17,6 +17,7 @@ linters:
     - containedctx # We use ctx to check if it is done
     - testpackage # Don't want separate packages for testing
     - wsl # Replaced by wsl_v5
+    - whitespace # Conflicts with wsl_v5
     - prealloc # Usually we don't preallocate slices
 
   settings:

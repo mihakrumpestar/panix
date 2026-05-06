@@ -18,7 +18,6 @@ require (
 	github.com/go-sprout/sprout v1.0.3
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gookit/goutil v0.7.4
-	github.com/hayageek/threadsafe v1.0.1
 	github.com/jaswdr/faker v1.19.1
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/lrstanley/bubblezone/v2 v2.0.0
@@ -52,7 +51,6 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
