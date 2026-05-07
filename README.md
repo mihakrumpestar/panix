@@ -1575,7 +1575,7 @@ task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
 task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
 ```
 
-The whole test usually takes only ~1.5 min (local only), or ~2.7 min (both modes).
+The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes).
 
 **What it does:**
 

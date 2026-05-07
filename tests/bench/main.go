@@ -11,9 +11,7 @@
 // # Usage
 //
 //	go run ./tests/bench/ [flags] [packages...]
-//	  -benchtime duration   per benchmark (default 500ms)
-//	  -parallel bool        run packages in parallel (default true)
-//	  -cores int            max parallel packages, 0=unlimited (default 0)
+//	  -benchtime duration   per benchmark (default 1s)
 package main
 
 import (
@@ -28,7 +26,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -63,7 +60,9 @@ func parseName(name string) (string, string, bool) {
 	return feat, "", false
 }
 
-func abbrevPkg(pkg string) string { return strings.TrimPrefix(pkg, "github.com/mihakrumpestar/panix/") }
+func abbrevPkg(pkg string) string {
+	return "./" + strings.TrimPrefix(pkg, "github.com/mihakrumpestar/panix/")
+}
 
 //nolint:cyclop
 func parse(data []byte) ([]bench, env, bool) {
@@ -307,55 +306,28 @@ func printFooter(envInfo env) {
 	}
 }
 
-//nolint:unparam
-func runBenchmarks(ctx context.Context, pkgs []string, benchtime string, parallel bool, cores int) ([]byte, error) {
-	var sem chan struct{}
-	if parallel && cores > 0 {
-		sem = make(chan struct{}, cores)
-	}
-
-	type result struct {
-		data []byte
-		ok   bool
-	}
-
-	results := make([]result, len(pkgs))
-
-	var waitGroup sync.WaitGroup
+func runBenchmarks(ctx context.Context, pkgs []string, benchtime string) []byte {
+	results := make([][]byte, len(pkgs))
 
 	for idx, pkg := range pkgs {
-		waitGroup.Add(1)
+		cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-benchmem", "-count=1", "-run=^$", "-benchtime="+benchtime, pkg) //nolint:gosec
 
-		go func(idx int, pkg string) {
-			defer waitGroup.Done()
+		var buf bytes.Buffer
 
-			if sem != nil {
-				sem <- struct{}{}
+		cmd.Stdout = &buf
+		_ = cmd.Run()
 
-				defer func() { <-sem }()
-			}
-
-			cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-benchmem", "-count=1", "-run=^$", "-benchtime="+benchtime, pkg) //nolint:gosec
-
-			var buf bytes.Buffer
-
-			cmd.Stdout = &buf
-			_ = cmd.Run()
-
-			results[idx] = result{buf.Bytes(), true}
-		}(idx, pkg)
+		results[idx] = buf.Bytes()
 	}
-
-	waitGroup.Wait()
 
 	var combined bytes.Buffer
 	fmt.Fprintf(&combined, "benchtime: %s\ntimestamp: %s\n", benchtime, time.Now().UTC().Format(time.RFC3339))
 
-	for _, r := range results {
-		combined.Write(r.data)
+	for _, data := range results {
+		combined.Write(data)
 	}
 
-	return combined.Bytes(), nil
+	return combined.Bytes()
 }
 
 func resolvePkgs(ctx context.Context, patterns []string) ([]string, error) {
@@ -382,9 +354,7 @@ func resolvePkgs(ctx context.Context, patterns []string) ([]string, error) {
 }
 
 func run() error {
-	benchtime := flag.String("benchtime", "500ms", "benchmark duration per function")
-	parallel := flag.Bool("parallel", true, "run packages in parallel")
-	cores := flag.Int("cores", 0, "max parallel packages (0 = unlimited)")
+	benchtime := flag.String("benchtime", "1s", "benchmark duration per function")
 
 	flag.Parse()
 
@@ -393,10 +363,7 @@ func run() error {
 		return err
 	}
 
-	data, err := runBenchmarks(context.Background(), pkgs, *benchtime, *parallel, *cores)
-	if err != nil {
-		return err
-	}
+	data := runBenchmarks(context.Background(), pkgs, *benchtime)
 
 	benchmarks, envInfo, has := parse(data)
 	if !has {

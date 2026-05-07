@@ -73,7 +73,7 @@ tasks:
     desc: |
       Run benchmarks with comparison table (use CLI_ARGS for specific packages,
       e.g. task go:test:bench -- ./internal/pkg/tui/...)
-      Flags: -benchtime=500ms  -parallel=false  -cores=4
+      Flags: -benchtime=1s
     cmds:
       - go run ./tests/bench/ {{.CLI_ARGS}}
 
