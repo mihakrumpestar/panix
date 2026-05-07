@@ -72,16 +72,14 @@ func (n *Node) Length() int {
 	return len(n.children)
 }
 
-// View renders the tree into the provided byte slice, reusing its backing array
-// across calls. Use this when you need the output as a string.
+// View renders the tree into the provided byte slice by appending,
+// reusing the backing array across calls.
 func (n *Node) View(buf *[]byte) {
 	if len(n.children) == 0 {
-		*buf = append((*buf)[:0], n.content...)
+		*buf = append(*buf, n.content...)
 
 		return
 	}
-
-	*buf = (*buf)[:0]
 
 	var (
 		pfxBuf [maxPrefixBytes]byte
@@ -91,7 +89,7 @@ func (n *Node) View(buf *[]byte) {
 	pfxEnd[0] = 0
 
 	treeSty := n.nodeStyle()
-	*buf = n.renderBytes(*buf, pfxBuf[:], pfxEnd[:], 0, treeSty.midConn, treeSty, true)
+	n.renderBytes(buf, pfxBuf[:], pfxEnd[:], 0, treeSty.midConn, treeSty, true)
 }
 
 type treeStyle struct {
@@ -127,34 +125,34 @@ var (
 )
 
 func (n *Node) renderBytes(
-	buf []byte, pfxBuf []byte, pfxEnd []int, depth int, conn []byte, treeSty treeStyle, isRoot bool,
-) []byte {
+	buf *[]byte, pfxBuf []byte, pfxEnd []int, depth int, conn []byte, treeSty treeStyle, isRoot bool,
+) {
 	if isRoot { //nolint:nestif // performance: single function avoids extra call overhead
-		buf = append(buf, n.content...)
+		*buf = append(*buf, n.content...)
 	} else {
 		pfxLen := pfxEnd[depth-1]
-		buf = append(buf, pfxBuf[:pfxLen]...)
-		buf = append(buf, conn...)
+		*buf = append(*buf, pfxBuf[:pfxLen]...)
+		*buf = append(*buf, conn...)
 
 		if !n.multiline {
-			buf = append(buf, n.content...)
+			*buf = append(*buf, n.content...)
 		} else {
 			pfx := strings.IndexByte(n.content, '\n')
-			buf = append(buf, n.content[:pfx]...)
+			*buf = append(*buf, n.content[:pfx]...)
 
 			remaining := n.content[pfx+1:]
 			contPfxLen := pfxEnd[depth]
 
 			for len(remaining) > 0 {
-				buf = append(buf, '\n')
-				buf = append(buf, pfxBuf[:contPfxLen]...)
+				*buf = append(*buf, '\n')
+				*buf = append(*buf, pfxBuf[:contPfxLen]...)
 
 				nxt := strings.IndexByte(remaining, '\n')
 				if nxt >= 0 {
-					buf = append(buf, remaining[:nxt]...)
+					*buf = append(*buf, remaining[:nxt]...)
 					remaining = remaining[nxt+1:]
 				} else {
-					buf = append(buf, remaining...)
+					*buf = append(*buf, remaining...)
 
 					break
 				}
@@ -164,27 +162,25 @@ func (n *Node) renderBytes(
 
 	nChildren := len(n.children)
 	if nChildren == 0 {
-		return buf
+		return
 	}
 
 	lastIdx := nChildren - 1
 	for childIdx := range lastIdx {
-		buf = append(buf, '\n')
+		*buf = append(*buf, '\n')
 
 		off := pfxEnd[depth]
 		copy(pfxBuf[off:], treeSty.midInd)
 		pfxEnd[depth+1] = off + len(treeSty.midInd)
-		buf = n.children[childIdx].renderBytes(buf, pfxBuf, pfxEnd, depth+1, treeSty.midConn, treeSty, false)
+		n.children[childIdx].renderBytes(buf, pfxBuf, pfxEnd, depth+1, treeSty.midConn, treeSty, false)
 	}
 
-	buf = append(buf, '\n')
+	*buf = append(*buf, '\n')
 
 	off := pfxEnd[depth]
 	copy(pfxBuf[off:], treeSty.lastInd)
 	pfxEnd[depth+1] = off + len(treeSty.lastInd)
-	buf = n.children[lastIdx].renderBytes(buf, pfxBuf, pfxEnd, depth+1, treeSty.lastConn, treeSty, false)
-
-	return buf
+	n.children[lastIdx].renderBytes(buf, pfxBuf, pfxEnd, depth+1, treeSty.lastConn, treeSty, false)
 }
 
 func (n *Node) inheritStyle(parent *Node) {

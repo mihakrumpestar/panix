@@ -156,14 +156,14 @@ func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, ver
 func (v *Viewports) GetOrCreateMainViewport(content string, version uint64, footerHeaderHeight int) string {
 	height := v.dimensions.Height - footerHeaderHeight
 
-	return v.render(v.mainXpath, content, 0, height, 0, false, true, false, version) + "\n"
+	return v.render(v.mainXpath, content, 0, height, 0, false, true, false, version)
 }
 
 func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, version uint64, footerHeaderHeight int) string {
 	height := max(1, v.dimensions.Height-footerHeaderHeight)
 	width := max(1, v.dimensions.Width)
 
-	return v.render(xp, content, 0, height, width, true, true, false, version) + "\n"
+	return v.render(xp, content, 0, height, width, true, true, false, version)
 }
 
 // Debug

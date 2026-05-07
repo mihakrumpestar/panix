@@ -18,6 +18,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 func TestMain(m *testing.M) {
@@ -61,16 +62,24 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
 
 	for flakeIdx := range flakesCount {
+		flakeName := "flake" + strconv.Itoa(flakeIdx)
 		flakeObj := &flake.Flake{}
+		flakeObj.Name = flakeName
+		flakeObj.Xpath = xpath.New(flakeName)
 		flakeObj.Logs = logs.New()
 		flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
 
 		for confIdx := range configsCount {
+			cfgName := "cfg" + strconv.Itoa(confIdx)
 			cfg := &configuration.Configuration{}
+			cfg.Name = cfgName
+			cfg.Xpath = xpath.New(flakeName, cfgName)
 			cfg.Logs = logs.New()
 			cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
 			for machIdx := range machinesN {
+				machName := "m" + strconv.Itoa(machIdx)
+
 				var mach *machine.Machine
 
 				switch machIdx % 4 {
@@ -84,13 +93,15 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 					mach = newTestMachineWithError(allPhases)
 				}
 
-				cfg.Machines.Set("m"+strconv.Itoa(machIdx), mach)
+				mach.Name = machName
+				mach.Xpath = xpath.New(flakeName, cfgName, machName)
+				cfg.Machines.Set(machName, mach)
 			}
 
-			flakeObj.Configurations.Set("cfg"+strconv.Itoa(confIdx), cfg)
+			flakeObj.Configurations.Set(cfgName, cfg)
 		}
 
-		flakesMap.Set("flake"+strconv.Itoa(flakeIdx), flakeObj)
+		flakesMap.Set(flakeName, flakeObj)
 	}
 
 	return &config.Config{

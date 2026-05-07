@@ -170,7 +170,7 @@ func (m *model) handleRetry() zeroterm.Cmd {
 
 	resetable.workflow.State().Retry.Trigger()
 
-	return nil
+	return m.footer.Notification().Set("Retrying failed...", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
 func (m *model) handleRestart() zeroterm.Cmd {

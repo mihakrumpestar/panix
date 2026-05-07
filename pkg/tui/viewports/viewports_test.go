@@ -266,10 +266,6 @@ func TestGetOrCreateMainViewport(t *testing.T) {
 		t.Error("main viewport should have scrollbar when content overflows")
 	}
 
-	if !strings.HasSuffix(output, "\n") {
-		t.Error("main viewport should end with newline")
-	}
-
 	if !strings.Contains(output, "\x1b[") {
 		t.Error("should contain ANSI zone marker")
 	}
@@ -300,10 +296,6 @@ func TestRenderFullscreenViewport_AlwaysBordered(t *testing.T) {
 
 	if !strings.Contains(output, "█") && !strings.Contains(output, "░") {
 		t.Error("fullscreen viewport should have scrollbar when content overflows")
-	}
-
-	if !strings.HasSuffix(output, "\n") {
-		t.Error("fullscreen viewport should end with newline")
 	}
 
 	lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")

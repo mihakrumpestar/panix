@@ -165,6 +165,7 @@ func TestViewReuse(t *testing.T) {
 	var buf []byte
 
 	for iteration := range 3 {
+		buf = buf[:0]
 		tree.View(&buf)
 
 		got := string(buf)
@@ -176,5 +177,27 @@ func TestViewReuse(t *testing.T) {
 		if len(lines) != 3 {
 			t.Errorf("iteration %d: expected 3 lines, got %d: %q", iteration, len(lines), got)
 		}
+	}
+}
+
+func TestViewAppends(t *testing.T) {
+	t.Parallel()
+
+	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our.Child(New().Root("child"))
+
+	var buf []byte
+
+	buf = append(buf, "prefix|"...)
+	our.View(&buf)
+
+	got := string(buf)
+
+	if !strings.HasPrefix(got, "prefix|") {
+		t.Errorf("View should append to existing buffer content, got %q", got)
+	}
+
+	if !strings.Contains(got, "root") {
+		t.Errorf("View should append tree content, got %q", got)
 	}
 }

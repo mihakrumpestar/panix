@@ -29,6 +29,7 @@ func benchTree(b *testing.B, depth, breadth int) {
 	b.ResetTimer()
 
 	for b.Loop() {
+		buf = buf[:0]
 		tree.View(&buf)
 	}
 }
