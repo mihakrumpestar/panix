@@ -20,6 +20,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -438,7 +439,7 @@ func TestAddCommands_WithCommandError(t *testing.T) {
 	cmd := phaseLog.NewCommand("test cmd", "running", "failed", []string{"echo", "test"}, nil)
 	cmd.TimeAndState.StartTimer()
 	cmd.TimeAndState.EndTimerWithError(os.ErrNotExist)
-	cmd.Output.WriteLineString("error output")
+	cmd.Output.Write([]byte("error output"))
 
 	phaseNode := tree.New().Root("phase")
 
@@ -544,8 +545,8 @@ func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 	buildLogs.viewports = newTestViewports(conf)
 
 	cmd := newFinishedCommandLog("test cmd", os.ErrNotExist)
-	cmd.Output.WriteLineString("build output line 1")
-	cmd.Output.WriteLineString("build output line 2")
+	cmd.Output.Write([]byte("build output line 1"))
+	cmd.Output.Write([]byte("build output line 2"))
 
 	cmdNode := tree.New().Root("cmd")
 	tas := cmd.TimeAndState.Load()
@@ -738,7 +739,7 @@ func TestView_BasicOutput(t *testing.T) {
 
 	result := buildLogs.View(vp, sp)
 
-	stripped := stripANSI(result)
+	stripped := style.StripANSI(result)
 
 	if !strings.Contains(stripped, "Build Logs") {
 		t.Error("View should contain 'Build Logs' header")
@@ -783,7 +784,7 @@ func TestView_NilFlake(t *testing.T) {
 
 	result := buildLogs.View(vp, sp)
 
-	if !strings.Contains(stripANSI(result), "Build Logs") {
+	if !strings.Contains(style.StripANSI(result), "Build Logs") {
 		t.Error("View should contain 'Build Logs' header")
 	}
 }
@@ -805,7 +806,7 @@ func TestView_NilMachine(t *testing.T) {
 
 	result := buildLogs.View(vp, sp)
 
-	if !strings.Contains(stripANSI(result), "Build Logs") {
+	if !strings.Contains(style.StripANSI(result), "Build Logs") {
 		t.Error("View should contain 'Build Logs' header")
 	}
 }
@@ -1123,32 +1124,4 @@ func getFirstConfig(conf *config.Config) *configuration.Configuration {
 	}
 
 	return nil
-}
-
-func stripANSI(s string) string {
-	var buf strings.Builder
-
-	inEsc := false
-
-	for _, char := range s {
-		if char == 0x1b {
-			inEsc = true
-
-			continue
-		}
-
-		if inEsc && char == 'm' {
-			inEsc = false
-
-			continue
-		}
-
-		if inEsc {
-			continue
-		}
-
-		buf.WriteRune(char)
-	}
-
-	return buf.String()
 }

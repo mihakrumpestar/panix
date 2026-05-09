@@ -40,6 +40,7 @@ var horizBorderBytes = func() []byte {
 // We intentionally do NOT provide ViewBytes() or ViewInto() alternatives because:
 //   - ViewBytes() would be ~3x slower on cache hits (slice header overhead)
 //   - ViewInto() would be ~30x slower (forced copy into caller buffer)
+//
 // If you need []byte output, use []byte(viewport.View()) - the conversion allocates
 // once, and you can then reuse the buffer. The internal []byte optimization we did
 // (pre-computed border/scrollbar bytes) already benefits View() by eliminating
@@ -77,9 +78,11 @@ type Viewport struct {
 	// Contiguous padded-line buffer: all padded lines joined with '\n'.
 	// Enables zero-copy View() for unbordered no-scrollbar viewports:
 	// the output is a direct subslice of paddedBuf.
-	paddedBuf   []byte
-	lineOffsets []int // byte offset of each line start; len = len(lines)+1
-	paddedBufCW int   // contentW paddedBuf was built for; -1 = invalid
+	paddedBuf      []byte
+	lineOffsets    []int // byte offset of each line start; len = len(lines)+1
+	paddedBufCW    int   // contentW paddedBuf was built for; -1 = invalid
+	cachedLines    []string
+	contentChanged bool // set by SetContentLines, cleared by ensurePaddedCache
 
 	// Render buffer, reused between renders to avoid allocation.
 	renderBuf []byte
@@ -201,6 +204,7 @@ func (m *Viewport) SetWidth(w int) {
 		m.width = w
 		m.cacheValid = false
 		m.paddedBufCW = -1
+		m.contentChanged = true
 	}
 }
 
@@ -208,7 +212,7 @@ func (m *Viewport) SetHeight(h int) {
 	if h != m.height {
 		m.height = h
 		m.cacheValid = false
-		m.paddedBufCW = -1
+		m.contentChanged = true
 	}
 }
 
@@ -317,6 +321,8 @@ var ErrLineOverWidth = errors.New("line exceeds ContentWidth")
 // If the lines slice is identical to the current content (same length,
 // same strings), no caches are invalidated — subsequent View() calls
 // hit the cached result directly.
+// When content changes, cached line widths are preserved for unchanged
+// lines so that CellWidth is only recomputed for new or modified lines.
 func (m *Viewport) SetContentLines(lines []string) {
 	if len(lines) == len(m.lines) {
 		same := true
@@ -334,12 +340,11 @@ func (m *Viewport) SetContentLines(lines []string) {
 		}
 	}
 
+	oldLines := m.lines
 	m.lines = lines
-	m.lineWidths = nil
+	m.lineWidths = m.buildPreservedWidths(lines, oldLines)
 	m.cacheValid = false
-	m.paddedBufCW = -1
-	m.paddedBuf = nil
-	m.lineOffsets = nil
+	m.contentChanged = true
 
 	maxOffset := max(len(lines)-m.contentHeight(), 0)
 
@@ -522,6 +527,34 @@ func (m *Viewport) View() string {
 	return result
 }
 
+// buildPreservedWidths creates a lineWidths slice that preserves cached
+// widths for lines that haven't changed. Lines that are new or modified
+// get -1 (uncached), so CellWidth is only recomputed when necessary.
+// Returns nil when there are no old widths to preserve.
+func (m *Viewport) buildPreservedWidths(newLines, oldLines []string) []int {
+	if m.lineWidths == nil {
+		return nil
+	}
+
+	newWidths := make([]int, len(newLines))
+
+	minLen := min(len(newLines), len(oldLines))
+	copyCount := min(len(m.lineWidths), minLen)
+	copy(newWidths[:copyCount], m.lineWidths[:copyCount])
+
+	for i := range minLen {
+		if newLines[i] != oldLines[i] {
+			newWidths[i] = -1
+		}
+	}
+
+	for i := minLen; i < len(newLines); i++ {
+		newWidths[i] = -1
+	}
+
+	return newWidths
+}
+
 //nolint:cyclop
 func (m *Viewport) renderView() string {
 	m.ensureLineWidths()
@@ -588,9 +621,20 @@ func (m *Viewport) renderView() string {
 // All padded lines are joined with '\n' into paddedBuf, and lineOffsets
 // records the byte offset of each line start. Widths are computed eagerly
 // so that render paths never call fastWidth.
+// When only new lines were appended (prefix unchanged), the existing
+// paddedBuf is extended rather than rebuilt, avoiding O(n) copy for
+// unchanged lines.
+//
+//nolint:cyclop // cache building is inherently branchy
 func (m *Viewport) ensurePaddedCache(contentW int) {
-	if m.paddedBufCW == contentW && len(m.lineOffsets) == len(m.lines)+1 {
+	if !m.contentChanged && m.paddedBufCW == contentW && len(m.lineOffsets) == len(m.lines)+1 {
 		return
+	}
+
+	if m.contentChanged && m.paddedBufCW == contentW && m.cachedLines != nil {
+		if m.tryAppendPaddedLines(contentW) {
+			return
+		}
 	}
 
 	est := (contentW+1)*len(m.lines) + 1
@@ -627,6 +671,59 @@ func (m *Viewport) ensurePaddedCache(contentW int) {
 	m.lineOffsets[len(m.lines)] = len(buf)
 	m.paddedBuf = buf
 	m.paddedBufCW = contentW
+	m.cachedLines = m.lines
+	m.contentChanged = false
+}
+
+// tryAppendPaddedLines attempts a delta update: if the existing paddedBuf
+// still covers the old lines and only new lines were appended, extend
+// paddedBuf with the new lines instead of rebuilding from scratch.
+// Returns true if delta update succeeded.
+func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
+	oldLineCount := len(m.cachedLines)
+	if oldLineCount >= len(m.lines) || oldLineCount == 0 {
+		return false
+	}
+
+	for i := range oldLineCount {
+		if m.lines[i] != m.cachedLines[i] {
+			return false
+		}
+	}
+
+	newLineCount := len(m.lines)
+	if cap(m.lineOffsets) < newLineCount+1 {
+		newOffsets := make([]int, newLineCount+1)
+		copy(newOffsets, m.lineOffsets)
+		m.lineOffsets = newOffsets
+	} else {
+		m.lineOffsets = m.lineOffsets[:newLineCount+1]
+	}
+
+	buf := m.paddedBuf
+	for idx := oldLineCount; idx < newLineCount; idx++ {
+		m.lineOffsets[idx] = len(buf)
+
+		lineWidth := m.lineWidths[idx]
+		if lineWidth < 0 {
+			lineWidth = style.CellWidth(m.lines[idx])
+			m.lineWidths[idx] = lineWidth
+		}
+
+		buf = append(buf, m.lines[idx]...)
+		if lineWidth < contentW {
+			buf = append(buf, spaces[:contentW-lineWidth]...)
+		}
+
+		buf = append(buf, '\n')
+	}
+
+	m.lineOffsets[newLineCount] = len(buf)
+	m.paddedBuf = buf
+	m.cachedLines = m.lines
+	m.contentChanged = false
+
+	return true
 }
 
 //nolint:cyclop,funlen

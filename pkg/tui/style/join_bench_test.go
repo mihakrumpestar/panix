@@ -18,7 +18,7 @@ func Benchmark__JoinHorizontal_Top_SameHeight(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__JoinHorizontal_Top_SameHeight(b *testing.B) {
+func Benchmark_Lipgloss__JoinHorizontal_Top_SameHeight(b *testing.B) {
 	icon := "📋 "
 	label := "BUILD"
 	dur := " (1.23s)"
@@ -42,7 +42,7 @@ func Benchmark__JoinHorizontal_Top_DiffHeight(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__JoinHorizontal_Top_DiffHeight(b *testing.B) {
+func Benchmark_Lipgloss__JoinHorizontal_Top_DiffHeight(b *testing.B) {
 	icon := "📋 \n   "
 	label := "flake1\nflake2\nflake3"
 	dur := " (1.23s)"
@@ -68,7 +68,7 @@ func Benchmark__JoinHorizontal_Top_WithANSI(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__JoinHorizontal_Top_WithANSI(b *testing.B) {
+func Benchmark_Lipgloss__JoinHorizontal_Top_WithANSI(b *testing.B) {
 	ls := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD"))
 	icon := ls.Render("📋 ")
 	label := ls.Render("flake1\nflake2\nflake3")

@@ -64,9 +64,9 @@ func TestCellWidth_OtherCSISequences(t *testing.T) {
 		input     string
 		wantWidth int
 	}{
-		{"\x1b[1Ahello", 5},           // Cursor Up
-		{"\x1b[2Chello", 5},           // Cursor Forward
-		{"\x1b[?25lhello", 5},         // Private CSI (hide cursor)
+		{"\x1b[1Ahello", 5},          // Cursor Up
+		{"\x1b[2Chello", 5},          // Cursor Forward
+		{"\x1b[?25lhello", 5},        // Private CSI (hide cursor)
 		{"\x1b[?25h\x1b[2Jhello", 5}, // Private + Erase Display
 	}
 
@@ -144,11 +144,11 @@ func TestCellWidth_EmojiGrapheme(t *testing.T) {
 		input string
 		want  int
 	}{
-		{"👍🏽", 2},     // skin tone modifier: single grapheme, width 2
-		{"👨‍👩‍👧", 2},  // ZWJ family: single grapheme, width 2
-		{"🚀", 2},     // simple emoji, width 2
-		{"👍🏽Hi", 4},   // emoji(2) + H(1) + i(1)
-		{"🇺🇸", 2},     // flag: single grapheme, width 2
+		{"👍🏽", 2},
+		{"👨‍👩‍👧", 2},
+		{"🚀", 2},
+		{"👍🏽Hi", 4},
+		{"🇺🇸", 2},
 	}
 
 	for _, tc := range tests {
@@ -156,5 +156,80 @@ func TestCellWidth_EmojiGrapheme(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.want)
 		}
+	}
+}
+
+func TestStripANSI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no ansi", "plain text", "plain text"},
+		{"single SGR", "\x1b[31mred\x1b[0m", "red"},
+		{"multiple SGR", "\x1b[1;32mgreen\x1b[0m \x1b[34mblue\x1b[0m", "green blue"},
+		{"RGB SGR", "\x1b[38;2;255;0;0mRGB\x1b[0m", "RGB"},
+		{"empty", "", ""},
+		{"only ansi", "\x1b[31m\x1b[0m", ""},
+		{"CSI erase line", "before\x1b[Kafter", "beforeafter"},
+		{"OSC title", "\x1b]0;window title\x07visible", "visible"},
+		{"OSC ST terminator", "\x1b]0;title\x1b\\visible", "visible"},
+		{"bare ESC sequence", "\x1bOvisible", "visible"},
+		{"mixed", "\x1b[1mbold\x1b[0m and \x1b[32mgreen\x1b[0m", "bold and green"},
+		{"no esc fast path", "hello world", "hello world"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := StripANSI(tt.input)
+			if got != tt.want {
+				t.Errorf("StripANSI(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripANSIBytes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no ansi", "plain text", "plain text"},
+		{"single SGR", "\x1b[31mred\x1b[0m", "red"},
+		{"multiple SGR", "\x1b[1;32mgreen\x1b[0m \x1b[34mblue\x1b[0m", "green blue"},
+		{"RGB SGR", "\x1b[38;2;255;0;0mRGB\x1b[0m", "RGB"},
+		{"empty", "", ""},
+		{"only ansi", "\x1b[31m\x1b[0m", ""},
+		{"OSC title", "\x1b]0;window title\x07visible", "visible"},
+		{"no esc fast path", "hello world", "hello world"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := string(StripANSIBytes(nil, []byte(tt.input)))
+			if got != tt.want {
+				t.Errorf("StripANSIBytes(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripANSIBytesZeroCopy(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("no ansi here")
+
+	result := StripANSIBytes(nil, data)
+	if &result[0] != &data[0] {
+		t.Error("expected zero-copy when no ESC bytes present")
 	}
 }

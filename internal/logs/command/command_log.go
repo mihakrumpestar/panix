@@ -5,18 +5,19 @@ import (
 	"strings"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
 
 type CommandLog struct {
-	// On creation
 	Description     string `yaml:"-" json:"description,omitempty"`
 	StatusIfRunning string `yaml:"-" json:"-"`
 	StatusIfFailed  string `yaml:"-" json:"-"`
 	Command         string `yaml:"-" json:"command,omitempty"`
 
-	// Mutate
-	Output       *AtomicCommandOutput
-	TimeAndState *atomictimeandstate.AtomicTimeAndState `yaml:"-" json:"time_and_state,omitempty"`
+	Output            *linesbuffer.LinesBuffer               `yaml:"-" json:"output"`
+	TimeAndState      *atomictimeandstate.AtomicTimeAndState `yaml:"-" json:"time_and_state,omitempty"`
+	PendingNewline    bool                                   `yaml:"-" json:"-"`
+	CarriageReturn    bool                                   `yaml:"-" json:"-"` // cursor at column 0 after trailing \r
 }
 
 func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
@@ -26,7 +27,7 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 		StatusIfFailed:  statusIfFailed,
 		Command:         joinCommand(slices.Concat(env, command)),
 
-		Output:       NewAtomicCommandOutput(),
+		Output:       linesbuffer.NewAtomic(),
 		TimeAndState: atomictimeandstate.New(),
 	}
 

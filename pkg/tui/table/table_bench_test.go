@@ -58,7 +58,7 @@ func Benchmark__Table_Small(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_Small(b *testing.B) {
+func Benchmark_Lipgloss__Table_Small(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(60).
 		Border(lipgloss.NormalBorder()).
@@ -133,7 +133,7 @@ func Benchmark__Table_Large_FreshRows(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_Large_FreshRows(b *testing.B) {
+func Benchmark_Lipgloss__Table_Large_FreshRows(b *testing.B) {
 	rowsA := buildLargeRows()
 
 	rowsB := make([][]string, len(rowsA))
@@ -183,7 +183,7 @@ func BenchmarkRef_Lipgloss__Table_Large_FreshRows(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_Large(b *testing.B) {
+func Benchmark_Lipgloss__Table_Large(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -223,7 +223,7 @@ func Benchmark__Table_LongContent(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_LongContent(b *testing.B) {
+func Benchmark_Lipgloss__Table_LongContent(b *testing.B) {
 	longCell := strings.Repeat("x", 200)
 
 	tbl := lipglosstable.New().
@@ -270,7 +270,7 @@ func Benchmark__Table_WithColumnStyles(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_WithColumnStyles(b *testing.B) {
+func Benchmark_Lipgloss__Table_WithColumnStyles(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -320,7 +320,7 @@ func Benchmark__Table_NoChange(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_NoChange(b *testing.B) {
+func Benchmark_Lipgloss__Table_NoChange(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -366,7 +366,7 @@ func Benchmark__Table_SelectionChange(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Table_SelectionChange(b *testing.B) {
+func Benchmark_Lipgloss__Table_SelectionChange(b *testing.B) {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).

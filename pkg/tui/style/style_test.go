@@ -180,7 +180,7 @@ func TestStyle_Render_ForegroundOnly(t *testing.T) {
 	t.Parallel()
 
 	got := NewStyle().Foreground(Color("#8BE9FD")).Render("hello")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	if visible != "hello" {
 		t.Errorf("Visible content = %q, want \"hello\"", visible)
@@ -195,7 +195,7 @@ func TestStyle_Render_MultipleArgs(t *testing.T) {
 	t.Parallel()
 
 	got := NewStyle().Foreground(Color("#8BE9FD")).Render("hello", " ", "world")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	if visible != "hello world" {
 		t.Errorf("Multiple args visible = %q, want \"hello world\"", visible)
@@ -233,7 +233,7 @@ func TestStyle_Render_WithBorder(t *testing.T) {
 		t.Errorf("Border Render = %q, missing corner chars", got)
 	}
 
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 	if !strings.Contains(visible, "│") {
 		t.Errorf("Border Render visible = %q, missing vertical bars", visible)
 	}
@@ -260,7 +260,7 @@ func TestStyle_Render_PaddingHorizontal(t *testing.T) {
 	sty := NewStyle().Width(10).Padding(0, 2)
 	got := sty.Render("hi")
 
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 	// "hi" padded left 2, right 2 = "  hi      " (width 10)
 	if strings.TrimSpace(visible) != "hi" {
 		t.Errorf("Visible = %q, expected hi padded", visible)
@@ -284,7 +284,7 @@ func TestStyle_Render_AlignLeft(t *testing.T) {
 
 	sty := NewStyle().Width(10).Align(Left)
 	got := sty.Render("hi")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	if visible != "hi        " {
 		t.Errorf("Left align = %q, want \"hi        \"", visible)
@@ -296,7 +296,7 @@ func TestStyle_Render_AlignCenter(t *testing.T) {
 
 	sty := NewStyle().Width(10).Align(Center)
 	got := sty.Render("hi")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	// "hi" is 2 chars, pad=8 -> left=4, right=4
 	if visible != "    hi    " {
@@ -309,7 +309,7 @@ func TestStyle_Render_AlignRight(t *testing.T) {
 
 	sty := NewStyle().Width(10).Align(Right)
 	got := sty.Render("hi")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	if visible != "        hi" {
 		t.Errorf("Right align = %q, want \"        hi\"", visible)
@@ -321,7 +321,7 @@ func TestStyle_Render_MaxWidth_Truncate(t *testing.T) {
 
 	sty := NewStyle().MaxWidth(5)
 	got := sty.Render("hello world")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	if CellWidth(visible) > 5 {
 		t.Errorf("MaxWidth(5) visible width = %d, content = %q", CellWidth(visible), visible)
@@ -393,7 +393,7 @@ func TestTruncateToWidth_WithANSI(t *testing.T) {
 	colored := "\x1b[38;2;255;0;0mhello\x1b[m"
 	got := truncateToWidth(colored, 3, false)
 
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 	if visible != "hel" {
 		t.Errorf("truncateToWidth with ANSI visible = %q, want \"hel\"", visible)
 	}
@@ -486,7 +486,7 @@ func TestTruncateToWidth_EllipsisWithANSI(t *testing.T) {
 	colored := "\x1b[38;2;255;0;0mhello world\x1b[m"
 	got := truncateToWidth(colored, 8, true)
 
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 	if visible != "hello .." {
 		t.Errorf("truncateToWidth with ANSI+ellipsis visible = %q, want \"hello ..\"", visible)
 	}
@@ -497,7 +497,7 @@ func TestStyle_TruncateEllipsis(t *testing.T) {
 
 	sty := NewStyle().Width(5).MaxWidth(5).TruncateEllipsis(true)
 	got := sty.Render("hello world")
-	visible := stripANSI(got)
+	visible := StripANSI(got)
 
 	if visible != "hel.." {
 		t.Errorf("TruncateEllipsis(true) visible = %q, want \"hel..\"", visible)
@@ -523,7 +523,7 @@ func TestWidthWithMaxWidth_ContentClipped(t *testing.T) {
 	got := sty.Render("hello world and more")
 
 	if w := maxLineWidth(got); w > 10 {
-		t.Errorf("Width(20).MaxWidth(10) produced width %d, want <= 10: %q", w, stripANSI(got))
+		t.Errorf("Width(20).MaxWidth(10) produced width %d, want <= 10: %q", w, StripANSI(got))
 	}
 }
 
@@ -534,7 +534,7 @@ func TestWidthWithMaxWidth_ShortContentNotOverPadded(t *testing.T) {
 	got := sty.Render("hi")
 
 	if w := maxLineWidth(got); w > 10 {
-		t.Errorf("Width(30).MaxWidth(10) on short content produced width %d, want <= 10: %q", w, stripANSI(got))
+		t.Errorf("Width(30).MaxWidth(10) on short content produced width %d, want <= 10: %q", w, StripANSI(got))
 	}
 }
 
@@ -545,7 +545,7 @@ func TestWidthWithMaxWidth_WithBorder(t *testing.T) {
 	got := sty.Render("hello world and more")
 
 	if w := maxLineWidth(got); w > 10 {
-		t.Errorf("Width(20).MaxWidth(10) with border produced width %d, want <= 10: %q", w, stripANSI(got))
+		t.Errorf("Width(20).MaxWidth(10) with border produced width %d, want <= 10: %q", w, StripANSI(got))
 	}
 }
 
@@ -556,7 +556,7 @@ func TestWidthWithMaxWidth_WithPadding(t *testing.T) {
 	got := sty.Render("hello world and more")
 
 	if w := maxLineWidth(got); w > 10 {
-		t.Errorf("Width(20).MaxWidth(10) with padding produced width %d, want <= 10: %q", w, stripANSI(got))
+		t.Errorf("Width(20).MaxWidth(10) with padding produced width %d, want <= 10: %q", w, StripANSI(got))
 	}
 }
 
@@ -567,6 +567,6 @@ func TestWidthWithMaxWidth_EqualValues(t *testing.T) {
 	got := sty.Render("hi")
 
 	if w := maxLineWidth(got); w != 10 {
-		t.Errorf("Width(10).MaxWidth(10) on short content produced width %d, want 10: %q", w, stripANSI(got))
+		t.Errorf("Width(10).MaxWidth(10) on short content produced width %d, want 10: %q", w, StripANSI(got))
 	}
 }

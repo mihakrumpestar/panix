@@ -121,7 +121,7 @@ func Benchmark__RenderPipe(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Bubbletea__RenderPipe(b *testing.B) {
+func Benchmark_Bubbletea__RenderPipe(b *testing.B) {
 	width, height := 200, 50
 	content := makeANSIContent(width, height)
 
@@ -162,7 +162,7 @@ func Benchmark__RenderPipeNoChange(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Bubbletea__RenderPipeNoChange(b *testing.B) {
+func Benchmark_Bubbletea__RenderPipeNoChange(b *testing.B) {
 	width, height := 200, 50
 	content := makeANSIContent(width, height)
 
@@ -206,7 +206,7 @@ func Benchmark__RenderLinesFullChange(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Bubbletea__RenderLinesFullChange(b *testing.B) {
+func Benchmark_Bubbletea__RenderLinesFullChange(b *testing.B) {
 	width, height := 200, 50
 	content1 := makeANSIContent(width, height)
 	content2 := makePlainContent(width, height)
@@ -258,7 +258,7 @@ func Benchmark__RenderLinesQuarterChange(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
+func Benchmark_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
 	width, height := 200, 50
 	content := makeANSIContent(width, height)
 
@@ -302,7 +302,7 @@ func Benchmark__ZoneMark(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Bubbletea__ZoneMark(b *testing.B) {
+func Benchmark_Bubbletea__ZoneMark(b *testing.B) {
 	content := makePlainContent(200, 50)
 
 	b.ResetTimer()

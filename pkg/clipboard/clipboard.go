@@ -7,20 +7,17 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/pkg/errors"
 )
 
 const cmdTimeout = 5 * time.Second
 
-var (
-	errClipboardUnavailable = errors.New("failed to copy to clipboard: no clipboard method available (tried wl-copy, xclip, xsel, and OSC52)")
-	ansiRegex               = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-)
+var errClipboardUnavailable = errors.New("failed to copy to clipboard: no clipboard method available (tried wl-copy, xclip, xsel, and OSC52)")
 
 var envCache = struct {
 	sync.Once
@@ -48,13 +45,9 @@ func CopyToClipboard(text string) error {
 	return nil
 }
 
-func stripANSI(text string) string {
-	return ansiRegex.ReplaceAllString(text, "")
-}
-
 func normalizeText(text string) string {
 	text = strings.TrimSpace(text)
-	text = stripANSI(text)
+	text = style.StripANSI(text)
 
 	return text
 }

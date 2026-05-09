@@ -14,9 +14,9 @@ var benchStyle = style.NewStyle().Foreground(style.Color("#6272A4"))
 func Benchmark__Tree(b *testing.B)             { benchTree(b, 3, 3) }
 func Benchmark__TreeFlat(b *testing.B)         { benchTree(b, 1, 20) }
 func Benchmark__TreeDeep(b *testing.B)         { benchTree(b, 8, 2) }
-func BenchmarkRef_Lipgloss__Tree(b *testing.B)  { benchRefTree(b, 3, 3) }
-func BenchmarkRef_Lipgloss__TreeFlat(b *testing.B) { benchRefTree(b, 1, 20) }
-func BenchmarkRef_Lipgloss__TreeDeep(b *testing.B) { benchRefTree(b, 8, 2) }
+func Benchmark_Lipgloss__Tree(b *testing.B)  { benchRefTree(b, 3, 3) }
+func Benchmark_Lipgloss__TreeFlat(b *testing.B) { benchRefTree(b, 1, 20) }
+func Benchmark_Lipgloss__TreeDeep(b *testing.B) { benchRefTree(b, 8, 2) }
 
 func benchTree(b *testing.B, depth, breadth int) {
 	b.Helper()

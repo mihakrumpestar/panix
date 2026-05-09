@@ -36,21 +36,26 @@ func JoinHorizontal(pos Position, strs ...string) string {
 		return strs[0]
 	}
 
-	blocks, maxWidths, maxHeight := splitAndMeasureBlocks(strs)
-	alignBlocks(blocks, pos, maxHeight)
+	blocks, maxWidths, lineWidths, maxHeight := splitAndMeasureBlocks(strs)
+	alignBlocksAndWidths(blocks, lineWidths, pos, maxHeight)
 
-	return mergeBlocks(blocks, maxWidths, maxHeight)
+	return mergeBlocks(blocks, maxWidths, lineWidths, maxHeight)
 }
 
-func splitAndMeasureBlocks(strs []string) ([][]string, []int, int) {
+func splitAndMeasureBlocks(strs []string) ([][]string, []int, [][]int, int) {
 	blocks := make([][]string, len(strs))
 	maxWidths := make([]int, len(strs))
+	lineWidths := make([][]int, len(strs))
 	maxHeight := 0
 
 	for idx, str := range strs {
 		blocks[idx] = splitLines(str)
-		for _, line := range blocks[idx] {
+		lineWidths[idx] = make([]int, len(blocks[idx]))
+
+		for lineIdx, line := range blocks[idx] {
 			w := CellWidth(line)
+			lineWidths[idx][lineIdx] = w
+
 			if w > maxWidths[idx] {
 				maxWidths[idx] = w
 			}
@@ -61,10 +66,10 @@ func splitAndMeasureBlocks(strs []string) ([][]string, []int, int) {
 		}
 	}
 
-	return blocks, maxWidths, maxHeight
+	return blocks, maxWidths, lineWidths, maxHeight
 }
 
-func alignBlocks(blocks [][]string, pos Position, maxHeight int) {
+func alignBlocksAndWidths(blocks [][]string, lineWidths [][]int, pos Position, maxHeight int) {
 	for idx := range blocks {
 		if len(blocks[idx]) >= maxHeight {
 			continue
@@ -76,20 +81,27 @@ func alignBlocks(blocks [][]string, pos Position, maxHeight int) {
 		case Top:
 			for range extra {
 				blocks[idx] = append(blocks[idx], "")
+				lineWidths[idx] = append(lineWidths[idx], 0)
 			}
 		case Bottom:
 			padded := make([]string, extra, extra+len(blocks[idx]))
+			widthPadded := make([]int, extra, extra+len(lineWidths[idx]))
 			blocks[idx] = append(padded, blocks[idx]...)
+			lineWidths[idx] = append(widthPadded, lineWidths[idx]...)
 		default:
 			split := int(math.Round(float64(extra) * float64(pos)))
 			padded := make([]string, maxHeight)
+			widthPadded := make([]int, maxHeight)
+
 			copy(padded[split:], blocks[idx])
+			copy(widthPadded[split:], lineWidths[idx])
 			blocks[idx] = padded
+			lineWidths[idx] = widthPadded
 		}
 	}
 }
 
-func mergeBlocks(blocks [][]string, maxWidths []int, maxHeight int) string {
+func mergeBlocks(blocks [][]string, maxWidths []int, lineWidths [][]int, maxHeight int) string {
 	var builder strings.Builder
 
 	for row := range maxHeight {
@@ -101,7 +113,7 @@ func mergeBlocks(blocks [][]string, maxWidths []int, maxHeight int) string {
 			line := block[row]
 			builder.WriteString(line)
 
-			pad := maxWidths[col] - CellWidth(line)
+			pad := maxWidths[col] - lineWidths[col][row]
 			if pad > 0 {
 				if pad <= maxPadSpaces {
 					builder.WriteString(padSpaces[:pad])
@@ -127,32 +139,35 @@ func JoinVertical(pos Position, strs ...string) string {
 		return strs[0]
 	}
 
-	lines, maxWidth := splitAndMeasureLines(strs)
+	lines, maxWidth, lineWidths := splitAndMeasureLines(strs)
 
-	return buildVerticalOutput(lines, maxWidth, pos)
+	return buildVerticalOutput(lines, maxWidth, lineWidths, pos)
 }
 
 // splitAndMeasureLines splits each string into lines and finds the max width.
-func splitAndMeasureLines(strs []string) ([][]string, int) {
+func splitAndMeasureLines(strs []string) ([][]string, int, [][]int) {
 	lines := make([][]string, len(strs))
+	lineWidths := make([][]int, len(strs))
 	maxWidth := 0
 
-	for i, str := range strs {
-		lines[i] = splitLines(str)
+	for idx, str := range strs {
+		lines[idx] = splitLines(str)
+		lineWidths[idx] = make([]int, len(lines[idx]))
 
-		for _, line := range lines[i] {
+		for lineIdx, line := range lines[idx] {
 			w := CellWidth(line)
+			lineWidths[idx][lineIdx] = w
+
 			if w > maxWidth {
 				maxWidth = w
 			}
 		}
 	}
 
-	return lines, maxWidth
+	return lines, maxWidth, lineWidths
 }
-
 // buildVerticalOutput writes aligned lines into a builder.
-func buildVerticalOutput(lines [][]string, maxWidth int, pos Position) string {
+func buildVerticalOutput(lines [][]string, maxWidth int, lineWidths [][]int, pos Position) string {
 	var builder strings.Builder
 
 	for blockIdx, block := range lines {
@@ -160,9 +175,8 @@ func buildVerticalOutput(lines [][]string, maxWidth int, pos Position) string {
 			builder.WriteByte('\n')
 		}
 
-		for _, line := range block {
-			w := CellWidth(line)
-			pad := maxWidth - w
+		for lineIdx, line := range block {
+			pad := maxWidth - lineWidths[blockIdx][lineIdx]
 
 			writeAlignedLine(&builder, pos, line, pad)
 			builder.WriteByte('\n')

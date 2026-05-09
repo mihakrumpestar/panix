@@ -46,7 +46,7 @@ func (w *Workflow) executeRollbackPhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 						return err
 					}
 
-					log.Output.WriteLineString(fmt.Sprintf("target generation: %d", targetGenNum))
+					log.Output.Write(fmt.Appendf(nil, "target generation: %d", targetGenNum))
 
 					return nil
 				},

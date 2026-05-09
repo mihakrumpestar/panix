@@ -67,7 +67,7 @@ func TestPhaseFlow_SinglePhase(t *testing.T) {
 		t.Fatal("Should produce output")
 	}
 
-	lines := strings.Split(stripANSI(got), "\n")
+	lines := strings.Split(style.StripANSI(got), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("Expected 2 lines, got %d: %v", len(lines), lines)
 	}
@@ -83,7 +83,7 @@ func TestPhaseFlow_MultiplePhases_EvenDistribution(t *testing.T) {
 	flowObj := New().Width(60).Phases("A", "B", "C").Styles(testStyles())
 	got := flowObj.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 
 	for line := range strings.SplitSeq(visible, "\n") {
 		if line == "" {
@@ -107,7 +107,7 @@ func TestPhaseFlow_StatusLine(t *testing.T) {
 	})
 
 	got := flowObj.String()
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	lines := strings.Split(visible, "\n")
 
 	if len(lines) < 2 {
@@ -152,8 +152,8 @@ func TestPhaseFlow_Cache_DataChange(t *testing.T) {
 	flowObj.SetData([]PhaseData{{Running: 2}, {Running: 1}})
 	result2 := flowObj.String()
 
-	visible1 := stripANSI(result1)
-	visible2 := stripANSI(result2)
+	visible1 := style.StripANSI(result1)
+	visible2 := style.StripANSI(result2)
 
 	if visible1 == visible2 {
 		t.Error("Different data should produce different output")
@@ -302,7 +302,7 @@ func TestPhaseFlow_ArrowOnPhaseNameRow(t *testing.T) {
 	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
 	got := flowObj.String()
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	lines := strings.Split(visible, "\n")
 
 	if len(lines) < 2 {
@@ -351,31 +351,4 @@ func TestDetermineState(t *testing.T) {
 			}
 		})
 	}
-}
-
-func stripANSI(str string) string {
-	var builder strings.Builder
-
-	pos := 0
-
-	for pos < len(str) {
-		if str[pos] == '\x1b' {
-			pos++
-
-			for pos < len(str) && (str[pos] < 'A' || str[pos] > 'Z') && (str[pos] < 'a' || str[pos] > 'z') {
-				pos++
-			}
-
-			if pos < len(str) {
-				pos++
-			}
-
-			continue
-		}
-
-		builder.WriteByte(str[pos])
-		pos++
-	}
-
-	return builder.String()
 }

@@ -115,30 +115,8 @@ func TestViewContentHasHorizontalPadding(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
 	content := lines[1]
 
-	clean := stripANSI(content)
+	clean := style.StripANSI(content)
 	if !strings.HasPrefix(clean, "│ ") || !strings.HasSuffix(clean, " │") {
 		t.Fatalf("content line should have padding inside borders: %q", clean)
 	}
-}
-
-func stripANSI(str string) string {
-	var builder strings.Builder
-
-	pos := 0
-	for pos < len(str) {
-		if str[pos] == '\x1b' {
-			for pos < len(str) && str[pos] != 'm' {
-				pos++
-			}
-
-			pos++
-
-			continue
-		}
-
-		builder.WriteByte(str[pos])
-		pos++
-	}
-
-	return builder.String()
 }

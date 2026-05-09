@@ -43,8 +43,8 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 				// in SGR parameter ordering (bold merged vs separate) and
 				// empty-string handling. Strip all ANSI sequences and compare
 				// the visible content + verify ANSI wrapping is present.
-				expectedVisible := stripANSI(expected)
-				gotVisible := stripANSI(got)
+				expectedVisible := StripANSI(expected)
+				gotVisible := StripANSI(got)
 
 				if expectedVisible != gotVisible {
 					t.Errorf("Visible content mismatch for %q (color=%s bold=%v):\n  expected: %q\n  got:      %q", input, color, bold, expectedVisible, gotVisible)
@@ -68,24 +68,4 @@ func TestANSIStyle_EmptyString(t *testing.T) {
 	if got != "" {
 		t.Errorf("ANSIStyle.Render(\"\") = %q, want \"\"", got)
 	}
-}
-
-// stripANSI removes all ANSI escape sequences from a string.
-func stripANSI(str string) string {
-	var builder strings.Builder
-
-	pos := 0
-
-	for pos < len(str) {
-		if str[pos] == '\x1b' {
-			pos = skipANSI(str, pos)
-
-			continue
-		}
-
-		builder.WriteByte(str[pos])
-		pos++
-	}
-
-	return builder.String()
 }

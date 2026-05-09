@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/stoewer/go-strcase"
@@ -77,7 +77,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 		executioner.DisableAutoSSHCommand(),
 		executioner.Env(env),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			storePath = strings.TrimSpace(string(lastNonEmptyLine(log.Output.Bytes())))
+			storePath = style.StripANSI(string(log.Output.LastLine()))
 
 			if storePath == "" || !strings.HasPrefix(storePath, "/nix/store/") {
 				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", fleetLeaf.Flake.Name, configurationI.Name, strconv.Quote(storePath))
@@ -121,20 +121,6 @@ func nixBuildCommand(configurationI *configuration.Configuration, machineI *mach
 		slices.Concat(configurationI.Nix.ExtraFlags, configurationI.Nix.BuildFlags),
 		installables,
 	)
-}
-
-func lastNonEmptyLine(b []byte) []byte {
-	lines := bytes.Split(b, []byte("\n"))
-	slices.Reverse(lines)
-
-	for _, line := range lines {
-		trimmed := bytes.TrimSpace(line)
-		if len(trimmed) > 0 {
-			return trimmed
-		}
-	}
-
-	return []byte{}
 }
 
 func nixBuildEnv(configurationI *configuration.Configuration, machineI *machine.Machine) ([]string, error) {

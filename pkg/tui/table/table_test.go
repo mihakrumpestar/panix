@@ -101,7 +101,7 @@ func TestTable_WidthExpandsToFill(t *testing.T) {
 	tbl.SetRows([][]string{{"1", "2"}})
 	got := tbl.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth != 30 {
@@ -117,7 +117,7 @@ func TestTable_WidthShrinksToShrink(t *testing.T) {
 	tbl.SetRows([][]string{{"longcontent1", "longcontent2"}})
 	got := tbl.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth > 14 {
@@ -133,7 +133,7 @@ func TestTable_WidthNoBorder(t *testing.T) {
 	tbl.SetRows([][]string{{"1", "2"}})
 	got := tbl.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth != 20 {
@@ -193,7 +193,7 @@ func TestTable_WrapFalse_Truncates(t *testing.T) {
 	tbl.SetRows([][]string{{"abcdefghijXYZ"}})
 	got := tbl.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		content := strings.Trim(line, "│ ")
 		if content == "abcdefghijXYZ" {
@@ -385,7 +385,7 @@ func TestTable_SelectionBackgroundNoOuterBorderBg(t *testing.T) {
 
 	lines := strings.SplitSeq(got, "\n")
 	for line := range lines {
-		visible := stripANSI(line)
+		visible := style.StripANSI(line)
 		if !strings.Contains(visible, "x") || !strings.Contains(visible, "y") {
 			continue
 		}
@@ -426,7 +426,7 @@ func TestTable_SelectionBackgroundWithFgColor(t *testing.T) {
 	selLine := ""
 
 	for _, line := range lines {
-		if strings.Contains(stripANSI(line), "x") && strings.Contains(stripANSI(line), "y") {
+		if strings.Contains(style.StripANSI(line), "x") && strings.Contains(style.StripANSI(line), "y") {
 			selLine = line
 
 			break
@@ -501,7 +501,7 @@ func TestTable_FixedWidthColumns(t *testing.T) {
 	tbl.SetRows([][]string{{"a", "bb", "c"}})
 	got := tbl.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth(line)
 		if lineWidth != 20 {
@@ -546,7 +546,7 @@ func TestTable_FixedWidthRespected(t *testing.T) {
 	tbl.SetRows([][]string{{"1", "test"}})
 	got := tbl.String()
 
-	visible := stripANSI(got)
+	visible := style.StripANSI(got)
 	lines := strings.SplitSeq(visible, "\n")
 
 	for line := range lines {
@@ -634,7 +634,7 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 	tbl.SetRows([][]string{{"a", "x"}, {"y", "z"}})
 	result := tbl.String()
 
-	visible := stripANSI(result)
+	visible := style.StripANSI(result)
 	lines := strings.SplitSeq(visible, "\n")
 
 	for line := range lines {
@@ -647,31 +647,4 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 			t.Errorf("Line width = %d, want 20. Line: %q", lineWidth, line)
 		}
 	}
-}
-
-func stripANSI(str string) string {
-	var builder strings.Builder
-
-	pos := 0
-
-	for pos < len(str) {
-		if str[pos] == '\x1b' {
-			pos++
-
-			for pos < len(str) && (str[pos] < 'A' || str[pos] > 'Z') && (str[pos] < 'a' || str[pos] > 'z') {
-				pos++
-			}
-
-			if pos < len(str) {
-				pos++
-			}
-
-			continue
-		}
-
-		builder.WriteByte(str[pos])
-		pos++
-	}
-
-	return builder.String()
 }

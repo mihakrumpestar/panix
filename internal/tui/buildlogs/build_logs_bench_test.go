@@ -130,7 +130,7 @@ func newTestMachine(phases []phase.Phase, running bool) *machine.Machine {
 		cmd := phaseLog.NewCommand(describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
 		cmd.TimeAndState.StartTimer()
 		cmd.TimeAndState.EndTimerWithError(nil)
-		cmd.Output.WriteLineString("done in 0.5s")
+		cmd.Output.Write([]byte("done in 0.5s"))
 	}
 
 	return mach
@@ -146,9 +146,9 @@ func newTestMachineWithOutput(phases []phase.Phase) *machine.Machine {
 
 		cmd := phaseLog.NewCommand(describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
 		cmd.TimeAndState.StartTimer()
-		cmd.Output.WriteLineString("output line 1")
-		cmd.Output.WriteLineString("output line 2")
-		cmd.Output.WriteLineString("output line 3")
+		cmd.Output.Write([]byte("output line 1"))
+		cmd.Output.Write([]byte("output line 2"))
+		cmd.Output.Write([]byte("output line 3"))
 	}
 
 	return mach
@@ -168,7 +168,7 @@ func newTestMachineWithError(phases []phase.Phase) *machine.Machine {
 		cmd.TimeAndState.EndTimerWithError(os.ErrNotExist)
 
 		if idx == 0 {
-			cmd.Output.WriteLineString("error: something went wrong")
+			cmd.Output.Write([]byte("error: something went wrong"))
 		}
 	}
 

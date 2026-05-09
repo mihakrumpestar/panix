@@ -140,6 +140,80 @@ func skipANSI(str string, pos int) int {
 	return pos
 }
 
+// StripANSI removes all ANSI escape sequences from s and returns the visible
+// text. It handles CSI, OSC, and bare ESC sequences using the same parser as
+// CellWidth. The returned string shares no allocation with the input.
+func StripANSI(str string) string {
+	if !strings.ContainsRune(str, '\x1b') {
+		return str
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(str))
+
+	pos := 0
+	for pos < len(str) {
+		if str[pos] == '\x1b' {
+			pos = skipANSI(str, pos)
+
+			continue
+		}
+
+		builder.WriteByte(str[pos])
+		pos++
+	}
+
+	return builder.String()
+}
+
+// StripANSIBytes removes all ANSI escape sequences from data, writing the
+// visible text into dst and returning it. dst may be nil. If data contains no
+// ESC bytes, the result is a sub-slice of the original data (zero-copy).
+func StripANSIBytes(dst, data []byte) []byte {
+	idx := indexByte(data, '\x1b')
+	if idx < 0 {
+		return data
+	}
+
+	if cap(dst) == 0 {
+		dst = make([]byte, 0, len(data))
+	}
+
+	dst = dst[:0]
+	dst = append(dst, data[:idx]...)
+	pos := idx
+
+	for pos < len(data) {
+		if data[pos] == '\x1b' {
+			// Reuse skipANSI by converting byte position to string call.
+			// The string view shares the same underlying data.
+			//nolint:gosec // G103: audited — zero-copy string view of remaining data, data outlives s
+			s := unsafe.String(&data[pos], len(data)-pos)
+			end := skipANSI(s, 0)
+			pos += end
+
+			continue
+		}
+
+		dst = append(dst, data[pos])
+		pos++
+	}
+
+	return dst
+}
+
+// indexByte returns the index of c in b, or -1 if not found.
+// Avoids bytes.IndexByte import.
+func indexByte(b []byte, c byte) int {
+	for i := range b {
+		if b[i] == c {
+			return i
+		}
+	}
+
+	return -1
+}
+
 // CountLines returns the number of lines in a string (1 for a string with no
 // newlines, including empty strings). It replaces lipgloss.Height in hot
 // paths with a direct newline count.

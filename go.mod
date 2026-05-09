@@ -5,14 +5,15 @@ go 1.26.2
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.3
+	codeberg.org/tslocum/cview v1.6.4
 	dario.cat/mergo v1.0.2
 	github.com/alecthomas/kong v1.15.0
 	github.com/alitto/pond/v2 v2.7.1
 	github.com/boyter/scc/v3 v3.7.0
 	github.com/charmbracelet/ultraviolet v0.0.0-20260428153724-66037269d7be
 	github.com/chelnak/ysmrr v0.6.0
-	github.com/creack/pty v1.1.24
 	github.com/fatih/color v1.19.0
+	github.com/gdamore/tcell/v3 v3.2.0
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/go-sprout/sprout v1.0.3
 	github.com/goccy/go-yaml v1.19.2
@@ -31,11 +32,13 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/crypto v0.50.0
+	golang.org/x/sys v0.43.0
 	golang.org/x/term v0.42.0
 )
 
 require (
 	charm.land/bubbletea/v2 v2.0.6 // indirect
+	codeberg.org/tslocum/cbind v0.1.8 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/agnivade/levenshtein v1.2.2-0.20250519083737-420867539855 // indirect
 	github.com/boyter/gocodewalker v1.5.2-0.20260227212453-19676720409f // indirect
@@ -49,6 +52,7 @@ require (
 	github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
+	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
@@ -70,7 +74,6 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/image v0.39.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

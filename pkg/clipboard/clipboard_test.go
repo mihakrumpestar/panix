@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 func TestStripANSI(t *testing.T) {
@@ -27,9 +29,9 @@ func TestStripANSI(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := stripANSI(test.input)
+			got := style.StripANSI(test.input)
 			if got != test.want {
-				t.Errorf("stripANSI(%q) = %q, want %q", test.input, got, test.want)
+				t.Errorf("StripANSI(%q) = %q, want %q", test.input, got, test.want)
 			}
 		})
 	}

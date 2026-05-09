@@ -60,13 +60,14 @@ type model struct {
 	lastWorkflowUpdate time.Time
 	err                error
 	contentVersion     uint64
-	header             *header.Header
-	buildLogs          *buildlogs.BuildLogs
-	footer             *footer.Footer
-	spinners           *spinners.Spinners
-	viewports          *viewports.Viewports
-	statsTable         *statstable.StatsTable
-	phaseFlow          *phaseflow.PhaseFlow
+
+	header     *header.Header
+	buildLogs  *buildlogs.BuildLogs
+	footer     *footer.Footer
+	spinners   *spinners.Spinners
+	viewports  *viewports.Viewports
+	statsTable *statstable.StatsTable
+	phaseFlow  *phaseflow.PhaseFlow
 }
 
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {

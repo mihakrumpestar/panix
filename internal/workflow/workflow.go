@@ -133,7 +133,18 @@ func (w *Workflow) Phase(
 	}
 
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phaseI != phase.Inspect)
-	exc := executioner.NewExecutioner(ctx, w.conf.Flags.Timeout, dryRun, xpath, fleetLeaf.Machine, phaseI, phaseLog, w.updateHook.Signal)
+
+	executionerConf := executioner.ExecutionerConf{
+		Ctx:          ctx,
+		Timeout:      w.conf.Flags.Timeout,
+		DryRun:       dryRun,
+		Xpath:        xpath,
+		Machine:      fleetLeaf.Machine,
+		Phase:        phaseI,
+		PhaseLog:     phaseLog,
+		OnUpdateHook: w.updateHook.Signal,
+	}
+	exc := executioner.NewExecutioner(executionerConf)
 	err = phaseCode(exc, phaseLog)
 
 	phaseLog.TimeAndState.EndTimerWithError(err)

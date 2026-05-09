@@ -18,7 +18,7 @@ func Benchmark__Render_SingleLine(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Render_SingleLine(b *testing.B) {
+func Benchmark_Lipgloss__Render_SingleLine(b *testing.B) {
 	lgSty := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
 
 	b.ResetTimer()
@@ -40,7 +40,7 @@ func Benchmark__Render_MultiLine(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Render_MultiLine(b *testing.B) {
+func Benchmark_Lipgloss__Render_MultiLine(b *testing.B) {
 	lgSty := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
 	content := "line1\nline2\nline3"
 
@@ -63,7 +63,7 @@ func Benchmark__Render_LongLine(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Render_LongLine(b *testing.B) {
+func Benchmark_Lipgloss__Render_LongLine(b *testing.B) {
 	lgSty := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF79C6"))
 	content := strings.Repeat("x", 200)
 
@@ -86,7 +86,7 @@ func Benchmark__Render_WithEmoji(b *testing.B) {
 	}
 }
 
-func BenchmarkRef_Lipgloss__Render_WithEmoji(b *testing.B) {
+func Benchmark_Lipgloss__Render_WithEmoji(b *testing.B) {
 	lgSty := lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Bold(true)
 	content := "📁 flake1  (0.50s)"
 
