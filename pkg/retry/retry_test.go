@@ -130,24 +130,41 @@ func TestTriggerMultipleTimesSequential(t *testing.T) {
 	retry := NewTaskRetry()
 	ctx := context.Background()
 
-	// Trigger is idempotent — multiple calls set signaled=true
-	retry.Trigger()
-	retry.Trigger()
-	retry.Trigger()
+	// With broadcast semantics, triggers without waiters are no-ops.
+	// Verify that trigger AFTER waiters start broadcasts to all of them.
+	var waitGroup sync.WaitGroup
 
-	// First Wait consumes the signal
-	err := retry.Wait(ctx)
-	if err != nil {
-		t.Errorf("first Wait() = %v, want nil", err)
+	count := 3
+	results := make([]error, count)
+
+	for idx := range count {
+		waitGroup.Add(1)
+
+		go func(idx int) {
+			defer waitGroup.Done()
+
+			results[idx] = retry.Wait(ctx)
+		}(idx)
 	}
 
-	// Second Wait should block (signal was consumed)
+	time.Sleep(5 * time.Millisecond)
+	retry.Trigger()
+
+	waitGroup.Wait()
+
+	for i, err := range results {
+		if err != nil {
+			t.Errorf("wait goroutine %d: Wait() = %v, want nil (broadcast should wake all)", i, err)
+		}
+	}
+
+	// After broadcast, next Wait should block (channel is fresh).
 	ctx2, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	err = retry.Wait(ctx2)
+	err := retry.Wait(ctx2)
 	if err == nil {
-		t.Error("second Wait() should block after signal was consumed")
+		t.Error("Wait() after broadcast should block (no pending trigger)")
 	}
 
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -221,13 +238,20 @@ func TestTriggerBeforeWaitIsConsumed(t *testing.T) {
 
 	retry := NewTaskRetry()
 
+	// With broadcast semantics, Trigger before Wait is a no-op
+	// (no waiters to broadcast to). Wait must block.
 	retry.Trigger()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
 
 	err := retry.Wait(ctx)
-	if err != nil {
-		t.Errorf("Wait() after pre-Trigger = %v, want nil (signal should persist)", err)
+	if err == nil {
+		t.Error("Wait() after pre-Trigger should block (broadcast semantics, no pre-signal)")
+	}
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, context.DeadlineExceeded) = false, got %v", err)
 	}
 }
 
@@ -236,21 +260,29 @@ func TestTriggerBeforeWaitConsumedOnce(t *testing.T) {
 
 	retry := NewTaskRetry()
 
+	// Trigger before any waiter → broadcast is a no-op, channel is fresh.
+	// Both Waits must block.
 	retry.Trigger()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
 
 	err := retry.Wait(ctx)
-	if err != nil {
-		t.Errorf("first Wait() = %v, want nil", err)
+	if err == nil {
+		t.Error("first Wait() after pre-Trigger should block")
 	}
 
-	ctx2, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, context.DeadlineExceeded) = false, got %v", err)
+	}
+
+	// Second Wait also blocks — channel is still empty.
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel2()
 
 	err = retry.Wait(ctx2)
 	if err == nil {
-		t.Error("second Wait() should block after signal was consumed")
+		t.Error("second Wait() should also block")
 	}
 
 	if !errors.Is(err, context.DeadlineExceeded) {

@@ -38,9 +38,11 @@ type (
 	workflowUpdateHookMsg struct{}
 
 	restartMsg struct{}
+	retryMsg   struct{}
 )
 
 func restartCmd() zeroterm.Msg { return restartMsg{} }
+func retryCmd() zeroterm.Msg   { return retryMsg{} }
 
 type errMsg struct { //nolint:errname
 	err error
@@ -143,32 +145,34 @@ func (m *model) Init() []zeroterm.Cmd {
 }
 
 func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
-	var cmds []zeroterm.Cmd
+	var cmd []zeroterm.Cmd
 
 	resetable := m.resetable.Load()
 	if resetable != nil {
-		cmds = append(cmds, m.viewports.Update(msg))
-		cmds = append(cmds, m.footer.Update(msg))
-		cmds = append(cmds, m.spinners.Update(msg))
+		cmd = append(cmd, m.viewports.Update(msg))
+		cmd = append(cmd, m.footer.Update(msg))
+		cmd = append(cmd, m.spinners.Update(msg))
 	}
 
 	switch msg := msg.(type) {
 	case errMsg:
-		cmds = append(cmds, m.handleErrMsg(msg))
+		cmd = append(cmd, m.handleErrMsg(msg))
 
-		return zeroterm.BatchCmd(cmds...)
+		return zeroterm.BatchCmd(cmd...)
 	case workflowDoneMsg:
-		cmds = append(cmds, m.handleWorkflowDoneMsg(msg))
+		cmd = append(cmd, m.handleWorkflowDoneMsg(msg))
 
-		return zeroterm.BatchCmd(cmds...)
+		return zeroterm.BatchCmd(cmd...)
 	case restartMsg:
-		cmds = append(cmds, m.restartWorkflow())
+		cmd = append(cmd, m.restartWorkflow())
+	case retryMsg:
+		m.retryWorkflow()
 	case workflowUpdateHookMsg:
-		cmds = append(cmds, m.workflowUpdateHook())
+		cmd = append(cmd, m.workflowUpdateHook())
 	case zeroterm.PostRenderMsg:
-		cmds = append(cmds, m.spinners.ProcessPendingTicks())
+		cmd = append(cmd, m.spinners.ProcessPendingTicks())
 	case zeroterm.KeyPressMsg:
-		cmds = append(cmds, m.HandleKeyInput(msg))
+		cmd = append(cmd, m.HandleKeyInput(msg))
 	case zeroterm.MouseClickMsg:
 		m.handleMouseClick(msg)
 	case zeroterm.WindowSizeMsg:
@@ -176,7 +180,7 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 		m.dimensions.Height = msg.Height
 	}
 
-	return zeroterm.BatchCmd(cmds...)
+	return zeroterm.BatchCmd(cmd...)
 }
 
 func (m *model) Render(buf *zeroterm.RenderBuffer) {

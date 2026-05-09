@@ -50,3 +50,12 @@ func (m *model) restartWorkflow() zeroterm.Cmd {
 
 	return m.startResetableWorkflow()
 }
+
+func (m *model) retryWorkflow() {
+	r := m.resetable.Load()
+	if r == nil || r.workflow == nil {
+		return
+	}
+
+	r.workflow.State().Retry.Trigger()
+}

@@ -168,9 +168,9 @@ func (m *model) handleRetry() zeroterm.Cmd {
 		m.captureSnapshot(config.SnaphsotReasonRetry)
 	}
 
-	resetable.workflow.State().Retry.Trigger()
+	notifCmd := m.footer.Notification().Set("Retrying failed...", m.conf.ColorScheme.Status.OK.GetForeground())
 
-	return m.footer.Notification().Set("Retrying failed...", m.conf.ColorScheme.Status.OK.GetForeground())
+	return zeroterm.BatchCmd(notifCmd, retryCmd)
 }
 
 func (m *model) handleRestart() zeroterm.Cmd {
