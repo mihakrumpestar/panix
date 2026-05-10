@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/header"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
+	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
@@ -58,7 +58,7 @@ type model struct {
 	dimensions         *viewports.Dimensions
 	quitting           bool
 	isSnapshot         bool
-	resetable          atomic.Pointer[resetable]
+	workflow           *workflow.Workflow
 	lastWorkflowUpdate time.Time
 	err                error
 	contentVersion     uint64
@@ -112,8 +112,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	if mdl.quitting {
 		content := mdl.header.View(mdl.dimensions.Width)
 
-		r := mdl.resetable.Load()
-		if r != nil {
+		if mdl.workflow != nil {
 			content += mdl.viewMainContent()
 		}
 
@@ -139,7 +138,7 @@ func (m *model) Init() []zeroterm.Cmd {
 	}
 
 	return []zeroterm.Cmd{
-		m.startResetableWorkflow(),
+		m.startWorkflowCmd(),
 		m.workflowUpdateHook(),
 	}
 }
@@ -147,8 +146,7 @@ func (m *model) Init() []zeroterm.Cmd {
 func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	var cmd []zeroterm.Cmd
 
-	resetable := m.resetable.Load()
-	if resetable != nil {
+	if m.workflow != nil {
 		cmd = append(cmd, m.viewports.Update(msg))
 		cmd = append(cmd, m.footer.Update(msg))
 		cmd = append(cmd, m.spinners.Update(msg))
@@ -184,8 +182,7 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 }
 
 func (m *model) Render(buf *zeroterm.RenderBuffer) {
-	resetable := m.resetable.Load()
-	if resetable == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
+	if m.workflow == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
 		return
 	}
 
@@ -255,8 +252,7 @@ func (m *model) handleWorkflowDoneMsg(msg workflowDoneMsg) zeroterm.Cmd {
 }
 
 func (m *model) viewMainContent() string {
-	resetable := m.resetable.Load()
-	if resetable == nil {
+	if m.workflow == nil {
 		return ""
 	}
 
@@ -304,16 +300,14 @@ func (m *model) viewMainContent() string {
 }
 
 func (m *model) workflowUpdateHook() zeroterm.Cmd {
-	// This happens in the backgound
 	return func() zeroterm.Msg {
-		resetable := m.resetable.Load()
-		if resetable == nil || resetable.workflow == nil {
+		if m.workflow == nil {
 			time.Sleep(workflowUpdateHookPollInterval)
 
 			return workflowUpdateHookMsg{}
 		}
 
-		<-resetable.workflow.WaitForUpdate()
+		<-m.workflow.WaitForUpdate()
 
 		now := time.Now()
 		elapsed := now.Sub(m.lastWorkflowUpdate)
@@ -329,8 +323,7 @@ func (m *model) workflowUpdateHook() zeroterm.Cmd {
 }
 
 func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
-	resetable := m.resetable.Load()
-	if resetable == nil {
+	if m.workflow == nil {
 		return ""
 	}
 

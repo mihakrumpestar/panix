@@ -77,8 +77,7 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 }
 
 func (m *model) handleCopy() zeroterm.Cmd {
-	resetable := m.resetable.Load()
-	if resetable == nil {
+	if m.workflow == nil {
 		return nil
 	}
 
@@ -101,14 +100,13 @@ func (m *model) handleCopy() zeroterm.Cmd {
 
 func (m *model) handleQuit() zeroterm.Cmd {
 	m.quitting = true
-	resetable := m.resetable.Load()
 
-	if resetable != nil && resetable.workflow != nil {
+	if m.workflow != nil {
 		if m.conf.Flags.Snapshot.OnExit {
 			m.captureSnapshot(config.SnaphsotReasonExit)
 		}
 
-		err := resetable.workflow.Cancel()
+		err := m.workflow.Cancel()
 		if m.err != nil && err != nil && !errors.Is(err, context.Canceled) {
 			m.err = errors.Wrap(m.err, err.Error())
 		} else if err != nil && !errors.Is(err, context.Canceled) {
@@ -159,8 +157,7 @@ func (m *model) handleToggleActiveOnly() zeroterm.Cmd {
 }
 
 func (m *model) handleRetry() zeroterm.Cmd {
-	resetable := m.resetable.Load()
-	if resetable == nil || resetable.workflow == nil {
+	if m.workflow == nil {
 		return nil
 	}
 
@@ -221,8 +218,7 @@ func (m *model) handleSnapshot() zeroterm.Cmd {
 }
 
 func (m *model) captureSnapshot(reason config.SnaphsotReason) {
-	resetable := m.resetable.Load()
-	if resetable == nil || resetable.workflow == nil {
+	if m.workflow == nil {
 		return
 	}
 

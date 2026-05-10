@@ -28,12 +28,16 @@ const (
 )
 
 type Workflow struct {
-	ctx        context.Context
+	parentCtx context.Context
+	ctx       context.Context
+
 	cancel     context.CancelFunc
 	conf       *config.Config
 	state      *WorkflowState
 	updateHook *hook.Hook
-	runner     *runner
+	done       chan struct{}
+
+	runner *runner
 }
 
 type WorkflowState struct {
@@ -45,7 +49,9 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	workflow := &Workflow{
-		ctx:    ctxWithCancel,
+		parentCtx: ctx,
+		ctx:       ctxWithCancel,
+
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
@@ -53,6 +59,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 			Retry: retry.NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),
+		done:       make(chan struct{}),
 	}
 
 	workflow.runner = newRunner(workflow)
@@ -68,12 +75,17 @@ func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
 
-// Cancel cancels the context and waits for it's completion.
+// Cancel cancels the context and waits for its completion.
 func (w *Workflow) Cancel() error {
 	w.cancel()
-	<-w.ctx.Done() // Wait to fully finish context (this also stops and cancels pool)
 
-	w.updateHook.Close() // If we don't close it, WaitForUpdate will wait beyond the restart
+	// If a workflow is running, wait for StartWorkflow to finish.
+	if w.done != nil {
+		<-w.done
+	}
+
+	// Close the update hook so any pending WaitForUpdate returns.
+	w.updateHook.Close()
 
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
@@ -168,6 +180,11 @@ func phaseLogsAndXpath(phaseI phase.Phase, fleetLeaf *fleet.FleetLeaf) (*logs.Lo
 
 // StartWorkflow orchestrates the execution of all phases.
 func (w *Workflow) StartWorkflow() error {
+	defer func() {
+		w.updateHook.Close()
+		close(w.done)
+	}()
+
 	subPool := w.state.Pool.NewGroup()
 
 	w.runner.groupCtx = subPool.Context()
@@ -205,8 +222,6 @@ func (w *Workflow) StartWorkflow() error {
 	}
 
 	err := subPool.Wait()
-
-	w.updateHook.Close()
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return errors.Wrap(err, "workflow execution failed")

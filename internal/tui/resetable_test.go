@@ -26,12 +26,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStartResetableWorkflow_ReturnsWorkflowDoneMsg(t *testing.T) {
+func TestStartWorkflowCmd_ReturnsWorkflowDoneMsg(t *testing.T) {
 	t.Parallel()
 
 	mdl := newTestModel(t)
 
-	cmd := mdl.startResetableWorkflow()
+	cmd := mdl.startWorkflowCmd()
 	require.NotNil(t, cmd)
 
 	msg := cmd()
@@ -98,7 +98,7 @@ func TestRestartWorkflow_IgnoresCancelErrors(t *testing.T) {
 	mdl := newTestModel(t)
 
 	// Start a workflow first so there's something to cancel
-	startCmd := mdl.startResetableWorkflow()
+	startCmd := mdl.startWorkflowCmd()
 	_ = startCmd()
 
 	// The workflow was started; now restart it.
@@ -113,7 +113,7 @@ func TestRestartWorkflow_NoExistingWorkflow(t *testing.T) {
 	t.Parallel()
 
 	mdl := newTestModel(t)
-	mdl.resetable.Store(nil)
+	mdl.workflow = nil
 
 	cmd := mdl.restartWorkflow()
 	require.NotNil(t, cmd, "restart should start a new workflow even without an existing one")

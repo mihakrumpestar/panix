@@ -6,35 +6,28 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type resetable struct {
-	workflow *workflow.Workflow
-}
-
 type workflowDoneMsg struct {
 	err error
 }
 
-func (m *model) startResetableWorkflow() zeroterm.Cmd {
+func (m *model) startWorkflowCmd() zeroterm.Cmd {
 	return func() zeroterm.Msg {
-		workflow, err := workflow.NewWorkflow(m.ctx, m.conf)
+		var err error
+
+		m.workflow, err = workflow.NewWorkflow(m.ctx, m.conf)
 		if err != nil {
 			return errMsg{err: err}
 		}
 
-		m.resetable.Store(&resetable{
-			workflow: workflow,
-		})
-
-		err = workflow.StartWorkflow()
+		err = m.workflow.StartWorkflow()
 
 		return workflowDoneMsg{err: err}
 	}
 }
 
 func (m *model) restartWorkflow() zeroterm.Cmd {
-	r := m.resetable.Load()
-	if r != nil {
-		err := r.workflow.Cancel()
+	if m.workflow != nil {
+		err := m.workflow.Cancel()
 		if err != nil {
 			log.Debug().Err(err).Msg("workflow cancelled for restart")
 		}
@@ -48,14 +41,13 @@ func (m *model) restartWorkflow() zeroterm.Cmd {
 	m.err = nil
 	m.buildLogs = nil
 
-	return m.startResetableWorkflow()
+	return m.startWorkflowCmd()
 }
 
 func (m *model) retryWorkflow() {
-	r := m.resetable.Load()
-	if r == nil || r.workflow == nil {
+	if m.workflow == nil {
 		return
 	}
 
-	r.workflow.State().Retry.Trigger()
+	m.workflow.State().Retry.Trigger()
 }
