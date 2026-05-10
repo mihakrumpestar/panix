@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -164,29 +166,27 @@ func TestZoneLifecycleAcrossFrames(t *testing.T) {
 	frame1Line3 := Mark("test-zone", "line3")
 
 	// Frame 1: 3 lines with zone
-	frame1 := [][]byte{
-		[]byte(frame1Line1),
-		[]byte(frame1Line2),
-		[]byte(frame1Line3),
-	}
-	SetCurrentLines(frame1)
+	frame1Buf := linesbuffer.NewPooled()
+	frame1Buf.Write([]byte(frame1Line1))
+	frame1Buf.Write([]byte(frame1Line2))
+	frame1Buf.Write([]byte(frame1Line3))
+	SetCurrentLines(frame1Buf)
 
 	// Verify zone found in frame1 (col 2 is within "line1")
-	if !IsZoneAtLine(frame1[0], 2, "test-zone") {
+	if !IsZoneAtLine(frame1Buf.Line(0), 2, "test-zone") {
 		t.Errorf("frame1 zone at col 2 should be test-zone (line content: %q)", frame1Line1)
 	}
 
 	// Frame 2: Only 2 lines (shrink)
 	frame2Line1 := Mark("test-zone", "lineA")
 	frame2Line2 := Mark("test-zone", "lineB")
-	frame2 := [][]byte{
-		[]byte(frame2Line1),
-		[]byte(frame2Line2),
-	}
-	SetCurrentLines(frame2)
+	frame2Buf := linesbuffer.New()
+	frame2Buf.Write([]byte(frame2Line1))
+	frame2Buf.Write([]byte(frame2Line2))
+	SetCurrentLines(frame2Buf)
 
 	// Verify zone found in frame2 (col 3 is within "lineA")
-	if !IsZoneAtLine(frame2[0], 3, "test-zone") {
+	if !IsZoneAtLine(frame2Buf.Line(0), 3, "test-zone") {
 		t.Errorf("frame2 zone at col 3 should be test-zone (line content: %q)", frame2Line1)
 	}
 }
@@ -223,12 +223,14 @@ func TestIsZoneAtLineUnknownName(t *testing.T) {
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestCurrentLines(t *testing.T) {
-	lines := [][]byte{[]byte("line1"), []byte("line2")}
-	SetCurrentLines(lines)
+	buf := linesbuffer.NewPooled()
+	buf.Write([]byte("line1"))
+	buf.Write([]byte("line2"))
+	SetCurrentLines(buf)
 
 	got := CurrentLines()
-	if len(got) != 2 || string(got[0]) != "line1" || string(got[1]) != "line2" {
-		t.Errorf("CurrentLines() = %v, want %v", got, lines)
+	if got.Len() != 2 || string(got.Line(0)) != "line1" || string(got.Line(1)) != "line2" {
+		t.Errorf("CurrentLines() = %v, want %v", got, buf)
 	}
 }
 

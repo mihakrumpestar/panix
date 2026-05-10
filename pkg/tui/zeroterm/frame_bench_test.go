@@ -10,6 +10,8 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	zone "github.com/lrstanley/bubblezone/v2"
+
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
 
 var zoneOnce sync.Once
@@ -19,7 +21,7 @@ func ensureZoneGlobal() {
 }
 
 //nolint:unparam
-func makeANSILines(width, lines int) [][]byte {
+func makeANSILines(width, lines int) *linesbuffer.LinesBuffer {
 	var builder strings.Builder
 
 	for lineIdx := range lines {
@@ -37,14 +39,10 @@ func makeANSILines(width, lines int) [][]byte {
 		}
 	}
 
-	result := strings.Split(builder.String(), "\n")
+	buf := linesbuffer.NewPooled()
+	buf.WriteString(builder.String())
 
-	byteLines := make([][]byte, len(result))
-	for i, line := range result {
-		byteLines[i] = []byte(line)
-	}
-
-	return byteLines
+	return buf
 }
 
 //nolint:unparam
@@ -96,10 +94,12 @@ func makePlainContent(width, lines int) string {
 
 func Benchmark__RenderPipe(b *testing.B) {
 	width, height := 200, 50
-	lines := makeANSILines(width, height)
+	cur := makeANSILines(width, height)
 
-	prevLines := make([][]byte, len(lines))
-	copy(prevLines, lines)
+	prev := linesbuffer.New()
+	for i := range cur.Len() {
+		prev.Write(cur.Line(i))
+	}
 
 	var outBuf []byte
 
@@ -108,16 +108,14 @@ func Benchmark__RenderPipe(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		diffs := DiffLines(lines, prevLines)
-		outBuf = RenderLines(outBuf[:0], diffs, lines, len(prevLines), height)
+		diffs := cur.Diff(prev)
+		outBuf = RenderLines(outBuf[:0], diffs, cur, prev.Len(), height)
 
-		if cap(prevLines) >= len(lines) {
-			prevLines = prevLines[:len(lines)]
-		} else {
-			prevLines = make([][]byte, len(lines))
+		prev.Reset()
+
+		for i := range cur.Len() {
+			prev.Write(cur.Line(i))
 		}
-
-		copy(prevLines, lines)
 	}
 }
 
@@ -145,10 +143,12 @@ func Benchmark_Bubbletea__RenderPipe(b *testing.B) {
 
 func Benchmark__RenderPipeNoChange(b *testing.B) {
 	width, height := 200, 50
-	lines := makeANSILines(width, height)
+	cur := makeANSILines(width, height)
 
-	prevLines := make([][]byte, len(lines))
-	copy(prevLines, lines)
+	prev := linesbuffer.New()
+	for i := range cur.Len() {
+		prev.Write(cur.Line(i))
+	}
 
 	var outBuf []byte
 
@@ -157,8 +157,8 @@ func Benchmark__RenderPipeNoChange(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		diffs := DiffLines(lines, prevLines)
-		outBuf = RenderLines(outBuf[:0], diffs, lines, len(prevLines), height)
+		diffs := cur.Diff(prev)
+		outBuf = RenderLines(outBuf[:0], diffs, cur, prev.Len(), height)
 	}
 }
 
@@ -188,11 +188,11 @@ func Benchmark_Bubbletea__RenderPipeNoChange(b *testing.B) {
 
 func Benchmark__RenderLinesFullChange(b *testing.B) {
 	width, height := 200, 50
-	lines := makeANSILines(width, height)
+	cur := makeANSILines(width, height)
 
-	diffs := make([]ChangedLine, height)
+	diffs := make([]int, height)
 	for i := range diffs {
-		diffs[i] = ChangedLine{Y: i}
+		diffs[i] = i
 	}
 
 	var outBuf []byte
@@ -202,7 +202,7 @@ func Benchmark__RenderLinesFullChange(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		outBuf = RenderLines(outBuf[:0], diffs, lines, height, height)
+		outBuf = RenderLines(outBuf[:0], diffs, cur, height, height)
 	}
 }
 
@@ -240,11 +240,11 @@ func Benchmark_Bubbletea__RenderLinesFullChange(b *testing.B) {
 
 func Benchmark__RenderLinesQuarterChange(b *testing.B) {
 	width, height := 200, 50
-	lines := makeANSILines(width, height)
+	cur := makeANSILines(width, height)
 
-	var diffs []ChangedLine
+	var diffs []int
 	for y := 0; y < height; y += 4 {
-		diffs = append(diffs, ChangedLine{Y: y})
+		diffs = append(diffs, y)
 	}
 
 	var outBuf []byte
@@ -254,7 +254,7 @@ func Benchmark__RenderLinesQuarterChange(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		outBuf = RenderLines(outBuf[:0], diffs, lines, height, height)
+		outBuf = RenderLines(outBuf[:0], diffs, cur, height, height)
 	}
 }
 

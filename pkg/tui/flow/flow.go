@@ -205,7 +205,7 @@ func (pf *PhaseFlow) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 
 	lines := zeroterm.CurrentLines()
 
-	if msg.Y < 0 || msg.Y >= len(lines) {
+	if msg.Y < 0 || msg.Y >= lines.Len() {
 		if pf.selectedIndex >= 0 {
 			pf.selectedIndex = -1
 			pf.cacheResult = ""
@@ -222,7 +222,7 @@ func (pf *PhaseFlow) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 		}
 
 		zoneName := fmt.Sprintf("%s-%d", pf.zonePrefix, idx)
-		if zeroterm.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
+		if zeroterm.IsZoneAtLine(lines.Line(msg.Y), msg.X, zoneName) {
 			if pf.selectedIndex != idx {
 				pf.selectedIndex = idx
 				pf.cacheResult = ""

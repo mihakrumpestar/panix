@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -37,7 +39,7 @@ type dummyModel struct{}
 
 func (m *dummyModel) Init() []Cmd            { return nil }
 func (m *dummyModel) Update(msg Msg) Cmd    { return nil }
-func (m *dummyModel) Render(rb *RenderBuffer) {}
+func (m *dummyModel) Render(buf *linesbuffer.LinesBuffer) {}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestProcessCmdsWithNil(t *testing.T) {
@@ -70,7 +72,8 @@ func TestRenderFrameDetectsChanges(t *testing.T) {
 
 	prog.renderFrame()
 
-	if len(prog.prevLines) == 0 || string(prog.prevLines[0]) != "Hello World" {
+	prevBuf := prog.frames[1-prog.curFrame]
+	if prevBuf.Len() == 0 || string(prevBuf.Line(0)) != "Hello World" {
 		t.Error("prevLines should have content after renderFrame")
 	}
 }
@@ -81,8 +84,8 @@ type renderTestModel struct {
 
 func (m *renderTestModel) Init() []Cmd         { return nil }
 func (m *renderTestModel) Update(msg Msg) Cmd  { return nil }
-func (m *renderTestModel) Render(rb *RenderBuffer) {
-	rb.WriteLine([]byte(m.content))
+func (m *renderTestModel) Render(buf *linesbuffer.LinesBuffer) {
+	buf.Write([]byte(m.content))
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -173,8 +176,8 @@ func (m *sizeTrackingModel) Update(msg Msg) Cmd {
 
 	return nil
 }
-func (m *sizeTrackingModel) Render(rb *RenderBuffer) {
-	rb.WriteLine(fmt.Appendf(nil, "%dx%d", m.lastSize.Width, m.lastSize.Height))
+func (m *sizeTrackingModel) Render(buf *linesbuffer.LinesBuffer) {
+	buf.Write(fmt.Appendf(nil, "%dx%d", m.lastSize.Width, m.lastSize.Height))
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe

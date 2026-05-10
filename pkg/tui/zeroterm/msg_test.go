@@ -2,6 +2,8 @@ package zeroterm
 
 import (
 	"testing"
+
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -54,7 +56,7 @@ type mockModel struct{}
 
 func (m *mockModel) Init() []Cmd         { return nil }
 func (m *mockModel) Update(msg Msg) Cmd  { return nil }
-func (m *mockModel) Render(rb *RenderBuffer) {}
+func (m *mockModel) Render(buf *linesbuffer.LinesBuffer) {}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestModelInterface(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
@@ -452,7 +453,10 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 	tbl.SetRows([][]string{{"a"}, {"b"}})
 	tbl.Select(0)
 
-	zeroterm.SetCurrentLines([][]byte{[]byte("no zones here"), []byte("another line")})
+	buf := linesbuffer.NewPooled()
+	buf.Write([]byte("no zones here"))
+	buf.Write([]byte("another line"))
+	zeroterm.SetCurrentLines(buf)
 
 	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0})
 

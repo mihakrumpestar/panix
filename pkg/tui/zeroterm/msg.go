@@ -2,6 +2,8 @@
 
 package zeroterm
 
+import "github.com/mihakrumpestar/panix/pkg/linesbuffer"
+
 type MouseButton uint8
 
 const (
@@ -48,8 +50,8 @@ type Cmd func() Msg
 type Model interface {
 	Init() []Cmd
 	Update(msg Msg) Cmd
-	// Render writes the screen lines into the RenderBuffer.
+	// Render writes the screen lines into the LinesBuffer.
 	// If nothing should be rendered (e.g., model not initialized),
 	// simply don't write anything to the buffer.
-	Render(buf *RenderBuffer)
+	Render(buf *linesbuffer.LinesBuffer)
 }

@@ -6,21 +6,22 @@ import (
 	"os"
 	"time"
 
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 	"github.com/pkg/errors"
 )
 
 type Program struct {
-	model     Model
-	terminal  *Terminal
-	prevLines [][]byte
-	outBuf    []byte
-	msgCh     chan Msg
-	stopCh    chan struct{}
-	width     int
-	height    int
-	raw       bool
-	frames    [2]RenderBuffer
-	curFrame  int
+	model           Model
+	terminal        *Terminal
+	outBuf          []byte
+	msgCh           chan Msg
+	stopCh          chan struct{}
+	width           int
+	height          int
+	raw             bool
+	forceFullRender bool
+	frames          [2]*linesbuffer.LinesBuffer
+	curFrame        int
 }
 
 type ProgramOption func(*Program)
@@ -36,6 +37,10 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 		msgCh:  make(chan Msg, 1024), //nolint:mnd
 		stopCh: make(chan struct{}),
 		outBuf: make([]byte, 0, 8192), //nolint:mnd
+		frames: [2]*linesbuffer.LinesBuffer{
+			linesbuffer.New(),
+			linesbuffer.New(),
+		},
 	}
 
 	for _, opt := range opts {
@@ -156,7 +161,7 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 			if newWidth != p.width || newHeight != p.height {
 				p.width = newWidth
 				p.height = newHeight
-				p.prevLines = p.prevLines[:0]
+				p.forceFullRender = true
 				cmds := p.model.Update(WindowSizeMsg{Width: newWidth, Height: newHeight})
 				p.processCmds(cmds)
 				p.renderFrame()
@@ -169,34 +174,41 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 }
 
 func (p *Program) renderFrame() {
-	cur := &p.frames[p.curFrame]
+	cur := p.frames[p.curFrame]
 	cur.Reset()
 	p.model.Render(cur)
 
-	if len(cur.Lines()) == 0 {
+	if cur.Len() == 0 {
 		return
 	}
 
-	lines := cur.Lines()
+	SetCurrentLines(cur)
 
-	SetCurrentLines(lines)
+	prevBuf := p.frames[1-p.curFrame]
 
-	if p.raw {
-		p.prevLines = p.prevLines[:0]
+	if p.raw || p.forceFullRender {
+		prevBuf.Reset()
+
+		p.forceFullRender = false
 	}
 
-	prevCount := len(p.prevLines)
-	diffs := DiffLines(lines, p.prevLines)
+	prevCount := prevBuf.Len()
+	if cur.Len() < prevCount {
+		prevBuf.Reset()
 
-	if !p.raw && len(diffs) == 0 && len(lines) >= len(p.prevLines) {
-		p.prevLines = lines
+		prevCount = 0
+	}
+
+	diffs := cur.Diff(prevBuf)
+
+	if len(diffs) == 0 && cur.Len() >= prevCount {
 		p.curFrame = 1 - p.curFrame
 
 		return
 	}
 
 	p.outBuf = p.outBuf[:0]
-	p.outBuf = RenderLines(p.outBuf, diffs, lines, prevCount, p.height)
+	p.outBuf = RenderLines(p.outBuf, diffs, cur, prevCount, p.height)
 
 	if len(p.outBuf) > 0 {
 		_, err := p.terminal.out.Write(p.outBuf)
@@ -205,7 +217,6 @@ func (p *Program) renderFrame() {
 		}
 	}
 
-	p.prevLines = lines
 	p.curFrame = 1 - p.curFrame
 }
 

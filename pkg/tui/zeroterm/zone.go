@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
 
 type ZoneManager struct {
@@ -16,11 +18,11 @@ type ZoneManager struct {
 
 var globalZones = newZoneManager()
 
-var currentLines [][]byte
+var currentLines *linesbuffer.LinesBuffer
 
-func SetCurrentLines(lines [][]byte) { currentLines = lines }
+func SetCurrentLines(lines *linesbuffer.LinesBuffer) { currentLines = lines }
 
-func CurrentLines() [][]byte { return currentLines }
+func CurrentLines() *linesbuffer.LinesBuffer { return currentLines }
 
 func newZoneManager() *ZoneManager {
 	return &ZoneManager{

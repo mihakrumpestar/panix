@@ -179,7 +179,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	}
 
 	lines := zeroterm.CurrentLines()
-	if msg.Y < 0 || msg.Y >= len(lines) {
+	if msg.Y < 0 || msg.Y >= lines.Len() {
 		if t.selectedIndex >= 0 {
 			t.selectedIndex = -1
 			t.outDirty = true
@@ -192,7 +192,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 
 	for idx := range len(t.rows) {
 		zoneName := fmt.Sprintf("%s-%d", t.zonePrefix, idx)
-		if zeroterm.IsZoneAtLine(lines[msg.Y], msg.X, zoneName) {
+		if zeroterm.IsZoneAtLine(lines.Line(msg.Y), msg.X, zoneName) {
 			if t.selectedIndex != idx {
 				t.selectedIndex = idx
 				t.outDirty = true

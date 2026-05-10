@@ -18,39 +18,16 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 )
 
 var ErrTypeAssertionFinalModel = errors.New("internal error: type assertion failed for finalModel")
-
-const (
-	workflowUpdateHookPollInterval  = 20 * time.Millisecond
-	workflowUpdateHookThrottleDelay = 40 * time.Millisecond
-)
-
-type (
-	workflowUpdateHookMsg struct{}
-
-	restartMsg struct{}
-	retryMsg   struct{}
-)
-
-func restartCmd() zeroterm.Msg { return restartMsg{} }
-func retryCmd() zeroterm.Msg   { return retryMsg{} }
-
-type errMsg struct { //nolint:errname
-	err error
-}
-
-func (e errMsg) Error() string {
-	return e.err.Error()
-}
 
 type model struct {
 	ctx                context.Context
@@ -138,11 +115,12 @@ func (m *model) Init() []zeroterm.Cmd {
 	}
 
 	return []zeroterm.Cmd{
-		m.startWorkflowCmd(),
-		m.workflowUpdateHook(),
+		m.workflowStartCmd(),
+		m.workflowUpdateHookCmd(),
 	}
 }
 
+//nolint:cyclop
 func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	var cmd []zeroterm.Cmd
 
@@ -154,19 +132,19 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 
 	switch msg := msg.(type) {
 	case errMsg:
-		cmd = append(cmd, m.handleErrMsg(msg))
+		cmd = append(cmd, m.handleErrMsgCmd(msg))
 
 		return zeroterm.BatchCmd(cmd...)
 	case workflowDoneMsg:
-		cmd = append(cmd, m.handleWorkflowDoneMsg(msg))
+		cmd = append(cmd, m.workflowDoneMsgCmd(msg))
 
 		return zeroterm.BatchCmd(cmd...)
 	case restartMsg:
-		cmd = append(cmd, m.restartWorkflow())
+		cmd = append(cmd, m.workflowRestartCmd())
 	case retryMsg:
-		m.retryWorkflow()
+		m.workflowRetry()
 	case workflowUpdateHookMsg:
-		cmd = append(cmd, m.workflowUpdateHook())
+		cmd = append(cmd, m.workflowUpdateHookCmd())
 	case zeroterm.PostRenderMsg:
 		cmd = append(cmd, m.spinners.ProcessPendingTicks())
 	case zeroterm.KeyPressMsg:
@@ -181,7 +159,7 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	return zeroterm.BatchCmd(cmd...)
 }
 
-func (m *model) Render(buf *zeroterm.RenderBuffer) {
+func (m *model) Render(buf *linesbuffer.LinesBuffer) {
 	if m.workflow == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
 		return
 	}
@@ -192,7 +170,11 @@ func (m *model) Render(buf *zeroterm.RenderBuffer) {
 
 	header := m.header.View(m.dimensions.Width)
 	mainContent := m.viewMainContent()
-	footer := m.footer.View(m.dimensions.Width, m.conf.ColorScheme)
+
+	var footer string
+	if !m.quitting {
+		footer = m.footer.View(m.dimensions.Width, m.conf.ColorScheme)
+	}
 
 	headerFooterHeight := style.CountLines(header) - 1 + style.CountLines(footer)
 
@@ -207,48 +189,10 @@ func (m *model) Render(buf *zeroterm.RenderBuffer) {
 
 	buf.WriteString(header)
 	buf.WriteString(main)
-	buf.WriteString(footer)
-}
 
-func (m *model) handleErrMsg(msg errMsg) zeroterm.Cmd {
-	m.err = msg.err
-
-	m.conf.Fleet.Recalculate(m.conf.Phases)
-	logFinalState(m.conf)
-
-	log.Error().Err(msg.err).Msg("errMsg")
-
-	m.quitting = true
-
-	return zeroterm.QuitCmd
-}
-
-func (m *model) handleWorkflowDoneMsg(msg workflowDoneMsg) zeroterm.Cmd {
-	if msg.err != nil {
-		m.err = msg.err
-		log.Error().Err(msg.err).Msg("workflowDoneMsg error")
+	if !m.quitting {
+		buf.WriteString(footer)
 	}
-
-	if m.isSnapshot {
-		return nil
-	}
-
-	log.Debug().Msg("workflowDoneMsg")
-
-	m.conf.Fleet.Recalculate(m.conf.Phases)
-	logFinalState(m.conf)
-
-	if m.conf.Flags.Snapshot.OnExit {
-		m.captureSnapshot(config.SnaphsotReasonExit)
-	}
-
-	if m.conf.Flags.ExitOnComplete {
-		m.quitting = true
-
-		return zeroterm.QuitCmd
-	}
-
-	return nil
 }
 
 func (m *model) viewMainContent() string {
@@ -299,29 +243,6 @@ func (m *model) viewMainContent() string {
 	return builder.String()
 }
 
-func (m *model) workflowUpdateHook() zeroterm.Cmd {
-	return func() zeroterm.Msg {
-		if m.workflow == nil {
-			time.Sleep(workflowUpdateHookPollInterval)
-
-			return workflowUpdateHookMsg{}
-		}
-
-		<-m.workflow.WaitForUpdate()
-
-		now := time.Now()
-		elapsed := now.Sub(m.lastWorkflowUpdate)
-
-		if elapsed < workflowUpdateHookThrottleDelay {
-			time.Sleep(workflowUpdateHookThrottleDelay - elapsed)
-		}
-
-		m.lastWorkflowUpdate = time.Now()
-
-		return workflowUpdateHookMsg{}
-	}
-}
-
 func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 	if m.workflow == nil {
 		return ""
@@ -339,16 +260,6 @@ func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
 	fullscreenViewport := m.viewports.RenderFullscreenViewport(fullscreenXpath, content, m.contentVersion, footerHeaderHeight)
 
 	return fullscreenViewport
-}
-
-func (m *model) handleMouseClick(msg zeroterm.MouseClickMsg) {
-	if m.statsTable.HandleMouseClick(msg) {
-		m.phaseFlow.Reset()
-	}
-
-	if m.phaseFlow.HandleMouseClick(msg) {
-		m.statsTable.Reset()
-	}
 }
 
 func setupSIGINTHandler(ctx context.Context) func() {

@@ -3,36 +3,9 @@ package zeroterm
 import (
 	"bytes"
 	"strconv"
+
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 )
-
-// ChangedLine represents a changed line index in a frame diff.
-type ChangedLine struct {
-	Y int
-}
-
-// DiffLines compares two line slices and returns indices of changed lines.
-// Uses bytes.Equal — O(n) per line but extremely fast in practice
-// because memcmp short-circuits on the first differing byte, and
-// most lines are identical between frames.
-func DiffLines(newLines, oldLines [][]byte) []ChangedLine {
-	commonLen := min(len(newLines), len(oldLines))
-
-	var diffs []ChangedLine
-
-	for y := range commonLen {
-		if bytes.Equal(newLines[y], oldLines[y]) {
-			continue
-		}
-
-		diffs = append(diffs, ChangedLine{Y: y})
-	}
-
-	for y := commonLen; y < len(newLines); y++ {
-		diffs = append(diffs, ChangedLine{Y: y})
-	}
-
-	return diffs
-}
 
 // RenderLines emits terminal bytes for changed lines. Returns the output
 // buffer (reuses the provided buf for zero allocation).
@@ -44,22 +17,26 @@ func DiffLines(newLines, oldLines [][]byte) []ChangedLine {
 // Always uses explicit cursor positioning to avoid misalignment from
 // line-wrapping or cursor tracking drift. After all changed lines,
 // clears below if the frame shrank.
-func RenderLines(buf []byte, diffs []ChangedLine, lines [][]byte, prevLineCount int, terminalHeight int) []byte {
-	for _, d := range diffs {
-		rowIdx := d.Y
+func RenderLines(buf []byte, diffs []int, cur *linesbuffer.LinesBuffer, prevLineCount int, terminalHeight int) []byte {
+	lineCount := cur.Len()
 
-		if rowIdx >= terminalHeight {
+	for _, lineIdx := range diffs {
+		if lineIdx >= terminalHeight {
 			break
 		}
 
+		if lineIdx < 0 || lineIdx >= lineCount {
+			continue
+		}
+
 		buf = append(buf, "\x1b["...)
-		buf = appendInt(buf, rowIdx+1)
+		buf = appendInt(buf, lineIdx+1)
 		buf = append(buf, ";1H"...)
 
 		// Strip \r from line content inline — avoids strings.ReplaceAll
 		// allocation. lipgloss and ANSI renderers may emit \r within a
 		// "line" (e.g. for cursor repositioning within a styled region).
-		line := lines[rowIdx]
+		line := cur.Line(lineIdx)
 
 		found := bytes.Contains(line, []byte{'\r'})
 		if found {
@@ -71,7 +48,7 @@ func RenderLines(buf []byte, diffs []ChangedLine, lines [][]byte, prevLineCount 
 		buf = append(buf, "\x1b[0m\x1b[K"...)
 	}
 
-	contentEnd := min(len(lines), terminalHeight)
+	contentEnd := min(lineCount, terminalHeight)
 	if contentEnd < prevLineCount || contentEnd < terminalHeight {
 		clearFrom := contentEnd
 		if clearFrom < terminalHeight {

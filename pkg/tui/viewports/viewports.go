@@ -356,7 +356,7 @@ func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 	lines := zeroterm.CurrentLines()
 
 	for xp := range v.items.Records() {
-		if click.Y >= 0 && click.Y < len(lines) && zeroterm.IsZoneAtLine(lines[click.Y], click.X, xp.String()) {
+		if click.Y >= 0 && click.Y < lines.Len() && zeroterm.IsZoneAtLine(lines.Line(click.Y), click.X, xp.String()) {
 			candidates = append(candidates, xp)
 		}
 	}

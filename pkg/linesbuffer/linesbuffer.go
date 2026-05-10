@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/mihakrumpestar/panix/pkg/no"
@@ -132,6 +133,17 @@ func (b *LinesBuffer) WriteLines(lines [][]byte) {
 
 	if b.atomic {
 		b.mu.Unlock()
+	}
+}
+
+// WriteString splits s by \n and writes each line.
+func (b *LinesBuffer) WriteString(s string) {
+	if s == "" {
+		return
+	}
+
+	for line := range strings.SplitSeq(s, "\n") {
+		b.Write([]byte(line))
 	}
 }
 

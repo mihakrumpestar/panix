@@ -31,7 +31,7 @@ func TestStartWorkflowCmd_ReturnsWorkflowDoneMsg(t *testing.T) {
 
 	mdl := newTestModel(t)
 
-	cmd := mdl.startWorkflowCmd()
+	cmd := mdl.workflowStartCmd()
 	require.NotNil(t, cmd)
 
 	msg := cmd()
@@ -86,7 +86,7 @@ func TestRestartWorkflow_ClearsError(t *testing.T) {
 
 	mdl.err = errors.New("workflow completed with 1 machine(s) failed")
 
-	cmd := mdl.restartWorkflow()
+	cmd := mdl.workflowRestartCmd()
 	require.NotNil(t, cmd, "restartWorkflow should return a cmd to start a new workflow")
 
 	assert.NoError(t, mdl.err, "restartWorkflow should clear m.err")
@@ -98,13 +98,13 @@ func TestRestartWorkflow_IgnoresCancelErrors(t *testing.T) {
 	mdl := newTestModel(t)
 
 	// Start a workflow first so there's something to cancel
-	startCmd := mdl.startWorkflowCmd()
+	startCmd := mdl.workflowStartCmd()
 	_ = startCmd()
 
 	// The workflow was started; now restart it.
 	// Cancel() always returns context.Canceled, but we should
 	// not care about ANY error from cancel on restart.
-	restartCmd := mdl.restartWorkflow()
+	restartCmd := mdl.workflowRestartCmd()
 	require.NotNil(t, restartCmd, "restart should proceed even if cancel errors")
 	assert.NoError(t, mdl.err, "restart should clear m.err regardless of cancel errors")
 }
@@ -115,7 +115,7 @@ func TestRestartWorkflow_NoExistingWorkflow(t *testing.T) {
 	mdl := newTestModel(t)
 	mdl.workflow = nil
 
-	cmd := mdl.restartWorkflow()
+	cmd := mdl.workflowRestartCmd()
 	require.NotNil(t, cmd, "restart should start a new workflow even without an existing one")
 	assert.NoError(t, mdl.err)
 }

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -440,12 +441,15 @@ func TestUpdate_MouseClick(t *testing.T) {
 	output := viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
 	strLines := strings.Split(output, "\n")
 
-	lines := make([][]byte, len(strLines))
+	buf := linesbuffer.NewPooled()
+
 	for i, l := range strLines {
-		lines[i] = []byte(l)
+		if l != "" || i < len(strLines)-1 {
+			buf.Write([]byte(l))
+		}
 	}
 
-	zeroterm.SetCurrentLines(lines)
+	zeroterm.SetCurrentLines(buf)
 
 	click := zeroterm.MouseClickMsg{
 		X:      5,
