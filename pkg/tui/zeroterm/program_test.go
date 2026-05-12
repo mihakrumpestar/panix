@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -39,7 +39,7 @@ type dummyModel struct{}
 
 func (m *dummyModel) Init() []Cmd            { return nil }
 func (m *dummyModel) Update(msg Msg) Cmd    { return nil }
-func (m *dummyModel) Render(buf *linesbuffer.LinesBuffer) {}
+func (m *dummyModel) Render(buf *buffer.LinesBufDiff, _ uint64) {}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestProcessCmdsWithNil(t *testing.T) {
@@ -84,7 +84,7 @@ type renderTestModel struct {
 
 func (m *renderTestModel) Init() []Cmd         { return nil }
 func (m *renderTestModel) Update(msg Msg) Cmd  { return nil }
-func (m *renderTestModel) Render(buf *linesbuffer.LinesBuffer) {
+func (m *renderTestModel) Render(buf *buffer.LinesBufDiff, _ uint64) {
 	buf.Write([]byte(m.content))
 }
 
@@ -176,7 +176,7 @@ func (m *sizeTrackingModel) Update(msg Msg) Cmd {
 
 	return nil
 }
-func (m *sizeTrackingModel) Render(buf *linesbuffer.LinesBuffer) {
+func (m *sizeTrackingModel) Render(buf *buffer.LinesBufDiff, _ uint64) {
 	buf.Write(fmt.Appendf(nil, "%dx%d", m.lastSize.Width, m.lastSize.Height))
 }
 

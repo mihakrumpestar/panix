@@ -1,9 +1,11 @@
 package table
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
@@ -14,23 +16,23 @@ const HeaderRow = -1
 // Changing any field after construction has no effect — use Width() for
 // runtime width updates and SetRows() for data updates.
 type Config struct {
-	Width             int
-	Border            style.Border
-	BorderStyle       style.Style
-	Headers           []string
-	ColumnStyles      []style.Style
-	Wrap              bool
+	Width               int
+	Border              style.Border
+	BorderStyle         style.Style
+	Headers             [][]byte
+	ColumnStyles        []style.Style
+	Wrap                bool
 	SelectionBackground style.Color
 }
 
 type Table struct {
 	cfg Config
 
-	rows         [][]string
-	bordered     bool
+	rows     [][][]byte
+	bordered bool
 
 	selectedIndex int
-	selBgPrefix   string
+	selBgPrefix   []byte
 	zonePrefix    string
 
 	colWidths       []int
@@ -42,28 +44,27 @@ type Table struct {
 	colAlign  []style.Position
 	colANSIOK bool
 
-	// Full output cache. When outDirty is false, String() returns
-	// outCache immediately with zero allocations.
-	outCache string
 	outDirty bool
 
-	// Reusable byte buffers. rowBuf is used by buildRow; outBuf is
-	// used by String().
+	// content is the owned output buffer. Render() returns it.
+	// Reset on each rebuild, returned on cache hit.
+	content *buffer.LinesBuf
+
+	// Reusable byte buffer for buildRow and writeHorizontalBorder.
 	rowBuf []byte
-	outBuf []byte
 
 	// Pre-computed zone markers per row. Built once when rows or
 	// zone prefix change, reused every render. nil means "needs
 	// recomputation".
-	zoneStarts []string
-	zoneEnds   []string
+	zoneStarts [][]byte
+	zoneEnds   [][]byte
 
 	// Per-row render cache: cached rendered bytes and the data that
 	// produced them. On selection-only changes, only the 2 affected
 	// rows are re-rendered instead of all N.
-	rowCacheBytes    [][]byte
-	rowCacheData     [][]string
-	rowCacheSel      int
+	rowCacheBytes     [][]byte
+	rowCacheData      [][][]byte
+	rowCacheSel       int
 	rowCacheColWidths []int // colWidths snapshot from last full rebuild
 
 	// structuralChange is set when Width changes and forces a full
@@ -77,15 +78,16 @@ type Table struct {
 }
 
 func New(cfg Config) *Table {
-	bordered := cfg.Border.Vertical != ""
+	bordered := len(cfg.Border.Vertical) > 0
 
 	return &Table{
-		cfg:          cfg,
-		bordered:     bordered,
-		selBgPrefix:  style.ColorToBgPrefix(cfg.SelectionBackground),
+		cfg:           cfg,
+		bordered:      bordered,
+		selBgPrefix:   style.ColorToBgPrefix(cfg.SelectionBackground),
 		selectedIndex: -1,
 		outDirty:      true,
 		rowCacheSel:   -2, // force mismatch on first render
+		content:       buffer.NewLinesBuf(),
 	}
 }
 
@@ -107,7 +109,7 @@ func (t *Table) Width(w int) *Table {
 // SetRows replaces all row data. Selection is preserved. Detects
 // identical data and skips cache invalidation, avoiding all
 // allocations for the common "same data, re-render" pattern.
-func (t *Table) SetRows(rows [][]string) *Table {
+func (t *Table) SetRows(rows [][][]byte) *Table {
 	if len(t.rows) == len(rows) {
 		anyChanged := false
 
@@ -232,18 +234,23 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 	return false
 }
 
-//nolint:cyclop,funlen
-func (t *Table) String() string {
-	if !t.outDirty && t.outCache != "" {
-		return t.outCache
+// Render builds the table into the owned content buffer and returns it.
+// On cache hit (no data/width/selection change since last Render), returns
+// the existing buffer immediately with zero allocations.
+// Callers must use AppendFrom or read Line(i) — do not retain the
+// pointer across frames.
+func (t *Table) Render() *buffer.LinesBuf {
+	if !t.outDirty {
+		return t.content
 	}
+
+	t.content.Reset()
 
 	numCols := t.numCols()
 	if numCols == 0 {
-		t.outCache = ""
 		t.outDirty = false
 
-		return ""
+		return t.content
 	}
 
 	var colWidths []int
@@ -261,12 +268,12 @@ func (t *Table) String() string {
 	}
 
 	bfg := t.cfg.BorderStyle.FgPrefix()
-	if bfg == "" {
+	if len(bfg) == 0 {
 		bfg = t.cfg.BorderStyle.BgPrefix()
 	}
 
-	borderReset := ""
-	if bfg != "" {
+	borderReset := []byte(nil)
+	if len(bfg) > 0 {
 		borderReset = style.ANSIReset()
 	}
 
@@ -279,9 +286,8 @@ func (t *Table) String() string {
 	// re-rendered instead of all N.
 	t.syncRowCache(colWidths, t.bordered, bfg, borderReset)
 
-	// Assemble output from cached row bytes.
-	t.outBuf = t.outBuf[:0]
-
+	// Assemble output into content LinesBuf — one WriteLine per
+	// visual line (borders, header, data rows).
 	hasContent := len(t.cfg.Headers) > 0 || len(t.rows) > 0
 
 	if t.bordered && hasContent {
@@ -289,33 +295,28 @@ func (t *Table) String() string {
 			t.cfg.Border.TopLeft, t.cfg.Border.TopMid, t.cfg.Border.TopRight,
 			colWidths, bfg, borderReset,
 		)
+		t.content.WriteLine(t.rowBuf)
 	}
 
 	if len(t.cfg.Headers) > 0 {
 		t.buildRow(t.cfg.Headers, colWidths, HeaderRow, t.bordered, bfg, borderReset)
-		t.outBuf = append(t.outBuf, t.rowBuf...)
-		t.outBuf = append(t.outBuf, '\n')
+		t.content.WriteLine(t.rowBuf)
 
 		if t.bordered {
 			t.writeHorizontalBorder(
 				t.cfg.Border.LeftMid, t.cfg.Border.MidMid, t.cfg.Border.RightMid,
 				colWidths, bfg, borderReset,
 			)
+			t.content.WriteLine(t.rowBuf)
 		}
 	}
 
 	for rowIdx, rowBytes := range t.rowCacheBytes {
-		if t.zonePrefix != "" && rowIdx < len(t.zoneStarts) {
-			t.outBuf = append(t.outBuf, t.zoneStarts[rowIdx]...)
+		if t.zonePrefix != "" && rowIdx < len(t.zoneStarts) && rowIdx < len(t.zoneEnds) {
+			t.content.WriteLine3(t.zoneStarts[rowIdx], rowBytes, t.zoneEnds[rowIdx])
+		} else {
+			t.content.WriteLine(rowBytes)
 		}
-
-		t.outBuf = append(t.outBuf, rowBytes...)
-
-		if t.zonePrefix != "" && rowIdx < len(t.zoneEnds) {
-			t.outBuf = append(t.outBuf, t.zoneEnds[rowIdx]...)
-		}
-
-		t.outBuf = append(t.outBuf, '\n')
 	}
 
 	if t.bordered && hasContent {
@@ -323,21 +324,19 @@ func (t *Table) String() string {
 			t.cfg.Border.BottomLeft, t.cfg.Border.BottomMid, t.cfg.Border.BottomRight,
 			colWidths, bfg, borderReset,
 		)
+		t.content.WriteLine(t.rowBuf)
 	}
 
-	if len(t.outBuf) > 0 && t.outBuf[len(t.outBuf)-1] == '\n' {
-		t.outBuf = t.outBuf[:len(t.outBuf)-1]
-	}
-
-	// Convert buffer to string. This is the ONE allocation in the
-	// hot path — unavoidable because Go's string([]byte) always
-	// copies. The alternative (unsafe.String + buffer donation)
-	// eliminates the copy but forces a new buffer allocation next
-	// frame, creating GC pressure. Buffer reuse + copy is better.
-	t.outCache = string(t.outBuf)
 	t.outDirty = false
 
-	return t.outCache
+	return t.content
+}
+
+// RenderInto writes the table output into dst, one line per LinesBuf entry.
+// Convenience wrapper — callers needing the table's own buffer can call
+// Render() directly and use AppendFrom.
+func (t *Table) RenderInto(dst *buffer.LinesBuf) {
+	dst.AppendFrom(t.Render())
 }
 
 func (t *Table) navigateLeft() bool {
@@ -405,25 +404,29 @@ func (t *Table) updateColumnANSI() {
 func (t *Table) updateZoneMarkers() {
 	numRows := len(t.rows)
 	if cap(t.zoneStarts) < numRows {
-		t.zoneStarts = make([]string, numRows)
-		t.zoneEnds = make([]string, numRows)
+		t.zoneStarts = make([][]byte, numRows)
+		t.zoneEnds = make([][]byte, numRows)
 	} else {
 		t.zoneStarts = t.zoneStarts[:numRows]
 		t.zoneEnds = t.zoneEnds[:numRows]
 	}
 
+	var openBuf, closeBuf [16]byte
+
 	for rowIdx := range numRows {
 		zoneName := t.zonePrefix + "-" + strconv.Itoa(rowIdx)
 		id := zeroterm.EnsureZone(zoneName)
-		t.zoneStarts[rowIdx] = "\x1b[" + strconv.Itoa(int(id)) + "z"
-		t.zoneEnds[rowIdx] = "\x1b[/" + strconv.Itoa(int(id)) + "z"
+		open := zeroterm.FormatZoneOpen(openBuf[:0], id)
+		t.zoneStarts[rowIdx] = append([]byte(nil), open...)
+		close := zeroterm.FormatZoneClose(closeBuf[:0], id)
+		t.zoneEnds[rowIdx] = append([]byte(nil), close...)
 	}
 }
 
 // syncRowCache ensures rowCacheBytes[i] contains the rendered bytes for
 // rows[i]. Only rows whose data or selection state changed since the
 // last render are re-rendered; all others reuse their cached bytes.
-func (t *Table) syncRowCache(colWidths []int, hasBorder bool, bfg, borderReset string) {
+func (t *Table) syncRowCache(colWidths []int, hasBorder bool, bfg, borderReset []byte) {
 	numRows := len(t.rows)
 	selChanged := t.rowCacheSel != t.selectedIndex
 
@@ -464,10 +467,10 @@ func (t *Table) syncRowCache(colWidths []int, hasBorder bool, bfg, borderReset s
 	t.incrementalRowCacheUpdate(colWidths, selChanged, hasBorder, bfg, borderReset)
 }
 
-func (t *Table) fullRowCacheRebuild(colWidths []int, numRows int, hasBorder bool, bfg, borderReset string) {
+func (t *Table) fullRowCacheRebuild(colWidths []int, numRows int, hasBorder bool, bfg, borderReset []byte) {
 	if cap(t.rowCacheBytes) < numRows {
 		t.rowCacheBytes = make([][]byte, numRows)
-		t.rowCacheData = make([][]string, numRows)
+		t.rowCacheData = make([][][]byte, numRows)
 	} else {
 		t.rowCacheBytes = t.rowCacheBytes[:numRows]
 		t.rowCacheData = t.rowCacheData[:numRows]
@@ -490,7 +493,7 @@ func (t *Table) fullRowCacheRebuild(colWidths []int, numRows int, hasBorder bool
 	t.rowCacheSel = t.selectedIndex
 }
 
-func (t *Table) incrementalRowCacheUpdate(colWidths []int, selChanged bool, hasBorder bool, bfg, borderReset string) {
+func (t *Table) incrementalRowCacheUpdate(colWidths []int, selChanged bool, hasBorder bool, bfg, borderReset []byte) {
 	for rowIdx, row := range t.rows {
 		dirty := !cellsEqual(t.rowCacheData[rowIdx], row)
 
@@ -523,10 +526,10 @@ func (t *Table) incrementalRowCacheUpdate(colWidths []int, selChanged bool, hasB
 // Selection background is injected inline: after every ANSI reset
 // inside the inner content, selBgPrefix is re-emitted so the
 // background spans uninterrupted between the outer borders.
-func (t *Table) buildRow(cells []string, colWidths []int,
-	rowIdx int, hasBorder bool, bfg, borderReset string,
+func (t *Table) buildRow(cells [][]byte, colWidths []int,
+	rowIdx int, hasBorder bool, bfg, borderReset []byte,
 ) {
-	selBg := ""
+	var selBg []byte
 	if rowIdx >= 0 && rowIdx == t.selectedIndex {
 		selBg = t.selBgPrefix
 	}
@@ -539,13 +542,13 @@ func (t *Table) buildRow(cells []string, colWidths []int,
 		t.rowBuf = append(t.rowBuf, borderReset...)
 	}
 
-	if selBg != "" {
+	if len(selBg) > 0 {
 		t.rowBuf = append(t.rowBuf, selBg...)
 	}
 
 	t.rowBuf = t.renderRowCells(cells, colWidths, hasBorder, bfg, borderReset, selBg, rowIdx)
 
-	if selBg != "" {
+	if len(selBg) > 0 {
 		t.rowBuf = append(t.rowBuf, style.ANSIReset()...)
 	}
 
@@ -556,7 +559,7 @@ func (t *Table) buildRow(cells []string, colWidths []int,
 	}
 }
 
-func (t *Table) renderRowCells(cells []string, colWidths []int, hasBorder bool, bfg, borderReset, selBg string, rowIdx int) []byte {
+func (t *Table) renderRowCells(cells [][]byte, colWidths []int, hasBorder bool, bfg, borderReset, selBg []byte, rowIdx int) []byte {
 	buf := t.rowBuf
 
 	for colIdx, colWidth := range colWidths {
@@ -565,12 +568,12 @@ func (t *Table) renderRowCells(cells []string, colWidths []int, hasBorder bool, 
 			buf = append(buf, t.cfg.Border.Vertical...)
 			buf = append(buf, borderReset...)
 
-			if selBg != "" {
+			if len(selBg) > 0 {
 				buf = append(buf, selBg...)
 			}
 		}
 
-		cell := ""
+		cell := []byte(nil)
 		if colIdx < len(cells) {
 			cell = cells[colIdx]
 		}
@@ -583,9 +586,9 @@ func (t *Table) renderRowCells(cells []string, colWidths []int, hasBorder bool, 
 }
 
 // cellANSI returns the ANSI prefix, reset, and alignment for a cell.
-func (t *Table) cellANSI(rowIdx, colIdx int) (string, string, style.Position) {
+func (t *Table) cellANSI(rowIdx, colIdx int) ([]byte, []byte, style.Position) {
 	if rowIdx == HeaderRow || colIdx >= len(t.colANSI) {
-		return "", "", 0
+		return nil, nil, 0
 	}
 
 	return t.colANSI[colIdx].Prefix(), t.colANSI[colIdx].Reset(), t.colAlign[colIdx]
@@ -594,8 +597,8 @@ func (t *Table) cellANSI(rowIdx, colIdx int) (string, string, style.Position) {
 // renderCell appends a single cell's content to buf, handling alignment,
 // truncation, wrapping, and ANSI sequences.
 func (t *Table) renderCell(
-	buf []byte, cell string, colWidth, colIdx int,
-	prefix, reset string, align style.Position, selBg string, rowIdx int,
+	buf []byte, cell []byte, colWidth, colIdx int,
+	prefix, reset []byte, align style.Position, selBg []byte, rowIdx int,
 ) []byte {
 	if hasNewline(cell) {
 		var sty style.Style
@@ -606,22 +609,32 @@ func (t *Table) renderCell(
 		}
 
 		sty = t.cellStyle(sty, colWidth)
-		rendered := sty.Render(cell)
-		buf = append(buf, rendered...)
+		tmp := buffer.NewLinesBuf()
+		sty.RenderInto(tmp, [][]byte{cell})
+
+		for i := range tmp.Len() {
+			if i > 0 {
+				buf = append(buf, '\n')
+			}
+
+			buf = append(buf, tmp.Line(i)...)
+		}
+
+		tmp.Release()
 
 		return buf
 	}
 
-	if prefix != "" {
+	if len(prefix) > 0 {
 		buf = append(buf, prefix...)
 	}
 
 	buf = t.alignCellContent(buf, cell, colWidth, align)
 
-	if reset != "" {
+	if len(reset) > 0 {
 		buf = append(buf, reset...)
 
-		if selBg != "" {
+		if len(selBg) > 0 {
 			buf = append(buf, selBg...)
 		}
 	}
@@ -630,7 +643,7 @@ func (t *Table) renderCell(
 }
 
 // alignCellContent appends cell content to buf with proper alignment and truncation.
-func (t *Table) alignCellContent(buf []byte, cell string, colWidth int, align style.Position) []byte {
+func (t *Table) alignCellContent(buf []byte, cell []byte, colWidth int, align style.Position) []byte {
 	cellWidth := style.CellWidth(cell)
 
 	switch {
@@ -814,38 +827,43 @@ func (t *Table) resolveDistributedWidths(
 	numCols int, buf, distributed, contentWidths, fixedWidths []int,
 	nonFixedAvailable, nonFixedContent int,
 ) []int {
-	if nonFixedContent == nonFixedAvailable {
-		result := make([]int, numCols)
-		copy(result, distributed)
-
-		return result
+	if nonFixedContent != nonFixedAvailable {
+		if nonFixedContent < nonFixedAvailable {
+			t.growNonFixedColumns(distributed, fixedWidths, nonFixedAvailable)
+		} else {
+			medians := buf[3*numCols : 4*numCols]
+			t.shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians, nonFixedAvailable)
+		}
 	}
 
-	if nonFixedContent < nonFixedAvailable {
-		t.growNonFixedColumns(distributed, fixedWidths, nonFixedAvailable)
+	if cap(t.colWidths) < numCols {
+		t.colWidths = make([]int, numCols)
 	} else {
-		medians := buf[3*numCols : 4*numCols]
-		t.shrinkNonFixedColumns(distributed, contentWidths, fixedWidths, medians, nonFixedAvailable)
+		t.colWidths = t.colWidths[:numCols]
 	}
 
-	result := make([]int, numCols)
-	copy(result, distributed)
+	copy(t.colWidths, distributed)
 
-	return result
+	return t.colWidths
 }
 
 // distributeWidthsNoTableWidth returns column widths when no table width is set.
 func (t *Table) distributeWidthsNoTableWidth(numCols int, contentWidths, fixedWidths []int) []int {
-	result := make([]int, numCols)
+	if cap(t.colWidths) < numCols {
+		t.colWidths = make([]int, numCols)
+	} else {
+		t.colWidths = t.colWidths[:numCols]
+	}
+
 	for i := range numCols {
 		if fixedWidths[i] > 0 {
-			result[i] = fixedWidths[i]
+			t.colWidths[i] = fixedWidths[i]
 		} else {
-			result[i] = contentWidths[i]
+			t.colWidths[i] = contentWidths[i]
 		}
 	}
 
-	return result
+	return t.colWidths
 }
 
 func (t *Table) totalBorderWidth(numCols int) int {
@@ -1013,43 +1031,45 @@ func biggestNonFixed(distributed, fixedWidths []int) int {
 	return bigIdx
 }
 
-func (t *Table) writeHorizontalBorder(left, mid, right string,
-	colWidths []int, fg, reset string,
+// writeHorizontalBorder builds a horizontal border line into t.rowBuf.
+// Reuses rowBuf since borders and data rows are never built concurrently.
+func (t *Table) writeHorizontalBorder(left, mid, right []byte,
+	colWidths []int, fg, reset []byte,
 ) {
-	t.outBuf = append(t.outBuf, fg...)
-	t.outBuf = append(t.outBuf, left...)
+	t.rowBuf = t.rowBuf[:0]
+	t.rowBuf = append(t.rowBuf, fg...)
+	t.rowBuf = append(t.rowBuf, left...)
 
 	for colIdx, colWidth := range colWidths {
 		if colIdx > 0 {
-			t.outBuf = append(t.outBuf, mid...)
+			t.rowBuf = append(t.rowBuf, mid...)
 		}
 
 		if colWidth > 0 {
-			t.outBuf = appendRepeatStr(t.outBuf, t.cfg.Border.Horizontal, colWidth)
+			t.rowBuf = appendRepeatBytes(t.rowBuf, t.cfg.Border.Horizontal, colWidth)
 		}
 	}
 
-	t.outBuf = append(t.outBuf, right...)
-	t.outBuf = append(t.outBuf, reset...)
-	t.outBuf = append(t.outBuf, '\n')
+	t.rowBuf = append(t.rowBuf, right...)
+	t.rowBuf = append(t.rowBuf, reset...)
 }
 
-func appendRepeatStr(buf []byte, s string, n int) []byte {
+func appendRepeatBytes(buf []byte, b []byte, n int) []byte {
 	for n > 0 {
-		buf = append(buf, s...)
+		buf = append(buf, b...)
 		n--
 	}
 
 	return buf
 }
 
-func cellsEqual(left, right []string) bool {
+func cellsEqual(left, right [][]byte) bool {
 	if len(left) != len(right) {
 		return false
 	}
 
 	for idx := range left {
-		if left[idx] != right[idx] {
+		if !bytes.Equal(left[idx], right[idx]) {
 			return false
 		}
 	}
@@ -1057,9 +1077,9 @@ func cellsEqual(left, right []string) bool {
 	return true
 }
 
-func hasNewline(s string) bool {
-	for i := range len(s) {
-		if s[i] == '\n' {
+func hasNewline(b []byte) bool {
+	for i := range b {
+		if b[i] == '\n' {
 			return true
 		}
 	}

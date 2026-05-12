@@ -2,7 +2,7 @@
 
 package zeroterm
 
-import "github.com/mihakrumpestar/panix/pkg/linesbuffer"
+import "github.com/mihakrumpestar/panix/pkg/buffer"
 
 type MouseButton uint8
 
@@ -51,7 +51,8 @@ type Model interface {
 	Init() []Cmd
 	Update(msg Msg) Cmd
 	// Render writes the screen lines into the LinesBuffer.
-	// If nothing should be rendered (e.g., model not initialized),
-	// simply don't write anything to the buffer.
-	Render(buf *linesbuffer.LinesBuffer)
+	// renderCounter is a monotonically increasing counter managed by the
+	// Program — callers use it for change detection (e.g., viewport
+	// content versioning) without tracking it themselves.
+	Render(buf *buffer.LinesBufDiff, renderCounter uint64)
 }

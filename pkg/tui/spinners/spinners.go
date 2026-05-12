@@ -18,14 +18,14 @@ type tickMsg struct{}
 
 type Spinners struct {
 	entries  *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *spinner.Spinner]
-	frames   []string
+	frames   [][]byte
 	interval time.Duration
 
 	viewed  bool
 	ticking bool
 }
 
-func New(frames []string, interval time.Duration) *Spinners {
+func New(frames [][]byte, interval time.Duration) *Spinners {
 	return &Spinners{
 		entries:  atomicorderedmap.New[xpath.Xpath, *spinner.Spinner](),
 		frames:   frames,
@@ -33,18 +33,17 @@ func New(frames []string, interval time.Duration) *Spinners {
 	}
 }
 
-func (s *Spinners) View(xpath xpath.Xpath) string {
+// Render returns the spinner frame for the given xpath as a byte slice.
+func (s *Spinners) Render(xpathVal xpath.Xpath) []byte {
 	s.viewed = true
 
-	spinnerI, ok := s.entries.Get(xpath)
-	if ok {
-		return spinnerI.View()
+	spinnerI, ok := s.entries.Get(xpathVal)
+	if !ok {
+		spinnerI = spinner.New(s.frames, s.interval)
+		s.entries.Set(xpathVal, spinnerI)
 	}
 
-	spinnerI = spinner.New(s.frames, s.interval)
-	s.entries.Set(xpath, spinnerI)
-
-	return spinnerI.View()
+	return spinnerI.Render()
 }
 
 func (s *Spinners) ProcessPendingTicks() zeroterm.Cmd {
@@ -94,3 +93,4 @@ func (s *Spinners) Debug() string {
 func (s *Spinners) nextTick() zeroterm.Cmd {
 	return zeroterm.TickCmd(s.interval, func(time.Time) zeroterm.Msg { return tickMsg{} })
 }
+

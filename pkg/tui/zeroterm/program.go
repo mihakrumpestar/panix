@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/pkg/errors"
 )
 
@@ -20,11 +20,15 @@ type Program struct {
 	height          int
 	raw             bool
 	forceFullRender bool
-	frames          [2]*linesbuffer.LinesBuffer
+	frames          [2]*buffer.LinesBufDiff
 	curFrame        int
+	renderCounter   uint64
 }
 
 type ProgramOption func(*Program)
+
+// RenderCounter returns the current render counter.
+func (p *Program) RenderCounter() uint64 { return p.renderCounter }
 
 // Raw disables frame diffing; every render writes all lines directly.
 func Raw() ProgramOption {
@@ -37,9 +41,9 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 		msgCh:  make(chan Msg, 1024), //nolint:mnd
 		stopCh: make(chan struct{}),
 		outBuf: make([]byte, 0, 8192), //nolint:mnd
-		frames: [2]*linesbuffer.LinesBuffer{
-			linesbuffer.New(),
-			linesbuffer.New(),
+		frames: [2]*buffer.LinesBufDiff{
+			buffer.NewLinesBufDiff(),
+			buffer.NewLinesBufDiff(),
 		},
 	}
 
@@ -176,7 +180,9 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 func (p *Program) renderFrame() {
 	cur := p.frames[p.curFrame]
 	cur.Reset()
-	p.model.Render(cur)
+
+	p.renderCounter++
+	p.model.Render(cur, p.renderCounter)
 
 	if cur.Len() == 0 {
 		return

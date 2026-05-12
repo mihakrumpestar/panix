@@ -2,11 +2,11 @@ package statstable
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/table"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
@@ -21,6 +21,7 @@ type StatsTable struct {
 	fleet       *fleet.Fleet
 	tbl         *table.Table
 	colorScheme *colorscheme.ColorScheme
+	content     *buffer.LinesBuf
 }
 
 func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
@@ -40,11 +41,11 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		colorScheme.Table.Row,
 	}
 
-	headers := []string{"", "",
-		colorScheme.Flake.Icon + " FLAKE",
-		colorScheme.Configuration.Icon + " CONFIGURATION",
-		colorScheme.Machine.Icon + " MACHINE",
-		"ARCH", "STATUS", "GEN", "DATE", "OS VERSION", "KERNEL"}
+	headers := [][]byte{[]byte(""), []byte(""),
+		joinBytes(colorScheme.Flake.Icon, " FLAKE"),
+		joinBytes(colorScheme.Configuration.Icon, " CONFIGURATION"),
+		joinBytes(colorScheme.Machine.Icon, " MACHINE"),
+		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("DATE"), []byte("OS VERSION"), []byte("KERNEL")}
 
 	tbl := table.New(table.Config{
 		Border:              style.NormalBorder(),
@@ -60,6 +61,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		fleet:       fleet,
 		tbl:         tbl,
 		colorScheme: colorScheme,
+		content:     buffer.NewLinesBuf(),
 	}
 }
 
@@ -88,60 +90,66 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 	return s.tbl.HandleNavigation(key, hasActiveInnerViewport)
 }
 
-func (s *StatsTable) View(width int) string {
-	var builder strings.Builder
+// Render renders the stats table and returns the output buffer.
+func (s *StatsTable) Render(width int) *buffer.LinesBuf {
+	s.content.Reset()
 
-	builder.WriteString(s.colorScheme.Header.Title.Render("=== Stats Table ===\n"))
+	statsTableHeader := [][]byte{
+		s.colorScheme.Header.Title.RenderLine([]byte("=== Stats Table ===")),
+		[]byte{},
+	}
+	s.content.WriteLines(statsTableHeader)
 
 	s.tbl.Width(width).SetRows(s.buildRows())
+	s.content.AppendFrom(s.tbl.Render())
 
-	builder.WriteString("\n" + s.tbl.String() + "\n\n")
+	s.content.EmptyLine()
 
-	return builder.String()
+	return s.content
 }
 
-func (s *StatsTable) buildRows() [][]string {
+func (s *StatsTable) buildRows() [][][]byte {
 	machineInfos := s.fleet.CacheMachineInfos
-	rows := make([][]string, len(machineInfos))
+	rows := make([][][]byte, len(machineInfos))
 
 	var prevFlakeName, prevConfigurationName string
 
 	for idx, machineInfo := range machineInfos {
 		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
 
-		marker := " " + s.colorScheme.Chars.RowSpanMarker
+		marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
 
 		flakeDisplay := marker
 		if flakeName != prevFlakeName {
-			flakeDisplay = flakeName
+			flakeDisplay = []byte(flakeName)
 			prevFlakeName = flakeName
 		}
 
 		configDisplay := marker
 		if configurationName != prevConfigurationName || flakeName != prevFlakeName {
-			configDisplay = configurationName
+			configDisplay = []byte(configurationName)
 			prevConfigurationName = configurationName
 		}
 
-		rows[idx] = []string{
-			strconv.Itoa(idx + 1),
+		rows[idx] = [][]byte{
+			[]byte(strconv.Itoa(idx + 1)),
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,
-			machineName,
-			machineInfo.MetaInspect.Architecture,
+			[]byte(machineName),
+			[]byte(machineInfo.MetaInspect.Architecture),
 			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, s.colorScheme),
 			getGeneration(machineInfo),
-			machineInfo.MetaInspect.Date,
-			machineInfo.MetaInspect.OSVersion,
-			machineInfo.MetaInspect.Kernel,
+			[]byte(machineInfo.MetaInspect.Date),
+			[]byte(machineInfo.MetaInspect.OSVersion),
+			[]byte(machineInfo.MetaInspect.Kernel),
 		}
 	}
 
 	return rows
 }
 
-func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme) string {
+func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme) []byte {
 	switch status {
 	case stats.Running:
 		return colorScheme.Status.Icons.Running
@@ -150,27 +158,35 @@ func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme
 	case stats.Done:
 		return colorScheme.Status.Icons.OK
 	default:
-		return "invalid"
+		return []byte("invalid")
 	}
 }
 
-func getStatusText(status stats.StatsState, statusMsg string, colorScheme *colorscheme.ColorScheme) string {
+func getStatusText(status stats.StatsState, statusMsg string, colorScheme *colorscheme.ColorScheme) []byte {
 	switch status {
 	case stats.Running:
-		return colorScheme.Status.Running.Render(statusMsg)
+		return colorScheme.Status.Running.RenderLine([]byte(statusMsg))
 	case stats.Failed:
-		return colorScheme.Status.Failed.Render(statusMsg)
+		return colorScheme.Status.Failed.RenderLine([]byte(statusMsg))
 	case stats.Done:
-		return colorScheme.Status.OK.Render(statusMsg)
+		return colorScheme.Status.OK.RenderLine([]byte(statusMsg))
 	default:
-		return "invalid"
+		return []byte("invalid")
 	}
 }
 
-func getGeneration(machineInfo fleet.MachineInfo) string {
+func getGeneration(machineInfo fleet.MachineInfo) []byte {
 	if machineInfo.MetaInspect.Generations == nil {
-		return ""
+		return nil
 	}
 
-	return strconv.FormatUint(uint64(machineInfo.MetaInspect.Generations.Current), 10)
+	return []byte(strconv.FormatUint(uint64(machineInfo.MetaInspect.Generations.Current), 10))
+}
+
+func joinBytes(prefix []byte, suffix string) []byte {
+	b := make([]byte, len(prefix)+len(suffix))
+	copy(b, prefix)
+	copy(b[len(prefix):], suffix)
+
+	return b
 }

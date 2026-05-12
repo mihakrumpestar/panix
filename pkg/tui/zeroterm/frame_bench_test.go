@@ -11,7 +11,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	zone "github.com/lrstanley/bubblezone/v2"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 var zoneOnce sync.Once
@@ -21,7 +21,7 @@ func ensureZoneGlobal() {
 }
 
 //nolint:unparam
-func makeANSILines(width, lines int) *linesbuffer.LinesBuffer {
+func makeANSILines(width, lines int) *buffer.LinesBufDiff {
 	var builder strings.Builder
 
 	for lineIdx := range lines {
@@ -39,7 +39,7 @@ func makeANSILines(width, lines int) *linesbuffer.LinesBuffer {
 		}
 	}
 
-	buf := linesbuffer.NewPooled()
+	buf := buffer.NewLinesBufDiff()
 	buf.WriteString(builder.String())
 
 	return buf
@@ -96,7 +96,7 @@ func Benchmark__RenderPipe(b *testing.B) {
 	width, height := 200, 50
 	cur := makeANSILines(width, height)
 
-	prev := linesbuffer.New()
+	prev := buffer.NewLinesBufDiff()
 	for i := range cur.Len() {
 		prev.Write(cur.Line(i))
 	}
@@ -145,7 +145,7 @@ func Benchmark__RenderPipeNoChange(b *testing.B) {
 	width, height := 200, 50
 	cur := makeANSILines(width, height)
 
-	prev := linesbuffer.New()
+	prev := buffer.NewLinesBufDiff()
 	for i := range cur.Len() {
 		prev.Write(cur.Line(i))
 	}
@@ -290,15 +290,21 @@ func Benchmark_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
 
 // --- Zone ---
 
-func Benchmark__ZoneMark(b *testing.B) {
+func Benchmark__ZoneMarkBuf(b *testing.B) {
 	ensureZoneGlobal()
 
 	content := makePlainContent(200, 50)
+	contentBytes := []byte(content)
+	id := EnsureZone("test-zone-buf")
+
+	lb := buffer.NewLinesBuf()
+	defer lb.Release()
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = Mark("test-zone", content)
+		lb.Reset()
+		MarkBufByID(id, contentBytes, lb)
 	}
 }
 

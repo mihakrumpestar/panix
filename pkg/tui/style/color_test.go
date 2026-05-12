@@ -1,6 +1,7 @@
 package style
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -167,21 +168,21 @@ func TestColorToFgPrefix(t *testing.T) {
 	t.Parallel()
 
 	// Empty color returns empty
-	if got := colorToFgPrefix(""); got != "" {
+	if got := colorToFgPrefix(""); len(got) != 0 {
 		t.Errorf("colorToFgPrefix(\"\") = %q, want \"\"", got)
 	}
 
 	// Invalid color returns empty
-	if got := colorToFgPrefix(Color("#XYZ")); got != "" {
+	if got := colorToFgPrefix(Color("#XYZ")); len(got) != 0 {
 		t.Errorf("colorToFgPrefix(#XYZ) = %q, want \"\"", got)
 	}
 
 	// Valid color produces true-color foreground sequence
 	c := Color("#FF8000")
 	got := colorToFgPrefix(c)
-	expected := "\x1b[38;2;255;128;0m"
+	expected := []byte("\x1b[38;2;255;128;0m")
 
-	if got != expected {
+	if !bytes.Equal(got, expected) {
 		t.Errorf("colorToFgPrefix(#FF8000) = %q, want %q", got, expected)
 	}
 }
@@ -190,21 +191,21 @@ func TestColorToBgPrefix(t *testing.T) {
 	t.Parallel()
 
 	// Empty color returns empty
-	if got := colorToBgPrefix(""); got != "" {
+	if got := colorToBgPrefix(""); len(got) != 0 {
 		t.Errorf("colorToBgPrefix(\"\") = %q, want \"\"", got)
 	}
 
 	// Invalid color returns empty
-	if got := colorToBgPrefix(Color("#XYZ")); got != "" {
+	if got := colorToBgPrefix(Color("#XYZ")); len(got) != 0 {
 		t.Errorf("colorToBgPrefix(#XYZ) = %q, want \"\"", got)
 	}
 
 	// Valid color produces true-color background sequence
 	c := Color("#64C832")
 	got := colorToBgPrefix(c)
-	expected := "\x1b[48;2;100;200;50m"
+	expected := []byte("\x1b[48;2;100;200;50m")
 
-	if got != expected {
+	if !bytes.Equal(got, expected) {
 		t.Errorf("colorToBgPrefix(#64C832) = %q, want %q", got, expected)
 	}
 }

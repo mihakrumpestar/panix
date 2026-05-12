@@ -1,76 +1,82 @@
 package header
 
 import (
-	"strings"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
-// Header renders a static snapshot banner. All styled content is pre-rendered
-// at construction time since snapshot data and colors never change; only the
-// terminal width varies at view time. The rendered output is cached by width
-// so re-rendering only happens on resize.
+// Header renders a static snapshot banner. Content is built once at construction;
+// only the terminal width varies at view time. The width-constrained output is
+// cached so re-rendering only happens on resize.
 type Header struct {
-	isSnapshot  bool
-	line        string
-	cachedWidth int
-	cachedView  string
+	isSnapshot bool
+	content    *buffer.LinesBuf
+
+	cachedWidth  int
+	cachedRender *buffer.LinesBuf
 }
 
-// New creates a Header. When isSnapshot is true the styled line is rendered
-// immediately so that View() only needs to apply a width constraint.
 func New(isSnapshot bool, snapshot config.Snapshot, colorScheme *colorscheme.ColorScheme) *Header {
 	header := &Header{
-		isSnapshot:  isSnapshot,
-		cachedWidth: -1,
+		isSnapshot: isSnapshot,
+
+		cachedWidth:  -1,
+		cachedRender: buffer.NewLinesBuf(),
 	}
 
 	if isSnapshot {
-		header.line = renderLine(snapshot, colorScheme)
+		header.content = buffer.NewLinesBuf()
+		renderLine(header.content, snapshot, colorScheme)
 	}
 
 	return header
 }
 
-func (h *Header) View(width int) string {
+// Render applies the width constraint to the pre-built content and returns
+// the cached result. Returns nil for non-snapshot mode.
+func (h *Header) Render(width int) *buffer.LinesBuf {
 	if !h.isSnapshot {
-		return ""
+		return nil
 	}
 
-	if width == h.cachedWidth {
-		return h.cachedView
+	if width != h.cachedWidth {
+		h.cachedWidth = width
+
+		h.cachedRender.Reset()
+		style.NewStyle().MaxWidth(width).RenderInto(h.cachedRender, h.content.Lines())
 	}
 
-	h.cachedWidth = width
-	h.cachedView = style.NewStyle().Width(width).Render(h.line) + "\n\n"
-
-	return h.cachedView
+	return h.cachedRender
 }
 
-// renderLine builds the fully-styled, width-independent header line from the
-// snapshot data. Called once at construction time.
-func renderLine(snapshot config.Snapshot, colorScheme *colorscheme.ColorScheme) string {
-	reason := snapshot.Reason.String()
-	sep := colorScheme.Table.Border.Render(" " + colorScheme.Chars.HeaderSeparator + " ")
+func (h *Header) Len() int {
+	return h.cachedRender.Len()
+}
 
-	parts := []string{
-		colorScheme.Status.Running.Render("v" + snapshot.PanixVersion),
-		colorScheme.Table.Border.Render(reason),
-		colorScheme.Table.Border.Render("started: ", formatTime(snapshot.StartTime)),
-		colorScheme.Table.Border.Render("taken: ", formatTime(snapshot.SnapshotTime)),
-	}
+// renderLine builds the header: ◉ Snapshot ─ v0.1.0 │ deploy │ started: ... │ taken: ...
+func renderLine(lineBuf *buffer.LinesBuf, snapshot config.Snapshot, colors *colorscheme.ColorScheme) {
+	title := colors.Header.Title
+	border := colors.Table.Border
 
-	if snapshot.WorkflowError != nil {
-		parts = append(parts, colorScheme.Status.Failed.Render(snapshot.WorkflowError.Error()))
-	}
+	sep := border.RenderLine(append(append([]byte{' '}, colors.Chars.HeaderSeparator...), ' '))
 
-	line := colorScheme.Header.Title.Render(colorScheme.Chars.SnapshotIcon+" Snapshot") +
-		colorScheme.Table.Border.Render(colorScheme.Chars.HeaderTitleSep) + " " + strings.Join(parts, sep)
+	lineBuf.Append(title.RenderLine(append(append([]byte{}, colors.Chars.SnapshotIcon...), " Snapshot"...)))
+	lineBuf.Append(border.RenderLine(colors.Chars.HeaderTitleSep))
+	lineBuf.Append([]byte{' '})
 
-	return line
+	lineBuf.Append(colors.Status.Running.RenderLine([]byte("v" + snapshot.PanixVersion)))
+	lineBuf.Append(sep)
+	lineBuf.Append(border.RenderLine([]byte(snapshot.Reason.String())))
+	lineBuf.Append(sep)
+	lineBuf.Append(border.RenderLine([]byte("started: " + formatTime(snapshot.StartTime))))
+	lineBuf.Append(sep)
+	lineBuf.Append(border.RenderLine([]byte("taken: " + formatTime(snapshot.SnapshotTime))))
+
+	lineBuf.WriteLine(nil)
 }
 
 func formatTime(t time.Time) string {

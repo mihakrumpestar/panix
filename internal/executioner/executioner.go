@@ -9,6 +9,7 @@ import (
 	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/rs/zerolog"
@@ -113,7 +114,7 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
 	commandLog := ex.conf.PhaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 
-	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, "")
+	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, nil)
 
 	var execErr error
 
@@ -133,8 +134,8 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 func (ex *Executioner) startCommandLog(
 	commandLog *logs_command.CommandLog,
 	description,
-	statusIfRunning,
-	command string,
+	statusIfRunning string,
+	command *buffer.LineBuf,
 ) func(error, *logs_command.CommandLog) {
 	commandLog.TimeAndState.StartTimer()
 
@@ -142,8 +143,8 @@ func (ex *Executioner) startCommandLog(
 		Str("xpath", ex.conf.Xpath.String()).
 		Any("phase", ex.conf.Phase).
 		Str("description", description)
-	if command != "" {
-		ctx = ctx.Str("command", command)
+	if command.Len() > 0 {
+		ctx = ctx.Str("command", command.String())
 	}
 
 	sublog := ctx.Logger()
@@ -156,7 +157,7 @@ func (ex *Executioner) startCommandLog(
 
 		logger.ResultEvent(sublog, "command finished", err, func(event *zerolog.Event) {
 			event.Str("event", "command_end").Dur("duration", duration).
-				Str("output", style.StripANSI(commandLog.Output.String()))
+				Str("output", string(style.StripANSI(commandLog.Output.Bytes())))
 		})
 
 		ex.conf.OnUpdateHook()

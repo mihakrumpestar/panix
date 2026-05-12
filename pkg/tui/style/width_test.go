@@ -24,7 +24,7 @@ func TestCellWidth_Equivalence(t *testing.T) {
 
 	for _, tc := range tests {
 		expected := lipgloss.Width(tc)
-		got := CellWidth(tc)
+		got := CellWidth([]byte(tc))
 
 		if expected != got {
 			t.Errorf("CellWidth(%q) = %d, want %d", tc, got, expected)
@@ -35,8 +35,6 @@ func TestCellWidth_Equivalence(t *testing.T) {
 func TestCellWidth_ZoneMarkers(t *testing.T) {
 	t.Parallel()
 
-	// bubblezone zone markers use CSI private sequences: \x1b[<id>z
-	// These are zero-width and must not be counted as visible cells.
 	tests := []struct {
 		input     string
 		wantWidth int
@@ -49,7 +47,7 @@ func TestCellWidth_ZoneMarkers(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := CellWidth(tc.input)
+		got := CellWidth([]byte(tc.input))
 		if got != tc.wantWidth {
 			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.wantWidth)
 		}
@@ -59,19 +57,18 @@ func TestCellWidth_ZoneMarkers(t *testing.T) {
 func TestCellWidth_OtherCSISequences(t *testing.T) {
 	t.Parallel()
 
-	// Non-SGR CSI sequences (cursor movement, etc.) are also zero-width.
 	tests := []struct {
 		input     string
 		wantWidth int
 	}{
-		{"\x1b[1Ahello", 5},          // Cursor Up
-		{"\x1b[2Chello", 5},          // Cursor Forward
-		{"\x1b[?25lhello", 5},        // Private CSI (hide cursor)
-		{"\x1b[?25h\x1b[2Jhello", 5}, // Private + Erase Display
+		{"\x1b[1Ahello", 5},
+		{"\x1b[2Chello", 5},
+		{"\x1b[?25lhello", 5},
+		{"\x1b[?25h\x1b[2Jhello", 5},
 	}
 
 	for _, tc := range tests {
-		got := CellWidth(tc.input)
+		got := CellWidth([]byte(tc.input))
 		if got != tc.wantWidth {
 			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.wantWidth)
 		}
@@ -86,30 +83,23 @@ func TestSkipANSI(t *testing.T) {
 		start int
 		want  int
 	}{
-		// SGR sequences
 		{"\x1b[m", 0, 3},
 		{"\x1b[38;2;255;0;0m", 0, 15},
 		{"\x1b[0m", 0, 4},
-		// CSI private (zone markers)
 		{"\x1b[1001z", 0, 7},
 		{"\x1b[1001zhello", 0, 7},
-		// CSI with ? prefix (private mode)
 		{"\x1b[?25l", 0, 6},
 		{"\x1b[?25h", 0, 6},
-		// OSC sequences (BEL-terminated)
 		{"\x1b]0;title\x07", 0, 10},
-		// OSC sequences (ST-terminated)
 		{"\x1b]0;title\x1b\\", 0, 11},
-		// Bare ESC + byte
 		{"\x1bO", 0, 2},
-		// Incomplete sequences
 		{"\x1b", 0, 1},
 		{"\x1b[", 0, 2},
 		{"\x1b[38", 0, 4},
 	}
 
 	for _, tc := range tests {
-		got := skipANSI(tc.input, tc.start)
+		got := skipANSI([]byte(tc.input), tc.start)
 		if got != tc.want {
 			t.Errorf("skipANSI(%q, %d) = %d, want %d", tc.input, tc.start, got, tc.want)
 		}
@@ -152,7 +142,7 @@ func TestCellWidth_EmojiGrapheme(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := CellWidth(tc.input)
+		got := CellWidth([]byte(tc.input))
 		if got != tc.want {
 			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.want)
 		}
@@ -185,39 +175,9 @@ func TestStripANSI(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := StripANSI(tt.input)
-			if got != tt.want {
+			got := StripANSI([]byte(tt.input))
+			if string(got) != tt.want {
 				t.Errorf("StripANSI(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestStripANSIBytes(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"no ansi", "plain text", "plain text"},
-		{"single SGR", "\x1b[31mred\x1b[0m", "red"},
-		{"multiple SGR", "\x1b[1;32mgreen\x1b[0m \x1b[34mblue\x1b[0m", "green blue"},
-		{"RGB SGR", "\x1b[38;2;255;0;0mRGB\x1b[0m", "RGB"},
-		{"empty", "", ""},
-		{"only ansi", "\x1b[31m\x1b[0m", ""},
-		{"OSC title", "\x1b]0;window title\x07visible", "visible"},
-		{"no esc fast path", "hello world", "hello world"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := string(StripANSIBytes(nil, []byte(tt.input)))
-			if got != tt.want {
-				t.Errorf("StripANSIBytes(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -228,8 +188,9 @@ func TestStripANSIBytesZeroCopy(t *testing.T) {
 
 	data := []byte("no ansi here")
 
-	result := StripANSIBytes(nil, data)
-	if &result[0] != &data[0] {
+	result := StripANSI(data)
+	// When no ESC bytes present, StripANSI returns the input as a sub-slice.
+	if len(result) > 0 && len(data) > 0 && &result[0] != &data[0] {
 		t.Error("expected zero-copy when no ESC bytes present")
 	}
 }

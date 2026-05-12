@@ -4,22 +4,35 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
-var testStyle = style.NewStyle().Foreground(style.Color("#6272A4"))
+func lb(s string) *buffer.LinesBuf {
+	buf := buffer.NewLinesBuf()
+	for line := range strings.SplitSeq(s, "\n") {
+		buf.WriteLine([]byte(line))
+	}
+
+	return buf
+}
+
+func rootStr(s string) *Node {
+	return NewTree(style.NewStyle()).NewNode(lb(s))
+}
 
 func viewString(n *Node) string {
-	var buf []byte
-	n.View(&buf)
+	buf := buffer.NewLinesBufDiff()
 
-	return string(buf)
+	n.Render(buf)
+
+	return buf.String()
 }
 
 func TestSingleNode(t *testing.T) {
 	t.Parallel()
 
-	got := viewString(New().Root("root"))
+	got := viewString(rootStr("root"))
 	want := "root"
 
 	if got != want {
@@ -30,8 +43,8 @@ func TestSingleNode(t *testing.T) {
 func TestSingleChild(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	our.Child(New().Root("child"))
+	our := rootStr("root")
+	our.Child(rootStr("child"))
 
 	got := viewString(our)
 
@@ -48,9 +61,9 @@ func TestSingleChild(t *testing.T) {
 func TestMultipleChildren(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := rootStr("root")
 	for _, s := range []string{"a", "b", "c"} {
-		our.Child(New().Root(s))
+		our.Child(rootStr(s))
 	}
 
 	got := viewString(our)
@@ -64,11 +77,11 @@ func TestMultipleChildren(t *testing.T) {
 func TestNested(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := rootStr("root")
 	for _, s := range []string{"a", "b"} {
-		child := New().Root(s)
+		child := rootStr(s)
 		for _, s2 := range []string{"x", "y"} {
-			child.Child(New().Root(s2))
+			child.Child(rootStr(s2))
 		}
 
 		our.Child(child)
@@ -85,8 +98,8 @@ func TestNested(t *testing.T) {
 func TestNoStyle(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root")
-	our.Child(New().Root("child"))
+	our := rootStr("root")
+	our.Child(rootStr("child"))
 
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
@@ -99,16 +112,16 @@ func TestNoStyle(t *testing.T) {
 func TestDeepNesting(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("r").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
+	our := rootStr("r")
 	{
-		a := New().Root("a")
-		a.Child(New().Root("a1"))
-		a.Child(New().Root("a2"))
+		a := rootStr("a")
+		a.Child(rootStr("a1"))
+		a.Child(rootStr("a2"))
 		our.Child(a)
 
-		b := New().Root("b")
-		b1 := New().Root("b1")
-		b1.Child(New().Root("b1a"))
+		b := rootStr("b")
+		b1 := rootStr("b1")
+		b1.Child(rootStr("b1a"))
 		b.Child(b1)
 		our.Child(b)
 	}
@@ -124,9 +137,9 @@ func TestDeepNesting(t *testing.T) {
 func TestMixedStringAndNodeChildren(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	our.ChildString("string child")
-	our.Child(New().Root("node child"))
+	our := rootStr("root")
+	our.Child(rootStr("string child"))
+	our.Child(rootStr("node child"))
 
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
@@ -139,13 +152,12 @@ func TestMixedStringAndNodeChildren(t *testing.T) {
 func TestMultiline(t *testing.T) {
 	t.Parallel()
 
-	sty := style.NewStyle().Foreground(style.Color("#6272A4"))
-	our := New().Root("r").EnumeratorStyle(sty).IndenterStyle(sty)
-	our.ChildString("line1\nline2\nline3")
+	our := rootStr("r")
+	our.Child(rootStr("line1\nline2\nline3"))
 
-	a := New().Root("a")
+	a := rootStr("a")
 	our.Child(a)
-	a.ChildString("child-line1\nchild-line2")
+	a.Child(rootStr("child-line1\nchild-line2"))
 
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
@@ -158,17 +170,24 @@ func TestMultiline(t *testing.T) {
 func TestViewReuse(t *testing.T) {
 	t.Parallel()
 
-	tree := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	tree.Child(New().Root("a"))
-	tree.Child(New().Root("b"))
+	tree := rootStr("root")
+	tree.Child(rootStr("a"))
+	tree.Child(rootStr("b"))
 
-	var buf []byte
+	var prev string
 
 	for iteration := range 3 {
-		buf = buf[:0]
-		tree.View(&buf)
+		renderBuf := buffer.NewLinesBufDiff()
+		tree.Render(renderBuf)
 
-		got := string(buf)
+		got := renderBuf.String()
+
+		if iteration > 0 && got != prev {
+			t.Errorf("iteration %d: output changed from previous: %q vs %q", iteration, got, prev)
+		}
+
+		prev = got
+
 		if !strings.Contains(got, "root") || !strings.Contains(got, "a") {
 			t.Errorf("iteration %d: unexpected output: %q", iteration, got)
 		}
@@ -183,15 +202,14 @@ func TestViewReuse(t *testing.T) {
 func TestViewAppends(t *testing.T) {
 	t.Parallel()
 
-	our := New().Root("root").EnumeratorStyle(testStyle).IndenterStyle(testStyle)
-	our.Child(New().Root("child"))
+	our := rootStr("root")
+	our.Child(rootStr("child"))
 
-	var buf []byte
+	renderBuf := buffer.NewLinesBufDiff()
+	renderBuf.Write([]byte("prefix|"))
+	our.Render(renderBuf)
 
-	buf = append(buf, "prefix|"...)
-	our.View(&buf)
-
-	got := string(buf)
+	got := renderBuf.String()
 
 	if !strings.HasPrefix(got, "prefix|") {
 		t.Errorf("View should append to existing buffer content, got %q", got)

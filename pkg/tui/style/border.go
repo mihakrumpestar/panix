@@ -1,74 +1,82 @@
 package style
 
+var (
+	normalBorder = Border{
+		TopLeft:     []byte("┌"),
+		TopRight:    []byte("┐"),
+		BottomLeft:  []byte("└"),
+		BottomRight: []byte("┘"),
+		Horizontal:  []byte("─"),
+		Vertical:    []byte("│"),
+		TopMid:      []byte("┬"),
+		BottomMid:   []byte("┴"),
+		LeftMid:     []byte("├"),
+		RightMid:    []byte("┤"),
+		MidMid:      []byte("┼"),
+	}
+
+	roundedBorder = Border{
+		TopLeft:     []byte("╭"),
+		TopRight:    []byte("╮"),
+		BottomLeft:  []byte("╰"),
+		BottomRight: []byte("╯"),
+		Horizontal:  []byte("─"),
+		Vertical:    []byte("│"),
+		TopMid:      []byte("┬"),
+		BottomMid:   []byte("┴"),
+		LeftMid:     []byte("├"),
+		RightMid:    []byte("┤"),
+		MidMid:      []byte("┼"),
+	}
+
+	markdownBorder = Border{
+		TopLeft:     []byte("|"),
+		TopRight:    []byte("|"),
+		BottomLeft:  []byte("|"),
+		BottomRight: []byte("|"),
+		Horizontal:  []byte("-"),
+		Vertical:    []byte("|"),
+		TopMid:      []byte("|"),
+		BottomMid:   []byte("|"),
+		LeftMid:     []byte("|"),
+		RightMid:    []byte("|"),
+		MidMid:      []byte("|"),
+	}
+)
+
 type Border struct {
-	TopLeft    string
-	TopRight   string
-	BottomLeft string
-	BottomRight string
-	Horizontal string
-	Vertical   string
+	TopLeft     []byte
+	TopRight    []byte
+	BottomLeft  []byte
+	BottomRight []byte
+	Horizontal  []byte
+	Vertical    []byte
 
-	TopMid    string
-	BottomMid string
-	LeftMid   string
-	RightMid  string
+	TopMid    []byte
+	BottomMid []byte
+	LeftMid   []byte
+	RightMid  []byte
 
-	MidMid string
+	MidMid []byte
 
-	topFg    string
-	rightFg  string
-	bottomFg string
-	leftFg   string
+	topFg    []byte
+	rightFg  []byte
+	bottomFg []byte
+	leftFg   []byte
 }
 
 func NormalBorder() Border {
-	return Border{
-		TopLeft:     "┌",
-		TopRight:    "┐",
-		BottomLeft:  "└",
-		BottomRight: "┘",
-		Horizontal:  "─",
-		Vertical:    "│",
-		TopMid:      "┬",
-		BottomMid:   "┴",
-		LeftMid:     "├",
-		RightMid:    "┤",
-		MidMid:      "┼",
-	}
+	return normalBorder
 }
 
 func RoundedBorder() Border {
-	return Border{
-		TopLeft:     "╭",
-		TopRight:    "╮",
-		BottomLeft:  "╰",
-		BottomRight: "╯",
-		Horizontal:  "─",
-		Vertical:    "│",
-		TopMid:      "┬",
-		BottomMid:   "┴",
-		LeftMid:     "├",
-		RightMid:    "┤",
-		MidMid:      "┼",
-	}
+	return roundedBorder
+}
+
+func MarkdownBorder() Border {
+	return markdownBorder
 }
 
 func HiddenBorder() Border {
 	return Border{}
-}
-
-func MarkdownBorder() Border {
-	return Border{
-		TopLeft:     "|",
-		TopRight:    "|",
-		BottomLeft:  "|",
-		BottomRight: "|",
-		Horizontal:  "-",
-		Vertical:    "|",
-		TopMid:      "|",
-		BottomMid:   "|",
-		LeftMid:     "|",
-		RightMid:    "|",
-		MidMid:      "|",
-	}
 }

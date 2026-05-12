@@ -7,13 +7,23 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
+func viewString(n *Notification) string {
+	v := n.Render()
+	if v == nil {
+		return ""
+	}
+
+	return v.String()
+}
+
 func TestViewRendersBorderedBox(t *testing.T) {
 	t.Parallel()
 
 	n := New(style.Color("#B4B4B4"))
+	n.SetBaseStyle(style.NewStyle().Bold(true))
 	_ = n.Set("hello", style.Color("#50FA7B"))
 
-	result := n.View(style.NewStyle().Bold(true))
+	result := viewString(n)
 	if result == "" {
 		t.Fatal("expected non-empty output")
 	}
@@ -57,8 +67,9 @@ func TestViewEmptyWhenExpired(t *testing.T) {
 	t.Parallel()
 
 	n := New(style.Color("#B4B4B4"))
+	n.SetBaseStyle(style.NewStyle())
 
-	result := n.View(style.NewStyle())
+	result := viewString(n)
 	if result != "" {
 		t.Fatalf("expected empty output for expired notification, got %q", result)
 	}
@@ -68,16 +79,18 @@ func TestViewBorderWidthMatchesContent(t *testing.T) {
 	t.Parallel()
 
 	n := New(style.Color("#B4B4B4"))
+	n.SetBaseStyle(style.NewStyle())
 	_ = n.Set("short", style.Color("#50FA7B"))
 
-	result := n.View(style.NewStyle())
-	topWidth := style.CellWidth(strings.Split(strings.TrimRight(result, "\n"), "\n")[0])
+	result := viewString(n)
+	topWidth := style.CellWidth([]byte(strings.Split(strings.TrimRight(result, "\n"), "\n")[0]))
 
 	n2 := New(style.Color("#B4B4B4"))
+	n2.SetBaseStyle(style.NewStyle())
 	_ = n2.Set("a much longer message text", style.Color("#50FA7B"))
 
-	result2 := n2.View(style.NewStyle())
-	topWidth2 := style.CellWidth(strings.Split(strings.TrimRight(result2, "\n"), "\n")[0])
+	result2 := viewString(n2)
+	topWidth2 := style.CellWidth([]byte(strings.Split(strings.TrimRight(result2, "\n"), "\n")[0]))
 
 	if topWidth2 <= topWidth {
 		t.Fatalf("longer content should produce wider border: short=%d, long=%d", topWidth, topWidth2)
@@ -88,14 +101,15 @@ func TestViewAllLinesEqualWidth(t *testing.T) {
 	t.Parallel()
 
 	n := New(style.Color("#B4B4B4"))
+	n.SetBaseStyle(style.NewStyle().Bold(true))
 	_ = n.Set("Here is a notification", style.Color("#50FA7B"))
 
-	result := n.View(style.NewStyle().Bold(true))
+	result := viewString(n)
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
 
 	widths := make([]int, len(lines))
 	for i, line := range lines {
-		widths[i] = style.CellWidth(line)
+		widths[i] = style.CellWidth([]byte(line))
 	}
 
 	for i := 1; i < len(widths); i++ {
@@ -109,13 +123,14 @@ func TestViewContentHasHorizontalPadding(t *testing.T) {
 	t.Parallel()
 
 	n := New(style.Color("#B4B4B4"))
+	n.SetBaseStyle(style.NewStyle().Bold(true))
 	_ = n.Set("hello", style.Color("#50FA7B"))
 
-	result := n.View(style.NewStyle().Bold(true))
+	result := viewString(n)
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
 	content := lines[1]
 
-	clean := style.StripANSI(content)
+	clean := string(style.StripANSI([]byte(content)))
 	if !strings.HasPrefix(clean, "│ ") || !strings.HasSuffix(clean, " │") {
 		t.Fatalf("content line should have padding inside borders: %q", clean)
 	}

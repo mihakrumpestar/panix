@@ -7,6 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/flow"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
@@ -22,6 +23,7 @@ type PhaseFlow struct {
 	pf          *flow.PhaseFlow
 	phases      []phase.Phase
 	Selected    Selected
+	content     *buffer.LinesBuf
 }
 
 func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
@@ -31,9 +33,11 @@ func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []p
 		GradientDone:    colorfulPair(scheme.PhaseStatus.Done),
 		GradientDefault: colorfulPair(scheme.PhaseStatus.Default),
 		Pill:            scheme.PhaseStatus.Pill,
-		StatusRunning:   scheme.Status.Running,
-		StatusFailed:    scheme.Status.Failed,
-		StatusDone:      scheme.Status.OK,
+		Status: flow.StatusStyles{
+			Running: scheme.Status.Running,
+			Failed:  scheme.Status.Failed,
+			Done:    scheme.Status.OK,
+		},
 		StatusSeparator: scheme.Table.Border,
 		Arrow:           scheme.Table.Border,
 		PhaseArrow:      scheme.Chars.PhaseArrow,
@@ -58,6 +62,7 @@ func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []p
 		pf:          phaseFlow,
 		phases:      workflowPhases,
 		Selected:    Selected{Index: -1},
+		content:     buffer.NewLinesBuf(),
 	}
 }
 
@@ -65,10 +70,13 @@ func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
 	return flow.GradientPair{Dark: cp[0], Light: cp[1]}
 }
 
-func (p *PhaseFlow) View(width int) string {
+// Render renders the phase flow and returns the output buffer.
+func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 	spp := p.fleet.CacheStatisticsPerPhase
 	if spp == nil {
-		return ""
+		p.content.Reset()
+
+		return p.content
 	}
 
 	pairs := spp.Pairs()
@@ -93,12 +101,18 @@ func (p *PhaseFlow) View(width int) string {
 
 	p.pf.Width(width).SetData(data)
 
-	result := p.pf.String()
-	p.syncSelection()
+	p.content.Reset()
 
-	header := p.colorScheme.Header.Title.Render("=== Phase Flow ===")
+	phaseFlowHeader := [][]byte{
+		p.colorScheme.Header.Title.RenderLine([]byte("=== Phase Flow ===")),
+		[]byte{},
+	}
 
-	return header + "\n\n" + result + "\n\n"
+	p.content.WriteLines(phaseFlowHeader)
+	p.content.AppendFrom(p.pf.Render())
+	p.content.EmptyLine()
+
+	return p.content
 }
 
 func (p *PhaseFlow) Reset() {

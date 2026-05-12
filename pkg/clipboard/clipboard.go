@@ -47,7 +47,7 @@ func CopyToClipboard(text string) error {
 
 func normalizeText(text string) string {
 	text = strings.TrimSpace(text)
-	text = style.StripANSI(text)
+	text = string(style.StripANSI([]byte(text)))
 
 	return text
 }

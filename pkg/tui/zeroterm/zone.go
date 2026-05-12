@@ -1,157 +1,123 @@
 package zeroterm
 
 import (
+	"bytes"
 	"strconv"
-	"strings"
-	"sync"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
-type ZoneManager struct {
-	mu     sync.RWMutex
-	names  []string
-	byName map[string]uint16
-	nextID uint16
-	active map[uint16]int
-}
+var zoneIDs = make(map[string]uint16)
 
-var globalZones = newZoneManager()
+var currentLines *buffer.LinesBufDiff
 
-var currentLines *linesbuffer.LinesBuffer
+func SetCurrentLines(lines *buffer.LinesBufDiff) { currentLines = lines }
+func CurrentLines() *buffer.LinesBufDiff         { return currentLines }
 
-func SetCurrentLines(lines *linesbuffer.LinesBuffer) { currentLines = lines }
-
-func CurrentLines() *linesbuffer.LinesBuffer { return currentLines }
-
-func newZoneManager() *ZoneManager {
-	return &ZoneManager{
-		byName: make(map[string]uint16),
-		active: make(map[uint16]int),
-	}
-}
-
-func (z *ZoneManager) GetOrCreate(name string) uint16 {
-	z.mu.Lock()
-	defer z.mu.Unlock()
-
-	if id, ok := z.byName[name]; ok {
+func EnsureZone(name string) uint16 {
+	if id, ok := zoneIDs[name]; ok {
 		return id
 	}
 
-	z.nextID++
-	zoneID := z.nextID
+	id := uint16(len(zoneIDs)) + 1
+	zoneIDs[name] = id
 
-	z.byName[name] = zoneID
-	for int(zoneID) >= len(z.names) {
-		z.names = append(z.names, "")
+	return id
+}
+
+func ZoneID(name string) uint16 { return zoneIDs[name] }
+
+// formatZone appends \x1b[<id>z (open) or \x1b[/<id>z (close) to dst.
+func formatZone(dst []byte, id uint16, close bool) []byte {
+	if close {
+		dst = append(dst, "\x1b[/"...)
+	} else {
+		dst = append(dst, "\x1b["...)
 	}
 
-	z.names[zoneID] = name
+	dst = strconv.AppendInt(dst, int64(id), 10)
+	dst = append(dst, 'z')
 
-	return zoneID
+	return dst
 }
 
-func (z *ZoneManager) Name(id uint16) string {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
+// FormatZoneOpen appends \x1b[<id>z to dst. Zero allocations.
+func FormatZoneOpen(dst []byte, id uint16) []byte { return formatZone(dst, id, false) }
 
-	if int(id) < len(z.names) {
-		return z.names[id]
+// FormatZoneClose appends \x1b[/<id>z to dst. Zero allocations.
+func FormatZoneClose(dst []byte, id uint16) []byte { return formatZone(dst, id, true) }
+
+// MarkBufByID wraps each line of view (split by \n) with zone open/close
+// markers and appends the resulting lines to dst. Zero allocations.
+// An empty view still produces one zone-marked empty line.
+func MarkBufByID(id uint16, view []byte, dst *buffer.LinesBuf) {
+	var openBuf, closeBuf [16]byte
+
+	open := formatZone(openBuf[:0], id, false)
+	close := formatZone(closeBuf[:0], id, true)
+
+	if len(view) == 0 {
+		dst.WriteLine3(open, nil, close)
+
+		return
 	}
 
-	return ""
-}
+	for len(view) > 0 {
+		idx := bytes.IndexByte(view, '\n')
+		if idx < 0 {
+			dst.WriteLine3(open, view, close)
 
-func (z *ZoneManager) ID(name string) uint16 {
-	z.mu.RLock()
-	defer z.mu.RUnlock()
-
-	return z.byName[name]
-}
-
-func (z *ZoneManager) Reset() {
-	z.mu.Lock()
-	for k := range z.active {
-		delete(z.active, k)
-	}
-	z.mu.Unlock()
-}
-
-func (z *ZoneManager) acquire(id uint16) {
-	z.mu.Lock()
-	z.active[id]++
-	z.mu.Unlock()
-}
-
-func (z *ZoneManager) release(id uint16) {
-	z.mu.Lock()
-	if z.active[id] > 0 {
-		z.active[id]--
-	}
-	z.mu.Unlock()
-}
-
-func Mark(name string, view string) string {
-	id := globalZones.GetOrCreate(name)
-	start := "\x1b[" + strconv.Itoa(int(id)) + "z"
-	end := "\x1b[/" + strconv.Itoa(int(id)) + "z"
-
-	estimatedLen := len(view) + (len(start)+len(end))*max(1, strings.Count(view, "\n")+1)
-
-	var builder strings.Builder
-	builder.Grow(estimatedLen)
-
-	first := true
-	for line := range strings.SplitSeq(view, "\n") {
-		if !first {
-			builder.WriteByte('\n')
+			return
 		}
 
-		builder.WriteString(start)
-		builder.WriteString(line)
-		builder.WriteString(end)
-
-		first = false
+		dst.WriteLine3(open, view[:idx], close)
+		view = view[idx+1:]
 	}
-
-	return builder.String()
 }
 
-// EnsureZone creates the zone if it doesn't exist and returns its ID.
-// Use this to pre-compute zone IDs at row-setup time instead of per-render.
-func EnsureZone(name string) uint16 {
-	return globalZones.GetOrCreate(name)
+// MarkLinesByID wraps each line from src with zone open/close markers
+// and appends the resulting lines to dst. Zero allocations.
+// When src is empty, a single zone-marked empty line is still produced.
+func MarkLinesByID(id uint16, src *buffer.LinesBuf, dst *buffer.LinesBuf) {
+	var openBuf, closeBuf [16]byte
+
+	open := formatZone(openBuf[:0], id, false)
+	close := formatZone(closeBuf[:0], id, true)
+
+	n := src.Len()
+	if n == 0 {
+		dst.WriteLine3(open, nil, close)
+
+		return
+	}
+
+	for i := range n {
+		dst.WriteLine3(open, src.Line(i), close)
+	}
 }
 
 func IsZoneAtLine(line []byte, col int, zoneName string) bool {
-	id := globalZones.ID(zoneName)
-	if id == 0 {
-		return false
-	}
+	id := ZoneID(zoneName)
 
-	return zoneIDAtCol(line, col) == id
+	return id != 0 && ZoneIDAtCol(line, col) == id
 }
 
-func zoneIDAtCol(line []byte, targetCol int) uint16 {
+func ZoneIDAtCol(line []byte, targetCol int) uint16 {
 	col := 0
-	pos := 0
 	activeZone := uint16(0)
 	zoneStack := make([]uint16, 0, 8) //nolint:mnd
 
+	pos := 0
 	for pos < len(line) {
-		char := line[pos]
+		b := line[pos]
 
-		if char == '\x1b' {
-			newPos, newActive, newStack := parseZoneEscape(line, pos, activeZone, zoneStack)
-			pos = newPos
-			activeZone = newActive
-			zoneStack = newStack
+		if b == '\x1b' {
+			pos, activeZone, zoneStack = parseZoneMarker(line, pos, activeZone, zoneStack)
 
 			continue
 		}
 
-		if advanceCol(char) {
+		if (b >= 0x20 && b < 0x7F) || b >= 0xC0 {
 			if col == targetCol {
 				return activeZone
 			}
@@ -169,100 +135,72 @@ func zoneIDAtCol(line []byte, targetCol int) uint16 {
 	return 0
 }
 
-// advanceCol reports whether the byte at the current position occupies a visible
-// cell and should increment the column counter.
-func advanceCol(char byte) bool {
-	return (char >= 0x20 && char < 0x7F) || char >= 0xC0
-}
-
-// parseZoneEscape parses an ANSI escape sequence starting at pos (the ESC byte).
-// It returns the new position, updated activeZone, and updated zoneStack.
-func parseZoneEscape(line []byte, pos int, activeZone uint16, zoneStack []uint16) (int, uint16, []uint16) {
+// parseZoneMarker skips non-zone ESC sequences and parses \x1b[<digits>z
+// or \x1b[/<digits>z. Returns new pos, activeZone, zoneStack.
+func parseZoneMarker(line []byte, pos int, activeZone uint16, zoneStack []uint16) (int, uint16, []uint16) {
 	pos++
 
-	if pos >= len(line) {
+	if pos >= len(line) || line[pos] != '[' {
+		if pos < len(line) {
+			pos++
+		}
+
 		return pos, activeZone, zoneStack
 	}
 
-	next := line[pos]
 	pos++
 
-	if next != '[' {
-		return pos, activeZone, zoneStack
+	close := pos < len(line) && line[pos] == '/'
+	if close {
+		pos++
 	}
 
-	paramStart := pos
-	pos = scanCSIParams(line, pos)
+	digitStart := pos
+	for pos < len(line) && line[pos] >= '0' && line[pos] <= '9' {
+		pos++
+	}
 
-	intermediateStart := pos
+	if pos < len(line) && line[pos] == 'z' {
+		id, err := strconv.ParseUint(string(line[digitStart:pos]), 10, 16)
+		pos++
+
+		if err != nil {
+			return pos, activeZone, zoneStack
+		}
+
+		uid := uint16(id)
+
+		if close {
+			if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1] == uid {
+				zoneStack = zoneStack[:len(zoneStack)-1]
+			}
+
+			if len(zoneStack) == 0 {
+				return pos, 0, zoneStack
+			}
+
+			return pos, zoneStack[len(zoneStack)-1], zoneStack
+		}
+
+		return pos, uid, append(zoneStack, uid)
+	}
+
+	// Not a zone marker — skip rest of CSI sequence.
+	for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x3F {
+		pos++
+	}
+
 	for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x2F {
 		pos++
 	}
 
-	trailingParamStart := pos
-	pos = scanCSITrailingParams(line, pos)
-
-	if pos >= len(line) || line[pos] < 0x40 || line[pos] > 0x7E {
-		return pos, activeZone, zoneStack
+	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
+		pos++
 	}
 
-	finalByte := line[pos]
-	params := line[paramStart:intermediateStart]
-	intermediates := line[intermediateStart:trailingParamStart]
-	trailingParams := line[trailingParamStart:pos]
-	pos++
-
-	if finalByte == 'z' {
-		activeZone, zoneStack = applyZoneMarker(params, intermediates, trailingParams, activeZone, zoneStack)
+	if pos < len(line) && line[pos] >= 0x40 && line[pos] <= 0x7E {
+		pos++
 	}
 
 	return pos, activeZone, zoneStack
-}
-
-// scanCSIParams advances pos past CSI parameter bytes (0x30-0x3F).
-func scanCSIParams(line []byte, pos int) int {
-	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
-		pos++
-	}
-
-	return pos
-}
-
-// scanCSITrailingParams advances pos past trailing CSI parameter bytes (0x30-0x3F).
-func scanCSITrailingParams(line []byte, pos int) int {
-	for pos < len(line) && line[pos] >= 0x30 && line[pos] <= 0x3F {
-		pos++
-	}
-
-	return pos
-}
-
-// applyZoneMarker updates the active zone and stack based on an open or close
-// zone marker that was already identified by its final byte 'z'.
-func applyZoneMarker(params, intermediates, trailingParams []byte, activeZone uint16, zoneStack []uint16) (uint16, []uint16) {
-	if len(intermediates) > 0 && intermediates[0] == '/' {
-		// Close marker: \x1b[/<id>z
-		id, err := strconv.ParseUint(string(trailingParams), 10, 16)
-		if err != nil {
-			return activeZone, zoneStack
-		}
-
-		if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1] == uint16(id) {
-			zoneStack = zoneStack[:len(zoneStack)-1]
-		}
-
-		if len(zoneStack) == 0 {
-			return 0, zoneStack
-		}
-
-		return zoneStack[len(zoneStack)-1], zoneStack
-	}
-
-	// Open marker: \x1b[<id>z
-	id, err := strconv.ParseUint(string(params), 10, 16)
-	if err != nil {
-		return activeZone, zoneStack
-	}
-
-	return uint16(id), append(zoneStack, uint16(id))
 }

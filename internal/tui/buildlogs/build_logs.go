@@ -15,6 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
@@ -29,8 +30,7 @@ const (
 	machineInd  = treeStep * indentStep
 	phaseInd    = machineInd + treeStep
 
-	iconCellWidth = 2
-	maxSpaces     = 512
+	maxSpaces = 512
 )
 
 var (
@@ -39,17 +39,19 @@ var (
 		phase.Secrets: {},
 	}
 
-	upperPhaseNames = map[phase.Phase]string{
-		phase.Inspect:   "INSPECT",
-		phase.Build:     "BUILD",
-		phase.Bootstrap: "BOOTSTRAP",
-		phase.Transfer:  "TRANSFER",
-		phase.Secrets:   "SECRETS",
-		phase.Activate:  "ACTIVATE",
-		phase.Rollback:  "ROLLBACK",
+	upperPhaseNames = map[phase.Phase][]byte{
+		phase.Inspect:   []byte("INSPECT"),
+		phase.Build:     []byte("BUILD"),
+		phase.Bootstrap: []byte("BOOTSTRAP"),
+		phase.Transfer:  []byte("TRANSFER"),
+		phase.Secrets:   []byte("SECRETS"),
+		phase.Activate:  []byte("ACTIVATE"),
+		phase.Rollback:  []byte("ROLLBACK"),
 	}
 
-	spaces = strings.Repeat(" ", maxSpaces)
+	spacesBytes = []byte(strings.Repeat(" ", maxSpaces))
+
+	headerTitle = []byte("=== Build Logs ===")
 )
 
 type BuildLogs struct {
@@ -60,8 +62,18 @@ type BuildLogs struct {
 	viewports *viewports.Viewports
 	spinners  *spinners.Spinners
 
-	styledTreeLine string
+	styledTreeLine []byte
 	contentWidth   int
+	content        *buffer.LinesBuf
+	tree           *tree.Node
+	nodeBufs       []*buffer.LinesBuf
+
+	cmdIconBuf  *buffer.LinesBuf
+	cmdLabelBuf *buffer.LinesBuf
+	cmdDurBuf   *buffer.LinesBuf
+	errBuf      *buffer.LinesBuf
+	durLineBuf  *buffer.LineBuf
+	iconBuf     *buffer.LineBuf
 }
 
 func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *phaseflow.PhaseFlow) *BuildLogs {
@@ -69,18 +81,33 @@ func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *ph
 		conf:        conf,
 		statsTable:  statsTable,
 		phaseStatus: phaseStatus,
+		content:     buffer.NewLinesBuf(),
+		tree:        tree.NewTree(conf.ColorScheme.Tree.Enumerator),
+		cmdIconBuf:  buffer.NewLinesBuf(),
+		cmdLabelBuf: buffer.NewLinesBuf(),
+		cmdDurBuf:   buffer.NewLinesBuf(),
+		errBuf:      buffer.NewLinesBuf(),
+		durLineBuf:  buffer.NewLineBuf(),
+		iconBuf:     buffer.NewLineBuf(),
 	}
 }
 
-func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string {
+// Render renders the build logs tree and returns the output buffer.
+func (b *BuildLogs) Render(vp *viewports.Viewports, sp *spinners.Spinners) *buffer.LinesBuf {
+	for _, nb := range b.nodeBufs {
+		nb.Release()
+	}
+
+	b.nodeBufs = b.nodeBufs[:0]
+
 	b.viewports = vp
 	b.spinners = sp
 	b.contentWidth = vp.ContentWidth()
-	b.styledTreeLine = b.conf.ColorScheme.Tree.Enumerator.Render("│")
+	b.styledTreeLine = b.conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
-	var buf []byte
-
-	buf = append(buf, b.conf.ColorScheme.Header.Title.Render("=== Build Logs ===\n")...)
+	b.content.Reset()
+	b.conf.ColorScheme.Header.Title.RenderInto(b.content, [][]byte{headerTitle})
+	b.content.EmptyLine()
 
 	for _, fp := range b.conf.Fleet.Flakes.Pairs() {
 		flake := fp.Value
@@ -99,18 +126,17 @@ func (b *BuildLogs) View(vp *viewports.Viewports, sp *spinners.Spinners) string 
 			cfgNode := b.entityNode(treeStep, b.conf.ColorScheme.Configuration, cfg.Name, cfg.Logs, false)
 			b.buildConfigTree(cfgNode, cfg)
 
-			if cfgNode.Length() > 0 {
+			if cfgNode.Len() > 0 {
 				flakeNode.Child(cfgNode)
 			}
 		}
 
-		if flakeNode.Length() > 0 {
-			buf = append(buf, '\n')
-			flakeNode.View(&buf)
+		if flakeNode.Len() > 0 {
+			flakeNode.RenderInto(b.content)
 		}
 	}
 
-	return string(buf)
+	return b.content
 }
 
 func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
@@ -147,7 +173,7 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configurat
 			}
 		}
 
-		if node.Length() > 0 {
+		if node.Len() > 0 {
 			cfgNode.Child(node)
 		}
 
@@ -212,7 +238,7 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Mac
 	node := b.entityNode(indent, b.conf.ColorScheme.Machine, machine.Name, machine.Logs, false)
 	b.addPhases(node, machine.Logs, machine.Xpath, indent+treeStep, false, allowed...)
 
-	if node.Length() > 0 {
+	if node.Len() > 0 {
 		parent.Child(node)
 	}
 }
@@ -318,25 +344,28 @@ func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI 
 
 	tasLoaded := tas.Load()
 	icon := b.spinnerOrIcon(phaseXpath, b.conf.ColorScheme.Phase.Icon, tasLoaded)
-	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Phase.Color, tas)
+	durStyled, durWidth := b.durationBytes(b.conf.ColorScheme.Phase.Color, tas)
 
 	upperName := upperPhaseNames[phaseI]
-	if upperName == "" {
-		upperName = strings.ToUpper(phaseI.String())
+	if upperName == nil {
+		upperName = []byte(strings.ToUpper(phaseI.String()))
 	}
 
-	leftRaw := icon + upperName
+	b.iconBuf.Reset()
+	b.iconBuf.Write(icon)
+	b.iconBuf.Write(upperName)
+	leftRaw := b.iconBuf.Bytes()
+
 	leftWidth := style.CellWidth(icon) + len(upperName)
-	left := b.conf.ColorScheme.Phase.Color.Render(leftRaw)
 
 	layoutIndent := indent
 	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
 		layoutIndent -= 2
 	}
 
-	line := b.layoutLine(layoutIndent, left, durStyled, leftWidth, durWidth)
+	line := b.layoutLineStyled(layoutIndent, b.conf.ColorScheme.Phase.Color, leftRaw, durStyled, leftWidth, durWidth)
 
-	phaseNode := tree.New().Root(line)
+	phaseNode := b.tree.NewNode(line)
 	hasError := b.addCommands(phaseNode, phaseLog, phaseI, phaseXpath, indent)
 	parent.Child(phaseNode)
 
@@ -388,9 +417,11 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	cmdIndent := indent + treeStep
 	cmdXpath := phaseXpath.NewXpathWithAppend(cmd.Description)
 
-	label := cmd.Description
-	if b.conf.Flags.Tui.ShowCommandsInLabels && len(cmd.Command) > 2 {
-		label = cmd.Command
+	var label string
+	if b.conf.Flags.Tui.ShowCommandsInLabels && cmd.Command != nil && len(cmd.Command.Bytes()) > 2 {
+		label = string(cmd.Command.Bytes())
+	} else {
+		label = cmd.Description
 	}
 
 	var labelShowsCommands uint64
@@ -400,26 +431,30 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 
 	tasCached := cmd.TimeAndState.Load()
 
-	icon := b.spinnerOrIcon(cmdXpath, strconv.Itoa(idx+1), tasCached)
-	icon = b.conf.ColorScheme.Command.Color.Render(icon)
+	b.iconBuf.Reset()
+	b.iconBuf.WriteString(strconv.Itoa(idx + 1))
+	icon := b.spinnerOrIcon(cmdXpath, b.iconBuf.Bytes(), tasCached)
 
-	durStyled, durWidth := b.durationText(b.conf.ColorScheme.Command.Color, cmd.TimeAndState)
+	b.cmdIconBuf.Reset()
+	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdIconBuf, icon)
 
-	iconWidth := style.CellWidth(icon)
+	durStyled, durWidth := b.durationBytes(b.conf.ColorScheme.Command.Color, cmd.TimeAndState)
+
+	iconWidth := style.CellWidth(b.cmdIconBuf.Line(0))
 	labelWidth := cmdIndent + iconWidth + durWidth
 	labelXpath := cmdXpath.NewXpathWithAppend("label")
-	labelVP := b.viewports.GetOrCreateLabelViewport(labelXpath, label, labelShowsCommands, labelWidth)
+	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{[]byte(label)}, labelShowsCommands, labelWidth)
 
-	labelLineCount := style.CountLines(labelVP)
-	if labelLineCount > 1 {
-		treeLine := "\n" + b.styledTreeLine
-		icon += strings.Repeat(treeLine, labelLineCount-1)
-	}
+	b.cmdLabelBuf.Reset()
+	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdLabelBuf, labelResult.Line(0))
 
-	styledLabel := b.conf.ColorScheme.Command.Color.Render(labelVP)
+	b.cmdDurBuf.Reset()
+	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdDurBuf, durStyled)
 
-	cmdContent := style.JoinHorizontal(style.Top, icon, styledLabel, durStyled)
-	cmdNode := tree.New().Root(cmdContent)
+	joinBuf := b.acquireNodeBuf()
+	style.JoinHorizontalBufs(joinBuf, style.Top, b.cmdIconBuf, b.cmdLabelBuf, b.cmdDurBuf)
+
+	cmdNode := b.tree.NewNode(joinBuf)
 
 	b.addCommandChildren(cmdNode, cmd, cmdXpath, tasCached, cmdIndent)
 
@@ -435,90 +470,146 @@ func (b *BuildLogs) addCommandChildren(
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
 
 	if output.Len() > 0 {
-		cmdNode.ChildString(b.viewports.GetOrCreateViewportVersioned(outputXpath, output.String(), output.Version(), cmdIndent+treeStep))
+		outResult := b.viewports.RenderViewportVersioned(outputXpath, output.Lines(), output.Version(), cmdIndent+treeStep)
+		outBuf := b.acquireNodeBuf()
+		outBuf.AppendFrom(outResult)
+		cmdNode.ChildContent(outBuf)
 	}
 
 	errXpath := cmdXpath.NewXpathWithAppend("error")
 
 	err := tasCached.EndError
 	if err != nil {
-		errMsg := b.conf.ColorScheme.Chars.ErrorIcon + " Command failed: " + err.Error()
-		cmdNode.ChildString(b.conf.ColorScheme.Error.Color.Render(
-			b.viewports.GetOrCreateLabelViewport(errXpath, errMsg, 0, cmdIndent+treeStep),
-		))
+		errMsg := append(
+			append(
+				append([]byte{}, b.conf.ColorScheme.Chars.ErrorIcon...),
+				" Command failed: "...,
+			),
+			err.Error()...,
+		)
+		errResult := b.viewports.RenderLabelViewport(errXpath, [][]byte{errMsg}, 0, cmdIndent+treeStep)
+		b.errBuf.Reset()
+		b.conf.ColorScheme.Error.Color.RenderInto(b.errBuf, errResult.Lines())
+		errNodeBuf := b.acquireNodeBuf()
+		errNodeBuf.AppendFrom(b.errBuf)
+		cmdNode.ChildContent(errNodeBuf)
 	}
 }
 
-func (b *BuildLogs) entityNode(indent int, style colorscheme.ColorSchemeLogEntity, name string, logNode *logs.Logs, isRoot bool) *tree.Node {
+func (b *BuildLogs) entityNode(indent int, entity colorscheme.ColorSchemeLogEntity, name string, logNode *logs.Logs, _ bool) *tree.Node {
 	dur := 0.0
 	if logNode != nil {
 		dur = logNode.DurationAndErrorCache.Duration.Seconds()
 	}
 
-	ansi := b.styleForEntity(style)
+	b.iconBuf.Reset()
+	b.iconBuf.Write(entity.Icon)
+	b.iconBuf.WriteByte(' ')
+	b.iconBuf.WriteString(name)
+	leftRaw := b.iconBuf.Bytes()
 
-	leftRaw := style.Icon + " " + name
-	rightRaw := formatDuration(dur)
-	left := ansi.Render(leftRaw)
-	right := ansi.Render(rightRaw)
+	rightRaw := b.formatDuration(dur)
 
-	leftWidth := iconCellWidth + 1 + len(name)
+	leftWidth := len(entity.Icon) + 1 + len(name)
 	rightWidth := len(rightRaw)
 
-	line := b.layoutLine(indent, left, right, leftWidth, rightWidth)
+	line := b.layoutLineStyled(indent, entity.Color, leftRaw, rightRaw, leftWidth, rightWidth)
 
-	treeI := tree.New().Root(line)
-	if isRoot {
-		treeI = treeI.EnumeratorStyle(b.conf.ColorScheme.Tree.Enumerator).
-			IndenterStyle(b.conf.ColorScheme.Tree.Enumerator)
-	}
+	node := b.tree.NewNode(line)
 
-	return treeI
+	return node
 }
 
-func (b *BuildLogs) styleForEntity(entity colorscheme.ColorSchemeLogEntity) style.Style {
-	return entity.Color
-}
-
-func (b *BuildLogs) layoutLine(indent int, left, right string, leftWidth, rightWidth int) string {
+// layoutLineStyled renders styled left + pad + styled right into a node buffer.
+// Zero-allocation for the common color-only case.
+func (b *BuildLogs) layoutLineStyled(indent int, sty style.Style, leftRaw, rightRaw []byte, leftWidth, rightWidth int) *buffer.LinesBuf {
 	level := indent / treeStep
 	available := b.contentWidth - indent - (timerIndent - level)
 	pad := max(available-rightWidth-leftWidth, leftWidth)
 
+	var padBytes []byte
 	if pad <= maxSpaces {
-		return left + spaces[:pad] + right
+		padBytes = spacesBytes[:pad]
+	} else {
+		padBytes = []byte(strings.Repeat(" ", pad))
 	}
 
-	return left + strings.Repeat(" ", pad) + right
+	lb := b.acquireNodeBuf()
+
+	// For color-only styles: prefix + leftRaw + reset + pad + prefix + rightRaw + reset
+	// This is exactly what WriteLine3 gives us when we pass styled bytes.
+	// We build the styled bytes via RenderLine which returns a new []byte.
+	// For the no-layout case (common), we can avoid allocs by writing directly.
+	if !sty.HasLayoutProperties() {
+		prefix := sty.StylePrefix()
+		reset := style.ANSIReset()
+
+		if len(prefix) == 0 {
+			lb.WriteLine3(leftRaw, padBytes, rightRaw)
+		} else {
+			// Write prefix + leftRaw + reset + padBytes + prefix + rightRaw + reset
+			// as one line using AppendToLine
+			lb.EmptyLine()
+			lb.AppendToLine(prefix, leftRaw, reset, padBytes, prefix, rightRaw, reset)
+		}
+	} else {
+		left := sty.RenderLine(leftRaw)
+		right := sty.RenderLine(rightRaw)
+		lb.WriteLine3(left, padBytes, right)
+	}
+
+	return lb
 }
 
-func (b *BuildLogs) spinnerOrIcon(xpathVal xpath.Xpath, icon string, tas *atomictimeandstate.TimeAndState) string {
+func (b *BuildLogs) acquireNodeBuf() *buffer.LinesBuf {
+	lb := buffer.NewLinesBuf()
+	b.nodeBufs = append(b.nodeBufs, lb)
+
+	return lb
+}
+
+func (b *BuildLogs) spinnerOrIcon(xpathVal xpath.Xpath, icon []byte, tas *atomictimeandstate.TimeAndState) []byte {
 	if !tas.HasStarted() {
-		return ""
+		return nil
 	}
 
 	if tas.IsFinished() {
-		return icon + " "
+		b.iconBuf.Reset()
+		b.iconBuf.Write(icon)
+		b.iconBuf.WriteByte(' ')
+
+		return b.iconBuf.Bytes()
 	}
 
-	return b.spinners.View(xpathVal)
+	frame := b.spinners.Render(xpathVal)
+	b.iconBuf.Reset()
+	b.iconBuf.Write(frame)
+	b.iconBuf.WriteByte(' ')
+
+	return b.iconBuf.Bytes()
 }
 
-func (b *BuildLogs) durationText(sty style.Style, tas *atomictimeandstate.AtomicTimeAndState) (string, int) {
+func (b *BuildLogs) durationBytes(sty style.Style, tas *atomictimeandstate.AtomicTimeAndState) ([]byte, int) {
 	d, err := tas.DurationOrElapsedTime()
 	if err != nil {
-		return "", 0
+		return nil, 0
 	}
 
-	text := formatDuration(d.Seconds())
+	text := b.formatDuration(d.Seconds())
 
-	return sty.Render(text), len(text)
+	return text, len(text)
 }
 
-func formatDuration(secs float64) string {
-	var buf [32]byte
+func (b *BuildLogs) formatDuration(secs float64) []byte {
+	b.durLineBuf.Reset()
+	b.durLineBuf.WriteByte(' ')
+	b.durLineBuf.WriteByte('(')
 
-	result := strconv.AppendFloat(buf[:0], secs, 'f', 2, 64) //nolint:mnd
+	var tmp [32]byte
 
-	return " (" + string(result) + "s)"
+	result := strconv.AppendFloat(tmp[:0], secs, 'f', 2, 64) //nolint:mnd
+	b.durLineBuf.Write(result)
+	b.durLineBuf.WriteString("s)")
+
+	return b.durLineBuf.Bytes()
 }

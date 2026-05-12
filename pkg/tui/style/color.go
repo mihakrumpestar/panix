@@ -97,38 +97,31 @@ func hexVal(hexStr string) uint8 {
 	return val
 }
 
-//nolint:mnd
-func colorToFgPrefix(c Color) string {
-	if c == "" {
-		return ""
-	}
-
-	red, green, blue, alpha := c.RGBA()
-	if alpha == 0 {
-		return ""
-	}
-
-	return "\x1b[38;2;" +
-		strconv.Itoa(int(red>>8)) + ";" +
-		strconv.Itoa(int(green>>8)) + ";" +
-		strconv.Itoa(int(blue>>8)) + "m"
+func colorToFgPrefix(c Color) []byte {
+	return colorToXPrefix(ansiForeground, c)
 }
 
-//nolint:mnd
-func colorToBgPrefix(c Color) string {
+func colorToBgPrefix(c Color) []byte {
+	return colorToXPrefix(ansiBackground, c)
+}
+
+func colorToXPrefix(x []byte, c Color) []byte {
 	if c == "" {
-		return ""
+		return nil
 	}
 
 	red, green, blue, alpha := c.RGBA()
 	if alpha == 0 {
-		return ""
+		return nil
 	}
 
-	return "\x1b[48;2;" +
-		strconv.Itoa(int(red>>8)) + ";" +
-		strconv.Itoa(int(green>>8)) + ";" +
-		strconv.Itoa(int(blue>>8)) + "m"
+	buf := make([]byte, 0, 50)
+	buf = append(buf, x...)
+	buf = append(buf, []byte(strconv.Itoa(int(red>>8))+";")...)
+	buf = append(buf, []byte(strconv.Itoa(int(green>>8))+";")...)
+	buf = append(buf, []byte(strconv.Itoa(int(blue>>8))+"m")...)
+
+	return buf
 }
 
 // ColorToRGB8 extracts 8-bit RGB components from a Color.

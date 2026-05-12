@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"slices"
 
@@ -86,11 +87,11 @@ func (m *model) handleCopy() zeroterm.Cmd {
 		return m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
-	if content == "" {
+	if len(content) == 0 {
 		return m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
-	err := clipboard.CopyToClipboard(content)
+	err := clipboard.CopyToClipboard(string(bytes.Join(content, []byte("\n"))))
 	if err != nil {
 		return m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())
 	}

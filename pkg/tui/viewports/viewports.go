@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	tuiviewport "github.com/mihakrumpestar/panix/pkg/tui/viewport"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
@@ -25,14 +26,18 @@ type Viewports struct {
 	fullscreenXp                 xpath.Xpath
 	mainXpath                    xpath.Xpath
 	activeXpath                  xpath.Xpath
+	highlightBuf                 *buffer.LinesBuf
 }
 
 type item struct {
 	model          tuiviewport.Viewport
-	content        string
+	content        [][]byte
+	contentBuf     *buffer.LinesBuf
 	contentVersion uint64
 	lastWidth      int
 	lastHeight     int
+	zoneID         uint16
+	zonedOutput    *buffer.LinesBuf
 }
 
 func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHighlightBackground, selectionHighlightBorder style.Style) *Viewports {
@@ -47,6 +52,7 @@ func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHi
 		selectionHighlightBorder:     selectionHighlightBorder,
 		mainXpath:                    mainXpath,
 		activeXpath:                  mainXpath,
+		highlightBuf:                 buffer.NewLinesBuf(),
 	}
 }
 
@@ -67,14 +73,14 @@ func (v *Viewports) HasActiveInner() bool {
 	return v.activeXpath.Depth() > 0 && v.activeXpath != v.mainXpath
 }
 
-func (v *Viewports) GetActiveInnerViewportContent() (string, bool) {
+func (v *Viewports) GetActiveInnerViewportContent() ([][]byte, bool) {
 	if !v.HasActiveInner() {
-		return "", false
+		return nil, false
 	}
 
 	it, ok := v.items.Get(v.activeXpath)
 	if !ok {
-		return "", false
+		return nil, false
 	}
 
 	return it.content, true
@@ -88,13 +94,13 @@ func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 	return ""
 }
 
-func (v *Viewports) GetViewportContent(xp xpath.Xpath) string {
+func (v *Viewports) GetViewportContent(xp xpath.Xpath) [][]byte {
 	it, ok := v.items.Get(xp)
 	if ok {
 		return it.content
 	}
 
-	return ""
+	return nil
 }
 
 func (v *Viewports) DeselectAll() { v.activeXpath = v.mainXpath }
@@ -145,25 +151,28 @@ func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 
 // Render methods
 
-func (v *Viewports) GetOrCreateViewportVersioned(xp xpath.Xpath, content string, version uint64, indent int) string {
-	return v.render(xp, content, indent, 0, 0, true, true, false, version)
+func (v *Viewports) RenderViewportVersioned(xp xpath.Xpath, content [][]byte, version uint64, indent int) *buffer.LinesBuf {
+	return v.render(xp, content, nil, indent, 0, 0, true, true, false, version)
 }
 
-func (v *Viewports) GetOrCreateLabelViewport(xp xpath.Xpath, content string, version uint64, indent int) string {
-	return v.render(xp, content, indent, 0, 0, false, false, true, version)
+func (v *Viewports) RenderLabelViewport(xp xpath.Xpath, content [][]byte, version uint64, indent int) *buffer.LinesBuf {
+	return v.render(xp, content, nil, indent, 0, 0, false, false, true, version)
 }
 
-func (v *Viewports) GetOrCreateMainViewport(content string, version uint64, footerHeaderHeight int) string {
+func (v *Viewports) RenderMainViewport(content *buffer.LinesBuf, version uint64, footerHeaderHeight int) *buffer.LinesBuf {
 	height := v.dimensions.Height - footerHeaderHeight
 
-	return v.render(v.mainXpath, content, 0, height, 0, false, true, false, version)
+	return v.render(v.mainXpath, content.Lines(), content, 0, height, 0, false, true, false, version)
 }
 
-func (v *Viewports) RenderFullscreenViewport(xp xpath.Xpath, content string, version uint64, footerHeaderHeight int) string {
+func (v *Viewports) RenderFullscreenViewport(
+	xpath xpath.Xpath,
+	content [][]byte, version uint64, footerHeaderHeight int,
+) *buffer.LinesBuf {
 	height := max(1, v.dimensions.Height-footerHeaderHeight)
 	width := max(1, v.dimensions.Width)
 
-	return v.render(xp, content, 0, height, width, true, true, false, version)
+	return v.render(xpath, content, nil, 0, height, width, true, true, false, version)
 }
 
 // Debug
@@ -197,16 +206,17 @@ func (v *Viewports) Debug() string {
 
 func (v *Viewports) render(
 	xpath xpath.Xpath,
-	content string,
+	content [][]byte,
+	contentBuf *buffer.LinesBuf,
 	indent, explicitHeight, explicitWidth int,
 	bordered, scrollbar, highlightActive bool,
 	version uint64,
-) string {
+) *buffer.LinesBuf {
 	active := xpath == v.activeXpath
 	itm := v.getOrCreateItem(xpath, content, indent, explicitHeight, explicitWidth, bordered, scrollbar)
 
 	contentChanged := itm.contentVersion != version
-	content = v.resolveContent(itm, version, content)
+	content = v.resolveContent(itm, version, content, contentBuf)
 
 	if bordered {
 		itm.model.SetBorderStyle(v.borderColor(active))
@@ -225,13 +235,18 @@ func (v *Viewports) render(
 		}
 	}
 
-	view := itm.model.View()
+	rendered := itm.model.Render()
 
 	if highlightActive && active {
-		view = v.selectionHighlightBackground.Render(view)
+		v.highlightBuf.Reset()
+		v.selectionHighlightBackground.RenderInto(v.highlightBuf, rendered.Lines())
+		rendered = v.highlightBuf
 	}
 
-	return zeroterm.Mark(xpath.String(), view)
+	itm.zonedOutput.Reset()
+	zeroterm.MarkLinesByID(itm.zoneID, rendered, itm.zonedOutput)
+
+	return itm.zonedOutput
 }
 
 func (v *Viewports) viewWidth(indent, explicitWidth int) int {
@@ -247,12 +262,17 @@ func (v *Viewports) viewWidth(indent, explicitWidth int) int {
 	return max(1, width)
 }
 
-func (v *Viewports) resolveContent(itm *item, version uint64, content string) string {
+func (v *Viewports) resolveContent(itm *item, version uint64, content [][]byte, contentBuf *buffer.LinesBuf) [][]byte {
 	if itm.contentVersion == version {
 		return itm.content
 	}
 
+	if itm.contentBuf != nil && itm.contentBuf != contentBuf {
+		itm.contentBuf.Release()
+	}
+
 	itm.content = content
+	itm.contentBuf = contentBuf
 	itm.contentVersion = version
 
 	return itm.content
@@ -260,20 +280,16 @@ func (v *Viewports) resolveContent(itm *item, version uint64, content string) st
 
 func (v *Viewports) getOrCreateItem(
 	xpath xpath.Xpath,
-	content string,
+	content [][]byte,
 	indent, explicitHeight, explicitWidth int,
 	bordered, scrollbar bool,
 ) *item {
 	itm, exists := v.items.Get(xpath)
 	if exists {
-		// Check if configuration changed
-		// Border and scrollbar are set at creation time, so if they differ,
-		// we need to recreate the viewport
 		hasBorder := itm.model.IsBordered()
 		hasScrollbar := itm.model.HasScrollbar()
 
 		if hasBorder != bordered || hasScrollbar != scrollbar {
-			// Configuration changed - remove old and create new
 			v.items.Del(xpath)
 		} else {
 			return itm
@@ -281,8 +297,10 @@ func (v *Viewports) getOrCreateItem(
 	}
 
 	itm = &item{
-		model:   tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, explicitWidth, bordered, scrollbar)...),
-		content: content,
+		model:       tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, explicitWidth, bordered, scrollbar)...),
+		content:     content,
+		zoneID:      zeroterm.EnsureZone(xpath.String()),
+		zonedOutput: buffer.NewLinesBuf(),
 	}
 
 	if xpath != v.mainXpath {
@@ -320,7 +338,6 @@ func (v *Viewports) buildViewportOpts(
 		}
 	}
 
-	// Main viewport: indent==0 and explicitWidth==0 and it's the mainXpath
 	if xpath == v.mainXpath {
 		opts = append(opts, tuiviewport.WithMain())
 	}

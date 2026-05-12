@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 func Benchmark__Width_ASCII(b *testing.B) {
@@ -15,7 +16,7 @@ func Benchmark__Width_ASCII(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = CellWidth(input)
+		_ = CellWidth([]byte(input))
 	}
 }
 
@@ -30,7 +31,7 @@ func Benchmark_Lipgloss__Width_ASCII(b *testing.B) {
 }
 
 func Benchmark__Width_WithANSI(b *testing.B) {
-	input := "\x1b[38;2;255;121;198m📋BUILD\x1b[m"
+	input := []byte("\x1b[38;2;255;121;198m📋BUILD\x1b[m")
 
 	b.ResetTimer()
 
@@ -50,7 +51,7 @@ func Benchmark_Lipgloss__Width_WithANSI(b *testing.B) {
 }
 
 func Benchmark__Width_Emoji(b *testing.B) {
-	input := "📁 📦 💻 📋 ⚙ ✗"
+	input := []byte("📁 📦 💻 📋 ⚙ ✗")
 
 	b.ResetTimer()
 
@@ -70,7 +71,7 @@ func Benchmark_Lipgloss__Width_Emoji(b *testing.B) {
 }
 
 func Benchmark__Width_CommandNumber(b *testing.B) {
-	input := "1 "
+	input := []byte("1 ")
 
 	b.ResetTimer()
 
@@ -172,18 +173,20 @@ func Benchmark_Lipgloss__Height_LongMultiLine(b *testing.B) {
 // --- JoinHorizontal ---
 
 func Benchmark__JoinHorizontal(b *testing.B) {
-	left := "\x1b[1;34msrc/\x1b[0m \x1b[32mpackage\x1b[0m"
-	right := "build output line here with some text"
+	left := []byte("\x1b[1;34msrc/\x1b[0m \x1b[32mpackage\x1b[0m")
+	right := []byte("build output line here with some text")
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = JoinHorizontal(Left, left, right)
+		buf := buffer.NewLinesBuf()
+		JoinHorizontal(buf, Left, left, right)
+		buf.Release()
 	}
 }
 
 func Benchmark__JoinHorizontal_MultiLine(b *testing.B) {
-	var leftStr, rightStr string
+	var leftBuf, rightBuf []byte
 
 	var (
 		leftStrSb187  strings.Builder
@@ -200,23 +203,14 @@ func Benchmark__JoinHorizontal_MultiLine(b *testing.B) {
 		fmt.Fprintf(&rightStrSb187, "output for phase %d with some content here", row)
 	}
 
-	leftStr += leftStrSb187.String()
-	rightStr += rightStrSb187.String()
+	leftBuf = []byte(leftStrSb187.String())
+	rightBuf = []byte(rightStrSb187.String())
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = JoinHorizontal(Left, leftStr, rightStr)
-	}
-}
-
-func Benchmark__JoinVertical(b *testing.B) {
-	top := "\x1b[1;34mheader\x1b[0m"
-	bottom := "content line with some text"
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		_ = JoinVertical(Left, top, bottom)
+		buf := buffer.NewLinesBuf()
+		JoinHorizontal(buf, Left, leftBuf, rightBuf)
+		buf.Release()
 	}
 }

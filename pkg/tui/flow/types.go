@@ -1,0 +1,144 @@
+package flow
+
+import (
+	"time"
+
+	"github.com/lucasb-eyer/go-colorful"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"go.uber.org/atomic"
+)
+
+const (
+	gradientCycleTime = 4 * time.Second
+	animInterval      = 100 * time.Millisecond
+	animAmplitude     = 0.5
+	arrowCellWidth    = 1
+)
+
+var slashSep = []byte("/")
+
+// PhaseState determines which gradient colors to use for a phase pill.
+type PhaseState int
+
+const (
+	Idle PhaseState = iota
+	StateRunning
+	StateFailed
+	StateDone
+)
+
+// GradientPair holds two colorful.Color values for animating between.
+type GradientPair struct {
+	Dark  colorful.Color
+	Light colorful.Color
+}
+
+// StatusStyles holds the three count styles (normal and selected variants).
+type StatusStyles struct {
+	Running style.Style
+	Failed  style.Style
+	Done    style.Style
+}
+
+// Styles holds all style configuration for PhaseFlow rendering.
+type Styles struct {
+	GradientRunning GradientPair
+	GradientFailed  GradientPair
+	GradientDone    GradientPair
+	GradientDefault GradientPair
+	Pill            style.Style
+
+	Status         StatusStyles
+	StatusSel      StatusStyles
+	StatusSeparator style.Style
+
+	Arrow       style.Style
+	PhaseArrow  []byte
+	SelectionBg style.Color
+
+	SelBgPrefix []byte
+	BgSpace     []byte
+}
+
+// InitSelectedStyles pre-computes the selected-background variants of status
+// styles and the SelectionBg prefix. Called automatically by Styles().
+func (s *Styles) InitSelectedStyles() {
+	bg := s.SelectionBg
+	s.StatusSel = StatusStyles{
+		Running: s.Status.Running.Background(bg),
+		Failed:  s.Status.Failed.Background(bg),
+		Done:    s.Status.Done.Background(bg),
+	}
+	s.SelBgPrefix = style.ColorToBgPrefix(bg)
+
+	prefix := s.SelBgPrefix
+	reset := style.ANSIReset()
+	bgSpace := make([]byte, 0, len(prefix)+1+len(reset))
+	bgSpace = append(bgSpace, prefix...)
+	bgSpace = append(bgSpace, ' ')
+	bgSpace = append(bgSpace, reset...)
+	s.BgSpace = bgSpace
+}
+
+// PhaseData holds the per-phase counts shown beneath the pill.
+type PhaseData struct {
+	Running int
+	Failed  int
+	Done    int
+}
+
+type animationState struct {
+	progress atomic.Uint64
+	lastTime atomic.Time
+}
+
+// PhaseFlow is a horizontal phase-flow component that renders phase name pills
+// with animated gradient backgrounds and status count lines beneath them.
+type PhaseFlow struct {
+	width         int
+	phases        []string
+	phaseNames    [][]byte
+	data          []PhaseData
+	styles        Styles
+	selectedIndex int
+	zonePrefix    string
+	zoneIDs       []uint16
+
+	cacheData   []PhaseData
+	cacheWidth  int
+	cacheSelIdx int
+	outDirty    bool
+
+	content   *buffer.LinesBuf
+	animation animationState
+
+	// Persistent scratch buffers for zero-alloc rebuilds.
+	pillBuf    *buffer.LinesBuf
+	statusBuf  *buffer.LinesBuf
+	cellBuf    *buffer.LinesBuf
+	zonedBuf   *buffer.LinesBuf
+	arrowBuf   *buffer.LinesBuf
+	joinBuf    *buffer.LinesBuf
+	lineBuf    *buffer.LineBuf
+	statusLine *buffer.LinesBuf
+	cellBufs   []*buffer.LinesBuf
+	parts      []*buffer.LinesBuf
+}
+
+// New creates a PhaseFlow with no phases and no selection.
+func New() *PhaseFlow {
+	return &PhaseFlow{
+		selectedIndex: -1,
+		outDirty:      true,
+		content:       buffer.NewLinesBuf(),
+		pillBuf:       buffer.NewLinesBuf(),
+		statusBuf:     buffer.NewLinesBuf(),
+		cellBuf:      buffer.NewLinesBuf(),
+		zonedBuf:     buffer.NewLinesBuf(),
+		arrowBuf:      buffer.NewLinesBuf(),
+		joinBuf:       buffer.NewLinesBuf(),
+		lineBuf:       buffer.NewLineBuf(),
+		statusLine:    buffer.NewLinesBuf(),
+	}
+}

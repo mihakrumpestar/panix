@@ -2,35 +2,28 @@ package style
 
 import (
 	"strings"
-	"unsafe"
 
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/rivo/uniseg"
 )
 
 // CellWidth returns the maximum terminal cell width across all lines in a
-// string, accounting for ANSI escape sequences (zero width) and grapheme
+// byte slice, accounting for ANSI escape sequences (zero width) and grapheme
 // clusters with proper width (emoji ZWJ sequences, skin tone modifiers, CJK
-// wide chars, etc.). For single-line strings this is equivalent to the total
-// visible width. For multi-line strings it returns the widest line, matching
+// wide chars, etc.). For single-line input this is equivalent to the total
+// visible width. For multi-line input it returns the widest line, matching
 // lipgloss.Width behavior.
 //
 // Fast paths:
 //   - ASCII printable chars (0x20-0x7E): counted as width 1 without uniseg
-//   - Zero-copy []byte via unsafe.Slice (avoids O(n²) []byte(str[pos:]) copies)
-func CellWidth(str string) int {
+func CellWidth(data []byte) int {
 	width := 0
 	maxWidth := 0
 	pos := 0
 	graphemeState := -1
 
-	// Zero-copy string→[]byte for uniseg calls. Safe because:
-	// 1. uniseg.FirstGraphemeCluster doesn't modify the input
-	// 2. str is alive for the duration of this function
-	//nolint:gosec // G103: audited — zero-copy byte view of str, str outlives byteSlice
-	byteSlice := unsafe.Slice(unsafe.StringData(str), len(str))
-
-	for pos < len(byteSlice) {
-		char := byteSlice[pos]
+	for pos < len(data) {
+		char := data[pos]
 
 		// Fast ASCII path for printable characters (0x20-0x7E).
 		// Handles >90% of terminal content without calling uniseg.
@@ -45,7 +38,7 @@ func CellWidth(str string) int {
 		switch char {
 		case '\x1b':
 			graphemeState = -1
-			pos = skipANSI(str, pos)
+			pos = skipANSI(data, pos)
 		case '\n', '\r':
 			graphemeState = -1
 
@@ -56,9 +49,9 @@ func CellWidth(str string) int {
 			width = 0
 			pos++
 		default:
-			cluster, rest, charWidth, newState := uniseg.FirstGraphemeCluster(byteSlice[pos:], graphemeState)
+			cluster, rest, charWidth, newState := uniseg.FirstGraphemeCluster(data[pos:], graphemeState)
 			graphemeState = newState
-			pos = len(byteSlice) - len(rest)
+			pos = len(data) - len(rest)
 			width += charWidth
 			_ = cluster
 		}
@@ -80,18 +73,18 @@ func CellWidth(str string) int {
 //   - Bare ESC sequences: \x1b<0x40-0x5F> (2-byte C1 codes like \x1b[)
 //
 //nolint:cyclop,mnd
-func skipANSI(str string, pos int) int {
-	if pos >= len(str) || str[pos] != '\x1b' {
+func skipANSI(line []byte, pos int) int {
+	if pos >= len(line) || line[pos] != '\x1b' {
 		return pos
 	}
 
 	pos++
 
-	if pos >= len(str) {
+	if pos >= len(line) {
 		return pos
 	}
 
-	next := str[pos]
+	next := line[pos]
 
 	switch {
 	case next == '[':
@@ -99,29 +92,29 @@ func skipANSI(str string, pos int) int {
 		// <final byte 0x40-0x7E>
 		pos++
 
-		for pos < len(str) && str[pos] >= 0x20 && str[pos] <= 0x3F {
+		for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x3F {
 			pos++
 		}
 
-		for pos < len(str) && str[pos] >= 0x20 && str[pos] <= 0x2F {
+		for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x2F {
 			pos++
 		}
 
-		if pos < len(str) && str[pos] >= 0x40 && str[pos] <= 0x7E {
+		if pos < len(line) && line[pos] >= 0x40 && line[pos] <= 0x7E {
 			pos++
 		}
 	case next == ']':
 		// OSC: ESC ] ... <BEL (0x07)> or <ST (ESC \)>
 		pos++
 
-		for pos < len(str) {
-			if str[pos] == 0x07 {
+		for pos < len(line) {
+			if line[pos] == 0x07 {
 				pos++
 
 				break
 			}
 
-			if str[pos] == '\x1b' && pos+1 < len(str) && str[pos+1] == '\\' {
+			if line[pos] == '\x1b' && pos+1 < len(line) && line[pos+1] == '\\' {
 				pos += 2
 
 				break
@@ -140,62 +133,28 @@ func skipANSI(str string, pos int) int {
 	return pos
 }
 
-// StripANSI removes all ANSI escape sequences from s and returns the visible
+// StripANSI removes all ANSI escape sequences from line and returns the visible
 // text. It handles CSI, OSC, and bare ESC sequences using the same parser as
-// CellWidth. The returned string shares no allocation with the input.
-func StripANSI(str string) string {
-	if !strings.ContainsRune(str, '\x1b') {
-		return str
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(str))
-
-	pos := 0
-	for pos < len(str) {
-		if str[pos] == '\x1b' {
-			pos = skipANSI(str, pos)
-
-			continue
-		}
-
-		builder.WriteByte(str[pos])
-		pos++
-	}
-
-	return builder.String()
-}
-
-// StripANSIBytes removes all ANSI escape sequences from data, writing the
-// visible text into dst and returning it. dst may be nil. If data contains no
-// ESC bytes, the result is a sub-slice of the original data (zero-copy).
-func StripANSIBytes(dst, data []byte) []byte {
-	idx := indexByte(data, '\x1b')
+// CellWidth. If line contains no ESC bytes, the result is a sub-slice of the
+// original line (zero-copy).
+func StripANSI(line []byte) []byte {
+	idx := indexByte(line, '\x1b')
 	if idx < 0 {
-		return data
+		return line
 	}
 
-	if cap(dst) == 0 {
-		dst = make([]byte, 0, len(data))
-	}
-
-	dst = dst[:0]
-	dst = append(dst, data[:idx]...)
+	dst := make([]byte, 0, len(line))
+	dst = append(dst, line[:idx]...)
 	pos := idx
 
-	for pos < len(data) {
-		if data[pos] == '\x1b' {
-			// Reuse skipANSI by converting byte position to string call.
-			// The string view shares the same underlying data.
-			//nolint:gosec // G103: audited — zero-copy string view of remaining data, data outlives s
-			s := unsafe.String(&data[pos], len(data)-pos)
-			end := skipANSI(s, 0)
-			pos += end
+	for pos < len(line) {
+		if line[pos] == '\x1b' {
+			pos = skipANSI(line, pos)
 
 			continue
 		}
 
-		dst = append(dst, data[pos])
+		dst = append(dst, line[pos])
 		pos++
 	}
 
@@ -245,4 +204,34 @@ func RuneWidth(runeVal rune) int {
 	}
 
 	return 1
+}
+
+// MaxLineWidth returns the maximum terminal cell width across all lines in
+// a LinesBuf. Zero-allocation: iterates lines directly without joining.
+func MaxLineWidth(lb *buffer.LinesBuf) int {
+	maxW := 0
+
+	for i := range lb.Len() {
+		w := CellWidth(lb.Line(i))
+		if w > maxW {
+			maxW = w
+		}
+	}
+
+	return maxW
+}
+
+// MaxLineWidthFromLines returns the maximum terminal cell width across all
+// lines in a [][]byte slice.
+func MaxLineWidthFromLines(lines [][]byte) int {
+	maxW := 0
+
+	for _, line := range lines {
+		w := CellWidth(line)
+		if w > maxW {
+			maxW = w
+		}
+	}
+
+	return maxW
 }

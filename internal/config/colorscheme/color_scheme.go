@@ -10,7 +10,7 @@ import (
 
 type ColorSchemeLogEntity struct {
 	Color style.Style
-	Icon  string
+	Icon  []byte
 }
 
 type ColorSchemeFooter struct {
@@ -32,9 +32,9 @@ type ColorSchemeHeader struct {
 }
 
 type ColorSchemeStatusIcons struct {
-	OK      string
-	Failed  string
-	Running string
+	OK      []byte
+	Failed  []byte
+	Running []byte
 }
 
 type ColorSchemeStatus struct {
@@ -46,12 +46,12 @@ type ColorSchemeStatus struct {
 }
 
 type ColorSchemeChars struct {
-	HeaderSeparator string
-	SnapshotIcon    string
-	ErrorIcon       string
-	RowSpanMarker   string
-	HeaderTitleSep  string
-	PhaseArrow      string
+	HeaderSeparator []byte
+	SnapshotIcon    []byte
+	ErrorIcon       []byte
+	RowSpanMarker   []byte
+	HeaderTitleSep  []byte
+	PhaseArrow      []byte
 }
 
 type ColorSchemeTableAndLogs struct {
@@ -68,7 +68,7 @@ type ColorSchemeTree struct {
 }
 
 type ColorSchemeSpinner struct {
-	Frames   []string
+	Frames   [][]byte
 	Interval time.Duration
 }
 
@@ -117,9 +117,9 @@ func DefaultColorScheme() *ColorScheme {
 			Failed:  makeForegroundStyle("#FF5555", false),
 			Running: makeForegroundStyle("#00BFFF", false),
 			Icons: ColorSchemeStatusIcons{
-				OK:      makeRune('✅'),
-				Failed:  makeRune('🔴'),
-				Running: makeRune('🔄'),
+				OK:      runeBytes('✅'),
+				Failed:  runeBytes('🔴'),
+				Running: runeBytes('🔄'),
 			},
 		},
 		Table: ColorSchemeTableAndLogs{
@@ -138,12 +138,12 @@ func DefaultColorScheme() *ColorScheme {
 			Pill:    style.NewStyle().Foreground(style.Color("#FFFFFF")).Bold(true).Padding(0, 1),
 		},
 		Chars: ColorSchemeChars{
-			HeaderSeparator: "│",
-			SnapshotIcon:    makeRune('◉'),
-			ErrorIcon:       makeRune('✗'),
-			RowSpanMarker:   makeRune('󱞩'),
-			HeaderTitleSep:  ":",
-			PhaseArrow:      makeRune('󰜴'),
+			HeaderSeparator: []byte("│"),
+			SnapshotIcon:    runeBytes('◉'),
+			ErrorIcon:       runeBytes('✗'),
+			RowSpanMarker:   runeBytes('󱞩'),
+			HeaderTitleSep:  []byte(":"),
+			PhaseArrow:      runeBytes('󰜴'),
 		},
 		Tree: ColorSchemeTree{
 			Enumerator: borderStyle,
@@ -166,7 +166,7 @@ func DefaultColorScheme() *ColorScheme {
 		Command:       makeLogEntity("#BD93F9", '⚙', false),
 		Error:         makeLogEntity("#FF5555", '✗', false),
 		Spinner: ColorSchemeSpinner{
-			Frames:   []string{"⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ "},
+			Frames:   [][]byte{[]byte("⣾"), []byte("⣽"), []byte("⣻"), []byte("⢿"), []byte("⡿"), []byte("⣟"), []byte("⣯"), []byte("⣷")},
 			Interval: time.Second / 10, //nolint:mnd
 		},
 	}
@@ -194,11 +194,11 @@ func makeBackgroundStyle(color string) style.Style {
 func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
 	sty := makeForegroundStyle(color, bold)
 
-	return ColorSchemeLogEntity{Color: sty, Icon: makeRune(icon)}
+	return ColorSchemeLogEntity{Color: sty, Icon: runeBytes(icon)}
 }
 
-func makeRune(r rune) string {
-	return string(r)
+func runeBytes(r rune) []byte {
+	return []byte(string(r))
 }
 
 func mustColorfulHex(hex string) colorful.Color {

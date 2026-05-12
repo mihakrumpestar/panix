@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"strconv"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 // RenderLines emits terminal bytes for changed lines. Returns the output
@@ -17,7 +17,7 @@ import (
 // Always uses explicit cursor positioning to avoid misalignment from
 // line-wrapping or cursor tracking drift. After all changed lines,
 // clears below if the frame shrank.
-func RenderLines(buf []byte, diffs []int, cur *linesbuffer.LinesBuffer, prevLineCount int, terminalHeight int) []byte {
+func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCount int, terminalHeight int) []byte {
 	lineCount := cur.Len()
 
 	for _, lineIdx := range diffs {

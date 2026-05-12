@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 // TestShrinkThenGrowWithIdenticalPrefix verifies that when content
@@ -28,7 +28,7 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	fullFrame := makeIdenticalPrefixFullFrame()
 	shortFrame := makeIdenticalPrefixShortFrame()
 
-	prevBuf := linesbuffer.NewPooled()
+	prevBuf := buffer.NewLinesBufDiff()
 
 	// Step 1: initial full frame (prevLines empty → all lines are diffs)
 	diffs1 := fullFrame.Diff(prevBuf)
@@ -50,8 +50,8 @@ func TestShrinkThenGrowWithIdenticalPrefix(t *testing.T) {
 	verifyGrowBackOutput(t, out3, fullFrame, shortFrame)
 }
 
-func makeIdenticalPrefixFullFrame() *linesbuffer.LinesBuffer {
-	buf := linesbuffer.NewPooled()
+func makeIdenticalPrefixFullFrame() *buffer.LinesBufDiff {
+	buf := buffer.NewLinesBufDiff()
 	for _, line := range []string{
 		"=== Header ===",
 		"",
@@ -77,8 +77,8 @@ func makeIdenticalPrefixFullFrame() *linesbuffer.LinesBuffer {
 	return buf
 }
 
-func makeIdenticalPrefixShortFrame() *linesbuffer.LinesBuffer {
-	buf := linesbuffer.NewPooled()
+func makeIdenticalPrefixShortFrame() *buffer.LinesBufDiff {
+	buf := buffer.NewLinesBufDiff()
 	for _, line := range []string{
 		"=== Header ===",
 		"",
@@ -101,7 +101,7 @@ func makeIdenticalPrefixShortFrame() *linesbuffer.LinesBuffer {
 	return buf
 }
 
-func renderShrinkStep(t *testing.T, shortFrame *linesbuffer.LinesBuffer, prevBuf *linesbuffer.LinesBuffer, terminalHeight int) string {
+func renderShrinkStep(t *testing.T, shortFrame *buffer.LinesBufDiff, prevBuf *buffer.LinesBufDiff, terminalHeight int) string {
 	t.Helper()
 
 	prevCount2 := prevBuf.Len()
@@ -128,7 +128,7 @@ func renderShrinkStep(t *testing.T, shortFrame *linesbuffer.LinesBuffer, prevBuf
 	return out2
 }
 
-func verifyShrinkOutput(t *testing.T, out2 string, shortFrame, fullFrame *linesbuffer.LinesBuffer) {
+func verifyShrinkOutput(t *testing.T, out2 string, shortFrame, fullFrame *buffer.LinesBufDiff) {
 	t.Helper()
 
 	for i := range shortFrame.Len() {
@@ -149,7 +149,7 @@ func verifyShrinkOutput(t *testing.T, out2 string, shortFrame, fullFrame *linesb
 	}
 }
 
-func renderGrowBackStep(t *testing.T, fullFrame *linesbuffer.LinesBuffer, prevBuf *linesbuffer.LinesBuffer, terminalHeight int) string {
+func renderGrowBackStep(t *testing.T, fullFrame *buffer.LinesBufDiff, prevBuf *buffer.LinesBufDiff, terminalHeight int) string {
 	t.Helper()
 
 	prevCount3 := prevBuf.Len()
@@ -176,7 +176,7 @@ func renderGrowBackStep(t *testing.T, fullFrame *linesbuffer.LinesBuffer, prevBu
 	return out3
 }
 
-func verifyGrowBackOutput(t *testing.T, out3 string, fullFrame, shortFrame *linesbuffer.LinesBuffer) {
+func verifyGrowBackOutput(t *testing.T, out3 string, fullFrame, shortFrame *buffer.LinesBufDiff) {
 	t.Helper()
 
 	for lineIdx := range fullFrame.Len() {
@@ -217,7 +217,7 @@ func TestShrinkThenGrow(t *testing.T) {
 		"S-005", "S-006", "S-007", "S-008",
 	)
 
-	prevBuf := linesbuffer.NewPooled()
+	prevBuf := buffer.NewLinesBufDiff()
 
 	diffs1 := fullFrame.Diff(prevBuf)
 
@@ -281,12 +281,14 @@ func TestRenderFrameWithANSIContent(t *testing.T) {
 	ansiFull := ansiFullContent()
 	ansiShort := ansiShortContent()
 
-	TestRenderFrameWithANSIContentShrink(t, ansiFull, ansiShort, terminalHeight)
+	renderFrameWithANSIContentShrink(t, ansiFull, ansiShort, terminalHeight)
 }
 
-//nolint:cyclop // complex test helper for ANSI shrink/grow sequence
-func TestRenderFrameWithANSIContentShrink(t *testing.T, ansiFull, ansiShort *linesbuffer.LinesBuffer, terminalHeight int) {
-	prevBuf := linesbuffer.NewPooled()
+//nolint:cyclop // complex helper for ANSI shrink/grow sequence
+func renderFrameWithANSIContentShrink(t *testing.T, ansiFull, ansiShort *buffer.LinesBufDiff, terminalHeight int) {
+	t.Helper()
+
+	prevBuf := buffer.NewLinesBufDiff()
 
 	diffs1 := ansiFull.Diff(prevBuf)
 
@@ -343,8 +345,8 @@ func TestRenderFrameWithANSIContentShrink(t *testing.T, ansiFull, ansiShort *lin
 	}
 }
 
-func ansiFullContent() *linesbuffer.LinesBuffer {
-	buf := linesbuffer.NewPooled()
+func ansiFullContent() *buffer.LinesBufDiff {
+	buf := buffer.NewLinesBufDiff()
 	for _, line := range []string{
 		"\x1b[1;34m=== HEADER ===\x1b[0m",
 		"",
@@ -373,8 +375,8 @@ func ansiFullContent() *linesbuffer.LinesBuffer {
 	return buf
 }
 
-func ansiShortContent() *linesbuffer.LinesBuffer {
-	buf := linesbuffer.NewPooled()
+func ansiShortContent() *buffer.LinesBufDiff {
+	buf := buffer.NewLinesBufDiff()
 	for _, line := range []string{
 		"\x1b[1;34m=== HEADER ===\x1b[0m",
 		"",
@@ -425,9 +427,9 @@ func TestDiffLinesPartialIdentical(t *testing.T) {
 	}
 }
 
-// toLinesBuffer converts string arguments to a *LinesBuffer.
-func toLinesBuffer(lines ...string) *linesbuffer.LinesBuffer {
-	buf := linesbuffer.NewPooled()
+// toLinesBuffer converts string arguments to a *LinesBufDiff.
+func toLinesBuffer(lines ...string) *buffer.LinesBufDiff {
+	buf := buffer.NewLinesBufDiff()
 	for _, line := range lines {
 		buf.Write([]byte(line))
 	}

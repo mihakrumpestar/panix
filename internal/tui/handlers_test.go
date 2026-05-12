@@ -193,7 +193,7 @@ func newTestModel(t *testing.T) *model {
 			tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
 		),
 	}
-	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
+	mdl.footer = footer.New(mdl.keyDefs(), conf.ColorScheme)
 
 	return mdl
 }

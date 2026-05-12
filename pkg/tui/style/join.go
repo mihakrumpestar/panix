@@ -1,10 +1,9 @@
-// Derived from charm.land/lipgloss/v2. See pkg/tui/LICENSE.charmbracelet.
-
 package style
 
 import (
 	"math"
-	"strings"
+
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 // Position represents alignment for JoinHorizontal and JoinVertical.
@@ -21,232 +20,326 @@ const (
 
 const maxPadSpaces = 512
 
-var padSpaces = strings.Repeat(" ", maxPadSpaces)
+var padSpaces = make([]byte, maxPadSpaces)
 
-// JoinHorizontal joins potentially multi-line strings along a vertical axis,
-// aligned by position (Top, Center, Bottom). It replaces
-// lipgloss.JoinHorizontal in hot paths, using CellWidth instead of the heavy
-// uax29-based ansi.StringWidth for width calculations.
-func JoinHorizontal(pos Position, strs ...string) string {
-	if len(strs) == 0 {
-		return ""
+func init() {
+	for i := range padSpaces {
+		padSpaces[i] = ' '
 	}
-
-	if len(strs) == 1 {
-		return strs[0]
-	}
-
-	blocks, maxWidths, lineWidths, maxHeight := splitAndMeasureBlocks(strs)
-	alignBlocksAndWidths(blocks, lineWidths, pos, maxHeight)
-
-	return mergeBlocks(blocks, maxWidths, lineWidths, maxHeight)
 }
 
-func splitAndMeasureBlocks(strs []string) ([][]string, []int, [][]int, int) {
-	blocks := make([][]string, len(strs))
-	maxWidths := make([]int, len(strs))
-	lineWidths := make([][]int, len(strs))
+type blockInfo struct {
+	lines  [][]byte
+	widths []int
+	maxW   int
+}
+
+func splitBlock(data []byte) blockInfo {
+	lines := splitLinesBytes(data)
+	widths := make([]int, len(lines))
+	maxW := 0
+
+	for i, line := range lines {
+		w := CellWidth(line)
+
+		widths[i] = w
+		if w > maxW {
+			maxW = w
+		}
+	}
+
+	return blockInfo{lines: lines, widths: widths, maxW: maxW}
+}
+
+func splitBlockScratch(s *joinScratch, data []byte) blockInfo {
+	lines := splitLinesBytesScratch(s, data)
+	widths := s.allocWidths(len(lines))
+	maxW := 0
+
+	for i, line := range lines {
+		w := CellWidth(line)
+
+		widths[i] = w
+		if w > maxW {
+			maxW = w
+		}
+	}
+
+	return blockInfo{lines: lines, widths: widths, maxW: maxW}
+}
+
+func splitLinesBytesScratch(s *joinScratch, data []byte) [][]byte {
+	if len(data) == 0 {
+		lines := s.allocLines(1)
+		lines[0] = nil
+
+		return lines
+	}
+
+	n := 1
+
+	for _, b := range data {
+		if b == '\n' {
+			n++
+		}
+	}
+
+	lines := s.allocLines(n)
+	start := 0
+	idx := 0
+
+	for i, b := range data {
+		if b == '\n' {
+			lines[idx] = data[start:i]
+			start = i + 1
+			idx++
+		}
+	}
+
+	lines[idx] = data[start:]
+
+	return lines
+}
+
+// JoinHorizontal joins potentially multi-line byte content along a vertical
+// axis, aligned by position (Top, Center, Bottom). Each element of blocks
+// is treated as a single block that may contain newlines. Output is written
+// into buf.
+func JoinHorizontal(buf *buffer.LinesBuf, pos Position, blocks ...[]byte) {
+	buf.Reset()
+
+	if len(blocks) == 0 {
+		return
+	}
+
+	s := newJoinScratch()
+	defer s.release()
+
+	if len(blocks) == 1 {
+		infos := splitBlockScratch(s, blocks[0])
+		for _, line := range infos.lines {
+			buf.WriteLine(line)
+		}
+
+		return
+	}
+
+	infos := s.allocInfos(len(blocks))
 	maxHeight := 0
 
-	for idx, str := range strs {
-		blocks[idx] = splitLines(str)
-		lineWidths[idx] = make([]int, len(blocks[idx]))
-
-		for lineIdx, line := range blocks[idx] {
-			w := CellWidth(line)
-			lineWidths[idx][lineIdx] = w
-
-			if w > maxWidths[idx] {
-				maxWidths[idx] = w
-			}
-		}
-
-		if len(blocks[idx]) > maxHeight {
-			maxHeight = len(blocks[idx])
+	for i, block := range blocks {
+		infos[i] = splitBlockScratch(s, block)
+		if len(infos[i].lines) > maxHeight {
+			maxHeight = len(infos[i].lines)
 		}
 	}
 
-	return blocks, maxWidths, lineWidths, maxHeight
+	mergeBlocks(buf, infos, maxHeight, pos)
 }
 
-func alignBlocksAndWidths(blocks [][]string, lineWidths [][]int, pos Position, maxHeight int) {
-	for idx := range blocks {
-		if len(blocks[idx]) >= maxHeight {
-			continue
+// JoinHorizontalBufs joins LinesBuf blocks along a vertical axis, aligned by
+// position (Top, Center, Bottom). Each *LinesBuf is treated as a single block.
+// Output is written into buf. This variant avoids newline scanning since
+// LinesBuf already tracks line boundaries.
+func JoinHorizontalBufs(buf *buffer.LinesBuf, pos Position, blocks ...*buffer.LinesBuf) {
+	buf.Reset()
+
+	if len(blocks) == 0 {
+		return
+	}
+
+	if len(blocks) == 1 {
+		buf.AppendFrom(blocks[0])
+
+		return
+	}
+
+	s := newJoinScratch()
+	defer s.release()
+
+	infos := s.allocInfos(len(blocks))
+	maxHeight := 0
+
+	for i, block := range blocks {
+		infos[i] = linesBufToBlockInfo(s, block)
+		if len(infos[i].lines) > maxHeight {
+			maxHeight = len(infos[i].lines)
+		}
+	}
+
+	mergeBlocks(buf, infos, maxHeight, pos)
+}
+
+// linesBufToBlockInfo builds a blockInfo from a LinesBuf without scanning for
+// newlines — lines and widths come directly from the LinesBuf's line index.
+func linesBufToBlockInfo(s *joinScratch, lb *buffer.LinesBuf) blockInfo {
+	n := lb.Len()
+	lines := s.allocLines(n)
+	widths := s.allocWidths(n)
+	maxW := 0
+
+	for i := range n {
+		line := lb.Line(i)
+		lines[i] = line
+
+		w := CellWidth(line)
+
+		widths[i] = w
+		if w > maxW {
+			maxW = w
+		}
+	}
+
+	return blockInfo{lines: lines, widths: widths, maxW: maxW}
+}
+
+// JoinVertical joins byte content vertically, aligning them by position
+// (Left, Center, Right). Each element of blocks is treated as a single
+// block that may contain newlines. Output is written into buf.
+func JoinVertical(buf *buffer.LinesBuf, pos Position, blocks ...[]byte) {
+	buf.Reset()
+
+	if len(blocks) == 0 {
+		return
+	}
+
+	s := newJoinScratch()
+	defer s.release()
+
+	if len(blocks) == 1 {
+		infos := splitBlockScratch(s, blocks[0])
+		for _, line := range infos.lines {
+			buf.WriteLine(line)
 		}
 
-		extra := maxHeight - len(blocks[idx])
+		return
+	}
 
-		switch pos {
-		case Top:
-			for range extra {
-				blocks[idx] = append(blocks[idx], "")
-				lineWidths[idx] = append(lineWidths[idx], 0)
-			}
-		case Bottom:
-			padded := make([]string, extra, extra+len(blocks[idx]))
-			widthPadded := make([]int, extra, extra+len(lineWidths[idx]))
-			blocks[idx] = append(padded, blocks[idx]...)
-			lineWidths[idx] = append(widthPadded, lineWidths[idx]...)
-		default:
-			split := int(math.Round(float64(extra) * float64(pos)))
-			padded := make([]string, maxHeight)
-			widthPadded := make([]int, maxHeight)
+	infos := s.allocInfos(len(blocks))
+	maxWidth := 0
 
-			copy(padded[split:], blocks[idx])
-			copy(widthPadded[split:], lineWidths[idx])
-			blocks[idx] = padded
-			lineWidths[idx] = widthPadded
+	for i, block := range blocks {
+		infos[i] = splitBlockScratch(s, block)
+		if infos[i].maxW > maxWidth {
+			maxWidth = infos[i].maxW
 		}
+	}
+
+	buildVerticalOutput(buf, infos, maxWidth, pos)
+}
+
+func rowToLineIdx(row, numLines, maxHeight int, pos Position) int {
+	if numLines >= maxHeight {
+		return row
+	}
+
+	extra := maxHeight - numLines
+
+	switch pos {
+	case Top:
+		if row < numLines {
+			return row
+		}
+
+		return -1
+	case Bottom:
+		idx := row - extra
+		if idx >= 0 {
+			return idx
+		}
+
+		return -1
+	default:
+		split := int(math.Round(float64(extra) * float64(pos)))
+		idx := row - split
+
+		if idx >= 0 && idx < numLines {
+			return idx
+		}
+
+		return -1
 	}
 }
 
-func mergeBlocks(blocks [][]string, maxWidths []int, lineWidths [][]int, maxHeight int) string {
-	var builder strings.Builder
-
+func mergeBlocks(buf *buffer.LinesBuf, infos []blockInfo, maxHeight int, pos Position) {
 	for row := range maxHeight {
-		if row > 0 {
-			builder.WriteByte('\n')
-		}
+		for blockIdx, info := range infos {
+			lineIdx := rowToLineIdx(row, len(info.lines), maxHeight, pos)
 
-		for col, block := range blocks {
-			line := block[row]
-			builder.WriteString(line)
-
-			pad := maxWidths[col] - lineWidths[col][row]
-			if pad > 0 {
-				if pad <= maxPadSpaces {
-					builder.WriteString(padSpaces[:pad])
+			if lineIdx >= 0 {
+				pad := info.maxW - info.widths[lineIdx]
+				if pad > 0 {
+					if blockIdx == 0 {
+						buf.WriteLine(info.lines[lineIdx], padSpaces[:min(pad, maxPadSpaces)])
+					} else {
+						buf.AppendToLine(info.lines[lineIdx], padSpaces[:min(pad, maxPadSpaces)])
+					}
 				} else {
-					builder.WriteString(strings.Repeat(" ", pad))
+					if blockIdx == 0 {
+						buf.WriteLine(info.lines[lineIdx])
+					} else {
+						buf.AppendToLine(info.lines[lineIdx])
+					}
+				}
+			} else {
+				pad := padSpaces[:min(info.maxW, maxPadSpaces)]
+				if blockIdx == 0 {
+					buf.WriteLine(pad)
+				} else {
+					buf.AppendToLine(pad)
 				}
 			}
 		}
 	}
-
-	return builder.String()
 }
 
-// JoinVertical joins strings vertically, aligning them by position
-// (Left, Center, Right). It replaces lipgloss.JoinVertical in hot paths,
-// using CellWidth instead of the heavy uax29-based ansi.StringWidth.
-func JoinVertical(pos Position, strs ...string) string {
-	if len(strs) == 0 {
-		return ""
-	}
+func buildVerticalOutput(buf *buffer.LinesBuf, infos []blockInfo, maxWidth int, pos Position) {
+	for blockIdx, info := range infos {
+		if blockIdx > 0 {
+			buf.EmptyLine()
+		}
 
-	if len(strs) == 1 {
-		return strs[0]
-	}
+		for i, line := range info.lines {
+			pad := maxWidth - info.widths[i]
 
-	lines, maxWidth, lineWidths := splitAndMeasureLines(strs)
-
-	return buildVerticalOutput(lines, maxWidth, lineWidths, pos)
-}
-
-// splitAndMeasureLines splits each string into lines and finds the max width.
-func splitAndMeasureLines(strs []string) ([][]string, int, [][]int) {
-	lines := make([][]string, len(strs))
-	lineWidths := make([][]int, len(strs))
-	maxWidth := 0
-
-	for idx, str := range strs {
-		lines[idx] = splitLines(str)
-		lineWidths[idx] = make([]int, len(lines[idx]))
-
-		for lineIdx, line := range lines[idx] {
-			w := CellWidth(line)
-			lineWidths[idx][lineIdx] = w
-
-			if w > maxWidth {
-				maxWidth = w
+			switch {
+			case pos >= Right:
+				buf.WriteLine(padSpaces[:min(pad, maxPadSpaces)], line)
+			case pos == Center:
+				left := pad / 2 //nolint:mnd
+				right := pad - left
+				buf.WriteLine(padSpaces[:min(left, maxPadSpaces)], line, padSpaces[:min(right, maxPadSpaces)])
+			default:
+				buf.WriteLine(line, padSpaces[:min(pad, maxPadSpaces)])
 			}
 		}
 	}
-
-	return lines, maxWidth, lineWidths
 }
-// buildVerticalOutput writes aligned lines into a builder.
-func buildVerticalOutput(lines [][]string, maxWidth int, lineWidths [][]int, pos Position) string {
-	var builder strings.Builder
 
-	for blockIdx, block := range lines {
-		if blockIdx > 0 {
-			builder.WriteByte('\n')
-		}
+func splitLinesBytes(data []byte) [][]byte {
+	if len(data) == 0 {
+		return [][]byte{nil}
+	}
 
-		for lineIdx, line := range block {
-			pad := maxWidth - lineWidths[blockIdx][lineIdx]
+	n := 1
 
-			writeAlignedLine(&builder, pos, line, pad)
-			builder.WriteByte('\n')
+	for _, b := range data {
+		if b == '\n' {
+			n++
 		}
 	}
 
-	result := builder.String()
-	if len(result) > 0 && result[len(result)-1] == '\n' {
-		result = result[:len(result)-1]
-	}
-
-	return result
-}
-
-// writeAlignedLine writes a line to the builder with padding applied according
-// to the given position (Left, Center, Right).
-func writeAlignedLine(builder *strings.Builder, pos Position, line string, pad int) {
-	switch {
-	case pos >= Right:
-		writePad(builder, pad)
-		builder.WriteString(line)
-	case pos == Center:
-		left := pad / 2 //nolint:mnd
-		right := pad - left
-		writePad(builder, left)
-		builder.WriteString(line)
-		writePad(builder, right)
-	default:
-		builder.WriteString(line)
-		writePad(builder, pad)
-	}
-}
-
-// writePad appends count spaces to the builder, using the pre-allocated
-// padSpaces buffer for small counts and strings.Repeat for larger ones.
-func writePad(builder *strings.Builder, count int) {
-	if count <= 0 {
-		return
-	}
-
-	if count <= maxPadSpaces {
-		builder.WriteString(padSpaces[:count])
-	} else {
-		builder.WriteString(strings.Repeat(" ", count))
-	}
-}
-
-// splitLines splits a string by newline, returning each line as a separate
-// string. An empty input returns a single empty-string element, matching
-// lipgloss behavior.
-//
-
-func splitLines(str string) []string {
-	if str == "" {
-		return []string{""}
-	}
-
-	n := 1 + strings.Count(str, "\n")
-	lines := make([]string, 0, n)
-
+	lines := make([][]byte, 0, n)
 	start := 0
 
-	for idx := range len(str) {
-		if str[idx] == '\n' {
-			lines = append(lines, str[start:idx])
-			start = idx + 1
+	for i, b := range data {
+		if b == '\n' {
+			lines = append(lines, data[start:i])
+			start = i + 1
 		}
 	}
 
-	lines = append(lines, str[start:])
+	lines = append(lines, data[start:])
 
 	return lines
 }

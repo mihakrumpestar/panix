@@ -1,52 +1,134 @@
 package style
 
 import (
-	"strings"
+	"sync"
 	"unicode/utf8"
+
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
-// Wrap wraps a string to the given cell width, preserving ANSI escape sequences
-// and inserting newlines at word boundaries. It replaces lipgloss.Wrap in hot
-// paths, using CellWidth instead of the heavy uax29 grapheme clustering.
+// Wrap wraps lines of byte content to the given cell width, preserving ANSI
+// escape sequences and inserting newlines at word boundaries. Output is
+// written into buf.
+//
+// ANSI style carry-over: when a wrap-induced line break occurs, any active
+// ANSI SGR sequences (colors, bold, etc.) are re-emitted at the start of the
+// next wrapped line, and a reset is emitted before the break. This preserves
+// styled text across line wraps.
+//
+// Each element of content is treated as a line.
 //
 // breakpoints is a string of characters considered valid word-break points
 // (in addition to whitespace and hyphens). Pass "" for default behavior.
-//
-//nolint:cyclop,funlen
-func Wrap(str string, limit int, breakpoints string) string {
-	if limit < 1 || str == "" {
-		return str
+func Wrap(dst *buffer.LinesBuf, content [][]byte, limit int, breakpoints string) {
+	dst.Reset()
+
+	if limit < 1 || len(content) == 0 {
+		for range content {
+			dst.EmptyLine()
+		}
+
+		return
 	}
 
-	// Ultra-fast path: byte length <= limit and no newlines means no wrapping
-	// needed. Each visible rune occupies at least 1 byte, so cell width <= byte
-	// length <= limit.
-	if len(str) <= limit && strings.IndexByte(str, '\n') < 0 {
-		return str
+	if len(content) == 1 && len(content[0]) <= limit {
+		dst.WriteLine(content[0])
+
+		return
 	}
 
-	// Fast path: scan to check if any line exceeds the width limit.
-	// If no line exceeds the limit, return the input as-is.
-	if !lineExceedsLimit(str, limit) {
-		return str
-	}
-
-	s := wrapState{ //nolint:varnamelen
-		str:         str,
-		limit:       limit,
-		breakpoints: breakpoints,
-	}
-	s.buf.Grow(len(str) + len(str)/limit + 1)
-
-	pos := 0
-	n := len(str)
 	hasBreakpoints := breakpoints != ""
 
+	s := wrapStatePool.Get().(*wrapState)
+	s.limit = limit
+	s.breakpoints = breakpoints
+	s.outBuf = dst
+	s.curWidth = 0
+	s.hasWord = false
+	s.hasSpace = false
+	s.wordWidth = 0
+	s.spaceWidth = 0
+	s.lineBuf = s.lineBuf[:0]
+	s.lineStyle = s.lineStyle[:0]
+
+	for _, line := range content {
+		if len(line) == 0 {
+			dst.EmptyLine()
+
+			continue
+		}
+
+		if !lineExceedsLimitBytes(line, limit) {
+			dst.WriteLine(line)
+
+			continue
+		}
+
+		s.data = line
+		s.wrapOneLine(line, hasBreakpoints)
+	}
+
+	s.data = nil
+	s.outBuf = nil
+	wrapStatePool.Put(s)
+}
+
+var wrapStatePool = sync.Pool{
+	New: func() any {
+		return &wrapState{
+			lineBuf:   make([]byte, 0, 128),
+			carryBuf:  make([]byte, 0, 32),
+			lineStyle: make([]byte, 0, 64),
+		}
+	},
+}
+
+type wrapState struct {
+	data        []byte
+	limit       int
+	breakpoints string
+	curWidth    int
+
+	wordStart int
+	wordEnd   int
+	wordWidth int
+	hasWord   bool
+
+	spaceStart int
+	spaceEnd   int
+	spaceWidth int
+	hasSpace   bool
+
+	lineBuf []byte
+	outBuf  *buffer.LinesBuf
+
+	// lineStyle is the net active ANSI style state at the END of lineBuf.
+	// Updated only when content is flushed into lineBuf (not when scanned).
+	// Empty means no active style (either plain text or reset was the last SGR).
+	lineStyle []byte
+
+	// carryBuf is a scratch buffer for building the style prefix to
+	// carry over to the next wrapped line.
+	carryBuf []byte
+}
+
+func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
+	s.curWidth = 0
+	s.hasWord = false
+	s.hasSpace = false
+	s.wordWidth = 0
+	s.spaceWidth = 0
+	s.lineBuf = s.lineBuf[:0]
+	s.lineStyle = s.lineStyle[:0]
+
+	pos := 0
+	n := len(data)
+
 	for pos < n {
-		b := str[pos] //nolint:varnamelen
+		b := data[pos]
 
 		if b == '\x1b' {
-			end := skipANSI(str, pos)
+			end := skipANSI(data, pos)
 
 			if !s.hasWord {
 				s.wordStart = pos
@@ -82,10 +164,10 @@ func Wrap(str string, limit int, breakpoints string) string {
 			continue
 		}
 
-		rn, size := utf8.DecodeRuneInString(str[pos:]) //nolint:varnamelen
+		rn, size := utf8.DecodeRune(data[pos:])
 		end := pos + size
 		pos = end
-		rw := RuneWidth(rn) //nolint:varnamelen
+		rw := RuneWidth(rn)
 
 		switch {
 		case rn == '\n':
@@ -104,32 +186,34 @@ func Wrap(str string, limit int, breakpoints string) string {
 	}
 
 	s.flushRemaining()
-
-	return s.buf.String()
 }
 
-// wrapState tracks word-wrapping state using byte ranges into the original
-// input string instead of intermediate buffers. This eliminates per-rune
-// WriteString calls and two buffer allocations (word, space).
-type wrapState struct {
-	buf         strings.Builder
-	str         string
-	limit       int
-	breakpoints string
-	curWidth    int
+// updateLineStyleAfterFlush updates lineStyle based on ANSI sequences in the
+// word/space data that was just flushed into lineBuf. data[start:end] was
+// appended to lineBuf.
+func (s *wrapState) updateLineStyleAfterFlush(start, end int) {
+	pos := start
 
-	// Word: str[wordStart:wordEnd] is the current pending word (may include
-	// ANSI sequences, which contribute zero to wordWidth).
-	wordStart int
-	wordEnd   int
-	wordWidth int
-	hasWord   bool
+	for pos < end {
+		if s.data[pos] != '\x1b' {
+			pos++
 
-	// Space: str[spaceStart:spaceEnd] is the pending whitespace.
-	spaceStart int
-	spaceEnd   int
-	spaceWidth int
-	hasSpace   bool
+			continue
+		}
+
+		seqEnd := skipANSI(s.data, pos)
+		seq := s.data[pos:seqEnd]
+
+		if len(seq) >= 3 && seq[0] == '\x1b' && seq[1] == '[' && seq[len(seq)-1] == 'm' {
+			if len(seq) == 3 && seq[2] == 'm' || len(seq) == 4 && seq[2] == '0' && seq[3] == 'm' {
+				s.lineStyle = s.lineStyle[:0]
+			} else {
+				s.lineStyle = append(s.lineStyle, seq...)
+			}
+		}
+
+		pos = seqEnd
+	}
 }
 
 func (s *wrapState) handleNewline() {
@@ -141,7 +225,10 @@ func (s *wrapState) handleNewline() {
 		s.flushWord()
 	}
 
-	s.newline()
+	s.emitLine()
+	s.curWidth = 0
+	s.hasSpace = false
+	s.spaceWidth = 0
 }
 
 func (s *wrapState) handleTab(start, end int) {
@@ -156,7 +243,6 @@ func (s *wrapState) handleTab(start, end int) {
 	s.spaceWidth += 4
 }
 
-//nolint:varnamelen
 func (s *wrapState) handleSpace(start, end int, rw int) {
 	s.flushWord()
 
@@ -169,7 +255,6 @@ func (s *wrapState) handleSpace(start, end int, rw int) {
 	s.spaceWidth += rw
 }
 
-//nolint:varnamelen
 func (s *wrapState) handleBreakpoint(start, end int, rw int) {
 	s.flushSpace()
 
@@ -182,20 +267,24 @@ func (s *wrapState) handleBreakpoint(start, end int, rw int) {
 		s.wordEnd = end
 		s.wordWidth += rw
 	} else {
-		// Merge word + breakpoint into a single WriteString call.
 		if s.hasWord {
+			ws, we := s.wordStart, s.wordEnd
 			s.curWidth += s.wordWidth + rw
-			s.buf.WriteString(s.str[s.wordStart:end])
+			s.lineBuf = append(s.lineBuf, s.data[s.wordStart:end]...)
 			s.hasWord = false
 			s.wordWidth = 0
+			s.updateLineStyleAfterFlush(ws, we)
+
+			// The breakpoint character itself is also in the flush.
+			s.updateLineStyleAfterFlush(we-1, end)
 		} else {
-			s.buf.WriteString(s.str[start:end])
+			s.lineBuf = append(s.lineBuf, s.data[start:end]...)
 			s.curWidth += rw
+			s.updateLineStyleAfterFlush(start, end)
 		}
 	}
 }
 
-//nolint:varnamelen
 func (s *wrapState) handleWordRune(start, end int, rw int) {
 	if s.wordWidth+rw > s.limit {
 		s.flushWord()
@@ -223,10 +312,12 @@ func (s *wrapState) flushSpace() {
 		return
 	}
 
+	ss, se := s.spaceStart, s.spaceEnd
 	s.curWidth += s.spaceWidth
-	s.buf.WriteString(s.str[s.spaceStart:s.spaceEnd])
+	s.lineBuf = append(s.lineBuf, s.data[s.spaceStart:s.spaceEnd]...)
 	s.hasSpace = false
 	s.spaceWidth = 0
+	s.updateLineStyleAfterFlush(ss, se)
 }
 
 func (s *wrapState) flushWord() {
@@ -236,17 +327,46 @@ func (s *wrapState) flushWord() {
 
 	s.flushSpace()
 
+	ws, we := s.wordStart, s.wordEnd
 	s.curWidth += s.wordWidth
-	s.buf.WriteString(s.str[s.wordStart:s.wordEnd])
+	s.lineBuf = append(s.lineBuf, s.data[s.wordStart:s.wordEnd]...)
 	s.hasWord = false
 	s.wordWidth = 0
+	s.updateLineStyleAfterFlush(ws, we)
 }
 
 func (s *wrapState) newline() {
-	s.buf.WriteByte('\n')
+	s.emitLine()
 	s.curWidth = 0
 	s.hasSpace = false
 	s.spaceWidth = 0
+}
+
+// emitLine writes the current lineBuf content into the LinesBuf.
+// If there are active ANSI styles at the end of the line, a reset is
+// appended before emitting, and the styles are carried over to the next line.
+func (s *wrapState) emitLine() {
+	if len(s.lineBuf) == 0 {
+		if len(s.lineStyle) > 0 {
+			s.outBuf.WriteLine(s.lineStyle)
+		} else {
+			s.outBuf.EmptyLine()
+		}
+
+		s.lineBuf = s.lineBuf[:0]
+
+		return
+	}
+
+	if len(s.lineStyle) > 0 {
+		// Active style at end of line: append reset, emit, then carry style to next line.
+		s.outBuf.WriteLine(s.lineBuf, ansiReset)
+		s.carryBuf = append(s.carryBuf[:0], s.lineStyle...)
+		s.lineBuf = append(s.lineBuf[:0], s.carryBuf...)
+	} else {
+		s.outBuf.WriteLine(s.lineBuf)
+		s.lineBuf = s.lineBuf[:0]
+	}
 }
 
 func (s *wrapState) flushRemaining() {
@@ -258,6 +378,10 @@ func (s *wrapState) flushRemaining() {
 	}
 
 	s.flushWord()
+
+	if len(s.lineBuf) > 0 {
+		s.emitLine()
+	}
 }
 
 func (s *wrapState) isBreakpointRune(rn rune) bool {
@@ -270,31 +394,36 @@ func (s *wrapState) isBreakpointRune(rn rune) bool {
 	return false
 }
 
-// lineExceedsLimit scans str and reports whether any line's cell width exceeds
-// the given limit. Used as a pre-check before the full wrapping algorithm to
-// avoid builder allocation when no wrapping is needed.
+// lineExceedsLimitBytes scans data and reports whether any line's cell width
+// exceeds the given limit. It also returns true if data contains a newline,
+// since that means the line needs splitting.
 //
 //nolint:mnd
-func lineExceedsLimit(str string, limit int) bool {
+func lineExceedsLimitBytes(data []byte, limit int) bool {
 	width := 0
 	pos := 0
-	n := len(str)
+	n := len(data)
 
 	for pos < n {
+		b := data[pos]
 		switch {
-		case str[pos] == '\x1b':
-			pos = skipANSI(str, pos)
-		case str[pos] == '\n':
-			width = 0
-			pos++
-		case str[pos] == '\t':
+		case b == '\n':
+			return true
+		case b == '\t':
 			width += 4
 			if width > limit {
 				return true
 			}
 
 			pos++
-		case str[pos] < 0x80:
+		case b == '\x1b':
+			end := skipANSI(data, pos)
+			if end == pos {
+				pos++
+			} else {
+				pos = end
+			}
+		case b < 0x80:
 			width++
 			if width > limit {
 				return true
@@ -302,7 +431,7 @@ func lineExceedsLimit(str string, limit int) bool {
 
 			pos++
 		default:
-			rn, size := utf8.DecodeRuneInString(str[pos:])
+			rn, size := utf8.DecodeRune(data[pos:])
 			pos += size
 
 			width += RuneWidth(rn)

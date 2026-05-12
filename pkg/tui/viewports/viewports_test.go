@@ -1,14 +1,30 @@
 package viewports
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
+
+func splitLines(s string) [][]byte {
+	if s == "" {
+		return nil
+	}
+
+	return bytes.Split([]byte(s), []byte("\n"))
+}
+
+func splitLinesBuf(s string) *buffer.LinesBuf {
+	lb := buffer.NewLinesBuf()
+	lb.WriteLines(splitLines(s))
+
+	return lb
+}
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -113,7 +129,8 @@ func TestGetActiveInnerViewportContent(t *testing.T) {
 	}
 
 	xpath_ := xpath.New("test", "item")
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "test content", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("test content"), 1, 0)
+
 	viewports.activeXpath = xpath_
 
 	content, ok := viewports.GetActiveInnerViewportContent()
@@ -121,8 +138,8 @@ func TestGetActiveInnerViewportContent(t *testing.T) {
 		t.Fatal("should have content with active inner")
 	}
 
-	if content != "test content" {
-		t.Errorf("content = %q, want 'test content'", content)
+	if len(content) == 0 || string(content[0]) != "test content" {
+		t.Errorf("content = %q, want 'test content'", string(content[0]))
 	}
 }
 
@@ -151,16 +168,16 @@ func TestGetViewportContent(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "item")
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
 
 	content := viewports.GetViewportContent(xpath_)
-	if content != "content" {
-		t.Errorf("content = %q, want 'content'", content)
+	if len(content) == 0 || string(content[0]) != "content" {
+		t.Errorf("content = %q, want 'content'", string(content[0]))
 	}
 
 	missing := viewports.GetViewportContent(xpath.New("missing"))
-	if missing != "" {
-		t.Errorf("missing content = %q, want empty", missing)
+	if len(missing) != 0 {
+		t.Errorf("missing content = %v, want empty", missing)
 	}
 }
 
@@ -172,8 +189,10 @@ func TestReset(t *testing.T) {
 
 	xp1 := xpath.New("test", "item1")
 	xp2 := xpath.New("test", "item2")
-	_ = viewports.GetOrCreateViewportVersioned(xp1, "content1", 1, 0)
-	_ = viewports.GetOrCreateViewportVersioned(xp2, "content2", 1, 0)
+
+	viewports.RenderViewportVersioned(xp1, splitLines("content1"), 1, 0)
+	viewports.RenderViewportVersioned(xp2, splitLines("content2"), 1, 0)
+
 	viewports.SetFullscreen(xp1)
 	viewports.activeXpath = xp2
 
@@ -188,7 +207,7 @@ func TestReset(t *testing.T) {
 	}
 
 	content := viewports.GetViewportContent(xp1)
-	if content != "" {
+	if len(content) != 0 {
 		t.Error("viewport should be removed after reset")
 	}
 }
@@ -200,13 +219,14 @@ func TestRemoveIfExistsViewport(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "item")
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
+
 	viewports.activeXpath = xpath_
 
 	viewports.RemoveIfExistsViewport(xpath_)
 
 	content := viewports.GetViewportContent(xpath_)
-	if content != "" {
+	if len(content) != 0 {
 		t.Error("viewport should be removed")
 	}
 
@@ -223,13 +243,15 @@ func TestGetOrCreateViewportVersioned(t *testing.T) {
 	viewports := New(dims, 10, border, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "item")
-	output := viewports.GetOrCreateViewportVersioned(xpath_, "line1\nline2\nline3", 1, 0)
+	result := viewports.RenderViewportVersioned(xpath_, splitLines("line1\nline2\nline3"), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
 
 	if !strings.Contains(output, "╭") && !strings.Contains(output, "│") {
 		t.Error("versioned viewport should have border")
 	}
 
-	output2 := viewports.GetOrCreateViewportVersioned(xpath_, "line1\nline2\nline3", 1, 0)
+	result = viewports.RenderViewportVersioned(xpath_, splitLines("line1\nline2\nline3"), 1, 0)
+	output2 := buffer.LinesBufToStringForTests(result)
 
 	if output != output2 {
 		t.Error("cached output should match")
@@ -243,7 +265,8 @@ func TestGetOrCreateLabelViewport(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "label")
-	output := viewports.GetOrCreateLabelViewport(xpath_, "label text", 1, 0)
+	result := viewports.RenderLabelViewport(xpath_, splitLines("label text"), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
 
 	if strings.Contains(output, "╭") || strings.Contains(output, "│") {
 		t.Error("label viewport should not have border")
@@ -261,7 +284,8 @@ func TestGetOrCreateMainViewport(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	content := strings.Repeat("line\n", 100)
-	output := viewports.GetOrCreateMainViewport(content, 1, 5)
+	result := viewports.RenderMainViewport(splitLinesBuf(content), 1, 5)
+	output := buffer.LinesBufToStringForTests(result)
 
 	if !strings.Contains(output, "█") && !strings.Contains(output, "░") {
 		t.Error("main viewport should have scrollbar when content overflows")
@@ -281,7 +305,8 @@ func TestRenderFullscreenViewport_AlwaysBordered(t *testing.T) {
 
 	xpath_ := xpath.New("test", "fullscreen")
 	content := strings.Repeat("line\n", 100)
-	output := viewports.RenderFullscreenViewport(xpath_, content, 1, 5)
+	result := viewports.RenderFullscreenViewport(xpath_, splitLines(content), 1, 5)
+	output := buffer.LinesBufToStringForTests(result)
 
 	if !strings.Contains(output, "╭") || !strings.Contains(output, "╮") {
 		t.Error("fullscreen viewport MUST have border (top corners)")
@@ -314,12 +339,15 @@ func TestFullscreenLabel_EnablesBorder(t *testing.T) {
 
 	xpath_ := xpath.New("test", "label")
 
-	labelOutput := viewports.GetOrCreateLabelViewport(xpath_, "label content", 1, 0)
+	result := viewports.RenderLabelViewport(xpath_, splitLines("label content"), 1, 0)
+	labelOutput := buffer.LinesBufToStringForTests(result)
+
 	if strings.Contains(labelOutput, "╭") {
 		t.Error("label viewport should not have border")
 	}
 
-	fullscreenOutput := viewports.RenderFullscreenViewport(xpath_, "label content", 2, 5)
+	result = viewports.RenderFullscreenViewport(xpath_, splitLines("label content"), 2, 5)
+	fullscreenOutput := buffer.LinesBufToStringForTests(result)
 
 	if !strings.Contains(fullscreenOutput, "╭") {
 		t.Error("fullscreen label MUST have border (top-left corner)")
@@ -350,7 +378,8 @@ func TestRenderFullscreenViewport_FullWidth(t *testing.T) {
 
 	xpath_ := xpath.New("test", "fullscreen")
 	content := strings.Repeat("x", 200)
-	output := viewports.RenderFullscreenViewport(xpath_, content, 1, 0)
+	result := viewports.RenderFullscreenViewport(xpath_, splitLines(content), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
 
 	lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
 
@@ -376,25 +405,25 @@ func TestVersionTracking(t *testing.T) {
 
 	xpath_ := xpath.New("test", "item")
 
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content v1", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content v1"), 1, 0)
 
 	content := viewports.GetViewportContent(xpath_)
-	if content != "content v1" {
-		t.Errorf("content = %q, want 'content v1'", content)
+	if len(content) == 0 || string(content[0]) != "content v1" {
+		t.Errorf("content = %q, want 'content v1'", string(content[0]))
 	}
 
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content v1 updated", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content v1 updated"), 1, 0)
 
 	content = viewports.GetViewportContent(xpath_)
-	if content != "content v1" {
-		t.Errorf("content should not change with same version: %q", content)
+	if len(content) == 0 || string(content[0]) != "content v1" {
+		t.Errorf("content should not change with same version: %q", string(content[0]))
 	}
 
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content v2", 2, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content v2"), 2, 0)
 
 	content = viewports.GetViewportContent(xpath_)
-	if content != "content v2" {
-		t.Errorf("content = %q, want 'content v2'", content)
+	if len(content) == 0 || string(content[0]) != "content v2" {
+		t.Errorf("content = %q, want 'content v2'", string(content[0]))
 	}
 }
 
@@ -409,7 +438,9 @@ func TestActiveHighlighting(t *testing.T) {
 	xpath_ := xpath.New("test", "item")
 	viewports.activeXpath = xpath_
 
-	output := viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	result := viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
+
 	if !strings.Contains(output, "\x1b[") {
 		t.Error("active viewport should have ANSI styling")
 	}
@@ -422,7 +453,8 @@ func TestIndentation(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "indented")
-	output := viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 10)
+	result := viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 10)
+	output := buffer.LinesBufToStringForTests(result)
 
 	if output == "" {
 		t.Error("indented viewport should render")
@@ -436,12 +468,14 @@ func TestUpdate_MouseClick(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "item")
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
 
-	output := viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	result := viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
+
 	strLines := strings.Split(output, "\n")
 
-	buf := linesbuffer.NewPooled()
+	buf := buffer.NewLinesBufDiff()
 
 	for i, l := range strLines {
 		if l != "" || i < len(strLines)-1 {
@@ -478,7 +512,7 @@ func TestDebug(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "item")
-	_ = viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
 
 	debug := viewports.Debug()
 
@@ -502,7 +536,8 @@ func TestEmptyContent(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "empty")
-	output := viewports.GetOrCreateViewportVersioned(xpath_, "", 1, 0)
+	result := viewports.RenderViewportVersioned(xpath_, splitLines(""), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
 
 	if output == "" {
 		t.Error("should render even with empty content")
@@ -516,7 +551,8 @@ func TestZeroDimensions(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	xpath_ := xpath.New("test", "item")
-	output := viewports.GetOrCreateViewportVersioned(xpath_, "content", 1, 0)
+	result := viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
+	output := buffer.LinesBufToStringForTests(result)
 
 	_ = output
 }
@@ -531,19 +567,22 @@ func TestMultipleViewports(t *testing.T) {
 	xp2 := xpath.New("test", "item2")
 	xp3 := xpath.New("test", "item3")
 
-	_ = viewports.GetOrCreateViewportVersioned(xp1, "content1", 1, 0)
-	_ = viewports.GetOrCreateViewportVersioned(xp2, "content2", 1, 0)
-	_ = viewports.GetOrCreateViewportVersioned(xp3, "content3", 1, 0)
+	viewports.RenderViewportVersioned(xp1, splitLines("content1"), 1, 0)
+	viewports.RenderViewportVersioned(xp2, splitLines("content2"), 1, 0)
+	viewports.RenderViewportVersioned(xp3, splitLines("content3"), 1, 0)
 
-	if viewports.GetViewportContent(xp1) != "content1" {
+	c1 := viewports.GetViewportContent(xp1)
+	if len(c1) == 0 || string(c1[0]) != "content1" {
 		t.Error("viewport 1 should have correct content")
 	}
 
-	if viewports.GetViewportContent(xp2) != "content2" {
+	c2 := viewports.GetViewportContent(xp2)
+	if len(c2) == 0 || string(c2[0]) != "content2" {
 		t.Error("viewport 2 should have correct content")
 	}
 
-	if viewports.GetViewportContent(xp3) != "content3" {
+	c3 := viewports.GetViewportContent(xp3)
+	if len(c3) == 0 || string(c3[0]) != "content3" {
 		t.Error("viewport 3 should have correct content")
 	}
 

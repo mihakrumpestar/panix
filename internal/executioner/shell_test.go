@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -298,7 +298,7 @@ func processTestData(data []byte, cmdLog *command.CommandLog) {
 
 func newTestCommandLog() *command.CommandLog {
 	return &command.CommandLog{
-		Output: linesbuffer.New(),
+		Output: buffer.NewLinesBufVer(),
 	}
 }
 

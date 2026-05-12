@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
 func TestANSIStyle_Equivalence(t *testing.T) {
@@ -37,22 +38,24 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 
 			for _, input := range tests {
 				expected := lgSty.Render(input)
-				got := ansi.Render(input)
+				inputBytes := bytesFromLines(strings.Split(input, "\n"))
 
-				// ANSIStyle produces visually identical output but may differ
-				// in SGR parameter ordering (bold merged vs separate) and
-				// empty-string handling. Strip all ANSI sequences and compare
-				// the visible content + verify ANSI wrapping is present.
-				expectedVisible := StripANSI(expected)
-				gotVisible := StripANSI(got)
+				buf := buffer.NewLinesBuf()
+				ansi.Render(buf, inputBytes)
+				got := buf.Lines()
+
+				expectedVisible := string(StripANSI([]byte(expected)))
+				gotVisible := string(StripANSI(bytesToSingleByte(got)))
 
 				if expectedVisible != gotVisible {
 					t.Errorf("Visible content mismatch for %q (color=%s bold=%v):\n  expected: %q\n  got:      %q", input, color, bold, expectedVisible, gotVisible)
 				}
 
-				if input != "" && !strings.Contains(got, "\x1b[") {
+				if input != "" && !strings.Contains(string(bytesToSingleByte(got)), "\x1b[") {
 					t.Errorf("Missing ANSI sequences for %q (color=%s bold=%v)", input, color, bold)
 				}
+
+				buf.Release()
 			}
 		}
 	}
@@ -64,8 +67,44 @@ func TestANSIStyle_EmptyString(t *testing.T) {
 	sty := NewStyle().Foreground(Color("#F1FA8C"))
 	ansi := NewANSIStyle(sty)
 
-	got := ansi.Render("")
-	if got != "" {
-		t.Errorf("ANSIStyle.Render(\"\") = %q, want \"\"", got)
+	buf := buffer.NewLinesBuf()
+	ansi.Render(buf, nil)
+
+	if buf.Len() != 0 {
+		t.Errorf("ANSIStyle.Render(nil) = %d lines, want 0", buf.Len())
 	}
+
+	buf.Release()
+}
+
+func bytesFromLines(lines []string) [][]byte {
+	out := make([][]byte, len(lines))
+	for i, l := range lines {
+		out[i] = []byte(l)
+	}
+
+	return out
+}
+
+func bytesToSingleByte(lines [][]byte) []byte {
+	if len(lines) == 0 {
+		return nil
+	}
+
+	size := 0
+	for _, l := range lines {
+		size += len(l) + 1
+	}
+
+	buf := make([]byte, 0, size)
+
+	for i, l := range lines {
+		if i > 0 {
+			buf = append(buf, '\n')
+		}
+
+		buf = append(buf, l...)
+	}
+
+	return buf
 }

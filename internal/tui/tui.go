@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"slices"
-	"strings"
 	"syscall"
 	"time"
 
@@ -18,10 +17,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
-	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
@@ -38,7 +36,6 @@ type model struct {
 	workflow           *workflow.Workflow
 	lastWorkflowUpdate time.Time
 	err                error
-	contentVersion     uint64
 
 	header     *header.Header
 	buildLogs  *buildlogs.BuildLogs
@@ -77,7 +74,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 	}
 
-	mdl.footer = footer.New(mdl.keyDefs(), conf, conf.ColorScheme)
+	mdl.footer = footer.New(mdl.keyDefs(), conf.ColorScheme)
 
 	program := zeroterm.NewProgram(mdl /*, render.WithRaw() */)
 
@@ -87,17 +84,15 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 	}
 
 	if mdl.quitting {
-		content := mdl.header.View(mdl.dimensions.Width)
+		buf := buffer.NewLinesBufDiff()
+
+		buf.AppendFrom(mdl.header.Render(mdl.dimensions.Width))
 
 		if mdl.workflow != nil {
-			content += mdl.viewMainContent()
+			mdl.viewMainContentInto(buf, 0, mdl.header.Len()-1)
 		}
 
-		if mdl.err != nil {
-			content += fmt.Sprintf("\n\n=== Error ===\n\n%s\n", mdl.err.Error())
-		}
-
-		fmt.Println(content)
+		fmt.Println(buf.String())
 	}
 
 	if mdl.err != nil {
@@ -159,7 +154,7 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	return zeroterm.BatchCmd(cmd...)
 }
 
-func (m *model) Render(buf *linesbuffer.LinesBuffer) {
+func (m *model) Render(buf *buffer.LinesBufDiff, renderCounter uint64) {
 	if m.workflow == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
 		return
 	}
@@ -168,36 +163,26 @@ func (m *model) Render(buf *linesbuffer.LinesBuffer) {
 		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseFlow)
 	}
 
-	header := m.header.View(m.dimensions.Width)
-	mainContent := m.viewMainContent()
+	header := m.header.Render(m.dimensions.Width)
+	buf.AppendFrom(header)
 
-	var footer string
-	if !m.quitting {
-		footer = m.footer.View(m.dimensions.Width, m.conf.ColorScheme)
-	}
+	footer := m.footer.Render(m.quitting, m.dimensions.Width)
 
-	headerFooterHeight := style.CountLines(header) - 1 + style.CountLines(footer)
+	headerFooterHeight := header.Len() + footer.Len()
 
-	m.contentVersion++
-
-	var main string
 	if m.viewports.IsFullscreen() {
-		main = m.renderFullscreenViewport(headerFooterHeight)
+		m.renderFullscreenViewportInto(buf, renderCounter, headerFooterHeight)
 	} else {
-		main = m.viewports.GetOrCreateMainViewport(mainContent, m.contentVersion, headerFooterHeight)
+		m.viewMainContentInto(buf, renderCounter, headerFooterHeight)
 	}
 
-	buf.WriteString(header)
-	buf.WriteString(main)
-
-	if !m.quitting {
-		buf.WriteString(footer)
-	}
+	buf.AppendFrom(footer)
 }
 
-func (m *model) viewMainContent() string {
+// viewMainContentInto renders the main content area into buf.
+func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint64, headerFooterHeight int) {
 	if m.workflow == nil {
-		return ""
+		return
 	}
 
 	if m.isSnapshot {
@@ -210,56 +195,66 @@ func (m *model) viewMainContent() string {
 		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseFlow)
 	}
 
-	var builder strings.Builder
-
 	contentWidth := m.viewports.ContentWidth()
+
+	content := buffer.NewLinesBuf()
 
 	if !m.conf.Flags.DryRun {
 		if slices.Contains(m.conf.Phases, phase.Inspect) {
-			builder.WriteString(m.statsTable.View(contentWidth))
+			content.AppendFrom(m.statsTable.Render(contentWidth))
 		}
 
-		builder.WriteString(m.phaseFlow.View(contentWidth))
+		content.AppendFrom(m.phaseFlow.Render(contentWidth))
 	}
 
-	builder.WriteString(m.buildLogs.View(m.viewports, m.spinners))
+	content.AppendFrom(m.buildLogs.Render(m.viewports, m.spinners))
 
 	if m.err != nil {
-		errorHeader := "\n\n=== Error ===\n"
-		errorContent := fmt.Sprintf("\n%s\n", m.err.Error())
-		builder.WriteString(m.conf.ColorScheme.Error.Color.Render(errorHeader + errorContent))
+		errContent := [][]byte{
+			[]byte{},
+			[]byte("=== Error ==="),
+			[]byte{},
+			[]byte(m.err.Error()),
+		}
+
+		m.conf.ColorScheme.Error.Color.RenderInto(content, errContent)
 	}
 
 	if m.conf.Flags.Logging.Debug {
-		debugHeader := "\n\n=== Debug ===\n"
-		debugContent := fmt.Sprintf("terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width)
-		debugContent += fmt.Sprintf("header - h: %d\n", style.CountLines(m.header.View(m.dimensions.Width))-1)
-		debugContent += fmt.Sprintf("footer - h: %d\n", style.CountLines(m.footer.View(m.dimensions.Width, m.conf.ColorScheme)))
-		debugContent += m.spinners.Debug()
-		debugContent += m.viewports.Debug()
-		builder.WriteString(debugHeader + debugContent)
+		debugContent := [][]byte{
+			[]byte{},
+			[]byte("=== Debug ==="),
+			[]byte{},
+			fmt.Appendf(nil, "terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width),
+			fmt.Appendf(nil, "header - h: %d", m.header.Len()),
+			fmt.Appendf(nil, "footer - h: %d\n", m.footer.Len()),
+			[]byte{},
+		}
+
+		content.WriteLines(debugContent)
 	}
 
-	return builder.String()
+	viewport := m.viewports.RenderMainViewport(content, renderCounter, headerFooterHeight)
+	buf.AppendFrom(viewport)
 }
 
-func (m *model) renderFullscreenViewport(footerHeaderHeight int) string {
+// renderFullscreenViewportInto renders the fullscreen viewport into buf.
+func (m *model) renderFullscreenViewportInto(buf *buffer.LinesBufDiff, renderCounter uint64, footerHeaderHeight int) {
 	if m.workflow == nil {
-		return ""
+		return
 	}
 
 	fullscreenXpath := m.viewports.GetFullscreenXpath()
 	content := m.viewports.GetViewportContent(fullscreenXpath)
 
-	if content == "" {
+	if len(content) == 0 {
 		m.viewports.ExitFullscreen()
 
-		return ""
+		return
 	}
 
-	fullscreenViewport := m.viewports.RenderFullscreenViewport(fullscreenXpath, content, m.contentVersion, footerHeaderHeight)
-
-	return fullscreenViewport
+	result := m.viewports.RenderFullscreenViewport(fullscreenXpath, content, renderCounter, footerHeaderHeight)
+	buf.AppendFrom(result)
 }
 
 func setupSIGINTHandler(ctx context.Context) func() {

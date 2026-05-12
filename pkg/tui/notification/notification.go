@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
@@ -23,10 +24,20 @@ type Notification struct {
 	defaultColor style.Color
 	currentColor style.Color
 	started      time.Time
+	baseStyle    style.Style
+
+	buf *buffer.LinesBufVer
 }
 
 func New(defaultColor style.Color) *Notification {
-	return &Notification{defaultColor: defaultColor}
+	return &Notification{
+		defaultColor: defaultColor,
+		buf:          buffer.NewLinesBufVer(),
+	}
+}
+
+func (n *Notification) SetBaseStyle(s style.Style) {
+	n.baseStyle = s
 }
 
 func (n *Notification) Set(text string, c style.Color) zeroterm.Cmd {
@@ -36,6 +47,8 @@ func (n *Notification) Set(text string, c style.Color) zeroterm.Cmd {
 	if c != "" {
 		n.currentColor = c
 	}
+
+	n.render()
 
 	return zeroterm.TickCmd(tickInterval, func(time.Time) zeroterm.Msg { return notificationTickMsg{} })
 }
@@ -56,35 +69,51 @@ func (n *Notification) Update(msg zeroterm.Msg) zeroterm.Cmd {
 		return nil
 	}
 
+	n.render()
+
 	return zeroterm.TickCmd(tickInterval, func(time.Time) zeroterm.Msg { return notificationTickMsg{} })
 }
 
 func (n *Notification) Clear() {
 	n.text = ""
 	n.started = time.Time{}
+	n.buf.Reset()
 }
 
-func (n *Notification) View(baseStyle style.Style) string {
+// View returns the notification's rendered content. Returns nil when expired.
+func (n *Notification) Render() *buffer.LinesBufVer {
 	if n.isExpired() {
-		return ""
+		return nil
+	}
+
+	return n.buf
+}
+
+// Version returns the current version of the rendered content.
+func (n *Notification) Version() uint64 {
+	return n.buf.Version()
+}
+
+func (n *Notification) render() {
+	if n.isExpired() {
+		n.buf.Reset()
+
+		return
 	}
 
 	fg := n.fadedColor()
-	box := style.NewStyle().
+	content := n.renderContent()
+
+	n.buf.Reset()
+	style.NewStyle().
 		Border(style.RoundedBorder()).
 		BorderForeground(fg).
 		Padding(0, 1).
-		Render(n.render(baseStyle))
-
-	return box
+		RenderInto(n.buf.LinesBuf, content)
 }
 
-func (n *Notification) render(baseStyle style.Style) string {
-	if n.isExpired() {
-		return ""
-	}
-
-	return baseStyle.Foreground(n.fadedColor()).Render(n.text)
+func (n *Notification) renderContent() [][]byte {
+	return [][]byte{n.baseStyle.Foreground(n.fadedColor()).RenderLine([]byte(n.text))}
 }
 
 func (n *Notification) isExpired() bool {

@@ -77,7 +77,7 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 		executioner.DisableAutoSSHCommand(),
 		executioner.Env(env),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			storePath = style.StripANSI(string(log.Output.LastLine()))
+			storePath = string(style.StripANSI(log.Output.LastLine()))
 
 			if storePath == "" || !strings.HasPrefix(storePath, "/nix/store/") {
 				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", fleetLeaf.Flake.Name, configurationI.Name, strconv.Quote(storePath))

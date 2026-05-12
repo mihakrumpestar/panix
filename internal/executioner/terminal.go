@@ -4,15 +4,20 @@ import (
 	"bytes"
 
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+)
+
+var (
+	carriageReturn   = []byte("\r")
+	eraseToEndOfLine = []byte("\x1b[K")
 )
 
 // terminalProcessor holds the cursor state for processing PTY output across
 // segments and reads. It avoids threading (cursorOnNewLine, cursorAtColZero)
 // as return values through a deep call chain.
 type terminalProcessor struct {
-	output          *linesbuffer.LinesBuffer
+	output          *buffer.LinesBufVer
 	cursorOnNewLine bool
 	cursorAtColZero bool
 }
@@ -34,7 +39,7 @@ type terminalProcessor struct {
 // next read's first content should overwrite that line. If no more output
 // comes, finalizeCommandLog removes the transient progress line.
 func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
-	buf = bytes.ReplaceAll(buf, []byte("\x1b[K"), nil)
+	buf = bytes.ReplaceAll(buf, eraseToEndOfLine, nil)
 	if len(buf) == 0 {
 		return
 	}
@@ -45,7 +50,7 @@ func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
 	exm.PendingNewline = false
 	exm.CarriageReturn = false
 
-	segments := bytes.Split(buf, []byte("\r"))
+	segments := bytes.Split(buf, carriageReturn)
 	lastSeg := len(segments) - 1
 
 	for segIdx, seg := range segments {
@@ -168,7 +173,7 @@ func (tp *terminalProcessor) trimANSIOnlyTrailingLines() {
 			break
 		}
 
-		if len(style.StripANSIBytes(nil, last)) > 0 {
+		if len(style.StripANSI(last)) > 0 {
 			break
 		}
 
@@ -178,7 +183,7 @@ func (tp *terminalProcessor) trimANSIOnlyTrailingLines() {
 
 // appendLineContent appends data to the last line in the output buffer.
 // If the buffer is empty, a new line is created.
-func appendLineContent(buf *linesbuffer.LinesBuffer, data []byte) {
+func appendLineContent(buf *buffer.LinesBufVer, data []byte) {
 	if len(data) == 0 {
 		return
 	}

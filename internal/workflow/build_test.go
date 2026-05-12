@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/pkg/linesbuffer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,13 +16,13 @@ func TestBuildOnSuccessStorePathValidation(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		setupBuf func(buf *linesbuffer.LinesBuffer)
+		setupBuf func(buf *buffer.LinesBufVer)
 		wantPath string
 		wantErr  bool
 	}{
 		{
 			"store path after CR overwrite",
-			func(buf *linesbuffer.LinesBuffer) {
+			func(buf *buffer.LinesBufVer) {
 				buf.Write([]byte("[1/1/2 built] building disko"))
 				buf.OverrideLastLine([]byte("/nix/store/abc-disko"))
 			},
@@ -30,22 +30,22 @@ func TestBuildOnSuccessStorePathValidation(t *testing.T) {
 		},
 		{
 			"ANSI stripped from last line",
-			func(buf *linesbuffer.LinesBuffer) {
+			func(buf *buffer.LinesBufVer) {
 				buf.OverrideLastLine([]byte("\x1b[0m/nix/store/xyz\x1b[0m"))
 			},
 			"/nix/store/xyz", false,
 		},
-		{"empty output", func(buf *linesbuffer.LinesBuffer) {}, "", true},
+		{"empty output", func(buf *buffer.LinesBufVer) {}, "", true},
 		{
 			"no store path prefix",
-			func(buf *linesbuffer.LinesBuffer) {
+			func(buf *buffer.LinesBufVer) {
 				buf.Write([]byte("build failed with exit code 1"))
 			},
 			"", true,
 		},
 		{
 			"warning then store path",
-			func(buf *linesbuffer.LinesBuffer) {
+			func(buf *buffer.LinesBufVer) {
 				buf.Write([]byte("warning: dirty tree"))
 				buf.Write([]byte("/nix/store/abc-disko"))
 			},
@@ -57,11 +57,11 @@ func TestBuildOnSuccessStorePathValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cl := &command.CommandLog{Output: linesbuffer.New()}
+			cl := &command.CommandLog{Output: buffer.NewLinesBufVer()}
 			tt.setupBuf(cl.Output)
 
-			storePath := style.StripANSI(string(cl.Output.LastLine()))
-			isValid := storePath != "" && strings.HasPrefix(storePath, "/nix/store/")
+			storePath := string(style.StripANSI(cl.Output.LastLine()))
+			isValid := len(storePath) > 0 && strings.HasPrefix(storePath, "/nix/store/")
 
 			if tt.wantErr {
 				require.False(t, isValid, "expected validation fail for: %q", storePath)

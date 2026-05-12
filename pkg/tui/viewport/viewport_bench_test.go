@@ -11,8 +11,7 @@ import (
 	"github.com/gdamore/tcell/v3/vt"
 )
 
-// makeLines creates n ASCII-only lines (the common case).
-func makeLines(n int) []string {
+func makeStringLines(n int) []string {
 	lines := make([]string, n)
 	for i := range n {
 		lines[i] = "line of text with some content that is reasonably long for testing purposes " + string(rune('A'+i%26))
@@ -21,9 +20,18 @@ func makeLines(n int) []string {
 	return lines
 }
 
+func makeLines(n int) [][]byte {
+	lines := make([][]byte, n)
+	for i := range n {
+		lines[i] = []byte("line of text with some content that is reasonably long for testing purposes " + string(rune('A'+i%26)))
+	}
+
+	return lines
+}
+
 // makeANSILines creates n lines where every 3rd line has ANSI escape codes
 // and every 10th line has wide Unicode characters, matching real TUI output.
-func makeANSILines(n int) []string {
+func makeStringANSILines(n int) []string {
 	lines := make([]string, n)
 	for idx := range n {
 		switch {
@@ -33,6 +41,22 @@ func makeANSILines(n int) []string {
 			lines[idx] = fmt.Sprintf("\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix", idx%6, idx)
 		default:
 			lines[idx] = fmt.Sprintf("line %d: plain text with some content that is reasonably long for testing", idx)
+		}
+	}
+
+	return lines
+}
+
+func makeANSILines(n int) [][]byte {
+	lines := make([][]byte, n)
+	for idx := range n {
+		switch {
+		case idx%10 == 0:
+			lines[idx] = []byte("\x1b[1;34msrc/\x1b[0m \x1b[32mwide-unicode-here\x1b[0m package with a longer description")
+		case idx%3 == 0:
+			lines[idx] = fmt.Appendf(nil, "\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix", idx%6, idx)
+		default:
+			lines[idx] = fmt.Appendf(nil, "line %d: plain text with some content that is reasonably long for testing", idx)
 		}
 	}
 
@@ -117,7 +141,7 @@ func Benchmark__NewAndSetContentLines(b *testing.B) {
 }
 
 func Benchmark_Bubbles__NewAndSetContentLines(b *testing.B) {
-	lines := makeLines(1000)
+	lines := makeStringLines(1000)
 
 	b.ResetTimer()
 
@@ -141,7 +165,7 @@ func Benchmark__SetContentLines(b *testing.B) {
 }
 
 func Benchmark_Bubbles__SetContentLines(b *testing.B) {
-	lines := makeLines(1000)
+	lines := makeStringLines(1000)
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
 
 	b.ResetTimer()
@@ -161,13 +185,13 @@ func Benchmark__View(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__View(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
-	mdl.SetContentLines(makeLines(1000))
+	mdl.SetContentLines(makeStringLines(1000))
 	mdl.SetYOffset(500)
 
 	b.ResetTimer()
@@ -185,13 +209,13 @@ func Benchmark__ViewANSI(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewANSI(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
-	mdl.SetContentLines(makeANSILines(1000))
+	mdl.SetContentLines(makeStringANSILines(1000))
 	mdl.SetYOffset(500)
 
 	b.ResetTimer()
@@ -209,13 +233,13 @@ func Benchmark__ViewANSIScroll(b *testing.B) {
 
 	for i := range b.N {
 		mdl.SetYOffset(i % 977)
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewANSIScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
-	mdl.SetContentLines(makeANSILines(1000))
+	mdl.SetContentLines(makeStringANSILines(1000))
 
 	b.ResetTimer()
 
@@ -233,13 +257,13 @@ func Benchmark__ViewScroll(b *testing.B) {
 
 	for i := range b.N {
 		mdl.SetYOffset(i % 977)
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(24))
-	mdl.SetContentLines(makeLines(1000))
+	mdl.SetContentLines(makeStringLines(1000))
 
 	b.ResetTimer()
 
@@ -259,13 +283,13 @@ func Benchmark__ViewSmall(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewSmall(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
-	mdl.SetContentLines(makeLines(50))
+	mdl.SetContentLines(makeStringLines(50))
 	mdl.SetYOffset(20)
 
 	b.ResetTimer()
@@ -283,13 +307,13 @@ func Benchmark__ViewSmallANSI(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewSmallANSI(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
-	mdl.SetContentLines(makeANSILines(50))
+	mdl.SetContentLines(makeStringANSILines(50))
 	mdl.SetYOffset(20)
 
 	b.ResetTimer()
@@ -307,13 +331,13 @@ func Benchmark__ViewSmallANSIScroll(b *testing.B) {
 
 	for i := range b.N {
 		mdl.SetYOffset(i % 43)
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewSmallANSIScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
-	mdl.SetContentLines(makeANSILines(50))
+	mdl.SetContentLines(makeStringANSILines(50))
 
 	b.ResetTimer()
 
@@ -331,13 +355,13 @@ func Benchmark__ViewSmallScroll(b *testing.B) {
 
 	for i := range b.N {
 		mdl.SetYOffset(i % 43)
-		_ = mdl.View()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark_Bubbles__ViewSmallScroll(b *testing.B) {
 	mdl := bubbles.New(bubbles.WithWidth(80), bubbles.WithHeight(8))
-	mdl.SetContentLines(makeLines(50))
+	mdl.SetContentLines(makeStringLines(50))
 
 	b.ResetTimer()
 
@@ -357,11 +381,11 @@ func Benchmark__SetContentLines_Append(b *testing.B) {
 	b.ResetTimer()
 
 	for i := range b.N {
-		appended := make([]string, len(base)+5)
+		appended := make([][]byte, len(base)+5)
 		copy(appended, base)
 
 		for j := range 5 {
-			appended[len(base)+j] = fmt.Sprintf("\x1b[32mnew line %d\x1b[0m appended content here", i*5+j)
+			appended[len(base)+j] = fmt.Appendf(nil, "\x1b[32mnew line %d\x1b[0m appended content here", i*5+j)
 		}
 
 		mdl.SetContentLines(appended)
@@ -373,20 +397,20 @@ func Benchmark__SetContentLines_Append_ThenView(b *testing.B) {
 	base := makeANSILines(500)
 	mdl := New(WithWidth(80), WithHeight(24))
 	mdl.SetContentLines(base)
-	_ = mdl.View()
+	_ = mdl.Render()
 
 	b.ResetTimer()
 
 	for i := range b.N {
-		appended := make([]string, len(base)+5)
+		appended := make([][]byte, len(base)+5)
 		copy(appended, base)
 
 		for j := range 5 {
-			appended[len(base)+j] = fmt.Sprintf("\x1b[32mnew line %d\x1b[0m appended content here", i*5+j)
+			appended[len(base)+j] = fmt.Appendf(nil, "\x1b[32mnew line %d\x1b[0m appended content here", i*5+j)
 		}
 
 		mdl.SetContentLines(appended)
-		_ = mdl.View()
+		_ = mdl.Render()
 		base = appended
 	}
 }
@@ -428,7 +452,7 @@ func Benchmark_Cview__New(b *testing.B) {
 // --- Cview New + SetContentLines (typical usage) ---
 
 func Benchmark_Cview__NewAndSetContentLines(b *testing.B) {
-	lines := makeLines(1000)
+	lines := makeStringLines(1000)
 	text := strings.Join(lines, "\n")
 
 	b.ResetTimer()
@@ -442,7 +466,7 @@ func Benchmark_Cview__NewAndSetContentLines(b *testing.B) {
 // --- Cview SetContentLines (reuse viewport) ---
 
 func Benchmark_Cview__SetContentLines(b *testing.B) {
-	lines := makeLines(1000)
+	lines := makeStringLines(1000)
 	text := strings.Join(lines, "\n")
 	textView := newCviewTV(24)
 
@@ -456,7 +480,7 @@ func Benchmark_Cview__SetContentLines(b *testing.B) {
 // --- Cview View (large, 1000 lines) ---
 
 func Benchmark_Cview__View(b *testing.B) {
-	lines := makeLines(1000)
+	lines := makeStringLines(1000)
 	text := strings.Join(lines, "\n")
 	textView := newCviewTV(24)
 	textView.SetText(text)
@@ -506,7 +530,7 @@ func Benchmark_Cview__ViewANSIScroll(b *testing.B) {
 }
 
 func Benchmark_Cview__ViewScroll(b *testing.B) {
-	lines := makeLines(1000)
+	lines := makeStringLines(1000)
 	text := strings.Join(lines, "\n")
 	textView := newCviewTV(24)
 	textView.SetText(text)
@@ -524,7 +548,7 @@ func Benchmark_Cview__ViewScroll(b *testing.B) {
 // --- Cview View (small, 50 lines) ---
 
 func Benchmark_Cview__ViewSmall(b *testing.B) {
-	lines := makeLines(50)
+	lines := makeStringLines(50)
 	text := strings.Join(lines, "\n")
 	textView := newCviewTV(8)
 	textView.SetText(text)
@@ -574,7 +598,7 @@ func Benchmark_Cview__ViewSmallANSIScroll(b *testing.B) {
 }
 
 func Benchmark_Cview__ViewSmallScroll(b *testing.B) {
-	lines := makeLines(50)
+	lines := makeStringLines(50)
 	text := strings.Join(lines, "\n")
 	textView := newCviewTV(8)
 	textView.SetText(text)

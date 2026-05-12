@@ -29,7 +29,7 @@ func TestStripANSI(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := style.StripANSI(test.input)
+			got := string(style.StripANSI([]byte(test.input)))
 			if got != test.want {
 				t.Errorf("StripANSI(%q) = %q, want %q", test.input, got, test.want)
 			}

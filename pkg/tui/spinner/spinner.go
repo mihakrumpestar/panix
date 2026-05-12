@@ -1,16 +1,18 @@
 package spinner
 
-import "time"
+import (
+	"time"
+)
 
 // Spinner is an animated spinner component with internal frame state.
 type Spinner struct {
-	frames   []string
+	frames   [][]byte
 	interval time.Duration
 	frame    int
 }
 
 // New creates a new spinner with the given animation frames and tick interval.
-func New(frames []string, interval time.Duration) *Spinner {
+func New(frames [][]byte, interval time.Duration) *Spinner {
 	return &Spinner{frames: frames, interval: interval}
 }
 
@@ -24,9 +26,9 @@ func (s *Spinner) Update() {
 }
 
 // View returns the current frame string.
-func (s *Spinner) View() string {
+func (s *Spinner) Render() []byte {
 	if len(s.frames) == 0 {
-		return ""
+		return nil
 	}
 
 	return s.frames[s.frame%len(s.frames)]

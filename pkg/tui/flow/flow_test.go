@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lucasb-eyer/go-colorful"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
@@ -28,13 +29,15 @@ func testStyles() Styles {
 			Dark:  mustHex("#535862"),
 			Light: mustHex("#6B7280"),
 		},
-		Pill:            white,
-		StatusRunning:   style.NewStyle().Foreground(style.Color("#00BFFF")),
-		StatusFailed:    style.NewStyle().Foreground(style.Color("#FF5555")),
-		StatusDone:      style.NewStyle().Foreground(style.Color("#50FA7B")),
+		Pill: white,
+		Status: StatusStyles{
+			Running: style.NewStyle().Foreground(style.Color("#00BFFF")),
+			Failed:  style.NewStyle().Foreground(style.Color("#FF5555")),
+			Done:    style.NewStyle().Foreground(style.Color("#50FA7B")),
+		},
 		StatusSeparator: style.NewStyle().Foreground(style.Color("#6272A4")),
 		Arrow:           style.NewStyle().Foreground(style.Color("#6272A4")),
-		PhaseArrow:      string(rune(0x1FB74)),
+		PhaseArrow:      []byte(string(rune(0x1FB74))),
 		SelectionBg:     style.Color("#3B3258"),
 	}
 }
@@ -43,7 +46,7 @@ func TestPhaseFlow_Empty(t *testing.T) {
 	t.Parallel()
 
 	flowObj := New()
-	if got := flowObj.String(); got != "" {
+	if got := buffer.LinesBufToStringForTests(flowObj.Render()); got != "" {
 		t.Errorf("Empty PhaseFlow should return \"\", got %q", got)
 	}
 }
@@ -52,7 +55,7 @@ func TestPhaseFlow_NoPhases(t *testing.T) {
 	t.Parallel()
 
 	flowObj := New().Width(80).Styles(testStyles())
-	if got := flowObj.String(); got != "" {
+	if got := buffer.LinesBufToStringForTests(flowObj.Render()); got != "" {
 		t.Errorf("No phases should return \"\", got %q", got)
 	}
 }
@@ -61,13 +64,13 @@ func TestPhaseFlow_SinglePhase(t *testing.T) {
 	t.Parallel()
 
 	flowObj := New().Width(20).Phases("INSPECT").Styles(testStyles())
-	got := flowObj.String()
+	got := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	if got == "" {
 		t.Fatal("Should produce output")
 	}
 
-	lines := strings.Split(style.StripANSI(got), "\n")
+	lines := strings.Split(string(style.StripANSI([]byte(got))), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("Expected 2 lines, got %d: %v", len(lines), lines)
 	}
@@ -81,16 +84,16 @@ func TestPhaseFlow_MultiplePhases_EvenDistribution(t *testing.T) {
 	t.Parallel()
 
 	flowObj := New().Width(60).Phases("A", "B", "C").Styles(testStyles())
-	got := flowObj.String()
+	got := buffer.LinesBufToStringForTests(flowObj.Render())
 
-	visible := style.StripANSI(got)
+	visible := string(style.StripANSI([]byte(got)))
 
 	for line := range strings.SplitSeq(visible, "\n") {
 		if line == "" {
 			continue
 		}
 
-		w := style.CellWidth(line)
+		w := style.CellWidth([]byte(line))
 		if w != 60 {
 			t.Errorf("Line width = %d, want 60: %q", w, line)
 		}
@@ -106,8 +109,8 @@ func TestPhaseFlow_StatusLine(t *testing.T) {
 		{Running: 0, Failed: 0, Done: 3},
 	})
 
-	got := flowObj.String()
-	visible := style.StripANSI(got)
+	got := buffer.LinesBufToStringForTests(flowObj.Render())
+	visible := string(style.StripANSI([]byte(got)))
 	lines := strings.Split(visible, "\n")
 
 	if len(lines) < 2 {
@@ -134,8 +137,8 @@ func TestPhaseFlow_Cache_SameData(t *testing.T) {
 	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
 	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
-	result1 := flowObj.String()
-	result2 := flowObj.String()
+	result1 := buffer.LinesBufToStringForTests(flowObj.Render())
+	result2 := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	if result1 != result2 {
 		t.Error("Same data should produce same cached result")
@@ -147,13 +150,13 @@ func TestPhaseFlow_Cache_DataChange(t *testing.T) {
 
 	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
 	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
-	result1 := flowObj.String()
+	result1 := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	flowObj.SetData([]PhaseData{{Running: 2}, {Running: 1}})
-	result2 := flowObj.String()
+	result2 := buffer.LinesBufToStringForTests(flowObj.Render())
 
-	visible1 := style.StripANSI(result1)
-	visible2 := style.StripANSI(result2)
+	visible1 := string(style.StripANSI([]byte(result1)))
+	visible2 := string(style.StripANSI([]byte(result2)))
 
 	if visible1 == visible2 {
 		t.Error("Different data should produce different output")
@@ -165,10 +168,10 @@ func TestPhaseFlow_Cache_WidthChange(t *testing.T) {
 
 	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
 	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
-	result1 := flowObj.String()
+	result1 := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	flowObj.Width(40)
-	result2 := flowObj.String()
+	result2 := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	if result1 == result2 {
 		t.Error("Width change should produce different output")
@@ -282,10 +285,10 @@ func TestPhaseFlow_SelectionReRender(t *testing.T) {
 	flowObj := New().Width(60).Phases("A", "B").Styles(testStyles())
 	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
-	resultNoSel := flowObj.String()
+	resultNoSel := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	flowObj.HandleNavigation("right", false)
-	resultWithSel := flowObj.String()
+	resultWithSel := buffer.LinesBufToStringForTests(flowObj.Render())
 
 	if resultNoSel == resultWithSel {
 		t.Error("Selection change should produce different output")
@@ -301,8 +304,8 @@ func TestPhaseFlow_ArrowOnPhaseNameRow(t *testing.T) {
 	flowObj := New().Width(40).Phases("A", "B").Styles(testStyles())
 	flowObj.SetData([]PhaseData{{Running: 1}, {Running: 1}})
 
-	got := flowObj.String()
-	visible := style.StripANSI(got)
+	got := buffer.LinesBufToStringForTests(flowObj.Render())
+	visible := string(style.StripANSI([]byte(got)))
 	lines := strings.Split(visible, "\n")
 
 	if len(lines) < 2 {

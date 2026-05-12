@@ -50,7 +50,8 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = buildLogs.View(viewportsInst, spinnersInst)
+		result := buildLogs.Render(viewportsInst, spinnersInst)
+		_ = result
 	}
 }
 
