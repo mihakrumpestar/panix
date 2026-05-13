@@ -2,8 +2,6 @@ package table
 
 import (
 	"bytes"
-	"fmt"
-	"strconv"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
@@ -34,6 +32,7 @@ type Table struct {
 	selectedIndex int
 	selBgStyle    style.Style
 	zonePrefix    string
+	zoneIDs       []zeroterm.ZoneID
 
 	colWidths       []int
 	colWidthsCached bool
@@ -161,6 +160,7 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 	t.zonePrefix = prefix
 	t.outDirty = true
 	t.zoneStarts = nil
+	t.zoneIDs = nil
 
 	return t
 }
@@ -174,8 +174,19 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 		return false
 	}
 
-	lines := zeroterm.CurrentLines()
-	if msg.Y < 0 || msg.Y >= lines.Len() {
+	if msg.Lines == nil || msg.Y < 0 || msg.Y >= msg.Lines.Len() {
+		if t.selectedIndex >= 0 {
+			t.selectedIndex = -1
+			t.outDirty = true
+
+			return true
+		}
+
+		return false
+	}
+
+	clickedID, ok := zeroterm.ZoneIDAtCol(msg.Lines.Line(msg.Y), msg.X)
+	if !ok {
 		if t.selectedIndex >= 0 {
 			t.selectedIndex = -1
 			t.outDirty = true
@@ -187,8 +198,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	}
 
 	for idx := range len(t.rows) {
-		zoneName := fmt.Sprintf("%s-%d", t.zonePrefix, idx)
-		if zeroterm.IsZoneAtLine(lines.Line(msg.Y), msg.X, zoneName) {
+		if idx < len(t.zoneIDs) && t.zoneIDs[idx].Equal(clickedID) {
 			if t.selectedIndex != idx {
 				t.selectedIndex = idx
 				t.outDirty = true
@@ -384,19 +394,21 @@ func (t *Table) updateZoneMarkers() {
 	if cap(t.zoneStarts) < numRows {
 		t.zoneStarts = make([][]byte, numRows)
 		t.zoneEnds = make([][]byte, numRows)
+		t.zoneIDs = make([]zeroterm.ZoneID, numRows)
 	} else {
 		t.zoneStarts = t.zoneStarts[:numRows]
 		t.zoneEnds = t.zoneEnds[:numRows]
+		t.zoneIDs = t.zoneIDs[:numRows]
 	}
 
 	var openBuf, closeBuf [16]byte
 
 	for rowIdx := range numRows {
-		zoneName := t.zonePrefix + "-" + strconv.Itoa(rowIdx)
-		id := zeroterm.EnsureZone(zoneName)
-		open := zeroterm.FormatZoneOpen(openBuf[:0], id)
+		id := zeroterm.NewZoneID()
+		t.zoneIDs[rowIdx] = id
+		open := id.FormatOpen(openBuf[:0])
 		t.zoneStarts[rowIdx] = append([]byte(nil), open...)
-		close := zeroterm.FormatZoneClose(closeBuf[:0], id)
+		close := id.FormatClose(closeBuf[:0])
 		t.zoneEnds[rowIdx] = append([]byte(nil), close...)
 	}
 }

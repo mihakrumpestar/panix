@@ -6,6 +6,7 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"go.uber.org/atomic"
 )
 
@@ -94,7 +95,7 @@ type PhaseFlow struct {
 	styles        Styles
 	selectedIndex int
 	zonePrefix    string
-	zoneIDs       []uint16
+	zoneIDs       []zeroterm.ZoneID
 
 	cacheData   []PhaseData
 	cacheWidth  int

@@ -295,7 +295,7 @@ func Benchmark__ZoneMarkBuf(b *testing.B) {
 
 	content := makePlainContent(200, 50)
 	contentBytes := []byte(content)
-	id := EnsureZone("test-zone-buf")
+	id := NewZoneID()
 
 	lb := buffer.NewLinesBuf()
 	defer lb.Release()
@@ -304,7 +304,7 @@ func Benchmark__ZoneMarkBuf(b *testing.B) {
 
 	for b.Loop() {
 		lb.Reset()
-		MarkBufByID(id, contentBytes, lb)
+		id.MarkBuf(contentBytes, lb)
 	}
 }
 

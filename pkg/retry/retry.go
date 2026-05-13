@@ -29,8 +29,12 @@ func NewTaskRetry() *Retry {
 // Multiple goroutines may call Wait concurrently — all are woken by a single
 // Trigger (broadcast via channel close).
 func (r *Retry) Wait(ctx context.Context) error {
+	r.mu.Lock()
+	ch := r.trigger
+	r.mu.Unlock()
+
 	select {
-	case <-r.trigger:
+	case <-ch:
 		return nil
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "context canceled")

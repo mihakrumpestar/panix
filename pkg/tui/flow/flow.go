@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -119,19 +118,17 @@ func (pf *PhaseFlow) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 		return false
 	}
 
-	lines := zeroterm.CurrentLines()
+	if msg.Lines == nil || msg.Y < 0 || msg.Y >= msg.Lines.Len() {
+		return pf.deselectIfSelected()
+	}
 
-	if msg.Y < 0 || msg.Y >= lines.Len() {
+	clickedID, ok := zeroterm.ZoneIDAtCol(msg.Lines.Line(msg.Y), msg.X)
+	if !ok {
 		return pf.deselectIfSelected()
 	}
 
 	for idx := range pf.phases {
-		if pf.zonePrefix == "" {
-			continue
-		}
-
-		zoneName := fmt.Sprintf("%s-%d", pf.zonePrefix, idx)
-		if zeroterm.IsZoneAtLine(lines.Line(msg.Y), msg.X, zoneName) {
+		if idx < len(pf.zoneIDs) && pf.zoneIDs[idx].Equal(clickedID) {
 			if pf.selectedIndex != idx {
 				pf.selectedIndex = idx
 				pf.outDirty = true
@@ -162,9 +159,9 @@ func (pf *PhaseFlow) ensureZoneIDs() {
 		return
 	}
 
-	pf.zoneIDs = make([]uint16, len(pf.phases))
+	pf.zoneIDs = make([]zeroterm.ZoneID, len(pf.phases))
 	for idx := range pf.phases {
-		pf.zoneIDs[idx] = zeroterm.EnsureZone(fmt.Sprintf("%s-%d", pf.zonePrefix, idx))
+		pf.zoneIDs[idx] = zeroterm.NewZoneID()
 	}
 }
 

@@ -36,7 +36,7 @@ type item struct {
 	contentVersion uint64
 	lastWidth      int
 	lastHeight     int
-	zoneID         uint16
+	zoneID         zeroterm.ZoneID
 	zonedOutput    *buffer.LinesBuf
 }
 
@@ -267,7 +267,7 @@ func (v *Viewports) render(
 	}
 
 	itm.zonedOutput.Reset()
-	zeroterm.MarkLinesByID(itm.zoneID, rendered, itm.zonedOutput)
+	itm.zoneID.MarkLines(rendered, itm.zonedOutput)
 
 	return itm.zonedOutput
 }
@@ -323,7 +323,7 @@ func (v *Viewports) getOrCreateItem(
 	itm = &item{
 		model:       tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, explicitWidth, bordered, scrollbar)...),
 		content:     content,
-		zoneID:      zeroterm.EnsureZone(xpath.String()),
+		zoneID:      zeroterm.NewZoneID(),
 		zonedOutput: buffer.NewLinesBuf(),
 	}
 
@@ -392,13 +392,19 @@ func (v *Viewports) activeItem() *item {
 }
 
 func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
+	if click.Lines == nil || click.Y < 0 || click.Y >= click.Lines.Len() {
+		return ""
+	}
+
+	clickedID, ok := zeroterm.ZoneIDAtCol(click.Lines.Line(click.Y), click.X)
+	if !ok {
+		return ""
+	}
+
 	var candidates []xpath.Xpath
-
-	lines := zeroterm.CurrentLines()
-
-	for xp := range v.items.Records() {
-		if click.Y >= 0 && click.Y < lines.Len() && zeroterm.IsZoneAtLine(lines.Line(click.Y), click.X, xp.String()) {
-			candidates = append(candidates, xp)
+	for _, pair := range v.items.Pairs() {
+		if pair.Value.zoneID.Equal(clickedID) {
+			candidates = append(candidates, pair.Key)
 		}
 	}
 

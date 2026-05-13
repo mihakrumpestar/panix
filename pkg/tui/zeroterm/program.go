@@ -148,11 +148,11 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 						return nil
 					}
 
-					cmds := p.model.Update(msg)
+					cmds := p.model.Update(p.enrichMouseMsg(msg))
 					p.processCmds(cmds)
 				}
 			} else {
-				cmds := p.model.Update(msg)
+				cmds := p.model.Update(p.enrichMouseMsg(msg))
 				p.processCmds(cmds)
 			}
 
@@ -188,8 +188,6 @@ func (p *Program) renderFrame() {
 		return
 	}
 
-	SetCurrentLines(cur)
-
 	prevBuf := p.frames[1-p.curFrame]
 
 	if p.raw || p.forceFullRender {
@@ -224,6 +222,18 @@ func (p *Program) renderFrame() {
 	}
 
 	p.curFrame = 1 - p.curFrame
+}
+
+// enrichMouseMsg injects the current frame into MouseClickMsg so
+// click handlers can do zone hit-testing without a global.
+func (p *Program) enrichMouseMsg(msg Msg) Msg {
+	if click, ok := msg.(MouseClickMsg); ok {
+		click.Lines = p.frames[p.curFrame]
+
+		return click
+	}
+
+	return msg
 }
 
 func (p *Program) processCmds(cmd Cmd) {

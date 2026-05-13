@@ -581,9 +581,8 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 	buf := buffer.NewLinesBufDiff()
 	buf.WriteLine([]byte("no zones here"))
 	buf.WriteLine([]byte("another line"))
-	zeroterm.SetCurrentLines(buf)
 
-	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0})
+	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0, Lines: buf})
 
 	if !changed {
 		t.Error("HandleMouseClick should return true when deselecting via outside click")

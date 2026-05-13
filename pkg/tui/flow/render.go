@@ -7,7 +7,6 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
-	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
 
 func (pf *PhaseFlow) renderInto(lb *buffer.LinesBuf) {
@@ -68,7 +67,7 @@ func (pf *PhaseFlow) buildCellBuf(idx int, data PhaseData, colWidth int, isSelec
 
 	if pf.zonePrefix != "" && idx < len(pf.zoneIDs) {
 		pf.zonedBuf.Reset()
-		zeroterm.MarkLinesByID(pf.zoneIDs[idx], pf.cellBuf, pf.zonedBuf)
+		pf.zoneIDs[idx].MarkLines(pf.cellBuf, pf.zonedBuf)
 		pf.cellBuf, pf.zonedBuf = pf.zonedBuf, pf.cellBuf
 	}
 

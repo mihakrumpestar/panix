@@ -483,12 +483,11 @@ func TestUpdate_MouseClick(t *testing.T) {
 		}
 	}
 
-	zeroterm.SetCurrentLines(buf)
-
 	click := zeroterm.MouseClickMsg{
 		X:      5,
 		Y:      0,
 		Button: zeroterm.MouseLeft,
+		Lines:  buf,
 	}
 
 	_ = viewports.Update(click)

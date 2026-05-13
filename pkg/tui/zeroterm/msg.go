@@ -26,6 +26,7 @@ type MouseClickMsg struct {
 	X      int
 	Y      int
 	Button MouseButton
+	Lines  *buffer.LinesBufDiff
 }
 
 type MouseWheelMsg struct {
