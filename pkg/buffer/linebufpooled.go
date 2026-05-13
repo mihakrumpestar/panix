@@ -4,7 +4,7 @@ import "sync"
 
 var lineBufPool = sync.Pool{
 	New: func() any {
-		return NewLineBuf()
+		return &LineBufPooled{LineBuf: NewLineBuf()}
 	},
 }
 

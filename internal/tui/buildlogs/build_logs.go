@@ -417,11 +417,11 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	cmdIndent := indent + treeStep
 	cmdXpath := phaseXpath.NewXpathWithAppend(cmd.Description)
 
-	var label string
+	label := buffer.NewLineBufPooled()
 	if b.conf.Flags.Tui.ShowCommandsInLabels && cmd.Command != nil && len(cmd.Command.Bytes()) > 2 {
-		label = string(cmd.Command.Bytes())
+		label.Write(cmd.Command.Bytes())
 	} else {
-		label = cmd.Description
+		label.Write([]byte(cmd.Description))
 	}
 
 	var labelShowsCommands uint64
@@ -443,7 +443,15 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	iconWidth := style.CellWidth(b.cmdIconBuf.Line(0))
 	labelWidth := cmdIndent + iconWidth + durWidth
 	labelXpath := cmdXpath.NewXpathWithAppend("label")
-	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{[]byte(label)}, labelShowsCommands, labelWidth)
+	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{label.Bytes()}, labelShowsCommands, labelWidth)
+
+	label.Release()
+
+	if cmd.Output.Len() > 0 {
+		for range labelResult.Len() - 1 {
+			b.conf.ColorScheme.Tree.Enumerator.RenderLineInto(b.cmdIconBuf, []byte("│"))
+		}
+	}
 
 	b.cmdLabelBuf.Reset()
 
@@ -483,14 +491,12 @@ func (b *BuildLogs) addCommandChildren(
 
 	err := tasCached.EndError
 	if err != nil {
-		errMsg := append(
-			append(
-				append([]byte{}, b.conf.ColorScheme.Chars.ErrorIcon...),
-				" Command failed: "...,
-			),
-			err.Error()...,
-		)
-		errResult := b.viewports.RenderLabelViewport(errXpath, [][]byte{errMsg}, 0, cmdIndent+treeStep)
+		errMsg := buffer.NewLineBufPooled()
+		errMsg.Write(b.conf.ColorScheme.Chars.ErrorIcon)
+		errMsg.WriteString(" Command failed: ")
+		errMsg.WriteString(err.Error())
+
+		errResult := b.viewports.RenderLabelViewport(errXpath, [][]byte{errMsg.Bytes()}, 0, cmdIndent+treeStep)
 		b.errBuf.Reset()
 		b.conf.ColorScheme.Error.Color.RenderInto(b.errBuf, errResult.Lines())
 		errNodeBuf := b.acquireNodeBuf()

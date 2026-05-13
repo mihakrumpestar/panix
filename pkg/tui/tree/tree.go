@@ -48,6 +48,7 @@ func (n *Node) ChildContent(content *buffer.LinesBuf) *Node {
 	return child
 }
 
+// Len returns the number of node children.
 func (n *Node) Len() int {
 	return len(n.children)
 }
