@@ -60,14 +60,14 @@ func Benchmark_Lipgloss__Wrap_LongParagraph(b *testing.B) {
 
 func Benchmark__Wrap_WithANSI(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#8BE9FD"))
-	ansi := NewANSIStyle(sty)
+	ansi := newANSIStyle(sty)
 
 	renderBuf := buffer.NewLinesBuf()
-	ansi.Render(renderBuf, [][]byte{[]byte("📋 flake1 ")})
+	ansi.render(renderBuf, [][]byte{[]byte("📋 flake1 ")})
 	rendered0 := make([]byte, len(renderBuf.Line(0)))
 	copy(rendered0, renderBuf.Line(0))
 
-	ansi.Render(renderBuf, [][]byte{[]byte("(1.23s)")})
+	ansi.render(renderBuf, [][]byte{[]byte("(1.23s)")})
 	rendered1 := make([]byte, len(renderBuf.Line(0)))
 	copy(rendered1, renderBuf.Line(0))
 	renderBuf.Release()

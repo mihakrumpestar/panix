@@ -510,7 +510,7 @@ func (b *BuildLogs) entityNode(indent int, entity colorscheme.ColorSchemeLogEnti
 
 	rightRaw := b.formatDuration(dur)
 
-	leftWidth := len(entity.Icon) + 1 + len(name)
+	leftWidth := style.CellWidth(entity.Icon) + 1 + len(name)
 	rightWidth := len(rightRaw)
 
 	line := b.layoutLineStyled(indent, entity.Color, leftRaw, rightRaw, leftWidth, rightWidth)
@@ -521,7 +521,6 @@ func (b *BuildLogs) entityNode(indent int, entity colorscheme.ColorSchemeLogEnti
 }
 
 // layoutLineStyled renders styled left + pad + styled right into a node buffer.
-// Zero-allocation for the common color-only case.
 func (b *BuildLogs) layoutLineStyled(indent int, sty style.Style, leftRaw, rightRaw []byte, leftWidth, rightWidth int) *buffer.LinesBuf {
 	level := indent / treeStep
 	available := b.contentWidth - indent - (timerIndent - level)
@@ -535,28 +534,10 @@ func (b *BuildLogs) layoutLineStyled(indent int, sty style.Style, leftRaw, right
 	}
 
 	lb := b.acquireNodeBuf()
-
-	// For color-only styles: prefix + leftRaw + reset + pad + prefix + rightRaw + reset
-	// This is exactly what WriteLine3 gives us when we pass styled bytes.
-	// We build the styled bytes via RenderLine which returns a new []byte.
-	// For the no-layout case (common), we can avoid allocs by writing directly.
-	if !sty.HasLayoutProperties() {
-		prefix := sty.StylePrefix()
-		reset := style.ANSIReset()
-
-		if len(prefix) == 0 {
-			lb.WriteLine3(leftRaw, padBytes, rightRaw)
-		} else {
-			// Write prefix + leftRaw + reset + padBytes + prefix + rightRaw + reset
-			// as one line using AppendToLine
-			lb.EmptyLine()
-			lb.AppendToLine(prefix, leftRaw, reset, padBytes, prefix, rightRaw, reset)
-		}
-	} else {
-		left := sty.RenderLine(leftRaw)
-		right := sty.RenderLine(rightRaw)
-		lb.WriteLine3(left, padBytes, right)
-	}
+	lb.EmptyLine()
+	sty.RenderAppend(lb, leftRaw)
+	lb.AppendToLine(padBytes)
+	sty.RenderAppend(lb, rightRaw)
 
 	return lb
 }

@@ -49,20 +49,19 @@ type Styles struct {
 	GradientDefault GradientPair
 	Pill            style.Style
 
-	Status         StatusStyles
-	StatusSel      StatusStyles
+	Status          StatusStyles
+	StatusSel       StatusStyles
 	StatusSeparator style.Style
 
 	Arrow       style.Style
 	PhaseArrow  []byte
 	SelectionBg style.Color
 
-	SelBgPrefix []byte
-	BgSpace     []byte
+	SelBgStyle style.Style
 }
 
 // InitSelectedStyles pre-computes the selected-background variants of status
-// styles and the SelectionBg prefix. Called automatically by Styles().
+// styles and the SelectionBg style. Called automatically by Styles().
 func (s *Styles) InitSelectedStyles() {
 	bg := s.SelectionBg
 	s.StatusSel = StatusStyles{
@@ -70,15 +69,7 @@ func (s *Styles) InitSelectedStyles() {
 		Failed:  s.Status.Failed.Background(bg),
 		Done:    s.Status.Done.Background(bg),
 	}
-	s.SelBgPrefix = style.ColorToBgPrefix(bg)
-
-	prefix := s.SelBgPrefix
-	reset := style.ANSIReset()
-	bgSpace := make([]byte, 0, len(prefix)+1+len(reset))
-	bgSpace = append(bgSpace, prefix...)
-	bgSpace = append(bgSpace, ' ')
-	bgSpace = append(bgSpace, reset...)
-	s.BgSpace = bgSpace
+	s.SelBgStyle = style.NewStyle().Background(bg)
 }
 
 // PhaseData holds the per-phase counts shown beneath the pill.

@@ -1,6 +1,7 @@
 package style
 
 import (
+	"bytes"
 	"slices"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -40,6 +41,11 @@ type Style struct {
 
 func NewStyle() Style {
 	return Style{}
+}
+
+// GetAlign returns the alignment position.
+func (s Style) GetAlign() Position {
+	return s.align
 }
 
 // Foreground sets the text foreground color. Returns a copy.
@@ -218,9 +224,6 @@ func (s Style) GetBackground() Color { return s.bgColor }
 // GetWidth returns the explicit width set on the style, or 0 if none.
 func (s Style) GetWidth() int { return s.width }
 
-// GetAlign returns the text alignment set on the style.
-func (s Style) GetAlign() Position { return s.align }
-
 // TruncateToWidth truncates str to at most maxW visible cell width, preserving
 // any ANSI escape sequences. When ellipsis is true and the string is actually
 // truncated, ".." replaces the last 2 cells so overflowing content is visually
@@ -230,29 +233,7 @@ func TruncateToWidth(str []byte, maxW int, ellipsis bool) []byte {
 	return truncateToWidth(str, maxW, ellipsis)
 }
 
-// FgPrefix returns the pre-computed ANSI foreground prefix string.
-func (s Style) FgPrefix() []byte {
-	return s.fgPrefix
-}
-
-// BgPrefix returns the pre-computed ANSI background prefix string.
-func (s Style) BgPrefix() []byte {
-	return s.bgPrefix
-}
-
-// StylePrefix returns the cached ANSI escape sequence for this style's
-// color/bold attributes (fg + bg + bold combined). Nil if no styling.
-func (s Style) StylePrefix() []byte {
-	return s.prefix
-}
-
-// HasLayoutProperties reports whether this style has layout properties
-// (width, padding, borders) that require the full rendering pipeline.
-func (s Style) HasLayoutProperties() bool {
-	return s.hasLayoutProperties()
-}
-
-// String returns the ANSI escape sequence for this style's color/bold
+// Bytes returns the ANSI escape sequence for this style's color/bold
 // attributes, without applying any layout.
 func (s Style) Bytes() []byte {
 	buf := s.stylePrefix()
@@ -329,8 +310,11 @@ func (s Style) RenderLineInto(dst *buffer.LinesBuf, line []byte) {
 		prefix := s.stylePrefix()
 		if len(prefix) == 0 && len(ansiReset) == 0 {
 			dst.WriteLine(line)
-		} else {
+		} else if !bytes.Contains(line, ansiReset) {
 			dst.WriteLine3(prefix, line, ansiReset)
+		} else {
+			dst.EmptyLine()
+			s.RenderAppend(dst, line)
 		}
 
 		return
@@ -340,9 +324,38 @@ func (s Style) RenderLineInto(dst *buffer.LinesBuf, line []byte) {
 	s.renderColorOnlyInto(dst, result)
 }
 
+// RenderAppend applies the style's color/bold attributes to content and
+// appends the result to the current line of dst. Layout properties
+// (width, padding, borders) are ignored — the caller controls line structure.
+// After every ANSI reset (\x1b[m) found in content, the style prefix
+// is re-emitted so that the style persists across pre-styled content
+// (e.g. table cells with selection background).
+func (s Style) RenderAppend(dst *buffer.LinesBuf, content []byte) {
+	prefix := s.stylePrefix()
+	reset := ansiReset
+
+	if len(prefix) == 0 && len(reset) == 0 {
+		dst.AppendToLine(content)
+
+		return
+	}
+
+	if len(prefix) == 0 {
+		dst.AppendToLine(content, reset)
+
+		return
+	}
+
+	dst.AppendToLine(prefix)
+	appendWithResetReemit(dst, content, prefix, reset)
+	dst.AppendToLine(reset)
+}
+
 // renderColorOnlyInto applies ANSI foreground/background/bold sequences to
 // every line of content, writing directly into dst. This avoids the contiguous
 // buffer + [][]byte slice allocation of renderColorOnly.
+// After every ANSI reset (\x1b[m) found in a line, the style prefix is
+// re-emitted so that the style persists across pre-styled content.
 func (s Style) renderColorOnlyInto(dst *buffer.LinesBuf, content [][]byte) {
 	if content == nil {
 		return
@@ -359,8 +372,42 @@ func (s Style) renderColorOnlyInto(dst *buffer.LinesBuf, content [][]byte) {
 		return
 	}
 
+	if len(prefix) == 0 {
+		for _, line := range content {
+			dst.WriteLine2(line, reset)
+		}
+
+		return
+	}
+
 	for _, line := range content {
-		dst.WriteLine3(prefix, line, reset)
+		if !bytes.Contains(line, reset) {
+			dst.WriteLine3(prefix, line, reset)
+
+			continue
+		}
+
+		dst.EmptyLine()
+		dst.AppendToLine(prefix)
+		appendWithResetReemit(dst, line, prefix, reset)
+	}
+}
+
+// appendWithResetReemit appends content to the current line of dst.
+// After every occurrence of reset in content, prefix is re-emitted.
+func appendWithResetReemit(dst *buffer.LinesBuf, content, prefix, reset []byte) {
+	for len(content) > 0 {
+		idx := bytes.Index(content, reset)
+		if idx < 0 {
+			dst.AppendToLine(content)
+
+			break
+		}
+
+		end := idx + len(reset)
+		dst.AppendToLine(content[:end])
+		dst.AppendToLine(prefix)
+		content = content[end:]
 	}
 }
 
@@ -592,27 +639,67 @@ func (s Style) renderColorOnly(content [][]byte) [][]byte {
 	reset := ansiReset
 	prefixLen := len(prefix)
 	resetLen := len(reset)
-	perLine := prefixLen + resetLen
 
-	// Single contiguous buffer for all line data — 1 malloc instead of N.
-	totalSize := 0
+	hasEmbeddedReset := false
 	for _, line := range content {
-		totalSize += perLine + len(line)
+		if bytes.Contains(line, reset) {
+			hasEmbeddedReset = true
+
+			break
+		}
 	}
 
-	buf := make([]byte, totalSize)
-	result := make([][]byte, len(content))
+	if !hasEmbeddedReset {
+		perLine := prefixLen + resetLen
 
-	off := 0
+		totalSize := 0
+		for _, line := range content {
+			totalSize += perLine + len(line)
+		}
+
+		buf := make([]byte, totalSize)
+		result := make([][]byte, len(content))
+
+		off := 0
+		for idx, line := range content {
+			start := off
+			off += copy(buf[off:], prefix)
+			off += copy(buf[off:], line)
+			off += copy(buf[off:], reset)
+			result[idx] = buf[start:off]
+		}
+
+		return result
+	}
+
+	result := make([][]byte, len(content))
 	for idx, line := range content {
-		start := off
-		off += copy(buf[off:], prefix)
-		off += copy(buf[off:], line)
-		off += copy(buf[off:], reset)
-		result[idx] = buf[start:off]
+		var buf []byte
+		buf = append(buf, prefix...)
+		buf = appendWithResetReemitBytes(buf, line, prefix, reset)
+		buf = append(buf, reset...)
+		result[idx] = buf
 	}
 
 	return result
+}
+
+func appendWithResetReemitBytes(buf, content, prefix, reset []byte) []byte {
+	for len(content) > 0 {
+		idx := bytes.Index(content, reset)
+		if idx < 0 {
+			buf = append(buf, content...)
+
+			break
+		}
+
+		end := idx + len(reset)
+		buf = append(buf, content[:end]...)
+		buf = append(buf, prefix...)
+		content = content[end:]
+	}
+
+	return buf
 }
 
 // stylePrefix builds the ANSI escape sequence for fg/bg/bold.

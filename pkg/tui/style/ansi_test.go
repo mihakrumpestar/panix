@@ -8,7 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
-func TestANSIStyle_Equivalence(t *testing.T) {
+func TestAnsiStyle_Equivalence(t *testing.T) {
 	t.Parallel()
 
 	colors := []string{"#F1FA8C", "#50FA7B", "#FF5555", "#8BE9FD"}
@@ -34,14 +34,14 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 				sty = sty.Bold(true)
 			}
 
-			ansi := NewANSIStyle(sty)
+			ansi := newANSIStyle(sty)
 
 			for _, input := range tests {
 				expected := lgSty.Render(input)
 				inputBytes := bytesFromLines(strings.Split(input, "\n"))
 
 				buf := buffer.NewLinesBuf()
-				ansi.Render(buf, inputBytes)
+				ansi.render(buf, inputBytes)
 				got := buf.Lines()
 
 				expectedVisible := string(StripANSI([]byte(expected)))
@@ -61,17 +61,17 @@ func TestANSIStyle_Equivalence(t *testing.T) {
 	}
 }
 
-func TestANSIStyle_EmptyString(t *testing.T) {
+func TestAnsiStyle_EmptyString(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Foreground(Color("#F1FA8C"))
-	ansi := NewANSIStyle(sty)
+	ansi := newANSIStyle(sty)
 
 	buf := buffer.NewLinesBuf()
-	ansi.Render(buf, nil)
+	ansi.render(buf, nil)
 
 	if buf.Len() != 0 {
-		t.Errorf("ANSIStyle.Render(nil) = %d lines, want 0", buf.Len())
+		t.Errorf("ansiStyle.render(nil) = %d lines, want 0", buf.Len())
 	}
 
 	buf.Release()

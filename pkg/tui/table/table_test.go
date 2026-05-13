@@ -471,6 +471,106 @@ func TestTable_SelectionBackgroundWithFgColor(t *testing.T) {
 	}
 }
 
+func TestTable_SelectionBackgroundCoversPadding(t *testing.T) {
+	t.Parallel()
+
+	selBg := style.Color("#333333")
+	tbl := New(Config{
+		Width:               40,
+		Border:              style.NormalBorder(),
+		SelectionBackground: selBg,
+		Headers:             strLines("A", "B"),
+		ColumnStyles: []style.Style{
+			style.NewStyle().Width(10),
+			style.NewStyle().Width(15),
+		},
+	})
+	tbl.SetRows(strRows([]string{"x", "yyy"}))
+	tbl.Select(0)
+	got := buffer.LinesBufToStringForTests(tbl.Render())
+
+	lines := strings.Split(got, "\n")
+
+	selLine := ""
+
+	for _, line := range lines {
+		plain := stripANSI(line)
+		if strings.Contains(plain, "x") && strings.Contains(plain, "yyy") {
+			selLine = line
+
+			break
+		}
+	}
+
+	if selLine == "" {
+		t.Fatal("Could not find selected data row")
+	}
+
+	bgPrefix := "\x1b[48;2;51;51;51m"
+
+	cellXPortion := selLine
+	if idx := strings.LastIndex(cellXPortion, "x"); idx >= 0 {
+		cellXPortion = cellXPortion[:idx+1]
+	}
+
+	nextAfterX := selLine[len(cellXPortion):]
+	if !strings.Contains(nextAfterX, bgPrefix) {
+		t.Errorf("Padding after 'x' cell missing selection bg.\nFull line: %s\nAfter x: %q", selLine, nextAfterX)
+	}
+}
+
+func TestTable_SelectionBackgroundCoversInnerSeparators(t *testing.T) {
+	t.Parallel()
+
+	selBg := style.Color("#333333")
+	tbl := New(Config{
+		Width:               30,
+		Border:              style.NormalBorder(),
+		SelectionBackground: selBg,
+		Headers:             strLines("A", "B", "C"),
+	})
+	tbl.SetRows(strRows([]string{"x", "y", "z"}))
+	tbl.Select(0)
+	got := buffer.LinesBufToStringForTests(tbl.Render())
+
+	bgPrefix := "\x1b[48;2;51;51;51m"
+
+	lines := strings.Split(got, "\n")
+
+	for _, line := range lines {
+		plain := stripANSI(line)
+		if !strings.Contains(plain, "x") || !strings.Contains(plain, "y") || !strings.Contains(plain, "z") {
+			continue
+		}
+
+		parts := strings.Split(line, "│")
+		if len(parts) < 3 {
+			t.Fatalf("Expected at least 3 parts split by │, got %d", len(parts))
+		}
+
+		leftBorder := parts[0]
+		if strings.Contains(leftBorder, bgPrefix) {
+			t.Errorf("Left outer border should NOT have sel bg:\n%s", line)
+		}
+
+		rightBorder := parts[len(parts)-1]
+		if strings.Contains(rightBorder, bgPrefix) {
+			t.Errorf("Right outer border should NOT have sel bg:\n%s", line)
+		}
+
+		innerPart := strings.Join(parts[1:len(parts)-1], "│")
+		innerSeps := strings.Count(innerPart, "│")
+		if innerSeps > 0 {
+			innerBgCount := strings.Count(innerPart, bgPrefix)
+			if innerBgCount < innerSeps {
+				t.Errorf("Inner separators should have sel bg; found %d bg occurrences for %d separators:\n%s", innerBgCount, innerSeps, line)
+			}
+		}
+
+		break
+	}
+}
+
 func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 	t.Parallel()
 

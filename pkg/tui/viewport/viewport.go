@@ -2,7 +2,6 @@ package viewport
 
 import (
 	"bytes"
-	"slices"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
@@ -49,9 +48,9 @@ type Viewport struct {
 	maxHeight        int
 	thumbChar        string
 	trackChar        string
-	thumbStyle       []byte
-	trackStyle       []byte
-	borderStyle      []byte
+	thumbStyle  style.Style
+	trackStyle  style.Style
+	borderStyle style.Style
 
 	// Pre-computed scrollbar cell bytes (built once in WithScrollbar).
 	thumbCell []byte
@@ -99,8 +98,8 @@ func WithScrollbar(thumbChar, trackChar string, thumbColor, trackColor style.Col
 		viewport.scrollbar = true
 		viewport.thumbChar = thumbChar
 		viewport.trackChar = trackChar
-		viewport.thumbStyle = style.ColorToPrefix(thumbColor)
-		viewport.trackStyle = style.ColorToPrefix(trackColor)
+		viewport.thumbStyle = style.NewStyle().Foreground(thumbColor)
+		viewport.trackStyle = style.NewStyle().Foreground(trackColor)
 		viewport.buildScrollbarCells()
 	}
 }
@@ -121,7 +120,7 @@ func WithScrollbarReserve() Option {
 func WithBorder(borderColor style.Color) Option {
 	return func(m *Viewport) {
 		m.bordered = true
-		m.borderStyle = style.ColorToPrefix(borderColor)
+		m.borderStyle = style.NewStyle().Foreground(borderColor)
 		m.buildBorderStrings()
 	}
 }
@@ -146,16 +145,18 @@ func New(opts ...Option) Viewport {
 
 //nolint:funcorder
 func (m *Viewport) buildScrollbarCells() {
-	if len(m.thumbStyle) > 0 {
-		m.thumbCell = slices.Concat([]byte(" "), m.thumbStyle, []byte(m.thumbChar), []byte("\x1b[0m"))
+	m.thumbCell = m.thumbStyle.RenderLine([]byte(m.thumbChar))
+	if len(m.thumbCell) == 0 {
+		m.thumbCell = []byte(m.thumbChar)
 	} else {
-		m.thumbCell = []byte(" " + m.thumbChar)
+		m.thumbCell = append([]byte(" "), m.thumbCell...)
 	}
 
-	if len(m.trackStyle) > 0 {
-		m.trackCell = slices.Concat([]byte(" "), m.trackStyle, []byte(m.trackChar), []byte("\x1b[0m"))
+	m.trackCell = m.trackStyle.RenderLine([]byte(m.trackChar))
+	if len(m.trackCell) == 0 {
+		m.trackCell = []byte(m.trackChar)
 	} else {
-		m.trackCell = []byte(" " + m.trackChar)
+		m.trackCell = append([]byte(" "), m.trackCell...)
 	}
 
 	m.emptyCell = []byte("  ")
@@ -163,23 +164,12 @@ func (m *Viewport) buildScrollbarCells() {
 
 //nolint:funcorder
 func (m *Viewport) buildBorderStrings() {
-	reset := []byte("\x1b[0m")
-
-	if len(m.borderStyle) > 0 {
-		m.borderLeft = slices.Concat(m.borderStyle, []byte("│"), reset)
-		m.borderRight = slices.Concat(m.borderStyle, []byte("│"), reset)
-		m.borderTopL = slices.Concat(m.borderStyle, []byte("╭"), reset)
-		m.borderTopR = slices.Concat(m.borderStyle, []byte("╮"), reset)
-		m.borderBotL = slices.Concat(m.borderStyle, []byte("╰"), reset)
-		m.borderBotR = slices.Concat(m.borderStyle, []byte("╯"), reset)
-	} else {
-		m.borderLeft = []byte("│")
-		m.borderRight = []byte("│")
-		m.borderTopL = []byte("╭")
-		m.borderTopR = []byte("╮")
-		m.borderBotL = []byte("╰")
-		m.borderBotR = []byte("╯")
-	}
+	m.borderLeft = m.borderStyle.RenderLine([]byte("│"))
+	m.borderRight = m.borderStyle.RenderLine([]byte("│"))
+	m.borderTopL = m.borderStyle.RenderLine([]byte("╭"))
+	m.borderTopR = m.borderStyle.RenderLine([]byte("╮"))
+	m.borderBotL = m.borderStyle.RenderLine([]byte("╰"))
+	m.borderBotR = m.borderStyle.RenderLine([]byte("╯"))
 }
 
 func (m *Viewport) SetWidth(w int) {
@@ -200,8 +190,8 @@ func (m *Viewport) SetHeight(h int) {
 }
 
 func (m *Viewport) SetBorderStyle(borderColor style.Color) {
-	newStyle := style.ColorToPrefix(borderColor)
-	if bytes.Equal(m.borderStyle, newStyle) {
+	newStyle := style.NewStyle().Foreground(borderColor)
+	if bytes.Equal(m.borderStyle.RenderLine(nil), newStyle.RenderLine(nil)) {
 		return
 	}
 
@@ -920,17 +910,7 @@ func (m *Viewport) appendHorizBorder(buf []byte, contentW int, showBar bool) []b
 		horizLen += scrollbarColWidth
 	}
 
-	if len(m.borderStyle) > 0 {
-		buf = append(buf, m.borderStyle...)
-	}
-
-	buf = append(buf, horizBorderBytes[:horizLen*3]...)
-
-	if len(m.borderStyle) > 0 {
-		buf = append(buf, "\x1b[0m"...)
-	}
-
-	return buf
+	return append(buf, m.borderStyle.RenderLine(horizBorderBytes[:horizLen*3])...)
 }
 
 func (m *Viewport) contentHeight() int {

@@ -89,7 +89,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		buf.AppendFrom(mdl.header.Render(mdl.dimensions.Width))
 
 		if mdl.workflow != nil {
-			mdl.viewMainContentInto(buf, 0, mdl.header.Len()-1)
+			mdl.viewMainContentInto(buf, 0, 0, true)
 		}
 
 		fmt.Println(buf.String())
@@ -173,19 +173,21 @@ func (m *model) Render(buf *buffer.LinesBufDiff, renderCounter uint64) {
 	if m.viewports.IsFullscreen() {
 		m.renderFullscreenViewportInto(buf, renderCounter, headerFooterHeight)
 	} else {
-		m.viewMainContentInto(buf, renderCounter, headerFooterHeight)
+		m.viewMainContentInto(buf, renderCounter, headerFooterHeight, false)
 	}
 
 	buf.AppendFrom(footer)
 }
 
 // viewMainContentInto renders the main content area into buf.
-func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint64, headerFooterHeight int) {
+// When finalRender is true, the viewport is rendered unconstrained (full height)
+// so the terminal retains the complete history after quit.
+func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint64, headerFooterHeight int, finalRender bool) {
 	if m.workflow == nil {
 		return
 	}
 
-	if m.isSnapshot {
+	if m.isSnapshot || finalRender {
 		m.conf.Fleet.RecalculateCachesOnly(m.conf.Phases)
 	} else {
 		m.conf.Fleet.Recalculate(m.conf.Phases)
@@ -234,8 +236,12 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 		content.WriteLines(debugContent)
 	}
 
-	viewport := m.viewports.RenderMainViewport(content, renderCounter, headerFooterHeight)
-	buf.AppendFrom(viewport)
+	var viewportHeight int
+	if !finalRender {
+		viewportHeight = m.dimensions.Height - headerFooterHeight
+	}
+
+	buf.AppendFrom(m.viewports.RenderMainViewport(content, renderCounter, viewportHeight))
 }
 
 // renderFullscreenViewportInto renders the fullscreen viewport into buf.

@@ -61,13 +61,13 @@ func Benchmark_Lipgloss__JoinHorizontal_Top_DiffHeight(b *testing.B) {
 
 func Benchmark__JoinHorizontal_Top_WithANSI(b *testing.B) {
 	sty := NewStyle().Foreground(Color("#8BE9FD"))
-	ansi := NewANSIStyle(sty)
+	ansi := newANSIStyle(sty)
 	renderBuf := buffer.NewLinesBuf()
-	ansi.Render(renderBuf, [][]byte{[]byte("📋 ")})
+	ansi.render(renderBuf, [][]byte{[]byte("📋 ")})
 	icon := renderBuf.Line(0)
-	ansi.Render(renderBuf, [][]byte{[]byte("flake1\nflake2\nflake3")})
+	ansi.render(renderBuf, [][]byte{[]byte("flake1\nflake2\nflake3")})
 	label := renderBuf.Line(0)
-	ansi.Render(renderBuf, [][]byte{[]byte(" (1.23s)")})
+	ansi.render(renderBuf, [][]byte{[]byte(" (1.23s)")})
 	dur := renderBuf.Line(0)
 	renderBuf.Release()
 

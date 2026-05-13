@@ -40,6 +40,18 @@ type item struct {
 	zonedOutput    *buffer.LinesBuf
 }
 
+func (itm *item) release() {
+	if itm.zonedOutput != nil {
+		itm.zonedOutput.Release()
+		itm.zonedOutput = nil
+	}
+
+	if itm.contentBuf != nil {
+		itm.contentBuf.Release()
+		itm.contentBuf = nil
+	}
+}
+
 func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHighlightBackground, selectionHighlightBorder style.Style) *Viewports {
 	mainXpath := xpath.New("main")
 
@@ -107,7 +119,12 @@ func (v *Viewports) DeselectAll() { v.activeXpath = v.mainXpath }
 
 // Reset clears all viewport items and resets fullscreen/active state.
 func (v *Viewports) Reset() {
-	v.items.Clear()
+	v.items.DeleteFunc(func(_ xpath.Xpath, itm *item) bool {
+		itm.release()
+
+		return true
+	})
+
 	v.fullscreenXp = xpath.New()
 	v.activeXpath = v.mainXpath
 }
@@ -115,6 +132,11 @@ func (v *Viewports) Reset() {
 // RemoveIfExistsViewport removes a viewport by xpath.
 
 func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
+	itm, ok := v.items.Get(xp)
+	if ok {
+		itm.release()
+	}
+
 	v.items.Del(xp)
 
 	if v.activeXpath == xp {
@@ -159,10 +181,11 @@ func (v *Viewports) RenderLabelViewport(xp xpath.Xpath, content [][]byte, versio
 	return v.render(xp, content, nil, indent, 0, 0, false, false, true, version)
 }
 
-func (v *Viewports) RenderMainViewport(content *buffer.LinesBuf, version uint64, footerHeaderHeight int) *buffer.LinesBuf {
-	height := v.dimensions.Height - footerHeaderHeight
-
-	return v.render(v.mainXpath, content.Lines(), content, 0, height, 0, false, true, false, version)
+// RenderMainViewport renders the main viewport. When explicitHeight > 0 the
+// viewport is constrained to that height; when 0 the viewport expands to show
+// all content (used for final output on quit).
+func (v *Viewports) RenderMainViewport(content *buffer.LinesBuf, version uint64, explicitHeight int) *buffer.LinesBuf {
+	return v.render(v.mainXpath, content.Lines(), content, 0, explicitHeight, 0, false, true, false, version)
 }
 
 func (v *Viewports) RenderFullscreenViewport(
@@ -290,6 +313,7 @@ func (v *Viewports) getOrCreateItem(
 		hasScrollbar := itm.model.HasScrollbar()
 
 		if hasBorder != bordered || hasScrollbar != scrollbar {
+			itm.release()
 			v.items.Del(xpath)
 		} else {
 			return itm

@@ -34,11 +34,11 @@ func TestJoinHorizontal_Equivalence(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Foreground(Color("#8BE9FD"))
-	ansi := NewANSIStyle(sty)
+	ansi := newANSIStyle(sty)
 
 	ansiStr := func(s string) string {
 		b := buffer.NewLinesBuf()
-		ansi.Render(b, [][]byte{[]byte(s)})
+		ansi.render(b, [][]byte{[]byte(s)})
 		line := string(b.Line(0))
 		b.Release()
 
@@ -134,11 +134,11 @@ func TestJoinHorizontalBufs_Equivalence(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Foreground(Color("#8BE9FD"))
-	ansi := NewANSIStyle(sty)
+	ansi := newANSIStyle(sty)
 
 	ansiStr := func(s string) string {
 		b := buffer.NewLinesBuf()
-		ansi.Render(b, [][]byte{[]byte(s)})
+		ansi.render(b, [][]byte{[]byte(s)})
 		line := string(b.Line(0))
 		b.Release()
 

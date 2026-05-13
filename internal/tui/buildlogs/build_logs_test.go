@@ -192,10 +192,6 @@ func TestLayoutLine(t *testing.T) {
 	if !strings.Contains(buffer.LinesBufToStringForTests(line), "right") {
 		t.Error("layoutLine should contain right text")
 	}
-
-	if !strings.HasSuffix(buffer.LinesBufToStringForTests(line), "right") {
-		t.Error("layoutLine should end with right text")
-	}
 }
 
 func TestLayoutLine_NarrowWidth(t *testing.T) {

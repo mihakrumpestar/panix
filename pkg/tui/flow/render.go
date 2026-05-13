@@ -111,22 +111,28 @@ func (pf *PhaseFlow) renderCount(val int, sty style.Style) {
 }
 
 // joinStatusBuf assembles pf.statusBuf lines into pf.statusLine with separators,
-// then centers into dst at pillWidth. For selected cells, bgSpace is non-nil and
-// used as visual padding (ANSI-styled space) on both sides of the status text.
-func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sep []byte, pillWidth int, bgSpace []byte) {
+// then centers into dst at pillWidth. When selBgStyle is non-zero, it is used
+// to render background-colored padding spaces.
+func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sepStyle style.Style, pillWidth int, selBgStyle style.Style) {
+	hasBg := len(selBgStyle.RenderLine(nil)) > 0
+
 	if pf.statusBuf.Len() == 0 {
-		dst.WriteLine(nil)
+		if hasBg && pillWidth > 0 {
+			bgSpaces := selBgStyle.RenderLine(style.PaddingBytes(pillWidth))
+			dst.WriteLine(bgSpaces)
+		} else {
+			dst.WriteLine(nil)
+		}
 
 		return
 	}
 
-	reset := style.ANSIReset()
 	n := pf.statusBuf.Len()
 
 	pf.statusLine.Reset()
 	pf.statusLine.EmptyLine()
 
-	if len(bgSpace) > 0 {
+	if hasBg {
 		contentWidth := 0
 
 		for i := range n {
@@ -134,7 +140,7 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sep []byte, pillWidth i
 
 			contentWidth += w
 			if i > 0 {
-				contentWidth += 1 + len(sep) + len(reset)
+				contentWidth += 1 + style.CellWidth(sepStyle.RenderLine(slashSep))
 			}
 		}
 
@@ -143,13 +149,14 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sep []byte, pillWidth i
 		if pad > 0 {
 			left := pad / 2 //nolint:mnd
 
+			bgSpace := selBgStyle.RenderLine([]byte(" "))
 			for range left {
 				pf.statusLine.AppendToLine(bgSpace)
 			}
 
-			pf.appendStatusCounts(sep, reset, n)
+			pf.appendStatusCounts(sepStyle, n)
 
-			for i := 0; i < pad-left; i++ {
+			for range pad - left {
 				pf.statusLine.AppendToLine(bgSpace)
 			}
 
@@ -159,14 +166,14 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sep []byte, pillWidth i
 		}
 	}
 
-	pf.appendStatusCounts(sep, reset, n)
+	pf.appendStatusCounts(sepStyle, n)
 	pf.centerLinesInto(dst, pf.statusLine, pillWidth)
 }
 
-func (pf *PhaseFlow) appendStatusCounts(sep, reset []byte, n int) {
+func (pf *PhaseFlow) appendStatusCounts(sepStyle style.Style, n int) {
 	for i := range n {
 		if i > 0 {
-			pf.statusLine.AppendToLine(sep, slashSep, reset)
+			sepStyle.RenderAppend(pf.statusLine, slashSep)
 		}
 
 		pf.statusLine.AppendToLine(pf.statusBuf.Line(i))
@@ -178,13 +185,13 @@ func (pf *PhaseFlow) writeStatusLines(dst *buffer.LinesBuf, data PhaseData, pill
 
 	if isSelected {
 		pf.renderCounts(data, pf.styles.StatusSel)
-		pf.joinStatusBuf(dst, pf.styles.SelBgPrefix, pillWidth, pf.styles.BgSpace)
+		pf.joinStatusBuf(dst, pf.styles.SelBgStyle, pillWidth, pf.styles.SelBgStyle)
 
 		return
 	}
 
 	pf.renderCounts(data, pf.styles.Status)
-	pf.joinStatusBuf(dst, pf.styles.StatusSeparator.StylePrefix(), pillWidth, nil)
+	pf.joinStatusBuf(dst, pf.styles.StatusSeparator, pillWidth, style.Style{})
 }
 
 func (pf *PhaseFlow) createAnimatedGradientPill(text []byte, state PhaseState) *buffer.LinesBuf {
@@ -203,14 +210,10 @@ func (pf *PhaseFlow) createAnimatedGradientPill(text []byte, state PhaseState) *
 	gradient := pf.styles.gradientForState(state)
 
 	finalColor := gradient.Dark.BlendLuv(gradient.Light, progress)
-	r, g, b := finalColor.RGB255()
-
-	pf.lineBuf.Reset()
-	bgPrefix := style.RGB8ToBgPrefix(pf.lineBuf.Bytes()[:0], r, g, b)
+	hexColor := style.Color(finalColor.Hex())
 
 	pf.pillBuf.Reset()
-	pf.pillBuf.EmptyLine()
-	pf.pillBuf.AppendToLine(bgPrefix, pf.styles.Pill.StylePrefix(), text, style.ANSIReset())
+	pf.styles.Pill.Background(hexColor).RenderLineInto(pf.pillBuf, text)
 
 	return pf.pillBuf
 }
