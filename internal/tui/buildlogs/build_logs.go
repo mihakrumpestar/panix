@@ -497,6 +497,8 @@ func (b *BuildLogs) addCommandChildren(
 		errMsg.WriteString(err.Error())
 
 		errResult := b.viewports.RenderLabelViewport(errXpath, [][]byte{errMsg.Bytes()}, 0, cmdIndent+treeStep)
+		errMsg.Release()
+
 		b.errBuf.Reset()
 		b.conf.ColorScheme.Error.Color.RenderInto(b.errBuf, errResult.Lines())
 		errNodeBuf := b.acquireNodeBuf()
