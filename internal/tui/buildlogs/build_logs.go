@@ -446,7 +446,10 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{[]byte(label)}, labelShowsCommands, labelWidth)
 
 	b.cmdLabelBuf.Reset()
-	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdLabelBuf, labelResult.Line(0))
+
+	for i := range labelResult.Len() {
+		b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdLabelBuf, labelResult.Line(i))
+	}
 
 	b.cmdDurBuf.Reset()
 	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdDurBuf, durStyled)
