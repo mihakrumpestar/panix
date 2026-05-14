@@ -2,6 +2,7 @@ package table
 
 import (
 	"bytes"
+	"slices"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
@@ -46,8 +47,8 @@ type Table struct {
 
 	rowBuf []byte
 
-	borderVertical        []byte
-	selBgBorderVertical   []byte
+	borderVertical      []byte
+	selBgBorderVertical []byte
 
 	zoneStarts [][]byte
 	zoneEnds   [][]byte
@@ -65,7 +66,7 @@ type Table struct {
 func New(cfg Config) *Table {
 	bordered := len(cfg.Border.Vertical) > 0
 
-	t := &Table{
+	table := &Table{
 		cfg:           cfg,
 		bordered:      bordered,
 		selBgStyle:    style.NewStyle().Background(cfg.SelectionBackground),
@@ -76,12 +77,12 @@ func New(cfg Config) *Table {
 	}
 
 	if bordered {
-		t.borderVertical = cfg.BorderStyle.RenderLine(cfg.Border.Vertical)
+		table.borderVertical = cfg.BorderStyle.RenderLine(cfg.Border.Vertical)
 		selBorderStyle := cfg.BorderStyle.Background(cfg.SelectionBackground)
-		t.selBgBorderVertical = selBorderStyle.RenderLine(cfg.Border.Vertical)
+		table.selBgBorderVertical = selBorderStyle.RenderLine(cfg.Border.Vertical)
 	}
 
-	return t
+	return table
 }
 
 // Width updates the table width at runtime (e.g. on terminal resize).
@@ -169,6 +170,7 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 // updates the selection accordingly. Clicking outside any row zone
 // deselects the current selection. Returns true if the selection state
 // was changed.
+
 func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if t.zonePrefix == "" || len(t.rows) == 0 {
 		return false
@@ -243,6 +245,8 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 // the existing buffer immediately with zero allocations.
 // Callers must use AppendFrom or read Line(i) — do not retain the
 // pointer across frames.
+//
+//nolint:funlen
 func (t *Table) Render() *buffer.LinesBuf {
 	if !t.outDirty {
 		return t.content
@@ -408,8 +412,8 @@ func (t *Table) updateZoneMarkers() {
 		t.zoneIDs[rowIdx] = id
 		open := id.FormatOpen(openBuf[:0])
 		t.zoneStarts[rowIdx] = append([]byte(nil), open...)
-		close := id.FormatClose(closeBuf[:0])
-		t.zoneEnds[rowIdx] = append([]byte(nil), close...)
+		closeMarker := id.FormatClose(closeBuf[:0])
+		t.zoneEnds[rowIdx] = append([]byte(nil), closeMarker...)
 	}
 }
 
@@ -494,7 +498,7 @@ func (t *Table) incrementalRowCacheUpdate(colWidths []int, selChanged bool, hasB
 		}
 
 		if dirty {
-		t.buildRow(row, colWidths, rowIdx, hasBorder)
+			t.buildRow(row, colWidths, rowIdx, hasBorder)
 			// Reuse existing byte slice if it fits, else allocate.
 			if cap(t.rowCacheBytes[rowIdx]) < len(t.rowBuf) {
 				t.rowCacheBytes[rowIdx] = make([]byte, len(t.rowBuf))
@@ -650,7 +654,7 @@ func (t *Table) alignCellContent(buf []byte, cell []byte, colWidth int, align st
 			buf = appendStyledPad(buf, pad, selBg)
 			buf = append(buf, cell...)
 		case align == style.Center:
-			left := pad / 2 //nolint:mnd
+			left := pad / 2
 			right := pad - left
 			buf = appendStyledPad(buf, left, selBg)
 			buf = append(buf, cell...)
@@ -939,7 +943,7 @@ func (t *Table) shrinkWideColumns(distributed, fixedWidths []int, availableWidth
 func (t *Table) computeMedians(medians, contentWidths, fixedWidths []int) {
 	for i := range medians {
 		if fixedWidths[i] == 0 {
-			medians[i] = max(contentWidths[i]/2, 1) //nolint:mnd
+			medians[i] = max(contentWidths[i]/2, 1)
 		}
 	}
 }
@@ -1043,6 +1047,7 @@ func (t *Table) writeHorizontalBorder(left, mid, right []byte,
 	t.rowBuf = append(t.rowBuf, styledLeft...)
 
 	styledMid := t.cfg.BorderStyle.RenderLine(mid)
+
 	for colIdx, colWidth := range colWidths {
 		if colIdx > 0 {
 			t.rowBuf = append(t.rowBuf, styledMid...)
@@ -1081,11 +1086,5 @@ func cellsEqual(left, right [][]byte) bool {
 }
 
 func hasNewline(b []byte) bool {
-	for i := range b {
-		if b[i] == '\n' {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(b, '\n')
 }

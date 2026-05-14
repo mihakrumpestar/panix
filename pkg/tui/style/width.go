@@ -200,7 +200,7 @@ func RuneWidth(runeVal rune) int {
 			(runeVal >= 0xFF01 && runeVal <= 0xFF60) ||
 			(runeVal >= 0xFFE0 && runeVal <= 0xFFE6) ||
 			(runeVal >= 0x1F300 && runeVal <= 0x1F9FF)) {
-		return 2 //nolint:mnd
+		return 2
 	}
 
 	return 1

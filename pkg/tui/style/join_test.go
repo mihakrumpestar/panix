@@ -112,13 +112,13 @@ func TestJoinHorizontal_EmptyBlocks(t *testing.T) {
 
 func strsToLineBufs(ss []string) []*buffer.LinesBuf {
 	out := make([]*buffer.LinesBuf, len(ss))
-	for i, s := range ss {
+	for idx, sI := range ss {
 		lb := buffer.NewLinesBuf()
-		for line := range strings.SplitSeq(s, "\n") {
+		for line := range strings.SplitSeq(sI, "\n") {
 			lb.WriteLine([]byte(line))
 		}
 
-		out[i] = lb
+		out[idx] = lb
 	}
 
 	return out

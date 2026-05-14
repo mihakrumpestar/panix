@@ -1,8 +1,10 @@
 package table
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -215,7 +217,7 @@ func Benchmark_Lipgloss__Table_Large(b *testing.B) {
 // --- LongContent (wide cells that need truncation) ---
 
 func Benchmark__Table_LongContent(b *testing.B) {
-	longCell := []byte("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+	longCell := bytes.Repeat([]byte("x"), 200)
 
 	tbl := New(Config{
 		Width:   60,
@@ -232,7 +234,7 @@ func Benchmark__Table_LongContent(b *testing.B) {
 }
 
 func Benchmark_Lipgloss__Table_LongContent(b *testing.B) {
-	longCell := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	longCell := strings.Repeat("x", 200)
 
 	tbl := lipglosstable.New().
 		Width(60).
@@ -328,7 +330,7 @@ func Benchmark__Table_NoChange(b *testing.B) {
 	}
 }
 
-func Benchmark_Lipgloss__Table_NoChange(b *testing.B) {
+func newLipglossBenchTable() *lipglosstable.Table {
 	tbl := lipglosstable.New().
 		Width(120).
 		Border(lipgloss.NormalBorder()).
@@ -343,6 +345,12 @@ func Benchmark_Lipgloss__Table_NoChange(b *testing.B) {
 	}
 
 	_ = tbl.String()
+
+	return tbl
+}
+
+func Benchmark_Lipgloss__Table_NoChange(b *testing.B) {
+	tbl := newLipglossBenchTable()
 
 	b.ResetTimer()
 
@@ -375,20 +383,7 @@ func Benchmark__Table_SelectionChange(b *testing.B) {
 }
 
 func Benchmark_Lipgloss__Table_SelectionChange(b *testing.B) {
-	tbl := lipglosstable.New().
-		Width(120).
-		Border(lipgloss.NormalBorder()).
-		Headers("#", "Icon", "Flake", "Config", "Machine", "Arch", "Status", "Gen", "Date", "NixOS", "Kernel").
-		StyleFunc(func(_, _ int) lipgloss.Style { return lipgloss.NewStyle() })
-
-	for i := range 50 {
-		tbl.Row(strconv.Itoa(i+1), "✅",
-			fmt.Sprintf("flake-%d", i%5), fmt.Sprintf("config-%d", i%10),
-			fmt.Sprintf("machine-%d", i), "x86_64", "done", "42",
-			"2024-01-01", "24.05", "6.1.0")
-	}
-
-	_ = tbl.String()
+	tbl := newLipglossBenchTable()
 
 	b.ResetTimer()
 

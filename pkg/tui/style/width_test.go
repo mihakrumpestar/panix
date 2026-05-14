@@ -171,13 +171,13 @@ func TestStripANSI(t *testing.T) {
 		{"no esc fast path", "hello world", "hello world"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := StripANSI([]byte(tt.input))
-			if string(got) != tt.want {
-				t.Errorf("StripANSI(%q) = %q, want %q", tt.input, got, tt.want)
+			got := StripANSI([]byte(test.input))
+			if string(got) != test.want {
+				t.Errorf("StripANSI(%q) = %q, want %q", test.input, got, test.want)
 			}
 		})
 	}

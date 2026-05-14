@@ -35,23 +35,23 @@ func TestValidateAndGetTargetGen(t *testing.T) {
 		{"current at ten with neg offset", 10, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, -5, 5, nil},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
-			gen := &machine.Generations{Current: tt.current, Available: tt.available}
-			result, err := validateAndGetTargetGen(gen, tt.rollback)
+			gen := &machine.Generations{Current: test.current, Available: test.available}
+			result, err := validateAndGetTargetGen(gen, test.rollback)
 
-			if tt.wantErrIs != nil {
-				require.ErrorIs(t, err, tt.wantErrIs)
+			if test.wantErrIs != nil {
+				require.ErrorIs(t, err, test.wantErrIs)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assertion.Equal(tt.wantGen, result)
+			assertion.Equal(test.wantGen, result)
 		})
 	}
 }
@@ -99,22 +99,22 @@ func TestGetSpecificGeneration(t *testing.T) {
 		{"zero target in list", []uint{0, 1, 2}, 0, 0, nil},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
-			result, err := getSpecificGeneration(tt.available, tt.target)
+			result, err := getSpecificGeneration(test.available, test.target)
 
-			if tt.wantErrIs != nil {
-				require.ErrorIs(t, err, tt.wantErrIs)
+			if test.wantErrIs != nil {
+				require.ErrorIs(t, err, test.wantErrIs)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assertion.Equal(tt.wantGen, result)
+			assertion.Equal(test.wantGen, result)
 		})
 	}
 }

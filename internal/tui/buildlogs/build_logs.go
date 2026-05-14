@@ -93,16 +93,16 @@ func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *ph
 }
 
 // Render renders the build logs tree and returns the output buffer.
-func (b *BuildLogs) Render(vp *viewports.Viewports, sp *spinners.Spinners) *buffer.LinesBuf {
+func (b *BuildLogs) Render(viewports *viewports.Viewports, spinners *spinners.Spinners) *buffer.LinesBuf {
 	for _, nb := range b.nodeBufs {
 		nb.Release()
 	}
 
 	b.nodeBufs = b.nodeBufs[:0]
 
-	b.viewports = vp
-	b.spinners = sp
-	b.contentWidth = vp.ContentWidth()
+	b.viewports = viewports
+	b.spinners = spinners
+	b.contentWidth = viewports.ContentWidth()
 	b.styledTreeLine = b.conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
 	b.content.Reset()
@@ -344,7 +344,7 @@ func (b *BuildLogs) addPhase(parent *tree.Node, entityXpath xpath.Xpath, phaseI 
 
 	tasLoaded := tas.Load()
 	icon := b.spinnerOrIcon(phaseXpath, b.conf.ColorScheme.Phase.Icon, tasLoaded)
-	durStyled, durWidth := b.durationBytes(b.conf.ColorScheme.Phase.Color, tas)
+	durStyled, durWidth := b.durationBytes(tas)
 
 	upperName := upperPhaseNames[phaseI]
 	if upperName == nil {
@@ -438,7 +438,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	b.cmdIconBuf.Reset()
 	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdIconBuf, icon)
 
-	durStyled, durWidth := b.durationBytes(b.conf.ColorScheme.Command.Color, cmd.TimeAndState)
+	durStyled, durWidth := b.durationBytes(cmd.TimeAndState)
 
 	iconWidth := style.CellWidth(b.cmdIconBuf.Line(0))
 	labelWidth := cmdIndent + iconWidth + durWidth
@@ -544,13 +544,13 @@ func (b *BuildLogs) layoutLineStyled(indent int, sty style.Style, leftRaw, right
 		padBytes = []byte(strings.Repeat(" ", pad))
 	}
 
-	lb := b.acquireNodeBuf()
-	lb.EmptyLine()
-	sty.RenderAppend(lb, leftRaw)
-	lb.AppendToLine(padBytes)
-	sty.RenderAppend(lb, rightRaw)
+	buf := b.acquireNodeBuf()
+	buf.EmptyLine()
+	sty.RenderAppend(buf, leftRaw)
+	buf.AppendToLine(padBytes)
+	sty.RenderAppend(buf, rightRaw)
 
-	return lb
+	return buf
 }
 
 func (b *BuildLogs) acquireNodeBuf() *buffer.LinesBuf {
@@ -581,7 +581,7 @@ func (b *BuildLogs) spinnerOrIcon(xpathVal xpath.Xpath, icon []byte, tas *atomic
 	return b.iconBuf.Bytes()
 }
 
-func (b *BuildLogs) durationBytes(sty style.Style, tas *atomictimeandstate.AtomicTimeAndState) ([]byte, int) {
+func (b *BuildLogs) durationBytes(tas *atomictimeandstate.AtomicTimeAndState) ([]byte, int) {
 	d, err := tas.DurationOrElapsedTime()
 	if err != nil {
 		return nil, 0

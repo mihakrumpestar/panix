@@ -1368,8 +1368,8 @@ func TestBorderedSetContentWrapsCorrectly(t *testing.T) {
 
 	// Each wrapped line must fit within the narrow content width (scrollbar will appear)
 	for idx, line := range mdl.lines {
-		if style.CellWidth([]byte(line)) > narrowContentWidth {
-			t.Errorf("wrapped line %d: width = %d, want <= %d: %q", idx, style.CellWidth([]byte(line)), narrowContentWidth, line)
+		if style.CellWidth(line) > narrowContentWidth {
+			t.Errorf("wrapped line %d: width = %d, want <= %d: %q", idx, style.CellWidth(line), narrowContentWidth, line)
 		}
 	}
 

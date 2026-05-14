@@ -63,10 +63,10 @@ func (n *Node) RenderInto(dst *buffer.LinesBuf) {
 	n.renderInto(dst)
 }
 
-func (n *Node) renderInto(lb *buffer.LinesBuf) {
+func (n *Node) renderInto(buf *buffer.LinesBuf) {
 	nChildren := len(n.children)
 	if nChildren == 0 {
-		n.writeLines(lb)
+		n.writeLines(buf)
 
 		return
 	}
@@ -76,36 +76,36 @@ func (n *Node) renderInto(lb *buffer.LinesBuf) {
 		pfxEnd [32]int
 	)
 
-	n.writeLines(lb)
+	n.writeLines(buf)
 
-	ts := n.treeStyle
+	treeStyle := n.treeStyle
 	lastIdx := nChildren - 1
 
 	for childIdx := range lastIdx {
 		off := pfxEnd[0]
-		copy(pfxBuf[off:], ts.indMid)
-		pfxEnd[1] = off + len(ts.indMid)
-		n.children[childIdx].renderNode(lb, pfxBuf[:], pfxEnd[:], 1, ts.connMid, ts)
+		copy(pfxBuf[off:], treeStyle.indMid)
+		pfxEnd[1] = off + len(treeStyle.indMid)
+		n.children[childIdx].renderNode(buf, pfxBuf[:], pfxEnd[:], 1, treeStyle.connMid, treeStyle)
 	}
 
 	off := pfxEnd[0]
-	copy(pfxBuf[off:], ts.indLast)
-	pfxEnd[1] = off + len(ts.indLast)
-	n.children[lastIdx].renderNode(lb, pfxBuf[:], pfxEnd[:], 1, ts.connLast, ts)
+	copy(pfxBuf[off:], treeStyle.indLast)
+	pfxEnd[1] = off + len(treeStyle.indLast)
+	n.children[lastIdx].renderNode(buf, pfxBuf[:], pfxEnd[:], 1, treeStyle.connLast, treeStyle)
 }
 
-func (n *Node) writeLines(lb *buffer.LinesBuf) {
+func (n *Node) writeLines(buf *buffer.LinesBuf) {
 	src := n.content
 	if src == nil || src.Len() == 0 {
-		lb.EmptyLine()
+		buf.EmptyLine()
 
 		return
 	}
 
-	lb.AppendFrom(src)
+	buf.AppendFrom(src)
 }
 
-func (n *Node) renderNode(lb *buffer.LinesBuf, pfxBuf []byte, pfxEnd []int, depth int, conn []byte, ts *treeStyle) {
+func (n *Node) renderNode(buf *buffer.LinesBuf, pfxBuf []byte, pfxEnd []int, depth int, conn []byte, treeStyle *treeStyle) {
 	pfx := pfxBuf[:pfxEnd[depth-1]]
 
 	src := n.content
@@ -117,17 +117,17 @@ func (n *Node) renderNode(lb *buffer.LinesBuf, pfxBuf []byte, pfxEnd []int, dept
 
 	if nLines <= 1 {
 		if nLines == 0 {
-			lb.WriteLine2(pfx, conn)
+			buf.WriteLine2(pfx, conn)
 		} else {
-			lb.WriteLine3(pfx, conn, src.Line(0))
+			buf.WriteLine3(pfx, conn, src.Line(0))
 		}
 	} else {
-		lb.WriteLine3(pfx, conn, src.Line(0))
+		buf.WriteLine3(pfx, conn, src.Line(0))
 
 		contPfx := pfxBuf[:pfxEnd[depth]]
 
 		for i := 1; i < nLines; i++ {
-			lb.WriteLine2(contPfx, src.Line(i))
+			buf.WriteLine2(contPfx, src.Line(i))
 		}
 	}
 
@@ -140,15 +140,15 @@ func (n *Node) renderNode(lb *buffer.LinesBuf, pfxBuf []byte, pfxEnd []int, dept
 
 	for childIdx := range lastIdx {
 		off := pfxEnd[depth]
-		copy(pfxBuf[off:], ts.indMid)
-		pfxEnd[depth+1] = off + len(ts.indMid)
-		n.children[childIdx].renderNode(lb, pfxBuf, pfxEnd, depth+1, ts.connMid, ts)
+		copy(pfxBuf[off:], treeStyle.indMid)
+		pfxEnd[depth+1] = off + len(treeStyle.indMid)
+		n.children[childIdx].renderNode(buf, pfxBuf, pfxEnd, depth+1, treeStyle.connMid, treeStyle)
 	}
 
 	off := pfxEnd[depth]
-	copy(pfxBuf[off:], ts.indLast)
-	pfxEnd[depth+1] = off + len(ts.indLast)
-	n.children[lastIdx].renderNode(lb, pfxBuf, pfxEnd, depth+1, ts.connLast, ts)
+	copy(pfxBuf[off:], treeStyle.indLast)
+	pfxEnd[depth+1] = off + len(treeStyle.indLast)
+	n.children[lastIdx].renderNode(buf, pfxBuf, pfxEnd, depth+1, treeStyle.connLast, treeStyle)
 }
 
 // Helpers

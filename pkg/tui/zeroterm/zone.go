@@ -17,15 +17,13 @@ type ZoneID struct {
 	close []byte
 }
 
-func (id ZoneID) Equal(other ZoneID) bool { return id.id == other.id }
-
 // NewZoneID generates a random zone ID. Call once per zone at component init.
 func NewZoneID() ZoneID {
-	return newZoneID(rand.Uint32())
+	return newZoneID(rand.Uint32()) //nolint:gosec // G404: zone IDs don't need crypto-grade randomness
 }
 
 func newZoneID(id uint32) ZoneID {
-	d := strconv.AppendUint(nil, uint64(id), 10)
+	d := strconv.AppendUint(nil, uint64(id), 10) //nolint:mnd
 
 	return ZoneID{
 		id:    id,
@@ -43,6 +41,9 @@ func (id ZoneID) FormatOpen(dst []byte) []byte {
 func (id ZoneID) FormatClose(dst []byte) []byte {
 	return append(dst, id.close...)
 }
+
+// Equal reports whether two zone IDs are the same.
+func (id ZoneID) Equal(other ZoneID) bool { return id.id == other.id }
 
 // MarkBuf wraps each line of view (split by \n) with zone open/close
 // markers and appends the resulting lines to dst.
@@ -71,14 +72,14 @@ func (id ZoneID) MarkBuf(view []byte, dst *buffer.LinesBuf) {
 // and appends the resulting lines to dst.
 // When src is empty, a single zone-marked empty line is still produced.
 func (id ZoneID) MarkLines(src *buffer.LinesBuf, dst *buffer.LinesBuf) {
-	n := src.Len()
-	if n == 0 {
+	length := src.Len()
+	if length == 0 {
 		dst.WriteLine3(id.open, nil, id.close)
 
 		return
 	}
 
-	for i := range n {
+	for i := range length {
 		dst.WriteLine3(id.open, src.Line(i), id.close)
 	}
 }
@@ -90,15 +91,15 @@ func ZoneIDAtCol(line []byte, targetCol int) (ZoneID, bool) {
 	zoneStack := make([]ZoneID, 0, 8) //nolint:mnd
 
 	for pos := 0; pos < len(line); {
-		b := line[pos]
+		byteI := line[pos]
 
-		if b == '\x1b' {
+		if byteI == '\x1b' {
 			pos, zoneStack = parseZoneMarker(line, pos, zoneStack)
 
 			continue
 		}
 
-		if (b >= 0x20 && b < 0x7F) || b >= 0xC0 {
+		if (byteI >= 0x20 && byteI < 0x7F) || byteI >= 0xC0 {
 			if col == targetCol {
 				if len(zoneStack) > 0 {
 					return zoneStack[len(zoneStack)-1], true
@@ -122,6 +123,7 @@ func ZoneIDAtCol(line []byte, targetCol int) (ZoneID, bool) {
 
 // parseZoneMarker skips non-zone ESC sequences and handles \x1b[<digits>z
 // (open) and \x1b[/<digits>z (close). Returns the new position and updated stack.
+
 func parseZoneMarker(line []byte, pos int, zoneStack []ZoneID) (int, []ZoneID) {
 	pos++ // skip ESC
 
@@ -176,7 +178,7 @@ func parseZoneMarker(line []byte, pos int, zoneStack []ZoneID) (int, []ZoneID) {
 func zoneIDFromDigits(digits []byte) ZoneID {
 	var id uint32
 	for _, d := range digits {
-		id = id*10 + uint32(d-'0')
+		id = id*10 + uint32(d-'0') //nolint:mnd
 	}
 
 	return newZoneID(id)

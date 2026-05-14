@@ -80,7 +80,7 @@ func (n *Notification) Clear() {
 	n.buf.Reset()
 }
 
-// View returns the notification's rendered content. Returns nil when expired.
+// Render returns the notification's rendered content. Returns nil when expired.
 func (n *Notification) Render() *buffer.LinesBufVer {
 	if n.isExpired() {
 		return nil
@@ -101,13 +101,13 @@ func (n *Notification) render() {
 		return
 	}
 
-	fg := n.fadedColor()
+	foreground := n.fadedColor()
 	content := n.renderContent()
 
 	n.buf.Reset()
 	style.NewStyle().
 		Border(style.RoundedBorder()).
-		BorderForeground(fg).
+		BorderForeground(foreground).
 		Padding(0, 1).
 		RenderInto(n.buf.LinesBuf, content)
 }

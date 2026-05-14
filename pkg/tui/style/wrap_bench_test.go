@@ -72,7 +72,9 @@ func Benchmark__Wrap_WithANSI(b *testing.B) {
 	copy(rendered1, renderBuf.Line(0))
 	renderBuf.Release()
 
-	input := append(rendered0, []byte("nix build .#nixosConfigurations.machine ")...)
+	input := make([]byte, 0, len(rendered0)+len([]byte("nix build .#nixosConfigurations.machine "))+len(rendered1))
+	input = append(input, rendered0...)
+	input = append(input, []byte("nix build .#nixosConfigurations.machine ")...)
 	input = append(input, rendered1...)
 	inputBytes := [][]byte{input}
 

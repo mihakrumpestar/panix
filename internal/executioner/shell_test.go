@@ -26,13 +26,13 @@ func TestProcessTerminalOutput_BasicWrites(t *testing.T) {
 		{"intentional empty CRLF", "hello\r\n\r\nworld\r\n", []string{"hello", "", "world"}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmdLog := newTestCommandLog()
-			processTestData([]byte(tt.input), cmdLog)
-			assertLines(t, cmdLog, tt.want)
+			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
 		})
 	}
 }
@@ -52,13 +52,13 @@ func TestProcessTerminalOutput_CarriageReturn(t *testing.T) {
 		{"trailing CR", "hello\r", []string{"hello"}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmdLog := newTestCommandLog()
-			processTestData([]byte(tt.input), cmdLog)
-			assertLines(t, cmdLog, tt.want)
+			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
 		})
 	}
 }
@@ -79,16 +79,16 @@ func TestProcessTerminalOutput_MultiRead(t *testing.T) {
 		{"multi-read intentional empty", []string{"hello\r\n", "\r\n", "world\r\n"}, []string{"hello", "", "world"}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmdLog := newTestCommandLog()
-			for _, read := range tt.reads {
+			for _, read := range test.reads {
 				processTestData([]byte(read), cmdLog)
 			}
 
-			assertLines(t, cmdLog, tt.want)
+			assertLines(t, cmdLog, test.want)
 		})
 	}
 }
@@ -134,13 +134,13 @@ func TestProcessTerminalOutput_ANSIOnly(t *testing.T) {
 		{"ANSI with visible content", "\x1b[31mred\x1b[0m\n", []string{"\x1b[31mred\x1b[0m"}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmdLog := newTestCommandLog()
-			processTestData([]byte(tt.input), cmdLog)
-			assertLines(t, cmdLog, tt.want)
+			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
 		})
 	}
 }
@@ -222,17 +222,17 @@ func TestProcessTerminalOutput_CarriageReturnAcrossReads(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmdLog := newTestCommandLog()
-			for _, read := range tt.reads {
+			for _, read := range test.reads {
 				processTestData([]byte(read), cmdLog)
 			}
 
-			assertLines(t, cmdLog, tt.want)
-			assert.Equal(t, tt.wantCR, cmdLog.CarriageReturn, "CarriageReturn flag")
+			assertLines(t, cmdLog, test.want)
+			assert.Equal(t, test.wantCR, cmdLog.CarriageReturn, "CarriageReturn flag")
 		})
 	}
 }
@@ -272,17 +272,17 @@ func TestFinalizeCommandLog(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmdLog := newTestCommandLog()
-			for _, read := range tt.reads {
+			for _, read := range test.reads {
 				processTestData([]byte(read), cmdLog)
 			}
 
 			finalizeCommandLog(cmdLog)
-			assertLines(t, cmdLog, tt.want)
+			assertLines(t, cmdLog, test.want)
 			assert.False(t, cmdLog.CarriageReturn, "CarriageReturn should be cmdLogeared")
 			assert.False(t, cmdLog.PendingNewline, "PendingNewline should be cmdLogeared")
 		})

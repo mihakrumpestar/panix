@@ -53,21 +53,21 @@ func TestBuildOnSuccessStorePathValidation(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			cl := &command.CommandLog{Output: buffer.NewLinesBufVer()}
-			tt.setupBuf(cl.Output)
+			test.setupBuf(cl.Output)
 
 			storePath := string(style.StripANSI(cl.Output.LastLine()))
 			isValid := len(storePath) > 0 && strings.HasPrefix(storePath, "/nix/store/")
 
-			if tt.wantErr {
+			if test.wantErr {
 				require.False(t, isValid, "expected validation fail for: %q", storePath)
 			} else {
 				require.True(t, isValid, "expected valid store path, got: %q", storePath)
-				assert.Equal(t, tt.wantPath, storePath)
+				assert.Equal(t, test.wantPath, storePath)
 			}
 		})
 	}

@@ -64,13 +64,26 @@ type Styles struct {
 // InitSelectedStyles pre-computes the selected-background variants of status
 // styles and the SelectionBg style. Called automatically by Styles().
 func (s *Styles) InitSelectedStyles() {
-	bg := s.SelectionBg
+	background := s.SelectionBg
 	s.StatusSel = StatusStyles{
-		Running: s.Status.Running.Background(bg),
-		Failed:  s.Status.Failed.Background(bg),
-		Done:    s.Status.Done.Background(bg),
+		Running: s.Status.Running.Background(background),
+		Failed:  s.Status.Failed.Background(background),
+		Done:    s.Status.Done.Background(background),
 	}
-	s.SelBgStyle = style.NewStyle().Background(bg)
+	s.SelBgStyle = style.NewStyle().Background(background)
+}
+
+func (s *Styles) gradientForState(state PhaseState) GradientPair {
+	switch state {
+	case StateRunning:
+		return s.GradientRunning
+	case StateFailed:
+		return s.GradientFailed
+	case StateDone:
+		return s.GradientDone
+	default:
+		return s.GradientDefault
+	}
 }
 
 // PhaseData holds the per-phase counts shown beneath the pill.
@@ -126,8 +139,8 @@ func New() *PhaseFlow {
 		content:       buffer.NewLinesBuf(),
 		pillBuf:       buffer.NewLinesBuf(),
 		statusBuf:     buffer.NewLinesBuf(),
-		cellBuf:      buffer.NewLinesBuf(),
-		zonedBuf:     buffer.NewLinesBuf(),
+		cellBuf:       buffer.NewLinesBuf(),
+		zonedBuf:      buffer.NewLinesBuf(),
 		arrowBuf:      buffer.NewLinesBuf(),
 		joinBuf:       buffer.NewLinesBuf(),
 		lineBuf:       buffer.NewLineBuf(),

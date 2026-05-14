@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-//nolint:cyclop
 func TestNormalBorder(t *testing.T) {
 	t.Parallel()
 
@@ -23,7 +22,10 @@ func TestNormalBorder(t *testing.T) {
 		t.Errorf("NormalBorder lines = (%q, %q), want (─, │)", brd.Horizontal, brd.Vertical)
 	}
 
-	if !bytes.Equal(brd.TopMid, []byte("┬")) || !bytes.Equal(brd.BottomMid, []byte("┴")) || !bytes.Equal(brd.LeftMid, []byte("├")) || !bytes.Equal(brd.RightMid, []byte("┤")) {
+	if !bytes.Equal(brd.TopMid, []byte("┬")) ||
+		!bytes.Equal(brd.BottomMid, []byte("┴")) ||
+		!bytes.Equal(brd.LeftMid, []byte("├")) ||
+		!bytes.Equal(brd.RightMid, []byte("┤")) {
 		t.Errorf("NormalBorder mids = (%q, %q, %q, %q), want (┬, ┴, ├, ┤)",
 			brd.TopMid, brd.BottomMid, brd.LeftMid, brd.RightMid)
 	}
@@ -67,7 +69,10 @@ func TestMarkdownBorder(t *testing.T) {
 
 	brd := MarkdownBorder()
 
-	if !bytes.Equal(brd.TopLeft, []byte("|")) || !bytes.Equal(brd.TopRight, []byte("|")) || !bytes.Equal(brd.BottomLeft, []byte("|")) || !bytes.Equal(brd.BottomRight, []byte("|")) {
+	if !bytes.Equal(brd.TopLeft, []byte("|")) ||
+		!bytes.Equal(brd.TopRight, []byte("|")) ||
+		!bytes.Equal(brd.BottomLeft, []byte("|")) ||
+		!bytes.Equal(brd.BottomRight, []byte("|")) {
 		t.Error("MarkdownBorder corners should all be |")
 	}
 

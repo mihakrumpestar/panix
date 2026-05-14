@@ -165,8 +165,8 @@ func (b *LinesBuf) AppendFrom(src *LinesBuf) {
 		return
 	}
 
-	n := len(src.indexes)
-	if n == 0 {
+	length := len(src.indexes)
+	if length == 0 {
 		return
 	}
 
@@ -174,7 +174,7 @@ func (b *LinesBuf) AppendFrom(src *LinesBuf) {
 	b.buf = append(b.buf, src.buf...)
 
 	oldLen := len(b.indexes)
-	newLen := oldLen + n
+	newLen := oldLen + length
 
 	if newLen <= cap(b.indexes) {
 		b.indexes = b.indexes[:newLen]
@@ -226,9 +226,9 @@ func (b *LinesBuf) WritePaddedView(data []byte, offsets []int, start, end int) {
 	base := len(b.buf)
 	b.buf = append(b.buf, data[offsets[start]:offsets[end]]...)
 
-	n := end - start
+	length := end - start
 	oldLen := len(b.indexes)
-	newLen := oldLen + n
+	newLen := oldLen + length
 
 	if newLen <= cap(b.indexes) {
 		b.indexes = b.indexes[:newLen]
@@ -244,7 +244,7 @@ func (b *LinesBuf) WritePaddedView(data []byte, offsets []int, start, end int) {
 	}
 
 	baseOffset := base - offsets[start]
-	for i := range n {
+	for i := range length {
 		b.indexes[oldLen+i] = baseOffset + offsets[start+i]
 	}
 }

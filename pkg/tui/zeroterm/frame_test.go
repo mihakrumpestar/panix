@@ -284,7 +284,6 @@ func TestRenderFrameWithANSIContent(t *testing.T) {
 	renderFrameWithANSIContentShrink(t, ansiFull, ansiShort, terminalHeight)
 }
 
-//nolint:cyclop // complex helper for ANSI shrink/grow sequence
 func renderFrameWithANSIContentShrink(t *testing.T, ansiFull, ansiShort *buffer.LinesBufDiff, terminalHeight int) {
 	t.Helper()
 

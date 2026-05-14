@@ -188,16 +188,16 @@ func TestUnmarshalJSON(t *testing.T) {
 		{"invalid json", `not json`, "", 0, false, true},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
 			ptr := New[testStruct]()
-			err := ptr.UnmarshalJSON([]byte(tt.input))
+			err := ptr.UnmarshalJSON([]byte(test.input))
 
-			if tt.wantErr {
+			if test.wantErr {
 				assertion.Error(err)
 
 				return
@@ -205,7 +205,7 @@ func TestUnmarshalJSON(t *testing.T) {
 
 			require.NoError(t, err)
 
-			if tt.wantNil {
+			if test.wantNil {
 				assertion.Nil(ptr.Load())
 
 				return
@@ -213,8 +213,8 @@ func TestUnmarshalJSON(t *testing.T) {
 
 			val := ptr.Load()
 			assertion.NotNil(val)
-			assertion.Equal(tt.wantName, val.Name)
-			assertion.Equal(tt.wantVal, val.Value)
+			assertion.Equal(test.wantName, val.Name)
+			assertion.Equal(test.wantVal, val.Value)
 		})
 	}
 }

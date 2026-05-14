@@ -39,17 +39,25 @@ func Wrap(dst *buffer.LinesBuf, content [][]byte, limit int, breakpoints string)
 
 	hasBreakpoints := breakpoints != ""
 
-	s := wrapStatePool.Get().(*wrapState)
-	s.limit = limit
-	s.breakpoints = breakpoints
-	s.outBuf = dst
-	s.curWidth = 0
-	s.hasWord = false
-	s.hasSpace = false
-	s.wordWidth = 0
-	s.spaceWidth = 0
-	s.lineBuf = s.lineBuf[:0]
-	s.lineStyle = s.lineStyle[:0]
+	wrappedState, ok := wrapStatePool.Get().(*wrapState)
+	if !ok {
+		wrappedState = &wrapState{
+			lineBuf:   make([]byte, 0, 128), //nolint:mnd
+			carryBuf:  make([]byte, 0, 32),  //nolint:mnd
+			lineStyle: make([]byte, 0, 64),  //nolint:mnd
+		}
+	}
+
+	wrappedState.limit = limit
+	wrappedState.breakpoints = breakpoints
+	wrappedState.outBuf = dst
+	wrappedState.curWidth = 0
+	wrappedState.hasWord = false
+	wrappedState.hasSpace = false
+	wrappedState.wordWidth = 0
+	wrappedState.spaceWidth = 0
+	wrappedState.lineBuf = wrappedState.lineBuf[:0]
+	wrappedState.lineStyle = wrappedState.lineStyle[:0]
 
 	for _, line := range content {
 		if len(line) == 0 {
@@ -64,21 +72,21 @@ func Wrap(dst *buffer.LinesBuf, content [][]byte, limit int, breakpoints string)
 			continue
 		}
 
-		s.data = line
-		s.wrapOneLine(line, hasBreakpoints)
+		wrappedState.data = line
+		wrappedState.wrapOneLine(line, hasBreakpoints)
 	}
 
-	s.data = nil
-	s.outBuf = nil
-	wrapStatePool.Put(s)
+	wrappedState.data = nil
+	wrappedState.outBuf = nil
+	wrapStatePool.Put(wrappedState)
 }
 
 var wrapStatePool = sync.Pool{
 	New: func() any {
 		return &wrapState{
-			lineBuf:   make([]byte, 0, 128),
-			carryBuf:  make([]byte, 0, 32),
-			lineStyle: make([]byte, 0, 64),
+			lineBuf:   make([]byte, 0, 128), //nolint:mnd
+			carryBuf:  make([]byte, 0, 32),  //nolint:mnd
+			lineStyle: make([]byte, 0, 64),  //nolint:mnd
 		}
 	},
 }
@@ -112,6 +120,7 @@ type wrapState struct {
 	carryBuf []byte
 }
 
+//nolint:cyclop,funlen
 func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 	s.curWidth = 0
 	s.hasWord = false
@@ -125,9 +134,9 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 	n := len(data)
 
 	for pos < n {
-		b := data[pos]
+		byteI := data[pos]
 
-		if b == '\x1b' {
+		if byteI == '\x1b' {
 			end := skipANSI(data, pos)
 
 			if !s.hasWord {
@@ -143,19 +152,19 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 
 		// ASCII fast path: avoid utf8.DecodeRuneInString and runeWidth for
 		// single-byte characters (width always 1, inline space/break checks).
-		if b < 0x80 { //nolint:mnd
+		if byteI < 0x80 { //nolint:mnd
 			pos++
 
 			switch {
-			case b == '\n':
+			case byteI == '\n':
 				s.handleNewline()
-			case b == '\t':
+			case byteI == '\t':
 				s.handleTab(pos-1, pos)
-			case b == ' ' || b == '\v' || b == '\f' || b == '\r':
+			case byteI == ' ' || byteI == '\v' || byteI == '\f' || byteI == '\r':
 				s.handleSpace(pos-1, pos, 1)
-			case b == '-':
+			case byteI == '-':
 				s.handleBreakpoint(pos-1, pos, 1)
-			case hasBreakpoints && s.isBreakpointRune(rune(b)):
+			case hasBreakpoints && s.isBreakpointRune(rune(byteI)):
 				s.handleBreakpoint(pos-1, pos, 1)
 			default:
 				s.handleWordRune(pos-1, pos, 1)
@@ -164,24 +173,24 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 			continue
 		}
 
-		rn, size := utf8.DecodeRune(data[pos:])
+		runeI, size := utf8.DecodeRune(data[pos:])
 		end := pos + size
 		pos = end
-		rw := RuneWidth(rn)
+		runeW := RuneWidth(runeI)
 
 		switch {
-		case rn == '\n':
+		case runeI == '\n':
 			s.handleNewline()
-		case rn == '\t':
+		case runeI == '\t':
 			s.handleTab(pos-size, end)
-		case unicodeIsSpace(rn):
-			s.handleSpace(pos-size, end, rw)
-		case rn == '-':
-			s.handleBreakpoint(pos-size, end, rw)
-		case hasBreakpoints && s.isBreakpointRune(rn):
-			s.handleBreakpoint(pos-size, end, rw)
+		case unicodeIsSpace(runeI):
+			s.handleSpace(pos-size, end, runeW)
+		case runeI == '-':
+			s.handleBreakpoint(pos-size, end, runeW)
+		case hasBreakpoints && s.isBreakpointRune(runeI):
+			s.handleBreakpoint(pos-size, end, runeW)
 		default:
-			s.handleWordRune(pos-size, end, rw)
+			s.handleWordRune(pos-size, end, runeW)
 		}
 	}
 
@@ -191,6 +200,7 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 // updateLineStyleAfterFlush updates lineStyle based on ANSI sequences in the
 // word/space data that was just flushed into lineBuf. data[start:end] was
 // appended to lineBuf.
+
 func (s *wrapState) updateLineStyleAfterFlush(start, end int) {
 	pos := start
 
@@ -243,7 +253,7 @@ func (s *wrapState) handleTab(start, end int) {
 	s.spaceWidth += 4
 }
 
-func (s *wrapState) handleSpace(start, end int, rw int) {
+func (s *wrapState) handleSpace(start, end int, runeW int) {
 	s.flushWord()
 
 	if !s.hasSpace {
@@ -252,41 +262,41 @@ func (s *wrapState) handleSpace(start, end int, rw int) {
 	}
 
 	s.spaceEnd = end
-	s.spaceWidth += rw
+	s.spaceWidth += runeW
 }
 
-func (s *wrapState) handleBreakpoint(start, end int, rw int) {
+func (s *wrapState) handleBreakpoint(start, end int, runeW int) {
 	s.flushSpace()
 
-	if s.curWidth+s.wordWidth+rw > s.limit {
+	if s.curWidth+s.wordWidth+runeW > s.limit {
 		if !s.hasWord {
 			s.wordStart = start
 			s.hasWord = true
 		}
 
 		s.wordEnd = end
-		s.wordWidth += rw
+		s.wordWidth += runeW
 	} else {
 		if s.hasWord {
-			ws, we := s.wordStart, s.wordEnd
-			s.curWidth += s.wordWidth + rw
+			wordS, wordE := s.wordStart, s.wordEnd
+			s.curWidth += s.wordWidth + runeW
 			s.lineBuf = append(s.lineBuf, s.data[s.wordStart:end]...)
 			s.hasWord = false
 			s.wordWidth = 0
-			s.updateLineStyleAfterFlush(ws, we)
+			s.updateLineStyleAfterFlush(wordS, wordE)
 
 			// The breakpoint character itself is also in the flush.
-			s.updateLineStyleAfterFlush(we-1, end)
+			s.updateLineStyleAfterFlush(wordE-1, end)
 		} else {
 			s.lineBuf = append(s.lineBuf, s.data[start:end]...)
-			s.curWidth += rw
+			s.curWidth += runeW
 			s.updateLineStyleAfterFlush(start, end)
 		}
 	}
 }
 
-func (s *wrapState) handleWordRune(start, end int, rw int) {
-	if s.wordWidth+rw > s.limit {
+func (s *wrapState) handleWordRune(start, end int, runeW int) {
+	if s.wordWidth+runeW > s.limit {
 		s.flushWord()
 	}
 
@@ -296,7 +306,7 @@ func (s *wrapState) handleWordRune(start, end int, rw int) {
 	}
 
 	s.wordEnd = end
-	s.wordWidth += rw
+	s.wordWidth += runeW
 
 	if s.curWidth+s.wordWidth+s.spaceWidth > s.limit {
 		s.newline()
@@ -405,25 +415,25 @@ func lineExceedsLimitBytes(data []byte, limit int) bool {
 	n := len(data)
 
 	for pos < n {
-		b := data[pos]
+		byteI := data[pos]
 		switch {
-		case b == '\n':
+		case byteI == '\n':
 			return true
-		case b == '\t':
+		case byteI == '\t':
 			width += 4
 			if width > limit {
 				return true
 			}
 
 			pos++
-		case b == '\x1b':
+		case byteI == '\x1b':
 			end := skipANSI(data, pos)
 			if end == pos {
 				pos++
 			} else {
 				pos = end
 			}
-		case b < 0x80:
+		case byteI < 0x80:
 			width++
 			if width > limit {
 				return true

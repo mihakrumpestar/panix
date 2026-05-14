@@ -18,7 +18,7 @@ func Encode(val any, writer io.Writer) error {
 		writer,
 		yaml.WithSmartAnchor(),
 		yaml.UseLiteralStyleIfMultiline(true),
-		yaml.Indent(2), //nolint:mnd
+		yaml.Indent(2),
 		yaml.OmitEmpty(),
 		yaml.OmitZero(),
 	)

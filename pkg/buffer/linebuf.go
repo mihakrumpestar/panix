@@ -30,10 +30,8 @@ func (r *LineBuf) Write(p []byte) {
 	r.buf = append(r.buf, p...)
 }
 
-func (r *LineBuf) WriteByte(b byte) error {
+func (r *LineBuf) WriteByte(b byte) { //nolint:govet
 	r.buf = append(r.buf, b)
-
-	return nil
 }
 
 func (r *LineBuf) WriteString(s string) {

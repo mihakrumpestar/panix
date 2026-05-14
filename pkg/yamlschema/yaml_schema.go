@@ -128,7 +128,7 @@ func NewSchema(cfg SchemaConfig) *generator {
 // It prefers the map field with validate:"dive" tag as the main content field.
 // Returns the value type V, or nil if the struct is not a map-like wrapper.
 func findMapValueType(typ reflect.Type) reflect.Type {
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
@@ -214,7 +214,7 @@ func (g *generator) Generate() (*Schema, error) {
 // recursed into (their fields count as the parent's). Stack-based cycle
 // detection prevents infinite recursion while correctly counting diamond patterns.
 func (g *generator) countStructOccurrences(typ reflect.Type, onStack map[reflect.Type]bool) {
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
@@ -254,13 +254,13 @@ func (g *generator) countStructOccurrences(typ reflect.Type, onStack map[reflect
 
 // countFieldType increments the occurrence count for a struct field's type.
 func (g *generator) countFieldType(typ reflect.Type) {
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
 	if typ.Kind() == reflect.Slice {
 		typ = typ.Elem()
-		if typ.Kind() == reflect.Ptr {
+		if typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
 		}
 	}
@@ -274,7 +274,7 @@ func (g *generator) countFieldType(typ reflect.Type) {
 // countFieldTypeInfo increments the occurrence count for a type that appears
 // as the value type of a map-like struct (e.g., AtomicOrderedMap values).
 func (g *generator) countFieldTypeInfo(typ reflect.Type) {
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
@@ -397,7 +397,7 @@ func resolveYAMLFieldName(structType reflect.Type, goFieldName string) string {
 }
 
 func (g *generator) processType(typ reflect.Type, field reflect.StructField) (any, error) {
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 

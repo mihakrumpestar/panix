@@ -110,7 +110,6 @@ func abbrevPkg(pkg string) string {
 	return "./" + strings.TrimPrefix(pkg, "github.com/mihakrumpestar/panix/")
 }
 
-//nolint:cyclop
 func parse(data []byte) ([]bench, env, bool) {
 	var (
 		benchmarks []bench

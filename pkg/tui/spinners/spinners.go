@@ -5,8 +5,9 @@ package spinners
 
 import (
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinner"
@@ -83,11 +84,9 @@ func (s *Spinners) Reset() {
 	s.ticking = false
 }
 
-func (s *Spinners) Debug() string {
-	var str strings.Builder
-	fmt.Fprintf(&str, "\nSpinners: %d (ticking: %v)\n", s.entries.Len(), s.ticking)
-
-	return str.String()
+func (s *Spinners) Debug(buf *buffer.LinesBuf) {
+	buf.EmptyLine()
+	buf.WriteString(fmt.Sprintf("Spinners: %d (ticking: %v)", s.entries.Len(), s.ticking))
 }
 
 func (s *Spinners) nextTick() zeroterm.Cmd {

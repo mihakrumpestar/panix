@@ -4,6 +4,10 @@ linters:
   default: all
   exclusions:
     warn-unused: true
+    rules:
+      - linters:
+          - gosec
+        text: "G115.*uintptr"
 
   disable:
     - tagliatelle # Bad check
@@ -63,10 +67,12 @@ linters:
       ignore-map-index-ok: true
       ignore-names:
         - ok
-        - tt
-        - fk
-        - is
         - mu
+        - id
+
+    mnd:
+      ignored-numbers:
+        - "2"
 
     revive:
       rules:

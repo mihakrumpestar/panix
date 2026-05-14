@@ -9,7 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
-func (pf *PhaseFlow) renderInto(lb *buffer.LinesBuf) {
+func (pf *PhaseFlow) renderInto(buf *buffer.LinesBuf) {
 	numPhases := len(pf.phases)
 	available := pf.width - arrowCellWidth*(numPhases-1)
 
@@ -37,22 +37,22 @@ func (pf *PhaseFlow) renderInto(lb *buffer.LinesBuf) {
 
 	pf.parts = pf.parts[:0]
 
-	for i := range pf.phases {
+	for idx := range pf.phases {
 		phaseData := PhaseData{}
-		if i < len(pf.data) {
-			phaseData = pf.data[i]
+		if idx < len(pf.data) {
+			phaseData = pf.data[idx]
 		}
 
-		if i > 0 {
+		if idx > 0 {
 			pf.parts = append(pf.parts, pf.arrowBuf)
 		}
 
-		pf.parts = append(pf.parts, pf.buildCellBuf(i, phaseData, colWidths[i], i == pf.selectedIndex))
+		pf.parts = append(pf.parts, pf.buildCellBuf(idx, phaseData, colWidths[idx], idx == pf.selectedIndex))
 	}
 
 	pf.joinBuf.Reset()
 	style.JoinHorizontalBufs(pf.joinBuf, style.Top, pf.parts...)
-	pf.centerLinesInto(lb, pf.joinBuf, pf.width)
+	pf.centerLinesInto(buf, pf.joinBuf, pf.width)
 }
 
 func (pf *PhaseFlow) buildCellBuf(idx int, data PhaseData, colWidth int, isSelected bool) *buffer.LinesBuf {
@@ -86,7 +86,7 @@ func (pf *PhaseFlow) centerLinesInto(dst *buffer.LinesBuf, src *buffer.LinesBuf,
 		if pad <= 0 {
 			dst.WriteLine(line)
 		} else {
-			l := pad / 2 //nolint:mnd
+			l := pad / 2
 			dst.WriteLine(style.PaddingBytes(l), line, style.PaddingBytes(pad-l))
 		}
 	}
@@ -105,7 +105,7 @@ func (pf *PhaseFlow) renderCount(val int, sty style.Style) {
 	}
 
 	pf.lineBuf.Reset()
-	pf.lineBuf.Set(strconv.AppendInt(pf.lineBuf.Bytes()[:0], int64(val), 10))
+	pf.lineBuf.Set(strconv.AppendInt(pf.lineBuf.Bytes()[:0], int64(val), 10)) //nolint:mnd
 	sty.RenderLineInto(pf.statusBuf, pf.lineBuf.Bytes())
 }
 
@@ -126,7 +126,7 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sepStyle style.Style, p
 		return
 	}
 
-	n := pf.statusBuf.Len()
+	length := pf.statusBuf.Len()
 
 	pf.statusLine.Reset()
 	pf.statusLine.EmptyLine()
@@ -134,7 +134,7 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sepStyle style.Style, p
 	if hasBg {
 		contentWidth := 0
 
-		for i := range n {
+		for i := range length {
 			w := style.CellWidth(pf.statusBuf.Line(i))
 
 			contentWidth += w
@@ -146,14 +146,14 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sepStyle style.Style, p
 		pad := pillWidth - contentWidth
 
 		if pad > 0 {
-			left := pad / 2 //nolint:mnd
+			left := pad / 2
 
 			bgSpace := selBgStyle.RenderLine([]byte(" "))
 			for range left {
 				pf.statusLine.AppendToLine(bgSpace)
 			}
 
-			pf.appendStatusCounts(sepStyle, n)
+			pf.appendStatusCounts(sepStyle, length)
 
 			for range pad - left {
 				pf.statusLine.AppendToLine(bgSpace)
@@ -165,7 +165,7 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sepStyle style.Style, p
 		}
 	}
 
-	pf.appendStatusCounts(sepStyle, n)
+	pf.appendStatusCounts(sepStyle, length)
 	pf.centerLinesInto(dst, pf.statusLine, pillWidth)
 }
 
@@ -221,19 +221,6 @@ func (pf *PhaseFlow) animationNeedsUpdate() bool {
 	lastTime := pf.animation.lastTime.Load()
 
 	return lastTime.IsZero() || time.Since(lastTime) >= animInterval
-}
-
-func (s Styles) gradientForState(state PhaseState) GradientPair {
-	switch state {
-	case StateRunning:
-		return s.GradientRunning
-	case StateFailed:
-		return s.GradientFailed
-	case StateDone:
-		return s.GradientDone
-	default:
-		return s.GradientDefault
-	}
 }
 
 func determineState(data PhaseData) PhaseState {

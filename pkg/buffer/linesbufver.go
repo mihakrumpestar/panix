@@ -12,13 +12,12 @@ import (
 // It tracks a version counter incremented on every mutation for cache
 // invalidation. Create with NewLinesBufVer.
 type LinesBufVer struct {
-	_ no.Copy
-
 	*LinesBuf
 
 	version uint64
+	mu      sync.Mutex
 
-	mu sync.Mutex
+	_ no.Copy
 }
 
 // NewLinesBufVer creates a new LinesBufVer.
@@ -144,15 +143,15 @@ func (b *LinesBufVer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	n := b.lenLocked()
-	if n == 0 {
+	length := b.lenLocked()
+	if length == 0 {
 		return ""
 	}
 
-	size := len(b.LinesBuf.buf) + n - 1
+	size := len(b.LinesBuf.buf) + length - 1
 	out := make([]byte, 0, size)
 
-	for i := range n {
+	for i := range length {
 		if i > 0 {
 			out = append(out, '\n')
 		}
@@ -229,15 +228,15 @@ func (b *LinesBufVer) lineLocked(i int) []byte {
 }
 
 func (b *LinesBufVer) bytesLocked() []byte {
-	n := b.lenLocked()
-	if n == 0 {
+	length := b.lenLocked()
+	if length == 0 {
 		return nil
 	}
 
-	size := len(b.LinesBuf.buf) + n - 1
+	size := len(b.LinesBuf.buf) + length - 1
 	result := make([]byte, 0, size)
 
-	for i := range n {
+	for i := range length {
 		if i > 0 {
 			result = append(result, '\n')
 		}

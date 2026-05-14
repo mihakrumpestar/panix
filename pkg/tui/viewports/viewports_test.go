@@ -391,7 +391,10 @@ func TestRenderFullscreenViewport_FullWidth(t *testing.T) {
 		t.Errorf("first line should be top border: %q", lines[0])
 	}
 
-	debug := viewports.Debug()
+	debugBuf := buffer.NewLinesBuf()
+	viewports.Debug(debugBuf)
+
+	debug := buffer.LinesBufToStringForTests(debugBuf)
 	if !strings.Contains(debug, "80x") {
 		t.Errorf("viewport should use width 80, debug: %s", debug)
 	}
@@ -513,7 +516,9 @@ func TestDebug(t *testing.T) {
 	xpath_ := xpath.New("test", "item")
 	viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
 
-	debug := viewports.Debug()
+	debugBuf := buffer.NewLinesBuf()
+	viewports.Debug(debugBuf)
+	debug := buffer.LinesBufToStringForTests(debugBuf)
 
 	if !strings.Contains(debug, "Viewports: 1") {
 		t.Error("debug should show viewport count")
@@ -585,7 +590,10 @@ func TestMultipleViewports(t *testing.T) {
 		t.Error("viewport 3 should have correct content")
 	}
 
-	debug := viewports.Debug()
+	debugBuf := buffer.NewLinesBuf()
+	viewports.Debug(debugBuf)
+
+	debug := buffer.LinesBufToStringForTests(debugBuf)
 	if !strings.Contains(debug, "Viewports: 3") {
 		t.Error("should have 3 viewports")
 	}

@@ -103,13 +103,13 @@ func TestNewXpathWithAppend(t *testing.T) {
 func TestFleetLeaf(t *testing.T) {
 	t.Parallel()
 
-	fk := faker.New()
-	segMach := fk.RandomStringWithLength(4)
-	segConf := fk.RandomStringWithLength(4)
-	segFlake := fk.RandomStringWithLength(4)
-	segExtra := fk.RandomStringWithLength(4)
-	segOne := fk.RandomStringWithLength(4)
-	segTwo := fk.RandomStringWithLength(4)
+	fake := faker.New()
+	segMach := fake.RandomStringWithLength(4)
+	segConf := fake.RandomStringWithLength(4)
+	segFlake := fake.RandomStringWithLength(4)
+	segExtra := fake.RandomStringWithLength(4)
+	segOne := fake.RandomStringWithLength(4)
+	segTwo := fake.RandomStringWithLength(4)
 
 	tests := []struct {
 		xpath     Xpath
@@ -125,15 +125,15 @@ func TestFleetLeaf(t *testing.T) {
 		{Xpath(segOne + "/" + segTwo + "/" + segFlake + "/" + segConf + "/" + segMach), segFlake, segConf, segMach},
 	}
 
-	for _, tt := range tests {
+	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
-			gotFlake, gotConf, gotMach := tt.xpath.FleetLeaf()
-			assertion.Equal(tt.wantFlake, gotFlake)
-			assertion.Equal(tt.wantConf, gotConf)
-			assertion.Equal(tt.wantMach, gotMach)
+			gotFlake, gotConf, gotMach := test.xpath.FleetLeaf()
+			assertion.Equal(test.wantFlake, gotFlake)
+			assertion.Equal(test.wantConf, gotConf)
+			assertion.Equal(test.wantMach, gotMach)
 		})
 	}
 }

@@ -30,7 +30,6 @@ func TestColor_RGBA_Hex(t *testing.T) {
 	}
 }
 
-//nolint:cyclop
 func TestColor_RGBA_HexInvalid(t *testing.T) {
 	t.Parallel()
 
@@ -100,7 +99,6 @@ func TestColor_RGBA_16Color(t *testing.T) {
 	}
 }
 
-//nolint:cyclop
 func TestColor_RGBA_256Color(t *testing.T) {
 	t.Parallel()
 

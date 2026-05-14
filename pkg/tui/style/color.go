@@ -77,7 +77,6 @@ func (c Color) RGBA() (uint32, uint32, uint32, uint32) {
 	return ru | ru<<8, gu | gu<<8, bu | bu<<8, 0xFFFF
 }
 
-//nolint:mnd
 func hexVal(hexStr string) uint8 {
 	var val uint8
 
@@ -88,9 +87,9 @@ func hexVal(hexStr string) uint8 {
 		case char >= '0' && char <= '9':
 			val = val*16 + char - '0'
 		case char >= 'a' && char <= 'f':
-			val = val*16 + char - 'a' + 10
+			val = val*16 + char - 'a' + 10 //nolint:mnd
 		case char >= 'A' && char <= 'F':
-			val = val*16 + char - 'A' + 10
+			val = val*16 + char - 'A' + 10 //nolint:mnd
 		}
 	}
 
@@ -105,7 +104,7 @@ func colorToBgPrefix(c Color) []byte {
 	return colorToXPrefix(ansiBackground, c)
 }
 
-func colorToXPrefix(x []byte, c Color) []byte {
+func colorToXPrefix(prefix []byte, c Color) []byte {
 	if c == "" {
 		return nil
 	}
@@ -115,11 +114,12 @@ func colorToXPrefix(x []byte, c Color) []byte {
 		return nil
 	}
 
-	buf := make([]byte, 0, 50)
-	buf = append(buf, x...)
-	buf = append(buf, []byte(strconv.Itoa(int(red>>8))+";")...)
-	buf = append(buf, []byte(strconv.Itoa(int(green>>8))+";")...)
-	buf = append(buf, []byte(strconv.Itoa(int(blue>>8))+"m")...)
+	buf := make([]byte, 0, 50) //nolint:mnd
+	buf = append(buf, prefix...)
+
+	buf = append(buf, []byte(strconv.Itoa(int(red>>8))+";")...)   //nolint:mnd
+	buf = append(buf, []byte(strconv.Itoa(int(green>>8))+";")...) //nolint:mnd
+	buf = append(buf, []byte(strconv.Itoa(int(blue>>8))+"m")...)  //nolint:mnd
 
 	return buf
 }
@@ -128,8 +128,8 @@ func colorToXPrefix(x []byte, c Color) []byte {
 func ColorToRGB8(c Color) (uint8, uint8, uint8) {
 	ru, gu, bu, _ := c.RGBA()
 
-	//nolint:gosec,mnd // G115: safe; 8 = standard RGBA 16→8 bit depth shift
-	return uint8(ru >> 8), uint8(gu >> 8), uint8(bu >> 8)
+	//nolint:gosec // G115: safe; 8 = standard RGBA 16→8 bit depth shift
+	return uint8(ru >> 8), uint8(gu >> 8), uint8(bu >> 8) //nolint:mnd
 }
 
 // ColorToStyle converts any color.Color to a style.Color hex string.

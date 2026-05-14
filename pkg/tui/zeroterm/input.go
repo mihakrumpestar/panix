@@ -66,7 +66,7 @@ func parseInput(data []byte, canHaveMoreData bool) ([]Msg, int) {
 // the new position. If the sequence is incomplete and more data may arrive,
 // it returns pos unchanged so the caller can return and wait.
 //
-//nolint:cyclop
+
 func parseEscape(data []byte, pos int, canHaveMoreData bool) ([]Msg, int) {
 	if pos+1 >= len(data) {
 		if canHaveMoreData {
@@ -77,7 +77,7 @@ func parseEscape(data []byte, pos int, canHaveMoreData bool) ([]Msg, int) {
 	}
 
 	if data[pos+1] == '[' {
-		msg, adv := parseCSI(data, pos+2, canHaveMoreData) //nolint:mnd
+		msg, adv := parseCSI(data, pos+2, canHaveMoreData)
 
 		var result []Msg
 		if msg != nil {
@@ -109,7 +109,7 @@ func parseEscape(data []byte, pos int, canHaveMoreData bool) ([]Msg, int) {
 	return []Msg{KeyPressMsg{Key: "esc"}}, pos + 1
 }
 
-//nolint:cyclop,funlen,mnd
+//nolint:cyclop,funlen
 func parseCSI(data []byte, pos int, canHaveMoreData bool) (Msg, int) {
 	start := pos
 
@@ -127,7 +127,7 @@ func parseCSI(data []byte, pos int, canHaveMoreData bool) (Msg, int) {
 	}
 
 	for pos < len(data) && data[pos] >= '0' && data[pos] <= '9' {
-		currentParam = currentParam*10 + int(data[pos]-'0')
+		currentParam = currentParam*10 + int(data[pos]-'0') //nolint:mnd
 		hasParam = true
 		pos++
 	}
@@ -140,7 +140,7 @@ func parseCSI(data []byte, pos int, canHaveMoreData bool) (Msg, int) {
 		hasParam = false
 
 		for pos < len(data) && data[pos] >= '0' && data[pos] <= '9' {
-			currentParam = currentParam*10 + int(data[pos]-'0')
+			currentParam = currentParam*10 + int(data[pos]-'0') //nolint:mnd
 			hasParam = true
 			pos++
 		}
@@ -216,7 +216,7 @@ func parseTilde(params []int) Msg {
 
 // tildeCodeToKey maps a CSI tilde code to its key name.
 //
-//nolint:cyclop,mnd
+//nolint:mnd
 func tildeCodeToKey(code int) string {
 	switch code {
 	case 1:
@@ -304,7 +304,7 @@ func applyModifier(base string, mod int) string {
 //   - bit 6: scroll wheel
 //   - bit 7: additional buttons 8-11
 //
-//nolint:cyclop,mnd
+//nolint:mnd
 func parseX10Mouse(data []byte, cbPos int) Msg {
 	clickBtn := int(data[cbPos]) - 32
 	cx := int(data[cbPos+1]) - 32
@@ -363,7 +363,7 @@ func parseX10Mouse(data []byte, cbPos int) Msg {
 	}
 }
 
-//nolint:cyclop,mnd
+//nolint:mnd
 func parseSGRMouse(params []int, final byte) Msg {
 	if len(params) < 3 {
 		return nil
@@ -425,7 +425,7 @@ func parseSGRMouse(params []int, final byte) Msg {
 	}
 }
 
-//nolint:cyclop,mnd
+//nolint:mnd
 func parseControl(byteVal byte) Msg {
 	switch byteVal {
 	case 0x0D:

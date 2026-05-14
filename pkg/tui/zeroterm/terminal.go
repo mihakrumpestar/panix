@@ -29,10 +29,9 @@ func NewTerminal(inputFile, outputFile *os.File) (*Terminal, error) {
 		sigCh: make(chan os.Signal, 1),
 	}
 
-	//nolint:gosec // G115: safe — fd fits in int on all supported platforms
 	termWidth, termHeight, err := term.GetSize(int(inputFile.Fd()))
 	if err != nil {
-		termWidth, termHeight, err = term.GetSize(int(outputFile.Fd())) //nolint:gosec // G115: safe — fd fits in int
+		termWidth, termHeight, err = term.GetSize(int(outputFile.Fd()))
 		if err != nil {
 			termWidth, termHeight = 80, 24
 		}
@@ -49,7 +48,6 @@ func (t *Terminal) Size() (int, int) {
 }
 
 func (t *Terminal) EnterRawMode() error {
-	//nolint:gosec // G115: safe — fd fits in int on all supported platforms
 	fd := int(t.in.Fd())
 
 	state, err := term.MakeRaw(fd)
@@ -64,7 +62,7 @@ func (t *Terminal) EnterRawMode() error {
 
 func (t *Terminal) ExitRawMode() {
 	if t.oldState != nil {
-		_ = term.Restore(int(t.in.Fd()), t.oldState) //nolint:gosec // G104/G115: best-effort restore
+		_ = term.Restore(int(t.in.Fd()), t.oldState)
 		t.oldState = nil
 	}
 }
@@ -113,10 +111,9 @@ func (t *Terminal) WatchResize() <-chan os.Signal {
 }
 
 func (t *Terminal) UpdateSize() (int, int) {
-	//nolint:gosec // G115: safe — fd fits in int on all supported platforms
 	termWidth, termHeight, err := term.GetSize(int(t.in.Fd()))
 	if err != nil {
-		termWidth, termHeight, err = term.GetSize(int(t.out.Fd())) //nolint:gosec // G115: safe
+		termWidth, termHeight, err = term.GetSize(int(t.out.Fd()))
 		if err != nil {
 			return t.width, t.height
 		}

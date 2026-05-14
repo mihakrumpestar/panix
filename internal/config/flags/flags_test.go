@@ -26,18 +26,18 @@ func TestDefautlIfNoTTY(t *testing.T) {
 		{"preserves explicit json output", OutputModeJSON, OutputModeJSON, true},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			flags := &Flags{}
-			flags.Output = tt.output
+			flags.Output = test.output
 
 			flags.DefautlIfNoTTY()
 
 			assertion := assert.New(t)
-			assertion.Equal(tt.wantOutput, flags.Output)
-			assertion.Equal(tt.wantExit, flags.ExitOnComplete)
+			assertion.Equal(test.wantOutput, flags.Output)
+			assertion.Equal(test.wantExit, flags.ExitOnComplete)
 		})
 	}
 }

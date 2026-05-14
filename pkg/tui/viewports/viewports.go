@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -131,15 +130,15 @@ func (v *Viewports) Reset() {
 
 // RemoveIfExistsViewport removes a viewport by xpath.
 
-func (v *Viewports) RemoveIfExistsViewport(xp xpath.Xpath) {
-	itm, ok := v.items.Get(xp)
+func (v *Viewports) RemoveIfExistsViewport(xpath xpath.Xpath) {
+	itm, ok := v.items.Get(xpath)
 	if ok {
 		itm.release()
 	}
 
-	v.items.Del(xp)
+	v.items.Del(xpath)
 
-	if v.activeXpath == xp {
+	if v.activeXpath == xpath {
 		v.activeXpath = v.mainXpath
 	}
 }
@@ -200,29 +199,25 @@ func (v *Viewports) RenderFullscreenViewport(
 
 // Debug
 
-func (v *Viewports) Debug() string {
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "\nViewports: %d (%dx%d) ContentWidth=%d\n", v.items.Len(), v.dimensions.Width, v.dimensions.Height, v.ContentWidth())
+func (v *Viewports) Debug(buf *buffer.LinesBuf) {
+	buf.EmptyLine()
+	buf.WriteString(fmt.Sprintf("Viewports: %d (%dx%d) ContentWidth=%d", v.items.Len(), v.dimensions.Width, v.dimensions.Height, v.ContentWidth()))
 
 	for _, pair := range v.items.Pairs() {
 		mdl := pair.Value.model
-		fmt.Fprintf(&builder, "  '%s': %dx%d l:%d sb:%v sr:%v main:%v overflows:%v",
+		buf.WriteLine(fmt.Appendf(nil, "  '%s': %dx%d l:%d sb:%v sr:%v main:%v overflows:%v",
 			pair.Key, mdl.Width(), mdl.Height(), mdl.TotalLineCount(),
 			mdl.HasScrollbar(), mdl.HasScrollbarReserve(), mdl.IsMain(),
-			mdl.TotalLineCount() > mdl.Height())
+			mdl.TotalLineCount() > mdl.Height()))
 
 		if pair.Key == v.activeXpath {
-			builder.WriteString(" [A]")
+			buf.AppendToLine([]byte(" [A]"))
 		}
 
 		if mdl.ScrollPercent() == 1 {
-			builder.WriteString(" @btm")
+			buf.AppendToLine([]byte(" @btm"))
 		}
-
-		builder.WriteByte('\n')
 	}
-
-	return builder.String()
 }
 
 // Internal
@@ -402,6 +397,7 @@ func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 	}
 
 	var candidates []xpath.Xpath
+
 	for _, pair := range v.items.Pairs() {
 		if pair.Value.zoneID.Equal(clickedID) {
 			candidates = append(candidates, pair.Key)

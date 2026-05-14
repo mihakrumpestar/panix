@@ -100,7 +100,8 @@ func (f *Footer) Render(quitting bool, width int) *buffer.LinesBuf {
 	helpWidth := width
 
 	if notifBuf != nil {
-		if w := style.MaxLineWidth(notifBuf.LinesBuf); w > 0 {
+		w := style.MaxLineWidth(notifBuf.LinesBuf)
+		if w > 0 {
 			helpWidth = width - w
 		}
 	}

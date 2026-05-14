@@ -308,11 +308,16 @@ func (s Style) RenderLine(line []byte) []byte {
 func (s Style) RenderLineInto(dst *buffer.LinesBuf, line []byte) {
 	if !s.hasLayoutProperties() {
 		prefix := s.stylePrefix()
-		if len(prefix) == 0 && len(ansiReset) == 0 {
+		reset := ansiReset
+
+		switch {
+		case len(prefix) == 0 && len(reset) == 0:
 			dst.WriteLine(line)
-		} else if !bytes.Contains(line, ansiReset) {
-			dst.WriteLine3(prefix, line, ansiReset)
-		} else {
+		case len(prefix) == 0:
+			dst.WriteLine2(line, reset)
+		case !bytes.Contains(line, reset):
+			dst.WriteLine3(prefix, line, reset)
+		default:
 			dst.EmptyLine()
 			s.RenderAppend(dst, line)
 		}
@@ -407,6 +412,7 @@ func appendWithResetReemit(dst *buffer.LinesBuf, content, prefix, reset []byte) 
 		end := idx + len(reset)
 		dst.AppendToLine(content[:end])
 		dst.AppendToLine(prefix)
+
 		content = content[end:]
 	}
 }
@@ -441,7 +447,7 @@ func (s Style) hasLayoutProperties() bool {
 		s.padTop > 0 || s.padRight > 0 || s.padBottom > 0 || s.padLeft > 0
 }
 
-var prerenderedPadding = slices.Repeat([]byte(" "), 1000)
+var prerenderedPadding = slices.Repeat([]byte(" "), 1000) //nolint:mnd
 
 // PaddingBytes returns a slice of n space bytes for padding.
 // The returned slice shares a static buffer; do not modify it.
@@ -577,7 +583,7 @@ func padLineAlignment(line []byte, pad int, align Position) []byte {
 
 	switch {
 	case align == Center:
-		left := pad / 2 //nolint:mnd
+		left := pad / 2
 		right := pad - left
 		off := copy(buf, prerenderedPadding[:left])
 		off += copy(buf[off:], line)
@@ -626,6 +632,7 @@ func (s Style) deriveBorderWidth(content [][]byte) int {
 
 // renderColorOnly applies ANSI foreground/background/bold sequences to every
 // line of content, without any layout (width, padding, borders).
+
 func (s Style) renderColorOnly(content [][]byte) [][]byte {
 	if content == nil {
 		return nil
@@ -641,6 +648,7 @@ func (s Style) renderColorOnly(content [][]byte) [][]byte {
 	resetLen := len(reset)
 
 	hasEmbeddedReset := false
+
 	for _, line := range content {
 		if bytes.Contains(line, reset) {
 			hasEmbeddedReset = true
@@ -675,6 +683,7 @@ func (s Style) renderColorOnly(content [][]byte) [][]byte {
 	result := make([][]byte, len(content))
 	for idx, line := range content {
 		var buf []byte
+
 		buf = append(buf, prefix...)
 		buf = appendWithResetReemitBytes(buf, line, prefix, reset)
 		buf = append(buf, reset...)
@@ -818,8 +827,8 @@ func (s Style) borderColors() ([]byte, []byte, []byte, []byte, []byte) {
 // wrapBorderLine wraps a content line with left/right vertical borders.
 func (s Style) wrapBorderLine(line, leftFg, rightFg, reset []byte) []byte {
 	size := len(line)
-	leftN := 0
-	rightN := 0
+
+	var leftN, rightN int
 
 	if s.borderLeft {
 		leftN = len(leftFg) + len(s.border.Vertical) + len(reset)

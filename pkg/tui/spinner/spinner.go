@@ -25,7 +25,7 @@ func (s *Spinner) Update() {
 	s.frame = (s.frame + 1) % len(s.frames)
 }
 
-// View returns the current frame string.
+// Render returns the current frame string.
 func (s *Spinner) Render() []byte {
 	if len(s.frames) == 0 {
 		return nil

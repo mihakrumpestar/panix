@@ -8,6 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
+//nolint:funlen
 func TestWrap_Equivalence(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +77,7 @@ func TestWrap_Equivalence(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestWrap_StyleCarryOver(t *testing.T) {
 	t.Parallel()
 

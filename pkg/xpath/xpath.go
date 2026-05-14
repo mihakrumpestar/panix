@@ -52,7 +52,7 @@ func (x Xpath) FleetLeaf() (string, string, string) {
 	switch numOfParts {
 	case 1:
 		return "", "", parts[0]
-	case 2: //nolint:mnd
+	case 2:
 		return "", parts[0], parts[1]
 	default:
 		return parts[numOfParts-3], parts[numOfParts-2], parts[numOfParts-1]

@@ -692,14 +692,14 @@ func TestParseInputF6ThroughF10(t *testing.T) {
 		{"20", "f9"},
 		{"21", "f10"},
 	}
-	for _, tt := range tests {
-		input := append([]byte{0x1B, '['}, []byte(tt.code)...)
+	for _, test := range tests {
+		input := append([]byte{0x1B, '['}, []byte(test.code)...)
 		input = append(input, '~')
 		msgs, _ := parseInput(input, false)
 
 		keyPress := asKeyPress(msgs[0])
-		if keyPress.Key != tt.wanted {
-			t.Errorf("CSI %s~: key = %q, want %q", tt.code, keyPress.Key, tt.wanted)
+		if keyPress.Key != test.wanted {
+			t.Errorf("CSI %s~: key = %q, want %q", test.code, keyPress.Key, test.wanted)
 		}
 	}
 }
@@ -713,14 +713,14 @@ func TestParseInputF11F12(t *testing.T) {
 		{"23", "f11"},
 		{"24", "f12"},
 	}
-	for _, tt := range tests {
-		input := append([]byte{0x1B, '['}, []byte(tt.code)...)
+	for _, test := range tests {
+		input := append([]byte{0x1B, '['}, []byte(test.code)...)
 		input = append(input, '~')
 		msgs, _ := parseInput(input, false)
 
 		keyPress := asKeyPress(msgs[0])
-		if keyPress.Key != tt.wanted {
-			t.Errorf("CSI %s~: key = %q, want %q", tt.code, keyPress.Key, tt.wanted)
+		if keyPress.Key != test.wanted {
+			t.Errorf("CSI %s~: key = %q, want %q", test.code, keyPress.Key, test.wanted)
 		}
 	}
 }

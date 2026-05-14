@@ -27,14 +27,7 @@ type Program struct {
 
 type ProgramOption func(*Program)
 
-// RenderCounter returns the current render counter.
-func (p *Program) RenderCounter() uint64 { return p.renderCounter }
-
-// Raw disables frame diffing; every render writes all lines directly.
-func Raw() ProgramOption {
-	return func(p *Program) { p.raw = true }
-}
-
+// NewProgram creates a new terminal program with the given model and options.
 func NewProgram(model Model, opts ...ProgramOption) *Program {
 	prog := &Program{
 		model:  model,
@@ -53,6 +46,14 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 
 	return prog
 }
+
+// Raw disables frame diffing; every render writes all lines directly.
+func Raw() ProgramOption {
+	return func(p *Program) { p.raw = true }
+}
+
+// RenderCounter returns the current render counter.
+func (p *Program) RenderCounter() uint64 { return p.renderCounter }
 
 func (p *Program) Run() error {
 	term, err := NewTerminal(os.Stdin, os.Stdout)
@@ -126,7 +127,7 @@ func (p *Program) processInitCmds() {
 	p.processCmds(postCmds)
 }
 
-//nolint:cyclop,unparam
+//nolint:unparam
 func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 	for {
 		select {
@@ -247,7 +248,6 @@ func (p *Program) processCmds(cmd Cmd) {
 	}(cmd)
 }
 
-//nolint:cyclop
 func (p *Program) readInput(done chan<- struct{}) {
 	defer close(done)
 

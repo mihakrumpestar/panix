@@ -54,17 +54,17 @@ func TestGetPhaseMetadata(t *testing.T) {
 		{"unknown", Phase("unknown"), false, ScopeMachine, false},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
-			meta, found := GetPhaseMetadata(tt.phase)
-			assertion.Equal(tt.wantFound, found)
+			meta, found := GetPhaseMetadata(test.phase)
+			assertion.Equal(test.wantFound, found)
 
 			if found {
-				assertion.Equal(tt.wantScope, meta.Scope)
-				assertion.Equal(tt.wantValidFirst, meta.ValidFirst)
+				assertion.Equal(test.wantScope, meta.Scope)
+				assertion.Equal(test.wantValidFirst, meta.ValidFirst)
 			}
 		})
 	}
@@ -172,15 +172,15 @@ func TestValidatePhasesValidCases(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
-			result, err := ValidatePhases(tt.requested, tt.skip)
+			result, err := ValidatePhases(test.requested, test.skip)
 			require.NoError(t, err)
-			assertion.Equal(tt.wantResult, result)
+			assertion.Equal(test.wantResult, result)
 		})
 	}
 }

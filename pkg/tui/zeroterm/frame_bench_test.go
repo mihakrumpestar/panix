@@ -297,14 +297,14 @@ func Benchmark__ZoneMarkBuf(b *testing.B) {
 	contentBytes := []byte(content)
 	id := NewZoneID()
 
-	lb := buffer.NewLinesBuf()
-	defer lb.Release()
+	buf := buffer.NewLinesBuf()
+	defer buf.Release()
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		lb.Reset()
-		id.MarkBuf(contentBytes, lb)
+		buf.Reset()
+		id.MarkBuf(contentBytes, buf)
 	}
 }
 

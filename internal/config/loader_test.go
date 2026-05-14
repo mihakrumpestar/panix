@@ -338,16 +338,16 @@ func TestKexecImageArchSupport(t *testing.T) {
 		{"default rejects armv7l", "armv7l", true},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			kexecImage := attributes.KexecImage("")
-			err := kexecImage.IfDefaultImageIsArchSupported(tt.subject)
+			err := kexecImage.IfDefaultImageIsArchSupported(test.subject)
 
 			assertion := assert.New(t)
 
-			if tt.wantErr {
+			if test.wantErr {
 				assertion.Error(err, "expected unsupported arch error")
 			} else {
 				assertion.NoError(err, "expected supported arch")

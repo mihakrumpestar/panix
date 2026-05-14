@@ -29,7 +29,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 
 	columnStyles := []style.Style{
 		colorScheme.Table.Row.Width(indexWidth).Align(style.Right),
-		colorScheme.Table.Row.Width(2), //nolint:mnd
+		colorScheme.Table.Row.Width(2),
 		colorScheme.Flake.Color,
 		colorScheme.Configuration.Color,
 		colorScheme.Machine.Color,

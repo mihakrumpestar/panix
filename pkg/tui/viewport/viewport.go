@@ -48,9 +48,9 @@ type Viewport struct {
 	maxHeight        int
 	thumbChar        string
 	trackChar        string
-	thumbStyle  style.Style
-	trackStyle  style.Style
-	borderStyle style.Style
+	thumbStyle       style.Style
+	trackStyle       style.Style
+	borderStyle      style.Style
 
 	// Pre-computed scrollbar cell bytes (built once in WithScrollbar).
 	thumbCell []byte
@@ -220,7 +220,7 @@ func (m *Viewport) MaxLineWidth() int {
 
 	for idx, lineWidth := range m.lineWidths {
 		if lineWidth < 0 {
-			lineWidth = style.CellWidth([]byte(m.lines[idx]))
+			lineWidth = style.CellWidth(m.lines[idx])
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -498,24 +498,24 @@ func (m *Viewport) buildPreservedWidths(newLines, oldLines [][]byte) []int {
 		return nil
 	}
 
-	n := len(newLines)
-	if cap(m.lineWidths) < n {
-		newWidths := make([]int, n)
+	height := len(newLines)
+	if cap(m.lineWidths) < height {
+		newWidths := make([]int, height)
 		copy(newWidths, m.lineWidths)
 		m.lineWidths = newWidths
 	} else {
-		m.lineWidths = m.lineWidths[:n]
+		m.lineWidths = m.lineWidths[:height]
 	}
 
 	minLen := min(len(newLines), len(oldLines))
 	copyCount := min(len(m.lineWidths), minLen)
 
-	for i := copyCount; i < n; i++ {
+	for i := copyCount; i < height; i++ {
 		m.lineWidths[i] = -1
 	}
 
-	for i := range minLen {
-		pNew, pOld := &newLines[i], &oldLines[i]
+	for idx := range minLen {
+		pNew, pOld := &newLines[idx], &oldLines[idx]
 
 		nLen, oLen := len(*pNew), len(*pOld)
 		if nLen == oLen && (nLen == 0 || &(*pNew)[0] == &(*pOld)[0]) {
@@ -523,14 +523,14 @@ func (m *Viewport) buildPreservedWidths(newLines, oldLines [][]byte) []int {
 		}
 
 		if !bytes.Equal(*pNew, *pOld) {
-			m.lineWidths[i] = -1
+			m.lineWidths[idx] = -1
 		}
 	}
 
 	return m.lineWidths
 }
 
-//nolint:cyclop
+//nolint:funlen
 func (m *Viewport) renderViewInto(buf *buffer.LinesBuf) {
 	m.ensureLineWidths()
 
@@ -658,7 +658,7 @@ func (m *Viewport) renderEmptyInto(buf *buffer.LinesBuf, contentW, contentH int,
 // paddedBuf is extended rather than rebuilt, avoiding O(n) copy for
 // unchanged lines.
 //
-//nolint:cyclop // cache building is inherently branchy
+
 func (m *Viewport) ensurePaddedCache(contentW int) {
 	if !m.contentChanged && m.paddedBufCW == contentW && len(m.lineOffsets) == len(m.lines)+1 {
 		return
@@ -710,6 +710,7 @@ func (m *Viewport) ensurePaddedCache(contentW int) {
 // still covers the old lines and only new lines were appended, extend
 // paddedBuf with the new lines instead of rebuilding from scratch.
 // Returns true if delta update succeeded.
+
 func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 	oldLineCount := len(m.cachedLines)
 	if oldLineCount >= len(m.lines) || oldLineCount == 0 {
@@ -717,14 +718,14 @@ func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 	}
 
 	for i := range oldLineCount {
-		nl, cl := &m.lines[i], &m.cachedLines[i]
+		cachedLineLen, cachedLine := &m.lines[i], &m.cachedLines[i]
 
-		nLen, cLen := len(*nl), len(*cl)
-		if nLen == cLen && (nLen == 0 || &(*nl)[0] == &(*cl)[0]) {
+		nLen, cLen := len(*cachedLineLen), len(*cachedLine)
+		if nLen == cLen && (nLen == 0 || &(*cachedLineLen)[0] == &(*cachedLine)[0]) {
 			continue
 		}
 
-		if !bytes.Equal(*nl, *cl) {
+		if !bytes.Equal(*cachedLineLen, *cachedLine) {
 			return false
 		}
 	}
@@ -762,7 +763,7 @@ func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 	return true
 }
 
-//nolint:cyclop,funlen
+//nolint:funlen
 func (m *Viewport) renderBorderedInto(
 	buf *buffer.LinesBuf,
 	start, end, contentW, contentH int,
@@ -831,7 +832,7 @@ func (m *Viewport) renderBorderedInto(
 	buf.WriteLine1(line)
 }
 
-//nolint:cyclop,funlen
+//nolint:funlen
 func (m *Viewport) renderUnborderedInto(
 	buf *buffer.LinesBuf,
 	start, end, contentW, contentH int,

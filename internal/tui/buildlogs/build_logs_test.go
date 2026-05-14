@@ -304,14 +304,20 @@ func TestAddPhases_NilPhaseLogs(t *testing.T) {
 	}
 }
 
+func newBuildLogsForTest() *BuildLogs {
+	conf := makeTestConfig(0, 0, 0, nil)
+	bl := New(conf, nil, nil)
+	bl.contentWidth = 120
+	bl.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	bl.viewports = newTestViewports(conf)
+
+	return bl
+}
+
 func TestAddPhasesSingle_HideableFinishedFiltered(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
-	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
-	buildLogs.viewports = newTestViewports(conf)
+	buildLogs := newBuildLogsForTest()
 
 	logNode := logs.New()
 	phaseLog := newFinishedPhaseLog(nil) // finished, no error
@@ -332,11 +338,7 @@ func TestAddPhasesSingle_HideableFinishedFiltered(t *testing.T) {
 func TestAddPhasesSingle_HideableFinishedWithErrorNotFiltered(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
-	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
-	buildLogs.viewports = newTestViewports(conf)
+	buildLogs := newBuildLogsForTest()
 
 	logNode := logs.New()
 	phaseLog := newFinishedPhaseLog(os.ErrNotExist) // finished with error
@@ -363,11 +365,7 @@ func TestAddPhasesSingle_HideableFinishedWithErrorNotFiltered(t *testing.T) {
 func TestAddPhasesSingle_BuildPhaseNotFiltered(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
-	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
-	buildLogs.viewports = newTestViewports(conf)
+	buildLogs := newBuildLogsForTest()
 
 	logNode := logs.New()
 	phaseLog := newFinishedPhaseLog(nil) // finished, no error, but NOT hideable
@@ -969,7 +967,7 @@ func TestDurationBytes_Finished(t *testing.T) {
 	tas.StartTimer()
 	tas.EndTimerWithError(nil)
 
-	styled, width := buildLogs.durationBytes(conf.ColorScheme.Phase.Color, tas)
+	styled, width := buildLogs.durationBytes(tas)
 
 	if width <= 0 {
 		t.Errorf("durationBytes for finished phase should have positive width, got %d", width)
@@ -988,7 +986,7 @@ func TestDurationBytes_NotStarted(t *testing.T) {
 
 	tas := atomictimeandstate.New()
 
-	styled, width := buildLogs.durationBytes(conf.ColorScheme.Phase.Color, tas)
+	styled, width := buildLogs.durationBytes(tas)
 
 	if width != 0 {
 		t.Errorf("durationBytes for not-started should have 0 width, got %d", width)

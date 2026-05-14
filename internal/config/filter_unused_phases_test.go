@@ -88,14 +88,14 @@ func TestHasRequiredPhases(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
-			result := hasRequiredPhases(tt.buildFleet())
-			assertion.Equal(tt.wantSecrets, result.Secrets)
-			assertion.Equal(tt.wantBootstrap, result.Bootstrap)
+			result := hasRequiredPhases(test.buildFleet())
+			assertion.Equal(test.wantSecrets, result.Secrets)
+			assertion.Equal(test.wantBootstrap, result.Bootstrap)
 		})
 	}
 }
@@ -182,18 +182,18 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
 			c := &Config{
-				Fleet:  tt.buildFleet(),
-				Phases: tt.inputPhases,
+				Fleet:  test.buildFleet(),
+				Phases: test.inputPhases,
 			}
 			c.FilterOutUnusedPhases()
-			assertion.Equal(tt.wantPhases, c.Phases)
+			assertion.Equal(test.wantPhases, c.Phases)
 		})
 	}
 }

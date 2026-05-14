@@ -5,28 +5,10 @@ import (
 
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
-	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 func benchStyles() Styles {
-	white := style.NewStyle().Foreground(style.Color("#FFFFFF")).Bold(true).Padding(0, 1)
-
-	return Styles{
-		GradientRunning: GradientPair{Dark: benchMustHex("#01536e"), Light: benchMustHex("#007da7")},
-		GradientFailed:  GradientPair{Dark: benchMustHex("#5f1414"), Light: benchMustHex("#DC2626")},
-		GradientDone:    GradientPair{Dark: benchMustHex("#14532D"), Light: benchMustHex("#11883d")},
-		GradientDefault: GradientPair{Dark: benchMustHex("#535862"), Light: benchMustHex("#6B7280")},
-		Pill:            white,
-		Status: StatusStyles{
-			Running: style.NewStyle().Foreground(style.Color("#00BFFF")),
-			Failed:  style.NewStyle().Foreground(style.Color("#FF5555")),
-			Done:    style.NewStyle().Foreground(style.Color("#50FA7B")),
-		},
-		StatusSeparator: style.NewStyle().Foreground(style.Color("#6272A4")),
-		Arrow:           style.NewStyle().Foreground(style.Color("#6272A4")),
-		PhaseArrow:      []byte(string(rune(0x1FB74))),
-		SelectionBg:     style.Color("#3B3258"),
-	}
+	return makeTestStyles(benchMustHex)
 }
 
 func Benchmark__Render_4Phases(b *testing.B)             { benchRender(b, 4, 80, false) }
@@ -40,32 +22,32 @@ func benchRender(b *testing.B, numPhases, width int, selected bool) {
 	b.Helper()
 
 	sty := benchStyles()
-	pf := New().Width(width).Styles(sty)
+	phaseFlow := New().Width(width).Styles(sty)
 
 	names := make([]string, numPhases)
 	for i := range numPhases {
 		names[i] = "P" + string(rune('A'+i))
 	}
 
-	pf.Phases(names...)
+	phaseFlow.Phases(names...)
 
 	data := make([]PhaseData, numPhases)
-	for i := range numPhases {
-		switch i % 3 {
+	for idx := range numPhases {
+		switch idx % 3 {
 		case 0:
-			data[i] = PhaseData{Running: 1, Failed: 0, Done: 0}
+			data[idx] = PhaseData{Running: 1, Failed: 0, Done: 0}
 		case 1:
-			data[i] = PhaseData{Running: 0, Failed: 1, Done: 2}
+			data[idx] = PhaseData{Running: 0, Failed: 1, Done: 2}
 		case 2:
-			data[i] = PhaseData{Running: 0, Failed: 0, Done: 3}
+			data[idx] = PhaseData{Running: 0, Failed: 0, Done: 3}
 		}
 	}
 
-	pf.SetData(data)
+	phaseFlow.SetData(data)
 
 	if selected {
-		pf.selectedIndex = numPhases / 2
-		pf.outDirty = true
+		phaseFlow.selectedIndex = numPhases / 2
+		phaseFlow.outDirty = true
 	}
 
 	buf := buffer.NewLinesBuf()
@@ -73,7 +55,7 @@ func benchRender(b *testing.B, numPhases, width int, selected bool) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result := pf.Render()
+		result := phaseFlow.Render()
 		buf.AppendFrom(result)
 		buf.Reset()
 	}
@@ -83,23 +65,23 @@ func benchRenderCacheHit(b *testing.B, numPhases, width int) {
 	b.Helper()
 
 	sty := benchStyles()
-	pf := New().Width(width).Styles(sty)
+	phaseFlow := New().Width(width).Styles(sty)
 
 	names := make([]string, numPhases)
 	for i := range numPhases {
 		names[i] = "P" + string(rune('A'+i))
 	}
 
-	pf.Phases(names...)
+	phaseFlow.Phases(names...)
 
 	data := make([]PhaseData, numPhases)
 	for i := range numPhases {
 		data[i] = PhaseData{Running: 0, Failed: 0, Done: i + 1}
 	}
 
-	pf.SetData(data)
+	phaseFlow.SetData(data)
 
-	result := pf.Render()
+	result := phaseFlow.Render()
 	if result.Len() == 0 {
 		b.Fatal("expected non-empty output")
 	}
@@ -107,7 +89,7 @@ func benchRenderCacheHit(b *testing.B, numPhases, width int) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		_ = pf.Render()
+		_ = phaseFlow.Render()
 	}
 }
 
@@ -115,36 +97,36 @@ func benchRenderFullRebuild(b *testing.B, numPhases, width int, selected bool) {
 	b.Helper()
 
 	sty := benchStyles()
-	pf := New().Width(width).Styles(sty)
+	phaseFlow := New().Width(width).Styles(sty)
 
 	names := make([]string, numPhases)
 	for i := range numPhases {
 		names[i] = "P" + string(rune('A'+i))
 	}
 
-	pf.Phases(names...)
+	phaseFlow.Phases(names...)
 
 	data := make([]PhaseData, numPhases)
-	for i := range numPhases {
-		switch i % 3 {
+	for idx := range numPhases {
+		switch idx % 3 {
 		case 0:
-			data[i] = PhaseData{Running: 1, Failed: 0, Done: 0}
+			data[idx] = PhaseData{Running: 1, Failed: 0, Done: 0}
 		case 1:
-			data[i] = PhaseData{Running: 0, Failed: 1, Done: 2}
+			data[idx] = PhaseData{Running: 0, Failed: 1, Done: 2}
 		case 2:
-			data[i] = PhaseData{Running: 0, Failed: 0, Done: 3}
+			data[idx] = PhaseData{Running: 0, Failed: 0, Done: 3}
 		}
 	}
 
 	if selected {
-		pf.selectedIndex = numPhases / 2
+		phaseFlow.selectedIndex = numPhases / 2
 	}
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		pf.outDirty = true
-		_ = pf.Render()
+		phaseFlow.outDirty = true
+		_ = phaseFlow.Render()
 	}
 }
 

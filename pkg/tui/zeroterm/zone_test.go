@@ -19,28 +19,28 @@ func TestZoneID_MarkBuf(t *testing.T) {
 
 	id := NewZoneID()
 
-	lb := buffer.NewLinesBuf()
-	defer lb.Release()
+	buf := buffer.NewLinesBuf()
+	defer buf.Release()
 
-	id.MarkBuf([]byte("Hello"), lb)
+	id.MarkBuf([]byte("Hello"), buf)
 
-	if lb.Len() != 1 {
-		t.Fatalf("MarkBuf: got %d lines, want 1", lb.Len())
+	if buf.Len() != 1 {
+		t.Fatalf("MarkBuf: got %d lines, want 1", buf.Len())
 	}
 
-	line := lb.Line(0)
+	line := buf.Line(0)
 	if !bytes.Contains(line, []byte("Hello")) {
 		t.Errorf("MarkBuf line should contain 'Hello': %q", line)
 	}
 
 	open := id.FormatOpen(nil)
-	close := id.FormatClose(nil)
+	closeMarker := id.FormatClose(nil)
 
 	if !bytes.HasPrefix(line, open) {
 		t.Errorf("MarkBuf line should start with open marker: %q", line)
 	}
 
-	if !bytes.HasSuffix(line, close) {
+	if !bytes.HasSuffix(line, closeMarker) {
 		t.Errorf("MarkBuf line should end with close marker: %q", line)
 	}
 }
@@ -50,18 +50,18 @@ func TestZoneID_MarkBufMultiline(t *testing.T) {
 
 	id := NewZoneID()
 
-	lb := buffer.NewLinesBuf()
-	defer lb.Release()
+	buf := buffer.NewLinesBuf()
+	defer buf.Release()
 
-	id.MarkBuf([]byte("line1\nline2\nline3"), lb)
+	id.MarkBuf([]byte("line1\nline2\nline3"), buf)
 
-	if lb.Len() != 3 {
-		t.Fatalf("MarkBuf multiline: got %d lines, want 3", lb.Len())
+	if buf.Len() != 3 {
+		t.Fatalf("MarkBuf multiline: got %d lines, want 3", buf.Len())
 	}
 
 	for i, want := range []string{"line1", "line2", "line3"} {
-		if !bytes.Contains(lb.Line(i), []byte(want)) {
-			t.Errorf("line %d should contain %q: %q", i, want, lb.Line(i))
+		if !bytes.Contains(buf.Line(i), []byte(want)) {
+			t.Errorf("line %d should contain %q: %q", i, want, buf.Line(i))
 		}
 	}
 }
@@ -71,13 +71,13 @@ func TestZoneID_MarkBufEmpty(t *testing.T) {
 
 	id := NewZoneID()
 
-	lb := buffer.NewLinesBuf()
-	defer lb.Release()
+	buf := buffer.NewLinesBuf()
+	defer buf.Release()
 
-	id.MarkBuf(nil, lb)
+	id.MarkBuf(nil, buf)
 
-	if lb.Len() != 1 {
-		t.Fatalf("MarkBuf empty: got %d lines, want 1", lb.Len())
+	if buf.Len() != 1 {
+		t.Fatalf("MarkBuf empty: got %d lines, want 1", buf.Len())
 	}
 }
 
@@ -86,22 +86,22 @@ func TestZoneID_MarkBufMultilineExact(t *testing.T) {
 
 	id := NewZoneID()
 
-	lb := buffer.NewLinesBuf()
-	defer lb.Release()
+	buf := buffer.NewLinesBuf()
+	defer buf.Release()
 
-	id.MarkBuf([]byte("line1\nline2\nline3"), lb)
+	id.MarkBuf([]byte("line1\nline2\nline3"), buf)
 
-	if lb.Len() != 3 {
-		t.Fatalf("got %d lines, want 3", lb.Len())
+	if buf.Len() != 3 {
+		t.Fatalf("got %d lines, want 3", buf.Len())
 	}
 
 	open := string(id.FormatOpen(nil))
-	close := string(id.FormatClose(nil))
+	closeMarker := string(id.FormatClose(nil))
 
 	for i, want := range []string{"line1", "line2", "line3"} {
-		expected := open + want + close
-		if string(lb.Line(i)) != expected {
-			t.Errorf("line %d = %q, want %q", i, lb.Line(i), expected)
+		expected := open + want + closeMarker
+		if string(buf.Line(i)) != expected {
+			t.Errorf("line %d = %q, want %q", i, buf.Line(i), expected)
 		}
 	}
 }
@@ -111,14 +111,14 @@ func TestZoneID_MarkBufNoZoneLeakWithPrefix(t *testing.T) {
 
 	id := NewZoneID()
 
-	lb := buffer.NewLinesBuf()
-	defer lb.Release()
+	buf := buffer.NewLinesBuf()
+	defer buf.Release()
 
-	id.MarkBuf([]byte("AAAA\nBBBB\nCCCC"), lb)
+	id.MarkBuf([]byte("AAAA\nBBBB\nCCCC"), buf)
 
-	lines := make([]string, lb.Len())
-	for i := range lb.Len() {
-		lines[i] = string(lb.Line(i))
+	lines := make([]string, buf.Len())
+	for i := range buf.Len() {
+		lines[i] = string(buf.Line(i))
 	}
 
 	prefixed := "│  " + lines[0] + "\n│  " + lines[1] + "\n│  " + lines[2]
@@ -172,16 +172,16 @@ func TestZoneLifecycleAcrossFrames(t *testing.T) {
 	id := NewZoneID()
 
 	frame1Buf := buffer.NewLinesBufDiff()
-	f1 := buffer.NewLinesBuf()
-	id.MarkBuf([]byte("line1"), f1)
-	frame1Buf.Write(f1.Line(0))
-	f1.Reset()
-	id.MarkBuf([]byte("line2"), f1)
-	frame1Buf.Write(f1.Line(0))
-	f1.Reset()
-	id.MarkBuf([]byte("line3"), f1)
-	frame1Buf.Write(f1.Line(0))
-	f1.Release()
+	buf1 := buffer.NewLinesBuf()
+	id.MarkBuf([]byte("line1"), buf1)
+	frame1Buf.Write(buf1.Line(0))
+	buf1.Reset()
+	id.MarkBuf([]byte("line2"), buf1)
+	frame1Buf.Write(buf1.Line(0))
+	buf1.Reset()
+	id.MarkBuf([]byte("line3"), buf1)
+	frame1Buf.Write(buf1.Line(0))
+	buf1.Release()
 
 	found, ok := ZoneIDAtCol(frame1Buf.Line(0), 2)
 	if !ok || !found.Equal(id) {
@@ -189,13 +189,13 @@ func TestZoneLifecycleAcrossFrames(t *testing.T) {
 	}
 
 	frame2Buf := buffer.NewLinesBufDiff()
-	f2 := buffer.NewLinesBuf()
-	id.MarkBuf([]byte("lineA"), f2)
-	frame2Buf.Write(f2.Line(0))
-	f2.Reset()
-	id.MarkBuf([]byte("lineB"), f2)
-	frame2Buf.Write(f2.Line(0))
-	f2.Release()
+	buf2 := buffer.NewLinesBuf()
+	id.MarkBuf([]byte("lineA"), buf2)
+	frame2Buf.Write(buf2.Line(0))
+	buf2.Reset()
+	id.MarkBuf([]byte("lineB"), buf2)
+	frame2Buf.Write(buf2.Line(0))
+	buf2.Release()
 
 	found, ok = ZoneIDAtCol(frame2Buf.Line(0), 3)
 	if !ok || !found.Equal(id) {
@@ -247,13 +247,13 @@ func TestZoneID_FormatOpenClose(t *testing.T) {
 
 	id := zoneIDFromDigits([]byte("42"))
 	open := id.FormatOpen(nil)
-	close := id.FormatClose(nil)
+	closeMarker := id.FormatClose(nil)
 
 	if string(open) != "\x1b[42z" {
 		t.Errorf("FormatOpen(42) = %q, want \\x1b[42z", open)
 	}
 
-	if string(close) != "\x1b[/42z" {
-		t.Errorf("FormatClose(42) = %q, want \\x1b[/42z", close)
+	if string(closeMarker) != "\x1b[/42z" {
+		t.Errorf("FormatClose(42) = %q, want \\x1b[/42z", closeMarker)
 	}
 }

@@ -535,9 +535,9 @@ func TestTable_SelectionBackgroundCoversInnerSeparators(t *testing.T) {
 
 	bgPrefix := "\x1b[48;2;51;51;51m"
 
-	lines := strings.Split(got, "\n")
+	lines := strings.SplitSeq(got, "\n")
 
-	for _, line := range lines {
+	for line := range lines {
 		plain := stripANSI(line)
 		if !strings.Contains(plain, "x") || !strings.Contains(plain, "y") || !strings.Contains(plain, "z") {
 			continue
@@ -559,6 +559,7 @@ func TestTable_SelectionBackgroundCoversInnerSeparators(t *testing.T) {
 		}
 
 		innerPart := strings.Join(parts[1:len(parts)-1], "│")
+
 		innerSeps := strings.Count(innerPart, "│")
 		if innerSeps > 0 {
 			innerBgCount := strings.Count(innerPart, bgPrefix)

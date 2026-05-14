@@ -337,24 +337,24 @@ func TestNilSafety(t *testing.T) {
 	})
 }
 
-func TestJSONMarshalUnmarshal(t *testing.T) {
-	t.Parallel()
+func testMarshalUnmarshal(t *testing.T, marshalFunc func(any) ([]byte, error), unmarshalFunc func([]byte, any) error) {
+	t.Helper()
 
 	orderedMap := New[string, int]()
 	orderedMap.Set("a", 1)
 	orderedMap.Set("b", 2)
 	orderedMap.Set("c", 3)
 
-	data, err := json.Marshal(orderedMap)
+	data, err := marshalFunc(orderedMap)
 	if err != nil {
-		t.Fatalf("MarshalJSON() error: %v", err)
+		t.Fatalf("marshal error: %v", err)
 	}
 
 	orderedMap2 := New[string, int]()
 
-	err = json.Unmarshal(data, orderedMap2)
+	err = unmarshalFunc(data, orderedMap2)
 	if err != nil {
-		t.Fatalf("UnmarshalJSON() error: %v", err)
+		t.Fatalf("unmarshal error: %v", err)
 	}
 
 	pairs1 := orderedMap.Pairs()
@@ -369,6 +369,12 @@ func TestJSONMarshalUnmarshal(t *testing.T) {
 			t.Errorf("pairs[%d] = %v, want %v", idx, pairs2[idx], pairs1[idx])
 		}
 	}
+}
+
+func TestJSONMarshalUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	testMarshalUnmarshal(t, json.Marshal, json.Unmarshal)
 }
 
 func TestJSONUnmarshalNil(t *testing.T) {
@@ -387,35 +393,7 @@ func TestJSONUnmarshalNil(t *testing.T) {
 func TestYAMLMarshalUnmarshal(t *testing.T) {
 	t.Parallel()
 
-	orderedMap := New[string, int]()
-	orderedMap.Set("a", 1)
-	orderedMap.Set("b", 2)
-	orderedMap.Set("c", 3)
-
-	data, err := yaml.Marshal(orderedMap)
-	if err != nil {
-		t.Fatalf("MarshalYAML() error: %v", err)
-	}
-
-	orderedMap2 := New[string, int]()
-
-	err = yaml.Unmarshal(data, orderedMap2)
-	if err != nil {
-		t.Fatalf("UnmarshalYAML() error: %v", err)
-	}
-
-	pairs1 := orderedMap.Pairs()
-	pairs2 := orderedMap2.Pairs()
-
-	if len(pairs1) != len(pairs2) {
-		t.Fatalf("unmarshaled length = %d, want %d", len(pairs2), len(pairs1))
-	}
-
-	for idx := range pairs1 {
-		if pairs1[idx] != pairs2[idx] {
-			t.Errorf("pairs[%d] = %v, want %v", idx, pairs2[idx], pairs1[idx])
-		}
-	}
+	testMarshalUnmarshal(t, yaml.Marshal, yaml.Unmarshal)
 }
 
 func TestConcurrentAccess(t *testing.T) {

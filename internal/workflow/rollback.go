@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ccoveille/go-safecast/v2"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -68,7 +69,12 @@ func validateAndGetTargetGen(generations *machine.Generations, rollbackGeneratio
 	case rollbackGeneration == 0:
 		return current, nil
 	case rollbackGeneration < 0:
-		resolvedGeneration := int(current) + rollbackGeneration //nolint:gosec // G115: uint -> int should not overflow
+		currentInt, err := safecast.Convert[int](current)
+		if err != nil {
+			return 0, err
+		}
+
+		resolvedGeneration := currentInt + rollbackGeneration
 		if resolvedGeneration <= 0 {
 			return 0, errors.Wrapf(ErrGenerationOutOfRange, "%d", resolvedGeneration)
 		}

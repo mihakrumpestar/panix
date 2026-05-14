@@ -98,17 +98,17 @@ func TestParseGenerationLine(t *testing.T) {
 		{"zero gen number", 1, "0   2025-04-19   10:00:00   24.11   6.6.0", 0, "2025-04-19", "24.11", "6.6.0", false, true},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
-			genNum, info, isCurrent, ok := parseGenerationLine(tt.lineNum, tt.line)
+			genNum, info, isCurrent, ok := parseGenerationLine(test.lineNum, test.line)
 
-			assertion.Equal(tt.wantOK, ok)
+			assertion.Equal(test.wantOK, ok)
 
-			if !tt.wantOK {
+			if !test.wantOK {
 				assertion.Zero(genNum)
 				assertion.False(isCurrent)
 
@@ -116,11 +116,11 @@ func TestParseGenerationLine(t *testing.T) {
 			}
 
 			require.True(t, ok)
-			assertion.Equal(tt.wantGenNum, genNum)
-			assertion.Equal(tt.wantCurrent, isCurrent)
-			assertion.Equal(tt.wantDate, info.Date)
-			assertion.Equal(tt.wantNixos, info.Nixos)
-			assertion.Equal(tt.wantKernel, info.Kernel)
+			assertion.Equal(test.wantGenNum, genNum)
+			assertion.Equal(test.wantCurrent, isCurrent)
+			assertion.Equal(test.wantDate, info.Date)
+			assertion.Equal(test.wantNixos, info.Nixos)
+			assertion.Equal(test.wantKernel, info.Kernel)
 		})
 	}
 }
@@ -205,27 +205,27 @@ func TestParseGenerationsOutput(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
-			gen, info, err := parseGenerationsOutput(tt.input)
+			gen, info, err := parseGenerationsOutput(test.input)
 
-			if tt.wantErr {
+			if test.wantErr {
 				require.Error(t, err)
-				assertion.Contains(err.Error(), tt.wantErrContains)
+				assertion.Contains(err.Error(), test.wantErrContains)
 
 				return
 			}
 
 			require.NoError(t, err)
-			assertion.Equal(tt.wantCurrent, gen.Current)
-			assertion.Equal(tt.wantAvailable, gen.Available)
-			assertion.Equal(tt.wantDate, info.Date)
-			assertion.Equal(tt.wantNixos, info.Nixos)
-			assertion.Equal(tt.wantKernel, info.Kernel)
+			assertion.Equal(test.wantCurrent, gen.Current)
+			assertion.Equal(test.wantAvailable, gen.Available)
+			assertion.Equal(test.wantDate, info.Date)
+			assertion.Equal(test.wantNixos, info.Nixos)
+			assertion.Equal(test.wantKernel, info.Kernel)
 		})
 	}
 }

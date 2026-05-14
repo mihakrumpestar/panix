@@ -1,6 +1,7 @@
 package style
 
 import (
+	"bytes"
 	"math"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -20,35 +21,12 @@ const (
 
 const maxPadSpaces = 512
 
-var padSpaces = make([]byte, maxPadSpaces)
-
-func init() {
-	for i := range padSpaces {
-		padSpaces[i] = ' '
-	}
-}
+var padSpaces = bytes.Repeat([]byte(" "), maxPadSpaces)
 
 type blockInfo struct {
 	lines  [][]byte
 	widths []int
 	maxW   int
-}
-
-func splitBlock(data []byte) blockInfo {
-	lines := splitLinesBytes(data)
-	widths := make([]int, len(lines))
-	maxW := 0
-
-	for i, line := range lines {
-		w := CellWidth(line)
-
-		widths[i] = w
-		if w > maxW {
-			maxW = w
-		}
-	}
-
-	return blockInfo{lines: lines, widths: widths, maxW: maxW}
 }
 
 func splitBlockScratch(s *joinScratch, data []byte) blockInfo {
@@ -68,23 +46,23 @@ func splitBlockScratch(s *joinScratch, data []byte) blockInfo {
 	return blockInfo{lines: lines, widths: widths, maxW: maxW}
 }
 
-func splitLinesBytesScratch(s *joinScratch, data []byte) [][]byte {
+func splitLinesBytesScratch(joinScratch *joinScratch, data []byte) [][]byte {
 	if len(data) == 0 {
-		lines := s.allocLines(1)
+		lines := joinScratch.allocLines(1)
 		lines[0] = nil
 
 		return lines
 	}
 
-	n := 1
+	lineCount := 1
 
 	for _, b := range data {
 		if b == '\n' {
-			n++
+			lineCount++
 		}
 	}
 
-	lines := s.allocLines(n)
+	lines := joinScratch.allocLines(lineCount)
 	start := 0
 	idx := 0
 
@@ -112,11 +90,11 @@ func JoinHorizontal(buf *buffer.LinesBuf, pos Position, blocks ...[]byte) {
 		return
 	}
 
-	s := newJoinScratch()
-	defer s.release()
+	joinScratch := newJoinScratch()
+	defer joinScratch.release()
 
 	if len(blocks) == 1 {
-		infos := splitBlockScratch(s, blocks[0])
+		infos := splitBlockScratch(joinScratch, blocks[0])
 		for _, line := range infos.lines {
 			buf.WriteLine(line)
 		}
@@ -124,11 +102,11 @@ func JoinHorizontal(buf *buffer.LinesBuf, pos Position, blocks ...[]byte) {
 		return
 	}
 
-	infos := s.allocInfos(len(blocks))
+	infos := joinScratch.allocInfos(len(blocks))
 	maxHeight := 0
 
 	for i, block := range blocks {
-		infos[i] = splitBlockScratch(s, block)
+		infos[i] = splitBlockScratch(joinScratch, block)
 		if len(infos[i].lines) > maxHeight {
 			maxHeight = len(infos[i].lines)
 		}
@@ -154,14 +132,14 @@ func JoinHorizontalBufs(buf *buffer.LinesBuf, pos Position, blocks ...*buffer.Li
 		return
 	}
 
-	s := newJoinScratch()
-	defer s.release()
+	joinScratch := newJoinScratch()
+	defer joinScratch.release()
 
-	infos := s.allocInfos(len(blocks))
+	infos := joinScratch.allocInfos(len(blocks))
 	maxHeight := 0
 
 	for i, block := range blocks {
-		infos[i] = linesBufToBlockInfo(s, block)
+		infos[i] = linesBufToBlockInfo(joinScratch, block)
 		if len(infos[i].lines) > maxHeight {
 			maxHeight = len(infos[i].lines)
 		}
@@ -172,19 +150,19 @@ func JoinHorizontalBufs(buf *buffer.LinesBuf, pos Position, blocks ...*buffer.Li
 
 // linesBufToBlockInfo builds a blockInfo from a LinesBuf without scanning for
 // newlines — lines and widths come directly from the LinesBuf's line index.
-func linesBufToBlockInfo(s *joinScratch, lb *buffer.LinesBuf) blockInfo {
-	n := lb.Len()
+func linesBufToBlockInfo(s *joinScratch, buf *buffer.LinesBuf) blockInfo {
+	n := buf.Len()
 	lines := s.allocLines(n)
 	widths := s.allocWidths(n)
 	maxW := 0
 
-	for i := range n {
-		line := lb.Line(i)
-		lines[i] = line
+	for idx := range n {
+		line := buf.Line(idx)
+		lines[idx] = line
 
 		w := CellWidth(line)
 
-		widths[i] = w
+		widths[idx] = w
 		if w > maxW {
 			maxW = w
 		}
@@ -203,11 +181,11 @@ func JoinVertical(buf *buffer.LinesBuf, pos Position, blocks ...[]byte) {
 		return
 	}
 
-	s := newJoinScratch()
-	defer s.release()
+	joinStratch := newJoinScratch()
+	defer joinStratch.release()
 
 	if len(blocks) == 1 {
-		infos := splitBlockScratch(s, blocks[0])
+		infos := splitBlockScratch(joinStratch, blocks[0])
 		for _, line := range infos.lines {
 			buf.WriteLine(line)
 		}
@@ -215,11 +193,11 @@ func JoinVertical(buf *buffer.LinesBuf, pos Position, blocks ...[]byte) {
 		return
 	}
 
-	infos := s.allocInfos(len(blocks))
+	infos := joinStratch.allocInfos(len(blocks))
 	maxWidth := 0
 
 	for i, block := range blocks {
-		infos[i] = splitBlockScratch(s, block)
+		infos[i] = splitBlockScratch(joinStratch, block)
 		if infos[i].maxW > maxWidth {
 			maxWidth = infos[i].maxW
 		}
@@ -267,28 +245,35 @@ func mergeBlocks(buf *buffer.LinesBuf, infos []blockInfo, maxHeight int, pos Pos
 			lineIdx := rowToLineIdx(row, len(info.lines), maxHeight, pos)
 
 			if lineIdx >= 0 {
-				pad := info.maxW - info.widths[lineIdx]
-				if pad > 0 {
-					if blockIdx == 0 {
-						buf.WriteLine(info.lines[lineIdx], padSpaces[:min(pad, maxPadSpaces)])
-					} else {
-						buf.AppendToLine(info.lines[lineIdx], padSpaces[:min(pad, maxPadSpaces)])
-					}
-				} else {
-					if blockIdx == 0 {
-						buf.WriteLine(info.lines[lineIdx])
-					} else {
-						buf.AppendToLine(info.lines[lineIdx])
-					}
-				}
+				writeBlockLine(buf, blockIdx, info.lines[lineIdx], info.maxW-info.widths[lineIdx])
 			} else {
-				pad := padSpaces[:min(info.maxW, maxPadSpaces)]
-				if blockIdx == 0 {
-					buf.WriteLine(pad)
-				} else {
-					buf.AppendToLine(pad)
-				}
+				writeBlockLine(buf, blockIdx, nil, info.maxW)
 			}
+		}
+	}
+}
+
+func writeBlockLine(buf *buffer.LinesBuf, blockIdx int, line []byte, pad int) {
+	switch {
+	case line == nil:
+		p := padSpaces[:min(pad, maxPadSpaces)]
+		if blockIdx == 0 {
+			buf.WriteLine(p)
+		} else {
+			buf.AppendToLine(p)
+		}
+	case pad > 0:
+		p := padSpaces[:min(pad, maxPadSpaces)]
+		if blockIdx == 0 {
+			buf.WriteLine(line, p)
+		} else {
+			buf.AppendToLine(line, p)
+		}
+	default:
+		if blockIdx == 0 {
+			buf.WriteLine(line)
+		} else {
+			buf.AppendToLine(line)
 		}
 	}
 }
@@ -306,7 +291,7 @@ func buildVerticalOutput(buf *buffer.LinesBuf, infos []blockInfo, maxWidth int, 
 			case pos >= Right:
 				buf.WriteLine(padSpaces[:min(pad, maxPadSpaces)], line)
 			case pos == Center:
-				left := pad / 2 //nolint:mnd
+				left := pad / 2
 				right := pad - left
 				buf.WriteLine(padSpaces[:min(left, maxPadSpaces)], line, padSpaces[:min(right, maxPadSpaces)])
 			default:
@@ -314,32 +299,4 @@ func buildVerticalOutput(buf *buffer.LinesBuf, infos []blockInfo, maxWidth int, 
 			}
 		}
 	}
-}
-
-func splitLinesBytes(data []byte) [][]byte {
-	if len(data) == 0 {
-		return [][]byte{nil}
-	}
-
-	n := 1
-
-	for _, b := range data {
-		if b == '\n' {
-			n++
-		}
-	}
-
-	lines := make([][]byte, 0, n)
-	start := 0
-
-	for i, b := range data {
-		if b == '\n' {
-			lines = append(lines, data[start:i])
-			start = i + 1
-		}
-	}
-
-	lines = append(lines, data[start:])
-
-	return lines
 }

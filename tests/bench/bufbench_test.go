@@ -213,6 +213,28 @@ func (s *stringSlice) Diff(old benchBuffer) []int {
 
 type lineRef struct{ off, len_ uint32 }
 
+func diffLineRefs(dataA []byte, refsA []lineRef, dataB []byte, refsB []lineRef) []int {
+	commonLen := min(len(refsA), len(refsB))
+
+	var diffs []int
+
+	for idx := range commonLen {
+		nr, or_ := refsA[idx], refsB[idx]
+		if nr.len_ == or_.len_ &&
+			bytes.Equal(dataA[nr.off:nr.off+nr.len_], dataB[or_.off:or_.off+or_.len_]) {
+			continue
+		}
+
+		diffs = append(diffs, idx)
+	}
+
+	for idx := commonLen; idx < len(refsA); idx++ {
+		diffs = append(diffs, idx)
+	}
+
+	return diffs
+}
+
 type contiguousRefBuffer struct {
 	data []byte
 	refs []lineRef
@@ -246,26 +268,7 @@ func (a *contiguousRefBuffer) OverrideLastLine(line []byte) {
 
 //nolint:forcetypeassert // type guaranteed by construction
 func (a *contiguousRefBuffer) Diff(old benchBuffer) []int {
-	other := old.(*contiguousRefBuffer)
-	commonLen := min(len(a.refs), len(other.refs))
-
-	var diffs []int
-
-	for idx := range commonLen {
-		nr, or_ := a.refs[idx], other.refs[idx]
-		if nr.len_ == or_.len_ &&
-			bytes.Equal(a.data[nr.off:nr.off+nr.len_], other.data[or_.off:or_.off+or_.len_]) {
-			continue
-		}
-
-		diffs = append(diffs, idx)
-	}
-
-	for idx := commonLen; idx < len(a.refs); idx++ {
-		diffs = append(diffs, idx)
-	}
-
-	return diffs
+	return diffLineRefs(a.data, a.refs, old.(*contiguousRefBuffer).data, old.(*contiguousRefBuffer).refs)
 }
 
 var contiguousRefPool = sync.Pool{
@@ -740,26 +743,7 @@ func (a *arenaResetRef) Reset() {
 
 //nolint:forcetypeassert // type guaranteed by construction
 func (a *arenaResetRef) Diff(old benchBuffer) []int {
-	other := old.(*arenaResetRef)
-	commonLen := min(len(a.refs), len(other.refs))
-
-	var diffs []int
-
-	for idx := range commonLen {
-		nr, or_ := a.refs[idx], other.refs[idx]
-		if nr.len_ == or_.len_ &&
-			bytes.Equal(a.data[nr.off:nr.off+nr.len_], other.data[or_.off:or_.off+or_.len_]) {
-			continue
-		}
-
-		diffs = append(diffs, idx)
-	}
-
-	for idx := commonLen; idx < len(a.refs); idx++ {
-		diffs = append(diffs, idx)
-	}
-
-	return diffs
+	return diffLineRefs(a.data, a.refs, old.(*arenaResetRef).data, old.(*arenaResetRef).refs)
 }
 
 // ─── BlobDiffRef (ContiguousRef + whole-blob memcmp fast path) ───────────────
@@ -795,7 +779,7 @@ func (b *blobDiffRef) Reset() {
 	b.refs = b.refs[:0]
 }
 
-//nolint:cyclop,forcetypeassert // diff is inherently branchy; type guaranteed by construction
+//nolint:forcetypeassert // diff is inherently branchy; type guaranteed by construction
 func (b *blobDiffRef) Diff(old benchBuffer) []int {
 	other := old.(*blobDiffRef)
 	commonLen := min(len(b.refs), len(other.refs))

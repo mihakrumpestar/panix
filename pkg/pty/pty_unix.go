@@ -58,7 +58,7 @@ func (p *Pty) SetWinsize(winsize *Winsize) error {
 	var ioctlErr error
 
 	err = conn.Control(func(fd uintptr) {
-		ioctlErr = unix.IoctlSetWinsize(int(fd), unix.TIOCSWINSZ, winsize) //nolint:gosec // G115: fd from uintptr is safe within Control callback
+		ioctlErr = unix.IoctlSetWinsize(int(fd), unix.TIOCSWINSZ, winsize)
 	})
 	if err != nil {
 		return fmt.Errorf("pty: control: %w", err)

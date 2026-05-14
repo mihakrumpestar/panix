@@ -212,28 +212,24 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 	content.AppendFrom(m.buildLogs.Render(m.viewports, m.spinners))
 
 	if m.err != nil {
-		errContent := [][]byte{
-			[]byte{},
-			[]byte("=== Error ==="),
-			[]byte{},
-			[]byte(m.err.Error()),
-		}
+		errContent := [][]byte{nil, []byte("=== Error ==="), nil, []byte(m.err.Error())}
 
 		m.conf.ColorScheme.Error.Color.RenderInto(content, errContent)
 	}
 
 	if m.conf.Flags.Logging.Debug {
 		debugContent := [][]byte{
-			[]byte{},
-			[]byte("=== Debug ==="),
-			[]byte{},
-			fmt.Appendf(nil, "terminal - h: %d, w: %d\n", m.dimensions.Height, m.dimensions.Width),
+			nil, []byte("=== Debug ==="), nil,
+			fmt.Appendf(nil, "terminal - h: %d, w: %d", m.dimensions.Height, m.dimensions.Width),
 			fmt.Appendf(nil, "header - h: %d", m.header.Len()),
-			fmt.Appendf(nil, "footer - h: %d\n", m.footer.Len()),
-			[]byte{},
+			fmt.Appendf(nil, "footer - h: %d", m.footer.Len()),
+			nil,
 		}
 
 		content.WriteLines(debugContent)
+
+		m.spinners.Debug(content)
+		m.viewports.Debug(content)
 	}
 
 	var viewportHeight int
