@@ -1,6 +1,7 @@
 package buffer
 
 import (
+	"strconv"
 	"sync"
 )
 
@@ -253,4 +254,45 @@ func (b *LinesBuf) WritePaddedView(data []byte, offsets []int, start, end int) {
 func (b *LinesBuf) CopyFrom(src *LinesBuf) {
 	b.buf = append(b.buf[:0], src.buf...)
 	b.indexes = append(b.indexes[:0], src.indexes...)
+}
+
+// AppendInt appends the decimal representation of val to buf and returns the
+// extended buffer. Fast-path for 1–3 digit numbers; falls back to
+// strconv.AppendInt for larger values. Zero allocations.
+//
+//nolint:mnd
+func AppendInt(buf []byte, val int) []byte {
+	if val < 0 {
+		buf = append(buf, '-')
+		val = -val
+	}
+
+	if val < 10 {
+		//nolint:gosec // G115: safe — val<10, so '0'+val is in ['0','9']
+		return append(buf, byte('0'+val))
+	}
+
+	if val < 100 {
+		return append(buf, byte('0'+val/10), byte('0'+val%10))
+	}
+
+	if val < 1000 {
+		buf = append(buf, byte('0'+val/100))
+		buf = append(buf, byte('0'+(val/10)%10))
+
+		return append(buf, byte('0'+val%10))
+	}
+
+	return strconv.AppendInt(buf, int64(val), 10)
+}
+
+// WriteLineInt starts a new line composed of prefix + decimal val + suffix,
+// written directly into the buffer with zero allocations. Equivalent to
+// fmt.Appendf(nil, "%s%d%s", prefix, val, suffix) but without interface{}
+// boxing or fmt reflection overhead.
+func (b *LinesBuf) WriteLineInt(prefix []byte, val int, suffix []byte) {
+	b.indexes = append(b.indexes, len(b.buf))
+	b.buf = append(b.buf, prefix...)
+	b.buf = AppendInt(b.buf, val)
+	b.buf = append(b.buf, suffix...)
 }

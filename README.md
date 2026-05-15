@@ -7,7 +7,7 @@
 *Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
 
 [![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
-[![license: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/mihakrumpestar/panix/pkg.svg)](https://pkg.go.dev/github.com/mihakrumpestar/panix/pkg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
@@ -55,10 +55,15 @@ Panix addresses these problems by providing deployment orchestration with built-
 
 ## What Panix Is
 
-Panix is a deployment orchestrator for NixOS flakes. It provides:
+Panix is a deployment orchestrator for NixOS flakes.
+
+![TUI Showcase](./assets/tui.png)
+
+It provides:
 
 - **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
-- **Phase-oriented execution**: Six sequential deployment phases - Inspect, Bootstrap, Build, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`. Remote build mode can execute builds on a target machine instead of locally.
+- **Phase-oriented execution**: Six sequential deployment phases - Inspect, Bootstrap, Build, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
+- **Remote build mode**: Builds can execute on a target machine instead of locally, useful when the target has more resources or a different architecture. The closure is then copied between machines via the Nix remote store protocol.
 - **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
 - **Bootstrap support**: machines can be converted to NixOS via NixOS live install or any live install or previusly installed distro using kexec and `disko`, with full support for custom hooks and secrets at multiple stages.
 - **Flake-agnostic configuration**: The deployment configuration is separate from your flake. No modifications to your flake are required to use Panix.
@@ -84,9 +89,9 @@ Inspect → Bootstrap → Build → Transfer → Secrets → Activate
 | **Inspect** | Per-machine | TCP reachability, SSH authentication, architecture detection, OS detection, generation discovery |
 | **Bootstrap** | Per-machine | kexec into NixOS installer (if needed), disko partitioning, encryption keys transfer (if provided) |
 | **Build** | Per-configuration | Build `config.system.build.toplevel` closure via `nix build` (local or remote mode) |
-| **Transfer** | Per-machine | `nix copy` closure to target (handles `/mnt` for bootstrapped systems) |
+| **Transfer** | Per-machine | `nix copy` closure to target |
 | **Secrets** | Per-machine | Transfer files/directories with proper ownership via rsync |
-| **Activate** | Per-machine | `nixos-install` (bootstrap) or `switch-to-configuration switch` (deploy) |
+| **Activate** | Per-machine | `nixos-install` (bootstrap) or `switch-to-configuration` (deploy) |
 
 Standalone phases (in combination with Inpect):
 
@@ -476,9 +481,9 @@ ssh:
 
 Defaults:
 
-- `disable_strict_key_checking: false` — strict host key checking enabled
-- `disable_auto_add_host_key: false` — automatically adds new host keys to known_hosts
-- `known_hosts_file: ""` — uses the user's default `~/.ssh/known_hosts` or temporary file if using bootstrap SSH
+- `disable_strict_key_checking: false`: strict host key checking enabled
+- `disable_auto_add_host_key: false`: automatically adds new host keys to known_hosts
+- `known_hosts_file: ""`: uses the user's default `~/.ssh/known_hosts` or temporary file if using bootstrap SSH
 
 Behavior:
 
@@ -940,7 +945,7 @@ fleet:
                 hostname: 192.168.1.101
 ```
 
-`build_mode` can be set at fleet, flake, or configuration level (inherited like other `nix` options). It cannot be set at machine level — a configuration's machines share the same build mode (since build is a configuration level phase).
+`build_mode` can be set at fleet, flake, or configuration level (inherited like other `nix` options). It cannot be set at machine level, as a configuration's machines share the same build mode (since build is a configuration level phase).
 
 ### Advanced
 
@@ -1583,13 +1588,44 @@ The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes
 
 1. Generates SSH keys, downloads kexec and Debian images, builds a NixOS installer ISO, preconfigures Debian image
 2. Starts QEMU VMs per test scope: NixOS ISO VM + Debian/kexec VM for local, and/or the same pair for remote
-3. Runs panix deploy (bootstrap) against all VMs (disko, nixos-install, reboot) — remote mode builds on the first machine via `--store ssh-ng://`
+3. Runs panix deploy (bootstrap) against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`
 4. Runs panix deploy (re-deploy) against all VMs (switch-to-configuration)
 5. Verifies NixOS installation on all VMs via SSH
 
 **What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
 
 **Logs** (`tests/e2e/log/`): Recreated each run. Per-VM console logs with timestamps, panix logs per deploy, snapshot JSONs.
+
+---
+
+## Custom TUI Rendering Engine
+
+Panix uses a custom-built terminal rendering engine `zeroterm` (the `pkg/tui` and `pkg/buffer` packages) instead of existing TUI frameworks. The engine is designed for zero-allocation steady-state rendering. When nothing changes on screen, the render + diff pipeline costs **0 memory allocations** and completes in under 3 μs.
+
+Full-pipeline benchmarks (render + diff, composite layout with viewports, tree, and table at terminal size of 200×50) against [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [cview](https://github.com/rivo/tview):
+
+| Feature | Ours | Bubbletea +181× | Cview +496× |
+|---|---|---|---|
+| Pipeline_EveryFrameUpdate | **24.7 µs** (11.4 KB, 178 allocs) | 1.3 ms (222.5 KB, 4382 allocs) +54× | 2.5 ms (1.1 MB, 28140 allocs) +100× |
+| Pipeline_NoChange | **2.8 µs** (0 B, 0 allocs) | 668.5 µs (173.0 KB, 3535 allocs) +236× | 2.1 ms (860.0 KB, 22535 allocs) +748× |
+| Pipeline_QuarterFrameUpdate | **2.8 µs** (0 B, 0 allocs) | 732.4 µs (167.2 KB, 2959 allocs) +257× | 1.8 ms (818.4 KB, 20474 allocs) +642× |
+
+*goos: linux goarch: amd64 cpu: AMD Ryzen 9 5900HX with Radeon Graphics, benchtime: 1s, ran: 2026-05-15*
+
+[Benchmark source code](./tests/bench/tui)
+
+<details>
+<summary>How it works</summary>
+
+- **Contiguous line buffer** (`LinesBuf`): all lines stored in one `[]byte` with `[]int` offsets. `Line(i)` is zero-copy. Bulk ops (`AppendFrom`, `WritePaddedView`) copy visible regions in a single append. Pooled via `sync.Pool`, reset with `buf[:0]` retaining capacity.
+- **In-place styling** (`AppendStyledLine`/`AppendStyledPad`): writes prefix + content + reset directly into the caller's buffer, no intermediate slices or per-cell allocations. Pre-rendered ANSI prefixes and 1000-space padding pool.
+- **Double-buffered frame diffing**: two `LinesBufDiff` buffers alternate as current/previous. `Diff(prev)` returns indices of changed lines via `bytes.Equal`. Only changed lines get terminal output (`\x1b[y;1H` + content + clear-to-EOL). Unchanged lines: zero output.
+- **Incremental caching**: Table re-renders only dirty rows (changed content or selection change). Viewport appends to its contiguous padded buffer when only new lines are added, avoiding O(n) rebuild. All components cache rendered output keyed on content/version/width/selection.
+- **Pre-rendered everything**: border bytes, connector chars, scrollbar cells, zone markers (`\x1b[<id>z`), ANSI prefixes. Computed once, reused every frame.
+- **Stack-allocated scratch**: Tree prefixes use `var pfxBuf [1024]byte`. Table uses a single partitioned `widthsBuf []int`. No heap scratch allocations.
+- **Zero-CGO**: Pure Go, no C dependencies.
+
+</details>
 
 ---
 

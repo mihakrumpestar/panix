@@ -6,54 +6,62 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    flake-utils,
-  }:
-    flake-utils.lib.eachDefaultSystem (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
 
-      version = builtins.readFile ./gen/VERSION;
-    in {
-      packages = {
-        default = pkgs.buildGoLatestModule {
-          pname = "panix";
-          inherit version;
+        version = builtins.readFile ./gen/VERSION;
+      in
+      {
+        packages = {
+          default = pkgs.buildGoLatestModule {
+            pname = "panix";
+            inherit version;
 
-          src = ./.;
-          subPackages = ["cmd/panix"];
+            src = ./.;
+            subPackages = [ "cmd/panix" ];
 
-          flags = ["-trimpath"];
-          ldflags = ["-s" "-w"];
-
-          env.CGO_ENABLED = 0; # Disable CGO
-
-          vendorHash = "sha256-en+zMjNN++F9i5Z7SkkRs66a9bVf1Wz8kbQEJNnkYKk=";
-
-          meta = with pkgs.lib; {
-            description = "Universal NixOS Deployment Tool";
-            homepage = "https://github.com/mihakrumpestar/panix";
-            changelog = "https://github.com/mihakrumpestar/panix/releases/tag/v${version}";
-            license = licenses.agpl3Only;
-            maintainers = [
-              {
-                name = "Miha Krumpestar";
-                github = "mihakrumpestar";
-                githubId = 70652456;
-              }
+            flags = [ "-trimpath" ];
+            ldflags = [
+              "-s"
+              "-w"
             ];
-            platforms = platforms.all;
-            mainProgram = "panix";
+
+            env.CGO_ENABLED = 0; # Disable CGO
+
+            vendorHash = "sha256-xDbItYNHcDqIpuy0VcrRB92P29sYCOdKs7KGbYKgVb0=";
+
+            meta = with pkgs.lib; {
+              description = "Universal NixOS Deployment Tool";
+              homepage = "https://github.com/mihakrumpestar/panix";
+              changelog = "https://github.com/mihakrumpestar/panix/releases/tag/v${version}";
+              license = licenses.agpl3Only;
+              maintainers = [
+                {
+                  name = "Miha Krumpestar";
+                  github = "mihakrumpestar";
+                  githubId = 70652456;
+                }
+              ];
+              platforms = platforms.all;
+              mainProgram = "panix";
+            };
           };
         };
-      };
 
-      apps = {
-        default = flake-utils.lib.mkApp {
-          drv = self.packages.${system}.default;
-          name = "panix";
+        apps = {
+          default = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.default;
+            name = "panix";
+          };
         };
-      };
-    });
+      }
+    );
 }

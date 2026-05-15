@@ -23,12 +23,12 @@
 //
 // # Output Format
 //
-// One table per package. Each cell shows time, allocs in parens, and
+// One table per package. Each cell shows time, bytes/allocs in parens, and
 // ratio vs the leftmost (best overall) variant as base:
 //
-//	668 ns (0)           — base variant, no ratio shown
-//	685 ns (0) +1.03×    — 1.03× slower than base
-//	550 ns (0) −1.21×    — 1.21× faster than base (reciprocal)
+//	668 ns (0 B, 0)           — base variant, no ratio shown
+//	685 ns (0 B, 0) +1.03×    — 1.03× slower than base
+//	550 ns (0 B, 0) −1.21×    — 1.21× faster than base (reciprocal)
 //
 // "-" means no benchmark exists for that variant/feature pair.
 //
@@ -55,12 +55,13 @@ import (
 	"time"
 )
 
-var benchLineRe = regexp.MustCompile(`^Benchmark(\S+?)-\d+\s+\d+\s+([\d.]+)\s+ns/op(?:\s+\d+\s+B/op\s+(\d+)\s+allocs/op)?`)
+var benchLineRe = regexp.MustCompile(`^Benchmark(\S+?)-\d+\s+\d+\s+([\d.]+)\s+ns/op(?:\s+([\d.]+)\s+B/op\s+(\d+)\s+allocs/op)?`)
 var metaLineRe = regexp.MustCompile(`^(goos|goarch|pkg|cpu|benchtime|timestamp):\s+(.+?)\s*$`)
 
 type bench struct {
 	name, pkg string
 	ns        float64
+	bytes     float64
 	allocs    int
 }
 
@@ -144,8 +145,9 @@ func parse(data []byte) ([]bench, env, bool) {
 		if match := benchLineRe.FindStringSubmatch(line); match != nil {
 			has = true
 			ns, _ := strconv.ParseFloat(match[2], 64)
-			a, _ := strconv.Atoi(match[3])
-			benchmarks = append(benchmarks, bench{match[1], curPkg, ns, a})
+			b, _ := strconv.ParseFloat(match[3], 64)
+			a, _ := strconv.Atoi(match[4])
+			benchmarks = append(benchmarks, bench{match[1], curPkg, ns, b, a})
 		}
 	}
 
@@ -216,6 +218,18 @@ func fmtNs(nanos float64) string {
 		return fmt.Sprintf("%.1f ms", nanos/1e6)
 	default:
 		return fmt.Sprintf("%.2f s", nanos/1e9)
+	}
+}
+
+//nolint:mnd
+func fmtBytes(bytes float64) string {
+	switch {
+	case bytes < 1024:
+		return fmt.Sprintf("%.0f B", bytes)
+	case bytes < 1024*1024:
+		return fmt.Sprintf("%.1f KB", bytes/1024)
+	default:
+		return fmt.Sprintf("%.1f MB", bytes/(1024*1024))
 	}
 }
 
@@ -384,7 +398,7 @@ func printMultiVariantTable(writer io.Writer, pkg string, groups map[string]*fea
 				continue
 			}
 
-			cell := fmt.Sprintf("%s (%d)", fmtNs(bch.ns), bch.allocs)
+			cell := fmt.Sprintf("%s (%s, %d)", fmtNs(bch.ns), fmtBytes(bch.bytes), bch.allocs)
 
 			vs := fmtVsBase(baseNs, bch.ns)
 			if vs != "" {
@@ -567,8 +581,6 @@ func run() error {
 		defer func() { _ = file.Close() }()
 
 		writers = append(writers, file)
-
-		fmt.Fprintf(os.Stderr, "  writing results to %s\n", *outFile)
 	}
 
 	writer := io.MultiWriter(writers...)

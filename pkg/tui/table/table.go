@@ -45,7 +45,7 @@ type Table struct {
 
 	content *buffer.LinesBuf
 
-	rowBuf []byte
+	rowBuf *buffer.LineBuf
 
 	borderVertical      []byte
 	selBgBorderVertical []byte
@@ -74,6 +74,7 @@ func New(cfg Config) *Table {
 		outDirty:      true,
 		rowCacheSel:   -2,
 		content:       buffer.NewLinesBuf(),
+		rowBuf:        buffer.NewLineBuf(),
 	}
 
 	if bordered {
@@ -291,19 +292,19 @@ func (t *Table) Render() *buffer.LinesBuf {
 			t.cfg.Border.TopLeft, t.cfg.Border.TopMid, t.cfg.Border.TopRight,
 			colWidths,
 		)
-		t.content.WriteLine(t.rowBuf)
+		t.content.WriteLine(t.rowBuf.Bytes())
 	}
 
 	if len(t.cfg.Headers) > 0 {
 		t.buildRow(t.cfg.Headers, colWidths, HeaderRow, t.bordered)
-		t.content.WriteLine(t.rowBuf)
+		t.content.WriteLine(t.rowBuf.Bytes())
 
 		if t.bordered {
 			t.writeHorizontalBorder(
 				t.cfg.Border.LeftMid, t.cfg.Border.MidMid, t.cfg.Border.RightMid,
 				colWidths,
 			)
-			t.content.WriteLine(t.rowBuf)
+			t.content.WriteLine(t.rowBuf.Bytes())
 		}
 	}
 
@@ -320,7 +321,7 @@ func (t *Table) Render() *buffer.LinesBuf {
 			t.cfg.Border.BottomLeft, t.cfg.Border.BottomMid, t.cfg.Border.BottomRight,
 			colWidths,
 		)
-		t.content.WriteLine(t.rowBuf)
+		t.content.WriteLine(t.rowBuf.Bytes())
 	}
 
 	t.outDirty = false
@@ -473,14 +474,15 @@ func (t *Table) fullRowCacheRebuild(colWidths []int, numRows int, hasBorder bool
 	for rowIdx, row := range t.rows {
 		t.buildRow(row, colWidths, rowIdx, hasBorder)
 
-		// Reuse existing byte slice if it fits, else allocate.
-		if cap(t.rowCacheBytes[rowIdx]) < len(t.rowBuf) {
-			t.rowCacheBytes[rowIdx] = make([]byte, len(t.rowBuf))
+		rowBytes := t.rowBuf.Bytes()
+
+		if cap(t.rowCacheBytes[rowIdx]) < len(rowBytes) {
+			t.rowCacheBytes[rowIdx] = make([]byte, len(rowBytes))
 		} else {
-			t.rowCacheBytes[rowIdx] = t.rowCacheBytes[rowIdx][:len(t.rowBuf)]
+			t.rowCacheBytes[rowIdx] = t.rowCacheBytes[rowIdx][:len(rowBytes)]
 		}
 
-		copy(t.rowCacheBytes[rowIdx], t.rowBuf)
+		copy(t.rowCacheBytes[rowIdx], rowBytes)
 		t.rowCacheData[rowIdx] = row
 	}
 
@@ -492,21 +494,21 @@ func (t *Table) incrementalRowCacheUpdate(colWidths []int, selChanged bool, hasB
 		dirty := !cellsEqual(t.rowCacheData[rowIdx], row)
 
 		if !dirty && selChanged {
-			// Selection affects rendering only for the previously-
-			// selected and newly-selected rows.
 			dirty = rowIdx == t.rowCacheSel || rowIdx == t.selectedIndex
 		}
 
 		if dirty {
 			t.buildRow(row, colWidths, rowIdx, hasBorder)
-			// Reuse existing byte slice if it fits, else allocate.
-			if cap(t.rowCacheBytes[rowIdx]) < len(t.rowBuf) {
-				t.rowCacheBytes[rowIdx] = make([]byte, len(t.rowBuf))
+
+			rowBytes := t.rowBuf.Bytes()
+
+			if cap(t.rowCacheBytes[rowIdx]) < len(rowBytes) {
+				t.rowCacheBytes[rowIdx] = make([]byte, len(rowBytes))
 			} else {
-				t.rowCacheBytes[rowIdx] = t.rowCacheBytes[rowIdx][:len(t.rowBuf)]
+				t.rowCacheBytes[rowIdx] = t.rowCacheBytes[rowIdx][:len(rowBytes)]
 			}
 
-			copy(t.rowCacheBytes[rowIdx], t.rowBuf)
+			copy(t.rowCacheBytes[rowIdx], rowBytes)
 			t.rowCacheData[rowIdx] = row
 		}
 	}
@@ -520,14 +522,14 @@ func (t *Table) buildRow(cells [][]byte, colWidths []int,
 ) {
 	selected := rowIdx >= 0 && rowIdx == t.selectedIndex
 
-	t.rowBuf = t.rowBuf[:0]
+	t.rowBuf.Reset()
 
 	if hasBorder {
-		t.rowBuf = append(t.rowBuf, t.borderVertical...)
+		t.rowBuf.Write(t.borderVertical)
 	}
 
 	if selected {
-		t.rowBuf = append(t.rowBuf, t.selBgStyle.RenderLine(nil)...)
+		t.selBgStyle.AppendStyledLine(t.rowBuf, nil)
 	}
 
 	innerBv := t.borderVertical
@@ -535,26 +537,24 @@ func (t *Table) buildRow(cells [][]byte, colWidths []int,
 		innerBv = t.selBgBorderVertical
 	}
 
-	t.rowBuf = t.renderRowCells(cells, colWidths, hasBorder, selected, rowIdx, innerBv)
+	t.renderRowCells(cells, colWidths, hasBorder, selected, rowIdx, innerBv)
 
 	if selected {
-		t.rowBuf = append(t.rowBuf, t.selBgStyle.RenderLine(nil)...)
+		t.selBgStyle.AppendStyledLine(t.rowBuf, nil)
 	}
 
 	if hasBorder {
-		t.rowBuf = append(t.rowBuf, t.borderVertical...)
+		t.rowBuf.Write(t.borderVertical)
 	}
 }
 
-func (t *Table) renderRowCells(cells [][]byte, colWidths []int, hasBorder bool, selected bool, rowIdx int, bv []byte) []byte {
-	buf := t.rowBuf
-
+func (t *Table) renderRowCells(cells [][]byte, colWidths []int, hasBorder bool, selected bool, rowIdx int, bv []byte) {
 	for colIdx, colWidth := range colWidths {
 		if colIdx > 0 && hasBorder {
-			buf = append(buf, bv...)
+			t.rowBuf.Write(bv)
 
 			if selected {
-				buf = append(buf, t.selBgStyle.RenderLine(nil)...)
+				t.selBgStyle.AppendStyledLine(t.rowBuf, nil)
 			}
 		}
 
@@ -564,10 +564,8 @@ func (t *Table) renderRowCells(cells [][]byte, colWidths []int, hasBorder bool, 
 		}
 
 		align := t.cellAlign(rowIdx, colIdx)
-		buf = t.renderCell(buf, cell, colWidth, colIdx, align, selected, rowIdx)
+		t.renderCell(cell, colWidth, colIdx, align, selected, rowIdx)
 	}
-
-	return buf
 }
 
 func (t *Table) cellAlign(rowIdx, colIdx int) style.Position {
@@ -578,12 +576,11 @@ func (t *Table) cellAlign(rowIdx, colIdx int) style.Position {
 	return t.colAlign[colIdx]
 }
 
-// renderCell appends a single cell's content to buf, handling alignment,
+// renderCell appends a single cell's content to t.rowBuf, handling alignment,
 // truncation, wrapping, and ANSI sequences.
-func (t *Table) renderCell(
-	buf []byte, cell []byte, colWidth, colIdx int,
+func (t *Table) renderCell(cell []byte, colWidth, colIdx int,
 	align style.Position, selected bool, rowIdx int,
-) []byte {
+) {
 	if hasNewline(cell) {
 		var sty style.Style
 		if rowIdx == HeaderRow {
@@ -602,31 +599,32 @@ func (t *Table) renderCell(
 
 		for i := range tmp.Len() {
 			if i > 0 {
-				buf = append(buf, '\n')
+				t.rowBuf.WriteByte('\n')
 			}
 
-			buf = append(buf, tmp.Line(i)...)
+			t.rowBuf.Write(tmp.Line(i))
 		}
 
 		tmp.Release()
 
-		return buf
+		return
 	}
 
 	sty := t.composedCellStyle(rowIdx, colIdx, selected)
-	styledCell := sty.RenderLine(cell)
+	cellWidth := style.CellWidth(cell)
 
 	var selBg style.Style
 	if selected {
 		selBg = style.NewStyle().Background(t.cfg.SelectionBackground)
 	}
 
-	return t.alignCellContent(buf, styledCell, colWidth, align, selBg)
+	t.appendAlignedCell(cell, cellWidth, colWidth, align, sty, selBg)
 }
 
 // composedCellStyle returns the column style for a cell, optionally with
-// selection background. The composed style's RenderLine handles re-emitting
-// the full prefix (col fg + sel bg) after every ANSI reset in the content.
+// selection background. The composed style's AppendStyledLine handles
+// re-emitting the full prefix (col fg + sel bg) after every ANSI reset
+// in the content.
 func (t *Table) composedCellStyle(rowIdx, colIdx int, selected bool) style.Style {
 	sty := style.NewStyle()
 	if rowIdx != HeaderRow && colIdx < len(t.cfg.ColumnStyles) {
@@ -640,44 +638,43 @@ func (t *Table) composedCellStyle(rowIdx, colIdx int, selected bool) style.Style
 	return sty
 }
 
-// alignCellContent appends cell content to buf with proper alignment and truncation.
-// When selBg is non-zero, padding spaces are rendered with the selection background.
-func (t *Table) alignCellContent(buf []byte, cell []byte, colWidth int, align style.Position, selBg style.Style) []byte {
-	cellWidth := style.CellWidth(cell)
-
+// appendAlignedCell appends a cell's styled content to t.rowBuf with proper
+// alignment and truncation. The cell style is applied inline via
+// AppendStyledLine, and padding spaces are styled via AppendStyledPad,
+// eliminating per-cell allocations. selBg is applied to padding spaces when
+// a row is selected.
+func (t *Table) appendAlignedCell(cell []byte, cellWidth, colWidth int, align style.Position, sty, selBg style.Style) {
 	switch {
 	case cellWidth < colWidth:
 		pad := colWidth - cellWidth
 
 		switch {
 		case align >= style.Right:
-			buf = appendStyledPad(buf, pad, selBg)
-			buf = append(buf, cell...)
+			selBg.AppendStyledPad(t.rowBuf, pad)
+			sty.AppendStyledLine(t.rowBuf, cell)
 		case align == style.Center:
 			left := pad / 2
 			right := pad - left
-			buf = appendStyledPad(buf, left, selBg)
-			buf = append(buf, cell...)
-			buf = appendStyledPad(buf, right, selBg)
+			selBg.AppendStyledPad(t.rowBuf, left)
+			sty.AppendStyledLine(t.rowBuf, cell)
+			selBg.AppendStyledPad(t.rowBuf, right)
 		default:
-			buf = append(buf, cell...)
-			buf = appendStyledPad(buf, pad, selBg)
+			sty.AppendStyledLine(t.rowBuf, cell)
+			selBg.AppendStyledPad(t.rowBuf, pad)
 		}
 
 	case cellWidth > colWidth:
 		truncated := style.TruncateToWidth(cell, colWidth, !t.cfg.Wrap)
-		buf = append(buf, truncated...)
+		sty.AppendStyledLine(t.rowBuf, truncated)
 
 		remaining := colWidth - style.CellWidth(truncated)
 		if remaining > 0 {
-			buf = appendStyledPad(buf, remaining, selBg)
+			selBg.AppendStyledPad(t.rowBuf, remaining)
 		}
 
 	default:
-		buf = append(buf, cell...)
+		sty.AppendStyledLine(t.rowBuf, cell)
 	}
-
-	return buf
 }
 
 // cellStyle configures width and truncation for a cell that contains newlines.
@@ -687,21 +684,6 @@ func (t *Table) cellStyle(sty style.Style, colWidth int) style.Style {
 	}
 
 	return sty.Width(colWidth).MaxWidth(colWidth).TruncateEllipsis(true)
-}
-
-func appendStyledPad(buf []byte, n int, selBg style.Style) []byte {
-	if n <= 0 {
-		return buf
-	}
-
-	pad := make([]byte, n)
-	for i := range pad {
-		pad[i] = ' '
-	}
-
-	styled := selBg.RenderLine(pad)
-
-	return append(buf, styled...)
 }
 
 func (t *Table) numCols() int {
@@ -1043,23 +1025,23 @@ func (t *Table) writeHorizontalBorder(left, mid, right []byte,
 ) {
 	styledLeft := t.cfg.BorderStyle.RenderLine(left)
 
-	t.rowBuf = t.rowBuf[:0]
-	t.rowBuf = append(t.rowBuf, styledLeft...)
+	t.rowBuf.Reset()
+	t.rowBuf.Write(styledLeft)
 
 	styledMid := t.cfg.BorderStyle.RenderLine(mid)
 
 	for colIdx, colWidth := range colWidths {
 		if colIdx > 0 {
-			t.rowBuf = append(t.rowBuf, styledMid...)
+			t.rowBuf.Write(styledMid)
 		}
 
 		if colWidth > 0 {
 			horizBytes := appendRepeatBytes(nil, t.cfg.Border.Horizontal, colWidth)
-			t.rowBuf = append(t.rowBuf, t.cfg.BorderStyle.RenderLine(horizBytes)...)
+			t.rowBuf.Write(t.cfg.BorderStyle.RenderLine(horizBytes))
 		}
 	}
 
-	t.rowBuf = append(t.rowBuf, t.cfg.BorderStyle.RenderLine(right)...)
+	t.rowBuf.Write(t.cfg.BorderStyle.RenderLine(right))
 }
 
 func appendRepeatBytes(buf []byte, b []byte, n int) []byte {

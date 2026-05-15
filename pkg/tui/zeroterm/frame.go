@@ -2,7 +2,6 @@ package zeroterm
 
 import (
 	"bytes"
-	"strconv"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
@@ -29,23 +28,23 @@ func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCoun
 			continue
 		}
 
-		buf = append(buf, "\x1b["...)
-		buf = appendInt(buf, lineIdx+1)
-		buf = append(buf, ";1H"...)
+	buf = append(buf, "\x1b["...)
+	buf = buffer.AppendInt(buf, lineIdx+1)
+	buf = append(buf, ";1H"...)
 
-		// Strip \r from line content inline — avoids strings.ReplaceAll
-		// allocation. lipgloss and ANSI renderers may emit \r within a
-		// "line" (e.g. for cursor repositioning within a styled region).
-		line := cur.Line(lineIdx)
+	// Strip \r from line content inline — avoids strings.ReplaceAll
+	// allocation. lipgloss and ANSI renderers may emit \r within a
+	// "line" (e.g. for cursor repositioning within a styled region).
+	line := cur.Line(lineIdx)
 
-		found := bytes.Contains(line, []byte{'\r'})
-		if found {
-			buf = appendStripCR(buf, line)
-		} else {
-			buf = append(buf, line...)
-		}
+	found := bytes.Contains(line, []byte{'\r'})
+	if found {
+		buf = appendStripCR(buf, line)
+	} else {
+		buf = append(buf, line...)
+	}
 
-		buf = append(buf, "\x1b[0m\x1b[K"...)
+	buf = append(buf, "\x1b[0m\x1b[K"...)
 	}
 
 	contentEnd := min(lineCount, terminalHeight)
@@ -53,7 +52,7 @@ func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCoun
 		clearFrom := contentEnd
 		if clearFrom < terminalHeight {
 			buf = append(buf, "\x1b["...)
-			buf = appendInt(buf, clearFrom+1)
+			buf = buffer.AppendInt(buf, clearFrom+1)
 			buf = append(buf, ";1H\x1b[J"...)
 		}
 	}
@@ -70,30 +69,4 @@ func appendStripCR(buf []byte, line []byte) []byte {
 	}
 
 	return buf
-}
-
-//nolint:mnd
-func appendInt(buf []byte, val int) []byte {
-	if val < 0 {
-		buf = append(buf, '-')
-		val = -val
-	}
-
-	if val < 10 {
-		//nolint:gosec // G115: safe — val<10, so '0'+val is in ['0','9']
-		return append(buf, byte('0'+val))
-	}
-
-	if val < 100 {
-		return append(buf, byte('0'+val/10), byte('0'+val%10))
-	}
-
-	if val < 1000 {
-		buf = append(buf, byte('0'+val/100))
-		buf = append(buf, byte('0'+(val/10)%10))
-
-		return append(buf, byte('0'+val%10))
-	}
-
-	return strconv.AppendInt(buf, int64(val), 10)
 }

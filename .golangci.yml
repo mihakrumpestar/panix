@@ -4,10 +4,6 @@ linters:
   default: all
   exclusions:
     warn-unused: true
-    rules:
-      - linters:
-          - gosec
-        text: "G115.*uintptr"
 
   disable:
     - tagliatelle # Bad check
@@ -22,7 +18,11 @@ linters:
     - testpackage # Don't want separate packages for testing
     - wsl # Replaced by wsl_v5
     - whitespace # Conflicts with wsl_v5
+    - gomodguard # Replaced by gomodguard_v2
     - prealloc # Usually we don't preallocate slices
+
+  enable:
+    - gomodguard_v2
 
   settings:
     govet:

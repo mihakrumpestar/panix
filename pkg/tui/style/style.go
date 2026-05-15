@@ -302,6 +302,49 @@ func (s Style) RenderLine(line []byte) []byte {
 	return result[0]
 }
 
+// AppendStyledLine appends a single line styled with color/bold attributes
+// directly into buf. This is the zero-allocation equivalent of
+// buf.Write(s.RenderLine(cell)...) for the common case where the style has
+// no layout properties (no width, padding, or border).
+//
+// After every ANSI reset (\x1b[m) found in cell, the style prefix is
+// re-emitted so that the style persists across pre-styled content
+// (e.g. table cells with embedded ANSI).
+func (s Style) AppendStyledLine(buf *buffer.LineBuf, cell []byte) {
+	prefix := s.stylePrefix()
+	reset := ansiReset
+
+	if len(prefix) == 0 && len(reset) == 0 {
+		buf.Write(cell)
+
+		return
+	}
+
+	if len(prefix) == 0 {
+		buf.Write(cell)
+		buf.Write(reset)
+
+		return
+	}
+
+	buf.Write(prefix)
+	writeWithResetReemit(buf, cell, prefix, reset)
+	buf.Write(reset)
+}
+
+// AppendStyledPad appends n space bytes styled with the receiver's
+// color/bold attributes directly into buf. This is the zero-allocation
+// equivalent of buf.Write(s.RenderLine(spaces[:n])...).
+func (s Style) AppendStyledPad(buf *buffer.LineBuf, n int) {
+	if n <= 0 {
+		return
+	}
+
+	pad := prerenderedPadding[:min(n, len(prerenderedPadding))]
+
+	s.AppendStyledLine(buf, pad)
+}
+
 // RenderLineInto renders a single line through the full style pipeline and
 // writes the result into dst. For the common no-layout case (color-only),
 // this is zero-allocation: it writes prefix+line+reset directly.
@@ -709,6 +752,27 @@ func appendWithResetReemitBytes(buf, content, prefix, reset []byte) []byte {
 	}
 
 	return buf
+}
+
+// writeWithResetReemit writes content into buf, re-emitting prefix after
+// every ANSI reset sequence found in content. This ensures that a parent
+// style persists across pre-styled content (e.g. table cells with embedded
+// ANSI sequences).
+func writeWithResetReemit(buf *buffer.LineBuf, content, prefix, reset []byte) {
+	for len(content) > 0 {
+		idx := bytes.Index(content, reset)
+		if idx < 0 {
+			buf.Write(content)
+
+			break
+		}
+
+		end := idx + len(reset)
+		buf.Write(content[:end])
+		buf.Write(prefix)
+
+		content = content[end:]
+	}
 }
 
 // stylePrefix builds the ANSI escape sequence for fg/bg/bold.
