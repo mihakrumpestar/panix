@@ -47,8 +47,9 @@
 //     sequences and updates a virtual screen. Zeroterm writes to a []byte
 //     and bubbletea writes to a bytes.Buffer.
 //
-//   - Cview SetText O(n): TextView.SetText(strings.Join(lines, "\n"))
-//     concatenates all scrollback lines and re-parses color tags every frame.
+//   - Cview TextView: uses SetBytes() which avoids the string→[]byte
+//     allocation that SetText performs internally. Both SetBytes and SetText
+//     are O(n) in content processing (copy + split + color tag parsing).
 //     Zeroterm SetContentLines and bubbletea SetContentLines store a slice
 //     reference (O(1)).
 package main
@@ -161,16 +162,16 @@ func makeBenchANSIContentString(lineCount int) string {
 	return builder.String()
 }
 
-func makeCviewColorLines(lineCount int) []string {
-	lines := make([]string, lineCount)
+func makeCviewColorLines(lineCount int) [][]byte {
+	lines := make([][]byte, lineCount)
 	for idx := range lineCount {
 		switch {
 		case idx%10 == 0:
-			lines[idx] = fmt.Sprintf("[blue::b]src/pkg%-4d[-] [green]OK[-] package with a longer description that fills the line", idx)
+			lines[idx] = fmt.Appendf(nil, "[blue::b]src/pkg%-4d[-] [green]OK[-] package with a longer description that fills the line", idx)
 		case idx%3 == 0:
-			lines[idx] = fmt.Sprintf("[%s]line %d: colored text with escape sequences[-] and plain suffix to fill width", cviewColorNames[idx%6], idx)
+			lines[idx] = fmt.Appendf(nil, "[%s]line %d: colored text with escape sequences[-] and plain suffix to fill width", cviewColorNames[idx%6], idx)
 		default:
-			lines[idx] = fmt.Sprintf("line %d: plain text with some content that is reasonably long for testing purposes here  ", idx)
+			lines[idx] = fmt.Appendf(nil, "line %d: plain text with some content that is reasonably long for testing purposes here  ", idx)
 		}
 	}
 
@@ -189,6 +190,27 @@ func makeBenchTableRows() [][][]byte {
 	}
 
 	return rows
+}
+
+func joinLines(lines [][]byte) []byte {
+	if len(lines) == 0 {
+		return nil
+	}
+
+	totalLen := 0
+	for _, line := range lines {
+		totalLen += len(line) + 1
+	}
+
+	result := make([]byte, 0, totalLen)
+	for i, line := range lines {
+		result = append(result, line...)
+		if i < len(lines)-1 {
+			result = append(result, '\n')
+		}
+	}
+
+	return result
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -248,19 +270,19 @@ func makeRandomBenchANSIContentString(rng *rand.Rand) string {
 	return builder.String()
 }
 
-func makeRandomCviewColorLines(rng *rand.Rand) []string {
+func makeRandomCviewColorLines(rng *rand.Rand) [][]byte {
 	lineCount := rng.IntN(maxLargeVPLines-80+1) + 80
-	lines := make([]string, lineCount)
+	lines := make([][]byte, lineCount)
 
 	for idx := range lineCount {
 		val := rng.IntN(10000)
 		switch {
 		case val%10 == 0:
-			lines[idx] = fmt.Sprintf("[blue::b]src/pkg%-4d[-] [green]OK[-] package with a longer description that fills the line", val)
+			lines[idx] = fmt.Appendf(nil, "[blue::b]src/pkg%-4d[-] [green]OK[-] package with a longer description that fills the line", val)
 		case val%3 == 0:
-			lines[idx] = fmt.Sprintf("[%s]line %d: colored text with escape sequences[-] and plain suffix to fill width", cviewColorNames[val%6], val)
+			lines[idx] = fmt.Appendf(nil, "[%s]line %d: colored text with escape sequences[-] and plain suffix to fill width", cviewColorNames[val%6], val)
 		default:
-			lines[idx] = fmt.Sprintf("line %d: plain text with some content that is reasonably long for testing purposes here  ", val)
+			lines[idx] = fmt.Appendf(nil, "line %d: plain text with some content that is reasonably long for testing purposes here  ", val)
 		}
 	}
 
@@ -287,8 +309,7 @@ type zerotermPipeline struct {
 	smallLines [][]byte
 	tblRows    [][][]byte
 
-	rng        *rand.Rand
-	frameCount int
+	rng *rand.Rand
 }
 
 func newZerotermPipeline() *zerotermPipeline {
@@ -385,12 +406,12 @@ func (pipe *zerotermPipeline) randomizeLargeViewport() {
 	pipe.largeVP.GotoBottom()
 }
 
-func (pipe *zerotermPipeline) appendLargeViewport() {
+func (pipe *zerotermPipeline) appendLargeViewport(frameCount int) {
 	if len(pipe.largeLines) >= maxLargeVPLines {
 		return
 	}
 
-	base := pipe.frameCount * 3
+	base := frameCount * 3
 
 	for i := range linesPerUpdate {
 		var line []byte
@@ -405,17 +426,16 @@ func (pipe *zerotermPipeline) appendLargeViewport() {
 	pipe.largeVP.GotoBottom()
 }
 
-func (pipe *zerotermPipeline) toggleTableStatus() {
-	rowIdx := pipe.frameCount % tableRows
+func (pipe *zerotermPipeline) toggleTableStatus(frameCount int) {
+	rowIdx := frameCount % tableRows
 
-	if pipe.frameCount%2 == 0 {
+	if frameCount%2 == 0 {
 		pipe.tblRows[rowIdx][1] = statusDoneBytes
 	} else {
 		pipe.tblRows[rowIdx][1] = statusRunningBytes
 	}
 
 	pipe.tbl.SetRows(pipe.tblRows)
-	pipe.frameCount++
 }
 
 func benchZerotermPipeline(b *testing.B, updateMode int) {
@@ -446,11 +466,11 @@ func benchZerotermPipeline(b *testing.B, updateMode int) {
 		case updateNone:
 		case updateEveryFrame:
 			pipe.randomizeLargeViewport()
-			pipe.toggleTableStatus()
+			pipe.toggleTableStatus(frameCount)
 		case updateQuarterFrame:
 			if frameCount%4 == 0 {
-				pipe.appendLargeViewport()
-				pipe.toggleTableStatus()
+				pipe.appendLargeViewport(frameCount)
+				pipe.toggleTableStatus(frameCount)
 			}
 		}
 
@@ -492,7 +512,6 @@ type bubbleteaPipeline struct {
 	treeStr         string
 	lastViewContent string
 	rng             *rand.Rand
-	frameCount      int
 }
 
 func newBubbleteaPipeline() *bubbleteaPipeline {
@@ -618,12 +637,12 @@ func (pipe *bubbleteaPipeline) randomizeLargeViewport() {
 	pipe.largeVP.GotoBottom()
 }
 
-func (pipe *bubbleteaPipeline) appendLargeViewport() {
+func (pipe *bubbleteaPipeline) appendLargeViewport(frameCount int) {
 	if len(pipe.largeLines) >= maxLargeVPLines {
 		return
 	}
 
-	base := pipe.frameCount * 3
+	base := frameCount * 3
 	pipe.largeLines = append(pipe.largeLines,
 		fmt.Sprintf("\x1b[32mnew line %d\x1b[0m appended content here", base),
 		fmt.Sprintf("\x1b[32mnew line %d\x1b[0m appended content here", base+1),
@@ -634,16 +653,15 @@ func (pipe *bubbleteaPipeline) appendLargeViewport() {
 	pipe.largeVP.GotoBottom()
 }
 
-func (pipe *bubbleteaPipeline) toggleTableStatus() {
-	rowIdx := pipe.frameCount % tableRows
+func (pipe *bubbleteaPipeline) toggleTableStatus(frameCount int) {
+	rowIdx := frameCount % tableRows
 
 	newStatus := "running"
-	if pipe.frameCount%2 == 0 {
+	if frameCount%2 == 0 {
 		newStatus = "done"
 	}
 
 	pipe.tbl = pipe.buildLipglossTableWithUpdate(rowIdx, newStatus)
-	pipe.frameCount++
 }
 
 func (pipe *bubbleteaPipeline) buildLipglossTableWithUpdate(changedRow int, status string) *lipglosstable.Table {
@@ -718,11 +736,11 @@ func benchBubbleteaPipeline(b *testing.B, updateMode int) {
 		case updateNone:
 		case updateEveryFrame:
 			pipe.randomizeLargeViewport()
-			pipe.toggleTableStatus()
+			pipe.toggleTableStatus(frameCount)
 		case updateQuarterFrame:
 			if frameCount%4 == 0 {
-				pipe.appendLargeViewport()
-				pipe.toggleTableStatus()
+				pipe.appendLargeViewport(frameCount)
+				pipe.toggleTableStatus(frameCount)
 			}
 		}
 
@@ -764,10 +782,9 @@ type cviewPipeline struct {
 	smallTV    *cview.TextView
 	treeView   *cview.TreeView
 	tbl        *cview.Table
-	largeLines []string
+	largeLines [][]byte
 	screen     tcell.Screen
 	rng        *rand.Rand
-	frameCount int
 }
 
 func newCviewSepTV() *cview.TextView {
@@ -789,7 +806,7 @@ func newCviewPipeline() *cviewPipeline {
 
 	largeLines := makeCviewColorLines(largeVPContentLines)
 
-	largeTV.SetText(strings.Join(largeLines, "\n"))
+	largeTV.SetBytes(joinLines(largeLines))
 	largeTV.ScrollToEnd()
 	largeTV.SetRect(0, 0, benchWidth, largeVPVisibleLines)
 	flex.AddItem(largeTV, largeVPVisibleLines, 0, false)
@@ -802,7 +819,7 @@ func newCviewPipeline() *cviewPipeline {
 	smallTV.SetDynamicColors(true)
 
 	smallLines := makeCviewColorLines(smallVPContentLines)
-	smallTV.SetText(strings.Join(smallLines, "\n"))
+	smallTV.SetBytes(joinLines(smallLines))
 	smallTV.SetRect(0, 0, benchWidth, smallVPVisibleLines)
 	flex.AddItem(smallTV, smallVPVisibleLines, 0, false)
 
@@ -868,6 +885,7 @@ func buildCviewTree() *cview.TreeView {
 	treeView := cview.NewTreeView()
 	treeView.SetRoot(root)
 	treeView.SetCurrentNode(root)
+	treeView.SetGraphics(true)
 	treeView.SetGraphicsColor(tcellColorCyan)
 	treeView.SetTopLevel(1)
 
@@ -912,31 +930,30 @@ func buildCviewTable() *cview.Table {
 
 func (pipe *cviewPipeline) randomizeLargeViewport() {
 	pipe.largeLines = makeRandomCviewColorLines(pipe.rng)
-	pipe.largeTV.SetText(strings.Join(pipe.largeLines, "\n"))
+	pipe.largeTV.SetBytes(joinLines(pipe.largeLines))
 	pipe.largeTV.ScrollToEnd()
 }
 
-func (pipe *cviewPipeline) appendLargeViewport() {
+func (pipe *cviewPipeline) appendLargeViewport(frameCount int) {
 	if len(pipe.largeLines) >= maxLargeVPLines {
 		return
 	}
 
-	base := pipe.frameCount * 3
-	pipe.largeLines = append(pipe.largeLines,
-		fmt.Sprintf("[green]new line %d[-] appended content here", base),
-		fmt.Sprintf("[green]new line %d[-] appended content here", base+1),
-		fmt.Sprintf("[green]new line %d[-] appended content here", base+2),
-	)
+	base := frameCount * 3
+	for i := range linesPerUpdate {
+		line := fmt.Appendf(nil, "[green]new line %d[-] appended content here", base+i)
+		pipe.largeLines = append(pipe.largeLines, line)
+	}
 
-	pipe.largeTV.SetText(strings.Join(pipe.largeLines, "\n"))
+	pipe.largeTV.SetBytes(joinLines(pipe.largeLines))
 	pipe.largeTV.ScrollToEnd()
 }
 
-func (pipe *cviewPipeline) toggleTableStatus() {
-	rowIdx := pipe.frameCount%tableRows + 1 // +1 for header row
+func (pipe *cviewPipeline) toggleTableStatus(frameCount int) {
+	rowIdx := frameCount%tableRows + 1 // +1 for header row
 
 	newStatus := "running"
-	if pipe.frameCount%2 == 0 {
+	if frameCount%2 == 0 {
 		newStatus = "done"
 	}
 
@@ -950,7 +967,6 @@ func (pipe *cviewPipeline) toggleTableStatus() {
 	}
 
 	pipe.tbl.SetCell(rowIdx, 1, cell)
-	pipe.frameCount++
 }
 
 func mustInitPipelineScreen(height int) tcell.Screen {
@@ -989,11 +1005,11 @@ func benchCviewPipeline(b *testing.B, updateMode int) {
 		case updateNone:
 		case updateEveryFrame:
 			pipe.randomizeLargeViewport()
-			pipe.toggleTableStatus()
+			pipe.toggleTableStatus(frameCount)
 		case updateQuarterFrame:
 			if frameCount%4 == 0 {
-				pipe.appendLargeViewport()
-				pipe.toggleTableStatus()
+				pipe.appendLargeViewport(frameCount)
+				pipe.toggleTableStatus(frameCount)
 			}
 		}
 
