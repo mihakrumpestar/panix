@@ -1,26 +1,29 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"slices"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/clipboard"
+	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
+	"github.com/mihakrumpestar/panix/pkg/clipboard"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
+//nolint:lll
 func (m *model) keyDefs() []footer.KeyDef {
 	kds := []footer.KeyDef{
 		{Keys: []string{"q"}, Help: "quit", Handler: m.handleQuit},
-		{Keys: []string{"h"}, Help: "toggle inspect/secrets logs", Handler: m.handleToggle},
-		{Keys: []string{"a"}, Help: "toggle active only", Handler: m.handleToggleActiveOnly},
-		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Handler: m.handleToggleCommands},
+		{Keys: []string{"h"}, Help: "toggle inspect/secrets logs", Active: func() bool { return m.conf.Flags.Tui.ShowAllBuildLogs }, Handler: m.handleToggle},
+		{Keys: []string{"a"}, Help: "toggle active only", Active: func() bool { return m.conf.Flags.Tui.ShowActiveOnly }, Handler: m.handleToggleActiveOnly},
+		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Active: func() bool { return m.conf.Flags.Tui.ShowCommandsInLabels }, Handler: m.handleToggleCommands},
 		{Keys: []string{"ctrl+c"}, Help: "copy", Handler: m.handleCopy},
-		{Keys: []string{"m"}, Help: "fullscreen", Handler: m.handleFullscreen},
+		{Keys: []string{"m"}, Help: "fullscreen", Active: func() bool { return m.viewports.IsFullscreen() }, Handler: m.handleFullscreen},
 	}
 
 	if !m.isSnapshot {
@@ -28,7 +31,7 @@ func (m *model) keyDefs() []footer.KeyDef {
 			footer.KeyDef{Keys: []string{"s"}, Help: "snapshot", Handler: m.handleSnapshot},
 		)
 
-		if !m.conf.Flags.ExitOnComplete {
+		if !m.conf.Flags.RequireAllSuccess {
 			kds = append(kds,
 				footer.KeyDef{Keys: []string{"r"}, Help: "retry", Handler: m.handleRetry},
 				footer.KeyDef{Keys: []string{"ctrl+r"}, Help: "restart", Handler: m.handleRestart},
@@ -39,165 +42,188 @@ func (m *model) keyDefs() []footer.KeyDef {
 	return kds
 }
 
-func (m *model) HandleKeyInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 	if msg.String() == "esc" {
 		return m.handleEsc()
 	}
 
-	hasActiveInner := m.resetable.Load().viewports.HasActiveInner()
+	hasActiveInner := m.viewports.HasActiveInner()
 
-	statsTable := m.conf.Fleet.StatsTable
-	if statsTable.HandleNavigation(msg.String(), hasActiveInner) {
-		m.conf.Fleet.PhaseStatus.Reset()
+	key := msg.String()
 
-		return m, nil
+	if m.statsTable.HandleNavigation(key, hasActiveInner) {
+		m.phaseFlow.Reset()
+
+		return nil
 	}
 
-	phaseStatus := m.conf.Fleet.PhaseStatus
-	if phaseStatus.HandleNavigation(msg.String(), hasActiveInner) {
-		m.conf.Fleet.StatsTable.Reset()
+	if m.phaseFlow.HandleNavigation(key, hasActiveInner) {
+		m.statsTable.Reset()
 
-		return m, nil
+		return nil
 	}
 
 	for _, kd := range m.footer.KeyDefs() {
-		if slices.Contains(kd.Keys, msg.String()) {
-			return kd.Handler()
+		if slices.Contains(kd.Keys, key) {
+			cmd := kd.Handler()
+			if cmd != nil {
+				return cmd
+			}
+
+			return nil
 		}
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleCopy() (tea.Model, tea.Cmd) {
-	resetable := m.resetable.Load()
+func (m *model) handleCopy() zeroterm.Cmd {
+	if m.workflow == nil {
+		return nil
+	}
 
-	content, isInner := resetable.viewports.GetActiveInnerViewportContent()
+	content, isInner := m.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m, m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning)
+		return m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
-	if content == "" {
-		return m, m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning)
+	if len(content) == 0 {
+		return m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
-	err := clipboard.CopyToClipboard(content)
+	err := clipboard.CopyToClipboard(string(bytes.Join(content, []byte("\n"))))
 	if err != nil {
-		return m, m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed)
+		return m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())
 	}
 
-	return m, m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK)
+	return m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
-func (m *model) handleQuit() (tea.Model, tea.Cmd) {
+func (m *model) handleQuit() zeroterm.Cmd {
 	m.quitting = true
-	resetable := m.resetable.Load()
 
-	if resetable.workflow != nil {
+	if m.workflow != nil {
 		if m.conf.Flags.Snapshot.OnExit {
 			m.captureSnapshot(config.SnaphsotReasonExit)
 		}
 
-		err := resetable.workflow.Cancel()
-		if resetable.err != nil && err != nil && !errors.Is(err, context.Canceled) {
-			resetable.err = errors.Wrap(resetable.err, err.Error())
+		err := m.workflow.Cancel()
+		if m.err != nil && err != nil && !errors.Is(err, context.Canceled) {
+			m.err = errors.Wrap(m.err, err.Error())
 		} else if err != nil && !errors.Is(err, context.Canceled) {
-			resetable.err = err
+			m.err = err
 		}
 	}
 
+	m.setFailedMachinesErrorIfNil()
+
 	log.Debug().Msg("Context done, exiting TUI")
 
-	return m, tea.Quit
+	return zeroterm.QuitCmd
 }
 
-func (m *model) handleToggle() (tea.Model, tea.Cmd) {
+func (m *model) setFailedMachinesErrorIfNil() {
+	if m.err != nil {
+		return
+	}
+
+	m.conf.Fleet.Recalculate(m.conf.Phases)
+	logFinalState(m.conf)
+
+	for _, fleetLeaf := range m.conf.Fleet.AllMachines() {
+		if fleetLeaf.Machine.State.Load().Status == stats.Failed {
+			m.err = errMachinesFailed
+
+			return
+		}
+	}
+}
+
+func (m *model) handleToggle() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleToggleCommands() (tea.Model, tea.Cmd) {
+func (m *model) handleToggleCommands() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleToggleActiveOnly() (tea.Model, tea.Cmd) {
+func (m *model) handleToggleActiveOnly() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleRetry() (tea.Model, tea.Cmd) {
+func (m *model) handleRetry() zeroterm.Cmd {
+	if m.workflow == nil {
+		return nil
+	}
+
 	if m.conf.Flags.Snapshot.OnRetry {
 		m.captureSnapshot(config.SnaphsotReasonRetry)
 	}
 
-	m.resetable.Load().workflow.State().Retry.Trigger()
+	notifCmd := m.footer.Notification().Set("Retrying failed...", m.conf.ColorScheme.Status.OK.GetForeground())
 
-	return m, nil
+	return zeroterm.BatchCmd(notifCmd, retryCmd)
 }
 
-func (m *model) handleRestart() (tea.Model, tea.Cmd) {
-	return m, tea.Batch(
-		m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK),
-		func() tea.Msg { return restartMsg{} },
-	)
+func (m *model) handleRestart() zeroterm.Cmd {
+	// The notification cmd also dispatches the restartMsg as a side effect,
+	// so both actions are triggered from a single cmd.
+	notifCmd := m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground())
+
+	return zeroterm.BatchCmd(notifCmd, restartCmd)
 }
 
-func (m *model) handleFullscreen() (tea.Model, tea.Cmd) {
-	resetable := m.resetable.Load()
-	if resetable.viewports.IsFullscreen() {
-		resetable.viewports.ExitFullscreen()
+func (m *model) handleFullscreen() zeroterm.Cmd {
+	if m.viewports.IsFullscreen() {
+		m.viewports.ExitFullscreen()
 
-		return m, nil
+		return nil
 	}
 
-	activeInnerXpath := resetable.viewports.GetActiveInnerViewportXpath()
+	activeInnerXpath := m.viewports.GetActiveInnerViewportXpath()
 
 	if activeInnerXpath.Depth() > 0 {
-		resetable.viewports.SetFullscreen(activeInnerXpath)
+		m.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m, m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning)
+		return m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleEsc() (tea.Model, tea.Cmd) {
-	resetable := m.resetable.Load()
-
-	statsTable := m.conf.Fleet.StatsTable
-	phaseStatus := m.conf.Fleet.PhaseStatus
-
+func (m *model) handleEsc() zeroterm.Cmd {
 	switch {
-	case resetable.viewports.IsFullscreen():
-		resetable.viewports.ExitFullscreen()
-	case resetable.viewports.HasActiveInner():
-		resetable.viewports.DeselectAll()
-	case statsTable.Selected.Index >= 0:
-		statsTable.Reset()
-	case phaseStatus.Selected.Index >= 0:
-		phaseStatus.Reset()
+	case m.viewports.IsFullscreen():
+		m.viewports.ExitFullscreen()
+	case m.viewports.HasActiveInner():
+		m.viewports.DeselectAll()
+	case m.statsTable.SelectedIndex() >= 0:
+		m.statsTable.Reset()
+	case m.phaseFlow.Selected.Index >= 0:
+		m.phaseFlow.Reset()
 	}
 
-	return m, nil
+	return nil
 }
 
-func (m *model) handleSnapshot() (tea.Model, tea.Cmd) {
+func (m *model) handleSnapshot() zeroterm.Cmd {
 	m.captureSnapshot(config.SnaphsotReasonManual)
 
-	return m, m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK)
+	return m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
 func (m *model) captureSnapshot(reason config.SnaphsotReason) {
-	resetable := m.resetable.Load()
-	if resetable == nil || resetable.workflow == nil {
+	if m.workflow == nil {
 		return
 	}
 
-	snap := snapshot.Capture(m.conf, reason, resetable.err)
+	snap := snapshot.Capture(m.conf, reason, m.err)
 
 	err := snapshot.Write(m.conf.Flags.Snapshot.Dir, snap)
 	if err != nil {

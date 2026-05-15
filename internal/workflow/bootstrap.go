@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/acobaugh/osrelease"
+	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -62,7 +62,7 @@ func (w *Workflow) disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLea
 		return ErrDiskoNoOutputPaths
 	}
 
-	err = executeTransferPhaseMachineWrapper(exc, machine, []string{diskoScript}, false)
+	err = executeTransferPhaseMachineWrapper(exc, fleetLeaf, []string{diskoScript}, false)
 	if err != nil {
 		return err
 	}

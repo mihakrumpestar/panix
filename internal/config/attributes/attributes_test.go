@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 func TestPassAttributesIntoMergesTags(t *testing.T) {
@@ -74,10 +74,10 @@ func TestPassAttributesIntoMergesSSH(t *testing.T) {
 	assertion := assert.New(t)
 
 	// Child's explicit port should be preserved, parent's hostname should merge in
-	assertion.Equal(uint16(2222), uint16(child.SSH.Port))
+	assertion.Equal(uint16(2222), child.SSH.Port)
 	assertion.Equal("parent-host", child.SSH.Hostname,
 		"child should inherit parent hostname when not set")
-	assertion.Equal("parent-user", child.SSH.Username.Get(),
+	assertion.Equal("parent-user", child.SSH.Username,
 		"child should inherit parent username when not set")
 }
 

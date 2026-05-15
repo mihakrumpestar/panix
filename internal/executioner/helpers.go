@@ -6,7 +6,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
 )
 
@@ -24,17 +24,19 @@ const (
 )
 
 func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookType string) error {
+	machine := ex.conf.Machine
+
 	for idx, hook := range hooks {
 		switch hook {
 		case attributes.PostBootstrapHookWaitForOnline:
-			activeSSH := ex.machine.GetActiveSSH()
+			activeSSH := machine.GetActiveSSH()
 
 			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), hookType+" did not come online")
 			if err != nil {
 				return err
 			}
 		case attributes.PostBootstrapHookWaitForOffline:
-			activeSSH := ex.machine.GetActiveSSH()
+			activeSSH := machine.GetActiveSSH()
 
 			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
 			if err != nil {
@@ -64,8 +66,8 @@ func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg stri
 		func(_ *logs_command.CommandLog) error {
 			for range WaitForDisconnectTimeoutTimes {
 				select {
-				case <-exc.ctx.Done():
-					return exc.ctx.Err()
+				case <-exc.conf.Ctx.Done():
+					return exc.conf.Ctx.Err()
 				default:
 					if !sshClient.ReachabilityCheck(time.Second) {
 						return nil
@@ -75,7 +77,7 @@ func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg stri
 				}
 			}
 
-			return errors.Wrapf(ErrHostDisconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port.Get())
+			return errors.Wrap(ErrHostDisconnectTimeout, sshClient.HostPortString())
 		},
 	)
 }
@@ -88,8 +90,8 @@ func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, fail
 		func(_ *logs_command.CommandLog) error {
 			for range WaitForReconnectTimeoutTimes {
 				select {
-				case <-exc.ctx.Done():
-					return exc.ctx.Err()
+				case <-exc.conf.Ctx.Done():
+					return exc.conf.Ctx.Err()
 				default:
 					if sshClient.ReachabilityCheck(time.Second) {
 						return nil
@@ -99,7 +101,7 @@ func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, fail
 				}
 			}
 
-			return errors.Wrapf(ErrHostReconnectTimeout, "%s:%d", sshClient.Hostname, sshClient.Port.Get())
+			return errors.Wrap(ErrHostReconnectTimeout, sshClient.HostPortString())
 		},
 	)
 }

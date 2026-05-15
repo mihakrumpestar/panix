@@ -8,43 +8,31 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 type Executioner struct {
-	ctx          context.Context
-	timeout      time.Duration
-	dryRun       bool
-	xpath        xpath.Xpath
-	machine      *machine.Machine
-	phase        phase.Phase
-	phaseLog     *log_sphase.PhaseLog
-	onUpdateHook func()
+	conf ExecutionerConf
 }
 
-func NewExecutioner(
-	ctx context.Context,
-	timeout time.Duration,
-	dryRun bool,
-	xpath xpath.Xpath,
-	machine *machine.Machine,
-	phase phase.Phase,
-	phaseLog *log_sphase.PhaseLog,
-	onUpdateHook func(),
-) *Executioner {
-	return &Executioner{
-		ctx:          ctx,
-		timeout:      timeout,
-		dryRun:       dryRun,
-		xpath:        xpath,
-		machine:      machine,
-		phase:        phase,
-		phaseLog:     phaseLog,
-		onUpdateHook: onUpdateHook,
-	}
+type ExecutionerConf struct {
+	Ctx          context.Context
+	Timeout      time.Duration
+	DryRun       bool
+	Xpath        xpath.Xpath
+	Machine      *machine.Machine
+	Phase        phase.Phase
+	PhaseLog     *log_sphase.PhaseLog
+	OnUpdateHook func()
+}
+
+func NewExecutioner(conf ExecutionerConf) *Executioner {
+	return &Executioner{conf}
 }
 
 // Exec
@@ -106,11 +94,12 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 
 	var isLocal bool
 
-	if ex.machine != nil {
-		isLocal = ex.machine.GetActiveSSH().IsLocal()
+	machine := ex.conf.Machine
+	if machine != nil {
+		isLocal = machine.GetActiveSSH().IsLocal()
 	}
 
-	noMachineOrLocal := ex.machine == nil || isLocal
+	noMachineOrLocal := machine == nil || isLocal
 	if noMachineOrLocal && excOpt.skipIfLocal {
 		return nil
 	}
@@ -123,9 +112,9 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 }
 
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
-	commandLog := ex.phaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
+	commandLog := ex.conf.PhaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
 
-	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, "")
+	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, nil)
 
 	var execErr error
 
@@ -133,7 +122,7 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 		endLog(execErr, commandLog)
 	}()
 
-	if ex.dryRun {
+	if ex.conf.DryRun {
 		return nil
 	}
 
@@ -145,17 +134,17 @@ func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed strin
 func (ex *Executioner) startCommandLog(
 	commandLog *logs_command.CommandLog,
 	description,
-	statusIfRunning,
-	command string,
+	statusIfRunning string,
+	command *buffer.LineBuf,
 ) func(error, *logs_command.CommandLog) {
 	commandLog.TimeAndState.StartTimer()
 
 	ctx := log.With().
-		Str("xpath", ex.xpath.String()).
-		Any("phase", ex.phase).
+		Str("xpath", ex.conf.Xpath.String()).
+		Any("phase", ex.conf.Phase).
 		Str("description", description)
-	if command != "" {
-		ctx = ctx.Str("command", command)
+	if command.Len() > 0 {
+		ctx = ctx.Str("command", command.String())
 	}
 
 	sublog := ctx.Logger()
@@ -168,9 +157,9 @@ func (ex *Executioner) startCommandLog(
 
 		logger.ResultEvent(sublog, "command finished", err, func(event *zerolog.Event) {
 			event.Str("event", "command_end").Dur("duration", duration).
-				Str("output", string(CleanAnsiAndSpace(commandLog.Output.Bytes())))
+				Str("output", string(style.StripANSI(commandLog.Output.Bytes())))
 		})
 
-		ex.onUpdateHook()
+		ex.conf.OnUpdateHook()
 	}
 }

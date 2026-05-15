@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,12 +9,15 @@ import (
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	"github.com/stoewer/go-strcase"
@@ -55,22 +57,14 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 	installables []string,
 	whatIsBuilding string,
 ) (string, error) {
-	flake := fleetLeaf.Flake
-	configuration := fleetLeaf.Configuration
+	configurationI := fleetLeaf.Configuration
+	machine := fleetLeaf.Machine
+
+	commandWithArgs := nixBuildCommand(configurationI, machine, installables)
 
 	var storePath string
 
-	commandWithArgs := slices.Concat(
-		[]string{"nix"},
-		NixExperimentalFeatures,
-		[]string{"build", "--no-link", "--no-update-lock-file", "--print-out-paths"},
-		slices.Concat(configuration.Nix.ExtraFlags, configuration.Nix.BuildFlags),
-		installables,
-	)
-
-	// Isolate the eval cache per configuration to avoid SQLite busy warnings
-	// when building multiple configurations in parallel.
-	env, err := nixEvalCacheEnv(configuration.Xpath.String())
+	env, err := nixBuildEnv(configurationI, machine)
 	if err != nil {
 		return "", err
 	}
@@ -83,10 +77,10 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 		executioner.DisableAutoSSHCommand(),
 		executioner.Env(env),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			storePath = strings.TrimSpace(string(lastNonEmptyLine(log.Output.Bytes())))
+			storePath = string(style.StripANSI(log.Output.LastLine()))
 
 			if storePath == "" || !strings.HasPrefix(storePath, "/nix/store/") {
-				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", flake.Name, configuration.Name, strconv.Quote(storePath))
+				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", fleetLeaf.Flake.Name, configurationI.Name, strconv.Quote(storePath))
 			}
 
 			return nil
@@ -100,28 +94,48 @@ func (w *Workflow) executeBuildPhaseConfigurationWrapper(
 	}
 
 	log.Info().
-		Str("flake", flake.Name).
-		Str("configuration", configuration.Name).
+		Str("flake", fleetLeaf.Flake.Name).
+		Str("configuration", configurationI.Name).
 		Str("closure", storePath).
-		Msgf("Built %s/%s -> %s", flake.Name, configuration.Name, storePath)
+		Str("mode", configurationI.Nix.BuildMode.String()).
+		Msgf("Built %s/%s -> %s", fleetLeaf.Flake.Name, configurationI.Name, storePath)
 
 	return storePath, nil
 }
 
-func lastNonEmptyLine(b []byte) []byte {
-	lines := bytes.Split(b, []byte("\n"))
-	slices.Reverse(lines)
+func nixBuildCommand(configurationI *configuration.Configuration, machineI *machine.Machine, installables []string) []string {
+	baseArgs := []string{"nix"}
+	baseArgs = append(baseArgs, NixExperimentalFeatures...)
+	baseArgs = append(baseArgs, "build")
 
-	for _, line := range lines {
-		trimmed := bytes.TrimSpace(line)
-		if len(trimmed) > 0 {
-			return trimmed
-		}
+	if configurationI.Nix.BuildMode == nix.BuildModeRemote {
+		storeURL := machineI.SSH.NixStoreURL()
+		baseArgs = append(baseArgs,
+			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
 	}
 
-	return []byte{}
+	baseArgs = append(baseArgs, "--no-link", "--no-update-lock-file", "--print-out-paths")
+
+	return slices.Concat(
+		baseArgs,
+		slices.Concat(configurationI.Nix.ExtraFlags, configurationI.Nix.BuildFlags),
+		installables,
+	)
 }
 
+func nixBuildEnv(configurationI *configuration.Configuration, machineI *machine.Machine) ([]string, error) {
+	evalCacheEnv, err := nixEvalCacheEnv(configurationI.Xpath.String())
+	if err != nil {
+		return nil, err
+	}
+
+	sshOpts := machineI.GetActiveSSH().MaybeNixSSHOpts()
+
+	return slices.Concat(evalCacheEnv, sshOpts), nil
+}
+
+// nixEvalCacheEnv isolates the eval cache per configuration to avoid SQLite busy warnings
+// when building multiple configurations in parallel.
 func nixEvalCacheEnv(xpath string) ([]string, error) {
 	userCacheDir, err := os.UserCacheDir()
 	if err != nil {

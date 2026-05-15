@@ -11,9 +11,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/validate"
 	"github.com/mihakrumpestar/panix/internal/logger"
-	"github.com/mihakrumpestar/panix/internal/pkg/validate"
-	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
+	"github.com/mihakrumpestar/panix/pkg/yamlx"
 	"github.com/pkg/errors"
 )
 

@@ -17,10 +17,12 @@ linters:
     - containedctx # We use ctx to check if it is done
     - testpackage # Don't want separate packages for testing
     - wsl # Replaced by wsl_v5
+    - whitespace # Conflicts with wsl_v5
+    - gomodguard # Replaced by gomodguard_v2
     - prealloc # Usually we don't preallocate slices
 
   enable:
-    - nilaway
+    - gomodguard_v2
 
   settings:
     govet:
@@ -41,9 +43,21 @@ linters:
           list-mode: lax
           files:
             - $all
+            - "!$test"
           deny:
             - pkg: errors
               desc: use github.com/pkg/errors instead
+
+            - pkg: "charm.land/bubbles/v2"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "charm.land/bubbletea/v2"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "charm.land/lipgloss/v2"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "github.com/charmbracelet/ultraviolet"
+              desc: "benchmark reference only and testing — not for production code"
+            - pkg: "github.com/lrstanley/bubblezone/v2"
+              desc: "benchmark reference only and testing — not for production code"
 
     lll:
       line-length: 150
@@ -53,10 +67,12 @@ linters:
       ignore-map-index-ok: true
       ignore-names:
         - ok
-        - tt
-        - fk
-        - is
         - mu
+        - id
+
+    mnd:
+      ignored-numbers:
+        - "2"
 
     revive:
       rules:
@@ -68,15 +84,13 @@ linters:
         - all
         - -QF1008 # could remove embedded field from selector
         - -ST1000 # at least one file in a package should have a package comment
-        - -ST1003 # should not use underscores in package names 
-
-    custom:
-      nilaway:
-        type: module
-        description: Static analysis tool to detect potential nil panics in Go code.
-        settings:
-          include-pkgs: "github.com/mihakrumpestar/panix"
-          exclude-pkgs: ""
+        - -ST1003 # should not use underscores in package names
+    #unused:
+    #  field-writes-are-uses: false
+    #  post-statements-are-reads: true
+    #  exported-fields-are-used: false
+    #  local-variables-are-used: false
+    #  generated-is-used: false
 
 formatters:
   exclusions:
@@ -86,3 +100,4 @@ formatters:
 issues:
   max-issues-per-linter: 1000
   max-same-issues: 100
+  fix: true

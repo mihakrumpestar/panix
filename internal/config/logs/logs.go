@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 	"github.com/pkg/errors"
 )
 
@@ -91,7 +91,11 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		}
 	}
 
-	// Add phases in order (stopping after the first errored phase).
+	// Add phases in order (stopping after the first errored or still-running phase).
+	// Phases from higher scopes (e.g. configuration-level "build") may already be
+	// finished by another machine's goroutine via OnceAsync, but if the previous
+	// machine-level phase hasn't completed yet the machine hasn't actually reached
+	// this phase — so we must not include it in the merged view.
 	for _, phase := range phasesInOrder {
 		phaseLog, ok := gathered.Get(phase)
 		if !ok {
@@ -102,15 +106,19 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 
 		tas := phaseLog.TimeAndState
 		phaseDOET, _ := tas.DurationOrElapsedTime()
-		endError := tas.Load().EndError
+		tasLoaded := tas.Load()
 
 		// Sum up all valid durations and set last error
 		logs.DurationAndErrorCache = DurationAndError{
 			Duration: logs.DurationAndErrorCache.Duration + phaseDOET,
-			Error:    endError,
+			Error:    tasLoaded.EndError,
 		}
 
-		if endError != nil {
+		if tasLoaded.EndError != nil {
+			break
+		}
+
+		if !tasLoaded.IsFinished() {
 			break
 		}
 	}

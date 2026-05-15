@@ -1,6 +1,7 @@
 {{- $dir := env "PANIX_E2E_DIR" -}}
 {{- $cache := printf "%s/.cache" $dir -}}
 {{- $log := printf "%s/log" $dir -}}
+{{- $profile := printf "%s/profile" $dir -}}
 {{- $key := printf "%s/id_ed25519" $cache -}}
 {{- $mode := env "PANIX_TEST_MODE" | default "bootstrap" -}}
 {{- $isBootstrap := eq $mode "bootstrap" -}}
@@ -12,6 +13,14 @@ flags:
   snapshot:
     on_exit: true
     dir: {{ $log }}
+{{ if $isBootstrap }}
+  profile:
+    cpu: {{ $profile }}/cpu.prof
+    mem: {{ $profile }}/mem.prof
+    block: {{ $profile }}/block.prof
+    mutex: {{ $profile }}/mutex.prof
+    goroutine: {{ $profile }}/goroutine.prof
+{{ end }}
 
 fleet:
   flakes:
@@ -46,6 +55,39 @@ fleet:
                 kexec:
                   image: {{ $cache }}/kexec-installer-x86_64-linux.tar.gz
                   ssh_port: 10023
+                post_bootstrap_provisioned_hooks:
+                  - waitForOnline
+{{ end }}
+        test-vm-remote:
+          nix:
+            build_mode: remote
+          machines:
+            nixos-iso-vm-remote:
+              ssh: &ssh_nixos_iso_remote
+                hostname: 127.0.0.1
+                port: 10025
+                username: root
+                identity_file: {{ $key }}
+                disable_strict_key_checking: true
+{{ if $isBootstrap }}
+              bootstrap:
+                ssh: *ssh_nixos_iso_remote
+                post_bootstrap_provisioned_hooks:
+                  - waitForOnline
+{{ end }}
+            kexec-vm-remote:
+              ssh: &ssh_kexec_remote
+                hostname: 127.0.0.1
+                port: 10026
+                username: root
+                identity_file: {{ $key }}
+                disable_strict_key_checking: true
+{{ if $isBootstrap }}
+              bootstrap:
+                ssh: *ssh_kexec_remote
+                kexec:
+                  image: {{ $cache }}/kexec-installer-x86_64-linux.tar.gz
+                  ssh_port: 10026
                 post_bootstrap_provisioned_hooks:
                   - waitForOnline
 {{ end }}

@@ -1,13 +1,15 @@
 package workflow
 
 import (
+	"context"
+
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/onceasync"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/onceasync"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
 
@@ -16,6 +18,7 @@ import (
 type runner struct {
 	workflow     *Workflow
 	onceRegistry *atomicorderedmap.AtomicOrderedMap[string, *onceasync.OnceAsync]
+	groupCtx     context.Context
 }
 
 // phaseRunner handles the execution of a single phase for a specific machine.

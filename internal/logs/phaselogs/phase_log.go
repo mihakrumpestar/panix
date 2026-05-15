@@ -2,8 +2,8 @@ package phaselogs
 
 import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicslice"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicslice"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 )
 
 type PhaseLog struct {

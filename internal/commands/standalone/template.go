@@ -5,7 +5,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
-	"github.com/mihakrumpestar/panix/internal/pkg/yamlx"
+	"github.com/mihakrumpestar/panix/pkg/yamlx"
 	"github.com/pkg/errors"
 )
 

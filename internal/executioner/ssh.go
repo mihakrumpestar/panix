@@ -1,7 +1,7 @@
 package executioner
 
 func (ex *Executioner) sshStream(description, statusIfRunning, statusIfFailed string, commandWithArgs []string, excOpt *ExecOptions) error {
-	ssh := ex.machine.GetActiveSSH()
+	ssh := ex.conf.Machine.GetActiveSSH()
 
 	sshCommandWithArgs := []string{"ssh", "-q"} // Silence banners
 	sshCommandWithArgs = append(sshCommandWithArgs, ssh.MaybeSSHCommandArguments()...)

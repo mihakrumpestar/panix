@@ -4,8 +4,8 @@ import (
 	"strconv"
 
 	"dario.cat/mergo"
-	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
 
@@ -23,7 +23,6 @@ type Attributes struct {
 	ActivationMode     ActivationModeD `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"`
 
 	Bootstrap Bootstrap `yaml:"bootstrap" json:"bootstrap" desc:"Bootstrap configuration for initial provisioning"`
-	Nix       NixConfig `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
 
 	Name  string      `yaml:"-" json:"name,omitempty"`
 	Xpath xpath.Xpath `yaml:"-" json:"xpath,omitempty"`
@@ -54,23 +53,15 @@ type Bootstrap struct {
 
 //nolint:lll
 type KexecConfig struct {
-	Image      KexecImage  `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"`
-	ExtraFlags []string    `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
-	SSHPort    ssh.SSHPort `yaml:"ssh_port" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
+	Image      KexecImage `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"`
+	ExtraFlags []string   `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
+	SSHPort    uint16     `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
 }
 
 type PostBootstrapHookCommand string
 
 const PostBootstrapHookWaitForOnline PostBootstrapHookCommand = "waitForOnline"
 const PostBootstrapHookWaitForOffline PostBootstrapHookCommand = "waitForOffline"
-
-//nolint:lll
-type NixConfig struct {
-	ExtraFlags        []string `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags applied to both 'nix build' and 'nix copy'"`
-	BuildFlags        []string `yaml:"build_flags" json:"build_flags,omitempty" desc:"Extra flags for 'nix build' command (e.g. '--max-jobs', '4')"`
-	CopyFlags         []string `yaml:"copy_flags" json:"copy_flags,omitempty" desc:"Extra flags for 'nix copy' command (e.g. '--compress')"`
-	NixosInstallFlags []string `yaml:"nixos_install_flags" json:"nixos_install_flags,omitempty" desc:"Extra flags for 'nixos-install' command (e.g. '--no-bootloader')"`
-}
 
 func New() *Attributes {
 	return &Attributes{}
