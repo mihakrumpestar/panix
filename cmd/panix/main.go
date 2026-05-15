@@ -13,15 +13,15 @@ import (
 type cliCmd struct {
 	Version kong.VersionFlag `name:"version" help:"Show version"`
 
-	Init        commands_standalone.InitCmd     `cmd:"" help:"Initialize a new panix configuration file"`
-	Schema      commands_standalone.SchemaCmd   `cmd:"" help:"Generate YAML schema for configuration files"`
-	Template    commands_standalone.TemplateCmd `cmd:"" help:"Process templates and anchors, output the result"`
-	Eval        commands_standalone.EvalCmd     `cmd:"" help:"Fully evaluate and validate configuration (including templating) for execution, output the result"`
-	SnapshotCmd commands_standalone.SnapshotCmd `cmd:"" help:"View snapshot in TUI"`
+	Init     commands_standalone.InitCmd     `cmd:"" help:"Initialize a new panix configuration file"`
+	Schema   commands_standalone.SchemaCmd   `cmd:"" help:"Generate YAML schema for configuration files"`
+	Template commands_standalone.TemplateCmd `cmd:"" help:"Process templates and anchors, output the result"`
+	Eval     commands_standalone.EvalCmd     `cmd:"" help:"Fully evaluate and validate configuration (including templating) for execution, output the result"`
+	Snapshot commands_standalone.SnapshotCmd `cmd:"" help:"View snapshot in TUI"`
 
 	Inspect  commands_workflow.InspectCmd  `cmd:"" help:"Inspect machines"`
 	Build    commands_workflow.BuildCmd    `cmd:"" help:"Build NixOS closures"`
-	Deploy   commands_workflow.DeployCmd   `cmd:"" help:"Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets -> activate)"`
+	Deploy   commands_workflow.DeployCmd   `cmd:"" help:"Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets -> activate)"`
 	Secrets  commands_workflow.SecretsCmd  `cmd:"" help:"Deploy secrets to machines"`
 	Rollback commands_workflow.RollbackCmd `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag (default is -1)"`
 }

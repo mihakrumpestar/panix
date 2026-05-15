@@ -8,3 +8,4 @@ profile: ./test/cover.out
 include:
   paths:
     - internal/
+    - pkg/

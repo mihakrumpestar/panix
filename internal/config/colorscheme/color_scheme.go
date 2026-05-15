@@ -2,44 +2,74 @@ package colorscheme
 
 import (
 	"fmt"
+	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/lucasb-eyer/go-colorful"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 type ColorSchemeLogEntity struct {
-	Color lipgloss.Style
-	Icon  rune
+	Color style.Style
+	Icon  []byte
 }
 
 type ColorSchemeFooter struct {
-	HelpKey         lipgloss.Style
-	DebugBackground lipgloss.Style
+	HelpKey               style.Style
+	HelpDesc              style.Style
+	HelpSeparator         style.Style
+	HelpSelectedKey       style.Style
+	HelpSelectedDesc      style.Style
+	NotificationBaseStyle style.Style
+}
+
+type ColorSchemeNotification struct {
+	DefaultFgColor style.Color
 }
 
 type ColorSchemeHeader struct {
-	Title  lipgloss.Style
-	Border lipgloss.Style
+	Title  style.Style
+	Border style.Style
+}
+
+type ColorSchemeStatusIcons struct {
+	OK      []byte
+	Failed  []byte
+	Running []byte
 }
 
 type ColorSchemeStatus struct {
-	OK      lipgloss.Style
-	Warning lipgloss.Style
-	Failed  lipgloss.Style
-	Running lipgloss.Style
+	OK      style.Style
+	Warning style.Style
+	Failed  style.Style
+	Running style.Style
+	Icons   ColorSchemeStatusIcons
+}
+
+type ColorSchemeChars struct {
+	HeaderSeparator []byte
+	SnapshotIcon    []byte
+	ErrorIcon       []byte
+	RowSpanMarker   []byte
+	HeaderTitleSep  []byte
+	PhaseArrow      []byte
 }
 
 type ColorSchemeTableAndLogs struct {
-	Header                       lipgloss.Style
-	Border                       lipgloss.Style
-	Row                          lipgloss.Style
-	RowAlt                       lipgloss.Style
-	SelectionHighlightBackground lipgloss.Style
-	SelectionHighlightBorder     lipgloss.Style
+	Header                       style.Style
+	Border                       style.Style
+	Row                          style.Style
+	RowAlt                       style.Style
+	SelectionHighlightBackground style.Style
+	SelectionHighlightBorder     style.Style
 }
 
 type ColorSchemeTree struct {
-	Enumerator lipgloss.Style
+	Enumerator style.Style
+}
+
+type ColorSchemeSpinner struct {
+	Frames   [][]byte
+	Interval time.Duration
 }
 
 type ColorScheme struct {
@@ -48,9 +78,11 @@ type ColorScheme struct {
 	Table       ColorSchemeTableAndLogs
 	PhaseStatus ColorSchemePhaseStatus
 
-	Tree    ColorSchemeTree
-	Spinner lipgloss.Style
-	Footer  ColorSchemeFooter
+	Chars        ColorSchemeChars
+	Tree         ColorSchemeTree
+	Spinner      ColorSchemeSpinner
+	Footer       ColorSchemeFooter
+	Notification ColorSchemeNotification
 
 	Flake         ColorSchemeLogEntity
 	Configuration ColorSchemeLogEntity
@@ -65,11 +97,12 @@ type ColorSchemePhaseStatus struct {
 	Failed  ColorPair
 	Done    ColorPair
 	Default ColorPair
-	Pill    lipgloss.Style
+	Pill    style.Style
 }
 
 type ColorPair [2]colorful.Color
 
+//nolint:funlen
 func DefaultColorScheme() *ColorScheme {
 	borderStyle := makeForegroundStyle("#6272A4", false)
 
@@ -83,6 +116,11 @@ func DefaultColorScheme() *ColorScheme {
 			Warning: makeForegroundStyle("#FFB86C", false),
 			Failed:  makeForegroundStyle("#FF5555", false),
 			Running: makeForegroundStyle("#00BFFF", false),
+			Icons: ColorSchemeStatusIcons{
+				OK:      runeBytes('✅'),
+				Failed:  runeBytes('🔴'),
+				Running: runeBytes('🔄'),
+			},
 		},
 		Table: ColorSchemeTableAndLogs{
 			Header:                       makeBoldForegroundStyle("#F8F8F2"),
@@ -97,14 +135,29 @@ func DefaultColorScheme() *ColorScheme {
 			Failed:  mustColorfulHexPair("#5f1414", "#DC2626"),
 			Done:    mustColorfulHexPair("#14532D", "#11883d"),
 			Default: mustColorfulHexPair("#535862", "#6B7280"),
-			Pill:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 1),
+			Pill:    style.NewStyle().Foreground(style.Color("#FFFFFF")).Bold(true).Padding(0, 1),
+		},
+		Chars: ColorSchemeChars{
+			HeaderSeparator: []byte("│"),
+			SnapshotIcon:    runeBytes('◉'),
+			ErrorIcon:       runeBytes('✗'),
+			RowSpanMarker:   runeBytes('󱞩'),
+			HeaderTitleSep:  []byte(":"),
+			PhaseArrow:      runeBytes('󰜴'),
 		},
 		Tree: ColorSchemeTree{
 			Enumerator: borderStyle,
 		},
 		Footer: ColorSchemeFooter{
-			HelpKey:         lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")),
-			DebugBackground: lipgloss.NewStyle().Background(lipgloss.Color("#FFC800")),
+			HelpKey:               style.NewStyle().Foreground(style.Color("#FFFFFF")),
+			HelpDesc:              style.NewStyle().Foreground(style.Color("#8e8e8e")),
+			HelpSeparator:         style.NewStyle().Foreground(style.Color("#6272A4")),
+			HelpSelectedKey:       style.NewStyle().Foreground(style.Color("#8BE9FD")).Bold(true),
+			HelpSelectedDesc:      style.NewStyle().Foreground(style.Color("#568CAF")),
+			NotificationBaseStyle: style.NewStyle().Bold(true),
+		},
+		Notification: ColorSchemeNotification{
+			DefaultFgColor: style.Color("#B4B4B4"),
 		},
 		Flake:         makeLogEntity("#F1FA8C", '📁', true),
 		Configuration: makeLogEntity("#FFB86C", '📦', false),
@@ -112,33 +165,40 @@ func DefaultColorScheme() *ColorScheme {
 		Phase:         makeLogEntity("#FF79C6", '📋', false),
 		Command:       makeLogEntity("#BD93F9", '⚙', false),
 		Error:         makeLogEntity("#FF5555", '✗', false),
-		Spinner:       makeForegroundStyle("#8BE9FD", false),
+		Spinner: ColorSchemeSpinner{
+			Frames:   [][]byte{[]byte("⣾"), []byte("⣽"), []byte("⣻"), []byte("⢿"), []byte("⡿"), []byte("⣟"), []byte("⣯"), []byte("⣷")},
+			Interval: time.Second / 10, //nolint:mnd
+		},
 	}
 }
 
 // Helpers
 
-func makeForegroundStyle(color string, bold bool) lipgloss.Style {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+func makeForegroundStyle(color string, bold bool) style.Style {
+	s := style.NewStyle().Foreground(style.Color(color))
 	if bold {
-		style = style.Bold(true)
+		s = s.Bold(true)
 	}
 
-	return style
+	return s
 }
 
-func makeBoldForegroundStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(color))
+func makeBoldForegroundStyle(color string) style.Style {
+	return style.NewStyle().Bold(true).Foreground(style.Color(color))
 }
 
-func makeBackgroundStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Background(lipgloss.Color(color))
+func makeBackgroundStyle(color string) style.Style {
+	return style.NewStyle().Background(style.Color(color))
 }
 
 func makeLogEntity(color string, icon rune, bold bool) ColorSchemeLogEntity {
-	style := makeForegroundStyle(color, bold)
+	sty := makeForegroundStyle(color, bold)
 
-	return ColorSchemeLogEntity{Color: style, Icon: icon}
+	return ColorSchemeLogEntity{Color: sty, Icon: runeBytes(icon)}
+}
+
+func runeBytes(r rune) []byte {
+	return []byte(string(r))
 }
 
 func mustColorfulHex(hex string) colorful.Color {

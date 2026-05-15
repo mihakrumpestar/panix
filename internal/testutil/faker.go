@@ -10,9 +10,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
-	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
 )
 
 const (
@@ -34,8 +34,8 @@ func NewFaker() *Faker {
 func (f *Faker) SSHClient() ssh.SSHClient {
 	return ssh.SSHClient{
 		Hostname:     f.Internet().Domain(),
-		Port:         ssh.SSHPort(f.UInt16()),
-		Username:     ssh.SSHUsername(f.Internet().User()),
+		Port:         f.UInt16(),
+		Username:     f.Internet().User(),
 		IdentityFile: fmt.Sprintf("/home/%s/.ssh/id_%s", f.RandomStringWithLength(homeDirLen), f.RandomStringWithLength(shortStrLen)),
 	}
 }

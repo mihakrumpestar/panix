@@ -8,10 +8,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicpointer"
-	"github.com/mihakrumpestar/panix/internal/pkg/jsonerror"
-	"github.com/mihakrumpestar/panix/internal/pkg/ssh"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
+	"github.com/mihakrumpestar/panix/pkg/jsonerror"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
 )
 
@@ -43,7 +43,7 @@ type MetaInspect struct {
 	Architecture string       `yaml:"-" json:"architecture,omitempty"`
 	Generations  *Generations `yaml:"-" json:"generations,omitempty"`
 	Date         string       `yaml:"-" json:"date,omitempty"`
-	Nixos        string       `yaml:"-" json:"nixos,omitempty"`
+	OSVersion    string       `yaml:"-" json:"nixos,omitempty"`
 	Kernel       string       `yaml:"-" json:"kernel,omitempty"`
 }
 

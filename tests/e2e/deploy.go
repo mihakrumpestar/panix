@@ -21,25 +21,62 @@ func runPanixDeploy(configPath string, envVars ...string) error {
 	}
 
 	panixLogPath := filepath.Join(logDirPath, "panix-"+mode+".log")
+	panixOutputPath := filepath.Join(logDirPath, "panix-"+mode+".out")
 	e2eDir := filepath.Join(root, "tests", "e2e")
 	goArgs := "run " + root + "/cmd/panix"
 
 	termPath, termExecArgs := findTerminalEmulator()
 	if termPath != "" {
-		return runPanixInTerminal(termPath, termExecArgs, wrapperPath(mode, goArgs, configPath, panixLogPath, envVars, e2eDir))
+		exitCodePath := filepath.Join(logDirPath, "panix-"+mode+".exitcode")
+
+		return runPanixInTerminal(termPath, termExecArgs,
+			wrapperPath(mode, goArgs, configPath, panixLogPath, panixOutputPath, envVars, e2eDir, exitCodePath), exitCodePath, panixOutputPath)
 	}
 
 	return runPanixInConsole(root, configPath, panixLogPath, envVars, e2eDir)
 }
 
-func runPanixInTerminal(termPath string, termExecArgs []string, wrapperPath string) error {
-	return errors.Wrap(
-		exec.CommandContext(context.Background(), termPath, append(termExecArgs, wrapperPath)...).Run(), //nolint:gosec
-		"run panix in terminal",
-	)
+func runPanixInTerminal(termPath string, termExecArgs []string, wrapperPath, exitCodePath, panixOutputPath string) error {
+	// Remove stale exit code and output files so we can detect if panix never wrote them
+	_ = os.Remove(exitCodePath)
+	_ = os.Remove(panixOutputPath)
+
+	err := exec.CommandContext(context.Background(), termPath, append(termExecArgs, wrapperPath)...).Run() //nolint:gosec
+	if err != nil {
+		return errors.Wrap(err, "run panix in terminal")
+	}
+
+	data, readErr := os.ReadFile(exitCodePath) //nolint:gosec
+	if readErr != nil {
+		return errors.New("panix exit code file not found — panix may have crashed before writing it")
+	}
+
+	code := strings.TrimSpace(string(data))
+	if code != "0" {
+		return errors.Errorf("panix exited with code %s\n%s", code, tailFile(panixOutputPath))
+	}
+
+	return nil
 }
 
-func wrapperPath(mode, goArgs, configPath, panixLogPath string, envVars []string, e2eDir string) string {
+func tailFile(path string) string {
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		return "(output file not found)"
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+
+	const maxLines = 30
+
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func wrapperPath(mode, goArgs, configPath, panixLogPath, panixOutputPath string, envVars []string, e2eDir, exitCodePath string) string {
 	path := filepath.Join(logDirPath, "run-panix-"+mode+".sh")
 	envLines := make([]string, 0, len(envVars)+1)
 
@@ -51,7 +88,9 @@ func wrapperPath(mode, goArgs, configPath, panixLogPath string, envVars []string
 
 	script := "#!/bin/sh\n" +
 		strings.Join(envLines, "\n") + "\n" +
-		"go " + goArgs + " deploy -c " + configPath + " --exit-on-complete --log --log-file " + panixLogPath + "\n"
+		"go " + goArgs + " deploy -c " + configPath + " --exit-on-complete --log --log-file " + panixLogPath +
+		" 2> " + panixOutputPath + "\n" +
+		"echo $? > " + exitCodePath + "\n"
 
 	_ = os.WriteFile(path, []byte(script), scriptPerm)
 
@@ -76,20 +115,9 @@ func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, 
 }
 
 func findTerminalEmulator() (string, []string) {
-	for _, emulator := range []struct {
-		name  string
-		flags []string
-	}{
-		{"kitty", []string{"--hold"}},
-		{"alacritty", []string{"-e"}},
-		{"konsole", []string{"-e"}},
-		{"xfce4-terminal", []string{"-x"}},
-		{"xterm", []string{"-e"}},
-	} {
-		path, err := exec.LookPath(emulator.name)
-		if err == nil {
-			return path, emulator.flags
-		}
+	path, err := exec.LookPath("konsole")
+	if err == nil {
+		return path, []string{"-e"}
 	}
 
 	return "", nil

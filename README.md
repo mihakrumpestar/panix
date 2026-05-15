@@ -7,9 +7,11 @@
 *Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
 
 [![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
-[![License](https://img.shields.io/github/license/mihakrumpestar/panix)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mihakrumpestar/panix/pkg.svg)](https://pkg.go.dev/github.com/mihakrumpestar/panix/pkg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
+[![Zero CGO](https://img.shields.io/badge/CGO-none-success)](https://github.com/mihakrumpestar/panix)
 ![GitHub last commit](https://img.shields.io/github/last-commit/mihakrumpestar/panix)
 [![Code lines](./gen/loc.svg)](https://github.com/boyter/scc/)
 [![Coverage](./gen/coverage.svg)](https://github.com/vladopajic/go-test-coverage)
@@ -26,9 +28,9 @@
 
 ## Demo
 
-![Demo](./assets/demo.gif)
+![Demo](https://github.com/user-attachments/assets/55b2a31c-cd79-419b-9f10-63fc9d5130a6)
 
-> [mp4 version](assets/demo.mp4)
+> [mp4 version](https://spectra.video/w/wFKyzEhzRf4fy4og53dDg1)
 
 Full demo of the bootstrap process with kexec over Arch:
 
@@ -53,10 +55,15 @@ Panix addresses these problems by providing deployment orchestration with built-
 
 ## What Panix Is
 
-Panix is a deployment orchestrator for NixOS flakes. It provides:
+Panix is a deployment orchestrator for NixOS flakes.
+
+![TUI Showcase](./assets/tui.png)
+
+It provides:
 
 - **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
-- **Phase-oriented execution**: Six sequential phases - Inspect, Build, Bootstrap, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
+- **Phase-oriented execution**: Six sequential deployment phases - Inspect, Bootstrap, Build, Transfer, Secrets, Activate - execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
+- **Remote build mode**: Builds can execute on a target machine instead of locally, useful when the target has more resources or a different architecture. The closure is then copied between machines via the Nix remote store protocol.
 - **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
 - **Bootstrap support**: machines can be converted to NixOS via NixOS live install or any live install or previusly installed distro using kexec and `disko`, with full support for custom hooks and secrets at multiple stages.
 - **Flake-agnostic configuration**: The deployment configuration is separate from your flake. No modifications to your flake are required to use Panix.
@@ -69,7 +76,7 @@ Panix doesn't just "*run a deployment*". It executes an ordered pipeline of phas
 
 <div align="center">
 
-Inspect → Build → Bootstrap → Transfer → Secrets → Activate
+Inspect → Bootstrap → Build → Transfer → Secrets → Activate
 
 </div>
 
@@ -78,13 +85,19 @@ Inspect → Build → Bootstrap → Transfer → Secrets → Activate
 **Phase-by-phase breakdown:**
 
 | Phase | Scope | Purpose |
-|-------|-------|---------|
+| ------- | ------- | --------- |
 | **Inspect** | Per-machine | TCP reachability, SSH authentication, architecture detection, OS detection, generation discovery |
-| **Build** | Per-configuration | Build `config.system.build.toplevel` closure via `nix build --json` |
 | **Bootstrap** | Per-machine | kexec into NixOS installer (if needed), disko partitioning, encryption keys transfer (if provided) |
-| **Transfer** | Per-machine | `nix copy` closure to target (handles `/mnt` for bootstrapped systems) |
+| **Build** | Per-configuration | Build `config.system.build.toplevel` closure via `nix build` (local or remote mode) |
+| **Transfer** | Per-machine | `nix copy` closure to target |
 | **Secrets** | Per-machine | Transfer files/directories with proper ownership via rsync |
-| **Activate** | Per-machine | `nixos-install` (bootstrap) or `switch-to-configuration switch` (deploy) |
+| **Activate** | Per-machine | `nixos-install` (bootstrap) or `switch-to-configuration` (deploy) |
+
+Standalone phases (in combination with Inpect):
+
+| Phase | Scope | Purpose |
+| ------- | ------- | --------- |
+| **Rollback** | Per-machine | Switch to a previous NixOS generation via `switch-to-configuration` |
 
 The TUI shows this unfolding in real-time:
 
@@ -288,8 +301,10 @@ fleet:
                   - systemd-cryptenroll --tpm2-device=auto /dev/sda2
 ```
 
-> [!WARNING]
-> When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
+<div>
+<strong>⚠️ Warning</strong><br>
+When specifying YAML anchor keys, you have to prefix them with `anchor_` for them not to be rejected by the parser.
+</div>
 
 ### Template Command
 
@@ -394,7 +409,7 @@ machines:
 Panix provides multiple hook points during bootstrap:
 
 | Hook | When it runs | SSH used |
-|------|--------------|----------|
+| ------ | -------------- | ---------- |
 | `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH |
 | `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH |
 | `post_bootstrap_provisioned_hooks` | After reboot into new system | Regular SSH |
@@ -466,9 +481,9 @@ ssh:
 
 Defaults:
 
-- `disable_strict_key_checking: false` — strict host key checking enabled
-- `disable_auto_add_host_key: false` — automatically adds new host keys to known_hosts
-- `known_hosts_file: ""` — uses the user's default `~/.ssh/known_hosts` or temporary file if using bootstrap SSH
+- `disable_strict_key_checking: false`: strict host key checking enabled
+- `disable_auto_add_host_key: false`: automatically adds new host keys to known_hosts
+- `known_hosts_file: ""`: uses the user's default `~/.ssh/known_hosts` or temporary file if using bootstrap SSH
 
 Behavior:
 
@@ -477,12 +492,15 @@ Behavior:
 - **After kexec**: the kexec installer preserves SSH host keys from the original system on remote, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new known_hosts entry is recorded (due to `StrictHostKeyChecking=accept-new`) for the new port (same key, different `[host]:port` entry).
 - Setting `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
 
-> [!WARNING]
-> Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
->
-> - Setting `disable_strict_key_checking: true` disables **all** host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).
-> - Setting `disable_auto_add_host_key: true` prevents new host keys from being recorded. Combined with `disable_strict_key_checking: false` (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via `known_hosts_file` or manually adding entries).
-> - The defaults (`disable_strict_key_checking: false`, `disable_auto_add_host_key: false`) provide `StrictHostKeyChecking=accept-new` behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.
+<div>
+<strong>⚠️ Warning</strong><br>
+Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
+
+- Setting `disable_strict_key_checking: true` disables **all** host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).
+- Setting `disable_auto_add_host_key: true` prevents new host keys from being recorded. Combined with `disable_strict_key_checking: false` (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via `known_hosts_file` or manually adding entries).
+- The defaults (`disable_strict_key_checking: false`, `disable_auto_add_host_key: false`) provide `StrictHostKeyChecking=accept-new` behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.
+
+</div>
 
 #### Disable Automatic Reboot
 
@@ -706,7 +724,7 @@ Click and navigate (`left`/`right` keys) to any machine to filter build logs. Th
 #### Keybinds
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | `r` | Retry failed phases |
 | `ctrl+r` | Restart entire workflow (this does not reread the yaml config) |
 | `m` | Toggle logs fullscreen (make any build logs label or command output in build logs fullscrean for easier reading) |
@@ -736,7 +754,7 @@ An example can be found in [examples](./examples).
 Three ways to take a snapshot:
 
 | Method | Description |
-|--------|-------------|
+| -------- | ------------- |
 | Press `s` in TUI | Manual snapshot at any time |
 | `--snapshot.on-retry` | Automatic snapshot before retrying failed phases |
 | `--snapshot.on-exit` | Automatic snapshot when exiting TUI |
@@ -759,8 +777,10 @@ panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
 
 This opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at the time of capture will also appear as running (loading spinners) in TUI replay.
 
-> [!NOTE]
-> `r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
+<div>
+<strong>ℹ️ Note</strong><br>
+`r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
+</div>
 
 ### Configuration
 
@@ -811,7 +831,7 @@ flags:
 Panix supports three output modes via the `--output` flag:
 
 | Mode | Description |
-|------|-------------|
+| ------ | ------------- |
 | `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
 | `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
 | `json` | JSON-structured log output to stdout |
@@ -872,6 +892,74 @@ panix deploy --exit-on-complete
 ### Deployment Options
 
 Fine-tuning how builds and deployments run.
+
+<details>
+<summary>Build Modes (Local vs Remote)</summary>
+
+Panix supports two build modes: **local** (default) and **remote**. This controls where the Nix closure is built.
+
+#### Local mode (default)
+
+Builds run on the machine executing Panix:
+
+```bash
+nix build --no-link --print-out-paths <flake-url>#<installable>
+```
+
+The resulting closure is then transferred to each target machine via `nix copy`.
+
+#### Remote mode
+
+Builds run on the **first machine** of the configuration via the Nix remote store protocol:
+
+```bash
+nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths <flake-url>#<installable>
+```
+
+This is useful when the target machine has more resources (CPU/RAM) than the deployment machine, or when deployment and target machine are not same architecture.
+
+For configurations with multiple machines, the closure is built on the first machine, then copied from the first machine to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine configurations in remote mode skip the transfer phase entirely since the closure is already on the target.
+
+**Requirements:**
+
+- The first machine must be **remote** (not the local machine running Panix)
+- The first machine must have Nix installed and the flake inputs available
+
+**Configuration:**
+
+```yaml
+fleet:
+  flakes:
+    my-flake:
+      url: <url>
+      configurations:
+        my-server:
+          nix:
+            build_mode: remote    # Build on the first machine instead of locally
+          machines:
+            builder-and-target:              # First machine = remote builder and target
+              ssh:
+                hostname: 192.168.1.100
+            target-2:               # Closure copied from builder to target-2
+              ssh:
+                hostname: 192.168.1.101
+```
+
+`build_mode` can be set at fleet, flake, or configuration level (inherited like other `nix` options). It cannot be set at machine level, as a configuration's machines share the same build mode (since build is a configuration level phase).
+
+### Advanced
+
+For more advanced remote/distributed builds, you can use additional `nix` command flags or set it up in your NixOS config.
+
+Some documentation is available at:
+
+- <https://wiki.nixos.org/wiki/Distributed_build>
+- <https://nix.dev/manual/nix/latest/advanced-topics/distributed-builds>
+- <https://nix.dev/tutorials/nixos/distributed-builds-setup.html>
+- <https://docs.nixbuild.net/remote-builds/>
+- <https://docs.nixbuild.net/use-as-substituter/>
+
+</details>
 
 <details>
 <summary>Nix Command Flags</summary>
@@ -1067,7 +1155,7 @@ Commands:
     Fully evaluate and validate configuration (including templating) for
     execution, output the result
 
-  snapshot-cmd --path=STRING [flags]
+  snapshot --path=STRING [flags]
     View snapshot in TUI
 
   inspect [flags]
@@ -1077,7 +1165,7 @@ Commands:
     Build NixOS closures
 
   deploy [flags]
-    Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
+    Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets ->
     activate)
 
   secrets [flags]
@@ -1097,7 +1185,7 @@ Run "panix <command> --help" for more information on a command.
 > panix deploy --help
 Usage: panix deploy [flags]
 
-Do full workflow (inspect -> build -> bootstrap -> transfer -> secrets ->
+Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets ->
 activate)
 
 Flags:
@@ -1123,30 +1211,13 @@ Flags:
                                    Activation mode: check, switch, boot, test,
                                    dry-activate (overrides machine specific
                                    ones) ($PANIX_ACTIVATION_MODE)
-  -l, --log                        Enable logging to file ($PANIX_LOG)
-      --log-file="panix.log"       Log file path (epoch timestamp appended
-                                   before .log) ($PANIX_LOG_FILE)
-  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
-      --snapshot.dir="."           Directory to save snapshots
-                                   ($PANIX_SNAPSHOT_DIR)
-      --snapshot.on-retry          Take snapshot before retry
-                                   ($PANIX_SNAPSHOT_ON_RETRY)
-      --snapshot.on-exit           Take snapshot on exit
-                                   ($PANIX_SNAPSHOT_ON_EXIT)
-      --profile.cpu=STRING         Path for CPU profile output (enables CPU
-                                   profiling) ($PANIX_PROFILE_CPU)
-      --profile.mem=STRING         Path for memory profile output (enables
-                                   memory profiling) ($PANIX_PROFILE_MEM)
-      --profile.block=STRING       Path for block profile output (enables block
-                                   profiling) ($PANIX_PROFILE_BLOCK)
-      --profile.mutex=STRING       Path for mutex profile output (enables mutex
-                                   profiling) ($PANIX_PROFILE_MUTEX)
-      --profile.goroutine=STRING
-                                   Path for goroutine profile output
-                                   (enables goroutine profiling)
-                                   ($PANIX_PROFILE_GOROUTINE)
+      --output="tui"               Output mode: tui, console, json
+                                   ($PANIX_OUTPUT)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ($PANIX_REQUIRE_ALL_SUCCESS)
+      --exit-on-complete           Exit TUI on completion ('retry' and
+                                   'restart' are disabled in this mode)
+                                   ($PANIX_EXIT_ON_COMPLETE)
       --local-machine-hostname=STRING
                                    Hostname of the machine that is local
                                    (won't use ssh to connect to it) (default:
@@ -1157,11 +1228,16 @@ Flags:
       --dry-run-with-inspect       Show what would be done without
                                    executing, but with real inspect query
                                    ($PANIX_DRY_RUN_WITH_INSPECT)
-      --exit-on-complete           Exit TUI on completion ('retry' and
-                                   'restart' are disabled in this mode)
-                                   ($PANIX_EXIT_ON_COMPLETE)
-      --output="tui"               Output mode: tui, console, json
-                                   ($PANIX_OUTPUT)
+  -l, --log                        Enable logging to file ($PANIX_LOG)
+      --log-file="panix.log"       Log file path (epoch timestamp appended
+                                   before .log) ($PANIX_LOG_FILE)
+  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
+      --snapshot.dir="."           Directory to save snapshots
+                                   ($PANIX_SNAPSHOT_DIR)
+      --snapshot.on-retry          Take snapshot before retry
+                                   ($PANIX_SNAPSHOT_ON_RETRY)
+      --snapshot.on-exit           Take snapshot on exit
+                                   ($PANIX_SNAPSHOT_ON_EXIT)
       --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
                                    ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
       --tui.show-active-only       Show only running or errored logs
@@ -1175,6 +1251,18 @@ Flags:
                                    Maximum height for command labels
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+      --profile.cpu=STRING         Path for CPU profile output (enables CPU
+                                   profiling) ($PANIX_PROFILE_CPU)
+      --profile.mem=STRING         Path for memory profile output (enables
+                                   memory profiling) ($PANIX_PROFILE_MEM)
+      --profile.block=STRING       Path for block profile output (enables block
+                                   profiling) ($PANIX_PROFILE_BLOCK)
+      --profile.mutex=STRING       Path for mutex profile output (enables mutex
+                                   profiling) ($PANIX_PROFILE_MUTEX)
+      --profile.goroutine=STRING
+                                   Path for goroutine profile output
+                                   (enables goroutine profiling)
+                                   ($PANIX_PROFILE_GOROUTINE)
 ```
 
 </details>
@@ -1250,6 +1338,7 @@ fleet:
   hardware_config_path: ./hardware     # Path for hardware config generation
   sudo_program: doas                  # Override sudo program (default: sudo)
   nix:                                 # Nix command flags inherited by all descendants
+    build_mode: local                  # Build mode: local (default) or remote
     extra_flags: []                    # Flags for both nix build and nix copy
     build_flags: []                    # Flags for nix build only
     copy_flags: []                     # Flags for nix copy only
@@ -1278,6 +1367,7 @@ fleet:
       hardware_config_path: ./hw-config
       sudo_program: sudo
       nix:
+        build_mode: local               # Build mode for this flake
         extra_flags: []
         build_flags: []
         copy_flags: []
@@ -1334,6 +1424,7 @@ fleet:
           hardware_config_path: ./hardware
           sudo_program: sudo
           nix:                         # Nix flags for this configuration
+            build_mode: local           # Build mode for this configuration
             extra_flags: []            # Inherits + appends from parent
             build_flags: ["--max-jobs", "4"]  # Flags for nix build
             copy_flags: []             # Flags for nix copy
@@ -1383,11 +1474,6 @@ fleet:
               tags: [web-01]           # Accumulated: [production, critical, web, web-01]
               hardware_config_path: ./hardware/web-01
               sudo_program: sudo
-              nix:                     # Nix flags for this machine
-                extra_flags: []        # Inherits + appends from parent
-                build_flags: []        # Inherits + appends from parent
-                copy_flags: ["--compress"]  # Flags for nix copy (machine-level)
-                nixos_install_flags: []    # Flags for nixos-install (machine-level)
               ssh:
                 hostname: 10.0.0.1
                 port: 22
@@ -1480,7 +1566,7 @@ task go:test
 
 ### E2E Tests
 
-End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, followed by a re-deploy to the installed systems.
+End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, for both local and remote build modes, followed by a re-deploy to the installed systems.
 
 **Prerequisites**: KVM (`/dev/kvm`), QEMU, Nix, `cdrtools`
 
@@ -1488,19 +1574,58 @@ End-to-end tests verify the full deployment pipeline against real QEMU VMs, cove
 task go:test:e2e
 ```
 
-The whole test ususally takes only 1 min and 27 sec.
+**Test scope selection**:
+
+```sh
+task go:test:e2e -- --test=local    # Only local build mode (2 VMs)
+task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
+task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
+```
+
+The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes).
 
 **What it does:**
 
 1. Generates SSH keys, downloads kexec and Debian images, builds a NixOS installer ISO, preconfigures Debian image
-2. Starts two QEMU VMs: one booting the NixOS ISO directly, one booting Debian then kexec-ing into the installer
-3. Runs panix deploy (bootstrap) against both VMs (disko, nixos-install, reboot)
-4. Runs panix deploy (re-deploy) against both VMs (switch-to-configuration)
-5. Verifies NixOS installation on both VMs via SSH
+2. Starts QEMU VMs per test scope: NixOS ISO VM + Debian/kexec VM for local, and/or the same pair for remote
+3. Runs panix deploy (bootstrap) against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`
+4. Runs panix deploy (re-deploy) against all VMs (switch-to-configuration)
+5. Verifies NixOS installation on all VMs via SSH
 
 **What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
 
 **Logs** (`tests/e2e/log/`): Recreated each run. Per-VM console logs with timestamps, panix logs per deploy, snapshot JSONs.
+
+---
+
+## Custom TUI Rendering Engine
+
+Panix uses a custom-built terminal rendering engine `zeroterm` (the `pkg/tui` and `pkg/buffer` packages) instead of existing TUI frameworks. The engine is designed for zero-allocation steady-state rendering. When nothing changes on screen, the render + diff pipeline costs **0 memory allocations** and completes in under 3 μs.
+
+Full-pipeline benchmarks (render + diff, composite layout with viewports, tree, and table at terminal size of 200×50) against [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [cview](https://github.com/rivo/tview):
+
+| Feature | Ours | Bubbletea +181× | Cview +496× |
+|---|---|---|---|
+| Pipeline_EveryFrameUpdate | **24.7 µs** (11.4 KB, 178 allocs) | 1.3 ms (222.5 KB, 4382 allocs) +54× | 2.5 ms (1.1 MB, 28140 allocs) +100× |
+| Pipeline_NoChange | **2.8 µs** (0 B, 0 allocs) | 668.5 µs (173.0 KB, 3535 allocs) +236× | 2.1 ms (860.0 KB, 22535 allocs) +748× |
+| Pipeline_QuarterFrameUpdate | **2.8 µs** (0 B, 0 allocs) | 732.4 µs (167.2 KB, 2959 allocs) +257× | 1.8 ms (818.4 KB, 20474 allocs) +642× |
+
+*goos: linux goarch: amd64 cpu: AMD Ryzen 9 5900HX with Radeon Graphics, benchtime: 1s, ran: 2026-05-15*
+
+[Benchmark source code](./tests/bench/tui)
+
+<details>
+<summary>How it works</summary>
+
+- **Contiguous line buffer** (`LinesBuf`): all lines stored in one `[]byte` with `[]int` offsets. `Line(i)` is zero-copy. Bulk ops (`AppendFrom`, `WritePaddedView`) copy visible regions in a single append. Pooled via `sync.Pool`, reset with `buf[:0]` retaining capacity.
+- **In-place styling** (`AppendStyledLine`/`AppendStyledPad`): writes prefix + content + reset directly into the caller's buffer, no intermediate slices or per-cell allocations. Pre-rendered ANSI prefixes and 1000-space padding pool.
+- **Double-buffered frame diffing**: two `LinesBufDiff` buffers alternate as current/previous. `Diff(prev)` returns indices of changed lines via `bytes.Equal`. Only changed lines get terminal output (`\x1b[y;1H` + content + clear-to-EOL). Unchanged lines: zero output.
+- **Incremental caching**: Table re-renders only dirty rows (changed content or selection change). Viewport appends to its contiguous padded buffer when only new lines are added, avoiding O(n) rebuild. All components cache rendered output keyed on content/version/width/selection.
+- **Pre-rendered everything**: border bytes, connector chars, scrollbar cells, zone markers (`\x1b[<id>z`), ANSI prefixes. Computed once, reused every frame.
+- **Stack-allocated scratch**: Tree prefixes use `var pfxBuf [1024]byte`. Table uses a single partitioned `widthsBuf []int`. No heap scratch allocations.
+- **Zero-CGO**: Pure Go, no C dependencies.
+
+</details>
 
 ---
 
@@ -1512,7 +1637,7 @@ Contributions are welcome! Whether it's bug reports, feature requests, construct
 
 ## License
 
-Panix is licensed under [AGPL-3.0](LICENSE). Internal packages under `internal/pkg` are licensed under [MIT](internal/pkg/LICENSE).
+Panix is licensed under [AGPL-3.0](LICENSE). Packages under `pkg` are licensed under [MIT](pkg/README.md).
 
 For more details about licenses, see [choosingalicense.com/licenses](https://www.choosingalicense.com/licenses).
 

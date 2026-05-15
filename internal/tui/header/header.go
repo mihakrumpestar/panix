@@ -1,69 +1,82 @@
 package header
 
 import (
-	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
-	"github.com/mihakrumpestar/panix/internal/pkg/cache"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
-type headerCacheKey struct {
-	width int
-}
-
+// Header renders a static snapshot banner. Content is built once at construction;
+// only the terminal width varies at view time. The width-constrained output is
+// cached so re-rendering only happens on resize.
 type Header struct {
 	isSnapshot bool
-	snapshot   config.Snapshot
+	content    *buffer.LinesBuf
 
-	cache cache.Cache[ContentAndHeight, headerCacheKey]
+	cachedWidth  int
+	cachedRender *buffer.LinesBuf
 }
 
-type ContentAndHeight struct {
-	Content string
-	Height  int
-}
-
-func New(isSnapshot bool, snapshot config.Snapshot) *Header {
-	return &Header{
+func New(isSnapshot bool, snapshot config.Snapshot, colorScheme *colorscheme.ColorScheme) *Header {
+	header := &Header{
 		isSnapshot: isSnapshot,
-		snapshot:   snapshot,
+
+		cachedWidth:  -1,
+		cachedRender: buffer.NewLinesBuf(),
 	}
+
+	if isSnapshot {
+		header.content = buffer.NewLinesBuf()
+		renderLine(header.content, snapshot, colorScheme)
+	}
+
+	return header
 }
 
-func (h *Header) View(width int, colorScheme *colorscheme.ColorScheme) ContentAndHeight {
+// Render applies the width constraint to the pre-built content and returns
+// the cached result. Returns nil for non-snapshot mode.
+func (h *Header) Render(width int) *buffer.LinesBuf {
 	if !h.isSnapshot {
-		return ContentAndHeight{}
+		return nil
 	}
 
-	return h.cache.Get(func() (ContentAndHeight, bool) {
-		content := h.render(width, colorScheme)
-		height := lipgloss.Height(content) - 1 // -1 to account for next view
+	if width != h.cachedWidth {
+		h.cachedWidth = width
 
-		return ContentAndHeight{Content: content, Height: height}, true
-	}, headerCacheKey{width: width})
+		h.cachedRender.Reset()
+		style.NewStyle().MaxWidth(width).RenderInto(h.cachedRender, h.content.Lines())
+	}
+
+	return h.cachedRender
 }
 
-func (h *Header) render(width int, colorScheme *colorscheme.ColorScheme) string {
-	reason := h.snapshot.Reason.String()
+func (h *Header) Len() int {
+	return h.cachedRender.Len()
+}
 
-	parts := []string{
-		colorScheme.Status.Running.Render("v" + h.snapshot.PanixVersion),
-		colorScheme.Table.Border.Render(reason),
-		colorScheme.Table.Border.Render("started:", formatTime(h.snapshot.StartTime)),
-		colorScheme.Table.Border.Render("taken:", formatTime(h.snapshot.SnapshotTime)),
-	}
+// renderLine builds the header: ◉ Snapshot ─ v0.1.0 │ deploy │ started: ... │ taken: ...
+func renderLine(lineBuf *buffer.LinesBuf, snapshot config.Snapshot, colors *colorscheme.ColorScheme) {
+	title := colors.Header.Title
+	border := colors.Table.Border
 
-	if h.snapshot.WorkflowError != nil {
-		parts = append(parts, colorScheme.Status.Failed.Render(h.snapshot.WorkflowError.Error()))
-	}
+	sep := border.RenderLine(append(append([]byte{' '}, colors.Chars.HeaderSeparator...), ' '))
 
-	sep := colorScheme.Table.Border.Render(" │ ")
-	line := colorScheme.Header.Title.Render("◉ Snapshot") + colorScheme.Table.Border.Render(": ") + strings.Join(parts, sep)
+	lineBuf.Append(title.RenderLine(append(append([]byte{}, colors.Chars.SnapshotIcon...), " Snapshot"...)))
+	lineBuf.Append(border.RenderLine(colors.Chars.HeaderTitleSep))
+	lineBuf.Append([]byte{' '})
 
-	return lipgloss.NewStyle().Width(width).Render(line) + "\n\n"
+	lineBuf.Append(colors.Status.Running.RenderLine([]byte("v" + snapshot.PanixVersion)))
+	lineBuf.Append(sep)
+	lineBuf.Append(border.RenderLine([]byte(snapshot.Reason.String())))
+	lineBuf.Append(sep)
+	lineBuf.Append(border.RenderLine([]byte("started: " + formatTime(snapshot.StartTime))))
+	lineBuf.Append(sep)
+	lineBuf.Append(border.RenderLine([]byte("taken: " + formatTime(snapshot.SnapshotTime))))
+
+	lineBuf.WriteLine(nil)
 }
 
 func formatTime(t time.Time) string {

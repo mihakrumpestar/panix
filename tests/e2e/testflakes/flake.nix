@@ -24,6 +24,15 @@
       ];
     };
 
+    nixosConfigurations.test-vm-remote = nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        disko.nixosModules.disko
+        ./configuration.nix
+        { users.users.root.openssh.authorizedKeys.keys = [ sshPubKey ]; }
+      ];
+    };
+
     packages.${system}.installer-iso = (nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [

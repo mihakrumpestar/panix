@@ -1,34 +1,43 @@
 package fleet
 
 import (
+	"context"
 	"iter"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/pkg/atomic/atomicorderedmap"
-	"github.com/mihakrumpestar/panix/internal/tui/phasestatus"
-	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
 
 type Fleet struct {
 	attributes.Attributes `yaml:",inline"`
 
+	Nix    nix.NixConfig                                            `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
 	Flakes *atomicorderedmap.AtomicOrderedMap[string, *flake.Flake] `yaml:"flakes,required" json:"flakes" desc:"Flakes in the fleet"`
 
 	// Internal
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 
-	// For TUI representation
-	StatsTable  *statstable.StatsTable   `yaml:"-" json:"stats_table"`
-	PhaseStatus *phasestatus.PhaseStatus `yaml:"-" json:"phase_status"`
+	// Caches for TUI representation
+	CacheMachineInfos       []MachineInfo             `yaml:"-" json:"-"`
+	CacheFlattenedLogs      []*logs.Logs              `yaml:"-" json:"-"`
+	CacheStatisticsPerPhase *stats.StatisticsPerPhase `yaml:"-" json:"-"`
+}
+
+type MachineInfo struct {
+	Xpath       xpath.Xpath
+	MetaInspect machine.MetaInspect
+	State       machine.State
 }
 
 func (f *Fleet) Init(localMachineHostname string) error {
@@ -37,10 +46,8 @@ func (f *Fleet) Init(localMachineHostname string) error {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
 
+	f.Nix.Init()
 	f.Logs = logs.New()
-
-	f.StatsTable = statstable.NewStatsTable()
-	f.PhaseStatus = phasestatus.NewPhaseStatus()
 
 	return nil
 }
@@ -50,16 +57,14 @@ func (f *Fleet) Recalculate(workflowPhases []phase.Phase) {
 	f.RecalculateDurationAndError()
 	f.RecalculateMachinesState(workflowPhases)
 
-	f.RefreshStatsTable()
+	f.RefreshCaches()
 	f.RecalculatePhaseStatus(workflowPhases)
 }
 
-// RecalculateCachesOnly rebuilds derived caches (flattened logs, stats table, phase status)
-// without overwriting machine state. Use after snapshot deserialization where State and durations are already correct.
 func (f *Fleet) RecalculateCachesOnly(workflowPhases []phase.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 
-	f.RefreshStatsTable()
+	f.RefreshCaches()
 	f.RecalculatePhaseStatus(workflowPhases)
 }
 
@@ -76,7 +81,7 @@ func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
 		flattenedLogs = append(flattenedLogs, mergedLogs)
 	}
 
-	f.StatsTable.CacheFlattenedLogs = flattenedLogs
+	f.CacheFlattenedLogs = flattenedLogs
 }
 
 func (f *Fleet) RecalculateDurationAndError() {
@@ -91,7 +96,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 			var largestMachineDuration time.Duration
 
 			for _, machine := range configuration.Value.Machines.Pairs() {
-				dae := f.StatsTable.CacheFlattenedLogs[idx].DurationAndErrorCache
+				dae := f.CacheFlattenedLogs[idx].DurationAndErrorCache
 
 				machine.Value.Logs.DurationAndErrorCache = dae
 
@@ -136,7 +141,6 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 
 		fleetLeaf.Machine.State.Update(func(machineState *machine.State) {
 			machineState.Phase = machineLastPhaseLog.Key
-			machineState.Error = endErr
 
 			if !tas.IsFinished() {
 				machineState.Status = stats.Running
@@ -145,12 +149,23 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 				return
 			}
 
-			if endErr != nil {
-				machineState.Status = stats.Failed
-				machineState.StatusMsg = lastCommandLog.StatusIfFailed
+			if endErr != nil && errors.Is(errors.Cause(endErr.Err()), context.Canceled) {
+				machineState.Status = stats.Running
+				machineState.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.Error = nil
 
 				return
 			}
+
+			if endErr != nil {
+				machineState.Status = stats.Failed
+				machineState.StatusMsg = lastCommandLog.StatusIfFailed
+				machineState.Error = endErr
+
+				return
+			}
+
+			machineState.Error = nil
 
 			if workflowPhases[len(workflowPhases)-1] == machineState.Phase {
 				machineState.Status = stats.Done
@@ -164,13 +179,14 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 }
 
 func (f *Fleet) GetMachineLastPhaseLog(machineInOrder int) (atomicorderedmap.Pair[phase.Phase, *phaselogs.PhaseLog], bool) {
-	return f.StatsTable.CacheFlattenedLogs[machineInOrder].PhaseLogs.Last()
+	return f.CacheFlattenedLogs[machineInOrder].PhaseLogs.Last()
 }
 
 func (f *Fleet) ResetState() {
 	f.Logs.Clear()
-	f.StatsTable = statstable.NewStatsTable()
-	f.PhaseStatus = phasestatus.NewPhaseStatus()
+	f.CacheMachineInfos = nil
+	f.CacheFlattenedLogs = nil
+	f.CacheStatisticsPerPhase = nil
 
 	for _, flakeP := range f.Flakes.Pairs() {
 		flakeV := flakeP.Value
@@ -218,6 +234,16 @@ func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	}
 }
 
+func (f *Fleet) MachineCount() int {
+	count := 0
+
+	for range f.AllMachines() {
+		count++
+	}
+
+	return count
+}
+
 func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.StatisticsPerPhase {
 	statisticsPerPhase := stats.New(workflowPhases)
 
@@ -228,18 +254,18 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.Stat
 		statisticsPerPhase.DeepSet(msState.Phase, msState.Status, ms.Xpath)
 	}
 
-	f.PhaseStatus.CacheStatisticsPerPhase = statisticsPerPhase
+	f.CacheStatisticsPerPhase = statisticsPerPhase
 
 	return statisticsPerPhase
 }
 
-func (f *Fleet) RefreshStatsTable() {
-	machineInfos := make([]statstable.MachineInfo, 0)
+func (f *Fleet) RefreshCaches() {
+	machineInfos := make([]MachineInfo, 0, f.MachineCount())
 
 	for _, treeLeaf := range f.AllMachines() {
 		m := treeLeaf.Machine
 
-		mInfo := statstable.MachineInfo{
+		mInfo := MachineInfo{
 			Xpath:       m.Xpath,
 			MetaInspect: *m.MetaInspect.Load(),
 			State:       *m.State.Load(),
@@ -248,5 +274,5 @@ func (f *Fleet) RefreshStatsTable() {
 		machineInfos = append(machineInfos, mInfo)
 	}
 
-	f.StatsTable.CacheMachineInfos = machineInfos
+	f.CacheMachineInfos = machineInfos
 }

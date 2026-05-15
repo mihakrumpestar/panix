@@ -1,161 +1,142 @@
 package footer
 
 import (
-	"strings"
-
-	"charm.land/bubbles/v2/help"
-	"charm.land/bubbles/v2/key"
-	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
-	"github.com/mihakrumpestar/panix/internal/pkg/cache"
-	"github.com/mihakrumpestar/panix/internal/pkg/tui/notifications"
-	"github.com/mihakrumpestar/panix/internal/tui/header"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/tui/keymap"
+	"github.com/mihakrumpestar/panix/pkg/tui/notification"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 )
 
 type KeyDef struct {
 	Keys    []string
 	Help    string
-	Handler func() (tea.Model, tea.Cmd)
+	Active  func() bool
+	Handler func() zeroterm.Cmd
 }
 
-var notificationBaseStyle = lipgloss.NewStyle().Bold(true)
-
-type footerCacheKey struct {
-	width int
-}
+const minFooterHeight = 3
 
 type Footer struct {
 	keyDefs      []KeyDef
-	keymapHelp   help.Model
-	notification *notifications.Notification
-	conf         *config.Config
+	keymap       *keymap.Keymap
+	notification *notification.Notification
 
-	cache cache.Cache[header.ContentAndHeight, footerCacheKey]
+	helpBuf      *buffer.LinesBuf
+	cachedRender *buffer.LinesBuf
+
+	cachedWidth       int
+	cachedNotifVer    uint64
+	cachedKeymapWidth int
+	cachedKeymask     uint64
 }
 
-func New(keyDefs []KeyDef, conf *config.Config) *Footer {
-	h := help.New()
+func New(keyDefs []KeyDef, colorScheme *colorscheme.ColorScheme) *Footer {
+	footer := &Footer{
+		keyDefs: keyDefs,
+		keymap: keymap.New(pairsFromKeyDefs(keyDefs), keymap.Styles{
+			Key:          colorScheme.Footer.HelpKey,
+			Desc:         colorScheme.Footer.HelpDesc,
+			Separator:    colorScheme.Footer.HelpSeparator,
+			SelectedKey:  colorScheme.Footer.HelpSelectedKey,
+			SelectedDesc: colorScheme.Footer.HelpSelectedDesc,
+		}),
+		notification: notification.New(colorScheme.Notification.DefaultFgColor),
 
-	return &Footer{
-		keyDefs:      keyDefs,
-		keymapHelp:   h,
-		notification: notifications.New(),
-		conf:         conf,
+		helpBuf:      buffer.NewLinesBuf(),
+		cachedRender: buffer.NewLinesBuf(),
+
+		cachedWidth: -1,
 	}
+
+	footer.notification.SetBaseStyle(colorScheme.Footer.NotificationBaseStyle)
+
+	return footer
 }
 
 func (f *Footer) KeyDefs() []KeyDef { return f.keyDefs }
 
-func (f *Footer) Notification() *notifications.Notification { return f.notification }
+func (f *Footer) Notification() *notification.Notification { return f.notification }
 
-func (f *Footer) Keymap() Keymap {
-	bindings := make([]key.Binding, len(f.keyDefs))
-	for i := range f.keyDefs {
-		bindings[i] = key.NewBinding(
-			key.WithKeys(f.keyDefs[i].Keys...),
-			key.WithHelp(f.keyDefs[i].Keys[0], f.keyDefs[i].Help),
-		)
+func (f *Footer) Len() int { return f.cachedRender.Len() }
+
+// Render builds the footer (keymap + notification), horizontally joined.
+// Returns nil when quitting. Skips re-rendering when nothing changed.
+//
+// Buffer flow (2 persistent buffers, no allocations on cache hit):
+//
+//	helpBuf:       raw keymap → (reused as join output) → swap → disposable
+//	cachedRender:  styled help  → (reused as join input) → swap → final result
+func (f *Footer) Render(quitting bool, width int) *buffer.LinesBuf {
+	if quitting {
+		return nil
 	}
 
-	return Keymap{bindings: bindings}
-}
+	notifBuf := f.notification.Render()
+	notifVer := notifBuf.Version()
+	keymapWidth, keymask := f.keymap.CacheKey()
 
-type Keymap struct {
-	bindings []key.Binding
-}
-
-func (k Keymap) ShortHelp() []key.Binding  { return k.bindings }
-func (k Keymap) FullHelp() [][]key.Binding { return [][]key.Binding{k.bindings} }
-
-func (f *Footer) View(width int, colorScheme *colorscheme.ColorScheme) header.ContentAndHeight {
-	f.keymapHelp.Styles.ShortKey = colorScheme.Footer.HelpKey
-	f.keymapHelp.Styles.FullKey = colorScheme.Footer.HelpKey
-
-	notifBox, notifWidth := f.notification.View(notificationBaseStyle)
-
-	helpText := f.cache.Get(func() (header.ContentAndHeight, bool) {
-		content := wrapKeybindingsByPair(f.keymapHelp, f.Keymap(), width)
-		height := lipgloss.Height(content)
-
-		return header.ContentAndHeight{Content: content, Height: height}, true
-	}, footerCacheKey{width: width})
-
-	style := lipgloss.NewStyle().Width(width).MaxWidth(width - notifWidth)
-	if f.conf.Flags.Debug {
-		style = style.Background(colorScheme.Footer.DebugBackground.GetBackground())
+	if width == f.cachedWidth && notifVer == f.cachedNotifVer &&
+		keymapWidth == f.cachedKeymapWidth && keymask == f.cachedKeymask {
+		return f.cachedRender
 	}
 
-	styledHelp := style.Render("\n" + helpText.Content)
+	f.cachedWidth = width
+	f.cachedNotifVer = notifVer
+	f.cachedKeymapWidth = keymapWidth
+	f.cachedKeymask = keymask
 
-	parts := []string{styledHelp}
-	if notifWidth != 0 {
-		parts = append(parts, notifBox)
+	// 1. Raw keymap content into helpBuf
+	f.helpBuf.Reset()
+	f.helpBuf.EmptyLine()
+	f.keymap.Render(f.helpBuf, width)
+
+	for f.helpBuf.Len() < minFooterHeight {
+		f.helpBuf.EmptyLine()
 	}
 
-	finalContent := lipgloss.JoinHorizontal(lipgloss.Center, parts...)
+	// 2. Apply width constraint → styled help into cachedRender
+	helpWidth := width
 
-	return header.ContentAndHeight{Content: finalContent, Height: helpText.Height}
+	if notifBuf != nil {
+		w := style.MaxLineWidth(notifBuf.LinesBuf)
+		if w > 0 {
+			helpWidth = width - w
+		}
+	}
+
+	f.cachedRender.Reset()
+	style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderInto(f.cachedRender, f.helpBuf.Lines())
+
+	// 3. Join with notification (if present)
+	if notifBuf != nil {
+		// cachedRender holds styled help (join input) — reuse helpBuf as join output
+		f.helpBuf.Reset()
+		style.JoinHorizontalBufs(f.helpBuf, style.Center, f.cachedRender, notifBuf.LinesBuf)
+
+		// Swap: cachedRender ← final result, helpBuf ← disposable for next frame
+		f.helpBuf, f.cachedRender = f.cachedRender, f.helpBuf
+	}
+
+	return f.cachedRender
 }
 
-func (f *Footer) Update(msg tea.Msg) tea.Cmd {
+func (f *Footer) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	return f.notification.Update(msg)
 }
 
-func wrapKeybindingsByPair(helpModel help.Model, keyMap help.KeyMap, maxWidth int) string {
-	bindings := keyMap.ShortHelp()
-	if len(bindings) == 0 {
-		return ""
-	}
+// Helpers
 
-	separator := helpModel.Styles.ShortSeparator.Render(helpModel.ShortSeparator)
-	sepWidth := lipgloss.Width(separator)
-
-	var (
-		lines        []string
-		currentLine  strings.Builder
-		currentWidth int
-	)
-
-	for _, binding := range bindings {
-		if !binding.Enabled() {
-			continue
+func pairsFromKeyDefs(keyDefs []KeyDef) []keymap.Pair {
+	pairs := make([]keymap.Pair, len(keyDefs))
+	for i := range keyDefs {
+		pairs[i] = keymap.Pair{
+			Key:    keyDefs[i].Keys[0],
+			Desc:   keyDefs[i].Help,
+			Active: keyDefs[i].Active,
 		}
-
-		item := helpModel.Styles.ShortKey.Render(binding.Help().Key)
-		item += " " + helpModel.Styles.ShortDesc.Render(binding.Help().Desc)
-
-		itemWidth := lipgloss.Width(item)
-
-		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
-			lines = append(lines, currentLine.String())
-			currentLine.Reset()
-
-			currentWidth = 0
-		}
-
-		if currentWidth > 0 {
-			currentLine.WriteString(separator)
-
-			currentWidth += sepWidth
-		}
-
-		currentLine.WriteString(item)
-
-		currentWidth += itemWidth
 	}
 
-	if currentWidth > 0 {
-		lines = append(lines, currentLine.String())
-	}
-
-	linesString := strings.Join(lines, "\n")
-	linesString += "\n"
-
-	if len(lines) == 1 { // Keep at least 3 in full height, so that notification can appear normally
-		linesString += "\n"
-	}
-
-	return linesString
+	return pairs
 }

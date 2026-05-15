@@ -25,13 +25,14 @@ Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
 Future potential/to-do list (by priority):
 
+- improve code quality
 - increase unit tests
-- replace bubbletea with [tview](https://github.com/rivo/tview) for potentially reduced binary size and performance
 
 ## Past
 
 The following packages were inadequate for use for Panix:
 
+- [bubbletea](https://github.com/charmbracelet/bubbletea): too slow, it is severly unoptimized
 - [Koanf link to issue](https://github.com/knadh/koanf/issues/221)
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)

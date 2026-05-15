@@ -88,14 +88,14 @@ func TestHasRequiredPhases(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
-			result := hasRequiredPhases(tt.buildFleet())
-			assertion.Equal(tt.wantSecrets, result.Secrets)
-			assertion.Equal(tt.wantBootstrap, result.Bootstrap)
+			result := hasRequiredPhases(test.buildFleet())
+			assertion.Equal(test.wantSecrets, result.Secrets)
+			assertion.Equal(test.wantBootstrap, result.Bootstrap)
 		})
 	}
 }
@@ -117,7 +117,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
@@ -127,7 +127,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
@@ -137,7 +137,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
@@ -147,7 +147,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1))))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
 		},
 		{
@@ -157,8 +157,8 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithBootstrapSSH())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Activate},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 		},
 		{
 			"keeps all phases when both needed",
@@ -167,8 +167,8 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1), fk.MachineWithBootstrapSSH())))
 			},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Secrets, phase.Activate},
-			[]phase.Phase{phase.Inspect, phase.Build, phase.Bootstrap, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 		},
 		{
 			"does not remove phases not in list",
@@ -182,18 +182,18 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
 
 			c := &Config{
-				Fleet:  tt.buildFleet(),
-				Phases: tt.inputPhases,
+				Fleet:  test.buildFleet(),
+				Phases: test.inputPhases,
 			}
 			c.FilterOutUnusedPhases()
-			assertion.Equal(tt.wantPhases, c.Phases)
+			assertion.Equal(test.wantPhases, c.Phases)
 		})
 	}
 }

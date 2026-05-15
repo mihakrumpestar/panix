@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/alitto/pond/v2"
@@ -12,10 +13,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/pkg/hook"
-	"github.com/mihakrumpestar/panix/internal/pkg/retry"
-	"github.com/mihakrumpestar/panix/internal/pkg/xpath"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/pkg/hook"
+	"github.com/mihakrumpestar/panix/pkg/retry"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -27,12 +28,16 @@ const (
 )
 
 type Workflow struct {
-	ctx        context.Context
+	parentCtx context.Context
+	ctx       context.Context
+
 	cancel     context.CancelFunc
 	conf       *config.Config
 	state      *WorkflowState
 	updateHook *hook.Hook
-	runner     *runner
+	done       chan struct{}
+
+	runner *runner
 }
 
 type WorkflowState struct {
@@ -44,7 +49,9 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	workflow := &Workflow{
-		ctx:    ctxWithCancel,
+		parentCtx: ctx,
+		ctx:       ctxWithCancel,
+
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
@@ -52,6 +59,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 			Retry: retry.NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),
+		done:       make(chan struct{}),
 	}
 
 	workflow.runner = newRunner(workflow)
@@ -67,12 +75,17 @@ func (w *Workflow) WaitForUpdate() <-chan struct{} {
 	return w.updateHook.WaitForUpdate()
 }
 
-// Cancel cancels the context and waits for it's completion.
+// Cancel cancels the context and waits for its completion.
 func (w *Workflow) Cancel() error {
 	w.cancel()
-	<-w.ctx.Done() // Wait to fully finish context (this also stops and cancels pool)
 
-	w.updateHook.Close() // If we don't close it, WaitForUpdate will wait beyond the restart
+	// If a workflow is running, wait for StartWorkflow to finish.
+	if w.done != nil {
+		<-w.done
+	}
+
+	// Close the update hook so any pending WaitForUpdate returns.
+	w.updateHook.Close()
 
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
@@ -85,8 +98,6 @@ func (w *Workflow) NewTaskWithRetry(phase phase.Phase, logs *logs.Logs, f func()
 		}
 
 		if w.conf.Flags.RequireAllSuccess {
-			w.cancel()
-
 			return err
 		}
 
@@ -113,31 +124,12 @@ func (w *Workflow) Phase(
 	fleetLeaf *fleet.FleetLeaf,
 	phaseCode func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error,
 ) error {
-	var (
-		logs  *logs.Logs
-		xpath xpath.Xpath
-		err   error
-	)
-
-	switch phaseI.GetPhaseScope() {
-	case phase.ScopeMachine:
-		logs = fleetLeaf.Machine.Logs
-		xpath = fleetLeaf.Machine.Xpath
-	case phase.ScopeConfiguration:
-		logs = fleetLeaf.Configuration.Logs
-		xpath = fleetLeaf.Configuration.Xpath
-	case phase.ScopeFlake:
-		logs = fleetLeaf.Flake.Logs
-		xpath = fleetLeaf.Flake.Xpath
-	case phase.ScopeFleet:
-		logs = fleetLeaf.Flake.Logs
-		xpath = fleetLeaf.Flake.Xpath
-	default:
-		return errors.New("invalid phase scope")
+	logs, xpath, err := phaseLogsAndXpath(phaseI, fleetLeaf)
+	if err != nil {
+		return err
 	}
 
 	phaseLog := logs.PhaseLogs.GetOrCreate(phaseI)
-
 	phaseLog.TimeAndState.StartTimer()
 
 	sublog := log.With().
@@ -147,30 +139,57 @@ func (w *Workflow) Phase(
 
 	sublog.Info().Str("event", "phase_start").Msgf("Started %s of %s", phaseI, xpath.String())
 
+	ctx := w.ctx
+	if w.runner.groupCtx != nil {
+		ctx = w.runner.groupCtx
+	}
+
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phaseI != phase.Inspect)
-	exc := executioner.NewExecutioner(w.ctx, w.conf.Flags.Timeout, dryRun, xpath, fleetLeaf.Machine, phaseI, phaseLog, w.updateHook.Signal)
+
+	executionerConf := executioner.ExecutionerConf{
+		Ctx:          ctx,
+		Timeout:      w.conf.Flags.Timeout,
+		DryRun:       dryRun,
+		Xpath:        xpath,
+		Machine:      fleetLeaf.Machine,
+		Phase:        phaseI,
+		PhaseLog:     phaseLog,
+		OnUpdateHook: w.updateHook.Signal,
+	}
+	exc := executioner.NewExecutioner(executionerConf)
 	err = phaseCode(exc, phaseLog)
 
 	phaseLog.TimeAndState.EndTimerWithError(err)
-
-	duration, durationErr := phaseLog.TimeAndState.Load().Duration()
-	if durationErr != nil {
-		return errors.Wrap(durationErr, "failed to get phase duration")
-	}
-
-	logger.ResultEvent(sublog,
-		fmt.Sprintf("Finished %s of %s", phaseI, xpath.String()),
-		err,
-		func(event *zerolog.Event) {
-			event.Str("event", "phase_end").Dur("duration", duration)
-		})
+	w.logPhaseResult(sublog, phaseI, xpath, phaseLog, err)
 
 	return err
 }
 
+func phaseLogsAndXpath(phaseI phase.Phase, fleetLeaf *fleet.FleetLeaf) (*logs.Logs, xpath.Xpath, error) {
+	switch phaseI.GetPhaseScope() {
+	case phase.ScopeMachine:
+		return fleetLeaf.Machine.Logs, fleetLeaf.Machine.Xpath, nil
+	case phase.ScopeConfiguration:
+		return fleetLeaf.Configuration.Logs, fleetLeaf.Configuration.Xpath, nil
+	case phase.ScopeFlake, phase.ScopeFleet:
+		return fleetLeaf.Flake.Logs, fleetLeaf.Flake.Xpath, nil
+	default:
+		return nil, xpath.Xpath(""), errors.New("invalid phase scope")
+	}
+}
+
 // StartWorkflow orchestrates the execution of all phases.
 func (w *Workflow) StartWorkflow() error {
+	defer func() {
+		w.updateHook.Close()
+		close(w.done)
+	}()
+
 	subPool := w.state.Pool.NewGroup()
+
+	w.runner.groupCtx = subPool.Context()
+
+	var failedCount atomic.Int32
 
 	for _, fleetLeaf := range w.conf.Fleet.AllMachines() {
 		subPool.SubmitErr(func() error {
@@ -188,7 +207,13 @@ func (w *Workflow) StartWorkflow() error {
 			for _, phase := range w.conf.Phases {
 				err := phaseRunnerInstance.run(phase)
 				if err != nil {
-					return err
+					if w.conf.Flags.RequireAllSuccess {
+						return err
+					}
+
+					failedCount.Add(1)
+
+					return nil
 				}
 			}
 
@@ -198,10 +223,16 @@ func (w *Workflow) StartWorkflow() error {
 
 	err := subPool.Wait()
 
-	w.updateHook.Close()
-
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return errors.Wrap(err, "workflow execution failed")
+	}
+
+	// Don't report failed machines when the workflow was cancelled (e.g. for restart)
+	if w.ctx.Err() == nil {
+		n := failedCount.Load()
+		if n > 0 {
+			return errors.Errorf("workflow completed with %d machine(s) failed", n)
+		}
 	}
 
 	return nil
@@ -215,6 +246,22 @@ func (w *Workflow) MachineCount() int {
 	}
 
 	return count
+}
+
+func (w *Workflow) logPhaseResult(sublog zerolog.Logger, phaseI phase.Phase, xpath xpath.Xpath, phaseLog *phaselogs.PhaseLog, err error) {
+	duration, durationErr := phaseLog.TimeAndState.Load().Duration()
+	if durationErr != nil {
+		sublog.Error().Err(durationErr).Msg("failed to get phase duration")
+
+		return
+	}
+
+	logger.ResultEvent(sublog,
+		fmt.Sprintf("Finished %s of %s", phaseI, xpath.String()),
+		err,
+		func(event *zerolog.Event) {
+			event.Str("event", "phase_end").Dur("duration", duration)
+		})
 }
 
 // executePhase executes a phase by dispatching to the appropriate handler.
