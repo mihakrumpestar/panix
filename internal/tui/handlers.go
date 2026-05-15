@@ -10,12 +10,14 @@ import (
 )
 
 const (
-	workflowUpdateHookPollInterval  = 20 * time.Millisecond
-	workflowUpdateHookThrottleDelay = 40 * time.Millisecond
+	workflowUpdateHookThrottleDelay = time.Second / 60 // FPS
 )
 
 type (
-	workflowUpdateHookMsg struct{}
+	workflowUpdateHookMsg struct {
+		workflow   *workflow.Workflow
+		lastUpdate time.Time
+	}
 
 	restartMsg struct{}
 	retryMsg   struct{}
@@ -28,26 +30,37 @@ type errMsg struct { //nolint:errname
 	err error
 }
 
+func errCmd(err error) zeroterm.Cmd { return func() zeroterm.Msg { return errMsg{err: err} } }
+
 func (e errMsg) Error() string {
 	return e.err.Error()
 }
 
 type workflowDoneMsg struct {
-	err error
+	workflow *workflow.Workflow
+	err      error
 }
 
-func (m *model) workflowStartCmd() zeroterm.Cmd {
+func workflowRunCmd(w *workflow.Workflow) zeroterm.Cmd {
 	return func() zeroterm.Msg {
-		var err error
+		err := w.StartWorkflow()
 
-		m.workflow, err = workflow.NewWorkflow(m.ctx, m.conf)
-		if err != nil {
-			return errMsg{err: err}
+		return workflowDoneMsg{workflow: w, err: err}
+	}
+}
+
+func workflowUpdateHookCmd(workflow *workflow.Workflow, lastUpdate time.Time) zeroterm.Cmd {
+	return func() zeroterm.Msg {
+		<-workflow.WaitForUpdate()
+
+		now := time.Now()
+		elapsed := now.Sub(lastUpdate)
+
+		if elapsed < workflowUpdateHookThrottleDelay {
+			time.Sleep(workflowUpdateHookThrottleDelay - elapsed)
 		}
 
-		err = m.workflow.StartWorkflow()
-
-		return workflowDoneMsg{err: err}
+		return workflowUpdateHookMsg{workflow: workflow, lastUpdate: now}
 	}
 }
 
@@ -68,30 +81,17 @@ func (m *model) workflowRestartCmd() zeroterm.Cmd {
 	m.err = nil
 	m.buildLogs = nil
 
-	return m.workflowStartCmd()
-}
-
-func (m *model) workflowUpdateHookCmd() zeroterm.Cmd {
-	return func() zeroterm.Msg {
-		if m.workflow == nil {
-			time.Sleep(workflowUpdateHookPollInterval)
-
-			return workflowUpdateHookMsg{}
-		}
-
-		<-m.workflow.WaitForUpdate()
-
-		now := time.Now()
-		elapsed := now.Sub(m.lastWorkflowUpdate)
-
-		if elapsed < workflowUpdateHookThrottleDelay {
-			time.Sleep(workflowUpdateHookThrottleDelay - elapsed)
-		}
-
-		m.lastWorkflowUpdate = time.Now()
-
-		return workflowUpdateHookMsg{}
+	w, err := workflow.NewWorkflow(m.ctx, m.conf)
+	if err != nil {
+		return errCmd(err)
 	}
+
+	m.workflow = w
+
+	return zeroterm.BatchCmd(
+		workflowRunCmd(m.workflow),
+		workflowUpdateHookCmd(m.workflow, m.lastWorkflowUpdate),
+	)
 }
 
 // workflowDoneMsgCmd is not async.

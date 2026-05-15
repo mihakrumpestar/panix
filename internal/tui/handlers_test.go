@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -16,6 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/header"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
+	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
@@ -31,12 +33,16 @@ func TestStartWorkflowCmd_ReturnsWorkflowDoneMsg(t *testing.T) {
 
 	mdl := newTestModel(t)
 
-	cmd := mdl.workflowStartCmd()
+	workflow, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	cmd := workflowRunCmd(workflow)
 	require.NotNil(t, cmd)
 
 	msg := cmd()
-	_, ok := msg.(workflowDoneMsg)
+	doneMsg, ok := msg.(workflowDoneMsg)
 	require.True(t, ok, "expected workflowDoneMsg, got %T", msg)
+	assert.Equal(t, workflow, doneMsg.workflow)
 }
 
 func TestWorkflowDoneMsg_WithErr_SetsModelError(t *testing.T) {
@@ -44,8 +50,13 @@ func TestWorkflowDoneMsg_WithErr_SetsModelError(t *testing.T) {
 
 	mdl := newTestModel(t)
 
+	workflow, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	mdl.workflow = workflow
+
 	workflowErr := errors.New("workflow completed with 1 machine(s) failed")
-	msg := workflowDoneMsg{err: workflowErr}
+	msg := workflowDoneMsg{workflow: workflow, err: workflowErr}
 
 	_ = mdl.Update(msg)
 
@@ -58,7 +69,12 @@ func TestWorkflowDoneMsg_WithoutErr_NoError(t *testing.T) {
 
 	mdl := newTestModel(t)
 
-	msg := workflowDoneMsg{}
+	w, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	mdl.workflow = w
+
+	msg := workflowDoneMsg{workflow: w}
 
 	_ = mdl.Update(msg)
 
@@ -97,13 +113,19 @@ func TestRestartWorkflow_IgnoresCancelErrors(t *testing.T) {
 
 	mdl := newTestModel(t)
 
-	// Start a workflow first so there's something to cancel
-	startCmd := mdl.workflowStartCmd()
-	_ = startCmd()
+	// Set up a workflow and start it so Cancel() can complete
+	w, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
 
-	// The workflow was started; now restart it.
-	// Cancel() always returns context.Canceled, but we should
-	// not care about ANY error from cancel on restart.
+	mdl.workflow = w
+
+	go func() { _ = w.StartWorkflow() }()
+
+	// Wait briefly for the workflow to be running
+	time.Sleep(10 * time.Millisecond)
+
+	// Cancel blocks until StartWorkflow finishes, but the cancelled
+	// context should make it complete quickly.
 	restartCmd := mdl.workflowRestartCmd()
 	require.NotNil(t, restartCmd, "restart should proceed even if cancel errors")
 	assert.NoError(t, mdl.err, "restart should clear m.err regardless of cancel errors")

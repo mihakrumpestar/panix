@@ -109,9 +109,16 @@ func (m *model) Init() []zeroterm.Cmd {
 		return nil
 	}
 
+	w, err := workflow.NewWorkflow(m.ctx, m.conf)
+	if err != nil {
+		return []zeroterm.Cmd{func() zeroterm.Msg { return errMsg{err: err} }}
+	}
+
+	m.workflow = w
+
 	return []zeroterm.Cmd{
-		m.workflowStartCmd(),
-		m.workflowUpdateHookCmd(),
+		workflowRunCmd(m.workflow),
+		workflowUpdateHookCmd(m.workflow, m.lastWorkflowUpdate),
 	}
 }
 
@@ -131,6 +138,10 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 
 		return zeroterm.BatchCmd(cmd...)
 	case workflowDoneMsg:
+		if msg.workflow != m.workflow {
+			return nil
+		}
+
 		cmd = append(cmd, m.workflowDoneMsgCmd(msg))
 
 		return zeroterm.BatchCmd(cmd...)
@@ -139,7 +150,10 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	case retryMsg:
 		m.workflowRetry()
 	case workflowUpdateHookMsg:
-		cmd = append(cmd, m.workflowUpdateHookCmd())
+		if msg.workflow == m.workflow {
+			m.lastWorkflowUpdate = msg.lastUpdate
+			cmd = append(cmd, workflowUpdateHookCmd(m.workflow, m.lastWorkflowUpdate))
+		}
 	case zeroterm.PostRenderMsg:
 		cmd = append(cmd, m.spinners.ProcessPendingTicks())
 	case zeroterm.KeyPressMsg:
