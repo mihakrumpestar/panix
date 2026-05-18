@@ -14,7 +14,7 @@ type Flake struct {
 	attributes.Attributes `yaml:",inline"`
 
 	Nix            nix.NixConfig                                                            `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
-	URL            string                                                                   `yaml:"url,required" json:"url" validate:"required,uri" desc:"Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
+	URL            string                                                                   `yaml:"url" json:"url" validate:"omitempty,uri|dir" default:"." desc:"Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
 	Configurations *atomicorderedmap.AtomicOrderedMap[string, *configuration.Configuration] `yaml:"configurations,required" json:"configurations" validate:"required" desc:"Configurations in flake"`
 
 	// Internal
@@ -28,6 +28,11 @@ func (f *Flake) Init(name string, attr *attributes.Attributes, localMachineHostn
 	}
 
 	f.Nix.Init()
+
+	if f.URL == "" {
+		f.URL = "."
+	}
+
 	f.Logs = logs.New()
 
 	return nil

@@ -309,10 +309,9 @@ properties:
                 type: string
             url:
               type: string
-              description: "Flake path (eg. 'path:...') or url (eg. 'ssh:...' 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"
-              format: uri
+              description: "Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax (default: .)"
+              default: .
           required:
-          - url
           - configurations
           additionalProperties: false
       hardware_config_path:
