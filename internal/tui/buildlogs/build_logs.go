@@ -442,7 +442,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 
 	iconWidth := style.CellWidth(b.cmdIconBuf.Line(0))
 	labelWidth := cmdIndent + iconWidth + durWidth
-	labelCopy := make([]byte, len(label.Bytes()))
+	labelCopy := make([]byte, label.Len())
 	copy(labelCopy, label.Bytes())
 
 	labelXpath := cmdXpath.NewXpathWithAppend("label")
@@ -499,10 +499,11 @@ func (b *BuildLogs) addCommandChildren(
 		errMsg.WriteString(" Command failed: ")
 		errMsg.WriteString(err.Error())
 
-		errMsgCopy := make([]byte, len(errMsg.Bytes()))
+		errMsgCopy := make([]byte, errMsg.Len())
 		copy(errMsgCopy, errMsg.Bytes())
 
 		errResult := b.viewports.RenderLabelViewport(errXpath, [][]byte{errMsgCopy}, 0, cmdIndent+treeStep)
+
 		errMsg.Release()
 
 		b.errBuf.Reset()
