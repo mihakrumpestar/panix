@@ -72,7 +72,7 @@ func (w *Workflow) transferPlainFileOrDir(
 			commandWithArgs = append(commandWithArgs, "-e=ssh "+strings.Join(sshArgs, " "))
 		}
 
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", activeSSH.Hostname, secretRemotePath))
+		commandWithArgs = append(commandWithArgs, fmt.Sprintf("%s:%s", activeSSH.SSHTarget(), secretRemotePath))
 	}
 
 	err := exc.Exec(

@@ -29,6 +29,7 @@ type SSHClient struct {
 
 	isLocal         bool
 	hostnameIsAlias bool
+	alias           string
 }
 
 func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, localMachine string) error {
@@ -41,16 +42,24 @@ func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, localMachine string
 
 	sC.resolveHostname(machineName)
 
-	// Even if it is alias we need to get port info for certain tasks (e.g. TCP port check)
-	if sC.hostnameIsAlias {
+	// Determine if machine is local before accessing SSH config.
+	// Local machines don't need SSH at all, so skip SSH config resolution.
+	sC.isLocal = sC.Hostname == localMachine
+
+	if sC.hostnameIsAlias && !sC.isLocal {
+		if sshConfig == nil {
+			sshConfig, err = GetCachedSSHConfig()
+			if err != nil {
+				return errors.Wrap(err, "ssh config required for alias resolution but could not be loaded")
+			}
+		}
+
 		err = sshConfig.RetrieveFullParamsFromSSHConfig(sC)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Check if machine is local after hostname is fully resolved (from SSH config if alias)
-	sC.isLocal = sC.Hostname == localMachine
 	sC.applyDefaults()
 
 	return nil
@@ -58,6 +67,17 @@ func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, localMachine string
 
 func (sC SSHClient) IsInitialized() bool {
 	return sC.Hostname != ""
+}
+
+// SSHTarget returns the hostname or alias to use as the SSH connection target.
+// When the hostname is an SSH config alias, returns the alias (SSH config resolves it).
+// Otherwise returns the resolved hostname (IP address).
+func (sC SSHClient) SSHTarget() string {
+	if sC.alias != "" {
+		return sC.alias
+	}
+
+	return sC.Hostname
 }
 
 func (sC SSHClient) IsLocal() bool {
@@ -117,7 +137,7 @@ func (sC SSHClient) MaybeNixSSHOpts() []string {
 // When hostnameIsAlias=false, returns "ssh-ng://user@hostname:port[?ssh-key=<path>]"
 func (sC SSHClient) NixStoreURL() string {
 	if sC.hostnameIsAlias {
-		return "ssh-ng://" + sC.Hostname
+		return "ssh-ng://" + sC.SSHTarget()
 	}
 
 	url := "ssh-ng://" + sC.Username + "@" + sC.Hostname + ":" + sC.PortString()
@@ -157,6 +177,7 @@ func (sC *SSHClient) resolveHostname(machineName string) {
 	if sC.Hostname == "" && sC.Port == 0 && sC.Username == "" && sC.IdentityFile == "" {
 		sC.Hostname = machineName
 		sC.hostnameIsAlias = true
+		sC.alias = machineName
 	} else if sC.Hostname == "" {
 		sC.Hostname = machineName
 	}

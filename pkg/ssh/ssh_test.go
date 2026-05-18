@@ -193,10 +193,13 @@ func TestInit_ResolveHostnameAlias(t *testing.T) {
 	err = client.Init(sshCfg, "my-alias", "localhost")
 	require.NoError(t, err)
 
-	assert.True(t, client.hostnameIsAlias)
-	assert.Equal(t, "10.0.0.1", client.Hostname)
-	assert.Equal(t, "deploy", client.Username)
-	assert.Equal(t, uint16(2222), client.Port)
+	assertion := assert.New(t)
+	assertion.True(client.hostnameIsAlias)
+	assertion.Equal("10.0.0.1", client.Hostname, "Hostname should be resolved IP for TCP checks")
+	assertion.Equal("my-alias", client.SSHTarget(), "SSHTarget should return alias for SSH commands")
+	assertion.Equal("deploy", client.Username)
+	assertion.Equal(uint16(2222), client.Port)
+	assertion.Equal("ssh-ng://my-alias", client.NixStoreURL(), "NixStoreURL should use alias")
 }
 
 func TestInit_ExplicitHostname(t *testing.T) {
@@ -387,6 +390,33 @@ func TestMaybeNixSSHOpts_KnownHostsFile(t *testing.T) {
 	assertion := assert.New(t)
 	assertion.Contains(opts[0], "UserKnownHostsFile=/home/user/.ssh/known_hosts")
 	assertion.Contains(opts[0], "StrictHostKeyChecking=accept-new")
+}
+
+func TestInit_LocalAlias_NoSSHConfigNeeded(t *testing.T) {
+	t.Parallel()
+
+	// Machine name matches localMachine (all SSH fields empty → alias mode),
+	// but it's local so SSH config should never be accessed.
+	client := &SSHClient{}
+
+	err := client.Init(nil, "this-machine", "this-machine")
+	require.NoError(t, err)
+
+	assert.True(t, client.hostnameIsAlias)
+	assert.True(t, client.IsLocal())
+	assert.Equal(t, "this-machine", client.Hostname)
+	assert.Equal(t, SSHDefaultUsername, client.Username)
+	assert.Equal(t, uint16(SSHDefaultPort), client.Port)
+}
+
+func TestInit_RemoteAlias_NilSSHConfig(t *testing.T) {
+	t.Parallel()
+
+	// Remote alias with nil config should fail because SSH config is needed.
+	client := &SSHClient{}
+
+	err := client.Init(nil, "remote-alias", "this-machine")
+	require.Error(t, err)
 }
 
 func TestConstants(t *testing.T) {

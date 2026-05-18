@@ -31,7 +31,7 @@ func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error
 	}
 
 	// Local machine: skip
-	if w.conf.Flags.LocalMachineHostname == fleetLeaf.Machine.SSH.Hostname {
+	if fleetLeaf.Machine.SSH.IsLocal() {
 		return nil
 	}
 

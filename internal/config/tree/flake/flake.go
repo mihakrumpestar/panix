@@ -21,8 +21,8 @@ type Flake struct {
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 }
 
-func (f *Flake) Init(name string, attr *attributes.Attributes, localMachineHostname string) error {
-	err := f.Attributes.Init(name, attr, false, localMachineHostname)
+func (f *Flake) Init(name string, attr *attributes.Attributes) error {
+	err := f.Attributes.Init(name, attr)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize flake")
 	}
