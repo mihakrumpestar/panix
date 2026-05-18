@@ -40,8 +40,8 @@ type MachineInfo struct {
 	State       machine.State
 }
 
-func (f *Fleet) Init(localMachineHostname string) error {
-	err := f.Attributes.Init("", attributes.New(), false, localMachineHostname)
+func (f *Fleet) Init() error {
+	err := f.Attributes.Init("", attributes.New())
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}

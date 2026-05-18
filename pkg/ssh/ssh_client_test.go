@@ -182,6 +182,23 @@ func TestNixStoreURL_Alias(t *testing.T) {
 	assertion.Equal("ssh-ng://my-server", client.NixStoreURL())
 }
 
+func TestNixStoreURL_AliasWithResolvedIP(t *testing.T) {
+	t.Parallel()
+
+	// After SSH config resolution: Hostname=IP, alias=machine name
+	client := SSHClient{
+		Hostname:        "10.0.0.1",
+		Port:            22,
+		hostnameIsAlias: true,
+		alias:           "my-server",
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://my-server", client.NixStoreURL(), "should use alias not resolved IP")
+	assertion.Equal("10.0.0.1:22", client.HostPortString(), "HostPortString should use resolved IP")
+	assertion.Equal("my-server", client.SSHTarget(), "SSHTarget should return alias")
+}
+
 func TestNixStoreURL_NonAlias_Defaults(t *testing.T) {
 	t.Parallel()
 
@@ -282,6 +299,42 @@ func TestResolveIdentityFile_TildeExpansion(t *testing.T) {
 	result, err := resolveIdentityFile("~/.ssh/id_ed25519")
 	require.NoError(t, err)
 	assertion.Equal(home+"/.ssh/id_ed25519", result)
+}
+
+func TestSSHTarget_NonAlias(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname: "192.168.1.50",
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("192.168.1.50", client.SSHTarget(), "non-alias should return Hostname")
+}
+
+func TestSSHTarget_Alias(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "10.0.0.1",
+		hostnameIsAlias: true,
+		alias:           "my-server",
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("my-server", client.SSHTarget(), "alias should return alias name, not resolved IP")
+}
+
+func TestSSHTarget_NoAliasSet(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "my-server",
+		hostnameIsAlias: true,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("my-server", client.SSHTarget(), "should fall back to Hostname when alias is empty")
 }
 
 func TestNixStoreURLWithParams_Alias(t *testing.T) {

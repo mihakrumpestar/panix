@@ -1,8 +1,6 @@
 package attributes
 
 import (
-	"strconv"
-
 	"dario.cat/mergo"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -67,55 +65,29 @@ func New() *Attributes {
 	return &Attributes{}
 }
 
-func (a *Attributes) Init(name string, parentAttr *Attributes, isMachine bool, localMachineHostname string) error {
+func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 	err := a.passAttributesInto(name, parentAttr)
 	if err != nil {
 		return err
 	}
 
-	if !isMachine {
-		return nil
-	}
-
-	sshConfig, err := ssh.GetCachedSSHConfig()
-	if err != nil {
-		return errors.Wrapf(err, "%s", strconv.Quote(a.Xpath.String()))
-	}
-
-	// Initialize regular SSH
-	err = a.initRegularSSH(sshConfig, name, localMachineHostname)
-	if err != nil {
-		return err
-	}
-
-	// Initialize bootstrap SSH
-	err = a.initBootstrapSSH(sshConfig, name, localMachineHostname)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
-// initRegularSSH initializes the regular SSH configuration for this machine.
-func (a *Attributes) initRegularSSH(sshConfig *ssh.SSHConfig, name, localMachineHostname string) error {
-	err := a.SSH.Init(sshConfig, name, localMachineHostname)
+// InitSSH initializes SSH configuration for this machine.
+// Must be called after Init and after filtering, so only surviving machines
+// trigger SSH config loading (which may fail if ~/.ssh/config is missing).
+func (a *Attributes) InitSSH(localMachineHostname string) error {
+	err := a.SSH.Init(nil, a.Name, localMachineHostname)
 	if err != nil {
-		return errors.Wrapf(errors.Wrap(err, "ssh"), "%s", strconv.Quote(a.Xpath.String()))
+		return errors.Wrapf(err, "%s", a.Xpath.String())
 	}
 
-	return nil
-}
-
-// initBootstrapSSH initializes the bootstrap SSH configuration if present.
-func (a *Attributes) initBootstrapSSH(sshConfig *ssh.SSHConfig, name, localMachineHostname string) error {
-	if !a.Bootstrap.SSH.IsInitialized() {
-		return nil
-	}
-
-	err := a.Bootstrap.SSH.Init(sshConfig, name, localMachineHostname)
-	if err != nil {
-		return errors.Wrapf(errors.Wrap(err, "bootstrap ssh"), "%s", strconv.Quote(a.Xpath.String()))
+	if a.Bootstrap.SSH.IsInitialized() {
+		err = a.Bootstrap.SSH.Init(nil, a.Name, localMachineHostname)
+		if err != nil {
+			return errors.Wrapf(err, "%s", a.Xpath.String())
+		}
 	}
 
 	return nil

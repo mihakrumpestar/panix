@@ -26,8 +26,8 @@ type MetaBuild struct {
 	SystemClosure string `yaml:"-" json:"system_closure,omitempty"`
 }
 
-func (c *Configuration) Init(name string, parentAttributes *attributes.Attributes, localMachineHostname string) error {
-	err := c.Attributes.Init(name, parentAttributes, false, localMachineHostname)
+func (c *Configuration) Init(name string, parentAttributes *attributes.Attributes) error {
+	err := c.Attributes.Init(name, parentAttributes)
 	if err != nil {
 		return errors.Wrap(err, "failed to init configuration attributes")
 	}

@@ -159,7 +159,7 @@ func TestFleetInitSetsFleetXpath(t *testing.T) {
 	conf, err := decodeConfigFile(testdataPath(t, "with_ssh.yml"))
 	require.NoError(t, err)
 
-	require.NoError(t, conf.Fleet.Init("testhost"))
+	require.NoError(t, conf.Fleet.Init())
 
 	assertion := assert.New(t)
 
@@ -174,14 +174,14 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	require.NoError(t, err)
 
 	must := require.New(t)
-	must.NoError(conf.Fleet.Init("testhost"))
+	must.NoError(conf.Fleet.Init())
 
 	// Init flake manually since initFleet on Config is hard to test
 	// due to SSH config dependency
 	flk, ok := conf.Fleet.Flakes.Get("my-flake")
 	must.True(ok)
 
-	must.NoError(flk.Init("my-flake", &conf.Fleet.Attributes, "testhost"))
+	must.NoError(flk.Init("my-flake", &conf.Fleet.Attributes))
 
 	assertion := assert.New(t)
 
@@ -193,7 +193,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	cfg, ok := flk.Configurations.Get("my-config")
 	must.True(ok)
 
-	must.NoError(cfg.Init("my-config", &flk.Attributes, "testhost"))
+	must.NoError(cfg.Init("my-config", &flk.Attributes))
 
 	expectedCfgXpath := expectedFlakeXpath.NewXpathWithAppend("my-config")
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
@@ -202,9 +202,11 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	mach, ok := cfg.Machines.Get("my-machine")
 	must.True(ok)
 
-	// Machine with explicit hostname won't need SSH config lookup
+	must.NoError(mach.Init("my-machine", &cfg.Attributes))
+
+	// SSH init is separate — test it explicitly
 	mach.SSH.Hostname = "host.example.com"
-	must.NoError(mach.Init("my-machine", &cfg.Attributes, "testhost"))
+	must.NoError(mach.InitSSH("testhost"))
 
 	expectedMachineXpath := expectedCfgXpath.NewXpathWithAppend("my-machine")
 	assertion.Equal(expectedMachineXpath.String(), mach.Xpath.String())
@@ -220,7 +222,7 @@ func TestPostUnmarshalInitSetsColorScheme(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, conf.Fleet.Init("testhost"))
+	require.NoError(t, conf.Fleet.Init())
 
 	conf.PostUnmarshalInit()
 

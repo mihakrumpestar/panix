@@ -47,6 +47,12 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
 
+	// Initialize SSH for remaining machines after filtering.
+	err = conf.initFleetSSH()
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid configuration")
+	}
+
 	// Validate configuration
 	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags)
 	if err != nil {
@@ -121,9 +127,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 }
 
 func (c *Config) initFleet() error {
-	localMachineHostname := c.Flags.LocalMachineHostname
-
-	err := c.Fleet.Init(localMachineHostname)
+	err := c.Fleet.Init()
 	if err != nil {
 		return errors.Wrap(err, "failed to init fleet")
 	}
@@ -131,7 +135,7 @@ func (c *Config) initFleet() error {
 	for _, flakePair := range c.Fleet.Flakes.Pairs() {
 		flakeV := flakePair.Value
 
-		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes, localMachineHostname)
+		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes)
 		if err != nil {
 			return errors.Wrap(err, "failed to init flake")
 		}
@@ -139,7 +143,7 @@ func (c *Config) initFleet() error {
 		for _, configurationPair := range flakeV.Configurations.Pairs() {
 			configurationV := configurationPair.Value
 
-			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes, localMachineHostname)
+			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes)
 			if err != nil {
 				return errors.Wrap(err, "failed to init configuration")
 			}
@@ -154,11 +158,24 @@ func (c *Config) initFleet() error {
 					configurationV.Machines.Set(machinePair.Key, machineV)
 				}
 
-				err = machineV.Init(machinePair.Key, &configurationV.Attributes, localMachineHostname)
+				err = machineV.Init(machinePair.Key, &configurationV.Attributes)
 				if err != nil {
 					return errors.Wrap(err, "failed to init machine")
 				}
 			}
+		}
+	}
+
+	return nil
+}
+
+// initFleetSSH initializes SSH configuration for all remaining machines after filtering.
+// This is separated from initFleet so that filtered-out machines never trigger SSH config loading.
+func (c *Config) initFleetSSH() error {
+	for _, leaf := range c.Fleet.AllMachines() {
+		err := leaf.Machine.InitSSH(c.Flags.LocalMachineHostname)
+		if err != nil {
+			return errors.Wrap(err, "failed to init machine SSH")
 		}
 	}
 

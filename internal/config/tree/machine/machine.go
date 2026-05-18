@@ -72,8 +72,8 @@ func (m *Machine) PostUnmarshalInit(name string, parentAttr *attributes.Attribut
 	}
 }
 
-func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, localMachineHostname string) error {
-	err := m.Attributes.Init(name, parentAttributes, true, localMachineHostname)
+func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) error {
+	err := m.Attributes.Init(name, parentAttributes)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize machine")
 	}
@@ -82,6 +82,18 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes, loc
 	m.State = atomicpointer.New[State]()
 
 	m.Logs = logs.New()
+
+	return nil
+}
+
+// InitSSH initializes SSH configuration for this machine.
+// Must be called after Init and after filtering, so only surviving machines
+// trigger SSH config loading (which may fail if ~/.ssh/config is missing).
+func (m *Machine) InitSSH(localMachineHostname string) error {
+	err := m.Attributes.InitSSH(localMachineHostname)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize machine SSH")
+	}
 
 	return nil
 }

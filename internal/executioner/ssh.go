@@ -5,7 +5,7 @@ func (ex *Executioner) sshStream(description, statusIfRunning, statusIfFailed st
 
 	sshCommandWithArgs := []string{"ssh", "-q"} // Silence banners
 	sshCommandWithArgs = append(sshCommandWithArgs, ssh.MaybeSSHCommandArguments()...)
-	sshCommandWithArgs = append(sshCommandWithArgs, ssh.Hostname)
+	sshCommandWithArgs = append(sshCommandWithArgs, ssh.SSHTarget())
 
 	sshCommandWithArgs = append(sshCommandWithArgs, commandWithArgs...)
 
