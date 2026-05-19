@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -32,7 +33,7 @@ type SSHClient struct {
 	alias           string
 }
 
-func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, localMachine string) error {
+func (sC *SSHClient) Init(machineName, localMachine string) error {
 	var err error
 
 	sC.IdentityFile, err = resolveIdentityFile(sC.IdentityFile)
@@ -47,16 +48,14 @@ func (sC *SSHClient) Init(sshConfig *SSHConfig, machineName, localMachine string
 	sC.isLocal = sC.Hostname == localMachine
 
 	if sC.hostnameIsAlias && !sC.isLocal {
-		if sshConfig == nil {
-			sshConfig, err = GetCachedSSHConfig()
-			if err != nil {
-				return errors.Wrap(err, "ssh config required for alias resolution but could not be loaded")
-			}
-		}
+		var sshConfig *SSHConfig
 
-		err = sshConfig.RetrieveFullParamsFromSSHConfig(sC)
-		if err != nil {
-			return err
+		sshConfig, err = GetCachedSSHConfig()
+		if err == nil {
+			resolveErr := sshConfig.RetrieveFullParamsFromSSHConfig(sC)
+			if resolveErr != nil {
+				log.Warn().Err(resolveErr).Str("alias", machineName).Msg("failed to resolve SSH alias from config")
+			}
 		}
 	}
 

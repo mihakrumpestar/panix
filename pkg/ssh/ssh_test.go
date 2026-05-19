@@ -190,7 +190,10 @@ func TestInit_ResolveHostnameAlias(t *testing.T) {
 	sshCfg := &SSHConfig{sshConfig: cfg}
 	client := &SSHClient{}
 
-	err = client.Init(sshCfg, "my-alias", "localhost")
+	err = client.Init("my-alias", "localhost")
+	require.NoError(t, err)
+
+	err = sshCfg.RetrieveFullParamsFromSSHConfig(client)
 	require.NoError(t, err)
 
 	assertion := assert.New(t)
@@ -205,10 +208,9 @@ func TestInit_ResolveHostnameAlias(t *testing.T) {
 func TestInit_ExplicitHostname(t *testing.T) {
 	t.Parallel()
 
-	cfg := &SSHConfig{}
 	client := &SSHClient{Hostname: "192.168.1.1", Port: 2222, Username: "deploy"}
 
-	err := client.Init(cfg, "machine-name", "localhost")
+	err := client.Init("machine-name", "localhost")
 	require.NoError(t, err)
 
 	assert.False(t, client.hostnameIsAlias)
@@ -220,10 +222,9 @@ func TestInit_ExplicitHostname(t *testing.T) {
 func TestInit_IsLocal(t *testing.T) {
 	t.Parallel()
 
-	cfg := &SSHConfig{}
 	client := &SSHClient{Hostname: "this-machine"}
 
-	err := client.Init(cfg, "machine-name", "this-machine")
+	err := client.Init("machine-name", "this-machine")
 	require.NoError(t, err)
 
 	assert.True(t, client.IsLocal())
@@ -232,10 +233,9 @@ func TestInit_IsLocal(t *testing.T) {
 func TestInit_IsRemote(t *testing.T) {
 	t.Parallel()
 
-	cfg := &SSHConfig{}
 	client := &SSHClient{Hostname: "remote-host"}
 
-	err := client.Init(cfg, "machine-name", "this-machine")
+	err := client.Init("machine-name", "this-machine")
 	require.NoError(t, err)
 
 	assert.False(t, client.IsLocal())
@@ -399,7 +399,7 @@ func TestInit_LocalAlias_NoSSHConfigNeeded(t *testing.T) {
 	// but it's local so SSH config should never be accessed.
 	client := &SSHClient{}
 
-	err := client.Init(nil, "this-machine", "this-machine")
+	err := client.Init("this-machine", "this-machine")
 	require.NoError(t, err)
 
 	assert.True(t, client.hostnameIsAlias)
@@ -412,11 +412,19 @@ func TestInit_LocalAlias_NoSSHConfigNeeded(t *testing.T) {
 func TestInit_RemoteAlias_NilSSHConfig(t *testing.T) {
 	t.Parallel()
 
-	// Remote alias with nil config should fail because SSH config is needed.
+	// Remote alias with no SSH config: Init should succeed (errors are logged, not fatal).
+	// The alias remains unresolved — hostname stays as the alias name with defaults.
 	client := &SSHClient{}
 
-	err := client.Init(nil, "remote-alias", "this-machine")
-	require.Error(t, err)
+	err := client.Init("remote-alias", "this-machine")
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.True(client.hostnameIsAlias)
+	assertion.False(client.IsLocal())
+	assertion.Equal("remote-alias", client.Hostname, "hostname should be the alias when SSH config is unavailable")
+	assertion.Equal(SSHDefaultUsername, client.Username)
+	assertion.Equal(uint16(SSHDefaultPort), client.Port)
 }
 
 func TestConstants(t *testing.T) {

@@ -60,9 +60,9 @@ fleet:
                   - |
                     {{template "cryptenroll" "/dev/sda2"}}
 
-        vps-02:
+        personal-vps-02:
           machines:
-            vps-02:
+            personal-vps-02:
 
         kiosk:
           machines:

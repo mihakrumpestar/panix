@@ -29,6 +29,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to get user home directory")
+			log.Warn().Err(cachedError).Msg("SSH config not available, alias resolution will be skipped")
 
 			return
 		}
@@ -38,6 +39,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		sshCfgRaw, err := os.Open(cfgPath) // #nosec G304 -- cfgPath is constructed from UserHomeDir() with known suffix
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to open SSH config")
+			log.Warn().Err(cachedError).Msg("SSH config not available, alias resolution will be skipped")
 
 			return
 		}
@@ -52,6 +54,7 @@ func GetCachedSSHConfig() (*SSHConfig, error) {
 		sshCfg, err := ssh_config.Decode(sshCfgRaw)
 		if err != nil {
 			cachedError = errors.Wrap(err, "failed to parse SSH config")
+			log.Warn().Err(cachedError).Msg("SSH config not available, alias resolution will be skipped")
 
 			return
 		}
