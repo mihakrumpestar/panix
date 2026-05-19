@@ -75,16 +75,16 @@ func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 }
 
 // InitSSH initializes SSH configuration for this machine.
-// Must be called after Init and after filtering, so only surviving machines
-// trigger SSH config loading (which may fail if ~/.ssh/config is missing).
+// SSH config resolution errors (e.g., missing ~/.ssh/config) are logged as warnings
+// and do not prevent initialization — the SSH client retains alias hostname with defaults.
 func (a *Attributes) InitSSH(localMachineHostname string) error {
-	err := a.SSH.Init(nil, a.Name, localMachineHostname)
+	err := a.SSH.Init(a.Name, localMachineHostname)
 	if err != nil {
 		return errors.Wrapf(err, "%s", a.Xpath.String())
 	}
 
 	if a.Bootstrap.SSH.IsInitialized() {
-		err = a.Bootstrap.SSH.Init(nil, a.Name, localMachineHostname)
+		err = a.Bootstrap.SSH.Init(a.Name, localMachineHostname)
 		if err != nil {
 			return errors.Wrapf(err, "%s", a.Xpath.String())
 		}
