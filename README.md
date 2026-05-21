@@ -99,6 +99,117 @@ Standalone phases (in combination with Inpect):
 | ------- | ------- | --------- |
 | **Rollback** | Per-machine | Switch to a previous NixOS generation via `switch-to-configuration` |
 
+Logical diagram:
+
+```mermaid
+---
+config:
+  theme: base
+  flowchart:
+    subGraphTitleMargin:
+      top: 10
+      bottom: 30
+    nodeSpacing: 10
+    rankSpacing: 30
+    wrappingWidth: 250
+  themeVariables:
+    fontSize: 32px
+---
+flowchart LR
+  subgraph Inspect
+    direction TB
+
+    A1[TCP reachability] --> B1[SSH echo OK]
+    B1 --> C1[uname -m]
+    C1 --> D1[id -u]
+    D1 --> E1[cat /etc/os-release]
+    E1 --> F1[nixos-rebuild list-generations]
+  end
+
+  subgraph Bootstrap
+    direction TB  
+  
+    A2[kexec] --> B2[encryption keys]
+    B2 --> C2[disko] 
+    C2 --> D2[post-bootstrap hooks]
+  end
+  
+  subgraph Per-config
+    subgraph Build
+      A3[nix build --print-out-paths]
+    end
+  end
+
+  subgraph Transfer
+    A4[nix copy --to target]
+  end
+  
+  subgraph Secrets
+    A5[rsync --chmod --chown]
+  end
+  
+  subgraph Activate
+    direction TB
+
+    A6[nixos-install --system] --> B6[post install hooks]
+    B6 --> C6[reboot]
+    C6 --> D6[post boot install hooks]
+
+    E6[nix-env --profile --set] --> F6[switch-to-configuration]
+  end
+
+  subgraph Rollback
+    A7[readlink] --> B7[nix-env --profile --set]
+    B7 --> C7[switch-to-configuration switch]
+  end
+
+  Start --> Inspect
+  Start --> Build
+
+  Inspect --> Bootstrap
+  Bootstrap --> Build
+  Build --> Done
+  Build --> Transfer
+  Transfer --> Secrets
+  Secrets --> Activate
+
+  Inspect --> Build
+  Build --> Secrets
+  Build --> Activate
+  Transfer --> Activate
+  Activate --> Done
+
+  Inspect --> Rollback
+  Rollback --> Done
+
+
+  classDef cmd fill:#6B7280,color:#fff
+  classDef cmdBootstrap fill:#4F4F3A,color:#fff
+
+  class A1,B1,C1,D1,E1,F1 cmd
+  class A2,B2,C2,D2 cmdBootstrap
+  class A3 cmd
+  class A4 cmd
+  class A5 cmd
+  class A6,B6,C6,D6 cmdBootstrap
+  class E6,F6 cmd
+  class A7,B7,C7 cmd
+
+  style Inspect fill:#cde8f5,stroke:#6272A4,stroke-width:2px,color:#333,fontWeight:bold
+  style Bootstrap fill:#cde8f5,stroke:#6272A4,stroke-width:2px,color:#333,fontWeight:bold
+  style Per-config fill:#ffddaa,stroke:#d79b00,stroke-width:2px,color:#333,fontStyle:italic
+  style Build fill:#cde8f5,stroke:#6272A4,stroke-width:2px,color:#333,fontWeight:bold
+  style Transfer fill:#cde8f5,stroke:#6272A4,stroke-width:2px,color:#333,fontWeight:bold
+  style Secrets fill:#cde8f5,stroke:#6272A4,stroke-width:2px,color:#333,fontWeight:bold
+  style Activate fill:#cde8f5,stroke:#6272A4,stroke-width:2px,color:#333,fontWeight:bold
+  style Rollback fill:#e5e6e8,stroke:#6B7280,stroke-width:2px,color:#333,fontWeight:bold
+
+  style Start fill:#007da7,stroke:#007da7,color:#fff,fontWeight:bold
+  style Done fill:#14532D,stroke:#14532D,color:#fff,fontWeight:bold
+
+  linkStyle default stroke:#6272A4,stroke-width:1.5px
+```
+
 The TUI shows this unfolding in real-time:
 
 ![Phase status](./assets/phase-status.png)
@@ -1600,7 +1711,7 @@ The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes
 
 ## Custom TUI Rendering Engine
 
-Panix uses a custom-built terminal rendering engine `zeroterm` (the `pkg/tui` and `pkg/buffer` packages) instead of existing TUI frameworks. The engine is designed for zero-allocation steady-state rendering. When nothing changes on screen, the render + diff pipeline costs **0 memory allocations** and completes in under 3 μs.
+Panix uses a custom-built terminal rendering engine `zeroterm` (the `pkg/tui` and `pkg/buffer` packages) instead of existing TUI frameworks. The engine is designed for speed and near zero-allocation rendering.
 
 Full-pipeline benchmarks (render + diff, composite layout with viewports, tree, and table at terminal size of 200×50) against [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [cview](https://github.com/rivo/tview):
 
@@ -1624,6 +1735,50 @@ Full-pipeline benchmarks (render + diff, composite layout with viewports, tree, 
 - **Pre-rendered everything**: border bytes, connector chars, scrollbar cells, zone markers (`\x1b[<id>z`), ANSI prefixes. Computed once, reused every frame.
 - **Stack-allocated scratch**: Tree prefixes use `var pfxBuf [1024]byte`. Table uses a single partitioned `widthsBuf []int`. No heap scratch allocations.
 - **Zero-CGO**: Pure Go, no C dependencies.
+
+Diagram on how signals and rendering are realized in Panix:
+
+```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: 32px
+---
+sequenceDiagram
+  participant W as Workflow
+  participant F as Fleet
+  participant T as TUI
+  participant U as User
+
+  Note over W,U: EXECUTION
+  loop per machine goroutine
+    W->>W: run phase sequence
+    W->>F: update machine state + phase logs
+    W-->>T: notifyUpdate (sync.Cond)
+  end
+
+  Note over W,U: RENDER
+  loop
+    T-->>T: WaitForUpdate (block)
+    T->>F: Recalculate (caches + stats)
+    T->>T: render header + table + flow + logs + footer
+  end
+
+  Note over W,U: INTERRUPT
+  U-x T: r (retry)
+  T->>W: re-execute failed phases
+
+  U-x T: ctrl+r (restart)
+  T->>W: cancel + new workflow
+
+  U-x T: s (snapshot)
+  T->>F: capture full state to JSON
+
+  U-x T: q (quit)
+  T->>F: snapshot on exit
+  T->>T: render final + quit
+```
 
 </details>
 
