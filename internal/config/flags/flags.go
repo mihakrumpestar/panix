@@ -7,7 +7,7 @@ import (
 	"dario.cat/mergo"
 	"github.com/mattn/go-isatty"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/pkg/errors"
 )

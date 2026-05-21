@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 )
 
 type optionalPhases struct {

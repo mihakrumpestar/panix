@@ -1,7 +1,6 @@
-package workflow
+package phaseops
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,8 +14,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -27,31 +24,7 @@ var ErrNoBuildOutputs = errors.New("invalid build output: no outputs")
 
 var NixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
 
-func (w *Workflow) executeBuildPhaseConfiguration(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phase.Build, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			flake := fleetLeaf.Flake
-			configurationI := fleetLeaf.Configuration
-
-			if configurationI.MetaBuild == nil {
-				configurationI.MetaBuild = &configuration.MetaBuild{}
-			}
-
-			flakeOutput := configuration.ResolveFlakeInstallable(configurationI.FlakeOutput, configurationI.BuildPath, configurationI.Name)
-			installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
-
-			storePath, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "system closure")
-			if err != nil {
-				return err
-			}
-
-			configurationI.MetaBuild.SystemClosure = storePath
-
-			return nil
-		})
-}
-
-func (w *Workflow) executeBuildPhaseConfigurationWrapper(
+func BuildInstallable(
 	exc *executioner.Executioner,
 	fleetLeaf *fleet.FleetLeaf,
 	installables []string,

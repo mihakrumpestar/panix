@@ -23,7 +23,7 @@ const (
 	WaitForReconnectCheckInterval = time.Second
 )
 
-func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookType string) error {
+func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookName string) error {
 	machine := ex.conf.Machine
 
 	for idx, hook := range hooks {
@@ -31,22 +31,22 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 		case attributes.PostBootstrapHookWaitForOnline:
 			activeSSH := machine.GetActiveSSH()
 
-			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookType), hookType+" did not come online")
+			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookName), hookName+" did not come online")
 			if err != nil {
 				return err
 			}
 		case attributes.PostBootstrapHookWaitForOffline:
 			activeSSH := machine.GetActiveSSH()
 
-			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookType))
+			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookName))
 			if err != nil {
 				return err
 			}
 		default:
 			err := ex.Exec(
-				fmt.Sprintf("%s %d", hookType, idx+1),
-				fmt.Sprintf("running %s: %s", hookType, hook),
-				hookType+" failed",
+				fmt.Sprintf("%s %d", hookName, idx+1),
+				fmt.Sprintf("running %s: %s", hookName, hook),
+				hookName+" failed",
 				[]string{string(hook)},
 			)
 			if err != nil {

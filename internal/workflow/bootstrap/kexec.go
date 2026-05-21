@@ -1,111 +1,21 @@
-package workflow
+package bootstrap
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/pkg/errors"
 )
 
-var (
-	ErrDiskoNoOutputPaths = errors.New("disko build output did not contain any output paths")
-	ErrKexecBootFailed    = errors.New("kexec did not boot into NixOS installer")
-)
+var ErrKexecBootFailed = errors.New("kexec did not boot into NixOS installer")
 
-func (w *Workflow) executeBootstrapPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phase.Bootstrap, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			machine := fleetLeaf.Machine
-
-			mi := machine.MetaInspect.Load()
-			if mi != nil && mi.RequiresKexec {
-				err := w.executeKexec(exc, machine)
-				if err != nil {
-					return err
-				}
-			}
-
-			if !machine.Bootstrap.DisableDisko {
-				err := w.disko(exc, fleetLeaf)
-				if err != nil {
-					return err
-				}
-			}
-
-			return exc.ExecuteHooks(machine.Bootstrap.PostBootstrapHooks, "post bootstrap hook")
-		},
-	)
-}
-
-func (w *Workflow) disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
-	flake := fleetLeaf.Flake
-	configuration := fleetLeaf.Configuration
-	machine := fleetLeaf.Machine
-
-	installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
-
-	diskoScript, err := w.executeBuildPhaseConfigurationWrapper(exc, fleetLeaf, installables, "disko")
-	if err != nil {
-		return err
-	}
-
-	if diskoScript == "" {
-		return ErrDiskoNoOutputPaths
-	}
-
-	err = executeTransferPhaseMachineWrapper(exc, fleetLeaf, []string{diskoScript}, false)
-	if err != nil {
-		return err
-	}
-
-	// Upload disk encryption keys BEFORE running disko
-	// Keys must be available for LUKS unlocking during partitioning
-	if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-		err = w.executeDiskEncryptionKeys(exc, machine)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = exc.Exec(
-		"disko",
-		"partitioning disk",
-		"diskoScript failed",
-		[]string{diskoScript},
-	)
-	if err != nil {
-		return errors.Wrap(err, "disko failed")
-	}
-
-	return nil
-}
-
-// executeDiskEncryptionKeys transfers disk encryption keys to the target machine.
-// Must be called BEFORE disko runs, so keys are available for LUKS unlocking.
-func (w *Workflow) executeDiskEncryptionKeys(
-	exc *executioner.Executioner,
-	machine *machine.Machine,
-) error {
-	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
-		err := w.transferPlainFileOrDir(exc, machine, diskEncryptionKey, "disk encryption key", false)
-		if err != nil {
-			return errors.Wrapf(err, "failed to transfer disk encryption key to %s", diskEncryptionKey.RemotePath)
-		}
-	}
-
-	return nil
-}
-
-func (w *Workflow) executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
+func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
 	arch := machineI.MetaInspect.Load().Architecture
 
 	if arch == "DRY_RUN" {
@@ -114,27 +24,27 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machineI *machine.
 
 	kexecURL := strings.ReplaceAll(machineI.Bootstrap.Kexec.Image.String(), "<arch>", arch)
 
-	err := w.createKexecDirectory(exc, machineI)
+	err := createKexecDirectory(exc, machineI)
 	if err != nil {
 		return err
 	}
 
-	err = w.downloadOrTransferKexec(exc, machineI, kexecURL)
+	err = downloadOrTransferKexec(exc, machineI, kexecURL)
 	if err != nil {
 		return err
 	}
 
-	err = w.extractKexecTarball(exc, machineI, kexecURL)
+	err = extractKexecTarball(exc, machineI, kexecURL)
 	if err != nil {
 		return err
 	}
 
-	err = w.runKexecCommand(exc, machineI)
+	err = runKexecCommand(exc, machineI)
 	if err != nil {
 		return err
 	}
 
-	err = w.waitForKexecReboot(exc, machineI)
+	err = waitForKexecReboot(exc, machineI)
 	if err != nil {
 		return err
 	}
@@ -147,7 +57,7 @@ func (w *Workflow) executeKexec(exc *executioner.Executioner, machineI *machine.
 }
 
 // createKexecDirectory creates the temporary directory for kexec files.
-func (w *Workflow) createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine) error {
+func createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine) error {
 	err := exc.Exec(
 		"create kexec directory",
 		"creating kexec directory",
@@ -162,7 +72,7 @@ func (w *Workflow) createKexecDirectory(exc *executioner.Executioner, machine *m
 }
 
 // downloadOrTransferKexec downloads the kexec tarball from URL or transfers it from local path.
-func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
+func downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
 	var err error
 	if isURL(kexecURL) {
 		err = exc.Exec(
@@ -172,17 +82,17 @@ func (w *Workflow) downloadOrTransferKexec(exc *executioner.Executioner, machine
 			[]string{"curl", "--fail", "-#", "-L", "-C", "-", "-o", "/tmp/kexec/kexec.tar", kexecURL},
 		)
 	} else {
-		err = w.transferPlainFileOrDir(exc, machine, attributes.PlainFileOrDirToTransfer{
+		err = phaseops.TransferFile(exc, machine, attributes.PlainFileOrDirToTransfer{
 			LocalPath:  kexecURL,
 			RemotePath: "/tmp/kexec/kexec.tar",
 		}, "kexec tarball", false)
 	}
 
-	return err
+	return errors.Wrap(err, "kexec tarball transfer failed")
 }
 
 // extractKexecTarball extracts the kexec tarball to the temporary directory.
-func (w *Workflow) extractKexecTarball(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
+func extractKexecTarball(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
 	tarArgs := getTarArgs(kexecURL)
 	tarArgs = append(tarArgs, "-C", "/tmp/kexec")
 
@@ -214,7 +124,7 @@ func getTarArgs(kexecURL string) []string {
 }
 
 // runKexecCommand executes the kexec script to boot into the NixOS installer.
-func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *machine.Machine) error {
+func runKexecCommand(exc *executioner.Executioner, machine *machine.Machine) error {
 	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
 
 	if len(machine.Bootstrap.Kexec.ExtraFlags) != 0 {
@@ -238,7 +148,7 @@ func (w *Workflow) runKexecCommand(exc *executioner.Executioner, machine *machin
 }
 
 // waitForKexecReboot waits for the machine to disconnect and reconnect after kexec.
-func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
+func waitForKexecReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
 	activeSSH := machineI.GetActiveSSH()
 
 	err := executioner.WaitForDisconnect(exc, activeSSH, "waiting for machine to become unreachable")
@@ -255,10 +165,10 @@ func (w *Workflow) waitForKexecReboot(exc *executioner.Executioner, machineI *ma
 		return errors.Wrap(err, "wait for reconnect failed")
 	}
 
-	return w.verifyInstaller(exc)
+	return verifyInstaller(exc)
 }
 
-func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
+func verifyInstaller(exc *executioner.Executioner) error {
 	err := exc.Exec(
 		"verify installer",
 		"verifying NixOS installer",
@@ -284,7 +194,7 @@ func (w *Workflow) verifyInstaller(exc *executioner.Executioner) error {
 	return errors.Wrap(err, "failed to verify installer")
 }
 
-// Helpers.
+// Helpers
 
 func isURL(s string) bool {
 	parsedURL, err := url.Parse(s)
@@ -292,6 +202,5 @@ func isURL(s string) bool {
 		return false
 	}
 
-	// Ensure it has a valid scheme (http or https) and a host
 	return (parsedURL.Scheme == "http" || parsedURL.Scheme == "https") && parsedURL.Host != ""
 }

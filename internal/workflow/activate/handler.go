@@ -1,42 +1,61 @@
-package workflow
+package activate
 
 import (
 	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeActivatePhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phase.Activate, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			machine := fleetLeaf.Machine
+type Handler struct {
+	ActivationModeOverride attributes.ActivationMode
+}
 
-			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
+func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	machine := fleetLeaf.Machine
 
-			isBootstrapped := false
+	systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
 
-			mi := machine.MetaInspect.Load()
-			if mi != nil {
-				isBootstrapped = mi.Bootstrapped
-			}
+	isBootstrapped := false
 
-			// Run bootstrap if not bootstrapped, or force bootstrap is set
-			shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
+	mi := machine.MetaInspect.Load()
+	if mi != nil {
+		isBootstrapped = mi.Bootstrapped
+	}
 
-			if shouldBootstrap {
-				return executeBootstrap(exc, machine, fleetLeaf.Configuration.Nix.NixosInstallFlags, systemClosure)
-			}
+	// Run bootstrap if not bootstrapped, or force bootstrap is set
+	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
-			return executeActivation(exc, w.conf.Flags, machine, systemClosure)
-		},
-	)
+	if shouldBootstrap {
+		return executeBootstrap(exc, machine, fleetLeaf.Configuration.Nix.NixosInstallFlags, systemClosure)
+	}
+
+	return executeActivation(exc, h.ActivationModeOverride, machine, systemClosure)
+}
+
+func executeActivation(
+	exc *executioner.Executioner,
+	activationModeOverride attributes.ActivationMode,
+	machine *machine.Machine,
+	systemClosure string,
+) error {
+	mode := machine.ActivationMode.Get()
+	if activationModeOverride != "" {
+		mode = activationModeOverride
+	}
+
+	if mode != attributes.ActivationModeTest {
+		err := phaseops.SetSystemProfile(exc, machine, systemClosure)
+		if err != nil {
+			return errors.Wrap(err, "failed to set system profile")
+		}
+	}
+
+	return errors.Wrap(phaseops.ActivateConfiguration(exc, machine, systemClosure, mode), "activation failed")
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {
@@ -77,6 +96,8 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	return nil
 }
 
+// Helpers
+
 func performReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"reboot",
@@ -108,46 +129,4 @@ func performReboot(exc *executioner.Executioner, machineI *machine.Machine) erro
 	}
 
 	return nil
-}
-
-func executeActivation(exc *executioner.Executioner, flagsI flags.Flags, machine *machine.Machine, systemClosure string) error {
-	mode := machine.ActivationMode.Get()
-	if string(flagsI.ActivationMode) != "" {
-		mode = flagsI.ActivationMode
-	}
-
-	if mode != attributes.ActivationModeTest {
-		err := setSystemProfile(exc, machine, systemClosure)
-		if err != nil {
-			return errors.Wrap(err, "failed to set system profile")
-		}
-	}
-
-	return activateConfiguration(exc, machine, systemClosure, mode)
-}
-
-// Helpers
-
-func setSystemProfile(exc *executioner.Executioner, machine *machine.Machine, closurePath string) error {
-	err := exc.Exec(
-		"set system profile",
-		"setting system profile",
-		"failed to set system profile",
-		append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", closurePath),
-	)
-
-	return errors.Wrap(err, "failed to set system profile")
-}
-
-func activateConfiguration(exc *executioner.Executioner, machine *machine.Machine, closurePath string, mode attributes.ActivationMode) error {
-	binPath := closurePath + "/bin/switch-to-configuration"
-
-	err := exc.Exec(
-		"activate",
-		"activating configuration",
-		"activation failed",
-		append(machine.MaybeSudo(), binPath, string(mode)),
-	)
-
-	return errors.Wrap(err, "failed to activate configuration")
 }
