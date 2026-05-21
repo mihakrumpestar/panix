@@ -1,4 +1,4 @@
-package workflow
+package phaseops
 
 import (
 	"slices"
@@ -8,47 +8,12 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
-func (w *Workflow) executeTransferPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	mode := fleetLeaf.Configuration.Nix.BuildMode
-
-	// BuildModeRemote + single machine: transfer is skipped — the closure is already on the target
-	if mode == nix.BuildModeRemote {
-		machineCount := 0
-		for range fleetLeaf.Configuration.Machines.Pairs() {
-			machineCount++
-		}
-
-		if machineCount <= 1 {
-			return nil
-		}
-	}
-
-	// Local machine: skip
-	if fleetLeaf.Machine.SSH.IsLocal() {
-		return nil
-	}
-
-	return w.Phase(phase.Transfer, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
-
-			err := executeTransferPhaseMachineWrapper(exc, fleetLeaf, []string{systemClosure}, true)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		})
-}
-
-func executeTransferPhaseMachineWrapper(
+func CopyClosure(
 	exc *executioner.Executioner,
 	fleetLeaf *fleet.FleetLeaf,
 	toTransfer []string,

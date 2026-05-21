@@ -1,7 +1,7 @@
 package stats
 
 import (
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"

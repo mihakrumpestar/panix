@@ -8,7 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 	"github.com/mihakrumpestar/panix/pkg/ssh"

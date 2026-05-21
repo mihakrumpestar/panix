@@ -1,7 +1,7 @@
 package phaselogs
 
 import (
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/pkg/errors"
 )

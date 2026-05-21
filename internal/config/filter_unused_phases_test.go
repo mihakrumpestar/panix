@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/testutil"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 )
 
 //nolint:funlen

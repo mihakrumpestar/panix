@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 )
 
 func TestDefautlIfNoTTY(t *testing.T) {

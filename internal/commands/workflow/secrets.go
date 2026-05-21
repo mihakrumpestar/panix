@@ -2,7 +2,7 @@ package commands_workflow
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 )
 
 type SecretsCmd struct {

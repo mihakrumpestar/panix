@@ -5,8 +5,8 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/tui"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 

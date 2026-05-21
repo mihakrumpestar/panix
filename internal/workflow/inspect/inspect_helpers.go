@@ -1,15 +1,13 @@
-package workflow
+package inspect
 
 import (
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
-	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/pkg/errors"
 )
@@ -19,62 +17,7 @@ var (
 	ErrPlatformUnsupported     = errors.New("platform unsupported, kexec supports limited platforms")
 )
 
-//nolint:cyclop
-func (w *Workflow) executeInspectPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	return w.Phase(phase.Inspect, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			machineI := fleetLeaf.Machine
-
-			if machineI.SSH.IsLocal() {
-				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-					mi.Reachable = true
-					mi.SSHConnectable = true
-				})
-			} else {
-				err := checkSSHReachability(exc, machineI)
-				if err != nil {
-					return err
-				}
-
-				err = checkSSHConnection(exc, machineI)
-				if err != nil {
-					return err
-				}
-			}
-
-			err := detectArchitecture(exc, machineI)
-			if err != nil {
-				return err
-			}
-
-			err = checkSuperuser(exc, machineI)
-			if err != nil {
-				return err
-			}
-
-			err = detectBootstrapStatus(exc, machineI)
-			if err != nil {
-				return err
-			}
-
-			err = validateSSHMachineState(exc, machineI)
-			if err != nil {
-				return err
-			}
-
-			err = validateSecretsPaths(exc, machineI)
-			if err != nil {
-				return err
-			}
-
-			mi := machineI.MetaInspect.Load()
-			if mi != nil && !mi.Bootstrapped {
-				return handleUnbootstrapped(exc, machineI)
-			}
-
-			return readGenerations(exc, machineI)
-		})
-}
+const sshReachabilityCheckTimeout = 2 * time.Second
 
 func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.ExecFn(
@@ -83,7 +26,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 		"SSH unreachable",
 		func(_ *command.CommandLog) error {
 			if machineI.Bootstrap.SSH.IsInitialized() {
-				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
+				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(sshReachabilityCheckTimeout)
 				if !bootstrapSSHReachable {
 					return errors.New("bootstrap SSH is configured but unreachable")
 				}
@@ -95,7 +38,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 
 				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeBootstrap })
 			} else {
-				regularSSHReachable := machineI.SSH.ReachabilityCheck(SSHReachabilityCheckTimeout)
+				regularSSHReachable := machineI.SSH.ReachabilityCheck(sshReachabilityCheckTimeout)
 
 				if !regularSSHReachable {
 					return errors.New("regular SSH is unreachable")
@@ -399,12 +342,7 @@ func validateSecretsPaths(exc *executioner.Executioner, machineI *machine.Machin
 		"validating bootstrap secrets paths",
 		"missing bootstrap secrets paths",
 		func(_ *command.CommandLog) error {
-			err := machineI.ValidateBootstrapSecretsPaths()
-			if err != nil {
-				return err //nolint:wrapcheck
-			}
-
-			return nil
+			return errors.Wrap(machineI.ValidateBootstrapSecretsPaths(), "bootstrap secrets path validation failed")
 		},
 	)
 	if err != nil {

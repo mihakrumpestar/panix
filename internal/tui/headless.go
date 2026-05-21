@@ -27,7 +27,7 @@ func NewHeadless(ctx context.Context, conf *config.Config) error {
 		Int("machine_count", workflowI.MachineCount()).
 		Msg("workflow started")
 
-	err = workflowI.StartWorkflow() //nolint:contextcheck // False positive lint
+	err = workflowI.StartWorkflow()
 
 	logFinalState(conf)
 

@@ -8,7 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logger"
 	logs_command "github.com/mihakrumpestar/panix/internal/logs/command"
 	log_sphase "github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/xpath"

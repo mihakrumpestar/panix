@@ -1,41 +1,16 @@
-package workflow
+package phaseops
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
-	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
-	"github.com/mihakrumpestar/panix/internal/workflow/phase"
 	"github.com/pkg/errors"
 )
 
-func (w *Workflow) executeSecretsPhaseMachine(fleetLeaf *fleet.FleetLeaf) error {
-	machine := fleetLeaf.Machine
-
-	secrets := machine.Secrets
-
-	return w.Phase(phase.Secrets, fleetLeaf,
-		func(exc *executioner.Executioner, phaseLog *phaselogs.PhaseLog) error {
-			if len(secrets) == 0 {
-				return nil
-			}
-
-			for _, secret := range secrets {
-				err := w.transferPlainFileOrDir(exc, machine, secret, "secrets", true)
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		})
-}
-
-func (w *Workflow) transferPlainFileOrDir(
+func TransferFile(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
 	plainFileOrDir attributes.PlainFileOrDirToTransfer,
