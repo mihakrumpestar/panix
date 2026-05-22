@@ -417,17 +417,9 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	cmdIndent := indent + treeStep
 	cmdXpath := phaseXpath.NewXpathWithAppend(cmd.Description)
 
+	labelContent, labelVersion := b.commandLabelContent(cmd)
 	label := buffer.NewLineBufPooled()
-	if b.conf.Flags.Tui.ShowCommandsInLabels && cmd.Command != nil && len(cmd.Command.Bytes()) > 2 {
-		label.Write(cmd.Command.Bytes())
-	} else {
-		label.Write([]byte(cmd.Description))
-	}
-
-	var labelShowsCommands uint64
-	if b.conf.Flags.Tui.ShowCommandsInLabels {
-		labelShowsCommands = 1
-	}
+	label.Write(labelContent)
 
 	tasCached := cmd.TimeAndState.Load()
 
@@ -446,7 +438,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	copy(labelCopy, label.Bytes())
 
 	labelXpath := cmdXpath.NewXpathWithAppend("label")
-	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{labelCopy}, labelShowsCommands, labelWidth)
+	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{labelCopy}, labelVersion, labelWidth)
 
 	label.Release()
 
@@ -473,6 +465,14 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	b.addCommandChildren(cmdNode, cmd, cmdXpath, tasCached, cmdIndent)
 
 	parent.Child(cmdNode)
+}
+
+func (b *BuildLogs) commandLabelContent(cmd *command.CommandLog) ([]byte, uint64) {
+	if b.conf.Flags.Tui.ShowCommandsInLabels && cmd.Command != nil && cmd.Command.Len() > 2 {
+		return cmd.Command.Bytes(), 1
+	}
+
+	return []byte(cmd.Description), 0
 }
 
 func (b *BuildLogs) addCommandChildren(

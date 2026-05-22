@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMkdirForFile(t *testing.T) {
@@ -13,19 +16,11 @@ func TestMkdirForFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "subdir", "nested", "profile.out")
 
-	err := mkdirForFile(path)
-	if err != nil {
-		t.Fatalf("mkdirForFile() error: %v", err)
-	}
+	require.NoError(t, mkdirForFile(path))
 
 	info, statErr := os.Stat(filepath.Join(tmpDir, "subdir", "nested"))
-	if statErr != nil {
-		t.Fatalf("stat nested dir error: %v", statErr)
-	}
-
-	if !info.IsDir() {
-		t.Error("expected directory to exist")
-	}
+	require.NoError(t, statErr)
+	assert.True(t, info.IsDir())
 }
 
 func TestMkdirForFileExistingDir(t *testing.T) {
@@ -33,22 +28,13 @@ func TestMkdirForFileExistingDir(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := mkdirForFile(filepath.Join(tmpDir, "profile.out"))
-	if err != nil {
-		t.Fatalf("mkdirForFile() on existing dir error: %v", err)
-	}
+	require.NoError(t, mkdirForFile(filepath.Join(tmpDir, "profile.out")))
 }
 
 func TestStartEmpty(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
 	stop, err := Start(Profile{})
-	if err != nil {
-		t.Fatalf("Start() with empty profile error: %v", err)
-	}
-
-	if stop == nil {
-		t.Fatal("Start() returned nil stop func")
-	}
-
+	require.NoError(t, err)
+	require.NotNil(t, stop)
 	stop()
 }
 
@@ -57,20 +43,12 @@ func TestStartCPU(t *testing.T) { //nolint:paralleltest // manipulates global pp
 	cpuPath := filepath.Join(tmpDir, "cpu.prof")
 
 	stop, err := Start(Profile{CPU: cpuPath})
-	if err != nil {
-		t.Fatalf("Start() with CPU profile error: %v", err)
-	}
-
+	require.NoError(t, err)
 	stop()
 
 	info, statErr := os.Stat(cpuPath)
-	if statErr != nil {
-		t.Fatalf("stat CPU profile error: %v", statErr)
-	}
-
-	if info.Size() == 0 {
-		t.Error("CPU profile file is empty")
-	}
+	require.NoError(t, statErr)
+	assert.NotZero(t, info.Size())
 }
 
 func TestStartMem(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
@@ -78,20 +56,12 @@ func TestStartMem(t *testing.T) { //nolint:paralleltest // manipulates global pp
 	memPath := filepath.Join(tmpDir, "mem.prof")
 
 	stop, err := Start(Profile{Mem: memPath})
-	if err != nil {
-		t.Fatalf("Start() with Mem profile error: %v", err)
-	}
-
+	require.NoError(t, err)
 	stop()
 
 	info, statErr := os.Stat(memPath)
-	if statErr != nil {
-		t.Fatalf("stat Mem profile error: %v", statErr)
-	}
-
-	if info.Size() == 0 {
-		t.Error("Mem profile file is empty")
-	}
+	require.NoError(t, statErr)
+	assert.NotZero(t, info.Size())
 }
 
 func TestStartGoroutine(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
@@ -99,20 +69,12 @@ func TestStartGoroutine(t *testing.T) { //nolint:paralleltest // manipulates glo
 	goroutinePath := filepath.Join(tmpDir, "goroutine.prof")
 
 	stop, err := Start(Profile{Goroutine: goroutinePath})
-	if err != nil {
-		t.Fatalf("Start() with Goroutine profile error: %v", err)
-	}
-
+	require.NoError(t, err)
 	stop()
 
 	info, statErr := os.Stat(goroutinePath)
-	if statErr != nil {
-		t.Fatalf("stat Goroutine profile error: %v", statErr)
-	}
-
-	if info.Size() == 0 {
-		t.Error("Goroutine profile file is empty")
-	}
+	require.NoError(t, statErr)
+	assert.NotZero(t, info.Size())
 }
 
 func TestStartBlock(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
@@ -120,16 +82,11 @@ func TestStartBlock(t *testing.T) { //nolint:paralleltest // manipulates global 
 	blockPath := filepath.Join(tmpDir, "block.prof")
 
 	stop, err := Start(Profile{Block: blockPath})
-	if err != nil {
-		t.Fatalf("Start() with Block profile error: %v", err)
-	}
-
+	require.NoError(t, err)
 	stop()
 
 	_, statErr := os.Stat(blockPath)
-	if statErr != nil {
-		t.Fatalf("stat Block profile error: %v", statErr)
-	}
+	require.NoError(t, statErr)
 }
 
 func TestStartMutex(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
@@ -137,16 +94,11 @@ func TestStartMutex(t *testing.T) { //nolint:paralleltest // manipulates global 
 	mutexPath := filepath.Join(tmpDir, "mutex.prof")
 
 	stop, err := Start(Profile{Mutex: mutexPath})
-	if err != nil {
-		t.Fatalf("Start() with Mutex profile error: %v", err)
-	}
-
+	require.NoError(t, err)
 	stop()
 
 	_, statErr := os.Stat(mutexPath)
-	if statErr != nil {
-		t.Fatalf("stat Mutex profile error: %v", statErr)
-	}
+	require.NoError(t, statErr)
 }
 
 func TestStartAllProfiles(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
@@ -157,96 +109,60 @@ func TestStartAllProfiles(t *testing.T) { //nolint:paralleltest // manipulates g
 		Mem:       filepath.Join(tmpDir, "mem.prof"),
 		Goroutine: filepath.Join(tmpDir, "goroutine.prof"),
 	})
-	if err != nil {
-		t.Fatalf("Start() with multiple profiles error: %v", err)
-	}
-
+	require.NoError(t, err)
 	stop()
 
 	for _, name := range []string{"cpu.prof", "mem.prof", "goroutine.prof"} {
 		path := filepath.Join(tmpDir, name)
 
 		info, statErr := os.Stat(path)
-		if statErr != nil {
-			t.Errorf("stat %s error: %v", name, statErr)
-
-			continue
-		}
-
-		if info.Size() == 0 {
-			t.Errorf("%s is empty", name)
-		}
+		require.NoError(t, statErr, "stat %s", name)
+		assert.NotZero(t, info.Size(), "%s is empty", name)
 	}
 }
 
 func TestStartCPUInvalidPath(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
 	_, err := Start(Profile{CPU: "/nonexistent/deep/nested/dir/cpu.prof"})
-	if err == nil {
-		t.Error("Start() with invalid CPU path should return error")
-	}
+	assert.Error(t, err)
 }
 
 func TestWriteProfile(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "goroutine.prof")
 
-	err := writeProfile("goroutine", path)
-	if err != nil {
-		t.Fatalf("writeProfile() error: %v", err)
-	}
+	require.NoError(t, writeProfile("goroutine", path))
 
 	info, statErr := os.Stat(path)
-	if statErr != nil {
-		t.Fatalf("stat error: %v", statErr)
-	}
-
-	if info.Size() == 0 {
-		t.Error("profile file is empty")
-	}
+	require.NoError(t, statErr)
+	assert.NotZero(t, info.Size())
 }
 
 func TestWriteProfileInvalidName(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "nonexistent.prof")
 
-	err := writeProfile("nonexistent_profile_xyz", path)
-	if err == nil {
-		t.Error("writeProfile() with invalid name should return error")
-	}
+	assert.Error(t, writeProfile("nonexistent_profile_xyz", path))
 }
 
 func TestWriteProfileInvalidPath(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
-	err := writeProfile("goroutine", "/nonexistent/deep/nested/dir/goroutine.prof")
-	if err == nil {
-		t.Error("writeProfile() with invalid path should return error")
-	}
+	assert.Error(t, writeProfile("goroutine", "/nonexistent/deep/nested/dir/goroutine.prof"))
 }
 
 func TestWriteProfileCreatesDir(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "sub", "dir", "goroutine.prof")
 
-	err := writeProfile("goroutine", path)
-	if err != nil {
-		t.Fatalf("writeProfile() error: %v", err)
-	}
+	require.NoError(t, writeProfile("goroutine", path))
 
 	info, statErr := os.Stat(path)
-	if statErr != nil {
-		t.Fatalf("stat error: %v", statErr)
-	}
-
-	if info.Size() == 0 {
-		t.Error("profile file is empty")
-	}
+	require.NoError(t, statErr)
+	assert.NotZero(t, info.Size())
 }
 
 func TestDirPermissions(t *testing.T) {
 	t.Parallel()
 
-	if dirPermissions != os.FileMode(0750) {
-		t.Errorf("dirPermissions = %o, want 0750", dirPermissions)
-	}
+	assert.Equal(t, dirPermissions, os.FileMode(0750))
 }
 
 func TestProfileFieldTags(t *testing.T) {
@@ -260,38 +176,24 @@ func TestProfileFieldTags(t *testing.T) {
 		Goroutine: "goroutine.prof",
 	}
 
-	if prof.CPU != "cpu.prof" {
-		t.Errorf("CPU = %q, want %q", prof.CPU, "cpu.prof")
-	}
-
-	if prof.Mem != "mem.prof" {
-		t.Errorf("Mem = %q, want %q", prof.Mem, "mem.prof")
-	}
+	assert.Equal(t, "cpu.prof", prof.CPU)
+	assert.Equal(t, "mem.prof", prof.Mem)
 }
 
 func TestPprofLookupGoroutine(t *testing.T) {
 	t.Parallel()
 
-	prof := pprof.Lookup("goroutine")
-	if prof == nil {
-		t.Error("pprof.Lookup(goroutine) returned nil")
-	}
+	assert.NotNil(t, pprof.Lookup("goroutine"))
 }
 
 func TestPprofLookupBlock(t *testing.T) {
 	t.Parallel()
 
-	prof := pprof.Lookup("block")
-	if prof == nil {
-		t.Error("pprof.Lookup(block) returned nil")
-	}
+	assert.NotNil(t, pprof.Lookup("block"))
 }
 
 func TestPprofLookupMutex(t *testing.T) {
 	t.Parallel()
 
-	prof := pprof.Lookup("mutex")
-	if prof == nil {
-		t.Error("pprof.Lookup(mutex) returned nil")
-	}
+	assert.NotNil(t, pprof.Lookup("mutex"))
 }

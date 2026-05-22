@@ -2,6 +2,8 @@ package atomicslice
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
 )
@@ -10,13 +12,8 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	slice := New[int]()
-	if slice == nil {
-		t.Fatal("New() returned nil")
-	}
-
-	if slice.Length() != 0 {
-		t.Errorf("new slice should be empty, got length %d", slice.Length())
-	}
+	assert.NotNil(t, slice, "New() returned nil")
+	assert.Equal(t, 0, slice.Length(), "new slice should be empty")
 }
 
 func TestNewFrom(t *testing.T) {
@@ -25,15 +22,11 @@ func TestNewFrom(t *testing.T) {
 	items := []int{1, 2, 3, 4, 5}
 	slice := NewFrom(items)
 
-	if slice.Length() != len(items) {
-		t.Errorf("Length() = %d, want %d", slice.Length(), len(items))
-	}
+	assert.Equal(t, len(items), slice.Length(), "Length()")
 
 	values := slice.Values()
 	for idx, val := range values {
-		if val != items[idx] {
-			t.Errorf("Values()[%d] = %d, want %d", idx, val, items[idx])
-		}
+		assert.Equal(t, items[idx], val, "Values()[%d]", idx)
 	}
 }
 
@@ -43,9 +36,7 @@ func TestNewFromEmpty(t *testing.T) {
 	items := []int{}
 	slice := NewFrom(items)
 
-	if slice.Length() != 0 {
-		t.Errorf("Length() = %d, want 0", slice.Length())
-	}
+	assert.Equal(t, 0, slice.Length(), "Length() for empty slice")
 }
 
 func TestAppend(t *testing.T) {
@@ -57,17 +48,13 @@ func TestAppend(t *testing.T) {
 	slice.Append("b")
 	slice.Append("c")
 
-	if slice.Length() != 3 {
-		t.Errorf("Length() = %d, want 3", slice.Length())
-	}
+	assert.Equal(t, 3, slice.Length(), "Length()")
 
 	values := slice.Values()
 
 	expected := []string{"a", "b", "c"}
 	for idx, val := range values {
-		if val != expected[idx] {
-			t.Errorf("Values()[%d] = %q, want %q", idx, val, expected[idx])
-		}
+		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
 	}
 }
 
@@ -79,17 +66,17 @@ func TestGet(t *testing.T) {
 	slice.Append(20)
 	slice.Append(30)
 
-	if val, ok := slice.Get(0); !ok || val != 10 {
-		t.Errorf("Get(0) = (%d, %v), want (10, true)", val, ok)
-	}
+	val, ok := slice.Get(0)
+	assert.True(t, ok, "Get(0) ok")
+	assert.Equal(t, 10, val, "Get(0) value")
 
-	if val, ok := slice.Get(1); !ok || val != 20 {
-		t.Errorf("Get(1) = (%d, %v), want (20, true)", val, ok)
-	}
+	val, ok = slice.Get(1)
+	assert.True(t, ok, "Get(1) ok")
+	assert.Equal(t, 20, val, "Get(1) value")
 
-	if val, ok := slice.Get(2); !ok || val != 30 {
-		t.Errorf("Get(2) = (%d, %v), want (30, true)", val, ok)
-	}
+	val, ok = slice.Get(2)
+	assert.True(t, ok, "Get(2) ok")
+	assert.Equal(t, 30, val, "Get(2) value")
 }
 
 func TestGetOutOfRange(t *testing.T) {
@@ -98,13 +85,11 @@ func TestGetOutOfRange(t *testing.T) {
 	slice := New[int]()
 	slice.Append(1)
 
-	if val, ok := slice.Get(-1); ok {
-		t.Errorf("Get(-1) = (%d, %v), want (_, false)", val, ok)
-	}
+	_, ok := slice.Get(-1)
+	assert.False(t, ok, "Get(-1) ok")
 
-	if val, ok := slice.Get(100); ok {
-		t.Errorf("Get(100) = (%d, %v), want (_, false)", val, ok)
-	}
+	_, ok = slice.Get(100)
+	assert.False(t, ok, "Get(100) ok")
 }
 
 func TestLast(t *testing.T) {
@@ -116,13 +101,8 @@ func TestLast(t *testing.T) {
 	slice.Append(3)
 
 	val, ok := slice.Last()
-	if !ok {
-		t.Fatal("Last() returned ok=false, want true")
-	}
-
-	if val != 3 {
-		t.Errorf("Last() = %d, want 3", val)
-	}
+	assert.True(t, ok, "Last() ok")
+	assert.Equal(t, 3, val)
 }
 
 func TestLastEmpty(t *testing.T) {
@@ -131,13 +111,8 @@ func TestLastEmpty(t *testing.T) {
 	slice := New[int]()
 
 	val, ok := slice.Last()
-	if ok {
-		t.Errorf("Last() on empty slice returned ok=true, want false")
-	}
-
-	if val != 0 {
-		t.Errorf("Last() = %d, want zero value 0", val)
-	}
+	assert.False(t, ok, "Last() on empty slice ok")
+	assert.Equal(t, 0, val, "Last() on empty slice value")
 }
 
 func TestValues(t *testing.T) {
@@ -149,15 +124,11 @@ func TestValues(t *testing.T) {
 	slice.Append("z")
 
 	values := slice.Values()
-	if len(values) != 3 {
-		t.Fatalf("Values() length = %d, want 3", len(values))
-	}
+	require.Len(t, values, 3, "Values() length")
 
 	expected := []string{"x", "y", "z"}
 	for idx, val := range values {
-		if val != expected[idx] {
-			t.Errorf("Values()[%d] = %q, want %q", idx, val, expected[idx])
-		}
+		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
 	}
 }
 
@@ -167,13 +138,8 @@ func TestValuesEmpty(t *testing.T) {
 	slice := New[int]()
 	values := slice.Values()
 
-	if values == nil {
-		t.Error("Values() returned nil for empty slice")
-	}
-
-	if len(values) != 0 {
-		t.Errorf("Values() length = %d, want 0", len(values))
-	}
+	assert.NotNil(t, values, "Values() for empty slice")
+	assert.Empty(t, values)
 }
 
 func TestClear(t *testing.T) {
@@ -186,14 +152,10 @@ func TestClear(t *testing.T) {
 
 	slice.Clear()
 
-	if slice.Length() != 0 {
-		t.Errorf("Length() after Clear = %d, want 0", slice.Length())
-	}
+	assert.Equal(t, 0, slice.Length(), "Length() after Clear")
 
 	values := slice.Values()
-	if len(values) != 0 {
-		t.Errorf("Values() length after Clear = %d, want 0", len(values))
-	}
+	assert.Empty(t, values, "Values() length after Clear")
 }
 
 func TestCopy(t *testing.T) {
@@ -206,17 +168,13 @@ func TestCopy(t *testing.T) {
 
 	copySlice := slice.Copy()
 
-	if copySlice.Length() != slice.Length() {
-		t.Errorf("Copy().Length() = %d, want %d", copySlice.Length(), slice.Length())
-	}
+	assert.Equal(t, slice.Length(), copySlice.Length(), "Copy().Length()")
 
 	originalValues := slice.Values()
 	copyValues := copySlice.Values()
 
 	for idx := range originalValues {
-		if copyValues[idx] != originalValues[idx] {
-			t.Errorf("Copy().Values()[%d] = %d, want %d", idx, copyValues[idx], originalValues[idx])
-		}
+		assert.Equal(t, originalValues[idx], copyValues[idx], "Copy().Values()[%d]", idx)
 	}
 }
 
@@ -230,17 +188,9 @@ func TestCopyIndependence(t *testing.T) {
 	copySlice := slice.Copy()
 	copySlice.Append(3)
 
-	if slice.Length() == copySlice.Length() {
-		t.Error("modifying copy should not affect original")
-	}
-
-	if slice.Length() != 2 {
-		t.Errorf("original Length() = %d, want 2", slice.Length())
-	}
-
-	if copySlice.Length() != 3 {
-		t.Errorf("copy Length() = %d, want 3", copySlice.Length())
-	}
+	assert.NotEqual(t, slice.Length(), copySlice.Length(), "modifying copy should not affect original")
+	assert.Equal(t, 2, slice.Length(), "original Length()")
+	assert.Equal(t, 3, copySlice.Length(), "copy Length()")
 }
 
 func TestJSONMarshalUnmarshal(t *testing.T) {
@@ -252,28 +202,20 @@ func TestJSONMarshalUnmarshal(t *testing.T) {
 	slice.Append(3)
 
 	data, err := json.Marshal(slice)
-	if err != nil {
-		t.Fatalf("MarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "MarshalJSON() error")
 
 	slice2 := New[int]()
 
 	err = json.Unmarshal(data, slice2)
-	if err != nil {
-		t.Fatalf("UnmarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "UnmarshalJSON() error")
 
 	values1 := slice.Values()
 	values2 := slice2.Values()
 
-	if len(values1) != len(values2) {
-		t.Fatalf("unmarshaled length = %d, want %d", len(values2), len(values1))
-	}
+	require.Len(t, values2, len(values1), "unmarshaled length")
 
 	for idx := range values1 {
-		if values1[idx] != values2[idx] {
-			t.Errorf("Values()[%d] = %d, want %d", idx, values2[idx], values1[idx])
-		}
+		assert.Equal(t, values1[idx], values2[idx], "Values()[%d]", idx)
 	}
 }
 
@@ -284,13 +226,9 @@ func TestJSONUnmarshalEmpty(t *testing.T) {
 	data := []byte("[]")
 
 	err := json.Unmarshal(data, slice)
-	if err != nil {
-		t.Fatalf("UnmarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "UnmarshalJSON() error")
 
-	if slice.Length() != 0 {
-		t.Errorf("Length() = %d, want 0", slice.Length())
-	}
+	assert.Equal(t, 0, slice.Length(), "Length() after unmarshal empty")
 }
 
 func TestJSONUnmarshalInvalid(t *testing.T) {
@@ -300,9 +238,7 @@ func TestJSONUnmarshalInvalid(t *testing.T) {
 	data := []byte(`not valid json`)
 
 	err := json.Unmarshal(data, slice)
-	if err == nil {
-		t.Error("UnmarshalJSON() should return error for invalid JSON")
-	}
+	assert.Error(t, err, "UnmarshalJSON() should return error for invalid JSON")
 }
 
 func TestJSONMarshalEmpty(t *testing.T) {
@@ -311,13 +247,9 @@ func TestJSONMarshalEmpty(t *testing.T) {
 	slice := New[int]()
 
 	data, err := json.Marshal(slice)
-	if err != nil {
-		t.Fatalf("MarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "MarshalJSON() error")
 
-	if string(data) != "[]" {
-		t.Errorf("MarshalJSON() = %s, want []", string(data))
-	}
+	assert.Equal(t, "[]", string(data), "MarshalJSON() empty slice")
 }
 
 func TestConcurrentAccess(t *testing.T) {
@@ -357,9 +289,7 @@ func TestConcurrentAccess(t *testing.T) {
 	waitGroup.Wait()
 
 	expectedLength := numWriters * numOps
-	if slice.Length() != expectedLength {
-		t.Errorf("Length() = %d, want %d", slice.Length(), expectedLength)
-	}
+	assert.Equal(t, expectedLength, slice.Length(), "Length() after concurrent access")
 }
 
 func TestDifferentTypes(t *testing.T) {
@@ -372,9 +302,9 @@ func TestDifferentTypes(t *testing.T) {
 		slice.Append("hello")
 		slice.Append("world")
 
-		if val, ok := slice.Get(0); !ok || val != "hello" {
-			t.Errorf("Get(0) = (%q, %v), want (hello, true)", val, ok)
-		}
+		val, ok := slice.Get(0)
+		assert.True(t, ok, "Get(0) ok")
+		assert.Equal(t, "hello", val, "Get(0) value")
 	})
 
 	t.Run("structs", func(t *testing.T) {
@@ -390,9 +320,8 @@ func TestDifferentTypes(t *testing.T) {
 		slice.Append(testStruct{Name: "second", Value: 2})
 
 		val, ok := slice.Get(1)
-		if !ok || val.Name != "second" || val.Value != 2 {
-			t.Errorf("Get(1) = (%v, %v), want ({second 2}, true)", val, ok)
-		}
+		assert.True(t, ok, "Get(1) ok")
+		assert.Equal(t, testStruct{Name: "second", Value: 2}, val, "Get(1) value")
 	})
 
 	t.Run("pointers", func(t *testing.T) {
@@ -405,9 +334,9 @@ func TestDifferentTypes(t *testing.T) {
 		slice.Append(&val2)
 
 		ptr, ok := slice.Get(0)
-		if !ok || ptr == nil || *ptr != 10 {
-			t.Errorf("Get(0) = (%v, %v), want (&10, true)", ptr, ok)
-		}
+		assert.True(t, ok, "Get(0) ok")
+		assert.NotNil(t, ptr, "Get(0) ptr")
+		assert.Equal(t, 10, *ptr, "Get(0) value")
 	})
 }
 
@@ -422,9 +351,8 @@ func TestSet(t *testing.T) {
 	slice.Set(1, 20)
 
 	val, ok := slice.Get(1)
-	if !ok || val != 20 {
-		t.Errorf("Get(1) after Set = (%d, %v), want (20, true)", val, ok)
-	}
+	assert.True(t, ok, "Get(1) ok after Set")
+	assert.Equal(t, 20, val, "Get(1) value after Set")
 }
 
 func TestSetOutOfRange(t *testing.T) {
@@ -435,10 +363,8 @@ func TestSetOutOfRange(t *testing.T) {
 
 	slice.Set(100, 999)
 
-	val, ok := slice.Get(100)
-	if ok {
-		t.Errorf("Set at invalid index should not create element, got (%d, %v)", val, ok)
-	}
+	_, ok := slice.Get(100)
+	assert.False(t, ok, "Get(100) after Set at invalid index")
 }
 
 func TestRemove(t *testing.T) {
@@ -451,17 +377,13 @@ func TestRemove(t *testing.T) {
 
 	slice.Remove(1)
 
-	if slice.Length() != 2 {
-		t.Errorf("Length() after Remove = %d, want 2", slice.Length())
-	}
+	assert.Equal(t, 2, slice.Length(), "Length() after Remove")
 
 	values := slice.Values()
 
 	expected := []int{1, 3}
 	for idx, val := range values {
-		if val != expected[idx] {
-			t.Errorf("Values()[%d] = %d, want %d", idx, val, expected[idx])
-		}
+		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
 	}
 }
 
@@ -474,14 +396,11 @@ func TestRemoveLast(t *testing.T) {
 
 	slice.Remove(1)
 
-	if slice.Length() != 1 {
-		t.Errorf("Length() = %d, want 1", slice.Length())
-	}
+	assert.Equal(t, 1, slice.Length(), "Length()")
 
 	val, ok := slice.Last()
-	if !ok || val != 1 {
-		t.Errorf("Last() = (%d, %v), want (1, true)", val, ok)
-	}
+	assert.True(t, ok, "Last() ok")
+	assert.Equal(t, 1, val, "Last() value")
 }
 
 func TestRemoveOutOfRange(t *testing.T) {
@@ -492,9 +411,7 @@ func TestRemoveOutOfRange(t *testing.T) {
 
 	slice.Remove(100)
 
-	if slice.Length() != 1 {
-		t.Errorf("Length() after invalid Remove = %d, want 1", slice.Length())
-	}
+	assert.Equal(t, 1, slice.Length(), "Length() after invalid Remove")
 }
 
 func TestInsert(t *testing.T) {
@@ -506,17 +423,13 @@ func TestInsert(t *testing.T) {
 
 	slice.Insert(1, 2)
 
-	if slice.Length() != 3 {
-		t.Fatalf("Length() = %d, want 3", slice.Length())
-	}
+	require.Equal(t, 3, slice.Length(), "Length()")
 
 	values := slice.Values()
 
 	expected := []int{1, 2, 3}
 	for idx, val := range values {
-		if val != expected[idx] {
-			t.Errorf("Values()[%d] = %d, want %d", idx, val, expected[idx])
-		}
+		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
 	}
 }
 
@@ -528,13 +441,8 @@ func TestContains(t *testing.T) {
 	slice.Append("banana")
 	slice.Append("cherry")
 
-	if !slice.Contains("banana") {
-		t.Error("Contains(banana) = false, want true")
-	}
-
-	if slice.Contains("grape") {
-		t.Error("Contains(grape) = true, want false")
-	}
+	assert.True(t, slice.Contains("banana"), "Contains(banana)")
+	assert.False(t, slice.Contains("grape"), "Contains(grape)")
 }
 
 func TestContainsEmpty(t *testing.T) {
@@ -542,9 +450,7 @@ func TestContainsEmpty(t *testing.T) {
 
 	slice := New[int]()
 
-	if slice.Contains(1) {
-		t.Error("Contains on empty slice should return false")
-	}
+	assert.False(t, slice.Contains(1), "Contains on empty slice")
 }
 
 func TestLength(t *testing.T) {
@@ -552,31 +458,13 @@ func TestLength(t *testing.T) {
 
 	slice := New[int]()
 
-	if slice.Length() != 0 {
-		t.Errorf("Length() = %d, want 0", slice.Length())
-	}
-
+	assert.Equal(t, 0, slice.Length(), "Length() after New")
 	slice.Append(1)
-
-	if slice.Length() != 1 {
-		t.Errorf("Length() = %d, want 1", slice.Length())
-	}
-
+	assert.Equal(t, 1, slice.Length(), "Length() after first Append")
 	slice.Append(2)
-
-	if slice.Length() != 2 {
-		t.Errorf("Length() = %d, want 2", slice.Length())
-	}
-
+	assert.Equal(t, 2, slice.Length(), "Length() after second Append")
 	slice.Remove(0)
-
-	if slice.Length() != 1 {
-		t.Errorf("Length() = %d, want 1", slice.Length())
-	}
-
+	assert.Equal(t, 1, slice.Length(), "Length() after Remove")
 	slice.Clear()
-
-	if slice.Length() != 0 {
-		t.Errorf("Length() = %d, want 0", slice.Length())
-	}
+	assert.Equal(t, 0, slice.Length(), "Length() after Clear")
 }

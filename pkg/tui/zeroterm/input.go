@@ -67,6 +67,10 @@ func parseInput(data []byte, canHaveMoreData bool) ([]Msg, int) {
 // it returns pos unchanged so the caller can return and wait.
 //
 
+var ss3Key = map[byte]string{
+	'P': "f1", 'Q': "f2", 'R': "f3", 'S': "f4",
+}
+
 func parseEscape(data []byte, pos int, canHaveMoreData bool) ([]Msg, int) {
 	if pos+1 >= len(data) {
 		if canHaveMoreData {
@@ -88,22 +92,12 @@ func parseEscape(data []byte, pos int, canHaveMoreData bool) ([]Msg, int) {
 	}
 
 	if data[pos+1] == 'O' && pos+2 < len(data) {
-		var msg Msg
-
-		switch data[pos+2] {
-		case 'P':
-			msg = KeyPressMsg{Key: "f1"}
-		case 'Q':
-			msg = KeyPressMsg{Key: "f2"}
-		case 'R':
-			msg = KeyPressMsg{Key: "f3"}
-		case 'S':
-			msg = KeyPressMsg{Key: "f4"}
-		default:
-			msg = KeyPressMsg{Key: "esc"}
+		key, ok := ss3Key[data[pos+2]]
+		if !ok {
+			key = "esc"
 		}
 
-		return []Msg{msg}, pos + 3 //nolint:mnd
+		return []Msg{KeyPressMsg{Key: key}}, pos + 3 //nolint:mnd
 	}
 
 	return []Msg{KeyPressMsg{Key: "esc"}}, pos + 1
@@ -214,50 +208,16 @@ func parseTilde(params []int) Msg {
 	return KeyPressMsg{Key: applyModifier(base, mod)}
 }
 
-// tildeCodeToKey maps a CSI tilde code to its key name.
-//
-//nolint:mnd
+var tildeCodeMap = map[int]string{
+	1: "home", 2: "insert", 3: "delete", 4: "end",
+	5: "pgup", 6: "pgdown",
+	11: "f1", 12: "f2", 13: "f3", 14: "f4", 15: "f5",
+	17: "f6", 18: "f7", 19: "f8", 20: "f9", 21: "f10",
+	23: "f11", 24: "f12",
+}
+
 func tildeCodeToKey(code int) string {
-	switch code {
-	case 1:
-		return "home"
-	case 2:
-		return "insert"
-	case 3:
-		return "delete"
-	case 4:
-		return "end"
-	case 5:
-		return "pgup"
-	case 6:
-		return "pgdown"
-	case 11:
-		return "f1"
-	case 12:
-		return "f2"
-	case 13:
-		return "f3"
-	case 14:
-		return "f4"
-	case 15:
-		return "f5"
-	case 17:
-		return "f6"
-	case 18:
-		return "f7"
-	case 19:
-		return "f8"
-	case 20:
-		return "f9"
-	case 21:
-		return "f10"
-	case 23:
-		return "f11"
-	case 24:
-		return "f12"
-	default:
-		return ""
-	}
+	return tildeCodeMap[code]
 }
 
 func keyWithMod(base string, params []int) string {
@@ -303,164 +263,82 @@ func applyModifier(base string, mod int) string {
 //   - bit 5: motion
 //   - bit 6: scroll wheel
 //   - bit 7: additional buttons 8-11
-//
-//nolint:mnd
-func parseX10Mouse(data []byte, cbPos int) Msg {
-	clickBtn := int(data[cbPos]) - 32
-	cx := int(data[cbPos+1]) - 32
-	cy := int(data[cbPos+2]) - 32
-
-	mouseX := cx - 1
-	mouseY := cy - 1
-
-	if mouseX < 0 {
-		mouseX = 0
-	}
-
-	if mouseY < 0 {
-		mouseY = 0
-	}
-
-	const (
-		bitWheel  = 0b0100_0000
-		bitAdd    = 0b1000_0000
-		bitsMask  = 0b0000_0011
-		bitMotion = 0b0010_0000
-	)
-
-	if clickBtn&bitWheel != 0 {
-		switch clickBtn & bitsMask {
-		case 0:
-			return MouseWheelMsg{X: mouseX, Y: mouseY, Button: MouseWheelUp}
-		case 1:
-			return MouseWheelMsg{X: mouseX, Y: mouseY, Button: MouseWheelDown}
-		}
-
+func parseX10Wheel(btn, mouseX, mouseY int) Msg {
+	switch btn {
+	case 0:
+		return MouseWheelMsg{X: mouseX, Y: mouseY, Button: MouseWheelUp}
+	case 1:
+		return MouseWheelMsg{X: mouseX, Y: mouseY, Button: MouseWheelDown}
+	default:
 		return nil
 	}
+}
 
-	if clickBtn&bitAdd != 0 {
-		return nil
-	}
-
-	// Motion events (button held + drag) — not needed for TUI
-	if clickBtn&bitMotion != 0 {
-		return nil
-	}
-
-	switch clickBtn & bitsMask {
+func parseX10Click(btn, mouseX, mouseY int) Msg {
+	switch btn {
 	case 0:
 		return MouseClickMsg{X: mouseX, Y: mouseY, Button: MouseLeft}
 	case 1:
 		return MouseClickMsg{X: mouseX, Y: mouseY, Button: MouseMiddle}
 	case 2:
 		return MouseClickMsg{X: mouseX, Y: mouseY, Button: MouseRight}
-	case 3:
-		// Button release — not reported as click
-		return nil
 	default:
 		return nil
 	}
 }
 
+const (
+	bitWheel  = 0b0100_0000
+	bitAdd    = 0b1000_0000
+	bitMotion = 0b0010_0000
+	bitsMask  = 0b0000_0011
+)
+
 //nolint:mnd
-func parseSGRMouse(params []int, final byte) Msg {
-	if len(params) < 3 {
+func parseX10Mouse(data []byte, cbPos int) Msg {
+	clickBtn := int(data[cbPos]) - 32
+	mouseX := max(0, int(data[cbPos+1])-33)
+	mouseY := max(0, int(data[cbPos+2])-33)
+
+	if clickBtn&bitWheel != 0 {
+		return parseX10Wheel(clickBtn&bitsMask, mouseX, mouseY)
+	}
+
+	if clickBtn&(bitAdd|bitMotion) != 0 {
 		return nil
 	}
 
-	button := params[0]
-	mouseX := params[1] - 1
-	mouseY := params[2] - 1
+	return parseX10Click(clickBtn&bitsMask, mouseX, mouseY)
+}
 
-	if mouseX < 0 {
-		mouseX = 0
+const sgrMouseMinParams = 3
+
+func parseSGRMouse(params []int, final byte) Msg {
+	if len(params) < sgrMouseMinParams {
+		return nil
 	}
 
-	if mouseY < 0 {
-		mouseY = 0
-	}
+	return parseSGRMouseParams(params, final)
+}
 
-	// SGR mouse: final 'M' = press, 'm' = release.
-	// For release events, only report button releases for clicks (not motion).
+func parseSGRMouseParams(params []int, final byte) Msg {
 	if final == 'm' {
 		return nil
 	}
 
-	const (
-		bitWheel  = 0b0100_0000
-		bitAdd    = 0b1000_0000
-		bitsMask  = 0b0000_0011
-		bitMotion = 0b0010_0000
-	)
+	button := params[0]
+	mouseX := max(0, params[1]-1)
+	mouseY := max(0, params[2]-1)
 
 	if button&bitWheel != 0 {
-		switch button & bitsMask {
-		case 0:
-			return MouseWheelMsg{X: mouseX, Y: mouseY, Button: MouseWheelUp}
-		case 1:
-			return MouseWheelMsg{X: mouseX, Y: mouseY, Button: MouseWheelDown}
-		}
+		return parseX10Wheel(button&bitsMask, mouseX, mouseY)
+	}
 
+	if button&(bitAdd|bitMotion) != 0 {
 		return nil
 	}
 
-	if button&bitAdd != 0 {
-		return nil
-	}
-
-	if button&bitMotion != 0 {
-		return nil
-	}
-
-	switch button & bitsMask {
-	case 0:
-		return MouseClickMsg{X: mouseX, Y: mouseY, Button: MouseLeft}
-	case 1:
-		return MouseClickMsg{X: mouseX, Y: mouseY, Button: MouseMiddle}
-	case 2:
-		return MouseClickMsg{X: mouseX, Y: mouseY, Button: MouseRight}
-	default:
-		return nil
-	}
-}
-
-//nolint:mnd
-func parseControl(byteVal byte) Msg {
-	switch byteVal {
-	case 0x0D:
-		return KeyPressMsg{Key: "enter"}
-	case 0x09:
-		return KeyPressMsg{Key: "tab"}
-	case 0x7F:
-		return KeyPressMsg{Key: "backspace"}
-	case 0x03:
-		return KeyPressMsg{Key: "ctrl+c"}
-	case 0x04:
-		return KeyPressMsg{Key: "ctrl+d"}
-	case 0x1A:
-		return KeyPressMsg{Key: "ctrl+z"}
-	case 0x15:
-		return KeyPressMsg{Key: "ctrl+u"}
-	case 0x17:
-		return KeyPressMsg{Key: "ctrl+w"}
-	case 0x12:
-		return KeyPressMsg{Key: "ctrl+r"}
-	case 0x01:
-		return KeyPressMsg{Key: "ctrl+a"}
-	case 0x05:
-		return KeyPressMsg{Key: "ctrl+e"}
-	case 0x0B:
-		return KeyPressMsg{Key: "ctrl+k"}
-	case 0x0A:
-		return KeyPressMsg{Key: "enter"}
-	default:
-		if byteVal >= 1 && byteVal <= 26 {
-			return KeyPressMsg{Key: "ctrl+" + string('a'+byteVal-1)}
-		}
-
-		return nil
-	}
+	return parseX10Click(button&bitsMask, mouseX, mouseY)
 }
 
 //nolint:mnd
@@ -500,4 +378,23 @@ func decodeInputRune(data []byte, pos int) (rune, int) {
 	}
 
 	return decoded, size
+}
+
+var ctrlKeyMap = map[byte]string{
+	0x0D: "enter", 0x09: "tab", 0x7F: "backspace", 0x0A: "enter",
+	0x03: "ctrl+c", 0x04: "ctrl+d", 0x1A: "ctrl+z",
+	0x15: "ctrl+u", 0x17: "ctrl+w", 0x12: "ctrl+r",
+	0x01: "ctrl+a", 0x05: "ctrl+e", 0x0B: "ctrl+k",
+}
+
+func parseControl(byteVal byte) Msg {
+	if key, ok := ctrlKeyMap[byteVal]; ok {
+		return KeyPressMsg{Key: key}
+	}
+
+	if byteVal >= 1 && byteVal <= 26 {
+		return KeyPressMsg{Key: "ctrl+" + string('a'+byteVal-1)}
+	}
+
+	return nil
 }

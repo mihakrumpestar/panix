@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/stretchr/testify/assert"
 )
 
 //nolint:funlen
@@ -70,11 +71,30 @@ func TestWrap_Equivalence(t *testing.T) {
 
 			got := strings.Join(gotStrs, "\n")
 
-			if expected != got {
-				t.Errorf("Mismatch for %s:\n  expected: %q\n  got:      %q", testCase.name, expected, got)
-			}
+			assert.Equal(t, expected, got, "Mismatch for %s", testCase.name)
 		})
 	}
+}
+
+func wrapStr(input string, width int) string {
+	lines := strings.Split(input, "\n")
+
+	inputBytes := make([][]byte, len(lines))
+	for i, l := range lines {
+		inputBytes[i] = []byte(l)
+	}
+
+	buf := buffer.NewLinesBuf()
+	Wrap(buf, inputBytes, width, "")
+
+	result := make([]string, buf.Len())
+	for i := range buf.Len() {
+		result[i] = string(buf.Line(i))
+	}
+
+	buf.Release()
+
+	return strings.Join(result, "\n")
 }
 
 //nolint:funlen
@@ -82,127 +102,66 @@ func TestWrap_StyleCarryOver(t *testing.T) {
 	t.Parallel()
 
 	red := "\x1b[31m"
-	green := "\x1b[32m"
 	bold := "\x1b[1m"
-	reset := "\x1b[m"
 
-	wrapStr := func(input string, width int) string {
-		lines := strings.Split(input, "\n")
+	tests := []struct {
+		name  string
+		input string
+		width int
+		check func(t *testing.T, got string)
+	}{
+		{
+			name:  "ColoredTextCarriesOver",
+			input: red + "red text that is long enough to wrap" + "\x1b[m",
+			width: 20,
+			check: func(t *testing.T, got string) {
+				t.Helper()
+				assert.Contains(t, got, red, "expected red style to carry over")
+			},
+		},
+		{
+			name:  "ResetBeforeWrapNoCarry",
+			input: red + "short" + "\x1b[m" + " plain text that is long enough to wrap",
+			width: 20,
+		},
+		{
+			name:  "BoldCarriesOver",
+			input: bold + "bold text that is quite long and wraps" + "\x1b[m",
+			width: 15,
+		},
+		{
+			name:  "MultipleStylesCarryOver",
+			input: bold + red + "styled text that is quite long and will wrap" + "\x1b[m",
+			width: 15,
+			check: func(t *testing.T, got string) {
+				t.Helper()
 
-		inputBytes := make([][]byte, len(lines))
-		for i, l := range lines {
-			inputBytes[i] = []byte(l)
-		}
-
-		buf := buffer.NewLinesBuf()
-		Wrap(buf, inputBytes, width, "")
-
-		result := make([]string, buf.Len())
-		for i := range buf.Len() {
-			result[i] = string(buf.Line(i))
-		}
-
-		buf.Release()
-
-		return strings.Join(result, "\n")
+				gotLines := strings.Split(got, "\n")
+				for i, line := range gotLines {
+					if i > 0 {
+						assert.True(t, strings.HasPrefix(line, bold) || strings.HasPrefix(line, red),
+							"line %d missing carry-over style: %q", i, line)
+					}
+				}
+			},
+		},
 	}
 
-	t.Run("ColoredTextCarriesOver", func(t *testing.T) {
-		t.Parallel()
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-		// "red text that is long enough to wrap" — all red
-		input := red + "red text that is long enough to wrap" + reset
-		got := wrapStr(input, 20)
+			got := wrapStr(testCase.input, testCase.width)
+			expected := lipgloss.Wrap(testCase.input, testCase.width, "")
 
-		// First line should end with reset (before the wrap break)
-		// Second line should start with the red prefix
-		if !strings.Contains(got, red) {
-			t.Errorf("expected red style to carry over, got: %q", got)
-		}
+			gotVisible := string(StripANSI([]byte(got)))
+			expectedVisible := string(StripANSI([]byte(expected)))
 
-		// Verify lipgloss equivalence
-		expected := lipgloss.Wrap(input, 20, "")
-		if expected != got {
-			t.Errorf("mismatch:\n  expected: %q\n  got:      %q", expected, got)
-		}
-	})
+			assert.Equal(t, expectedVisible, gotVisible, "visible text mismatch")
 
-	t.Run("ResetBeforeWrapNoCarry", func(t *testing.T) {
-		t.Parallel()
-
-		// Style resets before the wrap point — no carry expected
-		input := red + "short" + reset + " plain text that is long enough to wrap"
-		got := wrapStr(input, 20)
-
-		expected := lipgloss.Wrap(input, 20, "")
-		if expected != got {
-			t.Errorf("mismatch:\n  expected: %q\n  got:      %q", expected, got)
-		}
-	})
-
-	t.Run("BoldCarriesOver", func(t *testing.T) {
-		t.Parallel()
-
-		input := bold + "bold text that is quite long and wraps" + reset
-		got := wrapStr(input, 15)
-
-		expected := lipgloss.Wrap(input, 15, "")
-		if expected != got {
-			t.Errorf("mismatch:\n  expected: %q\n  got:      %q", expected, got)
-		}
-	})
-
-	t.Run("MultipleStylesCarryOver", func(t *testing.T) {
-		t.Parallel()
-
-		// Bold + red. Our wrap emits separate SGR sequences (\x1b[1m\x1b[31m)
-		// while lipgloss merges them (\x1b[1;31m). Both are semantically identical.
-		input := bold + red + "styled text that is quite long and will wrap" + reset
-		got := wrapStr(input, 15)
-
-		expected := lipgloss.Wrap(input, 15, "")
-
-		// Verify semantic equivalence: strip ANSI and compare visible text.
-		gotVisible := string(StripANSI([]byte(got)))
-
-		expectedVisible := string(StripANSI([]byte(expected)))
-		if expectedVisible != gotVisible {
-			t.Errorf("visible text mismatch:\n  expected: %q\n  got:      %q", expectedVisible, gotVisible)
-		}
-
-		// Verify each wrapped line (except the last) ends with reset and
-		// each continuation line (except the first) starts with style.
-		gotLines := strings.Split(got, "\n")
-		for i, line := range gotLines {
-			if i > 0 && !strings.HasPrefix(line, bold) && !strings.HasPrefix(line, red) {
-				t.Errorf("line %d missing carry-over style: %q", i, line)
+			if testCase.check != nil {
+				testCase.check(t, got)
 			}
-		}
-	})
-
-	t.Run("StyleChangeInMiddleOfLine", func(t *testing.T) {
-		t.Parallel()
-
-		// Red text, then green text — if wrap happens during green part,
-		// green should carry, not red.
-		input := red + "red part " + reset + green + "green part that is quite long" + reset
-		got := wrapStr(input, 20)
-
-		expected := lipgloss.Wrap(input, 20, "")
-		if expected != got {
-			t.Errorf("mismatch:\n  expected: %q\n  got:      %q", expected, got)
-		}
-	})
-
-	t.Run("NoStyleNoCarry", func(t *testing.T) {
-		t.Parallel()
-
-		input := "plain text that is long enough to wrap across lines"
-		got := wrapStr(input, 20)
-
-		expected := lipgloss.Wrap(input, 20, "")
-		if expected != got {
-			t.Errorf("mismatch:\n  expected: %q\n  got:      %q", expected, got)
-		}
-	})
+		})
+	}
 }

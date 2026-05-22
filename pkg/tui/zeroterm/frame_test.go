@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestShrinkThenGrowWithIdenticalPrefix verifies that when content
@@ -133,19 +134,17 @@ func verifyShrinkOutput(t *testing.T, out2 string, shortFrame, fullFrame *buffer
 
 	for i := range shortFrame.Len() {
 		prefix := "\x1b[" + itoa(i+1) + ";1H"
-		if !strings.Contains(out2, prefix+string(shortFrame.Line(i))) {
-			t.Errorf("shrink missing line %d at row %d: %q%q",
-				i, i+1, prefix, string(shortFrame.Line(i)))
-		}
+		assert.Contains(t, out2, prefix+string(shortFrame.Line(i)),
+			"shrink missing line %d at row %d: %q%q",
+			i, i+1, prefix, string(shortFrame.Line(i)))
 	}
 
 	for i := shortFrame.Len(); i < fullFrame.Len(); i++ {
 		oldPrefix := "\x1b[" + itoa(i+1) + ";1H"
 
 		oldLine := oldPrefix + string(fullFrame.Line(i))
-		if strings.Contains(out2, oldLine) {
-			t.Errorf("stale fullFrame[%d]=%q at row %d leaked", i, string(fullFrame.Line(i)), i+1)
-		}
+		assert.NotContains(t, out2, oldLine,
+			"stale fullFrame[%d]=%q at row %d leaked", i, string(fullFrame.Line(i)), i+1)
 	}
 }
 
@@ -186,18 +185,16 @@ func verifyGrowBackOutput(t *testing.T, out3 string, fullFrame, shortFrame *buff
 		}
 
 		prefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-		if !strings.Contains(out3, prefix+string(line)) {
-			t.Errorf("grow-back missing line %d at row %d: %q%q",
-				lineIdx, lineIdx+1, prefix, string(line))
-		}
+		assert.Contains(t, out3, prefix+string(line),
+			"grow-back missing line %d at row %d: %q%q",
+			lineIdx, lineIdx+1, prefix, string(line))
 	}
 
 	for lineIdx := shortFrame.Len(); lineIdx < fullFrame.Len(); lineIdx++ {
 		prefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-		if !strings.Contains(out3, prefix+string(fullFrame.Line(lineIdx))) {
-			t.Errorf("grow-back missing new line %d at row %d: %q%q",
-				lineIdx, lineIdx+1, prefix, string(fullFrame.Line(lineIdx)))
-		}
+		assert.Contains(t, out3, prefix+string(fullFrame.Line(lineIdx)),
+			"grow-back missing new line %d at row %d: %q%q",
+			lineIdx, lineIdx+1, prefix, string(fullFrame.Line(lineIdx)))
 	}
 }
 
@@ -237,9 +234,8 @@ func TestShrinkThenGrow(t *testing.T) {
 	output2 := string(buf)
 
 	for i := 9; i < fullFrame.Len(); i++ {
-		if strings.Contains(output2, string(fullFrame.Line(i))) {
-			t.Errorf("FULL frame[%d]=%q leaked into shrink output", i, string(fullFrame.Line(i)))
-		}
+		assert.NotContains(t, output2, string(fullFrame.Line(i)),
+			"FULL frame[%d]=%q leaked into shrink output", i, string(fullFrame.Line(i)))
 	}
 
 	prevBuf.Reset()
@@ -254,19 +250,17 @@ func TestShrinkThenGrow(t *testing.T) {
 	output3 := string(buf)
 
 	for lineIdx := range fullFrame.Len() {
-		if !strings.Contains(output3, string(fullFrame.Line(lineIdx))) {
-			t.Errorf("Render3 missing fullFrame[%d]=%q", lineIdx, string(fullFrame.Line(lineIdx)))
-		}
+		assert.Contains(t, output3, string(fullFrame.Line(lineIdx)),
+			"Render3 missing fullFrame[%d]=%q", lineIdx, string(fullFrame.Line(lineIdx)))
 	}
 
 	for lineIdx := range fullFrame.Len() {
 		want := string(fullFrame.Line(lineIdx))
 
 		prefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-		if !strings.Contains(output3, prefix+want) {
-			t.Errorf("Render3 line %d not positioned at row %d. Expected %q%q in output",
-				lineIdx, lineIdx+1, prefix, want)
-		}
+		assert.Contains(t, output3, prefix+want,
+			"Render3 line %d not positioned at row %d. Expected %q%q in output",
+			lineIdx, lineIdx+1, prefix, want)
 	}
 }
 
@@ -307,19 +301,13 @@ func renderFrameWithANSIContentShrink(t *testing.T, ansiFull, ansiShort *buffer.
 	t.Logf("ANSI shrink output: %q", string(buf))
 
 	output2 := string(buf)
-	if !strings.Contains(output2, "=== Build Logs ===") {
-		t.Error("changed build logs header missing from shrink output")
-	}
-
-	if !strings.Contains(output2, "===") {
-		t.Error("changed footer missing from shrink output")
-	}
+	assert.Contains(t, output2, "=== Build Logs ===", "changed build logs header missing from shrink output")
+	assert.Contains(t, output2, "===", "changed footer missing from shrink output")
 
 	for lineIdx := 9; lineIdx < ansiFull.Len(); lineIdx++ {
 		oldPrefix := "\x1b[" + itoa(lineIdx+1) + ";1H"
-		if strings.Contains(output2, oldPrefix+string(ansiFull.Line(lineIdx))) {
-			t.Errorf("stale ansi line %d written: prefix %q", lineIdx, oldPrefix+string(ansiFull.Line(lineIdx)))
-		}
+		assert.NotContains(t, output2, oldPrefix+string(ansiFull.Line(lineIdx)),
+			"stale ansi line %d written: prefix %q", lineIdx, oldPrefix+string(ansiFull.Line(lineIdx)))
 	}
 
 	prevBuf.Reset()
@@ -338,7 +326,7 @@ func renderFrameWithANSIContentShrink(t *testing.T, ansiFull, ansiShort *buffer.
 		line := ansiFull.Line(i)
 		if len(line) > 0 && !strings.Contains(output3, string(line)) {
 			if i > 4 || string(ansiShort.Line(i)) != string(line) {
-				t.Errorf("ANSIGrow Render3 missing line %d: %q", i, string(line))
+				assert.Contains(t, output3, string(line), "ANSIGrow Render3 missing line %d: %q", i, string(line))
 			}
 		}
 	}
@@ -402,9 +390,7 @@ func TestDiffLinesSameLengthDifferentContent(t *testing.T) {
 	b := toLinesBuffer("X", "Y", "Z", "W", "V")
 
 	diffs := b.Diff(a)
-	if len(diffs) != 5 {
-		t.Errorf("expected 5 diffs, got %d", len(diffs))
-	}
+	assert.Len(t, diffs, 5)
 }
 
 // TestDiffLinesPartialIdentical ensures lines that are identical are not in diffs.
@@ -415,14 +401,10 @@ func TestDiffLinesPartialIdentical(t *testing.T) {
 	b := toLinesBuffer("A", "Y", "C", "W", "E")
 
 	diffs := b.Diff(a)
-	if len(diffs) != 2 {
-		t.Errorf("expected 2 diffs, got %d", len(diffs))
-	}
+	assert.Len(t, diffs, 2)
 
 	for _, d := range diffs {
-		if d != 1 && d != 3 {
-			t.Errorf("unexpected diff at line %d", d)
-		}
+		assert.True(t, d == 1 || d == 3, "unexpected diff at line %d", d)
 	}
 }
 

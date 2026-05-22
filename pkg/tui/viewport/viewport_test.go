@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
@@ -30,13 +33,8 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(24))
-	if mdl.Width() != 80 {
-		t.Errorf("width = %d, want 80", mdl.Width())
-	}
-
-	if mdl.Height() != 24 {
-		t.Errorf("height = %d, want 24", mdl.Height())
-	}
+	assert.Equal(t, 80, mdl.Width())
+	assert.Equal(t, 24, mdl.Height())
 }
 
 func TestSetContentLines(t *testing.T) {
@@ -45,16 +43,14 @@ func TestSetContentLines(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(10))
 	mdl.SetContentLines(strLines("a", "b", "c"))
 
-	if mdl.TotalLineCount() != 3 {
-		t.Errorf("TotalLineCount = %d, want 3", mdl.TotalLineCount())
-	}
+	assert.Equal(t, 3, mdl.TotalLineCount())
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
-	if strings.TrimSpace(lines[0]) != "a" || strings.TrimSpace(lines[1]) != "b" || strings.TrimSpace(lines[2]) != "c" {
-		t.Errorf("view = %q", view)
-	}
+	assert.Equal(t, "a", strings.TrimSpace(lines[0]))
+	assert.Equal(t, "b", strings.TrimSpace(lines[1]))
+	assert.Equal(t, "c", strings.TrimSpace(lines[2]))
 }
 
 func TestSetContentLinesKeepsScroll(t *testing.T) {
@@ -65,16 +61,10 @@ func TestSetContentLinesKeepsScroll(t *testing.T) {
 	mdl.SetYOffset(2)
 
 	mdl.SetContentLines(strLines("a", "b", "c", "d", "e"))
-
-	if mdl.YOffset() != 2 {
-		t.Errorf("YOffset should stay 2, got %d", mdl.YOffset())
-	}
+	assert.Equal(t, 2, mdl.YOffset(), "YOffset should stay 2")
 
 	mdl.SetContentLines(strLines("x", "y"))
-
-	if mdl.YOffset() != 0 {
-		t.Errorf("YOffset should be 0 after shrink, got %d", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "YOffset should be 0 after shrink")
 }
 
 func TestView(t *testing.T) {
@@ -85,13 +75,8 @@ func TestView(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
-	if len(lines) != 3 {
-		t.Errorf("view lines = %d, want 3", len(lines))
-	}
-
-	if strings.TrimSpace(lines[0]) != "line1" {
-		t.Errorf("first line = %q, want line1", lines[0])
-	}
+	assert.Len(t, lines, 3)
+	assert.Equal(t, "line1", strings.TrimSpace(lines[0]))
 }
 
 func TestViewPaddedToWidth(t *testing.T) {
@@ -103,9 +88,7 @@ func TestViewPaddedToWidth(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
 	for i, line := range lines {
-		if style.CellWidth([]byte(line)) != 20 {
-			t.Errorf("line %d visible width = %d, want 20: %q", i, style.CellWidth([]byte(line)), line)
-		}
+		assert.Equal(t, 20, style.CellWidth([]byte(line)), "line %d visible width", i)
 	}
 }
 
@@ -116,26 +99,17 @@ func TestViewHeightChanges(t *testing.T) {
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if strings.Count(view, "\n") != 2 {
-		t.Errorf("height 3 should have 2 newlines (3 lines), got %d in %q",
-			strings.Count(view, "\n"), view)
-	}
+	assert.Equal(t, 2, strings.Count(view, "\n"), "height 3 should have 2 newlines (3 lines)")
 
 	mdl.SetHeight(2)
 
 	view = buffer.LinesBufToStringForTests(mdl.Render())
-	if strings.Count(view, "\n") != 1 {
-		t.Errorf("height 2 should have 1 newline (2 lines), got %d in %q",
-			strings.Count(view, "\n"), view)
-	}
+	assert.Equal(t, 1, strings.Count(view, "\n"), "height 2 should have 1 newline (2 lines)")
 
 	mdl.SetHeight(10)
 
 	view = buffer.LinesBufToStringForTests(mdl.Render())
-	if strings.Count(view, "\n")+1 != 10 {
-		t.Errorf("height 10 should have 10 lines, got %d in %q",
-			strings.Count(view, "\n")+1, view)
-	}
+	assert.Equal(t, 10, strings.Count(view, "\n")+1, "height 10 should have 10 lines")
 }
 
 func TestScrollPercent(t *testing.T) {
@@ -144,22 +118,16 @@ func TestScrollPercent(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(3))
 	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4", "line5"))
 
-	if mdl.ScrollPercent() != 0 {
-		t.Errorf("ScrollPercent at top = %f, want 0", mdl.ScrollPercent())
-	}
+		assert.InDelta(t, float64(0), mdl.ScrollPercent(), 0.001, "ScrollPercent at top")
 
 	mdl.GotoBottom()
 
-	if mdl.ScrollPercent() != 1 {
-		t.Errorf("ScrollPercent at bottom = %f, want 1", mdl.ScrollPercent())
-	}
+	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "ScrollPercent at bottom")
 
 	mdl.SetYOffset(1)
 
 	pct := mdl.ScrollPercent()
-	if pct <= 0 || pct >= 1 {
-		t.Errorf("ScrollPercent mid = %f, want between 0 and 1", pct)
-	}
+	assert.True(t, pct > 0 && pct < 1, "ScrollPercent mid = %f, want between 0 and 1", pct)
 }
 
 func TestScrollPercentShortContent(t *testing.T) {
@@ -168,9 +136,7 @@ func TestScrollPercentShortContent(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(10))
 	mdl.SetContentLines(strLines("a", "b"))
 
-	if mdl.ScrollPercent() != 1 {
-		t.Errorf("short content ScrollPercent = %f, want 1", mdl.ScrollPercent())
-	}
+	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "short content ScrollPercent")
 }
 
 func TestScrollPercentEmpty(t *testing.T) {
@@ -179,9 +145,7 @@ func TestScrollPercentEmpty(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(10))
 	mdl.SetContentLines(strLines())
 
-	if mdl.ScrollPercent() != 1 {
-		t.Errorf("empty ScrollPercent = %f, want 1", mdl.ScrollPercent())
-	}
+	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "empty ScrollPercent")
 }
 
 func TestGotoBottom(t *testing.T) {
@@ -194,13 +158,8 @@ func TestGotoBottom(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
-	if strings.TrimSpace(lines[0]) != "line3" {
-		t.Errorf("first visible line after GotoBottom = %q, want line3", lines[0])
-	}
-
-	if strings.TrimSpace(lines[2]) != "line5" {
-		t.Errorf("last visible line = %q, want line5", lines[2])
-	}
+	assert.Equal(t, "line3", strings.TrimSpace(lines[0]), "first visible line after GotoBottom")
+	assert.Equal(t, "line5", strings.TrimSpace(lines[2]), "last visible line")
 }
 
 func TestGotoBottomShorterContent(t *testing.T) {
@@ -210,9 +169,7 @@ func TestGotoBottomShorterContent(t *testing.T) {
 	mdl.SetContentLines(strLines("a", "b"))
 	mdl.GotoBottom()
 
-	if mdl.YOffset() != 0 {
-		t.Errorf("short content GotoBottom = %d, want 0", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "short content GotoBottom")
 }
 
 func TestSetYOffset(t *testing.T) {
@@ -225,9 +182,7 @@ func TestSetYOffset(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
-	if strings.TrimSpace(lines[0]) != "line3" {
-		t.Errorf("first line = %q, want line3", lines[0])
-	}
+	assert.Equal(t, "line3", strings.TrimSpace(lines[0]), "first line")
 }
 
 func TestSetYOffsetClamped(t *testing.T) {
@@ -238,15 +193,11 @@ func TestSetYOffsetClamped(t *testing.T) {
 
 	mdl.SetYOffset(100)
 
-	if mdl.YOffset() != 2 {
-		t.Errorf("YOffset after clamp = %d, want 2", mdl.YOffset())
-	}
+	assert.Equal(t, 2, mdl.YOffset(), "YOffset after clamp")
 
 	mdl.SetYOffset(-5)
 
-	if mdl.YOffset() != 0 {
-		t.Errorf("YOffset after negative clamp = %d, want 0", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "YOffset after negative clamp")
 }
 
 func TestContentShorterThanViewport(t *testing.T) {
@@ -258,13 +209,8 @@ func TestContentShorterThanViewport(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	count := strings.Count(view, "\n") + 1
-	if count != 10 {
-		t.Errorf("view length = %d, want 10: %q", count, view)
-	}
-
-	if !strings.HasPrefix(view, "line1") {
-		t.Errorf("content incorrect: %q", view)
-	}
+	assert.Equal(t, 10, count)
+	assert.True(t, strings.HasPrefix(view, "line1"), "content incorrect: %q", view)
 }
 
 func TestEmptyContent(t *testing.T) {
@@ -273,9 +219,7 @@ func TestEmptyContent(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(10))
 	mdl.SetContentLines(strLines())
 
-	if mdl.TotalLineCount() != 0 {
-		t.Errorf("TotalLineCount for empty = %d, want 0", mdl.TotalLineCount())
-	}
+	assert.Equal(t, 0, mdl.TotalLineCount(), "TotalLineCount for empty")
 }
 
 func TestEmptyView(t *testing.T) {
@@ -285,9 +229,7 @@ func TestEmptyView(t *testing.T) {
 	mdl.SetContentLines(strLines())
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if view != "" {
-		t.Errorf("empty view = %q, want empty", view)
-	}
+	assert.Empty(t, view, "empty view")
 }
 
 func TestViewNoContentYet(t *testing.T) {
@@ -296,9 +238,7 @@ func TestViewNoContentYet(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(10))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if view != "" {
-		t.Errorf("uninitialized view = %q, want empty", view)
-	}
+	assert.Empty(t, view, "uninitialized view")
 }
 
 func TestSetWidthPreservesContent(t *testing.T) {
@@ -309,13 +249,8 @@ func TestSetWidthPreservesContent(t *testing.T) {
 
 	mdl.SetWidth(40)
 
-	if mdl.TotalLineCount() != 3 {
-		t.Errorf("after width change, TotalLineCount = %d, want 3", mdl.TotalLineCount())
-	}
-
-	if mdl.Width() != 40 {
-		t.Errorf("width = %d, want 40", mdl.Width())
-	}
+	assert.Equal(t, 3, mdl.TotalLineCount(), "after width change, TotalLineCount")
+	assert.Equal(t, 40, mdl.Width())
 }
 
 func TestSetWidthResetsScrollIfNeeded(t *testing.T) {
@@ -327,9 +262,7 @@ func TestSetWidthResetsScrollIfNeeded(t *testing.T) {
 
 	mdl.SetContentLines(strLines("a", "b", "c", "d", "e"))
 
-	if mdl.YOffset() != 2 {
-		t.Errorf("YOffset = %d, want 2", mdl.YOffset())
-	}
+	assert.Equal(t, 2, mdl.YOffset())
 }
 
 func TestViewAtBottomWithResize(t *testing.T) {
@@ -341,17 +274,13 @@ func TestViewAtBottomWithResize(t *testing.T) {
 
 	mdl.SetHeight(10)
 
-	if mdl.YOffset() != 2 {
-		t.Errorf("YOffset = %d, want 2 (was at bottom)", mdl.YOffset())
-	}
+	assert.Equal(t, 2, mdl.YOffset(), "YOffset = %d, want 2 (was at bottom)", mdl.YOffset())
 
 	mdl.SetHeight(3)
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
-	if len(lines) != 3 {
-		t.Errorf("view has %d lines, want 3", len(lines))
-	}
+	assert.Len(t, lines, 3)
 }
 
 func TestViewBeyondContent(t *testing.T) {
@@ -361,9 +290,7 @@ func TestViewBeyondContent(t *testing.T) {
 	mdl.SetContentLines(strLines("line1", "line2"))
 	mdl.SetYOffset(10)
 
-	if mdl.YOffset() != 0 {
-		t.Errorf("offset clamped to %d, want 0", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "offset clamped to %d, want 0", mdl.YOffset())
 }
 
 func TestViewWithANSI(t *testing.T) {
@@ -375,10 +302,8 @@ func TestViewWithANSI(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
 	for i, line := range lines {
-		visibleLen := style.CellWidth([]byte(lines[i]))
-		if visibleLen != 20 {
-			t.Errorf("line %d visible width = %d, want 20: %q", i, visibleLen, line)
-		}
+		visibleLen := style.CellWidth([]byte(line))
+		assert.Equal(t, 20, visibleLen, "line %d visible width", i)
 	}
 }
 
@@ -407,9 +332,7 @@ func TestStringWidth(t *testing.T) {
 
 	for _, tt := range tests {
 		got := style.CellWidth([]byte(tt.input))
-		if got != tt.want {
-			t.Errorf("style.CellWidth(%q) = %d, want %d", tt.input, got, tt.want)
-		}
+		assert.Equal(t, tt.want, got, "style.CellWidth(%q)", tt.input)
 	}
 }
 
@@ -420,9 +343,7 @@ func TestViewWidthZero(t *testing.T) {
 	mdl.SetContentLines(strLines("a", "b"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if view != "" {
-		t.Errorf("zero-width view = %q, want empty", view)
-	}
+	assert.Empty(t, view, "zero-width view")
 }
 
 func TestScrollDown(t *testing.T) {
@@ -433,15 +354,11 @@ func TestScrollDown(t *testing.T) {
 
 	mdl.ScrollDown(1)
 
-	if mdl.YOffset() != 1 {
-		t.Errorf("YOffset after ScrollDown(1) = %d, want 1", mdl.YOffset())
-	}
+	assert.Equal(t, 1, mdl.YOffset(), "YOffset after ScrollDown(1)")
 
 	mdl.ScrollDown(10)
 
-	if mdl.YOffset() != 2 {
-		t.Errorf("YOffset after ScrollDown(10) = %d, want 2 (clamped)", mdl.YOffset())
-	}
+	assert.Equal(t, 2, mdl.YOffset(), "YOffset after ScrollDown(10) (clamped)")
 }
 
 func TestScrollUp(t *testing.T) {
@@ -453,15 +370,11 @@ func TestScrollUp(t *testing.T) {
 
 	mdl.ScrollUp(1)
 
-	if mdl.YOffset() != 1 {
-		t.Errorf("YOffset after ScrollUp(1) = %d, want 1", mdl.YOffset())
-	}
+	assert.Equal(t, 1, mdl.YOffset(), "YOffset after ScrollUp(1)")
 
 	mdl.ScrollUp(10)
 
-	if mdl.YOffset() != 0 {
-		t.Errorf("YOffset after ScrollUp(10) = %d, want 0 (clamped)", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "YOffset after ScrollUp(10) (clamped)")
 }
 
 func TestPageDown(t *testing.T) {
@@ -472,9 +385,7 @@ func TestPageDown(t *testing.T) {
 
 	mdl.PageDown()
 
-	if mdl.YOffset() != 3 {
-		t.Errorf("YOffset after PageDown = %d, want 3", mdl.YOffset())
-	}
+	assert.Equal(t, 3, mdl.YOffset(), "YOffset after PageDown")
 }
 
 func TestPageUp(t *testing.T) {
@@ -486,9 +397,7 @@ func TestPageUp(t *testing.T) {
 
 	mdl.PageUp()
 
-	if mdl.YOffset() != 2 {
-		t.Errorf("YOffset after PageUp = %d, want 2", mdl.YOffset())
-	}
+	assert.Equal(t, 2, mdl.YOffset(), "YOffset after PageUp")
 }
 
 func TestHalfPageDown(t *testing.T) {
@@ -499,9 +408,7 @@ func TestHalfPageDown(t *testing.T) {
 
 	mdl.HalfPageDown()
 
-	if mdl.YOffset() != 5 {
-		t.Errorf("YOffset after HalfPageDown = %d, want 5", mdl.YOffset())
-	}
+	assert.Equal(t, 5, mdl.YOffset(), "YOffset after HalfPageDown")
 }
 
 func TestHalfPageUp(t *testing.T) {
@@ -513,9 +420,7 @@ func TestHalfPageUp(t *testing.T) {
 
 	mdl.HalfPageUp()
 
-	if mdl.YOffset() != 0 {
-		t.Errorf("YOffset after HalfPageUp = %d, want 0", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "YOffset after HalfPageUp")
 }
 
 func TestAtTopAtBottom(t *testing.T) {
@@ -524,21 +429,15 @@ func TestAtTopAtBottom(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(3))
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
-	if !mdl.AtTop() {
-		t.Error("should be at top initially")
-	}
+	assert.True(t, mdl.AtTop(), "should be at top initially")
 
 	mdl.GotoBottom()
 
-	if !mdl.AtBottom() {
-		t.Error("should be at bottom after GotoBottom")
-	}
+	assert.True(t, mdl.AtBottom(), "should be at bottom after GotoBottom")
 
 	mdl.SetYOffset(1)
 
-	if mdl.AtTop() || mdl.AtBottom() {
-		t.Error("should be neither top nor bottom in the middle")
-	}
+	assert.False(t, mdl.AtTop() || mdl.AtBottom(), "should be neither top nor bottom in the middle")
 }
 
 // ---- Comprehensive scrollbar tests ----
@@ -546,8 +445,6 @@ func TestAtTopAtBottom(t *testing.T) {
 func TestScrollbarVisibleWidthWithOverflow(t *testing.T) {
 	t.Parallel()
 
-	// When content overflows and scrollbar is enabled, every line's visible width
-	// must equal the viewport's configured width (content + scrollbar).
 	vpWidth := 20
 	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
@@ -556,18 +453,13 @@ func TestScrollbarVisibleWidthWithOverflow(t *testing.T) {
 	viewLines := strings.Split(view, "\n")
 
 	for idx, line := range viewLines {
-		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: visible width = %d, want %d (width): %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", idx)
 	}
 }
 
 func TestScrollbarContentWidthSmallerThanTotal(t *testing.T) {
 	t.Parallel()
 
-	// Content area is width-2 when scrollbar is shown. Short content should be
-	// padded to contentWidth, then scrollbar appended, totaling width.
 	vpWidth := 10
 	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("hi", "there", "x", "overflow1", "overflow2"))
@@ -577,27 +469,18 @@ func TestScrollbarContentWidthSmallerThanTotal(t *testing.T) {
 
 	for idx, line := range viewLines {
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: visible width = %d, want %d: %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, visibleW, "line %d", idx)
 
-		// Content portion (before scrollbar) should be exactly contentWidth=8
-		// Scrollbar is " │" or " █" (2 visible chars)
 		contentPart := stripScrollbar(line)
-
 		contentVisibleW := style.CellWidth([]byte(contentPart))
-		if contentVisibleW != vpWidth-scrollbarColWidth {
-			t.Errorf("line %d: content visible width = %d, want %d: content=%q full=%q",
-				idx, contentVisibleW, vpWidth-scrollbarColWidth, contentPart, line)
-		}
+		assert.Equal(t, vpWidth-scrollbarColWidth, contentVisibleW,
+			"line %d: content visible width: content=%q full=%q", idx, contentPart, line)
 	}
 }
 
 func TestScrollbarHiddenContentFits(t *testing.T) {
 	t.Parallel()
 
-	// When content fits in viewport, no scrollbar should appear even if
-	// WithScrollbar was specified. Width should be full contentWidth.
 	vpWidth := 20
 	mdl := New(WithWidth(vpWidth), WithHeight(10), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("l1", "l2", "l3"))
@@ -606,22 +489,15 @@ func TestScrollbarHiddenContentFits(t *testing.T) {
 	viewLines := strings.Split(view, "\n")
 
 	for idx, line := range viewLines {
-		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: visible width = %d, want %d (no scrollbar): %q",
-				idx, visibleW, vpWidth, line)
-		}
-
-		if strings.Contains(line, "█") || strings.Contains(line, "│") {
-			t.Errorf("line %d: scrollbar chars should not appear when content fits: %q", idx, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d (no scrollbar)", idx)
+		assert.False(t, strings.Contains(line, "█") || strings.Contains(line, "│"),
+			"line %d: scrollbar chars should not appear when content fits: %q", idx, line)
 	}
 }
 
 func TestScrollbarNoScrollbarOption(t *testing.T) {
 	t.Parallel()
 
-	// Without WithScrollbar, even overflowing content should have no scrollbar.
 	vpWidth := 20
 	mdl := New(WithWidth(vpWidth), WithHeight(3))
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
@@ -630,17 +506,13 @@ func TestScrollbarNoScrollbarOption(t *testing.T) {
 	viewLines := strings.Split(view, "\n")
 
 	for idx, line := range viewLines {
-		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: visible width = %d, want %d: %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", idx)
 	}
 }
 
 func TestScrollbarThumbAtTop(t *testing.T) {
 	t.Parallel()
 
-	// At yOffset=0, thumb should be in the first visible lines.
 	vpWidth := 20
 	vpHeight := 3
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
@@ -659,9 +531,7 @@ func TestScrollbarThumbAtTop(t *testing.T) {
 		}
 	}
 
-	if thumbLine != 0 {
-		t.Errorf("at top, thumb should be at line 0, got line %d", thumbLine)
-	}
+	assert.Equal(t, 0, thumbLine, "at top, thumb should be at line 0, got line %d", thumbLine)
 }
 
 func TestScrollbarThumbAtBottom(t *testing.T) {
@@ -684,15 +554,12 @@ func TestScrollbarThumbAtBottom(t *testing.T) {
 		}
 	}
 
-	if thumbLine != vpHeight-1 {
-		t.Errorf("at bottom, thumb should be at line %d, got line %d", vpHeight-1, thumbLine)
-	}
+	assert.Equal(t, vpHeight-1, thumbLine, "at bottom, thumb should be at line %d, got line %d", vpHeight-1, thumbLine)
 }
 
 func TestScrollbarThumbSizeProportional(t *testing.T) {
 	t.Parallel()
 
-	// With 9 lines and height 3: thumb = max(1, 3*3/9) = 1
 	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
 
@@ -707,11 +574,8 @@ func TestScrollbarThumbSizeProportional(t *testing.T) {
 		}
 	}
 
-	if thumbCount != 1 {
-		t.Errorf("thumb count = %d, want 1 (9 lines, height 3)", thumbCount)
-	}
+	assert.Equal(t, 1, thumbCount, "thumb count (9 lines, height 3)")
 
-	// With 30 lines and height 10: thumb = max(1, 10*10/30) = 3
 	mdl2 := New(WithWidth(20), WithHeight(10), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
 	longContent := make([][]byte, 30)
@@ -732,9 +596,7 @@ func TestScrollbarThumbSizeProportional(t *testing.T) {
 		}
 	}
 
-	if thumbCount != 3 {
-		t.Errorf("thumb count = %d, want 3 (30 lines, height 10)", thumbCount)
-	}
+	assert.Equal(t, 3, thumbCount, "thumb count (30 lines, height 10)")
 }
 
 func TestScrollbarWithANSIStyles(t *testing.T) {
@@ -746,110 +608,74 @@ func TestScrollbarWithANSIStyles(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
 
-	// Each line's visible width must still be exactly vpWidth
 	for idx, line := range viewLines {
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != 20 {
-			t.Errorf("line %d: visible width = %d, want 20 (styled scrollbar): %q", idx, visibleW, line)
-		}
+		assert.Equal(t, 20, visibleW, "line %d: visible width (styled scrollbar)", idx)
 	}
 
-	// Check thumb has red style
-	if !strings.Contains(viewLines[0], "█") || !strings.Contains(viewLines[0], "\x1b[") {
-		t.Errorf("line 0 should have styled red thumb: %q", viewLines[0])
-	}
-
-	if !strings.Contains(viewLines[1], "│") || !strings.Contains(viewLines[1], "\x1b[") {
-		t.Errorf("line 1 should have styled blue track: %q", viewLines[1])
-	}
-
-	if !strings.Contains(viewLines[1], "│") || !strings.Contains(viewLines[1], "\x1b[") {
-		t.Errorf("line 1 should have styled blue track: %q", viewLines[1])
-	}
+	assert.True(t, strings.Contains(viewLines[0], "█") && strings.Contains(viewLines[0], "\x1b["),
+		"line 0 should have styled red thumb: %q", viewLines[0])
+	assert.True(t, strings.Contains(viewLines[1], "│") && strings.Contains(viewLines[1], "\x1b["),
+		"line 1 should have styled blue track: %q", viewLines[1])
 }
 
 func TestScrollbarFillLinesAlsoGetScrollbar(t *testing.T) {
 	t.Parallel()
 
-	// When content is shorter than height but still overflows (2 content, 3 height, 5 total lines),
-	// the fill lines should also have the scrollbar.
 	mdl := New(WithWidth(10), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
 
-	if len(viewLines) != 5 {
-		t.Fatalf("expected 5 lines, got %d", len(viewLines))
-	}
+	require.Len(t, viewLines, 5, "expected 5 lines")
 
-	// Every line should have a scrollbar character
 	for idx, line := range viewLines {
 		hasScrollbar := strings.Contains(line, "█") || strings.Contains(line, "│")
-		if !hasScrollbar {
-			t.Errorf("line %d: missing scrollbar in fill line: %q", idx, line)
-		}
+		assert.True(t, hasScrollbar, "line %d: missing scrollbar in fill line: %q", idx, line)
 
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != 10 {
-			t.Errorf("line %d: visible width = %d, want 10: %q", idx, visibleW, line)
-		}
+		assert.Equal(t, 10, visibleW, "line %d", idx)
 	}
 }
 
 func TestScrollbarNoScrollbarWhenContentFitsExactly(t *testing.T) {
 	t.Parallel()
 
-	// When totalLines == height, content fits exactly — no scrollbar
 	mdl := New(WithWidth(20), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
-	if strings.Contains(view, "█") || strings.Contains(view, "│") {
-		t.Errorf("scrollbar should not appear when content fits exactly: %q", view)
-	}
+	assert.False(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"scrollbar should not appear when content fits exactly: %q", view)
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		visibleW := style.CellWidth([]byte(line))
-		if visibleW != 20 {
-			t.Errorf("line %d: visible width = %d, want 20 (no scrollbar): %q", idx, visibleW, line)
-		}
+		assert.Equal(t, 20, style.CellWidth([]byte(line)), "line %d (no scrollbar)", idx)
 	}
 }
 
 func TestScrollbarContentWidth(t *testing.T) {
 	t.Parallel()
 
-	// With scrollbar but no content: ContentWidth returns full width (no overflow yet)
 	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("a", "b")) // 2 lines, fits in height=3
+	mdl.SetContentLines(strLines("a", "b"))
 
-	if mdl.ContentWidth() != 20 {
-		t.Errorf("ContentWidth no overflow = %d, want 20", mdl.ContentWidth())
-	}
+	assert.Equal(t, 20, mdl.ContentWidth(), "ContentWidth no overflow")
 
-	// With scrollbar and content that overflows: ContentWidth deducts scrollbar
 	mdl2 := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl2.SetContentLines(strLines("a", "b", "c", "d", "e")) // 5 lines, overflows height=3
+	mdl2.SetContentLines(strLines("a", "b", "c", "d", "e"))
 
-	if mdl2.ContentWidth() != 18 {
-		t.Errorf("ContentWidth with overflow = %d, want 18", mdl2.ContentWidth())
-	}
+	assert.Equal(t, 18, mdl2.ContentWidth(), "ContentWidth with overflow")
 
-	// Without scrollbar: ContentWidth() == width
 	mdl3 := New(WithWidth(20), WithHeight(3))
-	if mdl3.ContentWidth() != 20 {
-		t.Errorf("ContentWidth without scrollbar = %d, want 20", mdl3.ContentWidth())
-	}
+	assert.Equal(t, 20, mdl3.ContentWidth(), "ContentWidth without scrollbar")
 }
 
 func TestScrollbarExactLineComposition(t *testing.T) {
 	t.Parallel()
 
-	// Verify exact structure of each line:
-	// content (padded to contentWidth=8) + " " + scrollbarChar
 	vpWidth := 10
 	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	mdl.SetContentLines(strLines("hi", "there", "x", "y", "z"))
@@ -857,16 +683,11 @@ func TestScrollbarExactLineComposition(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
 
-	contentW := vpWidth - scrollbarColWidth // 8
+	contentW := vpWidth - scrollbarColWidth
 
 	for idx, line := range viewLines {
-		// Strip ANSI (none here) and check structure
-		// Content part should be exactly contentWidth chars
-		// Then " │" or " █"
 		scrollbarStart := strings.LastIndex(line, " ")
-		if scrollbarStart < 0 {
-			t.Errorf("line %d: no space before scrollbar: %q", idx, line)
-
+		if !assert.GreaterOrEqual(t, scrollbarStart, 0, "line %d: no space before scrollbar: %q", idx, line) {
 			continue
 		}
 
@@ -874,14 +695,10 @@ func TestScrollbarExactLineComposition(t *testing.T) {
 		scrollbarPart := line[scrollbarStart:]
 
 		contentVisibleW := style.CellWidth([]byte(contentPart))
-		if contentVisibleW != contentW {
-			t.Errorf("line %d: content part visible width = %d, want %d: content=%q",
-				idx, contentVisibleW, contentW, contentPart)
-		}
+		assert.Equal(t, contentW, contentVisibleW, "line %d: content part visible width: content=%q", idx, contentPart)
 
-		if scrollbarPart != " █" && scrollbarPart != " │" {
-			t.Errorf("line %d: unexpected scrollbar part %q", idx, scrollbarPart)
-		}
+		assert.True(t, scrollbarPart == " █" || scrollbarPart == " │",
+			"line %d: unexpected scrollbar part %q", idx, scrollbarPart)
 	}
 }
 
@@ -897,25 +714,17 @@ func TestScrollbarScrollingMovesThumb(t *testing.T) {
 
 	mdl.SetContentLines(content)
 
-	// At top: thumb at line 0
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	viewLines := strings.Split(view, "\n")
-	if !strings.Contains(viewLines[0], "█") {
-		t.Errorf("at top, line 0 should have thumb")
-	}
+	assert.Contains(t, viewLines[0], "█", "at top, line 0 should have thumb")
 
-	// Scroll down 5: thumb should have moved
 	mdl.SetYOffset(5)
 	view = buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines = strings.Split(view, "\n")
 
-	// Thumb should NOT be at line 0 anymore
-	if strings.Contains(viewLines[0], "█") {
-		t.Errorf("after scrolling, line 0 should not have thumb anymore")
-	}
+	assert.NotContains(t, viewLines[0], "█", "after scrolling, line 0 should not have thumb anymore")
 
-	// Thumb should be somewhere in the middle
 	thumbFound := false
 
 	for _, line := range viewLines {
@@ -926,28 +735,23 @@ func TestScrollbarScrollingMovesThumb(t *testing.T) {
 		}
 	}
 
-	if !thumbFound {
-		t.Errorf("thumb should be visible somewhere after scrolling")
-	}
+	assert.True(t, thumbFound, "thumb should be visible somewhere after scrolling")
 }
 
 // stripScrollbar removes the trailing " │" or " █" from a line,
 // handling both plain and ANSI-styled scrollbar chars.
 func stripScrollbar(line string) string {
-	// Try plain first
 	for _, suffix := range []string{" │", " █"} {
 		if strings.HasSuffix(line, suffix) {
 			return line[:len(line)-len(suffix)]
 		}
 	}
 
-	// Try ANSI-styled: ends with \x1b[0m after the char
 	for _, char := range []string{"█", "│"} {
 		target := char + "\x1b[0m"
 
 		idx := strings.LastIndex(line, target)
 		if idx >= 0 {
-			// Go back to find the space before the style
 			styleStart := idx
 			for styleStart > 0 && line[styleStart-1] != ' ' {
 				styleStart--
@@ -968,9 +772,7 @@ func TestBorderBasic(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	expected := "╭────╮\n│AB  │\n╰────╯"
-	if view != expected {
-		t.Errorf("bordered view = %q, want %q", view, expected)
-	}
+	assert.Equal(t, expected, view, "bordered view")
 }
 
 func TestBorderOutputSize(t *testing.T) {
@@ -983,14 +785,10 @@ func TestBorderOutputSize(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(view, "\n")
-	if len(lines) != height {
-		t.Errorf("bordered view has %d lines, want %d", len(lines), height)
-	}
+	assert.Len(t, lines, height, "bordered view has %d lines, want %d", len(lines), height)
 
 	for i, line := range lines {
-		if style.CellWidth([]byte(line)) != width {
-			t.Errorf("line %d visible width = %d, want %d: %q", i, style.CellWidth([]byte(line)), width, line)
-		}
+		assert.Equal(t, width, style.CellWidth([]byte(line)), "line %d visible width", i)
 	}
 }
 
@@ -1004,14 +802,10 @@ func TestBorderWithOverflowAndScrollbar(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(view, "\n")
-	if len(lines) != height {
-		t.Errorf("bordered+scrollbar view has %d lines, want %d", len(lines), height)
-	}
+	assert.Len(t, lines, height, "bordered+scrollbar view has %d lines, want %d", len(lines), height)
 
 	for i, line := range lines {
-		if style.CellWidth([]byte(line)) != width {
-			t.Errorf("line %d visible width = %d, want %d: %q", i, style.CellWidth([]byte(line)), width, line)
-		}
+		assert.Equal(t, width, style.CellWidth([]byte(line)), "line %d visible width", i)
 	}
 }
 
@@ -1019,51 +813,35 @@ func TestBorderContentWidth(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(10), WithHeight(3), WithBorder(style.Color("")))
-	if mdl.ContentWidth() != 8 {
-		t.Errorf("bordered ContentWidth = %d, want 8", mdl.ContentWidth())
-	}
+	assert.Equal(t, 8, mdl.ContentWidth(), "bordered ContentWidth")
 
-	// Bordered+scrollbar with content that fits: no scrollbar deduction
 	mdl2 := New(WithWidth(10), WithHeight(5), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl2.SetContentLines(strLines("a", "b")) // fits in contentH=3
+	mdl2.SetContentLines(strLines("a", "b"))
 
-	if mdl2.ContentWidth() != 8 {
-		t.Errorf("bordered+scrollbar (fits) ContentWidth = %d, want 8", mdl2.ContentWidth())
-	}
+	assert.Equal(t, 8, mdl2.ContentWidth(), "bordered+scrollbar (fits) ContentWidth")
 
-	// Bordered+scrollbar with content that overflows: scrollbar deducted
 	mdl3 := New(WithWidth(10), WithHeight(5), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl3.SetContentLines(strLines("a", "b", "c", "d", "e", "f")) // 6 lines > contentH=3
+	mdl3.SetContentLines(strLines("a", "b", "c", "d", "e", "f"))
 
-	if mdl3.ContentWidth() != 6 {
-		t.Errorf("bordered+scrollbar (overflows) ContentWidth = %d, want 6", mdl3.ContentWidth())
-	}
+	assert.Equal(t, 6, mdl3.ContentWidth(), "bordered+scrollbar (overflows) ContentWidth")
 }
 
 func TestBorderScrolling(t *testing.T) {
 	t.Parallel()
 
-	// height=5 → contentH=3 (5-2 for border), 6 lines → maxYOffset=3
 	mdl := New(WithWidth(8), WithHeight(5), WithBorder(style.Color("")))
 	mdl.SetContentLines(strLines("a", "b", "c", "d", "e", "f"))
 
-	if mdl.AtBottom() {
-		t.Error("should not be at bottom")
-	}
+	assert.False(t, mdl.AtBottom(), "should not be at bottom")
 
 	mdl.ScrollDown(3)
 
-	if !mdl.AtBottom() {
-		t.Errorf("should be at bottom after scrolling 3, yOffset=%d, maxYOffset=%d", mdl.YOffset(), len(mdl.lines)-3)
-	}
+	assert.True(t, mdl.AtBottom(), "should be at bottom after scrolling 3, yOffset=%d, maxYOffset=%d", mdl.YOffset(), len(mdl.lines)-3)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	lines := strings.Split(view, "\n")
 
-	// yOffset=3, contentH=3 → shows lines d, e, f
-	if !strings.Contains(lines[1], "d") {
-		t.Errorf("expected line 1 to contain 'd', got %q", lines[1])
-	}
+	assert.Contains(t, lines[1], "d", "expected line 1 to contain 'd', got %q", lines[1])
 }
 
 func TestBorderStyled(t *testing.T) {
@@ -1073,39 +851,28 @@ func TestBorderStyled(t *testing.T) {
 	mdl.SetContentLines(strLines("AB"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
-	if !strings.Contains(view, "\x1b[") || !strings.Contains(view, "╭") {
-		t.Error("border top-left should be styled")
-	}
-
-	if !strings.Contains(view, "\x1b[") || !strings.Contains(view, "│") {
-		t.Error("border sides should be styled")
-	}
-
-	if !strings.Contains(view, "\x1b[") || !strings.Contains(view, "╰") {
-		t.Error("border bottom-left should be styled")
-	}
+	assert.True(t, strings.Contains(view, "\x1b[") && strings.Contains(view, "╭"),
+		"border top-left should be styled")
+	assert.True(t, strings.Contains(view, "\x1b[") && strings.Contains(view, "│"),
+		"border sides should be styled")
+	assert.True(t, strings.Contains(view, "\x1b[") && strings.Contains(view, "╰"),
+		"border bottom-left should be styled")
 }
 
 func TestBorderIsBordered(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(10), WithHeight(3), WithBorder(style.Color("")))
-	if !mdl.IsBordered() {
-		t.Error("IsBordered should be true")
-	}
+	assert.True(t, mdl.IsBordered(), "IsBordered should be true")
 
 	mdl2 := New(WithWidth(10), WithHeight(3))
-	if mdl2.IsBordered() {
-		t.Error("IsBordered should be false")
-	}
+	assert.False(t, mdl2.IsBordered(), "IsBordered should be false")
 }
 
 func TestBorderOverheadFunc(t *testing.T) {
 	t.Parallel()
 
-	if BorderOverhead() != 2 {
-		t.Errorf("BorderOverhead() = %d, want 2", BorderOverhead())
-	}
+	assert.Equal(t, 2, BorderOverhead())
 }
 
 // ---- Scrollbar reservation and consistency tests ----
@@ -1113,42 +880,31 @@ func TestBorderOverheadFunc(t *testing.T) {
 func TestScrollbarAlwaysReservesWidth(t *testing.T) {
 	t.Parallel()
 
-	// Every output line must be exactly `width` visible chars wide,
-	// regardless of whether content overflows or not. When content overflows,
-	// scrollbar column takes 2 chars. When content fits, no scrollbar column.
 	vpWidth := 20
 	vpHeight := 10
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
-	// Content fits — no scrollbar drawn, but 2-char area is spaces
 	mdl.SetContentLines(strLines("short", "content"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("content-fits line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "content-fits line %d", idx)
 	}
 
-	// Content overflows — scrollbar drawn
 	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12"))
 	view = buffer.LinesBufToStringForTests(mdl.Render())
 
 	viewLines = strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("content-overflows line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "content-overflows line %d", idx)
 	}
 }
 
 func TestScrollbarVisibleAtBottom(t *testing.T) {
 	t.Parallel()
 
-	// When scrolled to bottom, scrollbar must still show track/thumb,
-	// not disappear or turn into spaces.
 	vpWidth := 20
 	vpHeight := 5
 
@@ -1161,26 +917,19 @@ func TestScrollbarVisibleAtBottom(t *testing.T) {
 
 	mdl.SetContentLines(content)
 
-	// At top
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if !strings.Contains(view, "█") && !strings.Contains(view, "│") {
-		t.Errorf("at top: scrollbar should be visible\n%q", view)
-	}
+	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"at top: scrollbar should be visible\n%q", view)
 
-	// At bottom
 	mdl.GotoBottom()
 
 	view = buffer.LinesBufToStringForTests(mdl.Render())
-	if !strings.Contains(view, "█") && !strings.Contains(view, "│") {
-		t.Errorf("at bottom: scrollbar should be visible\n%q", view)
-	}
+	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"at bottom: scrollbar should be visible\n%q", view)
 
-	// Verify every line is exactly vpWidth wide at bottom
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("at-bottom line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "at-bottom line %d", idx)
 	}
 }
 
@@ -1203,15 +952,12 @@ func TestScrollbarVisibleAtEveryScrollPosition(t *testing.T) {
 		mdl.SetYOffset(offset)
 
 		view := buffer.LinesBufToStringForTests(mdl.Render())
-		if !strings.Contains(view, "█") && !strings.Contains(view, "│") {
-			t.Errorf("at yOffset=%d: scrollbar should be visible\n%q", offset, view)
-		}
+		assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+			"at yOffset=%d: scrollbar should be visible\n%q", offset, view)
 
 		viewLines := strings.Split(view, "\n")
 		for idx, line := range viewLines {
-			if style.CellWidth([]byte(line)) != vpWidth {
-				t.Errorf("yOffset=%d line %d: width = %d, want %d: %q", offset, idx, style.CellWidth([]byte(line)), vpWidth, line)
-			}
+			assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "yOffset=%d line %d", offset, idx)
 		}
 	}
 }
@@ -1219,8 +965,6 @@ func TestScrollbarVisibleAtEveryScrollPosition(t *testing.T) {
 func TestScrollbarColumnIsSpacesWhenContentFits(t *testing.T) {
 	t.Parallel()
 
-	// When content fits, no scrollbar column is rendered at all.
-	// Content fills the full width.
 	vpWidth := 20
 	vpHeight := 10
 
@@ -1228,23 +972,18 @@ func TestScrollbarColumnIsSpacesWhenContentFits(t *testing.T) {
 	mdl.SetContentLines(strLines("a", "b"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if strings.Contains(view, "█") || strings.Contains(view, "│") {
-		t.Errorf("when content fits, no scrollbar chars should appear\n%q", view)
-	}
+	assert.False(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"when content fits, no scrollbar chars should appear\n%q", view)
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", idx)
 	}
 }
 
 func TestBorderedScrollbarWidthConsistency(t *testing.T) {
 	t.Parallel()
 
-	// Bordered + scrollbar: every line must be exactly `width` visible chars.
-	// Border takes 2, scrollbar takes 2, content gets width-4.
 	vpWidth := 16
 	vpHeight := 6
 
@@ -1257,30 +996,21 @@ func TestBorderedScrollbarWidthConsistency(t *testing.T) {
 
 	mdl.SetContentLines(content)
 
-	// Scroll through every position
 	for offset := 0; offset <= mdl.maxYOffset(); offset++ {
 		mdl.SetYOffset(offset)
 		view := buffer.LinesBufToStringForTests(mdl.Render())
 		viewLines := strings.Split(view, "\n")
 
-		if len(viewLines) != vpHeight {
-			t.Errorf("yOffset=%d: %d lines, want %d", offset, len(viewLines), vpHeight)
-		}
+		assert.Len(t, viewLines, vpHeight, "yOffset=%d", offset)
 
 		for idx, line := range viewLines {
-			if style.CellWidth([]byte(line)) != vpWidth {
-				t.Errorf("yOffset=%d line %d: width = %d, want %d: %q", offset, idx, style.CellWidth([]byte(line)), vpWidth, line)
-			}
+			assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "yOffset=%d line %d", offset, idx)
 		}
 
-		// Border chars must be present
-		if !strings.HasPrefix(viewLines[0], "╭") {
-			t.Errorf("yOffset=%d: missing top-left border", offset)
-		}
-
-		if !strings.HasPrefix(viewLines[vpHeight-1], "╰") {
-			t.Errorf("yOffset=%d: missing bottom-left border", offset)
-		}
+		assert.True(t, strings.HasPrefix(viewLines[0], "╭"),
+			"yOffset=%d: missing top-left border", offset)
+		assert.True(t, strings.HasPrefix(viewLines[vpHeight-1], "╰"),
+			"yOffset=%d: missing bottom-left border", offset)
 	}
 }
 
@@ -1302,91 +1032,67 @@ func TestBorderedScrollbarVisibleAtBottom(t *testing.T) {
 	mdl.GotoBottom()
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
-	// Scrollbar must be visible (track or thumb chars)
-	if !strings.Contains(view, "█") && !strings.Contains(view, "│") {
-		t.Errorf("at bottom: scrollbar should be visible in bordered viewport\n%q", view)
-	}
+	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"at bottom: scrollbar should be visible in bordered viewport\n%q", view)
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("at-bottom line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "at-bottom line %d", idx)
 	}
 }
 
 func TestSetContentWrapsAtScrollbarWidth(t *testing.T) {
 	t.Parallel()
 
-	// SetContent first wraps at full content width, then rewraps at
-	// scrollbar-reduced width if content overflows.
 	vpWidth := 10
 	vpHeight := 3
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	// 10 chars at full content width (10) fits in 1 line, no overflow → no rewrap
 	_ = mdl.SetContent(splitLines("abcdefghij"))
 
-	if mdl.TotalLineCount() != 1 {
-		t.Errorf("short content should not rewrap, got %d lines", mdl.TotalLineCount())
-	}
+	assert.Equal(t, 1, mdl.TotalLineCount(), "short content should not rewrap, got %d lines", mdl.TotalLineCount())
 
-	// 50 chars at full content width (10) = 5 lines > height 3 → overflow → rewrap at 8
 	mdl2 := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 	_ = mdl2.SetContent(splitLines(strings.Repeat("abcdefghij", 5)))
 
-	if mdl2.TotalLineCount() < 5 {
-		t.Errorf("long content should wrap at narrow width, got %d lines", mdl2.TotalLineCount())
-	}
+	assert.GreaterOrEqual(t, mdl2.TotalLineCount(), 5, "long content should wrap at narrow width, got %d lines", mdl2.TotalLineCount())
 
-	// Every line in View() must be exactly vpWidth wide
 	view := buffer.LinesBufToStringForTests(mdl2.Render())
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", idx)
 	}
 }
 
 func TestBorderedSetContentWrapsCorrectly(t *testing.T) {
 	t.Parallel()
 
-	// Bordered + scrollbar: full content width = width - 2(border)
-	// When content overflows, rewrap at width - 2(border) - 2(scrollbar)
 	vpWidth := 14
 	vpHeight := 6
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	fullContentWidth := vpWidth - 2       // 12, no scrollbar initially
-	narrowContentWidth := vpWidth - 2 - 2 // 10, with scrollbar
+	fullContentWidth := vpWidth - 2
+	narrowContentWidth := vpWidth - 2 - 2
 
-	// Content that overflows at full width triggers rewrap at narrow width
-	longContent := strings.Repeat("x", 60) // 60 chars
+	longContent := strings.Repeat("x", 60)
 	_ = mdl.SetContent(splitLines(longContent))
 
-	// Each wrapped line must fit within the narrow content width (scrollbar will appear)
 	for idx, line := range mdl.lines {
-		if style.CellWidth(line) > narrowContentWidth {
-			t.Errorf("wrapped line %d: width = %d, want <= %d: %q", idx, style.CellWidth(line), narrowContentWidth, line)
-		}
+		assert.LessOrEqual(t, style.CellWidth(line), narrowContentWidth,
+			"wrapped line %d: width = %d, want <= %d", idx, style.CellWidth(line), narrowContentWidth)
 	}
 
-	// Content that fits at full width should NOT rewrap
 	mdl2 := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	shortContent := strings.Repeat("x", fullContentWidth) // 12 chars, fits in 1 line
+	shortContent := strings.Repeat("x", fullContentWidth)
 	_ = mdl2.SetContent(splitLines(shortContent))
 
-	if mdl2.TotalLineCount() > 1 {
-		t.Errorf("short content should not wrap, got %d lines", mdl2.TotalLineCount())
-	}
+	assert.LessOrEqual(t, mdl2.TotalLineCount(), 1, "short content should not wrap, got %d lines", mdl2.TotalLineCount())
 }
 
 func TestScrollbarNoScrollbarOptionStillFullWidth(t *testing.T) {
 	t.Parallel()
 
-	// Without scrollbar, full width is used for content
 	vpWidth := 20
 	vpHeight := 5
 
@@ -1403,17 +1109,13 @@ func TestScrollbarNoScrollbarOptionStillFullWidth(t *testing.T) {
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("no-scrollbar line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "no-scrollbar line %d", idx)
 	}
 }
 
 func TestBorderedScrollbarFitsContentFitsExactly(t *testing.T) {
 	t.Parallel()
 
-	// contentH = height - 2(border) = 3, content has exactly 3 lines.
-	// Content fits, so no scrollbar column at all.
 	vpWidth := 12
 	vpHeight := 5
 
@@ -1423,27 +1125,19 @@ func TestBorderedScrollbarFitsContentFitsExactly(t *testing.T) {
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
 
-	if len(viewLines) != vpHeight {
-		t.Errorf("lines = %d, want %d", len(viewLines), vpHeight)
-	}
+	assert.Len(t, viewLines, vpHeight, "lines = %d, want %d", len(viewLines), vpHeight)
 
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", idx)
 	}
 
-	// No scrollbar thumb when content fits exactly.
-	if strings.Contains(view, "█") {
-		t.Errorf("scrollbar thumb should not appear when content fits exactly\n%q", view)
-	}
+	assert.NotContains(t, view, "█",
+		"scrollbar thumb should not appear when content fits exactly\n%q", view)
 }
 
 func TestBorderedScrollbarContentOverflowsByOne(t *testing.T) {
 	t.Parallel()
 
-	// contentH = height - 2(border) = 3, content has 4 lines (overflows by 1).
-	// Scrollbar should appear.
 	vpWidth := 12
 	vpHeight := 5
 
@@ -1451,93 +1145,69 @@ func TestBorderedScrollbarContentOverflowsByOne(t *testing.T) {
 	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if !strings.Contains(view, "█") && !strings.Contains(view, "│") {
-		t.Errorf("scrollbar should appear when content overflows by 1\n%q", view)
-	}
+	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"scrollbar should appear when content overflows by 1\n%q", view)
 
 	viewLines := strings.Split(view, "\n")
 	for idx, line := range viewLines {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("line %d: width = %d, want %d: %q", idx, style.CellWidth([]byte(line)), vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", idx)
 	}
 }
 
 func TestSetContentScrollbarAtTopAndBottom(t *testing.T) {
 	t.Parallel()
 
-	// Non-bordered, scrollbar, content that wraps due to being too wide.
 	vpWidth := 10
 	vpHeight := 3
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
-	// 50 chars, wraps to ~7 lines at contentWidth=8, overflows viewport
 	_ = mdl.SetContent(splitLines(strings.Repeat("abcdefghij", 5)))
 
-	if mdl.TotalLineCount() <= vpHeight {
-		t.Fatalf("expected content to overflow, got %d lines <= %d height", mdl.TotalLineCount(), vpHeight)
-	}
+	require.Greater(t, mdl.TotalLineCount(), vpHeight, "expected content to overflow, got %d lines <= %d height", mdl.TotalLineCount(), vpHeight)
 
-	// At top: scrollbar must show
 	view := buffer.LinesBufToStringForTests(mdl.Render())
-	if !strings.Contains(view, "█") {
-		t.Errorf("at top: scrollbar thumb should be visible\n%q", view)
-	}
+	assert.Contains(t, view, "█", "at top: scrollbar thumb should be visible\n%q", view)
 
 	for i, line := range strings.Split(view, "\n") {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("at top line %d: width=%d want %d", i, style.CellWidth([]byte(line)), vpWidth)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "at top line %d", i)
 	}
 
-	// At bottom: scrollbar must still show
 	mdl.GotoBottom()
 
 	view = buffer.LinesBufToStringForTests(mdl.Render())
-	if !strings.Contains(view, "█") && !strings.Contains(view, "│") {
-		t.Errorf("at bottom: scrollbar should be visible\n%q", view)
-	}
+	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
+		"at bottom: scrollbar should be visible\n%q", view)
 
 	for i, line := range strings.Split(view, "\n") {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("at bottom line %d: width=%d want %d", i, style.CellWidth([]byte(line)), vpWidth)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "at bottom line %d", i)
 	}
 }
 
 func TestBorderedSetContentScrollbarAtTopAndBottom(t *testing.T) {
 	t.Parallel()
 
-	// Bordered + scrollbar, content wraps due to width.
 	vpWidth := 14
 	vpHeight := 6
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
-	// At full content width (12): 50 chars → 5 lines > contentH=4 → overflow → rewrap at 10
 	_ = mdl.SetContent(splitLines(strings.Repeat("x", 50)))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	for i, line := range strings.Split(view, "\n") {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("line %d: width=%d want %d", i, style.CellWidth([]byte(line)), vpWidth)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "line %d", i)
 	}
 
-	// At bottom
 	mdl.GotoBottom()
 
 	view = buffer.LinesBufToStringForTests(mdl.Render())
 	for i, line := range strings.Split(view, "\n") {
-		if style.CellWidth([]byte(line)) != vpWidth {
-			t.Errorf("at bottom line %d: width=%d want %d", i, style.CellWidth([]byte(line)), vpWidth)
-		}
+		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "at bottom line %d", i)
 	}
 
-	if !strings.Contains(view, "█") {
-		t.Errorf("at bottom: scrollbar thumb should be visible\n%q", view)
-	}
+	assert.Contains(t, view, "█",
+		"at bottom: scrollbar thumb should be visible\n%q", view)
 }
 
 func TestMainViewportScrollbarOnAllLines(t *testing.T) {
@@ -1573,25 +1243,19 @@ func TestMainViewportScrollbarOnAllLines(t *testing.T) {
 
 	_ = mdl.SetContent(splitLines(content.String()))
 
-	if mdl.TotalLineCount() <= vpHeight {
-		t.Fatalf("expected overflow, got %d lines <= %d height", mdl.TotalLineCount(), vpHeight)
-	}
+	require.Greater(t, mdl.TotalLineCount(), vpHeight, "expected overflow, got %d lines <= %d height", mdl.TotalLineCount(), vpHeight)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
 
 	for idx, line := range viewLines {
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: width=%d want %d: %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, visibleW, "line %d", idx)
 
 		hasScrollbarTrack := strings.Contains(line, "│")
-
 		hasScrollbarThumb := strings.Contains(line, "█")
-		if !hasScrollbarTrack && !hasScrollbarThumb {
-			t.Errorf("line %d: MISSING scrollbar (width=%d): %q", idx, visibleW, line)
-		}
+		assert.True(t, hasScrollbarTrack || hasScrollbarThumb,
+			"line %d: MISSING scrollbar (width=%d): %q", idx, visibleW, line)
 	}
 }
 
@@ -1630,16 +1294,13 @@ func TestMainViewportScrollbarWithANSIContent(t *testing.T) {
 		content.WriteString("\n")
 	}
 
-	// Simulate syncItem: set width, then height, then content
 	mdl.SetWidth(vpWidth)
 	mdl.SetHeight(vpHeight)
 	_ = mdl.SetContent(splitLines(content.String()))
 
 	t.Logf("TotalLineCount=%d contentH=%d ContentWidth=%d", mdl.TotalLineCount(), vpHeight, mdl.ContentWidth())
 
-	if mdl.TotalLineCount() <= vpHeight {
-		t.Fatalf("expected overflow, got %d lines <= %d height", mdl.TotalLineCount(), vpHeight)
-	}
+	require.Greater(t, mdl.TotalLineCount(), vpHeight, "expected overflow, got %d lines <= %d height", mdl.TotalLineCount(), vpHeight)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -1649,21 +1310,14 @@ func TestMainViewportScrollbarWithANSIContent(t *testing.T) {
 		hasTrack := strings.Contains(line, "│")
 		hasThumb := strings.Contains(line, "█")
 
-		if visibleW != vpWidth {
-			t.Errorf("line %d: width=%d want %d track=%v thumb=%v", idx, visibleW, vpWidth, hasTrack, hasThumb)
-		}
-
-		if !hasTrack && !hasThumb {
-			t.Errorf("line %d: MISSING scrollbar (width=%d)", idx, visibleW)
-		}
+		assert.Equal(t, vpWidth, visibleW, "line %d: width=%d want %d track=%v thumb=%v", idx, visibleW, vpWidth, hasTrack, hasThumb)
+		assert.True(t, hasTrack || hasThumb, "line %d: MISSING scrollbar (width=%d)", idx, visibleW)
 	}
 }
 
 func TestScrollbarReserveContentFits(t *testing.T) {
 	t.Parallel()
 
-	// When scrollbarReserve is set and content fits, every line must be
-	// exactly vpWidth chars with a 2-space scrollbar column.
 	vpWidth := 20
 	vpHeight := 10
 
@@ -1676,26 +1330,20 @@ func TestScrollbarReserveContentFits(t *testing.T) {
 
 	_ = mdl.SetContent(splitLines("short content"))
 
-	if mdl.TotalLineCount() > vpHeight {
-		t.Fatalf("content should fit, got %d lines", mdl.TotalLineCount())
-	}
+	require.LessOrEqual(t, mdl.TotalLineCount(), vpHeight, "content should fit, got %d lines", mdl.TotalLineCount())
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
 
 	for idx, line := range viewLines {
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: width=%d want %d: %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, visibleW, "line %d", idx)
 	}
 }
 
 func TestScrollbarReserveWidthMatchesOverflow(t *testing.T) {
 	t.Parallel()
 
-	// ContentWidth must be the same whether content overflows or not
-	// when scrollbarReserve is set.
 	vpWidth := 20
 	vpHeight := 3
 
@@ -1706,24 +1354,18 @@ func TestScrollbarReserveWidthMatchesOverflow(t *testing.T) {
 		WithScrollbarReserve(),
 	)
 
-	// Short content: fits
 	_ = mdl.SetContent(splitLines("short"))
 	cwFits := mdl.ContentWidth()
 
-	// Long content: overflows
 	_ = mdl.SetContent(splitLines(strings.Repeat("x", 200)))
 	cwOverflows := mdl.ContentWidth()
 
-	if cwFits != cwOverflows {
-		t.Errorf("ContentWidth changed: fits=%d overflows=%d, should be same with scrollbarReserve", cwFits, cwOverflows)
-	}
+	assert.Equal(t, cwFits, cwOverflows, "ContentWidth changed: fits=%d overflows=%d, should be same with scrollbarReserve", cwFits, cwOverflows)
 }
 
 func TestScrollbarReserveWithWideContent(t *testing.T) {
 	t.Parallel()
 
-	// Content that's wider than ContentWidth should be wrapped,
-	// and every line in View() should be exactly vpWidth.
 	vpWidth := 20
 	vpHeight := 5
 
@@ -1734,7 +1376,6 @@ func TestScrollbarReserveWithWideContent(t *testing.T) {
 		WithScrollbarReserve(),
 	)
 
-	// Content with a line exactly vpWidth chars (wider than ContentWidth=18)
 	content := strings.Repeat("x", vpWidth) + "\nshort\n" + strings.Repeat("y", vpWidth) + "\n"
 	_ = mdl.SetContent(splitLines(content))
 
@@ -1743,17 +1384,13 @@ func TestScrollbarReserveWithWideContent(t *testing.T) {
 
 	for idx, line := range viewLines {
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: width=%d want %d: %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, visibleW, "line %d", idx)
 	}
 }
 
 func TestScrollbarReserveSyncItemSequence(t *testing.T) {
 	t.Parallel()
 
-	// Simulate exact syncItem sequence for main viewport:
-	// SetWidth → SetHeight(prelim) → SetContent → SetHeight(final)
 	vpWidth := 20
 	vpHeight := 5
 
@@ -1764,14 +1401,11 @@ func TestScrollbarReserveSyncItemSequence(t *testing.T) {
 		WithScrollbarReserve(),
 	)
 
-	// Content fits (3 lines < 5 height)
 	content := "line1\nline2\nline3\n"
 
-	// syncItem sequence
 	mdl.SetWidth(vpWidth)
-	mdl.SetHeight(vpHeight) // preliminary
+	mdl.SetHeight(vpHeight)
 	_ = mdl.SetContent(splitLines(content))
-	// finalHeight with explicitHeight: same as preliminary
 	mdl.SetHeight(vpHeight)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
@@ -1781,12 +1415,9 @@ func TestScrollbarReserveSyncItemSequence(t *testing.T) {
 
 	for idx, line := range viewLines {
 		visibleW := style.CellWidth([]byte(line))
-		if visibleW != vpWidth {
-			t.Errorf("line %d: width=%d want %d: %q", idx, visibleW, vpWidth, line)
-		}
+		assert.Equal(t, vpWidth, visibleW, "line %d", idx)
 	}
 
-	// Now set overflowing content
 	longContent := ""
 
 	var longContentSb1875 strings.Builder
@@ -1809,13 +1440,8 @@ func TestScrollbarReserveSyncItemSequence(t *testing.T) {
 		hasTrack := strings.Contains(line, "│")
 		hasThumb := strings.Contains(line, "█")
 
-		if visibleW != vpWidth {
-			t.Errorf("overflow line %d: width=%d want %d", idx, visibleW, vpWidth)
-		}
-
-		if !hasTrack && !hasThumb {
-			t.Errorf("overflow line %d: MISSING scrollbar", idx)
-		}
+		assert.Equal(t, vpWidth, visibleW, "overflow line %d: width=%d want %d", idx, visibleW, vpWidth)
+		assert.True(t, hasTrack || hasThumb, "overflow line %d: MISSING scrollbar", idx)
 	}
 }
 
@@ -1829,9 +1455,7 @@ func TestNonMainViewportSetContentReturnsNil(t *testing.T) {
 	)
 
 	err := mdl.SetContent(splitLines(strings.Repeat("x", 500)))
-	if err != nil {
-		t.Fatalf("non-main viewport should not error: %v", err)
-	}
+	require.NoError(t, err, "non-main viewport should not error")
 }
 
 func TestSyncFixedHeight(t *testing.T) {
@@ -1844,21 +1468,11 @@ func TestSyncFixedHeight(t *testing.T) {
 	)
 
 	err := mdl.Sync(splitLines("line1\nline2\nline3"), 20, 5)
-	if err != nil {
-		t.Fatalf("Sync should not error: %v", err)
-	}
+	require.NoError(t, err, "Sync should not error")
 
-	if mdl.Width() != 20 {
-		t.Errorf("Width=%d want 20", mdl.Width())
-	}
-
-	if mdl.Height() != 5 {
-		t.Errorf("Height=%d want 5", mdl.Height())
-	}
-
-	if mdl.YOffset() != 0 {
-		t.Errorf("YOffset=%d want 0", mdl.YOffset())
-	}
+	assert.Equal(t, 20, mdl.Width())
+	assert.Equal(t, 5, mdl.Height())
+	assert.Equal(t, 0, mdl.YOffset())
 }
 
 func TestSyncAutoHeightWithMaxHeight(t *testing.T) {
@@ -1873,13 +1487,9 @@ func TestSyncAutoHeightWithMaxHeight(t *testing.T) {
 	)
 
 	err := mdl.Sync(splitLines("line1\nline2"), 20, 0)
-	if err != nil {
-		t.Fatalf("Sync should not error: %v", err)
-	}
+	require.NoError(t, err, "Sync should not error")
 
-	if mdl.Height() != 4 { // 2 lines + borderOverhead(2)
-		t.Errorf("Height=%d want 4 (2 lines + border)", mdl.Height())
-	}
+	assert.Equal(t, 4, mdl.Height(), "Height=%d want 4 (2 lines + border)", mdl.Height())
 }
 
 func TestSyncAutoHeightClampedByMaxHeight(t *testing.T) {
@@ -1894,13 +1504,9 @@ func TestSyncAutoHeightClampedByMaxHeight(t *testing.T) {
 	)
 
 	err := mdl.Sync(splitLines("line1\nline2\nline3\nline4\nline5"), 20, 0)
-	if err != nil {
-		t.Fatalf("Sync should not error: %v", err)
-	}
+	require.NoError(t, err, "Sync should not error")
 
-	if mdl.Height() != 4 { // maxHeight(2) + borderOverhead(2)
-		t.Errorf("Height=%d want 4 (maxHeight=2 + border)", mdl.Height())
-	}
+	assert.Equal(t, 4, mdl.Height(), "Height=%d want 4 (maxHeight=2 + border)", mdl.Height())
 }
 
 func TestSyncAutoScrollToBottom(t *testing.T) {
@@ -1913,18 +1519,12 @@ func TestSyncAutoScrollToBottom(t *testing.T) {
 	)
 
 	_ = mdl.Sync(splitLines("line1\nline2\nline3\nline4\nline5"), 20, 0)
-	if mdl.ScrollPercent() != 1 {
-		t.Errorf("should be at bottom after initial Sync, got %.2f", mdl.ScrollPercent())
-	}
+	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "should be at bottom after initial Sync, got %.2f", mdl.ScrollPercent())
 
 	err := mdl.Sync(splitLines("line1\nline2\nline3\nline4\nline5\nline6\nline7"), 20, 0)
-	if err != nil {
-		t.Fatalf("Sync should not error: %v", err)
-	}
+	require.NoError(t, err, "Sync should not error")
 
-	if mdl.ScrollPercent() != 1 {
-		t.Errorf("should stay at bottom after Sync, got %.2f", mdl.ScrollPercent())
-	}
+	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "should stay at bottom after Sync, got %.2f", mdl.ScrollPercent())
 }
 
 func TestSyncMainNoAutoScroll(t *testing.T) {
@@ -1941,11 +1541,7 @@ func TestSyncMainNoAutoScroll(t *testing.T) {
 	mdl.SetYOffset(0)
 
 	err := mdl.Sync(splitLines("line1\nline2\nline3\nline4\nline5"), 20, 3)
-	if err != nil {
-		t.Fatalf("Sync should not error: %v", err)
-	}
+	require.NoError(t, err, "Sync should not error")
 
-	if mdl.YOffset() != 0 {
-		t.Errorf("main viewport should not auto-scroll, got yOffset=%d", mdl.YOffset())
-	}
+	assert.Equal(t, 0, mdl.YOffset(), "main viewport should not auto-scroll, got yOffset=%d", mdl.YOffset())
 }

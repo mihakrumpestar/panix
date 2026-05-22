@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStripANSI(t *testing.T) {
@@ -28,11 +30,7 @@ func TestStripANSI(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := string(style.StripANSI([]byte(test.input)))
-			if got != test.want {
-				t.Errorf("StripANSI(%q) = %q, want %q", test.input, got, test.want)
-			}
+			assert.Equal(t, test.want, string(style.StripANSI([]byte(test.input))))
 		})
 	}
 }
@@ -57,11 +55,7 @@ func TestNormalizeText(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := normalizeText(test.input)
-			if got != test.want {
-				t.Errorf("normalizeText(%q) = %q, want %q", test.input, got, test.want)
-			}
+			assert.Equal(t, test.want, normalizeText(test.input))
 		})
 	}
 }
@@ -90,41 +84,21 @@ func TestWriteOSC52(t *testing.T) {
 			var buf bytes.Buffer
 
 			err := writeOSC52(&buf, normalized)
-			if err != nil {
-				t.Errorf("writeOSC52(%q) error: %v", normalized, err)
 
-				return
-			}
+			require.NoError(t, err, "writeOSC52(%q)", normalized)
 
 			output := buf.String()
-
 			prefix := "\x1b]52;"
 			suffix := "\x07"
 
-			if !strings.HasPrefix(output, prefix) {
-				t.Errorf("OSC52 output missing prefix %q, got %q", prefix, output)
-
-				return
-			}
-
-			if !strings.HasSuffix(output, suffix) {
-				t.Errorf("OSC52 output missing suffix %q, got %q", suffix, output)
-
-				return
-			}
+			assert.True(t, strings.HasPrefix(output, prefix), "OSC52 output missing prefix %q: %q", prefix, output)
+			assert.True(t, strings.HasSuffix(output, suffix), "OSC52 output missing suffix %q: %q", suffix, output)
 
 			encoded := strings.TrimPrefix(strings.TrimSuffix(output, suffix), prefix)
 
 			decoded, err := base64.StdEncoding.DecodeString(encoded)
-			if err != nil {
-				t.Errorf("failed to decode OSC52 base64: %v", err)
-
-				return
-			}
-
-			if string(decoded) != normalized {
-				t.Errorf("OSC52 decoded = %q, want %q", string(decoded), normalized)
-			}
+			require.NoError(t, err, "failed to decode OSC52 base64")
+			assert.Equal(t, normalized, string(decoded))
 		})
 	}
 }

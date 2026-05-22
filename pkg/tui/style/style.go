@@ -687,40 +687,9 @@ func (s Style) renderColorOnly(content [][]byte) [][]byte {
 
 	prefix := s.stylePrefix()
 	reset := ansiReset
-	prefixLen := len(prefix)
-	resetLen := len(reset)
 
-	hasEmbeddedReset := false
-
-	for _, line := range content {
-		if bytes.Contains(line, reset) {
-			hasEmbeddedReset = true
-
-			break
-		}
-	}
-
-	if !hasEmbeddedReset {
-		perLine := prefixLen + resetLen
-
-		totalSize := 0
-		for _, line := range content {
-			totalSize += perLine + len(line)
-		}
-
-		buf := make([]byte, totalSize)
-		result := make([][]byte, len(content))
-
-		off := 0
-		for idx, line := range content {
-			start := off
-			off += copy(buf[off:], prefix)
-			off += copy(buf[off:], line)
-			off += copy(buf[off:], reset)
-			result[idx] = buf[start:off]
-		}
-
-		return result
+	if !hasEmbeddedReset(content, reset) {
+		return renderColorOnlyFast(content, prefix, reset)
 	}
 
 	result := make([][]byte, len(content))
@@ -731,6 +700,41 @@ func (s Style) renderColorOnly(content [][]byte) [][]byte {
 		buf = appendWithResetReemitBytes(buf, line, prefix, reset)
 		buf = append(buf, reset...)
 		result[idx] = buf
+	}
+
+	return result
+}
+
+func hasEmbeddedReset(content [][]byte, reset []byte) bool {
+	for _, line := range content {
+		if bytes.Contains(line, reset) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func renderColorOnlyFast(content [][]byte, prefix, reset []byte) [][]byte {
+	prefixLen := len(prefix)
+	resetLen := len(reset)
+	perLine := prefixLen + resetLen
+
+	totalSize := 0
+	for _, line := range content {
+		totalSize += perLine + len(line)
+	}
+
+	buf := make([]byte, totalSize)
+	result := make([][]byte, len(content))
+
+	off := 0
+	for idx, line := range content {
+		start := off
+		off += copy(buf[off:], prefix)
+		off += copy(buf[off:], line)
+		off += copy(buf[off:], reset)
+		result[idx] = buf[start:off]
 	}
 
 	return result

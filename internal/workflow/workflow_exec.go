@@ -113,7 +113,8 @@ func (w *Workflow) executePhase(phaseI phase.Phase, fleetLeaf *fleet.FleetLeaf) 
 		panic("internal error: no handler registered for phase: " + string(phaseI))
 	}
 
-	if skipper, ok := handler.(phasehandler.Skipper); ok && skipper.ShouldSkip(fleetLeaf) {
+	skipper, ok := handler.(phasehandler.Skipper)
+	if ok && skipper.ShouldSkip(fleetLeaf) {
 		return nil
 	}
 

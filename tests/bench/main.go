@@ -120,23 +120,21 @@ func parse(data []byte) ([]bench, env, bool) {
 
 	has := false
 
+	setMeta := map[string]func(string){
+		"goos":      func(v string) { envInfo.goos = v },
+		"goarch":    func(v string) { envInfo.goarch = v },
+		"cpu":       func(v string) { envInfo.cpu = v },
+		"pkg":       func(v string) { curPkg = v },
+		"benchtime": func(v string) { envInfo.benchtime = v },
+		"timestamp": func(v string) { envInfo.timestamp = v },
+	}
+
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		line := strings.TrimRight(sc.Text(), "\r")
 		if match := metaLineRe.FindStringSubmatch(line); match != nil {
-			switch match[1] {
-			case "goos":
-				envInfo.goos = match[2]
-			case "goarch":
-				envInfo.goarch = match[2]
-			case "cpu":
-				envInfo.cpu = match[2]
-			case "pkg":
-				curPkg = match[2]
-			case "benchtime":
-				envInfo.benchtime = match[2]
-			case "timestamp":
-				envInfo.timestamp = match[2]
+			if fn, ok := setMeta[match[1]]; ok {
+				fn(match[2])
 			}
 
 			continue

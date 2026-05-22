@@ -2,6 +2,8 @@ package zeroterm
 
 import (
 	"bytes"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
 
@@ -24,25 +26,20 @@ func TestZoneID_MarkBuf(t *testing.T) {
 
 	id.MarkBuf([]byte("Hello"), buf)
 
-	if buf.Len() != 1 {
-		t.Fatalf("MarkBuf: got %d lines, want 1", buf.Len())
-	}
+	assert.Equal(t, 1, buf.Len(), "MarkBuf: expected 1 line")
+
+	lineContent := string(buf.Line(0))
+	assert.Contains(t, lineContent, "Hello", "MarkBuf line should contain 'Hello': %q", lineContent)
 
 	line := buf.Line(0)
-	if !bytes.Contains(line, []byte("Hello")) {
-		t.Errorf("MarkBuf line should contain 'Hello': %q", line)
-	}
+	assert.True(t, bytes.Contains(line, []byte("Hello")), "MarkBuf line should contain 'Hello': %q", line)
 
 	open := id.FormatOpen(nil)
 	closeMarker := id.FormatClose(nil)
 
-	if !bytes.HasPrefix(line, open) {
-		t.Errorf("MarkBuf line should start with open marker: %q", line)
-	}
+	assert.True(t, bytes.HasPrefix(line, open), "MarkBuf line should start with open marker: %q", line)
 
-	if !bytes.HasSuffix(line, closeMarker) {
-		t.Errorf("MarkBuf line should end with close marker: %q", line)
-	}
+	assert.True(t, bytes.HasSuffix(line, closeMarker), "MarkBuf line should end with close marker: %q", line)
 }
 
 func TestZoneID_MarkBufMultiline(t *testing.T) {
@@ -55,14 +52,10 @@ func TestZoneID_MarkBufMultiline(t *testing.T) {
 
 	id.MarkBuf([]byte("line1\nline2\nline3"), buf)
 
-	if buf.Len() != 3 {
-		t.Fatalf("MarkBuf multiline: got %d lines, want 3", buf.Len())
-	}
+	require.Equal(t, 3, buf.Len(), "MarkBuf multiline: got %d lines, want 3")
 
 	for i, want := range []string{"line1", "line2", "line3"} {
-		if !bytes.Contains(buf.Line(i), []byte(want)) {
-			t.Errorf("line %d should contain %q: %q", i, want, buf.Line(i))
-		}
+		assert.True(t, bytes.Contains(buf.Line(i), []byte(want)), "line %d should contain %q: %q", i, want, buf.Line(i))
 	}
 }
 
@@ -76,9 +69,7 @@ func TestZoneID_MarkBufEmpty(t *testing.T) {
 
 	id.MarkBuf(nil, buf)
 
-	if buf.Len() != 1 {
-		t.Fatalf("MarkBuf empty: got %d lines, want 1", buf.Len())
-	}
+	require.Equal(t, 1, buf.Len(), "MarkBuf empty: got %d lines, want 1")
 }
 
 func TestZoneID_MarkBufMultilineExact(t *testing.T) {
@@ -91,18 +82,14 @@ func TestZoneID_MarkBufMultilineExact(t *testing.T) {
 
 	id.MarkBuf([]byte("line1\nline2\nline3"), buf)
 
-	if buf.Len() != 3 {
-		t.Fatalf("got %d lines, want 3", buf.Len())
-	}
+	require.Equal(t, 3, buf.Len(), "got %d lines, want 3")
 
 	open := string(id.FormatOpen(nil))
 	closeMarker := string(id.FormatClose(nil))
 
 	for i, want := range []string{"line1", "line2", "line3"} {
 		expected := open + want + closeMarker
-		if string(buf.Line(i)) != expected {
-			t.Errorf("line %d = %q, want %q", i, buf.Line(i), expected)
-		}
+		assert.Equal(t, expected, string(buf.Line(i)), "line %d = %q, want %q", i, buf.Line(i), expected)
 	}
 }
 
@@ -128,9 +115,7 @@ func TestZoneID_MarkBufNoZoneLeakWithPrefix(t *testing.T) {
 		prefix := line[:3]
 
 		found, ok := ZoneIDAtCol([]byte(prefix), 0)
-		if ok && found.Equal(id) {
-			t.Errorf("prefix at line %d col 0 should not be in zone", i)
-		}
+		assert.False(t, ok && found.Equal(id), "prefix at line %d col 0 should not be in zone", i)
 	}
 }
 
@@ -147,23 +132,17 @@ func TestZoneIDAtCol(t *testing.T) {
 	line := lb.Line(0)
 
 	found, ok := ZoneIDAtCol(line, 0)
-	if !ok || !found.Equal(id) {
-		t.Errorf("ZoneIDAtCol col 0 = (%v, %v), want match", found, ok)
-	}
+	assert.True(t, ok && found.Equal(id), "ZoneIDAtCol col 0 = (%v, %v), want match", found, ok)
 
 	found, ok = ZoneIDAtCol(line, 1)
-	if !ok || !found.Equal(id) {
-		t.Errorf("ZoneIDAtCol col 1 = (%v, %v), want match", found, ok)
-	}
+	assert.True(t, ok && found.Equal(id), "ZoneIDAtCol col 1 = (%v, %v), want match", found, ok)
 }
 
 func TestZoneIDAtColNoZone(t *testing.T) {
 	t.Parallel()
 
 	_, ok := ZoneIDAtCol([]byte("no zone here"), 0)
-	if ok {
-		t.Error("ZoneIDAtCol should return false for no zone")
-	}
+	assert.False(t, ok, "ZoneIDAtCol should return false for no zone")
 }
 
 func TestZoneLifecycleAcrossFrames(t *testing.T) {
@@ -184,9 +163,7 @@ func TestZoneLifecycleAcrossFrames(t *testing.T) {
 	buf1.Release()
 
 	found, ok := ZoneIDAtCol(frame1Buf.Line(0), 2)
-	if !ok || !found.Equal(id) {
-		t.Errorf("frame1 zone at col 2 should match id")
-	}
+	assert.True(t, ok && found.Equal(id), "frame1 zone at col 2 should match id")
 
 	frame2Buf := buffer.NewLinesBufDiff()
 	buf2 := buffer.NewLinesBuf()
@@ -198,9 +175,7 @@ func TestZoneLifecycleAcrossFrames(t *testing.T) {
 	buf2.Release()
 
 	found, ok = ZoneIDAtCol(frame2Buf.Line(0), 3)
-	if !ok || !found.Equal(id) {
-		t.Errorf("frame2 zone at col 3 should match id")
-	}
+	assert.True(t, ok && found.Equal(id), "frame2 zone at col 3 should match id")
 }
 
 func TestZoneID_MarkLines(t *testing.T) {
@@ -219,9 +194,7 @@ func TestZoneID_MarkLines(t *testing.T) {
 
 	id.MarkLines(src, dst)
 
-	if dst.Len() != 2 {
-		t.Fatalf("MarkLines: got %d lines, want 2", dst.Len())
-	}
+	require.Equal(t, 2, dst.Len(), "MarkLines: got %d lines, want 2")
 }
 
 func TestZoneID_MarkLinesEmpty(t *testing.T) {
@@ -237,9 +210,7 @@ func TestZoneID_MarkLinesEmpty(t *testing.T) {
 
 	id.MarkLines(src, dst)
 
-	if dst.Len() != 1 {
-		t.Fatalf("MarkLines empty: got %d lines, want 1", dst.Len())
-	}
+	require.Equal(t, 1, dst.Len(), "MarkLines empty: got %d lines, want 1")
 }
 
 func TestZoneID_FormatOpenClose(t *testing.T) {
@@ -249,11 +220,6 @@ func TestZoneID_FormatOpenClose(t *testing.T) {
 	open := id.FormatOpen(nil)
 	closeMarker := id.FormatClose(nil)
 
-	if string(open) != "\x1b[42z" {
-		t.Errorf("FormatOpen(42) = %q, want \\x1b[42z", open)
-	}
-
-	if string(closeMarker) != "\x1b[/42z" {
-		t.Errorf("FormatClose(42) = %q, want \\x1b[/42z", closeMarker)
-	}
+	assert.Equal(t, "\x1b[42z", string(open), "FormatOpen(42) = %q, want \\x1b[42z", open)
+	assert.Equal(t, "\x1b[/42z", string(closeMarker), "FormatClose(42) = %q, want \\x1b[/42z", closeMarker)
 }

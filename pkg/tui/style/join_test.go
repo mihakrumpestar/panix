@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/stretchr/testify/assert"
 )
 
 func strsToBytes(ss []string) [][]byte {
@@ -81,9 +82,7 @@ func TestJoinHorizontal_Equivalence(t *testing.T) {
 			got := bufJoinLines(buf)
 			buf.Release()
 
-			if expected != got {
-				t.Errorf("Mismatch for %s:\n  expected: %q\n  got:      %q", testCase.name, expected, got)
-			}
+			assert.Equal(t, expected, got, "Mismatch for %s", testCase.name)
 		})
 	}
 }
@@ -94,19 +93,14 @@ func TestJoinHorizontal_EmptyBlocks(t *testing.T) {
 	buf := buffer.NewLinesBuf()
 	JoinHorizontal(buf, Top)
 
-	if buf.Len() != 0 {
-		t.Errorf("JoinHorizontal() = %d lines, want 0", buf.Len())
-	}
-
+	assert.Equal(t, 0, buf.Len())
 	buf.Release()
 
 	buf = buffer.NewLinesBuf()
 	JoinHorizontal(buf, Top, []byte("hello"))
 
-	if buf.Len() != 1 || string(buf.Line(0)) != "hello" {
-		t.Errorf("JoinHorizontal(single) = %v, want [hello]", buf.Line(0))
-	}
-
+	assert.Equal(t, 1, buf.Len())
+	assert.Equal(t, "hello", string(buf.Line(0)))
 	buf.Release()
 }
 
@@ -184,9 +178,7 @@ func TestJoinHorizontalBufs_Equivalence(t *testing.T) {
 			got := bufJoinLines(buf)
 			buf.Release()
 
-			if expected != got {
-				t.Errorf("Mismatch for %s:\n  expected: %q\n  got:      %q", testCase.name, expected, got)
-			}
+			assert.Equal(t, expected, got, "Mismatch for %s", testCase.name)
 		})
 	}
 }
@@ -197,10 +189,7 @@ func TestJoinHorizontalBufs_EmptyBlocks(t *testing.T) {
 	buf := buffer.NewLinesBuf()
 	JoinHorizontalBufs(buf, Top)
 
-	if buf.Len() != 0 {
-		t.Errorf("JoinHorizontalBufs() = %d lines, want 0", buf.Len())
-	}
-
+	assert.Equal(t, 0, buf.Len())
 	buf.Release()
 
 	single := buffer.NewLinesBuf()
@@ -209,10 +198,8 @@ func TestJoinHorizontalBufs_EmptyBlocks(t *testing.T) {
 	buf = buffer.NewLinesBuf()
 	JoinHorizontalBufs(buf, Top, single)
 
-	if buf.Len() != 1 || string(buf.Line(0)) != "hello" {
-		t.Errorf("JoinHorizontalBufs(single) = %v, want [hello]", buf.Line(0))
-	}
-
+	assert.Equal(t, 1, buf.Len())
+	assert.Equal(t, "hello", string(buf.Line(0)))
 	buf.Release()
 	single.Release()
 }

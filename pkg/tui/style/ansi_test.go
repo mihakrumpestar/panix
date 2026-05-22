@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAnsiStyle_Equivalence(t *testing.T) {
@@ -47,12 +48,12 @@ func TestAnsiStyle_Equivalence(t *testing.T) {
 				expectedVisible := string(StripANSI([]byte(expected)))
 				gotVisible := string(StripANSI(bytesToSingleByte(got)))
 
-				if expectedVisible != gotVisible {
-					t.Errorf("Visible content mismatch for %q (color=%s bold=%v):\n  expected: %q\n  got:      %q", input, color, bold, expectedVisible, gotVisible)
-				}
+				assert.Equal(t, expectedVisible, gotVisible,
+					"Visible content mismatch for %q (color=%s bold=%v)", input, color, bold)
 
-				if input != "" && !strings.Contains(string(bytesToSingleByte(got)), "\x1b[") {
-					t.Errorf("Missing ANSI sequences for %q (color=%s bold=%v)", input, color, bold)
+				if input != "" {
+					assert.Contains(t, string(bytesToSingleByte(got)), "\x1b[",
+						"Missing ANSI sequences for %q (color=%s bold=%v)", input, color, bold)
 				}
 
 				buf.Release()
@@ -70,9 +71,7 @@ func TestAnsiStyle_EmptyString(t *testing.T) {
 	buf := buffer.NewLinesBuf()
 	ansi.render(buf, nil)
 
-	if buf.Len() != 0 {
-		t.Errorf("ansiStyle.render(nil) = %d lines, want 0", buf.Len())
-	}
+	assert.Equal(t, 0, buf.Len())
 
 	buf.Release()
 }

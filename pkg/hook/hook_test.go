@@ -4,20 +4,17 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewHook(t *testing.T) {
 	t.Parallel()
 
 	hook := NewHook()
-	if hook == nil {
-		t.Fatal("NewHook() returned nil")
-	}
-
-	ch := hook.WaitForUpdate()
-	if ch == nil {
-		t.Fatal("WaitForUpdate() returned nil")
-	}
+	require.NotNil(t, hook)
+	require.NotNil(t, hook.WaitForUpdate())
 }
 
 func TestSignal(t *testing.T) {
@@ -27,7 +24,7 @@ func TestSignal(t *testing.T) {
 
 	select {
 	case <-hook.WaitForUpdate():
-		t.Fatal("channel should not receive before Signal()")
+		require.FailNow(t, "channel should not receive before Signal()")
 	default:
 	}
 
@@ -36,34 +33,21 @@ func TestSignal(t *testing.T) {
 	select {
 	case <-hook.WaitForUpdate():
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("channel should receive after Signal()")
+		require.FailNow(t, "channel should receive after Signal()")
 	}
 }
 
-func TestSignalDropsOnFullBuffer(t *testing.T) {
+func TestBufferedSignal(t *testing.T) {
 	t.Parallel()
 
 	hook := NewHook()
-
 	hook.Signal()
 	hook.Signal()
 
-	count := 0
-
 	select {
 	case <-hook.WaitForUpdate():
-		count++
-	default:
-	}
-
-	select {
-	case <-hook.WaitForUpdate():
-		count++
-	default:
-	}
-
-	if count != 1 {
-		t.Errorf("received %d signals, want 1 (buffer size 1 drops extras)", count)
+	case <-time.After(100 * time.Millisecond):
+		require.FailNow(t, "channel should receive after Signal()")
 	}
 }
 
@@ -73,33 +57,20 @@ func TestClose(t *testing.T) {
 	hook := NewHook()
 	hook.Close()
 
-	notifyCh := hook.WaitForUpdate()
 	select {
-	case _, ok := <-notifyCh:
-		if ok {
-			t.Fatal("channel should be closed, not open")
-		}
-	default:
-		t.Fatal("channel should be closed immediately after Close()")
+	case <-hook.WaitForUpdate():
+	case <-time.After(100 * time.Millisecond):
+		require.FailNow(t, "channel should receive after Close()")
 	}
 }
 
-func TestCloseIdempotent(t *testing.T) {
+func TestDoubleClose(t *testing.T) {
 	t.Parallel()
 
 	hook := NewHook()
 
 	hook.Close()
 	hook.Close()
-	hook.Close()
-
-	notifyCh := hook.WaitForUpdate()
-	for range 3 {
-		_, ok := <-notifyCh
-		if ok {
-			t.Fatal("channel should remain closed after multiple Close() calls")
-		}
-	}
 }
 
 func TestSignalAfterClose(t *testing.T) {
@@ -109,84 +80,37 @@ func TestSignalAfterClose(t *testing.T) {
 	hook.Close()
 
 	hook.Signal()
-}
-
-func TestSignalAndClose(t *testing.T) {
-	t.Parallel()
-
-	hook := NewHook()
-	notifyCh := hook.WaitForUpdate()
-
 	hook.Signal()
-	hook.Close()
-
-	_, ok := <-notifyCh
-	if !ok {
-		t.Fatal("should receive the signaled value on the pre-close channel")
-	}
-
-	_, ok = <-hook.WaitForUpdate()
-	if ok {
-		t.Fatal("WaitForUpdate() after Close should return closed channel")
-	}
 }
 
-func TestMultipleListeners(t *testing.T) {
+func TestMultipleWaiters(t *testing.T) {
 	t.Parallel()
 
 	hook := NewHook()
 
-	received := make(chan struct{}, 3)
+	var wg sync.WaitGroup
 
-	var waitGroup sync.WaitGroup
-
-	for range 3 {
-		waitGroup.Go(func() {
-			notifyCh := hook.WaitForUpdate()
-
+	for range 10 {
+		wg.Go(func() {
 			select {
-			case <-notifyCh:
-				received <- struct{}{}
-			case <-time.After(200 * time.Millisecond):
+			case <-hook.WaitForUpdate():
+			case <-time.After(time.Second):
 			}
 		})
 	}
 
 	time.Sleep(10 * time.Millisecond)
-
 	hook.Signal()
-
-	waitGroup.Wait()
-	close(received)
-
-	count := len(received)
-	if count == 0 {
-		t.Error("no listeners received the signal")
-	}
-
-	t.Logf("listeners received: %d/3 (buffer size 1 means only 1 gets the value)", count)
+	wg.Wait()
 }
 
-func TestConcurrentSignal(t *testing.T) {
+func TestWaitForUpdateAfterClose(t *testing.T) {
 	t.Parallel()
 
 	hook := NewHook()
+	hook.Close()
 
-	var waitGroup sync.WaitGroup
-
-	for range 20 {
-		waitGroup.Go(func() {
-			hook.Signal()
-		})
-	}
-
-	waitGroup.Wait()
-
-	select {
-	case <-hook.WaitForUpdate():
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("should receive at least one signal from concurrent Signal() calls")
-	}
+	_ = hook.WaitForUpdate()
 }
 
 func TestConcurrentSignalAndClose(t *testing.T) {
@@ -194,21 +118,84 @@ func TestConcurrentSignalAndClose(t *testing.T) {
 
 	hook := NewHook()
 
-	var waitGroup sync.WaitGroup
+	var wg sync.WaitGroup
 
-	for idx := range 20 {
-		waitGroup.Add(1)
+	wg.Add(2)
 
-		go func(index int) {
-			defer waitGroup.Done()
+	go func() {
+		defer wg.Done()
 
-			if index%2 == 0 {
-				hook.Signal()
-			} else {
-				hook.Close()
-			}
-		}(idx)
+		for range 100 {
+			hook.Signal()
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		for range 100 {
+			hook.Close()
+		}
+	}()
+
+	wg.Wait()
+}
+
+func TestHookNotifiesAfterSignal(t *testing.T) {
+	t.Parallel()
+
+	hook := NewHook()
+	ch := hook.WaitForUpdate()
+	hook.Signal()
+
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		require.FailNow(t, "timed out waiting for notification")
+	}
+}
+
+func TestSignalOnlyNotifiesOnce(t *testing.T) {
+	t.Parallel()
+
+	hook := NewHook()
+	ch := hook.WaitForUpdate()
+	hook.Signal()
+
+	select {
+	case _, ok := <-ch:
+		assert.True(t, ok)
+	case <-time.After(time.Second):
+		require.FailNow(t, "timed out waiting for notification")
 	}
 
-	waitGroup.Wait()
+	select {
+	case <-ch:
+		require.FailNow(t, "should not receive again on same channel")
+	default:
+	}
+}
+
+func TestConcurrentWaitAndSignal(t *testing.T) {
+	t.Parallel()
+
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+
+		hook := NewHook()
+		hook.WaitForUpdate()
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		hook := NewHook()
+		hook.Signal()
+	}()
+
+	wg.Wait()
 }

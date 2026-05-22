@@ -121,11 +121,44 @@ func ZoneIDAtCol(line []byte, targetCol int) (ZoneID, bool) {
 	return ZoneID{}, false
 }
 
-// parseZoneMarker skips non-zone ESC sequences and handles \x1b[<digits>z
-// (open) and \x1b[/<digits>z (close). Returns the new position and updated stack.
+func skipNonZoneCSI(line []byte, pos int) int {
+	for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x3F {
+		pos++
+	}
+
+	if pos < len(line) && line[pos] >= 0x40 && line[pos] <= 0x7E {
+		pos++
+	}
+
+	return pos
+}
+
+func parseZoneDigits(line []byte, pos int, isClose bool, zoneStack []ZoneID) (int, []ZoneID) {
+	digitStart := pos
+	for pos < len(line) && line[pos] >= '0' && line[pos] <= '9' {
+		pos++
+	}
+
+	if pos >= len(line) || line[pos] != 'z' {
+		return skipNonZoneCSI(line, pos), zoneStack
+	}
+
+	uid := zoneIDFromDigits(line[digitStart:pos])
+	pos++
+
+	if isClose {
+		if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1].id == uid.id {
+			zoneStack = zoneStack[:len(zoneStack)-1]
+		}
+
+		return pos, zoneStack
+	}
+
+	return pos, append(zoneStack, uid)
+}
 
 func parseZoneMarker(line []byte, pos int, zoneStack []ZoneID) (int, []ZoneID) {
-	pos++ // skip ESC
+	pos++
 
 	if pos >= len(line) || line[pos] != '[' {
 		if pos < len(line) {
@@ -135,43 +168,14 @@ func parseZoneMarker(line []byte, pos int, zoneStack []ZoneID) (int, []ZoneID) {
 		return pos, zoneStack
 	}
 
-	pos++ // skip '['
+	pos++
 
 	isClose := pos < len(line) && line[pos] == '/'
 	if isClose {
 		pos++
 	}
 
-	digitStart := pos
-	for pos < len(line) && line[pos] >= '0' && line[pos] <= '9' {
-		pos++
-	}
-
-	if pos < len(line) && line[pos] == 'z' {
-		uid := zoneIDFromDigits(line[digitStart:pos])
-		pos++
-
-		if isClose {
-			if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1].id == uid.id {
-				zoneStack = zoneStack[:len(zoneStack)-1]
-			}
-
-			return pos, zoneStack
-		}
-
-		return pos, append(zoneStack, uid)
-	}
-
-	// Not a zone marker — skip CSI parameter/intermediate bytes then final byte.
-	for pos < len(line) && line[pos] >= 0x20 && line[pos] <= 0x3F {
-		pos++
-	}
-
-	if pos < len(line) && line[pos] >= 0x40 && line[pos] <= 0x7E {
-		pos++
-	}
-
-	return pos, zoneStack
+	return parseZoneDigits(line, pos, isClose, zoneStack)
 }
 
 // zoneIDFromDigits builds a ZoneID from raw decimal digit bytes.
