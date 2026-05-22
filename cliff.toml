@@ -19,7 +19,7 @@ body = """
                 ([#{{ commit.remote.pr_number }}](https://github.com/mihakrumpestar/panix/pull/{{ commit.remote.pr_number }})) \
             {% endif %}\
             {% if commit.remote.username %}\
-                by [@{{ commit.remote.username }}](https://github.com/{{ commit.remote.username }}) \
+                by @{{ commit.remote.username }} \
             {% elif commit.author %}\
                 by {{ commit.author.name }} \
             {% endif %}\
@@ -39,6 +39,9 @@ repo = "panix"
 conventional_commits = true
 filter_unconventional = true
 split_commits = true
+commit_preprocessors = [
+    { pattern = '\(#\d+\)$', replace = "" },
+]
 commit_parsers = [
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
@@ -61,4 +64,3 @@ skip_tags = ""
 ignore_tags = ""
 topo_order = false
 sort_commits = "oldest"
-
