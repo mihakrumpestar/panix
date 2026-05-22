@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.7.0](https://github.com/mihakrumpestar/panix/compare/v0.6.0..v0.7.0) - 2026-05-22
+
+### Bug Fixes
+
+- Restore live flag in StartTimer so elapsed time updates after retry by [@mihakrumpestar](https://github.com/mihakrumpestar) ([8b285af](https://github.com/mihakrumpestar/panix/commit/8b285afad95b9b19fc567c10e9b084bef936b734))
+- Build command by [@mihakrumpestar](https://github.com/mihakrumpestar) ([a920b67](https://github.com/mihakrumpestar/panix/commit/a920b678eb555669c6e3e27c920610ac7d7ac2fb))
+- Seperate eval-cache path to prevent SQlite busy warnings, switch build to --print-out-paths from --json by [@mihakrumpestar](https://github.com/mihakrumpestar) ([708d8b6](https://github.com/mihakrumpestar/panix/commit/708d8b6fa9a0bd685b7bc3d2998204e5e93480b4))
+- Slight changes to benchmarks, no change in results by [@mihakrumpestar](https://github.com/mihakrumpestar) ([9a74133](https://github.com/mihakrumpestar/panix/commit/9a741339d9bdc110fbd9bd67682f9657f7857198))
+- Make SSH config read only machines left after filtering, fix SSH target resolution by [@mihakrumpestar](https://github.com/mihakrumpestar) ([7c09a47](https://github.com/mihakrumpestar/panix/commit/7c09a4700be903b0847c5694c9a040134bfe6da7))
+- Prevent overwriting shared memory buffer of viewport in build_logs by [@mihakrumpestar](https://github.com/mihakrumpestar) ([3988150](https://github.com/mihakrumpestar/panix/commit/3988150f0a1e51b7c1cb1c99ac035180631cd402))
+- Proper len for prev fix by [@mihakrumpestar](https://github.com/mihakrumpestar) ([52d3f41](https://github.com/mihakrumpestar/panix/commit/52d3f41087fc5d584d0e6f195722bcdba5ccbac3))
+- Prevent SSH config errors on non-existant SSH config by [@mihakrumpestar](https://github.com/mihakrumpestar) ([b45b62e](https://github.com/mihakrumpestar/panix/commit/b45b62e3a2217b8c40b417353e4d93799c75d5cb))
+- Fix all linter errors, use testify for all tests by [@mihakrumpestar](https://github.com/mihakrumpestar) ([cd6ad5f](https://github.com/mihakrumpestar/panix/commit/cd6ad5feb2ed60dbccc588589362611eb596e708))
+
+### Documentation
+
+- Add diagrams to readme by [@mihakrumpestar](https://github.com/mihakrumpestar) ([a58f768](https://github.com/mihakrumpestar/panix/commit/a58f76899a6d9be17921cd63e9b5a60e04926f19))
+
+### Features
+
+- Remote builds, custom build TUI library (zeroterm), benchmarks, e2e tests, fixes (#2) ([#2](https://github.com/mihakrumpestar/panix/pull/2)) by [@mihakrumpestar](https://github.com/mihakrumpestar) ([b014e7c](https://github.com/mihakrumpestar/panix/commit/b014e7cd77b94527d77c86fe16a83ba84b2cf979))
+- Make flake URL accept uri|dir and make it optional, with default being '.' by [@mihakrumpestar](https://github.com/mihakrumpestar) ([4e3bcbd](https://github.com/mihakrumpestar/panix/commit/4e3bcbd3e310cbb90440a3fda7928df4733316a3))
+- Improve workflow code by [@mihakrumpestar](https://github.com/mihakrumpestar) ([48fc208](https://github.com/mihakrumpestar/panix/commit/48fc208ad7a1e1c75db60e45dff6a7dac0427695))
+
+### Miscellaneous
+
+- Update deps by [@mihakrumpestar](https://github.com/mihakrumpestar) ([0808953](https://github.com/mihakrumpestar/panix/commit/0808953e98f04511dda557998df2e1e3fac8cbf9))
+- Verify e2e tests by [@mihakrumpestar](https://github.com/mihakrumpestar) ([c21a177](https://github.com/mihakrumpestar/panix/commit/c21a1774e7b4e88b9de6fe2094f1698eae03766d))
+
 ## [0.6.0](https://github.com/mihakrumpestar/panix/compare/v0.5.0..v0.6.0) - 2026-04-25
 
 ### Bug Fixes
