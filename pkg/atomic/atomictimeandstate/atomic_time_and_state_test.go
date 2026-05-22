@@ -2,6 +2,8 @@ package atomictimeandstate
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
 	"time"
@@ -23,50 +25,32 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	tas := New()
-	if tas == nil {
-		t.Fatal("New() returned nil")
-	}
+	require.NotNil(t, tas, "New() returned nil")
 
 	loaded := tas.Load()
-	if loaded == nil {
-		t.Fatal("Load() returned nil after New()")
-	}
-
-	if loaded.HasStarted() {
-		t.Error("new AtomicTimeAndState should not have started")
-	}
-
-	if loaded.IsFinished() {
-		t.Error("new AtomicTimeAndState should not be finished")
-	}
+	require.NotNil(t, loaded, "Load() returned nil after New()")
+	assert.False(t, loaded.HasStarted(), "new AtomicTimeAndState should not have started")
+	assert.False(t, loaded.IsFinished(), "new AtomicTimeAndState should not be finished")
 }
 
 func TestTimeAndState_HasStarted(t *testing.T) {
 	t.Parallel()
 
 	tas := &TimeAndState{}
-	if tas.HasStarted() {
-		t.Error("zero TimeAndState should not have started")
-	}
+	assert.False(t, tas.HasStarted(), "zero TimeAndState should not have started")
 
 	tas.StartTime = time.Now()
-	if !tas.HasStarted() {
-		t.Error("TimeAndState with StartTime set should have started")
-	}
+	assert.True(t, tas.HasStarted(), "TimeAndState with StartTime set should have started")
 }
 
 func TestTimeAndState_IsFinished(t *testing.T) {
 	t.Parallel()
 
 	tas := &TimeAndState{}
-	if tas.IsFinished() {
-		t.Error("zero TimeAndState should not be finished")
-	}
+	assert.False(t, tas.IsFinished(), "zero TimeAndState should not be finished")
 
 	tas.EndTime = time.Now()
-	if !tas.IsFinished() {
-		t.Error("TimeAndState with EndTime set should be finished")
-	}
+	assert.True(t, tas.IsFinished(), "TimeAndState with EndTime set should be finished")
 }
 
 func TestTimeAndState_Duration(t *testing.T) {
@@ -75,28 +59,19 @@ func TestTimeAndState_Duration(t *testing.T) {
 	tas := &TimeAndState{}
 
 	_, err := tas.Duration()
-	if err == nil {
-		t.Error("Duration() on unstarted timer should return error")
-	}
+	require.Error(t, err, "Duration() on unstarted timer should return error")
 
 	tas.StartTime = time.Now()
 
 	_, err = tas.Duration()
-	if err == nil {
-		t.Error("Duration() on unfinished timer should return error")
-	}
+	require.Error(t, err, "Duration() on unfinished timer should return error")
 
 	tas.EndTime = time.Now()
 	tas.DurationCache = 5 * time.Second
 
 	dur, err := tas.Duration()
-	if err != nil {
-		t.Errorf("Duration() returned error: %v", err)
-	}
-
-	if dur != 5*time.Second {
-		t.Errorf("Duration() = %v, want 5s", dur)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, dur, "Duration()")
 }
 
 func TestStartTimer(t *testing.T) {
@@ -106,13 +81,8 @@ func TestStartTimer(t *testing.T) {
 	tas.StartTimer()
 
 	loaded := tas.Load()
-	if !loaded.HasStarted() {
-		t.Error("StartTimer() should set StartTime")
-	}
-
-	if !loaded.live {
-		t.Error("StartTimer() should set live=true")
-	}
+	assert.True(t, loaded.HasStarted(), "StartTimer() should set StartTime")
+	assert.True(t, loaded.live, "StartTimer() should set live=true")
 }
 
 func TestStartTimerIdempotent(t *testing.T) {
@@ -129,9 +99,7 @@ func TestStartTimerIdempotent(t *testing.T) {
 
 	secondStart := tas.Load().StartTime
 
-	if !firstStart.Equal(secondStart) {
-		t.Error("StartTimer() should be idempotent, StartTime changed on second call")
-	}
+	assert.True(t, firstStart.Equal(secondStart), "StartTimer() should be idempotent, StartTime changed on second call")
 }
 
 func TestEndTimerWithError(t *testing.T) {
@@ -144,21 +112,10 @@ func TestEndTimerWithError(t *testing.T) {
 	tas.EndTimerWithError(testErr)
 
 	loaded := tas.Load()
-	if !loaded.IsFinished() {
-		t.Error("EndTimerWithError() should set EndTime")
-	}
-
-	if loaded.DurationCache <= 0 {
-		t.Error("EndTimerWithError() should set DurationCache > 0")
-	}
-
-	if loaded.EndError == nil {
-		t.Error("EndTimerWithError() should set EndError")
-	}
-
-	if loaded.EndError.Error() != errTest.Error() {
-		t.Errorf("EndError.Error() = %q, want %q", loaded.EndError.Error(), errTest.Error())
-	}
+	assert.True(t, loaded.IsFinished(), "EndTimerWithError() should set EndTime")
+	assert.Positive(t, loaded.DurationCache, "EndTimerWithError() should set DurationCache > 0")
+	require.NotNil(t, loaded.EndError, "EndTimerWithError() should set EndError")
+	assert.Equal(t, errTest.Error(), loaded.EndError.Error(), "EndError.Error()")
 }
 
 func TestEndTimerWithErrorNil(t *testing.T) {
@@ -169,13 +126,8 @@ func TestEndTimerWithErrorNil(t *testing.T) {
 	tas.EndTimerWithError(nil)
 
 	loaded := tas.Load()
-	if !loaded.IsFinished() {
-		t.Error("EndTimerWithError(nil) should still set EndTime")
-	}
-
-	if loaded.EndError != nil {
-		t.Error("EndTimerWithError(nil) should set EndError to nil")
-	}
+	assert.True(t, loaded.IsFinished(), "EndTimerWithError(nil) should still set EndTime")
+	assert.Nil(t, loaded.EndError, "EndTimerWithError(nil) should set EndError to nil")
 }
 
 func TestEndTimerWithErrorIdempotent(t *testing.T) {
@@ -195,13 +147,8 @@ func TestEndTimerWithErrorIdempotent(t *testing.T) {
 	secondEnd := tas.Load().EndTime
 	secondErr := tas.Load().EndError.Error()
 
-	if !firstEnd.Equal(secondEnd) {
-		t.Error("EndTimerWithError() should be idempotent, EndTime changed on second call")
-	}
-
-	if firstErr != secondErr {
-		t.Errorf("EndError changed from %q to %q on second call", firstErr, secondErr)
-	}
+	assert.True(t, firstEnd.Equal(secondEnd), "EndTimerWithError() should be idempotent, EndTime changed on second call")
+	assert.Equal(t, firstErr, secondErr, "EndError changed on second call")
 }
 
 func TestDurationOrElapsedTime(t *testing.T) {
@@ -210,20 +157,13 @@ func TestDurationOrElapsedTime(t *testing.T) {
 	tas := New()
 
 	_, err := tas.DurationOrElapsedTime()
-	if err == nil {
-		t.Error("DurationOrElapsedTime() on unstarted timer should return error")
-	}
+	require.Error(t, err, "DurationOrElapsedTime() on unstarted timer should return error")
 
 	tas.StartTimer()
 
 	dur, err := tas.DurationOrElapsedTime()
-	if err != nil {
-		t.Errorf("DurationOrElapsedTime() after StartTimer returned error: %v", err)
-	}
-
-	if dur <= 0 {
-		t.Error("DurationOrElapsedTime() after StartTimer should be > 0")
-	}
+	require.NoError(t, err, "DurationOrElapsedTime() after StartTimer")
+	assert.Positive(t, dur, "DurationOrElapsedTime() after StartTimer should be > 0")
 }
 
 func TestDurationOrElapsedTimeAfterEnd(t *testing.T) {
@@ -234,14 +174,10 @@ func TestDurationOrElapsedTimeAfterEnd(t *testing.T) {
 	tas.EndTimerWithError(nil)
 
 	dur, err := tas.DurationOrElapsedTime()
-	if err != nil {
-		t.Errorf("DurationOrElapsedTime() after EndTimer returned error: %v", err)
-	}
+	require.NoError(t, err, "DurationOrElapsedTime() after EndTimer")
 
 	loaded := tas.Load()
-	if dur != loaded.DurationCache {
-		t.Errorf("DurationOrElapsedTime() = %v, want DurationCache %v", dur, loaded.DurationCache)
-	}
+	assert.Equal(t, loaded.DurationCache, dur, "DurationOrElapsedTime()")
 }
 
 func TestDurationOrElapsedTimeNotLive(t *testing.T) {
@@ -256,13 +192,8 @@ func TestDurationOrElapsedTimeNotLive(t *testing.T) {
 	})
 
 	dur, err := tas.DurationOrElapsedTime()
-	if err != nil {
-		t.Errorf("DurationOrElapsedTime() returned error: %v", err)
-	}
-
-	if dur != 3*time.Second {
-		t.Errorf("DurationOrElapsedTime() = %v, want 3s (cached, not live)", dur)
-	}
+	require.NoError(t, err, "DurationOrElapsedTime() returned error")
+	assert.Equal(t, 3*time.Second, dur, "DurationOrElapsedTime() (cached, not live)")
 }
 
 func TestMarshalJSON(t *testing.T) {
@@ -272,20 +203,14 @@ func TestMarshalJSON(t *testing.T) {
 	tas.StartTimer()
 
 	data, err := json.Marshal(tas)
-	if err != nil {
-		t.Fatalf("MarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "MarshalJSON() error")
 
 	var result map[string]any
 
 	err = json.Unmarshal(data, &result)
-	if err != nil {
-		t.Fatalf("unmarshal result error: %v", err)
-	}
+	require.NoError(t, err, "unmarshal result error")
 
-	if _, ok := result["start_time"]; !ok {
-		t.Error("MarshalJSON() missing start_time field")
-	}
+	assert.Contains(t, result, "start_time", "MarshalJSON() missing start_time field")
 }
 
 func TestUnmarshalJSON(t *testing.T) {
@@ -301,25 +226,16 @@ func TestUnmarshalJSON(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(data)
-	if err != nil {
-		t.Fatalf("marshal test data error: %v", err)
-	}
+	require.NoError(t, err, "marshal test data error")
 
 	tas := New()
 
 	err = json.Unmarshal(jsonData, tas)
-	if err != nil {
-		t.Fatalf("UnmarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "UnmarshalJSON() error")
 
 	loaded := tas.Load()
-	if !loaded.HasStarted() {
-		t.Error("UnmarshalJSON() should set StartTime")
-	}
-
-	if !loaded.IsFinished() {
-		t.Error("UnmarshalJSON() should set EndTime")
-	}
+	assert.True(t, loaded.HasStarted(), "UnmarshalJSON() should set StartTime")
+	assert.True(t, loaded.IsFinished(), "UnmarshalJSON() should set EndTime")
 }
 
 func TestUnmarshalJSONWithEndError(t *testing.T) {
@@ -336,25 +252,16 @@ func TestUnmarshalJSONWithEndError(t *testing.T) {
 	}
 
 	jsonData, err := json.Marshal(data)
-	if err != nil {
-		t.Fatalf("marshal test data error: %v", err)
-	}
+	require.NoError(t, err, "marshal test data error")
 
 	tas := New()
 
 	err = json.Unmarshal(jsonData, tas)
-	if err != nil {
-		t.Fatalf("UnmarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "UnmarshalJSON() error")
 
 	loaded := tas.Load()
-	if loaded.EndError == nil {
-		t.Error("UnmarshalJSON() should set EndError")
-	}
-
-	if loaded.EndError.Error() != "something went wrong" {
-		t.Errorf("EndError.Error() = %q, want %q", loaded.EndError.Error(), "something went wrong")
-	}
+	require.NotNil(t, loaded.EndError, "UnmarshalJSON() should set EndError")
+	assert.Equal(t, "something went wrong", loaded.EndError.Error(), "EndError.Error()")
 }
 
 func TestUnmarshalJSONNilReceiver(t *testing.T) {
@@ -363,9 +270,7 @@ func TestUnmarshalJSONNilReceiver(t *testing.T) {
 	var tas *AtomicTimeAndState
 
 	err := json.Unmarshal([]byte(`{"start_time":"2024-01-01T00:00:00Z"}`), tas)
-	if err == nil {
-		t.Error("UnmarshalJSON on nil receiver should return error")
-	}
+	assert.Error(t, err, "UnmarshalJSON on nil receiver should return error")
 }
 
 func TestJSONRoundTrip(t *testing.T) {
@@ -376,27 +281,21 @@ func TestJSONRoundTrip(t *testing.T) {
 	tas.EndTimerWithError(errRoundTrip)
 
 	data, err := json.Marshal(tas)
-	if err != nil {
-		t.Fatalf("MarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "MarshalJSON() error")
 
 	tas2 := New()
 
 	err = json.Unmarshal(data, tas2)
-	if err != nil {
-		t.Fatalf("UnmarshalJSON() error: %v", err)
-	}
+	require.NoError(t, err, "UnmarshalJSON() error")
 
 	original := tas.Load()
 	restored := tas2.Load()
 
-	if original.DurationCache != restored.DurationCache {
-		t.Errorf("DurationCache mismatch: original=%v, restored=%v", original.DurationCache, restored.DurationCache)
-	}
+	assert.Equal(t, original.DurationCache, restored.DurationCache, "DurationCache mismatch")
 
-	if original.EndError.Error() != restored.EndError.Error() {
-		t.Errorf("EndError mismatch: original=%q, restored=%q", original.EndError.Error(), restored.EndError.Error())
-	}
+	require.NotNil(t, original.EndError, "original EndError should not be nil")
+	require.NotNil(t, restored.EndError, "restored EndError should not be nil")
+	assert.Equal(t, original.EndError.Error(), restored.EndError.Error(), "EndError mismatch")
 }
 
 func TestConcurrentAccess(t *testing.T) {
@@ -443,20 +342,13 @@ func TestJSONErrorNew(t *testing.T) {
 	t.Parallel()
 
 	jsonErr := jsonerror.New(errJSONErrorTest)
-	if jsonErr == nil {
-		t.Fatal("jsonerror.New(non-nil) returned nil")
-	}
-
-	if jsonErr.Error() != errJSONErrorTest.Error() {
-		t.Errorf("Error() = %q, want %q", jsonErr.Error(), errJSONErrorTest.Error())
-	}
+	require.NotNil(t, jsonErr, "jsonerror.New(non-nil) returned nil")
+	assert.Equal(t, errJSONErrorTest.Error(), jsonErr.Error(), "Error()")
 }
 
 func TestJSONErrorNewNil(t *testing.T) {
 	t.Parallel()
 
 	je := jsonerror.New(nil)
-	if je != nil {
-		t.Error("jsonerror.New(nil) should return nil")
-	}
+	assert.Nil(t, je, "jsonerror.New(nil) should return nil")
 }

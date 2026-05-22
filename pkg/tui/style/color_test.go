@@ -1,8 +1,9 @@
 package style
 
 import (
-	"bytes"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestColor_RGBA_Hex(t *testing.T) {
@@ -20,47 +21,32 @@ func TestColor_RGBA_Hex(t *testing.T) {
 		{"#50FA7B", [4]uint32{0x5050, 0xFAFA, 0x7B7B, 0xFFFF}},
 	}
 
-	for _, tc := range cases {
-		red, green, blue, alpha := Color(tc.hex).RGBA()
+	for _, caseI := range cases {
+		red, green, blue, alpha := Color(caseI.hex).RGBA()
 
-		if red != tc.want[0] || green != tc.want[1] || blue != tc.want[2] || alpha != tc.want[3] {
-			t.Errorf("Color(%q).RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, %d)",
-				tc.hex, red, green, blue, alpha, tc.want[0], tc.want[1], tc.want[2], tc.want[3])
-		}
+		assert.Equal(t, caseI.want[0], red)
+		assert.Equal(t, caseI.want[1], green)
+		assert.Equal(t, caseI.want[2], blue)
+		assert.Equal(t, caseI.want[3], alpha)
 	}
 }
 
 func TestColor_RGBA_HexInvalid(t *testing.T) {
 	t.Parallel()
 
-	// Too short: len != 6 after # -> returns zero alpha
-	red, green, blue, alpha := Color("#FF").RGBA()
-	if alpha != 0 || red != 0 || green != 0 || blue != 0 {
-		t.Errorf("Color(\"#FF\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", red, green, blue, alpha)
+	for _, c := range []Color{Color("#FF"), Color("#FF0000FF"), Color("FF0000")} {
+		r, g, b, a := c.RGBA()
+		assert.Equal(t, uint32(0), r)
+		assert.Equal(t, uint32(0), g)
+		assert.Equal(t, uint32(0), b)
+		assert.Equal(t, uint32(0), a)
 	}
 
-	// Too long: len != 6 after # -> returns zero alpha
-	red, green, blue, alpha = Color("#FF0000FF").RGBA()
-	if alpha != 0 || red != 0 || green != 0 || blue != 0 {
-		t.Errorf("Color(\"#FF0000FF\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", red, green, blue, alpha)
-	}
-
-	// No hash prefix: treated as 256-color index. "FF0000" parsed as int fails -> zero alpha
-	red, green, blue, alpha = Color("FF0000").RGBA()
-	if alpha != 0 || red != 0 || green != 0 || blue != 0 {
-		t.Errorf("Color(\"FF0000\").RGBA() = (%d, %d, %d, %d), want (0,0,0,0)", red, green, blue, alpha)
-	}
-
-	// Invalid hex chars: hexVal treats non-hex as 0, so "#ZZZZZZ" -> RGB(0,0,0) with full alpha.
-	// This is a known limitation — invalid hex chars silently produce 0 rather than error.
-	red, green, blue, alpha = Color("#ZZZZZZ").RGBA()
-	if alpha != 0xFFFF {
-		t.Errorf("Color(\"#ZZZZZZ\").RGBA() alpha = %d, want 0xFFFF (invalid hex chars silently treated as 0)", alpha)
-	}
-
-	if red != 0 || green != 0 || blue != 0 {
-		t.Errorf("Color(\"#ZZZZZZ\").RGBA() = (%d, %d, %d), want (0,0,0) since Z is treated as 0", red, green, blue)
-	}
+	r, g, b, a := Color("#ZZZZZZ").RGBA()
+	assert.Equal(t, uint32(0xFFFF), a)
+	assert.Equal(t, uint32(0), r)
+	assert.Equal(t, uint32(0), g)
+	assert.Equal(t, uint32(0), b)
 }
 
 func TestColor_RGBA_16Color(t *testing.T) {
@@ -92,51 +78,33 @@ func TestColor_RGBA_16Color(t *testing.T) {
 
 		ru, gu, bu := uint32(want[0]), uint32(want[1]), uint32(want[2])
 
-		if red != ru|ru<<8 || green != gu|gu<<8 || blue != bu|bu<<8 || alpha != 0xFFFF {
-			t.Errorf("Color(%d).RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, %d)",
-				colorIdx, red, green, blue, alpha, ru|ru<<8, gu|gu<<8, bu|bu<<8, uint32(0xFFFF))
-		}
+		assert.Equal(t, ru|ru<<8, red)
+		assert.Equal(t, gu|gu<<8, green)
+		assert.Equal(t, bu|bu<<8, blue)
+		assert.Equal(t, uint32(0xFFFF), alpha)
 	}
 }
 
 func TestColor_RGBA_256Color(t *testing.T) {
 	t.Parallel()
 
-	// Color 16 = 6x6x6 cube index 0,0,0 -> RGB(0,0,0)
-	red, green, blue, alpha := Color("16").RGBA()
-
-	if red != 0 || green != 0 || blue != 0 || alpha != 0xFFFF {
-		t.Errorf("Color(\"16\").RGBA() = (%d, %d, %d, %d), want (0, 0, 0, 65535)", red, green, blue, alpha)
+	tests := []struct {
+		name string
+		c    Color
+		want [4]uint32
+	}{
+		{"16", Color("16"), [4]uint32{0, 0, 0, 0xFFFF}},
+		{"196", Color("196"), [4]uint32{uint32(255)<<8 | 255, 0, 0, 0xFFFF}},
+		{"232", Color("232"), [4]uint32{uint32(8)<<8 | 8, uint32(8)<<8 | 8, uint32(8)<<8 | 8, 0xFFFF}},
+		{"255", Color("255"), [4]uint32{uint32(238)<<8 | 238, uint32(238)<<8 | 238, uint32(238)<<8 | 238, 0xFFFF}},
 	}
 
-	// Color 196 = cube index (5,0,0) -> idx-16=180, R=(180/36)%6=5, 5*51=255, G=0, B=0
-	red, green, blue, alpha = Color("196").RGBA()
-
-	wantR := uint32(255)
-	wantR |= wantR << 8
-
-	if red != wantR || green != 0 || blue != 0 || alpha != 0xFFFF {
-		t.Errorf("Color(\"196\").RGBA() = (%d, %d, %d, %d), want (%d, 0, 0, 65535)", red, green, blue, alpha, wantR)
-	}
-
-	// Color 232 = grayscale start -> R=G=B=8
-	red, green, blue, alpha = Color("232").RGBA()
-
-	wantV := uint32(8)
-	wantV |= wantV << 8
-
-	if red != wantV || green != wantV || blue != wantV || alpha != 0xFFFF {
-		t.Errorf("Color(\"232\").RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, 65535)", red, green, blue, alpha, wantV, wantV, wantV)
-	}
-
-	// Color 255 = grayscale end -> R=G=B=238
-	red, green, blue, alpha = Color("255").RGBA()
-
-	wantV = uint32(238)
-	wantV |= wantV << 8
-
-	if red != wantV || green != wantV || blue != wantV || alpha != 0xFFFF {
-		t.Errorf("Color(\"255\").RGBA() = (%d, %d, %d, %d), want (%d, %d, %d, 65535)", red, green, blue, alpha, wantV, wantV, wantV)
+	for _, tt := range tests {
+		r, g, b, a := tt.c.RGBA()
+		assert.Equal(t, tt.want[0], r, "%s: red mismatch", tt.name)
+		assert.Equal(t, tt.want[1], g, "%s: green mismatch", tt.name)
+		assert.Equal(t, tt.want[2], b, "%s: blue mismatch", tt.name)
+		assert.Equal(t, tt.want[3], a, "%s: alpha mismatch", tt.name)
 	}
 }
 
@@ -156,56 +124,37 @@ func TestColor_RGBA_Invalid256(t *testing.T) {
 	for _, tc := range cases {
 		red, green, blue, alpha := Color(tc.value).RGBA()
 
-		if alpha != 0 || red != 0 || green != 0 || blue != 0 {
-			t.Errorf("Color(%q).RGBA() = (%d, %d, %d, %d), want (0, 0, 0, 0)", tc.value, red, green, blue, alpha)
-		}
+		assert.Equal(t, uint32(0), alpha)
+		assert.Equal(t, uint32(0), red)
+		assert.Equal(t, uint32(0), green)
+		assert.Equal(t, uint32(0), blue)
 	}
 }
 
 func TestColorToFgPrefix(t *testing.T) {
 	t.Parallel()
 
-	// Empty color returns empty
-	if got := colorToFgPrefix(""); len(got) != 0 {
-		t.Errorf("colorToFgPrefix(\"\") = %q, want \"\"", got)
-	}
+	assert.Empty(t, colorToFgPrefix(""))
+	assert.Empty(t, colorToFgPrefix(Color("#XYZ")))
 
-	// Invalid color returns empty
-	if got := colorToFgPrefix(Color("#XYZ")); len(got) != 0 {
-		t.Errorf("colorToFgPrefix(#XYZ) = %q, want \"\"", got)
-	}
-
-	// Valid color produces true-color foreground sequence
 	c := Color("#FF8000")
 	got := colorToFgPrefix(c)
 	expected := []byte("\x1b[38;2;255;128;0m")
 
-	if !bytes.Equal(got, expected) {
-		t.Errorf("colorToFgPrefix(#FF8000) = %q, want %q", got, expected)
-	}
+	assert.Equal(t, expected, got)
 }
 
 func TestColorToBgPrefix(t *testing.T) {
 	t.Parallel()
 
-	// Empty color returns empty
-	if got := colorToBgPrefix(""); len(got) != 0 {
-		t.Errorf("colorToBgPrefix(\"\") = %q, want \"\"", got)
-	}
+	assert.Empty(t, colorToBgPrefix(""))
+	assert.Empty(t, colorToBgPrefix(Color("#XYZ")))
 
-	// Invalid color returns empty
-	if got := colorToBgPrefix(Color("#XYZ")); len(got) != 0 {
-		t.Errorf("colorToBgPrefix(#XYZ) = %q, want \"\"", got)
-	}
-
-	// Valid color produces true-color background sequence
 	c := Color("#64C832")
 	got := colorToBgPrefix(c)
 	expected := []byte("\x1b[48;2;100;200;50m")
 
-	if !bytes.Equal(got, expected) {
-		t.Errorf("colorToBgPrefix(#64C832) = %q, want %q", got, expected)
-	}
+	assert.Equal(t, expected, got)
 }
 
 func TestHexVal(t *testing.T) {
@@ -225,11 +174,7 @@ func TestHexVal(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := hexVal(tc.input)
-
-		if got != tc.want {
-			t.Errorf("hexVal(%q) = %d, want %d", tc.input, got, tc.want)
-		}
+		assert.Equal(t, tc.want, hexVal(tc.input))
 	}
 }
 

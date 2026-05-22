@@ -5,6 +5,7 @@ import (
 
 	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/stretchr/testify/assert"
 )
 
 func makeTestStyles(hexFn func(string) colorful.Color) Styles {
@@ -47,10 +48,7 @@ func TestDetermineState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			if got := determineState(tt.data); got != tt.want {
-				t.Errorf("determineState(%+v) = %v, want %v", tt.data, got, tt.want)
-			}
+			assert.Equal(t, tt.want, determineState(tt.data))
 		})
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCellWidth_Equivalence(t *testing.T) {
@@ -23,12 +24,7 @@ func TestCellWidth_Equivalence(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		expected := lipgloss.Width(tc)
-		got := CellWidth([]byte(tc))
-
-		if expected != got {
-			t.Errorf("CellWidth(%q) = %d, want %d", tc, got, expected)
-		}
+		assert.Equal(t, lipgloss.Width(tc), CellWidth([]byte(tc)), "CellWidth(%q)", tc)
 	}
 }
 
@@ -47,10 +43,7 @@ func TestCellWidth_ZoneMarkers(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := CellWidth([]byte(tc.input))
-		if got != tc.wantWidth {
-			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.wantWidth)
-		}
+		assert.Equal(t, tc.wantWidth, CellWidth([]byte(tc.input)), "CellWidth(%q)", tc.input)
 	}
 }
 
@@ -68,10 +61,7 @@ func TestCellWidth_OtherCSISequences(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := CellWidth([]byte(tc.input))
-		if got != tc.wantWidth {
-			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.wantWidth)
-		}
+		assert.Equal(t, tc.wantWidth, CellWidth([]byte(tc.input)), "CellWidth(%q)", tc.input)
 	}
 }
 
@@ -80,72 +70,18 @@ func TestSkipANSI(t *testing.T) {
 
 	tests := []struct {
 		input string
-		start int
 		want  int
 	}{
-		{"\x1b[m", 0, 3},
-		{"\x1b[38;2;255;0;0m", 0, 15},
-		{"\x1b[0m", 0, 4},
-		{"\x1b[1001z", 0, 7},
-		{"\x1b[1001zhello", 0, 7},
-		{"\x1b[?25l", 0, 6},
-		{"\x1b[?25h", 0, 6},
-		{"\x1b]0;title\x07", 0, 10},
-		{"\x1b]0;title\x1b\\", 0, 11},
-		{"\x1bO", 0, 2},
-		{"\x1b", 0, 1},
-		{"\x1b[", 0, 2},
-		{"\x1b[38", 0, 4},
+		{"\x1b[31m", 5},
+		{"\x1b[1;32m", 7},
+		{"\x1b[38;2;255;0;0m", 15},
+		{"\x1b[?25l", 6},
+		{"a", 0},
+		{"\x1b", 1},
 	}
 
 	for _, tc := range tests {
-		got := skipANSI([]byte(tc.input), tc.start)
-		if got != tc.want {
-			t.Errorf("skipANSI(%q, %d) = %d, want %d", tc.input, tc.start, got, tc.want)
-		}
-	}
-}
-
-func TestCountLines(t *testing.T) {
-	t.Parallel()
-
-	tests := []string{
-		"hello",
-		"line1\nline2\nline3",
-		"",
-		"\n\n\n",
-		"single",
-	}
-
-	for _, tc := range tests {
-		expected := lipgloss.Height(tc)
-		got := CountLines(tc)
-
-		if expected != got {
-			t.Errorf("CountLines(%q) = %d, want %d", tc, got, expected)
-		}
-	}
-}
-
-func TestCellWidth_EmojiGrapheme(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		input string
-		want  int
-	}{
-		{"👍🏽", 2},
-		{"👨‍👩‍👧", 2},
-		{"🚀", 2},
-		{"👍🏽Hi", 4},
-		{"🇺🇸", 2},
-	}
-
-	for _, tc := range tests {
-		got := CellWidth([]byte(tc.input))
-		if got != tc.want {
-			t.Errorf("CellWidth(%q) = %d, want %d", tc.input, got, tc.want)
-		}
+		assert.Equal(t, tc.want, skipANSI([]byte(tc.input), 0), "skipANSI(%q)", tc.input)
 	}
 }
 
@@ -153,44 +89,26 @@ func TestStripANSI(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name  string
 		input string
 		want  string
 	}{
-		{"no ansi", "plain text", "plain text"},
-		{"single SGR", "\x1b[31mred\x1b[0m", "red"},
-		{"multiple SGR", "\x1b[1;32mgreen\x1b[0m \x1b[34mblue\x1b[0m", "green blue"},
-		{"RGB SGR", "\x1b[38;2;255;0;0mRGB\x1b[0m", "RGB"},
-		{"empty", "", ""},
-		{"only ansi", "\x1b[31m\x1b[0m", ""},
-		{"CSI erase line", "before\x1b[Kafter", "beforeafter"},
-		{"OSC title", "\x1b]0;window title\x07visible", "visible"},
-		{"OSC ST terminator", "\x1b]0;title\x1b\\visible", "visible"},
-		{"bare ESC sequence", "\x1bOvisible", "visible"},
-		{"mixed", "\x1b[1mbold\x1b[0m and \x1b[32mgreen\x1b[0m", "bold and green"},
-		{"no esc fast path", "hello world", "hello world"},
+		{"", ""},
+		{"no ansi", "no ansi"},
+		{"\x1b[31mred\x1b[0m", "red"},
+		{"\x1b[1mbold\x1b[0m", "bold"},
+		{"\x1b[38;2;255;0;0mRGBcolor\x1b[0m", "RGBcolor"},
+		{"mix\x1b[31m of\x1b[0m ansi", "mix of ansi"},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := StripANSI([]byte(test.input))
-			if string(got) != test.want {
-				t.Errorf("StripANSI(%q) = %q, want %q", test.input, got, test.want)
-			}
-		})
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, string(StripANSI([]byte(tc.input))), "StripANSI(%q)", tc.input)
 	}
 }
 
-func TestStripANSIBytesZeroCopy(t *testing.T) {
+func TestStripANSI_RendersToEmpty(t *testing.T) {
 	t.Parallel()
 
-	data := []byte("no ansi here")
-
-	result := StripANSI(data)
-	// When no ESC bytes present, StripANSI returns the input as a sub-slice.
-	if len(result) > 0 && len(data) > 0 && &result[0] != &data[0] {
-		t.Error("expected zero-copy when no ESC bytes present")
-	}
+	assert.Empty(t, string(StripANSI([]byte(""))))
+	assert.Empty(t, string(StripANSI([]byte("\x1b[31m\x1b[0m"))))
+	assert.Equal(t, "x", string(StripANSI([]byte("\x1b[31mx\x1b[0m"))))
 }

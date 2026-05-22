@@ -4,6 +4,9 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type simpleRoot struct {
@@ -103,14 +106,10 @@ func mustGetTypeDef(t *testing.T, props map[string]any, key string) *TypeDefinit
 	t.Helper()
 
 	raw, ok := props[key]
-	if !ok {
-		t.Fatalf("missing property %q", key)
-	}
+	require.Truef(t, ok, "missing property %q", key)
 
 	td, ok := raw.(*TypeDefinition)
-	if !ok {
-		t.Fatalf("property %q is not *TypeDefinition", key)
-	}
+	require.Truef(t, ok, "property %q is not *TypeDefinition", key)
 
 	return td
 }
@@ -121,9 +120,7 @@ func generate(t *testing.T, rootType reflect.Type) *Schema {
 	gen := NewSchema(SchemaConfig{RootType: rootType})
 
 	schema, err := gen.Generate()
-	if err != nil {
-		t.Fatalf("Generate() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	return schema
 }
@@ -133,28 +130,17 @@ func TestNewSchema_SimpleStruct(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[simpleRoot]())
 
-	if schema.Type != "object" {
-		t.Errorf("Type = %q, want %q", schema.Type, "object")
-	}
-
-	if schema.Schema != "http://json-schema.org/draft-07/schema#" {
-		t.Errorf("Schema = %q, want draft-07", schema.Schema)
-	}
+	assert.Equal(t, "object", schema.Type, "Type mismatch")
+	assert.Equal(t, "http://json-schema.org/draft-07/schema#", schema.Schema, "Schema mismatch")
 
 	nameDef := mustGetTypeDef(t, schema.Properties, "name")
-	if nameDef.Type != "string" {
-		t.Errorf("name type = %q, want %q", nameDef.Type, "string")
-	}
+	assert.Equal(t, "string", nameDef.Type, "name type mismatch")
 
 	countDef := mustGetTypeDef(t, schema.Properties, "count")
-	if countDef.Type != "integer" {
-		t.Errorf("count type = %q, want %q", countDef.Type, "integer")
-	}
+	assert.Equal(t, "integer", countDef.Type, "count type mismatch")
 
 	activeDef := mustGetTypeDef(t, schema.Properties, "active")
-	if activeDef.Type != "boolean" {
-		t.Errorf("active type = %q, want %q", activeDef.Type, "boolean")
-	}
+	assert.Equal(t, "boolean", activeDef.Type, "active type mismatch")
 }
 
 func TestNewSchema_MetaData(t *testing.T) {
@@ -168,21 +154,11 @@ func TestNewSchema_MetaData(t *testing.T) {
 	})
 
 	schema, err := gen.Generate()
-	if err != nil {
-		t.Fatalf("Generate() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if schema.ID != "https://example.com/simple" {
-		t.Errorf("ID = %q, want %q", schema.ID, "https://example.com/simple")
-	}
-
-	if schema.Title != "Simple" {
-		t.Errorf("Title = %q, want %q", schema.Title, "Simple")
-	}
-
-	if schema.Version != "1.0" {
-		t.Errorf("Version = %q, want %q", schema.Version, "1.0")
-	}
+	assert.Equal(t, "https://example.com/simple", schema.ID, "ID mismatch")
+	assert.Equal(t, "Simple", schema.Title, "Title mismatch")
+	assert.Equal(t, "1.0", schema.Version, "Version mismatch")
 }
 
 func TestNewSchema_RequiredFields(t *testing.T) {
@@ -190,22 +166,15 @@ func TestNewSchema_RequiredFields(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[rootWithRequired]())
 
-	if len(schema.Required) != 2 {
-		t.Fatalf("len(Required) = %d, want 2", len(schema.Required))
-	}
+	require.Len(t, schema.Required, 2)
 
 	requiredMap := make(map[string]bool)
 	for _, field := range schema.Required {
 		requiredMap[field] = true
 	}
 
-	if !requiredMap["name"] {
-		t.Error("'name' should be required")
-	}
-
-	if !requiredMap["email"] {
-		t.Error("'email' should be required")
-	}
+	assert.True(t, requiredMap["name"], "'name' should be required")
+	assert.True(t, requiredMap["email"], "'email' should be required")
 }
 
 func TestNewSchema_NestedStruct(t *testing.T) {
@@ -214,13 +183,8 @@ func TestNewSchema_NestedStruct(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithNested]())
 
 	configDef := mustGetTypeDef(t, schema.Properties, "config")
-	if configDef.Type != "object" {
-		t.Errorf("config type = %q, want %q", configDef.Type, "object")
-	}
-
-	if len(configDef.Properties) != 3 {
-		t.Errorf("config properties = %d, want 3", len(configDef.Properties))
-	}
+	assert.Equal(t, "object", configDef.Type, "config type mismatch")
+	assert.Len(t, configDef.Properties, 3)
 }
 
 func TestNewSchema_DuplicateStructUsesRef(t *testing.T) {
@@ -229,22 +193,13 @@ func TestNewSchema_DuplicateStructUsesRef(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithDuplicate]())
 
 	firstDef := mustGetTypeDef(t, schema.Properties, "first")
-	if firstDef.Ref != "#/definitions/sharedStruct" {
-		t.Errorf("first.Ref = %q, want %q", firstDef.Ref, "#/definitions/sharedStruct")
-	}
+	assert.Equal(t, "#/definitions/sharedStruct", firstDef.Ref, "first.Ref mismatch")
 
 	secondDef := mustGetTypeDef(t, schema.Properties, "second")
-	if secondDef.Ref != "#/definitions/sharedStruct" {
-		t.Errorf("second.Ref = %q, want %q", secondDef.Ref, "#/definitions/sharedStruct")
-	}
+	assert.Equal(t, "#/definitions/sharedStruct", secondDef.Ref, "second.Ref mismatch")
 
-	if len(schema.Definitions) != 1 {
-		t.Fatalf("len(Definitions) = %d, want 1", len(schema.Definitions))
-	}
-
-	if _, ok := schema.Definitions["sharedStruct"]; !ok {
-		t.Error("missing 'sharedStruct' definition")
-	}
+	require.Len(t, schema.Definitions, 1)
+	assert.Contains(t, schema.Definitions, "sharedStruct", "missing 'sharedStruct' definition")
 }
 
 func TestNewSchema_SliceField(t *testing.T) {
@@ -253,18 +208,12 @@ func TestNewSchema_SliceField(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithSlice]())
 
 	itemsDef := mustGetTypeDef(t, schema.Properties, "items")
-	if itemsDef.Type != "array" {
-		t.Errorf("items type = %q, want %q", itemsDef.Type, "array")
-	}
+	assert.Equal(t, "array", itemsDef.Type, "items type mismatch")
 
 	itemsItem, ok := itemsDef.Items.(*TypeDefinition)
-	if !ok {
-		t.Fatal("items.Items is not TypeDefinition")
-	}
+	require.True(t, ok, "items.Items is not TypeDefinition")
 
-	if itemsItem.Type != "string" {
-		t.Errorf("items.Items type = %q, want %q", itemsItem.Type, "string")
-	}
+	assert.Equal(t, "string", itemsItem.Type, "items.Items type mismatch")
 }
 
 func TestNewSchema_TimeDuration(t *testing.T) {
@@ -273,13 +222,8 @@ func TestNewSchema_TimeDuration(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithDuration]())
 
 	timeoutDef := mustGetTypeDef(t, schema.Properties, "timeout")
-	if timeoutDef.Type != "string" {
-		t.Errorf("timeout type = %q, want %q", timeoutDef.Type, "string")
-	}
-
-	if timeoutDef.Description == "" {
-		t.Error("timeout description should not be empty")
-	}
+	assert.Equal(t, "string", timeoutDef.Type, "timeout type mismatch")
+	assert.NotEmpty(t, timeoutDef.Description, "timeout description should not be empty")
 }
 
 func TestNewSchema_ValidateOneOf(t *testing.T) {
@@ -288,13 +232,9 @@ func TestNewSchema_ValidateOneOf(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithValidate]())
 
 	modeDef := mustGetTypeDef(t, schema.Properties, "mode")
-	if len(modeDef.Enum) != 2 {
-		t.Fatalf("mode enum = %v, want 2 values", modeDef.Enum)
-	}
-
-	if modeDef.Enum[0] != "local" || modeDef.Enum[1] != "remote" {
-		t.Errorf("mode enum = %v, want [local remote]", modeDef.Enum)
-	}
+	require.Len(t, modeDef.Enum, 2)
+	assert.Equal(t, "local", modeDef.Enum[0], "mode enum[0] mismatch")
+	assert.Equal(t, "remote", modeDef.Enum[1], "mode enum[1] mismatch")
 }
 
 func TestNewSchema_ValidateFormatConstraints(t *testing.T) {
@@ -303,28 +243,17 @@ func TestNewSchema_ValidateFormatConstraints(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithValidate]())
 
 	pathDef := mustGetTypeDef(t, schema.Properties, "path")
-	if pathDef.Format != "file-path" {
-		t.Errorf("path format = %q, want %q", pathDef.Format, "file-path")
-	}
+	assert.Equal(t, "file-path", pathDef.Format, "path format mismatch")
 
 	absPathDef := mustGetTypeDef(t, schema.Properties, "abs_path")
-	if absPathDef.Format != "uri-reference" {
-		t.Errorf("abs_path format = %q, want %q", absPathDef.Format, "uri-reference")
-	}
-
-	if absPathDef.Pattern != "^/.*" {
-		t.Errorf("abs_path pattern = %q, want %q", absPathDef.Pattern, "^/.*")
-	}
+	assert.Equal(t, "uri-reference", absPathDef.Format, "abs_path format mismatch")
+	assert.Equal(t, "^/.*", absPathDef.Pattern, "abs_path pattern mismatch")
 
 	uriDef := mustGetTypeDef(t, schema.Properties, "uri")
-	if uriDef.Format != "uri" {
-		t.Errorf("uri format = %q, want %q", uriDef.Format, "uri")
-	}
+	assert.Equal(t, "uri", uriDef.Format, "uri format mismatch")
 
 	urlDef := mustGetTypeDef(t, schema.Properties, "url")
-	if urlDef.Format != "uri" {
-		t.Errorf("url format = %q, want %q", urlDef.Format, "uri")
-	}
+	assert.Equal(t, "uri", urlDef.Format, "url format mismatch")
 }
 
 func TestNewSchema_DescTag(t *testing.T) {
@@ -333,9 +262,7 @@ func TestNewSchema_DescTag(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithDesc]())
 
 	nameDef := mustGetTypeDef(t, schema.Properties, "name")
-	if nameDef.Description != "The name of the resource" {
-		t.Errorf("name description = %q, want %q", nameDef.Description, "The name of the resource")
-	}
+	assert.Equal(t, "The name of the resource", nameDef.Description, "name description mismatch")
 }
 
 func TestNewSchema_HelpTag(t *testing.T) {
@@ -344,9 +271,7 @@ func TestNewSchema_HelpTag(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithDesc]())
 
 	countDef := mustGetTypeDef(t, schema.Properties, "count")
-	if countDef.Description != "Number of items" {
-		t.Errorf("count description = %q, want %q", countDef.Description, "Number of items")
-	}
+	assert.Equal(t, "Number of items", countDef.Description, "count description mismatch")
 }
 
 func TestNewSchema_DefaultTag(t *testing.T) {
@@ -355,23 +280,14 @@ func TestNewSchema_DefaultTag(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithDesc]())
 
 	timeoutDef := mustGetTypeDef(t, schema.Properties, "timeout")
-	if timeoutDef.Default != "30s" {
-		t.Errorf("timeout default = %v, want %q", timeoutDef.Default, "30s")
-	}
+	assert.Equal(t, "30s", timeoutDef.Default, "timeout default mismatch")
 
 	portDef := mustGetTypeDef(t, schema.Properties, "port")
-	if portDef.Default != 8080 {
-		t.Errorf("port default = %v, want 8080", portDef.Default)
-	}
-
-	if portDef.Description != "Listen port (default: 8080)" {
-		t.Errorf("port description = %q, want %q", portDef.Description, "Listen port (default: 8080)")
-	}
+	assert.Equal(t, 8080, portDef.Default, "port default mismatch")
+	assert.Equal(t, "Listen port (default: 8080)", portDef.Description, "port description mismatch")
 
 	debugDef := mustGetTypeDef(t, schema.Properties, "debug")
-	if debugDef.Default != false {
-		t.Errorf("debug default = %v, want false", debugDef.Default)
-	}
+	assert.Equal(t, false, debugDef.Default, "debug default mismatch")
 }
 
 func TestNewSchema_YamlDashOmitsField(t *testing.T) {
@@ -379,17 +295,9 @@ func TestNewSchema_YamlDashOmitsField(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[rootWithOmit]())
 
-	if len(schema.Properties) != 1 {
-		t.Fatalf("len(Properties) = %d, want 1", len(schema.Properties))
-	}
-
-	if _, ok := schema.Properties["name"]; !ok {
-		t.Error("missing 'name' property")
-	}
-
-	if _, ok := schema.Properties["value"]; ok {
-		t.Error("'value' should be omitted with yaml:\"-\"")
-	}
+	require.Len(t, schema.Properties, 1)
+	assert.Contains(t, schema.Properties, "name", "missing 'name' property")
+	assert.NotContains(t, schema.Properties, "value", "'value' should be omitted with yaml:\"-\"")
 }
 
 func TestNewSchema_PtrAndSlice(t *testing.T) {
@@ -399,23 +307,15 @@ func TestNewSchema_PtrAndSlice(t *testing.T) {
 
 	// innerStruct appears twice (via ptr + slice) so it becomes a $ref
 	innerDef := mustGetTypeDef(t, schema.Properties, "inner")
-	if innerDef.Ref != "#/definitions/innerStruct" {
-		t.Errorf("inner.Ref = %q, want %q", innerDef.Ref, "#/definitions/innerStruct")
-	}
+	assert.Equal(t, "#/definitions/innerStruct", innerDef.Ref, "inner.Ref mismatch")
 
 	itemsDef := mustGetTypeDef(t, schema.Properties, "items")
-	if itemsDef.Type != "array" {
-		t.Errorf("items type = %q, want %q", itemsDef.Type, "array")
-	}
+	assert.Equal(t, "array", itemsDef.Type, "items type mismatch")
 
 	itemsItem, ok := itemsDef.Items.(*TypeDefinition)
-	if !ok {
-		t.Fatal("items.Items is not TypeDefinition")
-	}
+	require.True(t, ok, "items.Items is not TypeDefinition")
 
-	if itemsItem.Ref != "#/definitions/innerStruct" {
-		t.Errorf("items.Items.Ref = %q, want %q", itemsItem.Ref, "#/definitions/innerStruct")
-	}
+	assert.Equal(t, "#/definitions/innerStruct", itemsItem.Ref, "items.Items.Ref mismatch")
 }
 
 func TestNewSchema_MapLikeWrapper(t *testing.T) {
@@ -424,13 +324,8 @@ func TestNewSchema_MapLikeWrapper(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithMapLike]())
 
 	entriesDef := mustGetTypeDef(t, schema.Properties, "entries")
-	if entriesDef.Type != "object" {
-		t.Errorf("entries type = %q, want %q", entriesDef.Type, "object")
-	}
-
-	if entriesDef.AdditionalProperties == nil {
-		t.Fatal("entries should have additionalProperties")
-	}
+	assert.Equal(t, "object", entriesDef.Type, "entries type mismatch")
+	require.NotNil(t, entriesDef.AdditionalProperties, "entries should have additionalProperties")
 }
 
 func TestNewSchema_NullableMapValues(t *testing.T) {
@@ -439,23 +334,15 @@ func TestNewSchema_NullableMapValues(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithNullableMap]())
 
 	entriesDef := mustGetTypeDef(t, schema.Properties, "entries")
-	if entriesDef.AdditionalProperties == nil {
-		t.Fatal("entries should have additionalProperties")
-	}
+	require.NotNil(t, entriesDef.AdditionalProperties, "entries should have additionalProperties")
 
 	addProps, ok := entriesDef.AdditionalProperties.Value.(map[string]any)
-	if !ok {
-		t.Fatal("additionalProperties.Value is not a map for nullable_values")
-	}
+	require.True(t, ok, "additionalProperties.Value is not a map for nullable_values")
 
 	anyOf, ok := addProps["anyOf"].([]any)
-	if !ok {
-		t.Fatal("missing anyOf in additionalProperties")
-	}
+	require.True(t, ok, "missing anyOf in additionalProperties")
 
-	if len(anyOf) != 2 {
-		t.Errorf("anyOf length = %d, want 2", len(anyOf))
-	}
+	assert.Len(t, anyOf, 2)
 }
 
 func TestNewSchema_InlineFields(t *testing.T) {
@@ -463,13 +350,8 @@ func TestNewSchema_InlineFields(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[rootWithInline]())
 
-	if _, ok := schema.Properties["base_field"]; !ok {
-		t.Error("inline 'base_field' should be promoted to root")
-	}
-
-	if _, ok := schema.Properties["extra_field"]; !ok {
-		t.Error("missing 'extra_field' property")
-	}
+	assert.Contains(t, schema.Properties, "base_field", "inline 'base_field' should be promoted to root")
+	assert.Contains(t, schema.Properties, "extra_field", "missing 'extra_field' property")
 }
 
 func TestNewSchema_DependencyCollection(t *testing.T) {
@@ -478,14 +360,10 @@ func TestNewSchema_DependencyCollection(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithDependency]())
 
 	modeDef := mustGetTypeDef(t, schema.Properties, "mode")
-	if modeDef.Type != "string" {
-		t.Errorf("mode type = %q, want %q", modeDef.Type, "string")
-	}
+	assert.Equal(t, "string", modeDef.Type, "mode type mismatch")
 
 	configDef := mustGetTypeDef(t, schema.Properties, "config")
-	if configDef.Type != "string" {
-		t.Errorf("config type = %q, want %q", configDef.Type, "string")
-	}
+	assert.Equal(t, "string", configDef.Type, "config type mismatch")
 }
 
 func TestNewSchema_AdditionalPropertiesTrue(t *testing.T) {
@@ -493,9 +371,7 @@ func TestNewSchema_AdditionalPropertiesTrue(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[simpleRoot]())
 
-	if schema.AdditionalProperties != true {
-		t.Errorf("root AdditionalProperties = %v, want true", schema.AdditionalProperties)
-	}
+	assert.Equal(t, true, schema.AdditionalProperties, "root AdditionalProperties mismatch")
 }
 
 func TestNewSchema_NestedAdditionalPropertiesFalse(t *testing.T) {
@@ -504,13 +380,8 @@ func TestNewSchema_NestedAdditionalPropertiesFalse(t *testing.T) {
 	schema := generate(t, reflect.TypeFor[rootWithNested]())
 
 	configDef := mustGetTypeDef(t, schema.Properties, "config")
-	if configDef.AdditionalProperties == nil {
-		t.Fatal("nested object should have additionalProperties")
-	}
-
-	if configDef.AdditionalProperties.Value != false {
-		t.Errorf("nested AdditionalProperties = %v, want false", configDef.AdditionalProperties.Value)
-	}
+	require.NotNil(t, configDef.AdditionalProperties, "nested object should have additionalProperties")
+	assert.Equal(t, false, configDef.AdditionalProperties.Value, "nested AdditionalProperties mismatch")
 }
 
 func TestNewSchema_NoDefinitionsForSingleUse(t *testing.T) {
@@ -518,9 +389,7 @@ func TestNewSchema_NoDefinitionsForSingleUse(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[rootWithNested]())
 
-	if len(schema.Definitions) != 0 {
-		t.Errorf("Definitions = %d, want 0 (no reused types)", len(schema.Definitions))
-	}
+	assert.Empty(t, schema.Definitions, "no reused types expected")
 }
 
 func TestNewSchema_EmptyConfig(t *testing.T) {
@@ -528,26 +397,16 @@ func TestNewSchema_EmptyConfig(t *testing.T) {
 
 	schema := generate(t, reflect.TypeFor[simpleRoot]())
 
-	if schema.ID != "" {
-		t.Errorf("ID = %q, want empty", schema.ID)
-	}
-
-	if schema.Title != "" {
-		t.Errorf("Title = %q, want empty", schema.Title)
-	}
-
-	if schema.Description != "" {
-		t.Errorf("Description = %q, want empty", schema.Description)
-	}
+	assert.Empty(t, schema.ID, "ID should be empty")
+	assert.Empty(t, schema.Title, "Title should be empty")
+	assert.Empty(t, schema.Description, "Description should be empty")
 }
 
 func TestFalseAdditionalProperties(t *testing.T) {
 	t.Parallel()
 
 	wrapper := FalseAdditionalProperties()
-	if wrapper.Value != false {
-		t.Errorf("Value = %v, want false", wrapper.Value)
-	}
+	assert.Equal(t, false, wrapper.Value, "Value mismatch")
 }
 
 func TestRequiredList_MarshalYAML(t *testing.T) {
@@ -556,34 +415,22 @@ func TestRequiredList_MarshalYAML(t *testing.T) {
 	empty := requiredList{}
 
 	result, err := empty.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	list, ok := result.([]string)
-	if !ok {
-		t.Fatal("result is not []string")
-	}
+	require.True(t, ok, "result is not []string")
 
-	if len(list) != 0 {
-		t.Errorf("len = %d, want 0", len(list))
-	}
+	assert.Empty(t, list)
 
 	nonEmpty := requiredList{"a", "b"}
 
 	result, err = nonEmpty.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	list, ok = result.([]string)
-	if !ok {
-		t.Fatal("result is not []string")
-	}
+	require.True(t, ok, "result is not []string")
 
-	if len(list) != 2 {
-		t.Errorf("len = %d, want 2", len(list))
-	}
+	assert.Len(t, list, 2)
 }
 
 func TestDependencyList_MarshalYAML(t *testing.T) {
@@ -592,18 +439,12 @@ func TestDependencyList_MarshalYAML(t *testing.T) {
 	empty := dependencyList{}
 
 	result, err := empty.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	list, ok := result.([]string)
-	if !ok {
-		t.Fatal("result is not []string")
-	}
+	require.True(t, ok, "result is not []string")
 
-	if len(list) != 0 {
-		t.Errorf("len = %d, want 0", len(list))
-	}
+	assert.Empty(t, list)
 }
 
 func TestDependenciesMap_MarshalYAML(t *testing.T) {
@@ -612,18 +453,12 @@ func TestDependenciesMap_MarshalYAML(t *testing.T) {
 	empty := dependenciesMap{}
 
 	result, err := empty.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	depMap, ok := result.(map[string]dependencyList)
-	if !ok {
-		t.Fatal("result is not map[string]dependencyList")
-	}
+	require.True(t, ok, "result is not map[string]dependencyList")
 
-	if len(depMap) != 0 {
-		t.Errorf("len = %d, want 0", len(depMap))
-	}
+	assert.Empty(t, depMap)
 }
 
 func TestAdditionalPropertiesWrapper_MarshalYAML(t *testing.T) {
@@ -632,75 +467,55 @@ func TestAdditionalPropertiesWrapper_MarshalYAML(t *testing.T) {
 	wrapper := &additionalPropertiesWrapper{Value: "test"}
 
 	result, err := wrapper.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if result != "test" {
-		t.Errorf("result = %v, want %q", result, "test")
-	}
+	assert.Equal(t, "test", result, "result mismatch")
 }
 
 func TestFindMapValueType_NonStruct(t *testing.T) {
 	t.Parallel()
 
 	result := findMapValueType(reflect.TypeFor[string]())
-	if result != nil {
-		t.Error("expected nil for non-struct type")
-	}
+	assert.Nil(t, result, "expected nil for non-struct type")
 }
 
 func TestFindMapValueType_StructWithVisibleFields(t *testing.T) {
 	t.Parallel()
 
 	result := findMapValueType(reflect.TypeFor[simpleRoot]())
-	if result != nil {
-		t.Error("expected nil for struct with YAML-visible fields")
-	}
+	assert.Nil(t, result, "expected nil for struct with YAML-visible fields")
 }
 
 func TestFindMapValueType_MapLikeWrapper(t *testing.T) {
 	t.Parallel()
 
 	result := findMapValueType(reflect.TypeFor[mapLikeWrapper]())
-	if result == nil {
-		t.Fatal("expected non-nil for map-like wrapper")
-	}
+	require.NotNil(t, result, "expected non-nil for map-like wrapper")
 
-	if result != reflect.TypeFor[simpleRoot]() {
-		t.Errorf("value type = %v, want %v", result, reflect.TypeFor[simpleRoot]())
-	}
+	assert.Equal(t, reflect.TypeFor[simpleRoot](), result, "value type mismatch")
 }
 
 func TestFindMapValueType_PtrToMapLike(t *testing.T) {
 	t.Parallel()
 
 	result := findMapValueType(reflect.TypeFor[*mapLikeWrapper]())
-	if result == nil {
-		t.Fatal("expected non-nil for ptr to map-like wrapper")
-	}
+	require.NotNil(t, result, "expected non-nil for ptr to map-like wrapper")
 
-	if result != reflect.TypeFor[simpleRoot]() {
-		t.Errorf("value type = %v, want %v", result, reflect.TypeFor[simpleRoot]())
-	}
+	assert.Equal(t, reflect.TypeFor[simpleRoot](), result, "value type mismatch")
 }
 
 func TestHasYAMLVisibleFields_True(t *testing.T) {
 	t.Parallel()
 
 	result := hasYAMLVisibleFields(reflect.TypeFor[simpleRoot]())
-	if !result {
-		t.Error("expected true for struct with exported fields")
-	}
+	assert.True(t, result, "expected true for struct with exported fields")
 }
 
 func TestHasYAMLVisibleFields_False(t *testing.T) {
 	t.Parallel()
 
 	result := hasYAMLVisibleFields(reflect.TypeFor[mapLikeWrapper]())
-	if result {
-		t.Error("expected false for struct with only unexported/yaml:- fields")
-	}
+	assert.False(t, result, "expected false for struct with only unexported/yaml:- fields")
 }
 
 func TestYamlFieldName_WithTag(t *testing.T) {
@@ -709,9 +524,7 @@ func TestYamlFieldName_WithTag(t *testing.T) {
 	field, _ := reflect.TypeFor[simpleRoot]().FieldByName("Name")
 
 	result := yamlFieldName(field, field.Tag.Get("yaml"))
-	if result != "name" {
-		t.Errorf("yamlFieldName = %q, want %q", result, "name")
-	}
+	assert.Equal(t, "name", result, "yamlFieldName mismatch")
 }
 
 func TestYamlFieldName_WithoutTag(t *testing.T) {
@@ -724,9 +537,7 @@ func TestYamlFieldName_WithoutTag(t *testing.T) {
 	field, _ := reflect.TypeFor[noTag]().FieldByName("MyField")
 
 	result := yamlFieldName(field, "")
-	if result != "myfield" {
-		t.Errorf("yamlFieldName = %q, want %q", result, "myfield")
-	}
+	assert.Equal(t, "myfield", result, "yamlFieldName mismatch")
 }
 
 func TestIsFieldRequired_YamlTag(t *testing.T) {
@@ -737,9 +548,7 @@ func TestIsFieldRequired_YamlTag(t *testing.T) {
 	}
 
 	field, _ := reflect.TypeFor[reqYaml]().FieldByName("Name")
-	if !isFieldRequired(field, field.Tag.Get("yaml")) {
-		t.Error("expected field to be required via yaml tag")
-	}
+	assert.True(t, isFieldRequired(field, field.Tag.Get("yaml")), "expected field to be required via yaml tag")
 }
 
 func TestIsFieldRequired_ValidateTag(t *testing.T) {
@@ -750,68 +559,52 @@ func TestIsFieldRequired_ValidateTag(t *testing.T) {
 	}
 
 	field, _ := reflect.TypeFor[reqValidate]().FieldByName("Name")
-	if !isFieldRequired(field, field.Tag.Get("yaml")) {
-		t.Error("expected field to be required via validate tag")
-	}
+	assert.True(t, isFieldRequired(field, field.Tag.Get("yaml")), "expected field to be required via validate tag")
 }
 
 func TestIsFieldRequired_NotRequired(t *testing.T) {
 	t.Parallel()
 
 	field, _ := reflect.TypeFor[simpleRoot]().FieldByName("Name")
-	if isFieldRequired(field, field.Tag.Get("yaml")) {
-		t.Error("expected field to not be required")
-	}
+	assert.False(t, isFieldRequired(field, field.Tag.Get("yaml")), "expected field to not be required")
 }
 
 func TestParseDefaultValue_Bool(t *testing.T) {
 	t.Parallel()
 
 	result := parseDefaultValue("true", reflect.TypeFor[bool]())
-	if result != true {
-		t.Errorf("result = %v, want true", result)
-	}
+	assert.Equal(t, true, result)
 
 	result = parseDefaultValue("false", reflect.TypeFor[bool]())
-	if result != false {
-		t.Errorf("result = %v, want false", result)
-	}
+	assert.Equal(t, false, result)
 }
 
 func TestParseDefaultValue_Int(t *testing.T) {
 	t.Parallel()
 
 	result := parseDefaultValue("42", reflect.TypeFor[int]())
-	if result != 42 {
-		t.Errorf("result = %v, want 42", result)
-	}
+	assert.Equal(t, 42, result)
 }
 
 func TestParseDefaultValue_String(t *testing.T) {
 	t.Parallel()
 
 	result := parseDefaultValue("hello", reflect.TypeFor[string]())
-	if result != "hello" {
-		t.Errorf("result = %v, want %q", result, "hello")
-	}
+	assert.Equal(t, "hello", result)
 }
 
 func TestParseDefaultValue_Duration(t *testing.T) {
 	t.Parallel()
 
 	result := parseDefaultValue("30s", reflect.TypeFor[time.Duration]())
-	if result != "30s" {
-		t.Errorf("result = %v, want %q", result, "30s")
-	}
+	assert.Equal(t, "30s", result)
 }
 
 func TestResolveYAMLFieldName_WithTag(t *testing.T) {
 	t.Parallel()
 
 	result := resolveYAMLFieldName(reflect.TypeFor[simpleRoot](), "Name")
-	if result != "name" {
-		t.Errorf("result = %q, want %q", result, "name")
-	}
+	assert.Equal(t, "name", result)
 }
 
 func TestResolveYAMLFieldName_WithoutTag(t *testing.T) {
@@ -822,9 +615,7 @@ func TestResolveYAMLFieldName_WithoutTag(t *testing.T) {
 	}
 
 	result := resolveYAMLFieldName(reflect.TypeFor[noTag](), "MyField")
-	if result != "myfield" {
-		t.Errorf("result = %q, want %q", result, "myfield")
-	}
+	assert.Equal(t, "myfield", result)
 }
 
 func TestNewSchema_ProcessStruct_NonStructError(t *testing.T) {
@@ -835,7 +626,5 @@ func TestNewSchema_ProcessStruct_NonStructError(t *testing.T) {
 	})
 
 	_, err := gen.Generate()
-	if err == nil {
-		t.Fatal("Generate() should error for non-struct root type")
-	}
+	require.Error(t, err)
 }

@@ -173,25 +173,22 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 // was changed.
 
 func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
-	if t.zonePrefix == "" || len(t.rows) == 0 {
+	if t.zonePrefix == "" || len(t.rows) == 0 || msg.Lines == nil {
 		return false
 	}
 
-	if msg.Lines == nil || msg.Y < 0 || msg.Y >= msg.Lines.Len() {
-		if t.selectedIndex >= 0 {
-			t.selectedIndex = -1
-			t.outDirty = true
-
-			return true
-		}
-
-		return false
+	if msg.Y < 0 || msg.Y >= msg.Lines.Len() {
+		return t.deselectIfSelected()
 	}
 
 	clickedID, ok := zeroterm.ZoneIDAtCol(msg.Lines.Line(msg.Y), msg.X)
 	if !ok {
-		if t.selectedIndex >= 0 {
-			t.selectedIndex = -1
+		return t.deselectIfSelected()
+	}
+
+	if idx := t.findClickedRow(clickedID); idx >= 0 {
+		if t.selectedIndex != idx {
+			t.selectedIndex = idx
 			t.outDirty = true
 
 			return true
@@ -200,27 +197,7 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 		return false
 	}
 
-	for idx := range len(t.rows) {
-		if idx < len(t.zoneIDs) && t.zoneIDs[idx].Equal(clickedID) {
-			if t.selectedIndex != idx {
-				t.selectedIndex = idx
-				t.outDirty = true
-
-				return true
-			}
-
-			return false
-		}
-	}
-
-	if t.selectedIndex >= 0 {
-		t.selectedIndex = -1
-		t.outDirty = true
-
-		return true
-	}
-
-	return false
+	return t.deselectIfSelected()
 }
 
 // HandleNavigation processes left/right key navigation. Returns true if
@@ -247,7 +224,7 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 // Callers must use AppendFrom or read Line(i) — do not retain the
 // pointer across frames.
 //
-//nolint:funlen
+
 func (t *Table) Render() *buffer.LinesBuf {
 	if !t.outDirty {
 		return t.content
@@ -262,66 +239,18 @@ func (t *Table) Render() *buffer.LinesBuf {
 		return t.content
 	}
 
-	var colWidths []int
-
-	if t.colWidthsCached && t.colWidths != nil {
-		colWidths = t.colWidths
-	} else {
-		colWidths = t.distributeWidths(numCols)
-		t.colWidths = colWidths
-		t.colWidthsCached = true
-	}
-
-	if !t.colANSIOK {
-		t.updateColumnANSI()
-	}
-
-	if t.zonePrefix != "" && (t.zoneStarts == nil || len(t.zoneStarts) != len(t.rows)) {
-		t.updateZoneMarkers()
-	}
-
-	// Per-row diff: re-render only rows whose data or selection
-	// state changed. On selection-only changes, just 2 rows are
-	// re-rendered instead of all N.
+	colWidths := t.ensureColWidths(numCols)
+	t.ensureColumnANSI()
+	t.ensureZoneMarkers()
 	t.syncRowCache(colWidths, t.bordered)
 
 	hasContent := len(t.cfg.Headers) > 0 || len(t.rows) > 0
 
-	if t.bordered && hasContent {
-		t.writeHorizontalBorder(
-			t.cfg.Border.TopLeft, t.cfg.Border.TopMid, t.cfg.Border.TopRight,
-			colWidths,
-		)
-		t.content.WriteLine(t.rowBuf.Bytes())
-	}
-
-	if len(t.cfg.Headers) > 0 {
-		t.buildRow(t.cfg.Headers, colWidths, HeaderRow, t.bordered)
-		t.content.WriteLine(t.rowBuf.Bytes())
-
-		if t.bordered {
-			t.writeHorizontalBorder(
-				t.cfg.Border.LeftMid, t.cfg.Border.MidMid, t.cfg.Border.RightMid,
-				colWidths,
-			)
-			t.content.WriteLine(t.rowBuf.Bytes())
-		}
-	}
-
-	for rowIdx, rowBytes := range t.rowCacheBytes {
-		if t.zonePrefix != "" && rowIdx < len(t.zoneStarts) && rowIdx < len(t.zoneEnds) {
-			t.content.WriteLine3(t.zoneStarts[rowIdx], rowBytes, t.zoneEnds[rowIdx])
-		} else {
-			t.content.WriteLine(rowBytes)
-		}
-	}
-
-	if t.bordered && hasContent {
-		t.writeHorizontalBorder(
-			t.cfg.Border.BottomLeft, t.cfg.Border.BottomMid, t.cfg.Border.BottomRight,
-			colWidths,
-		)
-		t.content.WriteLine(t.rowBuf.Bytes())
+	if hasContent {
+		t.renderTopBorder(colWidths)
+		t.renderHeaders(colWidths)
+		t.renderRows()
+		t.renderBottomBorder(colWidths)
 	}
 
 	t.outDirty = false
@@ -334,6 +263,101 @@ func (t *Table) Render() *buffer.LinesBuf {
 // Render() directly and use AppendFrom.
 func (t *Table) RenderInto(dst *buffer.LinesBuf) {
 	dst.AppendFrom(t.Render())
+}
+
+func (t *Table) deselectIfSelected() bool {
+	if t.selectedIndex < 0 {
+		return false
+	}
+
+	t.selectedIndex = -1
+	t.outDirty = true
+
+	return true
+}
+
+func (t *Table) findClickedRow(clickedID zeroterm.ZoneID) int {
+	for idx := range len(t.rows) {
+		if idx < len(t.zoneIDs) && t.zoneIDs[idx].Equal(clickedID) {
+			return idx
+		}
+	}
+
+	return -1
+}
+
+func (t *Table) ensureColWidths(numCols int) []int {
+	if t.colWidthsCached && t.colWidths != nil {
+		return t.colWidths
+	}
+
+	t.colWidths = t.distributeWidths(numCols)
+	t.colWidthsCached = true
+
+	return t.colWidths
+}
+
+func (t *Table) ensureColumnANSI() {
+	if !t.colANSIOK {
+		t.updateColumnANSI()
+	}
+}
+
+func (t *Table) ensureZoneMarkers() {
+	if t.zonePrefix != "" && (t.zoneStarts == nil || len(t.zoneStarts) != len(t.rows)) {
+		t.updateZoneMarkers()
+	}
+}
+
+func (t *Table) renderTopBorder(colWidths []int) {
+	if !t.bordered {
+		return
+	}
+
+	t.writeHorizontalBorder(
+		t.cfg.Border.TopLeft, t.cfg.Border.TopMid, t.cfg.Border.TopRight,
+		colWidths,
+	)
+	t.content.WriteLine(t.rowBuf.Bytes())
+}
+
+func (t *Table) renderHeaders(colWidths []int) {
+	if len(t.cfg.Headers) == 0 {
+		return
+	}
+
+	t.buildRow(t.cfg.Headers, colWidths, HeaderRow, t.bordered)
+	t.content.WriteLine(t.rowBuf.Bytes())
+
+	if t.bordered {
+		t.writeHorizontalBorder(
+			t.cfg.Border.LeftMid, t.cfg.Border.MidMid, t.cfg.Border.RightMid,
+			colWidths,
+		)
+		t.content.WriteLine(t.rowBuf.Bytes())
+	}
+}
+
+func (t *Table) renderRows() {
+	for rowIdx, rowBytes := range t.rowCacheBytes {
+		if t.zonePrefix != "" && rowIdx < len(t.zoneStarts) && rowIdx < len(t.zoneEnds) {
+			t.content.WriteLine3(t.zoneStarts[rowIdx], rowBytes, t.zoneEnds[rowIdx])
+		} else {
+			t.content.WriteLine(rowBytes)
+		}
+	}
+}
+
+func (t *Table) renderBottomBorder(colWidths []int) {
+	if !t.bordered {
+		return
+	}
+
+	t.writeHorizontalBorder(
+		t.cfg.Border.BottomLeft, t.cfg.Border.BottomMid, t.cfg.Border.BottomRight,
+		colWidths,
+	)
+	t.content.WriteLine(t.rowBuf.Bytes())
 }
 
 func (t *Table) navigateLeft() bool {

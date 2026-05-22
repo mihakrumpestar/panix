@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -16,9 +18,7 @@ func TestTickCmd(t *testing.T) {
 	})
 
 	result := cmd()
-	if kpm, ok := result.(KeyPressMsg); !ok || kpm.Key != "tick" {
-		t.Errorf("TickCmd returned %v, want KeyPressMsg{Key: tick}", result)
-	}
+	kpm, ok := result.(KeyPressMsg); require.True(t, ok) ; require.Equal(t, "tick", kpm.Key)
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -26,19 +26,14 @@ func TestProgramNew(t *testing.T) {
 	m := &dummyModel{}
 
 	prog := NewProgram(m)
-	if prog == nil {
-		t.Fatal("NewProgram returned nil")
-	}
-
-	if prog.model == nil {
-		t.Error("Program.model should be set")
-	}
+	assert.NotNil(t, prog)
+	assert.NotNil(t, prog.model, "Program.model should be set")
 }
 
 type dummyModel struct{}
 
-func (m *dummyModel) Init() []Cmd            { return nil }
-func (m *dummyModel) Update(msg Msg) Cmd    { return nil }
+func (m *dummyModel) Init() []Cmd                               { return nil }
+func (m *dummyModel) Update(msg Msg) Cmd                        { return nil }
 func (m *dummyModel) Render(buf *buffer.LinesBufDiff, _ uint64) {}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -73,17 +68,15 @@ func TestRenderFrameDetectsChanges(t *testing.T) {
 	prog.renderFrame()
 
 	prevBuf := prog.frames[1-prog.curFrame]
-	if prevBuf.Len() == 0 || string(prevBuf.Line(0)) != "Hello World" {
-		t.Error("prevLines should have content after renderFrame")
-	}
+	assert.NotZero(t, prevBuf.Len(), "prevLines should have content after renderFrame") ; assert.Equal(t, "Hello World", string(prevBuf.Line(0)))
 }
 
 type renderTestModel struct {
 	content string
 }
 
-func (m *renderTestModel) Init() []Cmd         { return nil }
-func (m *renderTestModel) Update(msg Msg) Cmd  { return nil }
+func (m *renderTestModel) Init() []Cmd        { return nil }
+func (m *renderTestModel) Update(msg Msg) Cmd { return nil }
 func (m *renderTestModel) Render(buf *buffer.LinesBufDiff, _ uint64) {
 	buf.Write([]byte(m.content))
 }
@@ -98,9 +91,7 @@ func TestNewProgramWithOptions(t *testing.T) {
 	m := &dummyModel{}
 	prog := NewProgram(m, opt)
 
-	if !applied {
-		t.Error("ProgramOption should have been applied")
-	}
+	assert.True(t, applied, "ProgramOption should have been applied")
 
 	_ = prog
 }
@@ -124,13 +115,10 @@ func TestProcessCmdsAsync(t *testing.T) {
 	msg := <-prog.msgCh
 
 	kp, ok := msg.(KeyPressMsg)
-	if !ok || kp.Key != "async" {
-		t.Errorf("processCmds should send cmd result to msgCh, got %v", msg)
-	}
+	require.True(t, ok, "processCmds should send cmd result to msgCh, got %v", msg)
+	assert.Equal(t, "async", kp.Key)
 
-	if !called {
-		t.Error("cmd should have been called")
-	}
+	assert.True(t, called, "cmd should have been called")
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -159,9 +147,7 @@ func TestInitialWindowSizeMsgSent(t *testing.T) {
 	prog.renderFrame()
 
 	receivedSize = model.lastSize
-	if receivedSize.Width != 80 || receivedSize.Height != 24 {
-		t.Errorf("model should have received initial WindowSizeMsg: got %dx%d", receivedSize.Width, receivedSize.Height)
-	}
+	assert.Equal(t, 80, receivedSize.Width, "model should have received initial WindowSizeMsg: got %dx%d") ; assert.Equal(t, 24, receivedSize.Height)
 }
 
 type sizeTrackingModel struct {
@@ -187,7 +173,7 @@ func TestStopChClosesOnExit(t *testing.T) {
 
 	select {
 	case <-prog.stopCh:
-		t.Error("stopCh should not be closed before Run returns")
+		assert.Fail(t, "stopCh should not be closed before Run returns")
 	default:
 	}
 
@@ -196,6 +182,6 @@ func TestStopChClosesOnExit(t *testing.T) {
 	select {
 	case <-prog.stopCh:
 	default:
-		t.Error("stopCh should be closable")
+		assert.Fail(t, "stopCh should be closable")
 	}
 }

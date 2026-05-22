@@ -446,14 +446,12 @@ func (m *Viewport) PageUp() {
 	m.ScrollUp(m.contentHeight())
 }
 
-const halfDivisor = 2
-
 func (m *Viewport) HalfPageDown() {
-	m.ScrollDown(m.contentHeight() / halfDivisor)
+	m.ScrollDown(m.contentHeight() / 2)
 }
 
 func (m *Viewport) HalfPageUp() {
-	m.ScrollUp(m.contentHeight() / halfDivisor)
+	m.ScrollUp(m.contentHeight() / 2)
 }
 
 func (m *Viewport) AtTop() bool {
@@ -530,36 +528,56 @@ func (m *Viewport) buildPreservedWidths(newLines, oldLines [][]byte) []int {
 	return m.lineWidths
 }
 
-//nolint:funlen
+func (m *Viewport) contentDimensions() (int, int) {
+	height, width := m.height, m.width
+
+	if m.bordered {
+		height -= borderOverhead
+		width -= borderOverhead
+	}
+
+	return height, width
+}
+
+func (m *Viewport) renderEmpty(buf *buffer.LinesBuf, contentW, contentH int) {
+	if !m.main {
+		return
+	}
+
+	showBar := m.scrollbar && m.scrollbarReserve
+	if showBar {
+		contentW -= scrollbarColWidth
+	}
+
+	m.renderEmptyInto(buf, contentW, contentH, showBar)
+}
+
+func (m *Viewport) scrollbarInfo(contentH int) (bool, int, int, bool) {
+	showBar := m.scrollbar && (len(m.lines) > contentH || m.scrollbarReserve)
+
+	if !showBar || len(m.lines) <= contentH {
+		return showBar, 0, 0, false
+	}
+
+	thumb := max(1, contentH*contentH/len(m.lines))
+	maxScroll := max(1, len(m.lines)-contentH)
+	yOff := m.yOffset
+	thumbPos := (contentH - thumb) * yOff / maxScroll
+
+	return true, thumbPos, thumbPos + thumb, true
+}
+
 func (m *Viewport) renderViewInto(buf *buffer.LinesBuf) {
 	m.ensureLineWidths()
 
-	contentH := m.height
-	if m.bordered {
-		contentH -= borderOverhead
-	}
-
-	contentW := m.width
-	if m.bordered {
-		contentW -= borderOverhead
-	}
+	contentH, contentW := m.contentDimensions()
 
 	if contentH <= 0 || contentW <= 0 {
 		return
 	}
 
 	if len(m.lines) == 0 {
-		if !m.main {
-			return
-		}
-
-		showBar := m.scrollbar && m.scrollbarReserve
-
-		if showBar {
-			contentW -= scrollbarColWidth
-		}
-
-		m.renderEmptyInto(buf, contentW, contentH, showBar)
+		m.renderEmpty(buf, contentW, contentH)
 
 		return
 	}
@@ -570,7 +588,7 @@ func (m *Viewport) renderViewInto(buf *buffer.LinesBuf) {
 
 	start := m.yOffset
 	end := min(start+contentH, len(m.lines))
-	showBar := m.scrollbar && (len(m.lines) > contentH || m.scrollbarReserve)
+	showBar, thumbPos, thumbEnd, hasBar := m.scrollbarInfo(contentH)
 
 	if showBar {
 		contentW -= scrollbarColWidth
@@ -578,25 +596,10 @@ func (m *Viewport) renderViewInto(buf *buffer.LinesBuf) {
 
 	m.ensurePaddedCache(contentW)
 
-	// Fast path: unbordered, no scrollbar, content fills viewport.
-	// Bulk-copy visible window from paddedBuf in one append.
 	if !m.bordered && !showBar && end == start+contentH {
 		buf.WritePaddedView(m.paddedBuf, m.lineOffsets, start, end)
 
 		return
-	}
-
-	// Compute scrollbar thumb position inline (no struct allocation).
-	var thumbPos, thumbEnd int
-
-	hasBar := false
-
-	if showBar && len(m.lines) > contentH {
-		hasBar = true
-		thumb := max(1, contentH*contentH/len(m.lines))
-		maxScroll := max(1, len(m.lines)-contentH)
-		thumbPos = (contentH - thumb) * m.yOffset / maxScroll
-		thumbEnd = thumbPos + thumb
 	}
 
 	if m.bordered {
@@ -659,17 +662,7 @@ func (m *Viewport) renderEmptyInto(buf *buffer.LinesBuf, contentW, contentH int,
 // unchanged lines.
 //
 
-func (m *Viewport) ensurePaddedCache(contentW int) {
-	if !m.contentChanged && m.paddedBufCW == contentW && len(m.lineOffsets) == len(m.lines)+1 {
-		return
-	}
-
-	if m.contentChanged && m.paddedBufCW == contentW && m.cachedLines != nil {
-		if m.tryAppendPaddedLines(contentW) {
-			return
-		}
-	}
-
+func (m *Viewport) ensureBufSizes(contentW int) {
 	est := (contentW+1)*len(m.lines) + 1
 	if cap(m.paddedBuf) < est {
 		m.paddedBuf = make([]byte, 0, est)
@@ -681,7 +674,9 @@ func (m *Viewport) ensurePaddedCache(contentW int) {
 	} else {
 		m.lineOffsets = m.lineOffsets[:n]
 	}
+}
 
+func (m *Viewport) padLines(contentW int) {
 	buf := m.paddedBuf[:0]
 	for idx, line := range m.lines {
 		m.lineOffsets[idx] = len(buf)
@@ -701,23 +696,28 @@ func (m *Viewport) ensurePaddedCache(contentW int) {
 
 	m.lineOffsets[len(m.lines)] = len(buf)
 	m.paddedBuf = buf
+}
+
+func (m *Viewport) ensurePaddedCache(contentW int) {
+	if !m.contentChanged && m.paddedBufCW == contentW && len(m.lineOffsets) == len(m.lines)+1 {
+		return
+	}
+
+	if m.contentChanged && m.paddedBufCW == contentW && m.cachedLines != nil {
+		if m.tryAppendPaddedLines(contentW) {
+			return
+		}
+	}
+
+	m.ensureBufSizes(contentW)
+	m.padLines(contentW)
 	m.paddedBufCW = contentW
 	m.cachedLines = m.lines
 	m.contentChanged = false
 }
 
-// tryAppendPaddedLines attempts a delta update: if the existing paddedBuf
-// still covers the old lines and only new lines were appended, extend
-// paddedBuf with the new lines instead of rebuilding from scratch.
-// Returns true if delta update succeeded.
-
-func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
-	oldLineCount := len(m.cachedLines)
-	if oldLineCount >= len(m.lines) || oldLineCount == 0 {
-		return false
-	}
-
-	for i := range oldLineCount {
+func (m *Viewport) linesUnchangedFromCache() bool {
+	for i := range len(m.cachedLines) {
 		cachedLineLen, cachedLine := &m.lines[i], &m.cachedLines[i]
 
 		nLen, cLen := len(*cachedLineLen), len(*cachedLine)
@@ -730,7 +730,10 @@ func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 		}
 	}
 
-	newLineCount := len(m.lines)
+	return true
+}
+
+func (m *Viewport) extendLineOffsets(newLineCount int) {
 	if cap(m.lineOffsets) < newLineCount+1 {
 		newOffsets := make([]int, newLineCount+1)
 		copy(newOffsets, m.lineOffsets)
@@ -738,7 +741,9 @@ func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 	} else {
 		m.lineOffsets = m.lineOffsets[:newLineCount+1]
 	}
+}
 
+func (m *Viewport) appendNewLines(contentW, oldLineCount, newLineCount int) []byte {
 	buf := m.paddedBuf
 	for idx := oldLineCount; idx < newLineCount; idx++ {
 		m.lineOffsets[idx] = len(buf)
@@ -755,6 +760,27 @@ func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 		}
 	}
 
+	return buf
+}
+
+// tryAppendPaddedLines attempts a delta update: if the existing paddedBuf
+// still covers the old lines and only new lines were appended, extend
+// paddedBuf with the new lines instead of rebuilding from scratch.
+func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
+	oldLineCount := len(m.cachedLines)
+	if oldLineCount >= len(m.lines) || oldLineCount == 0 {
+		return false
+	}
+
+	if !m.linesUnchangedFromCache() {
+		return false
+	}
+
+	newLineCount := len(m.lines)
+	m.extendLineOffsets(newLineCount)
+
+	buf := m.appendNewLines(contentW, oldLineCount, newLineCount)
+
 	m.lineOffsets[newLineCount] = len(buf)
 	m.paddedBuf = buf
 	m.cachedLines = m.lines
@@ -763,7 +789,21 @@ func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
 	return true
 }
 
-//nolint:funlen
+func (m *Viewport) renderScrollbarInLine(line []byte, showBar, hasBar, inThumb bool) []byte {
+	if !showBar {
+		return line
+	}
+
+	switch {
+	case !hasBar:
+		return append(line, m.emptyCell...)
+	case inThumb:
+		return append(line, m.thumbCell...)
+	default:
+		return append(line, m.trackCell...)
+	}
+}
+
 func (m *Viewport) renderBorderedInto(
 	buf *buffer.LinesBuf,
 	start, end, contentW, contentH int,
@@ -771,60 +811,31 @@ func (m *Viewport) renderBorderedInto(
 	thumbPos, thumbEnd int,
 	hasBar bool,
 ) {
-	// Top border
 	line := m.scratchBuf[:0]
 	line = append(line, m.borderTopL...)
 	line = m.appendHorizBorder(line, contentW, showBar)
 	line = append(line, m.borderTopR...)
 	buf.WriteLine1(line)
 
-	// Content lines
 	for idx := start; idx < end; idx++ {
 		line = line[:0]
 		line = append(line, m.borderLeft...)
-
-		ls := m.lineOffsets[idx]
-		le := m.lineOffsets[idx+1]
-		line = append(line, m.paddedBuf[ls:le]...)
-
-		if showBar {
-			switch {
-			case !hasBar:
-				line = append(line, m.emptyCell...)
-			case idx-start >= thumbPos && idx-start < thumbEnd:
-				line = append(line, m.thumbCell...)
-			default:
-				line = append(line, m.trackCell...)
-			}
-		}
-
+		line = append(line, m.paddedBuf[m.lineOffsets[idx]:m.lineOffsets[idx+1]]...)
+		line = m.renderScrollbarInLine(line, showBar, hasBar, idx-start >= thumbPos && idx-start < thumbEnd)
 		line = append(line, m.borderRight...)
 		buf.WriteLine1(line)
 	}
 
-	// Fill lines
 	fillStart := end - start
 	for idx := fillStart; idx < contentH; idx++ {
 		line = line[:0]
 		line = append(line, m.borderLeft...)
 		line = append(line, spaces[:contentW]...)
-
-		if showBar {
-			switch {
-			case !hasBar:
-				line = append(line, m.emptyCell...)
-			case idx >= thumbPos && idx < thumbEnd:
-				line = append(line, m.thumbCell...)
-			default:
-				line = append(line, m.trackCell...)
-			}
-		}
-
+		line = m.renderScrollbarInLine(line, showBar, hasBar, idx >= thumbPos && idx < thumbEnd)
 		line = append(line, m.borderRight...)
 		buf.WriteLine1(line)
 	}
 
-	// Bottom border
 	line = line[:0]
 	line = append(line, m.borderBotL...)
 	line = m.appendHorizBorder(line, contentW, showBar)
@@ -832,7 +843,6 @@ func (m *Viewport) renderBorderedInto(
 	buf.WriteLine1(line)
 }
 
-//nolint:funlen
 func (m *Viewport) renderUnborderedInto(
 	buf *buffer.LinesBuf,
 	start, end, contentW, contentH int,
@@ -840,66 +850,24 @@ func (m *Viewport) renderUnborderedInto(
 	thumbPos, thumbEnd int,
 	hasBar bool,
 ) {
-	// First content line
 	if start < end {
 		line := m.scratchBuf[:0]
-		ls := m.lineOffsets[start]
-		le := m.lineOffsets[start+1]
-		line = append(line, m.paddedBuf[ls:le]...)
-
-		if showBar {
-			switch {
-			case !hasBar:
-				line = append(line, m.emptyCell...)
-			case thumbPos == 0:
-				line = append(line, m.thumbCell...)
-			default:
-				line = append(line, m.trackCell...)
-			}
-		}
-
+		line = append(line, m.paddedBuf[m.lineOffsets[start]:m.lineOffsets[start+1]]...)
+		line = m.renderScrollbarInLine(line, showBar, hasBar, thumbPos == 0)
 		buf.WriteLine1(line)
 	}
 
-	// Remaining content lines
 	for idx := start + 1; idx < end; idx++ {
 		line := m.scratchBuf[:0]
-		ls := m.lineOffsets[idx]
-		le := m.lineOffsets[idx+1]
-		line = append(line, m.paddedBuf[ls:le]...)
-
-		if showBar {
-			visibleIdx := idx - start
-			switch {
-			case !hasBar:
-				line = append(line, m.emptyCell...)
-			case visibleIdx >= thumbPos && visibleIdx < thumbEnd:
-				line = append(line, m.thumbCell...)
-			default:
-				line = append(line, m.trackCell...)
-			}
-		}
-
+		line = append(line, m.paddedBuf[m.lineOffsets[idx]:m.lineOffsets[idx+1]]...)
+		line = m.renderScrollbarInLine(line, showBar, hasBar, idx-start >= thumbPos && idx-start < thumbEnd)
 		buf.WriteLine1(line)
 	}
 
-	// Fill lines
-	fillStart := end - start
-	for idx := fillStart; idx < contentH; idx++ {
+	for idx := end - start; idx < contentH; idx++ {
 		line := m.scratchBuf[:0]
 		line = append(line, spaces[:contentW]...)
-
-		if showBar {
-			switch {
-			case !hasBar:
-				line = append(line, m.emptyCell...)
-			case idx >= thumbPos && idx < thumbEnd:
-				line = append(line, m.thumbCell...)
-			default:
-				line = append(line, m.trackCell...)
-			}
-		}
-
+		line = m.renderScrollbarInLine(line, showBar, hasBar, idx >= thumbPos && idx < thumbEnd)
 		buf.WriteLine1(line)
 	}
 }

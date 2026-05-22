@@ -2,6 +2,8 @@ package atomicorderedmap
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
 
@@ -12,13 +14,8 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	orderedMap := New[string, int]()
-	if orderedMap == nil {
-		t.Fatal("New() returned nil")
-	}
-
-	if orderedMap.Len() != 0 {
-		t.Errorf("new map should be empty, got length %d", orderedMap.Len())
-	}
+	assert.NotNil(t, orderedMap, "New() returned nil")
+	assert.Equal(t, 0, orderedMap.Len(), "new map should be empty")
 }
 
 func TestSetGetExists(t *testing.T) {
@@ -30,29 +27,23 @@ func TestSetGetExists(t *testing.T) {
 	orderedMap.Set("b", 2)
 	orderedMap.Set("c", 3)
 
-	if val, ok := orderedMap.Get("a"); !ok || val != 1 {
-		t.Errorf("Get(a) = (%d, %v), want (1, true)", val, ok)
-	}
+	val, ok := orderedMap.Get("a")
+	assert.True(t, ok, "Get(a) ok")
+	assert.Equal(t, 1, val, "Get(a) value")
 
-	if val, ok := orderedMap.Get("b"); !ok || val != 2 {
-		t.Errorf("Get(b) = (%d, %v), want (2, true)", val, ok)
-	}
+	val, ok = orderedMap.Get("b")
+	assert.True(t, ok, "Get(b) ok")
+	assert.Equal(t, 2, val, "Get(b) value")
 
-	if val, ok := orderedMap.Get("c"); !ok || val != 3 {
-		t.Errorf("Get(c) = (%d, %v), want (3, true)", val, ok)
-	}
+	val, ok = orderedMap.Get("c")
+	assert.True(t, ok, "Get(c) ok")
+	assert.Equal(t, 3, val, "Get(c) value")
 
-	if val, ok := orderedMap.Get("d"); ok {
-		t.Errorf("Get(d) = (%d, %v), want (_, false)", val, ok)
-	}
+	_, ok = orderedMap.Get("d")
+	assert.False(t, ok, "Get(d) should not be found")
 
-	if !orderedMap.Exists("a") {
-		t.Error("Exists(a) = false, want true")
-	}
-
-	if orderedMap.Exists("d") {
-		t.Error("Exists(d) = true, want false")
-	}
+	assert.True(t, orderedMap.Exists("a"), "Exists(a) should be true")
+	assert.False(t, orderedMap.Exists("d"), "Exists(d) should be false")
 }
 
 func TestSetOverwrite(t *testing.T) {
@@ -64,18 +55,13 @@ func TestSetOverwrite(t *testing.T) {
 	orderedMap.Set("a", 2)
 	orderedMap.Set("a", 3)
 
-	if orderedMap.Len() != 1 {
-		t.Errorf("Len() = %d, want 1", orderedMap.Len())
-	}
+	assert.Equal(t, 1, orderedMap.Len(), "Len()")
 
-	if val, ok := orderedMap.Get("a"); !ok || val != 3 {
-		t.Errorf("Get(a) = (%d, %v), want (3, true)", val, ok)
-	}
+	val, ok := orderedMap.Get("a")
+	assert.True(t, ok, "Get(a) ok")
+	assert.Equal(t, 3, val, "Get(a) value after overwrite")
 
-	pairs := orderedMap.Pairs()
-	if len(pairs) != 1 {
-		t.Errorf("Pairs() length = %d, want 1", len(pairs))
-	}
+	assert.Len(t, orderedMap.Pairs(), 1)
 }
 
 func TestOrderPreservation(t *testing.T) {
@@ -89,18 +75,11 @@ func TestOrderPreservation(t *testing.T) {
 	}
 
 	pairs := orderedMap.Pairs()
-	if len(pairs) != len(keys) {
-		t.Fatalf("Pairs() length = %d, want %d", len(pairs), len(keys))
-	}
+	require.Len(t, pairs, len(keys), "Pairs() length")
 
 	for idx, pair := range pairs {
-		if pair.Key != keys[idx] {
-			t.Errorf("Pairs()[%d].Key = %q, want %q", idx, pair.Key, keys[idx])
-		}
-
-		if pair.Value != idx+1 {
-			t.Errorf("Pairs()[%d].Value = %d, want %d", idx, pair.Value, idx+1)
-		}
+		assert.Equal(t, keys[idx], pair.Key, "Pairs()[%d].Key", idx)
+		assert.Equal(t, idx+1, pair.Value, "Pairs()[%d].Value", idx)
 	}
 }
 
@@ -114,22 +93,14 @@ func TestDel(t *testing.T) {
 
 	orderedMap.Del("b")
 
-	if orderedMap.Len() != 2 {
-		t.Errorf("Len() = %d, want 2", orderedMap.Len())
-	}
-
-	if orderedMap.Exists("b") {
-		t.Error("Exists(b) = true, want false")
-	}
+	assert.Equal(t, 2, orderedMap.Len(), "Len() after Del")
+	assert.False(t, orderedMap.Exists("b"), "Exists(b) after Del")
 
 	pairs := orderedMap.Pairs()
-	if len(pairs) != 2 {
-		t.Fatalf("Pairs() length = %d, want 2", len(pairs))
-	}
+	require.Len(t, pairs, 2, "Pairs() length")
 
-	if pairs[0].Key != "a" || pairs[1].Key != "c" {
-		t.Errorf("order not preserved after Del: got keys %v, want [a c]", []string{pairs[0].Key, pairs[1].Key})
-	}
+	assert.Equal(t, "a", pairs[0].Key, "Pairs()[0].Key")
+	assert.Equal(t, "c", pairs[1].Key, "Pairs()[1].Key")
 }
 
 func TestDelNonExistent(t *testing.T) {
@@ -140,9 +111,7 @@ func TestDelNonExistent(t *testing.T) {
 
 	orderedMap.Del("nonexistent")
 
-	if orderedMap.Len() != 1 {
-		t.Errorf("Len() = %d, want 1", orderedMap.Len())
-	}
+	assert.Equal(t, 1, orderedMap.Len(), "Len() after Del non-existent")
 }
 
 func TestDelIndexReordering(t *testing.T) {
@@ -157,15 +126,11 @@ func TestDelIndexReordering(t *testing.T) {
 	orderedMap.Del("b")
 
 	pairs := orderedMap.Pairs()
-	if len(pairs) != 3 {
-		t.Fatalf("Pairs() length = %d, want 3", len(pairs))
-	}
+	require.Len(t, pairs, 3, "Pairs() length")
 
 	expected := []string{"a", "c", "d"}
 	for idx, p := range pairs {
-		if p.Key != expected[idx] {
-			t.Errorf("Pairs()[%d].Key = %q, want %q", idx, p.Key, expected[idx])
-		}
+		assert.Equal(t, expected[idx], p.Key, "Pairs()[%d].Key", idx)
 	}
 }
 
@@ -179,18 +144,9 @@ func TestClear(t *testing.T) {
 
 	orderedMap.Clear()
 
-	if orderedMap.Len() != 0 {
-		t.Errorf("Len() = %d, want 0", orderedMap.Len())
-	}
-
-	if orderedMap.Exists("a") {
-		t.Error("Exists(a) = true after Clear")
-	}
-
-	pairs := orderedMap.Pairs()
-	if len(pairs) != 0 {
-		t.Errorf("Pairs() length = %d, want 0", len(pairs))
-	}
+	assert.Equal(t, 0, orderedMap.Len(), "Len() after Clear")
+	assert.False(t, orderedMap.Exists("a"), "Exists(a) after Clear")
+	assert.Empty(t, orderedMap.Pairs(), "Pairs() after Clear")
 }
 
 func TestPairs(t *testing.T) {
@@ -201,17 +157,10 @@ func TestPairs(t *testing.T) {
 	orderedMap.Set("b", 2)
 
 	pairs := orderedMap.Pairs()
-	if len(pairs) != 2 {
-		t.Fatalf("Pairs() length = %d, want 2", len(pairs))
-	}
+	require.Len(t, pairs, 2, "Pairs() length")
 
-	if pairs[0] != (Pair[string, int]{Key: "a", Value: 1}) {
-		t.Errorf("Pairs()[0] = %v, want {a 1}", pairs[0])
-	}
-
-	if pairs[1] != (Pair[string, int]{Key: "b", Value: 2}) {
-		t.Errorf("Pairs()[1] = %v, want {b 2}", pairs[1])
-	}
+	assert.Equal(t, Pair[string, int]{Key: "a", Value: 1}, pairs[0], "Pairs()[0]")
+	assert.Equal(t, Pair[string, int]{Key: "b", Value: 2}, pairs[1], "Pairs()[1]")
 }
 
 func TestRecords(t *testing.T) {
@@ -222,17 +171,9 @@ func TestRecords(t *testing.T) {
 	orderedMap.Set("b", 2)
 
 	records := orderedMap.Records()
-	if len(records) != 2 {
-		t.Errorf("Records() length = %d, want 2", len(records))
-	}
-
-	if records["a"] != 1 {
-		t.Errorf("Records()[a] = %d, want 1", records["a"])
-	}
-
-	if records["b"] != 2 {
-		t.Errorf("Records()[b] = %d, want 2", records["b"])
-	}
+	assert.Len(t, records, 2, "Records() length")
+	assert.Equal(t, 1, records["a"], "Records()[a]")
+	assert.Equal(t, 2, records["b"], "Records()[b]")
 }
 
 func TestLast(t *testing.T) {
@@ -244,13 +185,9 @@ func TestLast(t *testing.T) {
 	orderedMap.Set("c", 3)
 
 	pair, ok := orderedMap.Last()
-	if !ok {
-		t.Fatal("Last() returned ok=false, want true")
-	}
-
-	if pair.Key != "c" || pair.Value != 3 {
-		t.Errorf("Last() = %v, want {c 3}", pair)
-	}
+	assert.True(t, ok, "Last() ok")
+	assert.Equal(t, "c", pair.Key, "Last().Key")
+	assert.Equal(t, 3, pair.Value, "Last().Value")
 }
 
 func TestLastEmpty(t *testing.T) {
@@ -259,13 +196,9 @@ func TestLastEmpty(t *testing.T) {
 	orderedMap := New[string, int]()
 
 	pair, ok := orderedMap.Last()
-	if ok {
-		t.Errorf("Last() on empty map returned ok=true, want false")
-	}
-
-	if pair.Key != "" || pair.Value != 0 {
-		t.Errorf("Last() = %v, want zero value", pair)
-	}
+	assert.False(t, ok, "Last() on empty map ok")
+	assert.Empty(t, pair.Key, "Last().Key on empty map")
+	assert.Equal(t, 0, pair.Value, "Last().Value on empty map")
 }
 
 func TestDeleteFunc(t *testing.T) {
@@ -281,17 +214,13 @@ func TestDeleteFunc(t *testing.T) {
 		return v%2 == 0
 	})
 
-	if orderedMap.Len() != 2 {
-		t.Errorf("Len() = %d, want 2", orderedMap.Len())
-	}
+	assert.Equal(t, 2, orderedMap.Len(), "Len() after DeleteFunc")
 
 	pairs := orderedMap.Pairs()
 
 	expected := []string{"a", "c"}
 	for idx, p := range pairs {
-		if p.Key != expected[idx] {
-			t.Errorf("Pairs()[%d].Key = %q, want %q", idx, p.Key, expected[idx])
-		}
+		assert.Equal(t, expected[idx], p.Key, "Pairs()[%d].Key", idx)
 	}
 }
 
@@ -306,9 +235,7 @@ func TestDeleteFuncAll(t *testing.T) {
 		return true
 	})
 
-	if orderedMap.Len() != 0 {
-		t.Errorf("Len() = %d, want 0", orderedMap.Len())
-	}
+	assert.Equal(t, 0, orderedMap.Len(), "Len() after DeleteFunc(all)")
 }
 
 func TestNilSafety(t *testing.T) {
@@ -316,21 +243,12 @@ func TestNilSafety(t *testing.T) {
 
 	var nilMap *AtomicOrderedMap[string, int]
 
-	if nilMap.Len() != 0 {
-		t.Error("nil.Len() should return 0")
-	}
+	assert.Equal(t, 0, nilMap.Len(), "nil.Len()")
+	assert.Nil(t, nilMap.Pairs(), "nil.Pairs()")
+	assert.Nil(t, nilMap.Records(), "nil.Records()")
 
-	if pairs := nilMap.Pairs(); pairs != nil {
-		t.Errorf("nil.Pairs() = %v, want nil", pairs)
-	}
-
-	if records := nilMap.Records(); records != nil {
-		t.Errorf("nil.Records() = %v, want nil", records)
-	}
-
-	if pair, ok := nilMap.Last(); ok {
-		t.Errorf("nil.Last() = (%v, %v), want (zero, false)", pair, ok)
-	}
+	_, ok := nilMap.Last()
+	assert.False(t, ok, "nil.Last() ok")
 
 	nilMap.DeleteFunc(func(k string, v int) bool {
 		return true
@@ -346,28 +264,20 @@ func testMarshalUnmarshal(t *testing.T, marshalFunc func(any) ([]byte, error), u
 	orderedMap.Set("c", 3)
 
 	data, err := marshalFunc(orderedMap)
-	if err != nil {
-		t.Fatalf("marshal error: %v", err)
-	}
+	require.NoError(t, err, "marshal error")
 
 	orderedMap2 := New[string, int]()
 
 	err = unmarshalFunc(data, orderedMap2)
-	if err != nil {
-		t.Fatalf("unmarshal error: %v", err)
-	}
+	require.NoError(t, err, "unmarshal error")
 
 	pairs1 := orderedMap.Pairs()
 	pairs2 := orderedMap2.Pairs()
 
-	if len(pairs1) != len(pairs2) {
-		t.Fatalf("unmarshaled length = %d, want %d", len(pairs2), len(pairs1))
-	}
+	require.Len(t, pairs2, len(pairs1), "unmarshaled length")
 
 	for idx := range pairs1 {
-		if pairs1[idx] != pairs2[idx] {
-			t.Errorf("pairs[%d] = %v, want %v", idx, pairs2[idx], pairs1[idx])
-		}
+		assert.Equal(t, pairs1[idx], pairs2[idx], "pairs[%d]", idx)
 	}
 }
 
@@ -385,9 +295,7 @@ func TestJSONUnmarshalNil(t *testing.T) {
 	data := `[{"key":"a","value":1}]`
 
 	err := json.Unmarshal([]byte(data), nilMap)
-	if err == nil {
-		t.Error("UnmarshalJSON on nil should return error")
-	}
+	assert.Error(t, err, "UnmarshalJSON on nil should return error")
 }
 
 func TestYAMLMarshalUnmarshal(t *testing.T) {
@@ -444,9 +352,9 @@ func TestDifferentTypes(t *testing.T) {
 		orderedMap.Set(1, "one")
 		orderedMap.Set(2, "two")
 
-		if val, ok := orderedMap.Get(1); !ok || val != "one" {
-			t.Errorf("Get(1) = (%q, %v), want (one, true)", val, ok)
-		}
+		val, ok := orderedMap.Get(1)
+		assert.True(t, ok, "Get(1) ok")
+		assert.Equal(t, "one", val, "Get(1) value")
 	})
 
 	t.Run("struct values", func(t *testing.T) {
@@ -460,8 +368,7 @@ func TestDifferentTypes(t *testing.T) {
 		orderedMap.Set("a", testStruct{Field: "value"})
 
 		val, ok := orderedMap.Get("a")
-		if !ok || val.Field != "value" {
-			t.Errorf("Get(a) = (%v, %v), want ({value}, true)", val, ok)
-		}
+		assert.True(t, ok, "Get(a) ok")
+		assert.Equal(t, "value", val.Field, "Get(a).Field")
 	})
 }

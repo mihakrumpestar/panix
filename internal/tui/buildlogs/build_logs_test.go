@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"os"
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -59,9 +60,7 @@ func TestFormatDuration(t *testing.T) {
 		b := &BuildLogs{durLineBuf: buffer.NewLineBuf()}
 
 		got := b.formatDuration(tc.secs)
-		if string(got) != tc.want {
-			t.Errorf("formatDuration(%v) = %q, want %q", tc.secs, got, tc.want)
-		}
+		assert.Equal(t, tc.want, string(got), "formatDuration(%v)", tc.secs)
 	}
 }
 
@@ -76,15 +75,11 @@ func TestIsHideable(t *testing.T) {
 	nonHideablePhases := []phase.Phase{phase.Build, phase.Bootstrap, phase.Transfer, phase.Activate, phase.Rollback}
 
 	for _, p := range hideablePhases {
-		if !buildLogs.isHideable(p) {
-			t.Errorf("isHideable(%s) = false, want true", p)
-		}
+		assert.True(t, buildLogs.isHideable(p), "isHideable(%s) = false, want true", p)
 	}
 
 	for _, p := range nonHideablePhases {
-		if buildLogs.isHideable(p) {
-			t.Errorf("isHideable(%s) = true, want false", p)
-		}
+		assert.False(t, buildLogs.isHideable(p), "isHideable(%s) = true, want false", p)
 	}
 }
 
@@ -96,11 +91,10 @@ func TestShouldHidePhase_HideableFinishedNoError(t *testing.T) {
 	conf := makeTestConfig(0, 0, 0, nil)
 	buildLogs := New(conf, nil, nil)
 
-	phaseLog := newFinishedPhaseLog(nil) // finished, no error
+	phaseLog := newFinishedPhaseLog(nil)
 
-	if !buildLogs.shouldHidePhase(phase.Inspect, phaseLog) {
-		t.Error("should hide finished hideable phase with no error")
-	}
+	assert.True(t, buildLogs.shouldHidePhase(phase.Inspect, phaseLog),
+		"should hide finished hideable phase with no error")
 }
 
 func TestShouldHidePhase_HideableFinishedWithError(t *testing.T) {
@@ -109,11 +103,10 @@ func TestShouldHidePhase_HideableFinishedWithError(t *testing.T) {
 	conf := makeTestConfig(0, 0, 0, nil)
 	buildLogs := New(conf, nil, nil)
 
-	phaseLog := newFinishedPhaseLog(os.ErrNotExist) // finished, with error
+	phaseLog := newFinishedPhaseLog(os.ErrNotExist)
 
-	if buildLogs.shouldHidePhase(phase.Inspect, phaseLog) {
-		t.Error("should NOT hide finished hideable phase with error")
-	}
+	assert.False(t, buildLogs.shouldHidePhase(phase.Inspect, phaseLog),
+		"should NOT hide finished hideable phase with error")
 }
 
 func TestShouldHidePhase_HideableRunning(t *testing.T) {
@@ -122,11 +115,10 @@ func TestShouldHidePhase_HideableRunning(t *testing.T) {
 	conf := makeTestConfig(0, 0, 0, nil)
 	buildLogs := New(conf, nil, nil)
 
-	phaseLog := newRunningPhaseLog() // started but not finished
+	phaseLog := newRunningPhaseLog()
 
-	if buildLogs.shouldHidePhase(phase.Inspect, phaseLog) {
-		t.Error("should NOT hide running hideable phase")
-	}
+	assert.False(t, buildLogs.shouldHidePhase(phase.Inspect, phaseLog),
+		"should NOT hide running hideable phase")
 }
 
 func TestShouldHidePhase_NonHideableFinishedNoError(t *testing.T) {
@@ -137,9 +129,8 @@ func TestShouldHidePhase_NonHideableFinishedNoError(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(nil)
 
-	if buildLogs.shouldHidePhase(phase.Build, phaseLog) {
-		t.Error("should NOT hide finished non-hideable phase (Build)")
-	}
+	assert.False(t, buildLogs.shouldHidePhase(phase.Build, phaseLog),
+		"should NOT hide finished non-hideable phase (Build)")
 }
 
 func TestShouldHidePhase_ShowAllBuildLogs(t *testing.T) {
@@ -151,9 +142,8 @@ func TestShouldHidePhase_ShowAllBuildLogs(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(nil)
 
-	if buildLogs.shouldHidePhase(phase.Inspect, phaseLog) {
-		t.Error("ShowAllBuildLogs=true should NOT hide finished hideable phase")
-	}
+	assert.False(t, buildLogs.shouldHidePhase(phase.Inspect, phaseLog),
+		"ShowAllBuildLogs=true should NOT hide finished hideable phase")
 }
 
 func TestShouldHidePhase_ShowActiveOnly(t *testing.T) {
@@ -164,14 +154,12 @@ func TestShouldHidePhase_ShowActiveOnly(t *testing.T) {
 	buildLogs := New(conf, nil, nil)
 
 	runningPhaseLog := newRunningPhaseLog()
-	if buildLogs.shouldHidePhase(phase.Build, runningPhaseLog) {
-		t.Error("ShowActiveOnly should NOT hide running phase")
-	}
+	assert.False(t, buildLogs.shouldHidePhase(phase.Build, runningPhaseLog),
+		"ShowActiveOnly should NOT hide running phase")
 
 	finishedPhaseLog := newFinishedPhaseLog(nil)
-	if !buildLogs.shouldHidePhase(phase.Build, finishedPhaseLog) {
-		t.Error("ShowActiveOnly should hide finished phase even if non-hideable")
-	}
+	assert.True(t, buildLogs.shouldHidePhase(phase.Build, finishedPhaseLog),
+		"ShowActiveOnly should hide finished phase even if non-hideable")
 }
 
 // --- layoutLine ---
@@ -185,13 +173,10 @@ func TestLayoutLine(t *testing.T) {
 
 	line := buildLogs.layoutLineStyled(0, style.NewStyle(), []byte("left"), []byte("right"), 4, 5)
 
-	if !strings.Contains(buffer.LinesBufToStringForTests(line), "left") {
-		t.Error("layoutLine should contain left text")
-	}
-
-	if !strings.Contains(buffer.LinesBufToStringForTests(line), "right") {
-		t.Error("layoutLine should contain right text")
-	}
+	assert.Contains(t, buffer.LinesBufToStringForTests(line), "left",
+		"layoutLine should contain left text")
+	assert.Contains(t, buffer.LinesBufToStringForTests(line), "right",
+		"layoutLine should contain right text")
 }
 
 func TestLayoutLine_NarrowWidth(t *testing.T) {
@@ -203,13 +188,10 @@ func TestLayoutLine_NarrowWidth(t *testing.T) {
 
 	line := buildLogs.layoutLineStyled(6, style.NewStyle(), []byte("BUILD"), []byte("(1.23s)"), 5, 7)
 
-	if !strings.Contains(buffer.LinesBufToStringForTests(line), "BUILD") {
-		t.Error("layoutLine should contain left text")
-	}
-
-	if !strings.Contains(buffer.LinesBufToStringForTests(line), "(1.23s)") {
-		t.Error("layoutLine should contain right text")
-	}
+	assert.Contains(t, buffer.LinesBufToStringForTests(line), "BUILD",
+		"layoutLine should contain left text")
+	assert.Contains(t, buffer.LinesBufToStringForTests(line), "(1.23s)",
+		"layoutLine should contain right text")
 }
 
 // --- spinnerOrIcon ---
@@ -221,12 +203,10 @@ func TestSpinnerOrIcon_NotStarted(t *testing.T) {
 	buildLogs := New(conf, nil, nil)
 	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	tas := &atomictimeandstate.TimeAndState{} //nolint:exhaustruct // not started
+	tas := &atomictimeandstate.TimeAndState{}
 
 	result := buildLogs.spinnerOrIcon(xpath.New("test"), []byte("icon"), tas)
-	if len(result) != 0 {
-		t.Errorf("spinnerOrIcon for not-started = %q, want empty", result)
-	}
+	assert.Empty(t, result)
 }
 
 func TestSpinnerOrIcon_Finished(t *testing.T) {
@@ -242,9 +222,7 @@ func TestSpinnerOrIcon_Finished(t *testing.T) {
 	tasLoaded := tas.Load()
 
 	result := buildLogs.spinnerOrIcon(xpath.New("test"), []byte("OK"), tasLoaded)
-	if string(result) != "OK " {
-		t.Errorf("spinnerOrIcon for finished = %q, want %q", result, "OK ")
-	}
+	assert.Equal(t, "OK ", string(result), "spinnerOrIcon for finished = %q, want %q", result, "OK ")
 }
 
 func TestSpinnerOrIcon_Running(t *testing.T) {
@@ -259,13 +237,8 @@ func TestSpinnerOrIcon_Running(t *testing.T) {
 	tasLoaded := tas.Load()
 
 	result := buildLogs.spinnerOrIcon(xpath.New("test"), []byte("OK"), tasLoaded)
-	if len(result) == 0 {
-		t.Error("spinnerOrIcon for running should return spinner, got empty")
-	}
-
-	if string(result) == "OK " {
-		t.Error("spinnerOrIcon for running should NOT return finished icon")
-	}
+	assert.NotEmpty(t, result, "spinnerOrIcon for running should return spinner, got empty")
+	assert.NotEqual(t, "OK ", string(result), "spinnerOrIcon for running should NOT return finished icon")
 }
 
 // --- addPhases ---
@@ -279,13 +252,8 @@ func TestAddPhases_NilLogNode(t *testing.T) {
 	parent := testRootNode("parent")
 
 	result := buildLogs.addPhases(parent, nil, xpath.New("test"), 0, false, phase.Build)
-	if result {
-		t.Error("addPhases with nil logNode should return false")
-	}
-
-	if parent.Len() != 0 {
-		t.Error("addPhases with nil logNode should not add children")
-	}
+	assert.False(t, result, "addPhases with nil logNode should return false")
+	assert.Equal(t, 0, parent.Len(), "addPhases with nil logNode should not add children")
 }
 
 func TestAddPhases_NilPhaseLogs(t *testing.T) {
@@ -294,14 +262,12 @@ func TestAddPhases_NilPhaseLogs(t *testing.T) {
 	conf := makeTestConfig(0, 0, 0, nil)
 	buildLogs := New(conf, nil, nil)
 
-	logNode := &logs.Logs{} //nolint:exhaustruct // PhaseLogs is nil
+	logNode := &logs.Logs{}
 
 	parent := testRootNode("parent")
 
 	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), 0, false, phase.Build)
-	if result {
-		t.Error("addPhases with nil PhaseLogs should return false")
-	}
+	assert.False(t, result, "addPhases with nil PhaseLogs should return false")
 }
 
 func newBuildLogsForTest() *BuildLogs {
@@ -320,19 +286,14 @@ func TestAddPhasesSingle_HideableFinishedFiltered(t *testing.T) {
 	buildLogs := newBuildLogsForTest()
 
 	logNode := logs.New()
-	phaseLog := newFinishedPhaseLog(nil) // finished, no error
+	phaseLog := newFinishedPhaseLog(nil)
 	logNode.PhaseLogs.Set(phase.Inspect, phaseLog)
 
 	parent := testRootNode("parent")
 
 	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Inspect)
-	if result {
-		t.Error("addPhasesSingle should return false when phase is hidden")
-	}
-
-	if parent.Len() != 0 {
-		t.Errorf("addPhasesSingle should add 0 children when phase hidden, got %d", parent.Len())
-	}
+	assert.False(t, result, "addPhasesSingle should return false when phase is hidden")
+	assert.Equal(t, 0, parent.Len(), "addPhasesSingle should add 0 children when phase hidden, got %d", parent.Len())
 }
 
 func TestAddPhasesSingle_HideableFinishedWithErrorNotFiltered(t *testing.T) {
@@ -341,25 +302,19 @@ func TestAddPhasesSingle_HideableFinishedWithErrorNotFiltered(t *testing.T) {
 	buildLogs := newBuildLogsForTest()
 
 	logNode := logs.New()
-	phaseLog := newFinishedPhaseLog(os.ErrNotExist) // finished with error
+	phaseLog := newFinishedPhaseLog(os.ErrNotExist)
 	logNode.PhaseLogs.Set(phase.Inspect, phaseLog)
 
 	parent := testRootNode("parent")
 
-	// stopAtError=false: addPhases returns false regardless, but the child should still be added
 	buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Inspect)
 
-	if parent.Len() != 1 {
-		t.Errorf("addPhasesSingle should add child when phase has error, got %d", parent.Len())
-	}
+	assert.Equal(t, 1, parent.Len(), "addPhasesSingle should add child when phase has error, got %d", parent.Len())
 
-	// With stopAtError=true, addPhases should return true
 	parent2 := testRootNode("parent")
 	result2 := buildLogs.addPhases(parent2, logNode, xpath.New("test"), 6, true, phase.Inspect)
 
-	if !result2 {
-		t.Error("addPhasesSingle with stopAtError should return true when phase has error")
-	}
+	assert.True(t, result2, "addPhasesSingle with stopAtError should return true when phase has error")
 }
 
 func TestAddPhasesSingle_BuildPhaseNotFiltered(t *testing.T) {
@@ -368,19 +323,14 @@ func TestAddPhasesSingle_BuildPhaseNotFiltered(t *testing.T) {
 	buildLogs := newBuildLogsForTest()
 
 	logNode := logs.New()
-	phaseLog := newFinishedPhaseLog(nil) // finished, no error, but NOT hideable
+	phaseLog := newFinishedPhaseLog(nil)
 	logNode.PhaseLogs.Set(phase.Build, phaseLog)
 
 	parent := testRootNode("parent")
 
 	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Build)
-	if result {
-		t.Error("addPhasesSingle should return false when phase finishes with no error")
-	}
-
-	if parent.Len() != 1 {
-		t.Errorf("addPhasesSingle should add child for non-hideable phase, got %d", parent.Len())
-	}
+	assert.False(t, result, "addPhasesSingle should return false when phase finishes with no error")
+	assert.Equal(t, 1, parent.Len(), "addPhasesSingle should add child for non-hideable phase, got %d", parent.Len())
 }
 
 func TestAddPhasesMulti_Filtering(t *testing.T) {
@@ -394,11 +344,9 @@ func TestAddPhasesMulti_Filtering(t *testing.T) {
 
 	logNode := logs.New()
 
-	// Inspect: finished, no error → should be hidden
 	inspectLog := newFinishedPhaseLog(nil)
 	logNode.PhaseLogs.Set(phase.Inspect, inspectLog)
 
-	// Build: finished, no error → NOT hideable, should be shown
 	buildLog := newFinishedPhaseLog(nil)
 	logNode.PhaseLogs.Set(phase.Build, buildLog)
 
@@ -406,9 +354,7 @@ func TestAddPhasesMulti_Filtering(t *testing.T) {
 
 	buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Inspect, phase.Build)
 
-	if parent.Len() != 1 {
-		t.Errorf("addPhasesMulti should add 1 child (Build only, Inspect hidden), got %d", parent.Len())
-	}
+	assert.Equal(t, 1, parent.Len(), "addPhasesMulti should add 1 child (Build only, Inspect hidden), got %d", parent.Len())
 }
 
 // --- addCommands ---
@@ -429,9 +375,7 @@ func TestAddCommands_NilCommandLogs(t *testing.T) {
 
 	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, xpath.New("test"), 6)
 
-	if hasError {
-		t.Error("addCommands with nil CommandLogs and no error should return false")
-	}
+	assert.False(t, hasError, "addCommands with nil CommandLogs and no error should return false")
 }
 
 func TestAddCommands_WithCommandError(t *testing.T) {
@@ -454,13 +398,8 @@ func TestAddCommands_WithCommandError(t *testing.T) {
 
 	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, xpath.New("test"), 6)
 
-	if !hasError {
-		t.Error("addCommands should return true when command has error")
-	}
-
-	if phaseNode.Len() == 0 {
-		t.Error("addCommands should add command children")
-	}
+	assert.True(t, hasError, "addCommands should return true when command has error")
+	assert.NotZero(t, phaseNode.Len(), "addCommands should add command children")
 }
 
 func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
@@ -491,9 +430,7 @@ func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
 
 	buildLogs.addCommands(phaseNode, phaseLog, phase.Inspect, xpath.New("test"), 6)
 
-	if phaseNode.Len() != 1 {
-		t.Errorf("addCommands for hideable phase should show only last command, got %d children", phaseNode.Len())
-	}
+	assert.Equal(t, 1, phaseNode.Len(), "addCommands for hideable phase should show only last command, got %d children", phaseNode.Len())
 }
 
 func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
@@ -536,9 +473,7 @@ func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
 
 			buildLogs.addCommands(phaseNode, phaseLog, testCase.phaseI, xpath.New("test"), 6)
 
-			if phaseNode.Len() != testCase.wantCmds {
-				t.Errorf("got %d children, want %d", phaseNode.Len(), testCase.wantCmds)
-			}
+			assert.Equal(t, testCase.wantCmds, phaseNode.Len(), "got %d children, want %d", phaseNode.Len(), testCase.wantCmds)
 		})
 	}
 }
@@ -562,9 +497,8 @@ func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 
 	buildLogs.addCommandChildren(cmdNode, cmd, xpath.New("test"), tas, 9)
 
-	if cmdNode.Len() < 2 {
-		t.Errorf("addCommandChildren should add output and error children, got %d", cmdNode.Len())
-	}
+	assert.GreaterOrEqual(t, cmdNode.Len(), 2,
+		"addCommandChildren should add output and error children, got %d", cmdNode.Len())
 }
 
 func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
@@ -575,16 +509,15 @@ func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
 	buildLogs.contentWidth = 120
 	buildLogs.viewports = newTestViewports(conf)
 
-	cmd := newFinishedCommandLog("test cmd", nil) // no error
+	cmd := newFinishedCommandLog("test cmd", nil)
 
 	cmdNode := testRootNode("cmd")
 	tas := cmd.TimeAndState.Load()
 
 	buildLogs.addCommandChildren(cmdNode, cmd, xpath.New("test"), tas, 9)
 
-	if cmdNode.Len() != 0 {
-		t.Errorf("addCommandChildren with no output and no error should add 0 children, got %d", cmdNode.Len())
-	}
+	assert.Equal(t, 0, cmdNode.Len(),
+		"addCommandChildren with no output and no error should add 0 children, got %d", cmdNode.Len())
 }
 
 // --- entityNode ---
@@ -605,13 +538,10 @@ func TestEntityNode(t *testing.T) {
 
 	result := buf.String()
 
-	if !strings.Contains(result, "my-flake") {
-		t.Error("entityNode should contain the name")
-	}
-
-	if !strings.Contains(result, "(0.00s)") {
-		t.Error("entityNode should contain duration")
-	}
+	assert.Contains(t, result, "my-flake",
+		"entityNode should contain the name")
+	assert.Contains(t, result, "(0.00s)",
+		"entityNode should contain duration")
 }
 
 func TestEntityNode_NilLogNode(t *testing.T) {
@@ -629,13 +559,10 @@ func TestEntityNode_NilLogNode(t *testing.T) {
 
 	result := buf.String()
 
-	if !strings.Contains(result, "my-flake") {
-		t.Error("entityNode with nil logNode should still contain the name")
-	}
-
-	if !strings.Contains(result, "(0.00s)") {
-		t.Error("entityNode with nil logNode should show 0.00s duration")
-	}
+	assert.Contains(t, result, "my-flake",
+		"entityNode with nil logNode should still contain the name")
+	assert.Contains(t, result, "(0.00s)",
+		"entityNode with nil logNode should show 0.00s duration")
 }
 
 // --- buildDefaultTree ---
@@ -655,9 +582,7 @@ func TestBuildDefaultTree_ConfigScopedPhases(t *testing.T) {
 
 	buildLogs.buildDefaultTree(cfgNode, cfg)
 
-	if cfgNode.Len() == 0 {
-		t.Error("buildDefaultTree should produce children")
-	}
+	assert.NotZero(t, cfgNode.Len(), "buildDefaultTree should produce children")
 }
 
 func TestBuildDefaultTree_EmptyMachines(t *testing.T) {
@@ -671,16 +596,14 @@ func TestBuildDefaultTree_EmptyMachines(t *testing.T) {
 
 	cfg := getFirstConfig(conf)
 
-	// Add Build phase log to the config (config-scoped)
 	cfg.Logs.PhaseLogs.Set(phase.Build, newFinishedPhaseLog(nil))
 
 	cfgNode := testRootNode("cfg")
 
 	buildLogs.buildDefaultTree(cfgNode, cfg)
 
-	if cfgNode.Len() == 0 {
-		t.Error("buildDefaultTree should produce config-scoped phases even with no machines")
-	}
+	assert.NotZero(t, cfgNode.Len(),
+		"buildDefaultTree should produce config-scoped phases even with no machines")
 }
 
 // --- buildPhaseSelectedTree ---
@@ -708,9 +631,8 @@ func TestBuildPhaseSelectedTree_ConfigScopedPhase(t *testing.T) {
 
 	buildLogs.buildPhaseSelectedTree(cfgNode, cfg)
 
-	if cfgNode.Len() == 0 {
-		t.Error("buildPhaseSelectedTree for config-scoped phase should add children")
-	}
+	assert.NotZero(t, cfgNode.Len(),
+		"buildPhaseSelectedTree for config-scoped phase should add children")
 }
 
 func TestBuildPhaseSelectedTree_MachineScopedPhase(t *testing.T) {
@@ -756,13 +678,10 @@ func TestView_BasicOutput(t *testing.T) {
 
 	stripped := string(style.StripANSI([]byte(result)))
 
-	if !strings.Contains(stripped, "Build Logs") {
-		t.Error("View should contain 'Build Logs' header")
-	}
-
-	if !strings.Contains(stripped, "flake0") {
-		t.Error("View should contain flake name")
-	}
+	assert.Contains(t, stripped, "Build Logs",
+		"View should contain 'Build Logs' header")
+	assert.Contains(t, stripped, "flake0",
+		"View should contain flake name")
 }
 
 func TestView_EmptyFleet(t *testing.T) {
@@ -778,9 +697,8 @@ func TestView_EmptyFleet(t *testing.T) {
 
 	result := renderBuildLogsString(buildLogs, vp, sp)
 
-	if !strings.Contains(result, "Build Logs") {
-		t.Error("View should contain 'Build Logs' header even with empty fleet")
-	}
+	assert.Contains(t, result, "Build Logs",
+		"View should contain 'Build Logs' header even with empty fleet")
 }
 
 func TestView_NilFlake(t *testing.T) {
@@ -791,7 +709,6 @@ func TestView_NilFlake(t *testing.T) {
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
 
-	// Add a nil flake entry — View should skip it
 	conf.Fleet.Flakes.Set("nil-flake", nil)
 
 	vp := newTestViewports(conf)
@@ -799,9 +716,8 @@ func TestView_NilFlake(t *testing.T) {
 
 	result := renderBuildLogsString(buildLogs, vp, sp)
 
-	if !strings.Contains(string(style.StripANSI([]byte(result))), "Build Logs") {
-		t.Error("View should contain 'Build Logs' header")
-	}
+	assert.Contains(t, string(style.StripANSI([]byte(result))), "Build Logs",
+		"View should contain 'Build Logs' header")
 }
 
 func TestView_NilMachine(t *testing.T) {
@@ -821,9 +737,8 @@ func TestView_NilMachine(t *testing.T) {
 
 	result := renderBuildLogsString(buildLogs, vp, sp)
 
-	if !strings.Contains(string(style.StripANSI([]byte(result))), "Build Logs") {
-		t.Error("View should contain 'Build Logs' header")
-	}
+	assert.Contains(t, string(style.StripANSI([]byte(result))), "Build Logs",
+		"View should contain 'Build Logs' header")
 }
 
 func TestView_MultipleFlakes(t *testing.T) {
@@ -839,13 +754,10 @@ func TestView_MultipleFlakes(t *testing.T) {
 
 	result := renderBuildLogsString(buildLogs, vp, sp)
 
-	if !strings.Contains(result, "flake0") {
-		t.Error("View should contain first flake name")
-	}
-
-	if !strings.Contains(result, "flake1") {
-		t.Error("View should contain second flake name")
-	}
+	assert.Contains(t, result, "flake0",
+		"View should contain first flake name")
+	assert.Contains(t, result, "flake1",
+		"View should contain second flake name")
 }
 
 // --- addPhase edge cases ---
@@ -865,13 +777,8 @@ func TestAddPhase_NotStarted(t *testing.T) {
 
 	result := buildLogs.addPhase(parent, xpath.New("test"), phase.Build, phaseLog, 6)
 
-	if result {
-		t.Error("addPhase for not-started phase should return false (no error)")
-	}
-
-	if parent.Len() != 1 {
-		t.Errorf("addPhase should add the phase even when not started, got %d children", parent.Len())
-	}
+	assert.False(t, result, "addPhase for not-started phase should return false (no error)")
+	assert.Equal(t, 1, parent.Len(), "addPhase should add the phase even when not started, got %d children", parent.Len())
 }
 
 func TestAddPhase_RunningPhaseShowsSpinner(t *testing.T) {
@@ -889,18 +796,15 @@ func TestAddPhase_RunningPhaseShowsSpinner(t *testing.T) {
 
 	buildLogs.addPhase(parent, xpath.New("test"), phase.Build, phaseLog, 6)
 
-	if parent.Len() != 1 {
-		t.Error("addPhase for running phase should add child")
-	}
+	assert.Equal(t, 1, parent.Len(), "addPhase for running phase should add child")
 
 	buf := buffer.NewLinesBufDiff()
 	parent.Render(buf)
 
 	result := buf.String()
 
-	if !strings.Contains(result, "BUILD") {
-		t.Error("addPhase for Build should contain 'BUILD'")
-	}
+	assert.Contains(t, result, "BUILD",
+		"addPhase for Build should contain 'BUILD'")
 }
 
 // --- makeAllowedSet ---
@@ -910,24 +814,16 @@ func TestMakeAllowedSet(t *testing.T) {
 
 	set := makeAllowedSet([]phase.Phase{phase.Build, phase.Transfer})
 
-	if len(set) != 2 {
-		t.Fatalf("makeAllowedSet should have 2 entries, got %d", len(set))
-	}
+	assert.Len(t, set, 2, "makeAllowedSet should have 2 entries, got %d", len(set))
 
 	_, ok := set[phase.Build]
-	if !ok {
-		t.Error("makeAllowedSet should contain Build")
-	}
+	assert.True(t, ok, "makeAllowedSet should contain Build")
 
 	_, ok = set[phase.Transfer]
-	if !ok {
-		t.Error("makeAllowedSet should contain Transfer")
-	}
+	assert.True(t, ok, "makeAllowedSet should contain Transfer")
 
 	_, ok = set[phase.Inspect]
-	if ok {
-		t.Error("makeAllowedSet should NOT contain Inspect")
-	}
+	assert.False(t, ok, "makeAllowedSet should NOT contain Inspect")
 }
 
 func TestMakeAllowedSet_Empty(t *testing.T) {
@@ -935,9 +831,7 @@ func TestMakeAllowedSet_Empty(t *testing.T) {
 
 	set := makeAllowedSet(nil)
 
-	if len(set) != 0 {
-		t.Errorf("makeAllowedSet(nil) should be empty, got %d", len(set))
-	}
+	assert.Empty(t, set, "makeAllowedSet(nil) should be empty, got %d", len(set))
 }
 
 // --- styleForEntity ---
@@ -950,9 +844,8 @@ func TestStyleForEntity(t *testing.T) {
 	entity := conf.ColorScheme.Flake
 	result := entity.Color
 
-	if !reflect.DeepEqual(result, entity.Color) {
-		t.Error("entity Color should be the entity's Color style")
-	}
+	assert.True(t, reflect.DeepEqual(result, entity.Color),
+		"entity Color should be the entity's Color style")
 }
 
 // --- durationBytes ---
@@ -969,13 +862,9 @@ func TestDurationBytes_Finished(t *testing.T) {
 
 	styled, width := buildLogs.durationBytes(tas)
 
-	if width <= 0 {
-		t.Errorf("durationBytes for finished phase should have positive width, got %d", width)
-	}
-
-	if !bytes.Contains(styled, []byte("s)")) {
-		t.Errorf("durationBytes result should contain seconds, got %q", styled)
-	}
+	assert.Positive(t, width, "durationBytes for finished phase should have positive width, got %d", width)
+	assert.True(t, bytes.Contains(styled, []byte("s)")),
+		"durationBytes result should contain seconds, got %q", styled)
 }
 
 func TestDurationBytes_NotStarted(t *testing.T) {
@@ -988,13 +877,9 @@ func TestDurationBytes_NotStarted(t *testing.T) {
 
 	styled, width := buildLogs.durationBytes(tas)
 
-	if width != 0 {
-		t.Errorf("durationBytes for not-started should have 0 width, got %d", width)
-	}
-
-	if len(styled) != 0 {
-		t.Errorf("durationBytes for not-started should return empty, got %q", styled)
-	}
+	assert.Equal(t, 0, width)
+	assert.Empty(t, styled,
+		"durationBytes for not-started should return empty, got %q", styled)
 }
 
 // --- phaseLogsAndXpath ---
@@ -1013,13 +898,10 @@ func TestPhaseLogsAndXpath_ConfigScope(t *testing.T) {
 
 	logsResult, xpResult := buildLogs.phaseLogsAndXpath(pm, cfg, nil)
 
-	if logsResult != cfg.Logs {
-		t.Error("phaseLogsAndXpath for config scope should return cfg.Logs")
-	}
-
-	if xpResult != cfg.Xpath {
-		t.Error("phaseLogsAndXpath for config scope should return cfg.Xpath")
-	}
+	assert.Equal(t, cfg.Logs, logsResult,
+		"phaseLogsAndXpath for config scope should return cfg.Logs")
+	assert.Equal(t, cfg.Xpath, xpResult,
+		"phaseLogsAndXpath for config scope should return cfg.Xpath")
 }
 
 func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
@@ -1039,13 +921,10 @@ func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
 
 	logsResult, xpResult := buildLogs.phaseLogsAndXpath(pm, cfg, mach)
 
-	if logsResult != mach.Logs {
-		t.Error("phaseLogsAndXpath for machine scope should return m.Logs")
-	}
-
-	if xpResult != mach.Xpath {
-		t.Error("phaseLogsAndXpath for machine scope should return m.Xpath")
-	}
+	assert.Equal(t, mach.Logs, logsResult,
+		"phaseLogsAndXpath for machine scope should return m.Logs")
+	assert.Equal(t, mach.Xpath, xpResult,
+		"phaseLogsAndXpath for machine scope should return m.Xpath")
 }
 
 // --- Helpers ---

@@ -6,6 +6,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/stretchr/testify/assert"
 )
 
 func lb(s string) *buffer.LinesBuf {
@@ -32,12 +33,7 @@ func viewString(n *Node) string {
 func TestSingleNode(t *testing.T) {
 	t.Parallel()
 
-	got := viewString(rootStr("root"))
-	want := "root"
-
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
+	assert.Equal(t, "root", viewString(rootStr("root")))
 }
 
 func TestSingleChild(t *testing.T) {
@@ -48,14 +44,11 @@ func TestSingleChild(t *testing.T) {
 
 	got := viewString(our)
 
-	if !strings.Contains(got, "root") || !strings.Contains(got, "child") {
-		t.Errorf("tree doesn't contain expected nodes: %q", got)
-	}
+	assert.Contains(t, got, "root")
+	assert.Contains(t, got, "child")
 
 	lines := strings.Split(got, "\n")
-	if len(lines) != 2 {
-		t.Errorf("expected 2 lines, got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 2)
 }
 
 func TestMultipleChildren(t *testing.T) {
@@ -69,9 +62,7 @@ func TestMultipleChildren(t *testing.T) {
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
-	if len(lines) != 4 {
-		t.Errorf("expected 4 lines, got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 4)
 }
 
 func TestNested(t *testing.T) {
@@ -90,9 +81,7 @@ func TestNested(t *testing.T) {
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
-	if len(lines) != 7 {
-		t.Errorf("expected 7 lines (root + 2 children + 4 grandchildren), got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 7)
 }
 
 func TestNoStyle(t *testing.T) {
@@ -104,9 +93,7 @@ func TestNoStyle(t *testing.T) {
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
-	if len(lines) != 2 {
-		t.Errorf("expected 2 lines, got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 2)
 }
 
 func TestDeepNesting(t *testing.T) {
@@ -129,9 +116,7 @@ func TestDeepNesting(t *testing.T) {
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
-	if len(lines) != 7 {
-		t.Errorf("expected 7 lines, got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 7)
 }
 
 func TestMixedStringAndNodeChildren(t *testing.T) {
@@ -144,9 +129,7 @@ func TestMixedStringAndNodeChildren(t *testing.T) {
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
-	if len(lines) != 3 {
-		t.Errorf("expected 3 lines, got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 3)
 }
 
 func TestMultiline(t *testing.T) {
@@ -162,9 +145,7 @@ func TestMultiline(t *testing.T) {
 	got := viewString(our)
 	lines := strings.Split(got, "\n")
 
-	if len(lines) != 7 {
-		t.Errorf("expected 7 lines, got %d: %q", len(lines), got)
-	}
+	assert.Len(t, lines, 7)
 }
 
 func TestViewReuse(t *testing.T) {
@@ -182,20 +163,17 @@ func TestViewReuse(t *testing.T) {
 
 		got := renderBuf.String()
 
-		if iteration > 0 && got != prev {
-			t.Errorf("iteration %d: output changed from previous: %q vs %q", iteration, got, prev)
+		if iteration > 0 {
+			assert.Equal(t, prev, got, "iteration %d", iteration)
 		}
 
 		prev = got
 
-		if !strings.Contains(got, "root") || !strings.Contains(got, "a") {
-			t.Errorf("iteration %d: unexpected output: %q", iteration, got)
-		}
+		assert.Contains(t, got, "root", "iteration %d", iteration)
+		assert.Contains(t, got, "a", "iteration %d", iteration)
 
 		lines := strings.Split(got, "\n")
-		if len(lines) != 3 {
-			t.Errorf("iteration %d: expected 3 lines, got %d: %q", iteration, len(lines), got)
-		}
+		assert.Len(t, lines, 3, "iteration %d", iteration)
 	}
 }
 
@@ -211,11 +189,6 @@ func TestViewAppends(t *testing.T) {
 
 	got := renderBuf.String()
 
-	if !strings.HasPrefix(got, "prefix|") {
-		t.Errorf("View should append to existing buffer content, got %q", got)
-	}
-
-	if !strings.Contains(got, "root") {
-		t.Errorf("View should append tree content, got %q", got)
-	}
+	assert.True(t, strings.HasPrefix(got, "prefix|"))
+	assert.Contains(t, got, "root")
 }

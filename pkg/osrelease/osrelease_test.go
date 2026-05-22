@@ -4,99 +4,100 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseEmpty(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte(""))
-	if len(got) != 0 {
-		t.Fatalf("got %d keys, want 0", len(got))
-	}
+	assert.Empty(t, got)
 }
 
 func TestParseCommentAndBlankLines(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("# comment\n\nID=linux\n"))
-	assertMap(t, got, map[string]string{"ID": "linux"})
+	assert.Equal(t, map[string]string{"ID": "linux"}, got)
 }
 
 func TestParseUnquotedValue(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("ID=linux\nVERSION=1.0\n"))
-	assertMap(t, got, map[string]string{"ID": "linux", "VERSION": "1.0"})
+	assert.Equal(t, map[string]string{"ID": "linux", "VERSION": "1.0"}, got)
 }
 
 func TestParseDoubleQuotedValue(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte(`PRETTY_NAME="Ubuntu 22.04"` + "\n"))
-	assertMap(t, got, map[string]string{"PRETTY_NAME": "Ubuntu 22.04"})
+	assert.Equal(t, map[string]string{"PRETTY_NAME": "Ubuntu 22.04"}, got)
 }
 
 func TestParseSingleQuotedValue(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte(`NAME='My OS'` + "\n"))
-	assertMap(t, got, map[string]string{"NAME": "My OS"})
+	assert.Equal(t, map[string]string{"NAME": "My OS"}, got)
 }
 
 func TestParseSingleQuotedNoEscape(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte(`NAME='has \" \$ \\ \` + "'" + "\n"))
-	assertMap(t, got, map[string]string{"NAME": `has \" \$ \\ \`})
+	assert.Equal(t, map[string]string{"NAME": `has \" \$ \\ \`}, got)
 }
 
 func TestParseDoubleQuotedEscape(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte(`NAME="has \" \$ \\ ` + "`" + `end"` + "\n"))
-	assertMap(t, got, map[string]string{"NAME": "has \" $ \\ `end"})
+	assert.Equal(t, map[string]string{"NAME": "has \" $ \\ `end"}, got)
 }
 
 func TestParseUnquotedEscape(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("NAME=has\\\"\\$end\n"))
-	assertMap(t, got, map[string]string{"NAME": `has"$end`})
+	assert.Equal(t, map[string]string{"NAME": `has"$end`}, got)
 }
 
 func TestParseWhitespaceAroundEquals(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("  ID  =  linux  \n"))
-	assertMap(t, got, map[string]string{"ID": "linux"})
+	assert.Equal(t, map[string]string{"ID": "linux"}, got)
 }
 
 func TestParseNoNewlineAtEnd(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("ID=linux"))
-	assertMap(t, got, map[string]string{"ID": "linux"})
+	assert.Equal(t, map[string]string{"ID": "linux"}, got)
 }
 
 func TestParseEmptyValue(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("ID=\n"))
-	assertMap(t, got, map[string]string{"ID": ""})
+	assert.Equal(t, map[string]string{"ID": ""}, got)
 }
 
 func TestParseLineWithoutEquals(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("NOEQUALS\nID=linux\n"))
-	assertMap(t, got, map[string]string{"ID": "linux"})
+	assert.Equal(t, map[string]string{"ID": "linux"}, got)
 }
 
 func TestParseDuplicateKey(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte("ID=first\nID=second\n"))
-	assertMap(t, got, map[string]string{"ID": "second"})
+	assert.Equal(t, map[string]string{"ID": "second"}, got)
 }
 
 func TestParseTypicalOsRelease(t *testing.T) {
@@ -123,22 +124,20 @@ BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
 		"BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
 	}
 
-	got := Parse([]byte(input))
-	assertMap(t, got, want)
+	assert.Equal(t, want, Parse([]byte(input)))
 }
 
 func TestParseNoEscapingFastPath(t *testing.T) {
 	t.Parallel()
 
-	got := Parse([]byte("ID=linux\n"))
-	assertMap(t, got, map[string]string{"ID": "linux"})
+	assert.Equal(t, map[string]string{"ID": "linux"}, Parse([]byte("ID=linux\n")))
 }
 
 func TestParseBackslashNotSpecialChar(t *testing.T) {
 	t.Parallel()
 
 	got := Parse([]byte(`PATH=/usr\local` + "\n"))
-	assertMap(t, got, map[string]string{"PATH": `/usr\local`})
+	assert.Equal(t, map[string]string{"PATH": `/usr\local`}, got)
 }
 
 func TestReadFile(t *testing.T) {
@@ -151,32 +150,19 @@ func TestReadFile(t *testing.T) {
 ID=test
 `
 
-	err := os.WriteFile(path, []byte(content), 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 
 	result, err := ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-
-	if result["NAME"] != "TestOS" {
-		t.Errorf("NAME: got %q, want %q", result["NAME"], "TestOS")
-	}
-
-	if result["ID"] != "test" {
-		t.Errorf("ID: got %q, want %q", result["ID"], "test")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "TestOS", result["NAME"])
+	assert.Equal(t, "test", result["ID"])
 }
 
 func TestReadFileNotFound(t *testing.T) {
 	t.Parallel()
 
 	_, err := ReadFile("/nonexistent/path/os-release")
-	if err == nil {
-		t.Error("expected error for nonexistent file")
-	}
+	assert.Error(t, err)
 }
 
 func TestReadFallback(t *testing.T) {
@@ -187,39 +173,12 @@ func TestReadFallback(t *testing.T) {
 	etcPath := filepath.Join(dir, "etc-os-release")
 	usrPath := filepath.Join(dir, "usr-os-release")
 
-	err := os.WriteFile(usrPath, []byte("ID=fallback\n"), 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(usrPath, []byte("ID=fallback\n"), 0o600))
 
-	_, err = ReadFile(etcPath)
-	if err == nil {
-		t.Error("expected error for missing /etc file")
-	}
+	_, err := ReadFile(etcPath)
+	require.Error(t, err, "expected error for missing /etc file")
 
 	result, err := ReadFile(usrPath)
-	if err != nil {
-		t.Fatalf("ReadFile fallback: %v", err)
-	}
-
-	if result["ID"] != "fallback" {
-		t.Errorf("ID: got %q, want %q", result["ID"], "fallback")
-	}
-}
-
-func assertMap(t *testing.T, got, want map[string]string) {
-	t.Helper()
-
-	if len(got) != len(want) {
-		t.Fatalf("got %d keys, want %d keys: %+v", len(got), len(want), got)
-	}
-
-	for key, wantVal := range want {
-		gotVal, ok := got[key]
-		if !ok {
-			t.Errorf("missing key %q", key)
-		} else if gotVal != wantVal {
-			t.Errorf("key %q: got %q, want %q", key, gotVal, wantVal)
-		}
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "fallback", result["ID"])
 }

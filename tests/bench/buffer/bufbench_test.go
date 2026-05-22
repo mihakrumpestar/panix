@@ -779,27 +779,16 @@ func (b *blobDiffRef) Reset() {
 	b.refs = b.refs[:0]
 }
 
-//nolint:forcetypeassert // diff is inherently branchy; type guaranteed by construction
 func (b *blobDiffRef) Diff(old benchBuffer) []int {
-	other := old.(*blobDiffRef)
+	other, ok := old.(*blobDiffRef)
+	if !ok {
+		panic("type should be guaranteed by construction")
+	}
+
 	commonLen := min(len(b.refs), len(other.refs))
 
-	// Fast path: if all line lengths match and total data length matches,
-	// do a single memcmp on the whole blob
-	if len(b.data) == len(other.data) && len(b.refs) == len(other.refs) {
-		allMatch := true
-
-		for idx := range commonLen {
-			if b.refs[idx].len_ != other.refs[idx].len_ {
-				allMatch = false
-
-				break
-			}
-		}
-
-		if allMatch && bytes.Equal(b.data, other.data) {
-			return nil
-		}
+	if b.fastPathEqual(other) {
+		return nil
 	}
 
 	var diffs []int
@@ -819,6 +808,22 @@ func (b *blobDiffRef) Diff(old benchBuffer) []int {
 	}
 
 	return diffs
+}
+
+func (b *blobDiffRef) fastPathEqual(other *blobDiffRef) bool {
+	if len(b.data) != len(other.data) || len(b.refs) != len(other.refs) {
+		return false
+	}
+
+	commonLen := min(len(b.refs), len(other.refs))
+
+	for idx := range commonLen {
+		if b.refs[idx].len_ != other.refs[idx].len_ {
+			return false
+		}
+	}
+
+	return bytes.Equal(b.data, other.data)
 }
 
 // ─── Registry ───────────────────────────────────────────────────────────────

@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
@@ -39,26 +42,16 @@ func TestNew_Defaults(t *testing.T) {
 
 	tbl := New(Config{})
 
-	if tbl.cfg.Width != 0 {
-		t.Errorf("Default width = %d, want 0", tbl.cfg.Width)
-	}
-
-	if tbl.bordered {
-		t.Error("Default bordered should be false")
-	}
-
-	if tbl.SelectedIndex() != -1 {
-		t.Errorf("Default SelectedIndex = %d, want -1", tbl.SelectedIndex())
-	}
+	assert.Equal(t, 0, tbl.cfg.Width, "Default width should be 0")
+	assert.False(t, tbl.bordered, "Default bordered should be false")
+	assert.Equal(t, -1, tbl.SelectedIndex(), "Default SelectedIndex should be -1")
 }
 
 func TestTable_Empty(t *testing.T) {
 	t.Parallel()
 
 	got := buffer.LinesBufToStringForTests(New(Config{}).Render())
-	if got != "" {
-		t.Errorf("Empty table String() = %q, want \"\"", got)
-	}
+	assert.Empty(t, got, "Empty table should return empty string")
 }
 
 func TestTable_HeadersOnly_NoBorder(t *testing.T) {
@@ -67,9 +60,8 @@ func TestTable_HeadersOnly_NoBorder(t *testing.T) {
 	tbl := New(Config{Headers: strLines("Name", "Value")})
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "Name") || !strings.Contains(got, "Value") {
-		t.Errorf("Headers-only no border = %q, missing header text", got)
-	}
+	assert.Contains(t, got, "Name", "Headers-only table should contain header text")
+	assert.Contains(t, got, "Value", "Headers-only table should contain header text")
 }
 
 func TestTable_HeadersAndRows_WithBorder(t *testing.T) {
@@ -79,17 +71,9 @@ func TestTable_HeadersAndRows_WithBorder(t *testing.T) {
 	tbl.SetRows(strRows([]string{"key1", "val1"}, []string{"key2", "val2"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "┌") {
-		t.Errorf("Missing top-left corner ┌: %s", got)
-	}
-
-	if !strings.Contains(got, "└") {
-		t.Errorf("Missing bottom-left corner └: %s", got)
-	}
-
-	if !strings.Contains(got, "┬") {
-		t.Errorf("Missing header separator ┬: %s", got)
-	}
+	assert.Contains(t, got, "┌", "Bordered table missing top-left corner")
+	assert.Contains(t, got, "└", "Bordered table missing bottom-left corner")
+	assert.Contains(t, got, "┬", "Bordered table missing header separator")
 }
 
 func TestTable_RowsOnly_WithBorder(t *testing.T) {
@@ -99,13 +83,8 @@ func TestTable_RowsOnly_WithBorder(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a", "b"}, []string{"c", "d"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "┌") {
-		t.Errorf("Missing top border ┌: %s", got)
-	}
-
-	if !strings.Contains(got, "└") {
-		t.Errorf("Missing bottom border └: %s", got)
-	}
+	assert.Contains(t, got, "┌", "Bordered table missing top border")
+	assert.Contains(t, got, "└", "Bordered table missing bottom border")
 }
 
 func TestTable_NoBorder(t *testing.T) {
@@ -115,9 +94,8 @@ func TestTable_NoBorder(t *testing.T) {
 	tbl.SetRows(strRows([]string{"1", "2"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if strings.Contains(got, "┌") || strings.Contains(got, "│") {
-		t.Errorf("No-border table should not contain border chars:\n%s", got)
-	}
+	assert.NotContains(t, got, "┌", "No-border table should not contain border chars")
+	assert.NotContains(t, got, "│", "No-border table should not contain border chars")
 }
 
 func TestTable_WidthExpandsToFill(t *testing.T) {
@@ -130,9 +108,7 @@ func TestTable_WidthExpandsToFill(t *testing.T) {
 	visible := stripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth([]byte(line))
-		if lineWidth != 30 {
-			t.Errorf("Line width = %d, want 30. Line: %q", lineWidth, line)
-		}
+		assert.Equal(t, 30, lineWidth)
 	}
 }
 
@@ -146,9 +122,7 @@ func TestTable_WidthShrinksToShrink(t *testing.T) {
 	visible := stripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth([]byte(line))
-		if lineWidth > 14 {
-			t.Errorf("Line too wide: width=%d, line: %q", lineWidth, line)
-		}
+		assert.LessOrEqual(t, lineWidth, 14, "Line too wide: width=%d", lineWidth)
 	}
 }
 
@@ -162,9 +136,7 @@ func TestTable_WidthNoBorder(t *testing.T) {
 	visible := stripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth([]byte(line))
-		if lineWidth != 20 {
-			t.Errorf("Line width = %d, want 20. Line: %q", lineWidth, line)
-		}
+		assert.Equal(t, 20, lineWidth, "Line width mismatch")
 	}
 }
 
@@ -183,13 +155,8 @@ func TestTable_ColumnStyles(t *testing.T) {
 	tbl.SetRows(strRows([]string{"x", "y"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "\x1b[38;2;139;233;253m") {
-		t.Errorf("Column 0 missing fg color: %s", got)
-	}
-
-	if !strings.Contains(got, "\x1b[38;2;255;85;85m") {
-		t.Errorf("Column 1 missing fg color: %s", got)
-	}
+	assert.Contains(t, got, "\x1b[38;2;139;233;253m", "Column 0 missing fg color")
+	assert.Contains(t, got, "\x1b[38;2;255;85;85m", "Column 1 missing fg color")
 }
 
 func TestTable_Rows(t *testing.T) {
@@ -198,18 +165,14 @@ func TestTable_Rows(t *testing.T) {
 	tbl := New(Config{Headers: strLines("A")})
 	tbl.SetRows(strRows([]string{"1"}, []string{"2"}, []string{"3"}))
 
-	if len(tbl.rows) != 3 {
-		t.Errorf("Rows count = %d, want 3", len(tbl.rows))
-	}
+	assert.Len(t, tbl.rows, 3, "Rows count mismatch")
 }
 
 func TestTable_Wrap(t *testing.T) {
 	t.Parallel()
 
 	tbl := New(Config{Wrap: true})
-	if !tbl.cfg.Wrap {
-		t.Error("Wrap(true) should set wrap = true")
-	}
+	assert.True(t, tbl.cfg.Wrap, "Wrap(true) should set wrap = true")
 }
 
 func TestTable_WrapFalse_Truncates(t *testing.T) {
@@ -222,9 +185,7 @@ func TestTable_WrapFalse_Truncates(t *testing.T) {
 	visible := stripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		content := strings.Trim(line, "│ ")
-		if content == "abcdefghijXYZ" {
-			t.Errorf("Content should have been truncated, got: %q", content)
-		}
+		assert.NotEqual(t, "abcdefghijXYZ", content, "Content should have been truncated")
 	}
 }
 
@@ -240,9 +201,7 @@ func TestTable_BorderStyle(t *testing.T) {
 	tbl.SetRows(strRows([]string{"x"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "\x1b[38;2;255;0;0m") {
-		t.Errorf("BorderStyle color not applied to border:\n%s", got)
-	}
+	assert.Contains(t, got, "\x1b[38;2;255;0;0m", "BorderStyle color not applied to border")
 }
 
 func TestTable_CalculateColumnWidths(t *testing.T) {
@@ -254,13 +213,8 @@ func TestTable_CalculateColumnWidths(t *testing.T) {
 	widths := make([]int, 2)
 	tbl.contentWidths(2, widths)
 
-	if widths[0] < 7 {
-		t.Errorf("Col 0 width = %d, want >= 7", widths[0])
-	}
-
-	if widths[1] < 5 {
-		t.Errorf("Col 1 width = %d, want >= 5", widths[1])
-	}
+	assert.GreaterOrEqual(t, widths[0], 7, "Col 0 width too small")
+	assert.GreaterOrEqual(t, widths[1], 5, "Col 1 width too small")
 }
 
 func TestTable_HiddenBorder(t *testing.T) {
@@ -270,17 +224,13 @@ func TestTable_HiddenBorder(t *testing.T) {
 	tbl.SetRows(strRows([]string{"1", "2"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if strings.Contains(got, "│") {
-		t.Errorf("HiddenBorder should not render vertical bars:\n%s", got)
-	}
+	assert.NotContains(t, got, "│", "HiddenBorder should not render vertical bars")
 }
 
 func TestTable_HeaderRowConstant(t *testing.T) {
 	t.Parallel()
 
-	if HeaderRow != -1 {
-		t.Errorf("HeaderRow = %d, want -1", HeaderRow)
-	}
+	assert.Equal(t, -1, HeaderRow, "HeaderRow constant mismatch")
 }
 
 func TestTable_SelectionBackground(t *testing.T) {
@@ -297,9 +247,7 @@ func TestTable_SelectionBackground(t *testing.T) {
 	tbl.Select(0)
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "\x1b[48;2;51;51;51m") {
-		t.Errorf("Selected row missing background color:\n%s", got)
-	}
+	assert.Contains(t, got, "\x1b[48;2;51;51;51m", "Selected row missing background color")
 }
 
 func TestTable_HandleNavigation(t *testing.T) {
@@ -309,21 +257,10 @@ func TestTable_HandleNavigation(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}, []string{"c"}))
 	tbl.Select(1)
 
-	if !tbl.HandleNavigation("right", false) {
-		t.Error("right should succeed")
-	}
-
-	if tbl.SelectedIndex() != 2 {
-		t.Errorf("After right: SelectedIndex = %d, want 2", tbl.SelectedIndex())
-	}
-
-	if !tbl.HandleNavigation("left", false) {
-		t.Error("left should succeed")
-	}
-
-	if tbl.SelectedIndex() != 1 {
-		t.Errorf("After left: SelectedIndex = %d, want 1", tbl.SelectedIndex())
-	}
+	assert.True(t, tbl.HandleNavigation("right", false), "right should succeed")
+	assert.Equal(t, 2, tbl.SelectedIndex(), "After right: SelectedIndex mismatch")
+	assert.True(t, tbl.HandleNavigation("left", false), "left should succeed")
+	assert.Equal(t, 1, tbl.SelectedIndex(), "After left: SelectedIndex mismatch")
 }
 
 func TestTable_HandleNavigation_InitialSelection(t *testing.T) {
@@ -332,13 +269,8 @@ func TestTable_HandleNavigation_InitialSelection(t *testing.T) {
 	tbl := New(Config{})
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}, []string{"c"}))
 
-	if !tbl.HandleNavigation("right", false) {
-		t.Error("right with no selection should select first row")
-	}
-
-	if tbl.SelectedIndex() != 0 {
-		t.Errorf("After initial right: SelectedIndex = %d, want 0", tbl.SelectedIndex())
-	}
+	assert.True(t, tbl.HandleNavigation("right", false), "right with no selection should select first row")
+	assert.Equal(t, 0, tbl.SelectedIndex(), "After initial right: SelectedIndex mismatch")
 }
 
 func TestTable_HandleNavigation_Boundary(t *testing.T) {
@@ -348,15 +280,11 @@ func TestTable_HandleNavigation_Boundary(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}))
 	tbl.Select(0)
 
-	if tbl.HandleNavigation("left", false) {
-		t.Error("left at index 0 should fail")
-	}
+	assert.False(t, tbl.HandleNavigation("left", false), "left at index 0 should fail")
 
 	tbl.Select(1)
 
-	if tbl.HandleNavigation("right", false) {
-		t.Error("right at last index should fail")
-	}
+	assert.False(t, tbl.HandleNavigation("right", false), "right at last index should fail")
 }
 
 func TestTable_HandleNavigation_NoRows(t *testing.T) {
@@ -364,9 +292,7 @@ func TestTable_HandleNavigation_NoRows(t *testing.T) {
 
 	tbl := New(Config{})
 
-	if tbl.HandleNavigation("right", false) {
-		t.Error("Navigation on empty table should fail")
-	}
+	assert.False(t, tbl.HandleNavigation("right", false), "Navigation on empty table should fail")
 }
 
 func TestTable_HandleNavigation_ActiveInnerViewport(t *testing.T) {
@@ -376,9 +302,7 @@ func TestTable_HandleNavigation_ActiveInnerViewport(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}))
 	tbl.Select(0)
 
-	if tbl.HandleNavigation("right", true) {
-		t.Error("Navigation with active inner viewport should fail")
-	}
+	assert.False(t, tbl.HandleNavigation("right", true), "Navigation with active inner viewport should fail")
 }
 
 func TestTable_ZoneMarkersInOutput(t *testing.T) {
@@ -388,9 +312,7 @@ func TestTable_ZoneMarkersInOutput(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}))
 	got := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(got, "z") {
-		t.Errorf("Zone markers should appear in output:\n%s", got)
-	}
+	assert.Contains(t, got, "z", "Zone markers should appear in output")
 }
 
 func TestTable_SelectionBackgroundNoOuterBorderBg(t *testing.T) {
@@ -459,16 +381,12 @@ func TestTable_SelectionBackgroundWithFgColor(t *testing.T) {
 		}
 	}
 
-	if selLine == "" {
-		t.Fatal("Could not find selected data row")
-	}
+	require.NotEmpty(t, selLine, "Could not find selected data row")
 
 	bgPrefix := "\x1b[48;2;51;51;51m"
 
 	count := strings.Count(selLine, bgPrefix)
-	if count < 2 {
-		t.Errorf("Selection bg should be re-emitted after cell resets, found %d occurrences in:\n%s", count, selLine)
-	}
+	assert.GreaterOrEqual(t, count, 2, "Selection bg should be re-emitted after cell resets")
 }
 
 func TestTable_SelectionBackgroundCoversPadding(t *testing.T) {
@@ -502,9 +420,7 @@ func TestTable_SelectionBackgroundCoversPadding(t *testing.T) {
 		}
 	}
 
-	if selLine == "" {
-		t.Fatal("Could not find selected data row")
-	}
+	require.NotEmpty(t, selLine, "Could not find selected data row")
 
 	bgPrefix := "\x1b[48;2;51;51;51m"
 
@@ -544,9 +460,7 @@ func TestTable_SelectionBackgroundCoversInnerSeparators(t *testing.T) {
 		}
 
 		parts := strings.Split(line, "│")
-		if len(parts) < 3 {
-			t.Fatalf("Expected at least 3 parts split by │, got %d", len(parts))
-		}
+		require.GreaterOrEqual(t, len(parts), 3, "Expected at least 3 parts split by │")
 
 		leftBorder := parts[0]
 		if strings.Contains(leftBorder, bgPrefix) {
@@ -563,9 +477,7 @@ func TestTable_SelectionBackgroundCoversInnerSeparators(t *testing.T) {
 		innerSeps := strings.Count(innerPart, "│")
 		if innerSeps > 0 {
 			innerBgCount := strings.Count(innerPart, bgPrefix)
-			if innerBgCount < innerSeps {
-				t.Errorf("Inner separators should have sel bg; found %d bg occurrences for %d separators:\n%s", innerBgCount, innerSeps, line)
-			}
+			assert.GreaterOrEqual(t, innerBgCount, innerSeps, "Inner separators should have sel bg")
 		}
 
 		break
@@ -585,13 +497,8 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 
 	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0, Lines: buf})
 
-	if !changed {
-		t.Error("HandleMouseClick should return true when deselecting via outside click")
-	}
-
-	if tbl.SelectedIndex() != -1 {
-		t.Errorf("SelectedIndex = %d, want -1 after outside click", tbl.SelectedIndex())
-	}
+	assert.True(t, changed, "HandleMouseClick should return true when deselecting via outside click")
+	assert.Equal(t, -1, tbl.SelectedIndex(), "SelectedIndex after outside click")
 }
 
 func TestTable_HandleNavigation_UpDownIgnored(t *testing.T) {
@@ -601,17 +508,9 @@ func TestTable_HandleNavigation_UpDownIgnored(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}, []string{"c"}))
 	tbl.Select(1)
 
-	if tbl.HandleNavigation("up", false) {
-		t.Error("up key should not be handled by table navigation")
-	}
-
-	if tbl.HandleNavigation("down", false) {
-		t.Error("down key should not be handled by table navigation")
-	}
-
-	if tbl.SelectedIndex() != 1 {
-		t.Errorf("SelectedIndex should remain 1, got %d", tbl.SelectedIndex())
-	}
+	assert.False(t, tbl.HandleNavigation("up", false), "up key should not be handled by table navigation")
+	assert.False(t, tbl.HandleNavigation("down", false), "down key should not be handled by table navigation")
+	assert.Equal(t, 1, tbl.SelectedIndex(), "SelectedIndex should remain 1")
 }
 
 func TestTable_FixedWidthColumns(t *testing.T) {
@@ -633,9 +532,7 @@ func TestTable_FixedWidthColumns(t *testing.T) {
 	visible := stripANSI(got)
 	for line := range strings.SplitSeq(visible, "\n") {
 		lineWidth := style.CellWidth([]byte(line))
-		if lineWidth != 20 {
-			t.Errorf("Line width = %d, want 20. Line: %q", lineWidth, line)
-		}
+		assert.Equal(t, 20, lineWidth, "Line width mismatch")
 	}
 }
 
@@ -655,9 +552,7 @@ func TestTable_FixedWidthColumnsNotShrunk(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a", "b", "c"}))
 
 	got := buffer.LinesBufToStringForTests(tbl.Render())
-	if got == "" {
-		t.Error("Table should render even with overflow")
-	}
+	assert.NotEmpty(t, got, "Table should render even with overflow")
 }
 
 func TestTable_FixedWidthRespected(t *testing.T) {
@@ -680,9 +575,7 @@ func TestTable_FixedWidthRespected(t *testing.T) {
 
 	for line := range lines {
 		if strings.Contains(line, "1") && strings.Contains(line, "test") {
-			if !strings.Contains(line, "   1") {
-				t.Errorf("Fixed-width column should be right-aligned: %q", line)
-			}
+			assert.Contains(t, line, "   1", "Fixed-width column should be right-aligned")
 		}
 	}
 }
@@ -694,19 +587,12 @@ func TestTable_SetRows_PreservesSelection(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}, []string{"c"}))
 	tbl.Select(1)
 
-	if tbl.SelectedIndex() != 1 {
-		t.Fatalf("Select(1) → SelectedIndex = %d, want 1", tbl.SelectedIndex())
-	}
+	require.Equal(t, 1, tbl.SelectedIndex(), "Select(1) → SelectedIndex mismatch")
 
 	tbl.SetRows(strRows([]string{"x"}, []string{"y"}))
 
-	if tbl.SelectedIndex() != 1 {
-		t.Errorf("SetRows should preserve selection, got %d", tbl.SelectedIndex())
-	}
-
-	if len(tbl.rows) != 2 {
-		t.Errorf("After SetRows: len = %d, want 2", len(tbl.rows))
-	}
+	assert.Equal(t, 1, tbl.SelectedIndex(), "SetRows should preserve selection")
+	assert.Len(t, tbl.rows, 2, "After SetRows: len mismatch")
 }
 
 func TestTable_SetRows_PerRowCacheDiff(t *testing.T) {
@@ -720,16 +606,12 @@ func TestTable_SetRows_PerRowCacheDiff(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a", "b"}, []string{"c", "d"}, []string{"e", "f"}))
 	result2 := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if result1 != result2 {
-		t.Error("Same data should produce same output")
-	}
+	assert.Equal(t, result1, result2, "Same data should produce same output")
 
 	tbl.SetRows(strRows([]string{"a", "b"}, []string{"CHANGED", "d"}, []string{"e", "f"}))
 	result3 := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(result3, "CHANGED") {
-		t.Error("Changed row should appear in output")
-	}
+	assert.Contains(t, result3, "CHANGED", "Changed row should appear in output")
 }
 
 func TestTable_SetRows_RowCountChange_FullRebuild(t *testing.T) {
@@ -742,9 +624,7 @@ func TestTable_SetRows_RowCountChange_FullRebuild(t *testing.T) {
 	tbl.SetRows(strRows([]string{"a"}, []string{"b"}, []string{"c"}))
 	result := buffer.LinesBufToStringForTests(tbl.Render())
 
-	if !strings.Contains(result, "c") {
-		t.Errorf("Full rebuild should include new row data, got: %s", result)
-	}
+	assert.Contains(t, result, "c", "Full rebuild should include new row data")
 }
 
 func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
@@ -772,8 +652,6 @@ func TestTable_SetRows_ColWidthChange_InvalidatesAllRows(t *testing.T) {
 		}
 
 		lineWidth := style.CellWidth([]byte(line))
-		if lineWidth != 20 {
-			t.Errorf("Line width = %d, want 20. Line: %q", lineWidth, line)
-		}
+		assert.Equal(t, 20, lineWidth, "Line width mismatch")
 	}
 }

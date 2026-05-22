@@ -127,7 +127,7 @@ func (p *Program) processInitCmds() {
 	p.processCmds(postCmds)
 }
 
-//nolint:unparam
+//nolint:cyclop,unparam
 func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 	for {
 		select {
@@ -248,6 +248,7 @@ func (p *Program) processCmds(cmd Cmd) {
 	}(cmd)
 }
 
+//nolint:cyclop
 func (p *Program) readInput(done chan<- struct{}) {
 	defer close(done)
 

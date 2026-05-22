@@ -67,8 +67,10 @@ linters:
       ignore-map-index-ok: true
       ignore-names:
         - ok
-        - mu
         - id
+        - mu # mutex
+        - wg # waitGroup
+        - ch # channel
 
     mnd:
       ignored-numbers:
@@ -91,6 +93,13 @@ linters:
     #  exported-fields-are-used: false
     #  local-variables-are-used: false
     #  generated-is-used: false
+
+    testifylint:
+      enable-all: true
+      bool-compare:
+        ignore-custom-types: true
+      expected-actual:
+        pattern: ^expected
 
 formatters:
   exclusions:

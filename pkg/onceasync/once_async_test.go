@@ -6,6 +6,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -16,32 +19,19 @@ var (
 func TestNewOnceAsync(t *testing.T) {
 	t.Parallel()
 
-	onceAsync := NewOnceAsync()
-	if onceAsync == nil {
-		t.Fatal("NewOnceAsync() returned nil")
-	}
+	assert.NotNil(t, NewOnceAsync())
 }
 
 func TestDoSuccess(t *testing.T) {
 	t.Parallel()
 
-	onceAsync := NewOnceAsync()
-
-	err := onceAsync.Do(func() error { return nil })
-	if err != nil {
-		t.Errorf("Do() = %v, want nil", err)
-	}
+	assert.NoError(t, NewOnceAsync().Do(func() error { return nil }))
 }
 
 func TestDoError(t *testing.T) {
 	t.Parallel()
 
-	onceAsync := NewOnceAsync()
-
-	err := onceAsync.Do(func() error { return errFromFn })
-	if !errors.Is(err, errFromFn) {
-		t.Errorf("Do() = %v, want %v", err, errFromFn)
-	}
+	assert.ErrorIs(t, NewOnceAsync().Do(func() error { return errFromFn }), errFromFn)
 }
 
 func TestDoRunsOnce(t *testing.T) {
@@ -59,9 +49,7 @@ func TestDoRunsOnce(t *testing.T) {
 		})
 	}
 
-	if callCount.Load() != 1 {
-		t.Errorf("fn called %d times, want 1", callCount.Load())
-	}
+	assert.Equal(t, int32(1), callCount.Load())
 }
 
 func TestDoReturnsSameError(t *testing.T) {
@@ -72,13 +60,8 @@ func TestDoReturnsSameError(t *testing.T) {
 	firstErr := onceAsync.Do(func() error { return errFromFn })
 	secondErr := onceAsync.Do(func() error { return errFromFnAlt })
 
-	if !errors.Is(firstErr, errFromFn) {
-		t.Errorf("first Do() = %v, want %v", firstErr, errFromFn)
-	}
-
-	if !errors.Is(secondErr, firstErr) {
-		t.Errorf("second Do() = %v, want same error as first %v", secondErr, firstErr)
-	}
+	require.ErrorIs(t, firstErr, errFromFn)
+	require.ErrorIs(t, secondErr, firstErr)
 }
 
 func TestDoConcurrentCallers(t *testing.T) {
@@ -101,17 +84,13 @@ func TestDoConcurrentCallers(t *testing.T) {
 				return errFromFn
 			})
 
-			if !errors.Is(err, errFromFn) {
-				t.Errorf("Do() = %v, want %v", err, errFromFn)
-			}
+			assert.ErrorIs(t, err, errFromFn)
 		})
 	}
 
 	waitGroup.Wait()
 
-	if callCount.Load() != 1 {
-		t.Errorf("fn called %d times, want 1", callCount.Load())
-	}
+	assert.Equal(t, int32(1), callCount.Load())
 }
 
 func TestDoBlocksUntilCompletion(t *testing.T) {
@@ -136,10 +115,7 @@ func TestDoBlocksUntilCompletion(t *testing.T) {
 
 	close(proceed)
 
-	err := onceAsync.Do(func() error { return errFromFnAlt })
-	if !errors.Is(err, errFromFn) {
-		t.Errorf("Do() = %v, want %v", err, errFromFn)
-	}
+	assert.ErrorIs(t, onceAsync.Do(func() error { return errFromFnAlt }), errFromFn)
 }
 
 func TestDoAfterCompletion(t *testing.T) {
@@ -148,11 +124,9 @@ func TestDoAfterCompletion(t *testing.T) {
 	onceAsync := NewOnceAsync()
 
 	firstErr := onceAsync.Do(func() error { return errFromFn })
-
 	secondErr := onceAsync.Do(func() error { return errFromFnAlt })
-	if !errors.Is(secondErr, firstErr) {
-		t.Errorf("Do() after completion = %v, want %v", secondErr, firstErr)
-	}
+
+	assert.ErrorIs(t, secondErr, firstErr)
 }
 
 func TestDoSlowFnMultipleWaiters(t *testing.T) {
@@ -180,9 +154,7 @@ func TestDoSlowFnMultipleWaiters(t *testing.T) {
 	close(results)
 
 	for err := range results {
-		if !errors.Is(err, errFromFn) {
-			t.Errorf("Do() = %v, want %v", err, errFromFn)
-		}
+		assert.ErrorIs(t, err, errFromFn)
 	}
 }
 
@@ -194,17 +166,10 @@ func TestDoPanic(t *testing.T) {
 	err := onceAsync.Do(func() error {
 		panic("boom")
 	})
-	if err == nil {
-		t.Fatal("Do() returned nil error after panic")
-	}
 
-	if !errors.Is(err, errPanic) {
-		t.Errorf("errors.Is(err, errPanic) = false, want true")
-	}
-
-	if err.Error() != "onceasync: fn panicked: boom" {
-		t.Errorf("Do() = %q, want %q", err.Error(), "onceasync: fn panicked: boom")
-	}
+	require.Error(t, err)
+	require.ErrorIs(t, err, errPanic)
+	assert.Equal(t, "onceasync: fn panicked: boom", err.Error())
 }
 
 func TestDoPanicDoesNotBlockOtherCallers(t *testing.T) {
@@ -224,10 +189,7 @@ func TestDoPanicDoesNotBlockOtherCallers(t *testing.T) {
 
 	<-started
 
-	err := onceAsync.Do(func() error { return errFromFnAlt })
-	if err == nil {
-		t.Fatal("Do() after panic returned nil")
-	}
+	require.Error(t, onceAsync.Do(func() error { return errFromFnAlt }))
 }
 
 func TestDoPanicReturnsSameErrorToAllCallers(t *testing.T) {
@@ -244,6 +206,7 @@ func TestDoPanicReturnsSameErrorToAllCallers(t *testing.T) {
 			err := onceAsync.Do(func() error {
 				panic("shared panic")
 			})
+
 			results <- err
 		})
 	}
@@ -252,8 +215,6 @@ func TestDoPanicReturnsSameErrorToAllCallers(t *testing.T) {
 	close(results)
 
 	for err := range results {
-		if err == nil {
-			t.Error("Do() returned nil after panic")
-		}
+		require.Error(t, err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/stretchr/testify/assert"
 )
 
 func viewString(n *Notification) string {
@@ -24,43 +25,22 @@ func TestViewRendersBorderedBox(t *testing.T) {
 	_ = n.Set("hello", style.Color("#50FA7B"))
 
 	result := viewString(n)
-	if result == "" {
-		t.Fatal("expected non-empty output")
-	}
+	assert.NotEmpty(t, result, "expected non-empty output")
 
 	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
-	if len(lines) < 3 {
-		t.Fatalf("expected at least 3 lines (top border, content, bottom border), got %d", len(lines))
-	}
+	assert.GreaterOrEqual(t, len(lines), 3, "expected at least 3 lines")
 
 	top := lines[0]
 	content := lines[1]
 	bottom := lines[2]
 
-	// Top border should start with ╭ and end with ╮
-	if !strings.Contains(top, "╭") || !strings.Contains(top, "╮") {
-		t.Fatalf("top border missing rounded corners: %q", top)
-	}
-
-	// Top border should have horizontal fill between corners
-	if !strings.Contains(top, "─") {
-		t.Fatalf("top border missing horizontal fill: %q", top)
-	}
-
-	// Content line should have vertical borders
-	if !strings.Contains(content, "│") {
-		t.Fatalf("content line missing vertical borders: %q", content)
-	}
-
-	// Bottom border should start with ╰ and end with ╯
-	if !strings.Contains(bottom, "╰") || !strings.Contains(bottom, "╯") {
-		t.Fatalf("bottom border missing rounded corners: %q", bottom)
-	}
-
-	// Bottom border should have horizontal fill
-	if !strings.Contains(bottom, "─") {
-		t.Fatalf("bottom border missing horizontal fill: %q", bottom)
-	}
+	assert.Contains(t, top, "╭", "top border missing ╭")
+	assert.Contains(t, top, "╮", "top border missing ╮")
+	assert.Contains(t, top, "─", "top border missing horizontal fill")
+	assert.Contains(t, content, "│", "content line missing vertical borders")
+	assert.Contains(t, bottom, "╰", "bottom border missing ╰")
+	assert.Contains(t, bottom, "╯", "bottom border missing ╯")
+	assert.Contains(t, bottom, "─", "bottom border missing horizontal fill")
 }
 
 func TestViewEmptyWhenExpired(t *testing.T) {
@@ -69,10 +49,7 @@ func TestViewEmptyWhenExpired(t *testing.T) {
 	n := New(style.Color("#B4B4B4"))
 	n.SetBaseStyle(style.NewStyle())
 
-	result := viewString(n)
-	if result != "" {
-		t.Fatalf("expected empty output for expired notification, got %q", result)
-	}
+	assert.Empty(t, viewString(n), "expected empty output for expired notification")
 }
 
 func TestViewBorderWidthMatchesContent(t *testing.T) {
@@ -92,9 +69,7 @@ func TestViewBorderWidthMatchesContent(t *testing.T) {
 	result2 := viewString(n2)
 	topWidth2 := style.CellWidth([]byte(strings.Split(strings.TrimRight(result2, "\n"), "\n")[0]))
 
-	if topWidth2 <= topWidth {
-		t.Fatalf("longer content should produce wider border: short=%d, long=%d", topWidth, topWidth2)
-	}
+	assert.Greater(t, topWidth2, topWidth, "longer content should produce wider border")
 }
 
 func TestViewAllLinesEqualWidth(t *testing.T) {
@@ -113,9 +88,7 @@ func TestViewAllLinesEqualWidth(t *testing.T) {
 	}
 
 	for i := 1; i < len(widths); i++ {
-		if widths[i] != widths[0] {
-			t.Fatalf("lines have mismatched widths: %v (lines: %q)", widths, lines)
-		}
+		assert.Equal(t, widths[0], widths[i], "lines have mismatched widths: %v", widths)
 	}
 }
 
@@ -131,7 +104,6 @@ func TestViewContentHasHorizontalPadding(t *testing.T) {
 	content := lines[1]
 
 	clean := string(style.StripANSI([]byte(content)))
-	if !strings.HasPrefix(clean, "│ ") || !strings.HasSuffix(clean, " │") {
-		t.Fatalf("content line should have padding inside borders: %q", clean)
-	}
+	assert.True(t, strings.HasPrefix(clean, "│ "), "content line should have padding: %q", clean)
+	assert.True(t, strings.HasSuffix(clean, " │"), "content line should have padding: %q", clean)
 }

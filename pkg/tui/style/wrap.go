@@ -197,10 +197,17 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 	s.flushRemaining()
 }
 
+func isANSISGR(seq []byte) bool {
+	return len(seq) >= 3 && seq[0] == '\x1b' && seq[1] == '[' && seq[len(seq)-1] == 'm'
+}
+
+func isResetSeq(seq []byte) bool {
+	return len(seq) == 3 && seq[2] == 'm' || len(seq) == 4 && seq[2] == '0' && seq[3] == 'm'
+}
+
 // updateLineStyleAfterFlush updates lineStyle based on ANSI sequences in the
 // word/space data that was just flushed into lineBuf. data[start:end] was
 // appended to lineBuf.
-
 func (s *wrapState) updateLineStyleAfterFlush(start, end int) {
 	pos := start
 
@@ -214,8 +221,8 @@ func (s *wrapState) updateLineStyleAfterFlush(start, end int) {
 		seqEnd := skipANSI(s.data, pos)
 		seq := s.data[pos:seqEnd]
 
-		if len(seq) >= 3 && seq[0] == '\x1b' && seq[1] == '[' && seq[len(seq)-1] == 'm' {
-			if len(seq) == 3 && seq[2] == 'm' || len(seq) == 4 && seq[2] == '0' && seq[3] == 'm' {
+		if isANSISGR(seq) {
+			if isResetSeq(seq) {
 				s.lineStyle = s.lineStyle[:0]
 			} else {
 				s.lineStyle = append(s.lineStyle, seq...)
@@ -421,37 +428,36 @@ func lineExceedsLimitBytes(data []byte, limit int) bool {
 			return true
 		case byteI == '\t':
 			width += 4
-			if width > limit {
-				return true
-			}
-
 			pos++
 		case byteI == '\x1b':
-			end := skipANSI(data, pos)
-			if end == pos {
-				pos++
-			} else {
-				pos = end
-			}
+			pos = skipANSIPos(data, pos)
+
+			continue
 		case byteI < 0x80:
 			width++
-			if width > limit {
-				return true
-			}
-
 			pos++
 		default:
 			rn, size := utf8.DecodeRune(data[pos:])
 			pos += size
 
 			width += RuneWidth(rn)
-			if width > limit {
-				return true
-			}
+		}
+
+		if width > limit {
+			return true
 		}
 	}
 
 	return false
+}
+
+func skipANSIPos(data []byte, pos int) int {
+	end := skipANSI(data, pos)
+	if end == pos {
+		return pos + 1
+	}
+
+	return end
 }
 
 // unicodeIsSpace reports whether the rune is a Unicode whitespace character
