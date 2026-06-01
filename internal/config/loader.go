@@ -135,7 +135,7 @@ func (c *Config) initFleet() error {
 	for _, flakePair := range c.Fleet.Flakes.Pairs() {
 		flakeV := flakePair.Value
 
-		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes)
+		err = flakeV.Init(flakePair.Key, &c.Fleet.Attributes, &c.Fleet.Nix)
 		if err != nil {
 			return errors.Wrap(err, "failed to init flake")
 		}
@@ -143,7 +143,7 @@ func (c *Config) initFleet() error {
 		for _, configurationPair := range flakeV.Configurations.Pairs() {
 			configurationV := configurationPair.Value
 
-			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes)
+			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes, &flakeV.Nix)
 			if err != nil {
 				return errors.Wrap(err, "failed to init configuration")
 			}

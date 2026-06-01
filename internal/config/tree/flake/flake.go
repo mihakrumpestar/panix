@@ -21,13 +21,16 @@ type Flake struct {
 	Logs *logs.Logs `yaml:"-" json:"logs,omitempty"`
 }
 
-func (f *Flake) Init(name string, attr *attributes.Attributes) error {
+func (f *Flake) Init(name string, attr *attributes.Attributes, parentNix *nix.NixConfig) error {
 	err := f.Attributes.Init(name, attr)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize flake")
 	}
 
-	f.Nix.Init()
+	err = f.Nix.Init(parentNix)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize flake nix config")
+	}
 
 	if f.URL == "" {
 		f.URL = "."

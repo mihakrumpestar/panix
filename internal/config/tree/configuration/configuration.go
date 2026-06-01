@@ -26,13 +26,17 @@ type MetaBuild struct {
 	SystemClosure string `yaml:"-" json:"system_closure,omitempty"`
 }
 
-func (c *Configuration) Init(name string, parentAttributes *attributes.Attributes) error {
+func (c *Configuration) Init(name string, parentAttributes *attributes.Attributes, parentNix *nix.NixConfig) error {
 	err := c.Attributes.Init(name, parentAttributes)
 	if err != nil {
 		return errors.Wrap(err, "failed to init configuration attributes")
 	}
 
-	c.Nix.Init()
+	err = c.Nix.Init(parentNix)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize configuration nix config")
+	}
+
 	c.Logs = logs.New()
 
 	return nil

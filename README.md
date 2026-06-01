@@ -696,7 +696,7 @@ curl -L -o ./kexec-$ARCH.tar.gz \
   https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$ARCH-linux.tar.gz
 ```
 
-**Configure in `panix.yaml`:**
+**Configure in `panix.yml`:**
 
 ```yaml
 machines:
@@ -1089,22 +1089,15 @@ fleet:
           nix:
             build_flags: ["--max-jobs", "8"]       # nix build only
             copy_flags: ["--compress"]             # nix copy only
-            extra_flags: []                        # Inherits + appends from parent
+            extra_flags: []                        # Flags for build and copy
           
           machines:
             web-01:
-              nix:
-                copy_flags: ["--compress"]         # Inherits + appends from parent
-                nixos_install_flags: ["--no-bootloader"]  # nixos-install only
 ```
 
-**Inheritance**: Flags accumulate down the hierarchy (fleet → flake → configuration → machine). Slices are appended, not replaced.
+**Inheritance**: Flags accumulate through inheritance (fleet → flake → configuration). Slices are appended, not replaced.
 
-**Scope matters**:
-
-- `build_flags` and `extra_flags` for `nix build` should be set at **configuration** level (build runs once per configuration)
-- `copy_flags` for `nix copy` can be set at **machine** level (transfer runs per machine)
-- `nixos_install_flags` for `nixos-install` can be set at **machine** level (bootstrap runs per machine)
+`nix` config settings can't be set at `machine` level.
 
 </details>
 
@@ -1213,20 +1206,40 @@ echo -n "test" > /tmp/disko-encryption-password.txt
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
+# Minimal Panix configuration demo.
+#
+# All fields have sensible defaults:
+#   config file: panix.yml          (can be overridden with -c)
+#   flake url:   .                  (current directory, can be omitted)
+#   build_mode:  local              (build locally, then nix copy)
+#   activation:  switch             (switch-to-configuration switch)
+#   SSH:         machine name matched against ~/.ssh/config
+#   flake attr:  nixosConfigurations.<name>
+#   inheritance: fleet → flake → configuration → machine
+#                (tags, secrets, SSH, bootstrap, nix cascade down)
+
 fleet:
   flakes:
-    # An arbitrary name for your flake
-    my-config:
-      url: path:./my-nixos-flake # Path to your NixOS flake or Git repo link
+    my-infra:
+      # url defaults to "." — can be omitted when flake is in current dir
       configurations:
-        # Matches "my-server" in nixosConfigurations
-        my-server:
+        workstation: # nixosConfigurations.workstation
           machines:
-            # Matches "my-server" in SSH config
-            my-server:
-              # Or if it is not in SSH config, specify SSH parameters
+            workstation: # matched against ~/.ssh/config
+
+        servers: # multi-machine, build once, copy to both
+          machines:
+            server-eu: # matched against ~/.ssh/config
+            server-us:
+              ssh: # SSH not in ~/.ssh/config → specify here
+                hostname: server-us.example.com
+
+        vps: # another single machine
+          machines:
+            my-vps:
               ssh:
-                hostname: my-hostname
+                hostname: 10.0.0.100
+                port: 2222
 
 ```
 
@@ -1387,20 +1400,40 @@ For the complete schema, see [gen/panix-schema.yaml](./gen/panix-schema.yaml).
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
+# Minimal Panix configuration demo.
+#
+# All fields have sensible defaults:
+#   config file: panix.yml          (can be overridden with -c)
+#   flake url:   .                  (current directory, can be omitted)
+#   build_mode:  local              (build locally, then nix copy)
+#   activation:  switch             (switch-to-configuration switch)
+#   SSH:         machine name matched against ~/.ssh/config
+#   flake attr:  nixosConfigurations.<name>
+#   inheritance: fleet → flake → configuration → machine
+#                (tags, secrets, SSH, bootstrap, nix cascade down)
+
 fleet:
   flakes:
-    # An arbitrary name for your flake
-    my-config:
-      url: path:./my-nixos-flake # Path to your NixOS flake or Git repo link
+    my-infra:
+      # url defaults to "." — can be omitted when flake is in current dir
       configurations:
-        # Matches "my-server" in nixosConfigurations
-        my-server:
+        workstation: # nixosConfigurations.workstation
           machines:
-            # Matches "my-server" in SSH config
-            my-server:
-              # Or if it is not in SSH config, specify SSH parameters
+            workstation: # matched against ~/.ssh/config
+
+        servers: # multi-machine, build once, copy to both
+          machines:
+            server-eu: # matched against ~/.ssh/config
+            server-us:
+              ssh: # SSH not in ~/.ssh/config → specify here
+                hostname: server-us.example.com
+
+        vps: # another single machine
+          machines:
+            my-vps:
               ssh:
-                hostname: my-hostname
+                hostname: 10.0.0.100
+                port: 2222
 
 ```
 
@@ -1409,6 +1442,7 @@ fleet:
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
+# All options
 flags: # Listed are default values, all also overridable using CLI arguments
   activation_mode: switch              # Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)
   tags: []                             # Filter machines by tags (flakes, configs, machine names are auto-registered as tags)
@@ -1442,197 +1476,42 @@ flags: # Listed are default values, all also overridable using CLI arguments
     mutex: ""                          # Path for mutex profile output (enables mutex profiling)
     goroutine: ""                      # Path for goroutine profile output (enables goroutine profiling)
 
+# Only some options, read yaml schema for all
 fleet:
-  activation_mode: switch              # Default activation mode for fleet
-  disabled: false                      # Disable this entire fleet
-  tags: [production]                   # Tags inherited by all descendants
-  hardware_config_path: ./hardware     # Path for hardware config generation
-  sudo_program: doas                  # Override sudo program (default: sudo)
-  nix:                                 # Nix command flags inherited by all descendants
-    build_mode: local                  # Build mode: local (default) or remote
-    extra_flags: []                    # Flags for both nix build and nix copy
-    build_flags: []                    # Flags for nix build only
-    copy_flags: []                     # Flags for nix copy only
-    nixos_install_flags: []            # Flags for nixos-install only
-  ssh:                                 # SSH config inherited by all machines (machine-level overrides)
-    hostname: ""                       # SSH hostname or IP address
-    port: 22                           # SSH port number
-    username: root                     # SSH username
-    identity_file: ./keys/default.key  # Path to SSH private key
-    disable_strict_key_checking: false  # Enable strict host key checking
-    disable_auto_add_host_key: false     # Disable auto-adding host keys on first connection
-    extra_flags: []                    # Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')
-  secrets:                             # Secrets transferred to all machines
-    - local_path: ./secrets/common.key
-      remote_path: /var/secrets/common.key
-      uid: 0                           # User ID for remote file
-      gid: 0                           # Group ID for remote file
-      permissions: 0600                # File permissions (default: 0700)
-  
+  tags: [production]                   # Inherited by all descendants
+  nix:
+    extra_flags: ["--option", "sandbox", "false"]
+  ssh:
+    username: root
+    disable_strict_key_checking: true   # Lab/test networks only
+
   flakes:
     infrastructure:
-      url: path:../infra-flake         # Flake path or URL (e.g. 'github:...', 'git+ssh://...')
-      activation_mode: switch           # Activation mode for this flake
-      disabled: false                  # Disable this flake
-      tags: [critical]                 # Additional tags (accumulated: [production, critical])
-      hardware_config_path: ./hw-config
-      sudo_program: sudo
+      url: path:../infra-flake
+      tags: [critical]                 # Accumulated with fleet: [production, critical]
       nix:
-        build_mode: local               # Build mode for this flake
-        extra_flags: []
-        build_flags: []
-        copy_flags: []
-        nixos_install_flags: []
-      ssh:                             # SSH config for all machines in this flake
-        hostname: ""
-        port: 22
-        username: admin
-        identity_file: ./keys/infra.key
-        disable_strict_key_checking: false
-        disable_auto_add_host_key: false
-        known_hosts_file: ""            # Path to known_hosts file (empty = default ~/.ssh/known_hosts)
-        extra_flags: []
-      secrets:                         # APPENDED to inherited secrets
-        - local_path: ./secrets/infra.key
-          remote_path: /var/secrets/infra.key
-          uid: 0
-          gid: 0
-          permissions: 0600
-      bootstrap:                       # Bootstrap config inherited by machines
-        ssh:                           # Bootstrap SSH (used during initial provisioning)
-          hostname: ""
-          port: 22
-          username: root
-          identity_file: ./keys/bootstrap.key
-          disable_strict_key_checking: false  # Default: false for bootstrap SSH
-          disable_auto_add_host_key: false    # Default: false for bootstrap SSH
-          known_hosts_file: ""              # Empty = auto-generated temp file during bootstrap
-        disable_disko: false           # Disable disko tool build/transfer/execution
-        kexec:                         # Kexec configuration for non-NixOS machines
-          image: ""                    # Custom kexec tarball image (default: nix-community image)
-          extra_flags: []              # Extra flags for kexec (e.g. '--no-sync')
-          ssh_port: 22                 # SSH port for kexec installer (default: 22)
-        disk_encryption_keys:          # Transferred BEFORE disko runs
-          - local_path: ./secrets/luks.key
-            remote_path: /tmp/luks-key
-            uid: 0
-            gid: 0
-            permissions: 0700
-        allow_destructive_actions: false  # Required for force_bootstrap options
-        force_bootstrap: false         # Force bootstrap even if already NixOS
-        force_bootstrap_kexec: false   # Force kexec even if in NixOS installer (requires force_bootstrap)
-        disable_automatic_reboot: false  # Disable auto-reboot after nixos-install
-        post_bootstrap_hooks: []       # Commands after disko partitioning
-        post_bootstrap_install_hooks: []  # Commands after nixos-install, before reboot
-        post_bootstrap_provisioned_hooks: []  # Commands after reboot (uses regular SSH)
-      
+        build_flags: ["--max-jobs", "8"]
+      secrets:                         # APPENDED to fleet secrets (none inherited)
+        - local_path: ./secrets/infra/api.key
+          remote_path: /var/secrets/api.key
+
       configurations:
         webserver:
-          activation_mode: switch
-          disabled: false
           tags: [web]                  # Accumulated: [production, critical, web]
-          flake_output: nixosConfigurations.webserver.config.system.build.toplevel  # Override flake output
-          hardware_config_path: ./hardware
-          sudo_program: sudo
-          nix:                         # Nix flags for this configuration
-            build_mode: local           # Build mode for this configuration
-            extra_flags: []            # Inherits + appends from parent
-            build_flags: ["--max-jobs", "4"]  # Flags for nix build
-            copy_flags: []             # Flags for nix copy
-            nixos_install_flags: []    # Flags for nixos-install
-          ssh:
-            hostname: ""
-            port: 22
-            username: root
-            identity_file: ./keys/web.key
-            disable_strict_key_checking: false
-            disable_auto_add_host_key: false
-            known_hosts_file: ""
-            extra_flags: []
-          secrets:
-            - local_path: ./secrets/web.key
-              remote_path: /var/secrets/web.key
-              uid: 0
-              gid: 0
-              permissions: 0600
-          bootstrap:
-            ssh:
-              hostname: ""
-              port: 22
-              username: root
-              identity_file: ./keys/web-bootstrap.key
-              disable_strict_key_checking: false
-              disable_auto_add_host_key: false
-              known_hosts_file: ""
-              extra_flags: []
-            kexec:
-              image: ""
-              extra_flags: []
-              ssh_port: 22
-            disk_encryption_keys: []
-            allow_destructive_actions: false
-            force_bootstrap: false
-            force_bootstrap_kexec: false
-            disable_automatic_reboot: false
-            post_bootstrap_hooks: []
-            post_bootstrap_install_hooks: []
-            post_bootstrap_provisioned_hooks: []
-          
+          nix:
+            build_mode: remote          # Build on first machine instead of locally
           machines:
-            web-01:
-              activation_mode: switch
-              disabled: false
-              tags: [web-01]           # Accumulated: [production, critical, web, web-01]
-              hardware_config_path: ./hardware/web-01
-              sudo_program: sudo
+            web-01:                    # SSH from config/ssh block, no override needed
+            web-02:
               ssh:
-                hostname: 10.0.0.1
-                port: 22
-                username: root
-                identity_file: ./keys/web-01.key
-                disable_strict_key_checking: false
-                disable_auto_add_host_key: false
-                known_hosts_file: ""
-                extra_flags: []
-              secrets:
-                - local_path: ./secrets/web-01.key
-                  remote_path: /var/secrets/web-01.key
-                  uid: 0
-                  gid: 0
-                  permissions: 0600
-              bootstrap:
-                ssh:
-                  hostname: 10.0.0.1
-                  port: 22
-                  username: root
-                  identity_file: ./keys/web-01-bootstrap.key
-                  disable_strict_key_checking: false
-                  disable_auto_add_host_key: false
-                  known_hosts_file: ""
-                  extra_flags: []
-                kexec:
-                  image: ""
-                  extra_flags: []
-                  ssh_port: 22
-                disk_encryption_keys: []
-                allow_destructive_actions: false
-                force_bootstrap: false
-                force_bootstrap_kexec: false
-                disable_automatic_reboot: false
-                post_bootstrap_hooks: []
-                post_bootstrap_install_hooks: []
-                post_bootstrap_provisioned_hooks: []
-            
-            web-02:                    # Minimal machine entry
-              ssh:
-                hostname: web-02.example.com
-        
+                hostname: web-02.example.com  # Machine-specific hostname override
+
         database:
           machines:
             db-01:
-              activation_mode: switch
               ssh:
                 hostname: 10.0.1.50
+                identity_file: ./keys/db.key
               bootstrap:
                 ssh:
                   hostname: 10.0.1.50
@@ -1642,7 +1521,7 @@ fleet:
                     remote_path: /tmp/luks-key
                 post_bootstrap_hooks:
                   - systemd-cryptenroll --tpm2-device=auto /dev/sda2
-    
+
     monitoring:
       url: github:myorg/monitoring#main
       configurations:

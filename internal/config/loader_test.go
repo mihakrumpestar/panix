@@ -181,7 +181,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	flk, ok := conf.Fleet.Flakes.Get("my-flake")
 	must.True(ok)
 
-	must.NoError(flk.Init("my-flake", &conf.Fleet.Attributes))
+	must.NoError(flk.Init("my-flake", &conf.Fleet.Attributes, &conf.Fleet.Nix))
 
 	assertion := assert.New(t)
 
@@ -193,7 +193,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	cfg, ok := flk.Configurations.Get("my-config")
 	must.True(ok)
 
-	must.NoError(cfg.Init("my-config", &flk.Attributes))
+	must.NoError(cfg.Init("my-config", &flk.Attributes, &flk.Nix))
 
 	expectedCfgXpath := expectedFlakeXpath.NewXpathWithAppend("my-config")
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
