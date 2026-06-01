@@ -46,7 +46,11 @@ func (f *Fleet) Init() error {
 		return errors.Wrap(err, "failed to initialize fleet attributes")
 	}
 
-	f.Nix.Init()
+	err = f.Nix.Init(nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to initialize fleet nix config")
+	}
+
 	f.Logs = logs.New()
 
 	return nil

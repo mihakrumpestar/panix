@@ -1,16 +1,36 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
+# Minimal Panix configuration demo.
+#
+# All fields have sensible defaults:
+#   config file: panix.yml          (can be overridden with -c)
+#   flake url:   .                  (current directory, can be omitted)
+#   build_mode:  local              (build locally, then nix copy)
+#   activation:  switch             (switch-to-configuration switch)
+#   SSH:         machine name matched against ~/.ssh/config
+#   flake attr:  nixosConfigurations.<name>
+#   inheritance: fleet → flake → configuration → machine
+#                (tags, secrets, SSH, bootstrap, nix cascade down)
+
 fleet:
   flakes:
-    # An arbitrary name for your flake
-    my-config:
-      url: path:./my-nixos-flake # Path to your NixOS flake or Git repo link
+    my-infra:
+      # url defaults to "." — can be omitted when flake is in current dir
       configurations:
-        # Matches "my-server" in nixosConfigurations
-        my-server:
+        workstation: # nixosConfigurations.workstation
           machines:
-            # Matches "my-server" in SSH config
-            my-server:
-              # Or if it is not in SSH config, specify SSH parameters
+            workstation: # matched against ~/.ssh/config
+
+        servers: # multi-machine, build once, copy to both
+          machines:
+            server-eu: # matched against ~/.ssh/config
+            server-us:
+              ssh: # SSH not in ~/.ssh/config → specify here
+                hostname: server-us.example.com
+
+        vps: # another single machine
+          machines:
+            my-vps:
               ssh:
-                hostname: my-hostname
+                hostname: 10.0.0.100
+                port: 2222

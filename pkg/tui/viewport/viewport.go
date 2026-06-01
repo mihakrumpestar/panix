@@ -6,7 +6,6 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
-	"github.com/pkg/errors"
 )
 
 const maxSpacesLen = 512
@@ -277,21 +276,30 @@ func (m *Viewport) SetContent(content [][]byte) error {
 
 	wrapBuf := buffer.NewLinesBuf()
 	style.Wrap(wrapBuf, content, contentW, "")
-	m.SetContentLines(wrapBuf.Lines())
+	m.SetContentLines(copyLines(wrapBuf.Lines()))
 	wrapBuf.Release()
 
 	if m.scrollbar && !m.scrollbarReserve && len(m.lines) > m.contentHeight() {
 		scrollbarW := max(1, contentW-scrollbarColWidth)
 		wrapBuf = buffer.NewLinesBuf()
 		style.Wrap(wrapBuf, content, scrollbarW, "")
-		m.SetContentLines(wrapBuf.Lines())
+		m.SetContentLines(copyLines(wrapBuf.Lines()))
 		wrapBuf.Release()
 	}
 
 	return nil
 }
 
-var ErrLineOverWidth = errors.New("line exceeds ContentWidth")
+// copyLines returns deep copies of lines so the caller can safely release
+// the source buffer (e.g. a pooled LinesBuf) without corrupting the copies.
+func copyLines(lines [][]byte) [][]byte {
+	cloned := make([][]byte, len(lines))
+	for i, line := range lines {
+		cloned[i] = bytes.Clone(line)
+	}
+
+	return cloned
+}
 
 // SetContentLines sets the content lines. Visual widths are computed lazily
 // on first access so that SetContentLines itself is O(1).

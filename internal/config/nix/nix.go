@@ -1,5 +1,10 @@
 package nix
 
+import (
+	"dario.cat/mergo"
+	"github.com/pkg/errors"
+)
+
 //nolint:lll
 type NixConfig struct {
 	BuildMode         BuildMode `yaml:"build_mode" json:"build_mode" desc:"Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine configurations, transfer is skipped (closure is already on target). For multi-machine configurations, the closure is copied from the first machine to the rest." default:"local" validate:"omitempty,oneof=local remote"`
@@ -9,11 +14,21 @@ type NixConfig struct {
 	NixosInstallFlags []string  `yaml:"nixos_install_flags" json:"nixos_install_flags,omitempty" desc:"Extra flags for 'nixos-install' command (e.g. '--no-bootloader')"`
 }
 
-// Init sets defaults for zero-value fields.
-func (c *NixConfig) Init() {
+// Init merges parent NixConfig into this one (parent values fill zeros, slices append)
+// then sets defaults for any remaining zero-value fields.
+func (c *NixConfig) Init(parent *NixConfig) error {
+	if parent != nil {
+		err := mergo.Merge(c, parent, mergo.WithAppendSlice)
+		if err != nil {
+			return errors.Wrap(err, "failed to inherit nix config")
+		}
+	}
+
 	if c.BuildMode == "" {
 		c.BuildMode = BuildModeLocal
 	}
+
+	return nil
 }
 
 // BuildMode determines how nix builds are executed.
