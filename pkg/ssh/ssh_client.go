@@ -139,7 +139,12 @@ func (sC SSHClient) NixStoreURL() string {
 		return "ssh-ng://" + sC.SSHTarget()
 	}
 
-	url := "ssh-ng://" + sC.Username + "@" + sC.Hostname + ":" + sC.PortString()
+	var portString string
+	if sC.Port != SSHDefaultPort {
+		portString = ":" + sC.PortString()
+	}
+
+	url := "ssh-ng://" + sC.Username + "@" + sC.Hostname + portString
 
 	if sC.IdentityFile != "" {
 		url += "?ssh-key=" + sC.IdentityFile

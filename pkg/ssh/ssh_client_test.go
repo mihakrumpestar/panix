@@ -210,7 +210,7 @@ func TestNixStoreURL_NonAlias_Defaults(t *testing.T) {
 	}
 
 	assertion := assert.New(t)
-	assertion.Equal("ssh-ng://root@192.168.1.50:22", client.NixStoreURL())
+	assertion.Equal("ssh-ng://root@192.168.1.50", client.NixStoreURL())
 }
 
 func TestNixStoreURL_NonAlias_CustomUser(t *testing.T) {
@@ -224,7 +224,7 @@ func TestNixStoreURL_NonAlias_CustomUser(t *testing.T) {
 	}
 
 	assertion := assert.New(t)
-	assertion.Equal("ssh-ng://deploy@192.168.1.50:22", client.NixStoreURL())
+	assertion.Equal("ssh-ng://deploy@192.168.1.50", client.NixStoreURL())
 }
 
 func TestNixStoreURL_NonAlias_CustomPort(t *testing.T) {
@@ -253,7 +253,7 @@ func TestNixStoreURL_NonAlias_IdentityFile(t *testing.T) {
 	}
 
 	assertion := assert.New(t)
-	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURL())
+	assertion.Equal("ssh-ng://root@192.168.1.50?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURL())
 }
 
 func TestNixStoreURL_NonAlias_AllCustom(t *testing.T) {
@@ -362,6 +362,6 @@ func TestNixStoreURLWithParams_NonAliasWithIdentityFile(t *testing.T) {
 	}
 
 	assertion := assert.New(t)
-	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURLWithParams())
-	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519&remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt")) //nolint:lll
+	assertion.Equal("ssh-ng://root@192.168.1.50?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURLWithParams())
+	assertion.Equal("ssh-ng://root@192.168.1.50?ssh-key=/home/user/.ssh/id_ed25519&remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt")) //nolint:lll
 }
