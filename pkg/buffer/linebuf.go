@@ -1,5 +1,10 @@
 package buffer
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 const DefaultLineBufLen = 256
 
 // LineBuf is a pooled single-line buffer. Set copies data in.
@@ -56,4 +61,23 @@ func (r *LineBuf) Len() int {
 
 func (r *LineBuf) Reset() {
 	r.buf = r.buf[:0]
+}
+
+// MarshalJSON implements json.Marshaler.
+func (r *LineBuf) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.String()) //nolint:wrapcheck // JSON serialization
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (r *LineBuf) UnmarshalJSON(data []byte) error {
+	var str string
+
+	err := json.Unmarshal(data, &str)
+	if err != nil {
+		return fmt.Errorf("unmarshal LineBuf: %w", err)
+	}
+
+	r.Set([]byte(str))
+
+	return nil
 }
