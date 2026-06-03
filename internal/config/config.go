@@ -8,11 +8,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/jsonerror"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 )
 
 type Config struct {
 	Flags       flags.Flags              `yaml:"flags" json:"flags" desc:"Flags (CLI and YAML)"`
 	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required" desc:"Fleet configuration"`
+	Nix         *nixver.Info             `yaml:"-" json:"nix,omitempty"`
 	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-"`
 
 	// Internal - exportable

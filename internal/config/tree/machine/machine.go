@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/jsonerror"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
 )
@@ -89,8 +90,8 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) err
 // InitSSH initializes SSH configuration for this machine.
 // Must be called after Init and after filtering, so only surviving machines
 // trigger SSH config loading (which may fail if ~/.ssh/config is missing).
-func (m *Machine) InitSSH(localMachineHostname string) error {
-	err := m.Attributes.InitSSH(localMachineHostname)
+func (m *Machine) InitSSH(localMachineHostname string, nixInfo nixver.Info) error {
+	err := m.Attributes.InitSSH(localMachineHostname, nixInfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize machine SSH")
 	}

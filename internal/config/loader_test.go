@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -206,7 +207,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 
 	// SSH init is separate — test it explicitly
 	mach.SSH.Hostname = "host.example.com"
-	must.NoError(mach.InitSSH("testhost"))
+	must.NoError(mach.InitSSH("testhost", nixver.Info{}))
 
 	expectedMachineXpath := expectedCfgXpath.NewXpathWithAppend("my-machine")
 	assertion.Equal(expectedMachineXpath.String(), mach.Xpath.String())

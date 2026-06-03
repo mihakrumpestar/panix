@@ -9,6 +9,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
+
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 )
 
 const (
@@ -31,9 +33,12 @@ type SSHClient struct {
 	isLocal         bool
 	hostnameIsAlias bool
 	alias           string
+	nixInfo         nixver.Info // runtime-detected nix implementation
 }
 
-func (sC *SSHClient) Init(machineName, localMachine string) error {
+func (sC *SSHClient) Init(machineName, localMachine string, nixInfo nixver.Info) error {
+	sC.nixInfo = nixInfo
+
 	var err error
 
 	sC.IdentityFile, err = resolveIdentityFile(sC.IdentityFile)
@@ -133,16 +138,29 @@ func (sC SSHClient) MaybeNixSSHOpts() []string {
 // NixStoreURL returns a nix store URL for this SSH client.
 //
 // When hostnameIsAlias=true, returns "ssh-ng://<alias>" (SSH config resolves everything else).
-// When hostnameIsAlias=false, returns "ssh-ng://user@hostname:port[?ssh-key=<path>]"
+// When hostnameIsAlias=false, returns:
+//   - Nix: "ssh-ng://user@hostname:port[?ssh-key=<path>]"
+//   - Lix: "ssh-ng://user@hostname?port=number[&ssh-key=<path>]"
 func (sC SSHClient) NixStoreURL() string {
 	if sC.hostnameIsAlias {
 		return "ssh-ng://" + sC.SSHTarget()
 	}
 
-	url := "ssh-ng://" + sC.Username + "@" + sC.Hostname + ":" + sC.PortString()
+	url := "ssh-ng://" + sC.Username + "@" + sC.Hostname
+
+	if sC.nixInfo.Flavor == nixver.FlavorLix {
+		url += "?port=" + sC.PortString()
+	} else {
+		url += ":" + sC.PortString()
+	}
 
 	if sC.IdentityFile != "" {
-		url += "?ssh-key=" + sC.IdentityFile
+		sep := "?"
+		if sC.nixInfo.Flavor == nixver.FlavorLix {
+			sep = "&"
+		}
+
+		url += sep + "ssh-key=" + sC.IdentityFile
 	}
 
 	return url

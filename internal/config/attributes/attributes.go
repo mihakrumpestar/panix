@@ -2,6 +2,7 @@ package attributes
 
 import (
 	"dario.cat/mergo"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
@@ -77,14 +78,14 @@ func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 // InitSSH initializes SSH configuration for this machine.
 // SSH config resolution errors (e.g., missing ~/.ssh/config) are logged as warnings
 // and do not prevent initialization — the SSH client retains alias hostname with defaults.
-func (a *Attributes) InitSSH(localMachineHostname string) error {
-	err := a.SSH.Init(a.Name, localMachineHostname)
+func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) error {
+	err := a.SSH.Init(a.Name, localMachineHostname, nixInfo)
 	if err != nil {
 		return errors.Wrapf(err, "%s", a.Xpath.String())
 	}
 
 	if a.Bootstrap.SSH.IsInitialized() {
-		err = a.Bootstrap.SSH.Init(a.Name, localMachineHostname)
+		err = a.Bootstrap.SSH.Init(a.Name, localMachineHostname, nixInfo)
 		if err != nil {
 			return errors.Wrapf(err, "%s", a.Xpath.String())
 		}

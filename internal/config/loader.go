@@ -13,8 +13,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/validate"
 	"github.com/mihakrumpestar/panix/internal/logger"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/yamlx"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
@@ -46,6 +48,14 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter config")
 	}
+
+	// Detect nix implementation before SSH init so it can be injected into SSH clients.
+	conf.Nix, err = nixver.Detect()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to detect nix implementation")
+	}
+
+	log.Info().Str("nix", conf.Nix.Raw).Msg("detected nix implementation")
 
 	// Initialize SSH for remaining machines after filtering.
 	err = conf.initFleetSSH()
@@ -173,7 +183,7 @@ func (c *Config) initFleet() error {
 // This is separated from initFleet so that filtered-out machines never trigger SSH config loading.
 func (c *Config) initFleetSSH() error {
 	for _, leaf := range c.Fleet.AllMachines() {
-		err := leaf.Machine.InitSSH(c.Flags.LocalMachineHostname)
+		err := leaf.Machine.InitSSH(c.Flags.LocalMachineHostname, *c.Nix)
 		if err != nil {
 			return errors.Wrap(err, "failed to init machine SSH")
 		}

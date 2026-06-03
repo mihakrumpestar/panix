@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 )
 
 func TestMaybeSSHCommandArguments_DisableStrictKeyChecking(t *testing.T) {
@@ -364,4 +366,104 @@ func TestNixStoreURLWithParams_NonAliasWithIdentityFile(t *testing.T) {
 	assertion := assert.New(t)
 	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURLWithParams())
 	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519&remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt")) //nolint:lll
+}
+
+var lixInfo = nixver.Info{
+	Raw:    "nix (Lix, like Nix) 2.94.0",
+	Flavor: nixver.FlavorLix,
+	Major:  2,
+	Minor:  94,
+	Patch:  0,
+}
+
+func TestNixStoreURL_NonAlias_LixDefaults(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        SSHDefaultUsername,
+		Port:            SSHDefaultPort,
+		hostnameIsAlias: false,
+		nixInfo:         lixInfo,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50?port=22", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_LixCustomPort(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Port:            2222,
+		Username:        "root",
+		hostnameIsAlias: false,
+		nixInfo:         lixInfo,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50?port=2222", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_LixIdentityFile(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        SSHDefaultUsername,
+		Port:            SSHDefaultPort,
+		IdentityFile:    "/home/user/.ssh/id_ed25519",
+		hostnameIsAlias: false,
+		nixInfo:         lixInfo,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50?port=22&ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURL())
+}
+
+func TestNixStoreURL_NonAlias_LixAllCustom(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Port:            2222,
+		Username:        "builder",
+		IdentityFile:    "/home/user/.ssh/builder_key",
+		hostnameIsAlias: false,
+		nixInfo:         lixInfo,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://builder@192.168.1.50?port=2222&ssh-key=/home/user/.ssh/builder_key", client.NixStoreURL())
+}
+
+func TestNixStoreURLWithParams_NonAlias_LixWithIdentityFile(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "192.168.1.50",
+		Username:        SSHDefaultUsername,
+		Port:            SSHDefaultPort,
+		IdentityFile:    "/home/user/.ssh/id_ed25519",
+		hostnameIsAlias: false,
+		nixInfo:         lixInfo,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://root@192.168.1.50?port=22&ssh-key=/home/user/.ssh/id_ed25519", client.NixStoreURLWithParams())
+	assertion.Equal("ssh-ng://root@192.168.1.50?port=22&ssh-key=/home/user/.ssh/id_ed25519&remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt")) //nolint:lll
+}
+
+func TestNixStoreURL_NonAlias_LixAlias(t *testing.T) {
+	t.Parallel()
+
+	// Alias mode should not be affected by Lix detection.
+	client := SSHClient{
+		Hostname:        "my-alias",
+		hostnameIsAlias: true,
+	}
+
+	assertion := assert.New(t)
+	assertion.Equal("ssh-ng://my-alias", client.NixStoreURL())
 }
