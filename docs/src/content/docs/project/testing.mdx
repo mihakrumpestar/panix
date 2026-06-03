@@ -1,0 +1,44 @@
+---
+title: Testing
+description: How to run unit and end-to-end tests.
+sidebar:
+  order: 2
+---
+
+## Unit Tests
+
+```sh
+task go:test
+```
+
+## E2E Tests
+
+End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, for both local and remote build modes, followed by a re-deploy to the installed systems.
+
+**Prerequisites**: KVM (`/dev/kvm`), QEMU, Nix, `cdrtools`
+
+```sh
+task go:test:e2e
+```
+
+**Test scope selection**:
+
+```sh
+task go:test:e2e -- --test=local    # Only local build mode (2 VMs)
+task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
+task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
+```
+
+The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes).
+
+**What it does:**
+
+1. Generates SSH keys, downloads kexec and Debian images, builds a NixOS installer ISO, preconfigures Debian image
+2. Starts QEMU VMs per test scope: NixOS ISO VM + Debian/kexec VM for local, and/or the same pair for remote
+3. Runs panix deploy (bootstrap) against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`
+4. Runs panix deploy (re-deploy) against all VMs (switch-to-configuration)
+5. Verifies NixOS installation on all VMs via SSH
+
+**What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
+
+**Logs** (`tests/e2e/log/`): Recreated each run. Per-VM console logs with timestamps, panix logs per deploy, snapshot JSONs.

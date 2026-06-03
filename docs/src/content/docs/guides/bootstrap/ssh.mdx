@@ -1,0 +1,64 @@
+---
+title: SSH
+description: SSH configuration for bootstrapping machines.
+sidebar:
+  order: 3
+---
+
+For machines that need initial provisioning (bootstrap) you **must specify** SSH credentials.
+
+```yaml
+machines:
+  server:
+    ssh:                          # Regular SSH (after bootstrap)
+      hostname: 192.168.1.100
+      port: 9999
+      identity_file: ./keys/prod.key
+    bootstrap:
+      ssh:                        # Bootstrap SSH (during bootstrap)
+        hostname: 192.168.1.100
+        identity_file: ./keys/temp.key
+```
+
+## Requirements
+
+- **Unbootstrapped machines**: must have bootstrap SSH configured (unless `force_bootstrap: true`)
+- **Bootstrapped machines**: must not have bootstrap SSH configured (unless `force_bootstrap: true`)
+- The `force_bootstrap` option explicitly allows bypassing these requirements
+- **Inspect** phase will error if you try to use bootstrap SSH config on an already bootstrapped machine and vice versa (regular SSH config will error on an un-bootstrapped machine)
+
+## Workflow
+
+1. During **Inspect** phase: Panix validates SSH configuration matches machine state
+2. Later phases:
+   - If bootstrapping: Uses bootstrap SSH for all bootstrap operations; after reboot: automatically switches to regular SSH
+   - If already bootstrapped: uses regular SSH
+
+## SSH Key Checking Options
+
+Defaults:
+
+```yaml
+ssh:
+  # Disable strict host key checking (default: false for both regular and bootstrap SSH)
+  disable_strict_key_checking: false
+  # Disable auto-adding host keys (default: false for both regular and bootstrap SSH)
+  disable_auto_add_host_key: false
+  # Path to known_hosts file (default: user's ~/.ssh/known_hosts; bootstrap SSH uses a temporary file)
+  known_hosts_file: ""
+```
+
+### Behavior
+
+- **Regular SSH**: uses the user's `~/.ssh/known_hosts` with `StrictHostKeyChecking=accept-new` (trusts new machines, verifies against existing entries)
+- **Bootstrap SSH**: Panix automatically creates a temporary known_hosts file and uses it for the duration of the bootstrap session. The first SSH connection records the installer's host key (trust on first use / TOFU). All subsequent commands during bootstrapping verify against that recorded key, preventing man-in-the-middle attacks mid-session. If `known_hosts_file` is explicitly set in bootstrap SSH config, that file is used instead of the temporary one. After bootstrapping completes, the temporary file (but not the user set one) is removed.
+- **After kexec**: the kexec installer preserves SSH host keys from the original system on remote, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new known_hosts entry is recorded (due to `StrictHostKeyChecking=accept-new`) for the new port (same key, different `[host]:port` entry).
+- Setting `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
+
+:::caution
+Changing `disable_strict_key_checking` or `disable_auto_add_host_key` from their defaults has significant security implications:
+
+- Setting `disable_strict_key_checking: true` disables **all** host key verification. This allows man-in-the-middle attacks on every SSH connection. Only use this in fully trusted networks (e.g., local VMs with no external access).
+- Setting `disable_auto_add_host_key: true` prevents new host keys from being recorded. Combined with `disable_strict_key_checking: false` (the default), this enforces strict checking: connections will be rejected if the host key is not already in the known_hosts file. This is the most secure option but requires the key to be pre-provisioned (e.g., via `known_hosts_file` or manually adding entries).
+- The defaults (`disable_strict_key_checking: false`, `disable_auto_add_host_key: false`) provide `StrictHostKeyChecking=accept-new` behavior: new hosts are trusted on first connection and verified on subsequent ones. This is the standard SSH trust model and is secure for most use cases.
+:::

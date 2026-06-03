@@ -1,0 +1,48 @@
+---
+title: SSH Config Integration
+description: Using ~/.ssh/config and local machine detection.
+sidebar:
+  order: 7
+---
+
+## SSH Config Integration
+
+Panix reads `~/.ssh/config`. If your machine name matches a host alias:
+
+```yaml
+machines:
+  production-server-01:     # Uses SSH config: Host, Port, User, IdentityFile
+```
+
+No duplication. Your SSH config is the source of truth for connection parameters.
+
+If you don't use SSH config or need to add/change something temporarily you can specify SSH options directly:
+
+```yaml
+machines:
+  my-server:
+    ssh:
+      hostname: 192.168.1.100
+      port: 2222
+      username: admin
+      identity_file: ./keys/server.key
+      disable_strict_key_checking: false  # Enable strict host key checking
+      disable_auto_add_host_key: false    # Allow auto-adding host keys
+```
+
+## Local Machine Detection
+
+Deploying to the machine you're on? If the machine name matches the system hostname, Panix skips SSH entirely, executing commands directly via local shell:
+
+```yaml
+# On a machine with hostname "workstation"
+machines:
+  workstation:              # Detected as local, no SSH
+```
+
+This can be overridden (if you want to prevent this, or if hostname detection does not work for you):
+
+```yaml
+flags:
+  local_machine_hostname: my-local-machine
+```

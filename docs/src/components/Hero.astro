@@ -1,0 +1,81 @@
+---
+import { LinkButton } from "@astrojs/starlight/components";
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+---
+
+<div
+  class="hero-full grid grid-cols-1 items-center gap-4xl:grid-cols-[7fr_4fr] xl:gap-[3%]"
+>
+  <div
+    class="sl-flex flex flex-col gap-[clamp(1.5rem,calc(1.5rem+1vw),2rem)] text-center xl:text-start"
+  >
+    <div class="sl-flex flex flex-col gap-4 items-center xl:items-start">
+      <h1
+        id="_top"
+        data-page-title
+        class="text-[clamp(var(--sl-text-3xl),calc(0.25rem+5vw),var(--sl-text-6xl))] leading-(--sl-line-height-headings) font-semibold text-(--sl-color-white)"
+        set:html={title}
+      />
+      {
+        tagline && (
+          <div
+            class="text-[clamp(var(--sl-text-base),calc(0.0625rem+2vw),var(--sl-text-xl))] text-(--sl-color-gray-2)"
+            set:html={tagline}
+          />
+        )
+      }
+    </div>
+    {
+      actions.length > 0 && (
+        <div class="sl-flex flex-wrap gap-4 gap-x-8 p-3 justify-center xl:justify-start">
+          {actions.map(
+            ({
+              attrs: { class: className, ...attrs } = {},
+              icon,
+              link: href,
+              text,
+              variant,
+            }) => (
+              <LinkButton
+                {href}
+                {variant}
+                icon={icon?.name}
+                class:list={[className]}
+                {...attrs}
+              >
+                {text}
+              </LinkButton>
+            ),
+          )}
+        </div>
+      )
+    }
+  </div>
+  <div class="flex items-center justify-center xl:order-2">
+    <img
+      src="https://files.catbox.moe/dkq4fl.gif"
+      alt="Panix TUI demo"
+      class="w-full max-w-full rounded-lg border border-(--sl-color-hairline)"
+    />
+  </div>
+</div>
+
+<style>
+  .hero-full {
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    padding-inline: var(--sl-content-pad-x);
+    max-width: 100vw;
+    padding-left: auto;
+    padding-right: auto;
+    display: flex;
+    justify-content: center;
+  }
+
+  .hero-full > :first-child {
+    max-width: var(--sl-content-width);
+    width: auto;
+  }
+</style>

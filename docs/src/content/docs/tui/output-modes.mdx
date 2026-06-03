@@ -1,0 +1,68 @@
+---
+title: Output Modes
+description: TUI, console, and JSON output modes with file logging.
+sidebar:
+  order: 3
+---
+
+Panix supports three output modes via the `--output` flag:
+
+| Mode | Description |
+|------|-------------|
+| `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
+| `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
+| `json` | JSON-structured log output to stdout |
+
+```bash
+# Interactive TUI (default)
+panix deploy
+
+# Human-readable output (no TUI)
+panix deploy --output console
+
+# JSON output (for piping to tools)
+panix deploy --output json
+
+# JSON output with file logging
+panix deploy --output json --log
+```
+
+When no TTY is present, `--output console` is automatically selected since the TUI cannot render without a terminal.
+
+## File Logging
+
+Enabled with `--log` and writes structured JSON to a file with an epoch timestamp in the name (e.g., `panix.1746565600.log`):
+
+```bash
+panix deploy --log                        # Log to panix.<epoch>.log
+panix deploy --log --log-file deploy.log  # Log to deploy.<epoch>.log
+```
+
+## JSON Structure
+
+Console/JSON output includes:
+
+- Structured fields: xpath, phase, description, command, duration, status, output
+- `command_start` / `command_end` events per command with duration in seconds
+- `phase_start` / `phase_end` events per phase
+- `workflow_end` with final state of all machines (status, phase, total duration, error)
+- Failed events are logged at `ERROR` level, successful ones at `INFO`
+
+Example:
+
+```json
+{"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh ...","event":"command_start","time":"2026-04-08T23:58:59+02:00","message":"command started"}
+{"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh ...","event":"command_end","duration":1.94,"output":"...","status":"success","time":"2026-04-08T23:59:01+02:00","message":"command finished"}
+{"level":"error","event":"workflow_end","machines":{"...":{"status":"failed","phase":"inspect","duration":0.06,"error":"reachability check failed: regular SSH is unreachable"}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
+```
+
+## Failure Modes
+
+```bash
+# Fail immediately on first error
+panix deploy --require-all-success
+
+# In TUI mode (console mode does this automatically), force exit when workflow finishes
+# (by default TUI stays open)
+panix deploy --exit-on-complete
+```

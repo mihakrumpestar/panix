@@ -1,0 +1,61 @@
+---
+title: Configuration Model
+description: Hierarchical configuration inheritance - Fleet → Flake → Configuration → Machine.
+sidebar:
+  order: 3
+---
+
+Your infrastructure has natural hierarchies: flakes contain configurations, configurations contain machines. Panix's configuration model reflects this:
+
+<center>
+**Fleet → Flake → Configuration → Machine**
+</center>
+
+Attributes at each level cascade down, **without overriding** child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the fleet, extend at any level:
+
+```yaml
+fleet:
+  tags: [production]              # Inherited by all descendants
+  secrets:                        # Inherited by all descendants
+    - local_path: ./secrets/common.key
+      remote_path: /var/secrets/common.key
+  
+  flakes:
+    infrastructure:
+      tags: [critical]            # Accumulated: [production, critical]
+      secrets:                    # APPENDED to inherited secrets
+        - local_path: ./secrets/prod/api.key
+          remote_path: /var/secrets/api.key
+      
+      configurations:
+        webserver:
+          tags: [web]             # Accumulated: [production, critical, web]
+          
+          machines:
+            web-01:               # Accumulated: [production, critical, web, web-01]
+            web-02:
+              secrets:            # APPENDED to all inherited secrets
+                - local_path: ./secrets/web-02/cert.pem
+                  remote_path: /etc/ssl/cert.pem
+```
+
+## How Inheritance Works
+
+- **Tags**: Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through the hierarchy.
+- **Secrets**: Secrets defined at fleet/flake/configuration levels append down to machines. They are never replaced, only accumulated.
+- **SSH**: Settings cascade down. A machine can override any SSH parameter.
+- **Bootstrap**: Settings cascade down. Hooks at each level are collected.
+- **Nix flags**: `extra_flags`, `build_flags`, `copy_flags` accumulate through inheritance.
+
+## Disabling Parts of the Configuration
+
+You can disable flakes, configurations, or machines by setting `disabled: true`:
+
+```yaml
+fleet:
+  flakes:
+    my-flake:
+      disabled: true  # This flake and all its children are skipped
+```
+
+Disabled sections are filtered out during evaluation and do not participate in any phase.

@@ -1,0 +1,34 @@
+---
+title: Large Fleet Tips
+description: Maximizing visibility when deploying to many machines.
+sidebar:
+  order: 4
+---
+
+When deploying to many machines, maximize visibility with:
+
+- Show only active/errored build logs: `a` keybind or `--tui.show-active-only` flag
+- Reduce build log viewport height: `--tui.command-output-max-height=N` (default: 8)
+
+## Minimal Build Logs, Maximum Stats Space
+
+```bash
+panix deploy --tui.show-active-only --tui.command-output-max-height=2
+```
+
+Or in config:
+
+```yaml
+flags:
+  tui:
+    show_active_only: true
+    command_output_max_height: 2
+```
+
+## Keybinds for Large Fleets
+
+| Key/Flag | Effect |
+|----------|--------|
+| `a` | Show only running or errored build logs (hides completed) |
+| `h` | Include inspect/secrets phases in build logs |
+| `c` | Switch labels between descriptions and raw commands |

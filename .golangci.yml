@@ -49,15 +49,15 @@ linters:
               desc: use github.com/pkg/errors instead
 
             - pkg: "charm.land/bubbles/v2"
-              desc: "benchmark reference only and testing — not for production code"
+              desc: "benchmark reference only and testing, not for production code"
             - pkg: "charm.land/bubbletea/v2"
-              desc: "benchmark reference only and testing — not for production code"
+              desc: "benchmark reference only and testing, not for production code"
             - pkg: "charm.land/lipgloss/v2"
-              desc: "benchmark reference only and testing — not for production code"
+              desc: "benchmark reference only and testing, not for production code"
             - pkg: "github.com/charmbracelet/ultraviolet"
-              desc: "benchmark reference only and testing — not for production code"
+              desc: "benchmark reference only and testing, not for production code"
             - pkg: "github.com/lrstanley/bubblezone/v2"
-              desc: "benchmark reference only and testing — not for production code"
+              desc: "benchmark reference only and testing, not for production code"
 
     lll:
       line-length: 150

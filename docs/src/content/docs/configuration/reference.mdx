@@ -1,0 +1,101 @@
+---
+title: Full YAML Reference
+description: Complete annotated panix.yml configuration reference.
+sidebar:
+  order: 2
+---
+
+For the YAML schema, see [gen/panix-schema.yaml](https://github.com/mihakrumpestar/panix/blob/main/gen/panix-schema.yaml) (it is human-readable).
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
+
+# All options
+flags: # Listed are default values, all also overridable using CLI arguments
+  activation_mode: switch              # Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)
+  tags: []                             # Filter machines by tags (flakes, configs, machine names are auto-registered as tags)
+  timeout: 2h                          # Workflow timeout (e.g. '1h', '1m15s')
+  exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
+  require_all_success: false           # Abort if any task fails (for CI/CD)
+  skip_phases: []                      # Phases to skip (not all phases can be skipped)
+  local_machine_hostname: my-laptop    # Override which machine is considered local based on machine name (no SSH)
+  dry_run: false                       # Show what would happen without executing
+  dry_run_with_inspect: false          # Dry run but with real inspect queries
+  output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
+  rollback_generation: -1              # 0=current generation, -N=Nth before current, N=specific generation
+
+  tui:
+    show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)
+    show_active_only: false            # Show only running/errored logs (keybind a)
+    show_commands_in_labels: false     # Show raw commands instead of descriptions (keybind c)
+    command_output_max_height: 8       # Max height for command output viewports
+  logging:
+    log: false                         # Enable logging to file (epoch timestamp appended before .log)
+    log_file: panix.log                # Log file path
+    debug: false                       # Enable debug output (enables logging)
+  snapshot:
+    dir: .                             # Directory to save snapshots
+    on_retry: false                    # Take snapshot before retry
+    on_exit: false                     # Take snapshot on exit
+  profile:
+    cpu: ""                            # Path for CPU profile output (enables CPU profiling)
+    mem: ""                            # Path for memory profile output (enables memory profiling)
+    block: ""                          # Path for block profile output (enables block profiling)
+    mutex: ""                          # Path for mutex profile output (enables mutex profiling)
+    goroutine: ""                      # Path for goroutine profile output (enables goroutine profiling)
+
+# Only some options, read yaml schema for all
+fleet:
+  tags: [production]                   # Inherited by all descendants
+  nix:
+    extra_flags: ["--option", "sandbox", "false"]
+  ssh:
+    username: root
+    disable_strict_key_checking: true   # Lab/test networks only
+
+  flakes:
+    infrastructure:
+      url: path:../infra-flake
+      tags: [critical]                 # Accumulated with fleet: [production, critical]
+      nix:
+        build_flags: ["--max-jobs", "8"]
+      secrets:                         # APPENDED to fleet secrets (none inherited)
+        - local_path: ./secrets/infra/api.key
+          remote_path: /var/secrets/api.key
+
+      configurations:
+        webserver:
+          tags: [web]                  # Accumulated: [production, critical, web]
+          nix:
+            build_mode: remote          # Build on first machine instead of locally
+          machines:
+            web-01:                    # SSH from config/ssh block, no override needed
+            web-02:
+              ssh:
+                hostname: web-02.example.com  # Machine-specific hostname override
+
+        database:
+          machines:
+            db-01:
+              ssh:
+                hostname: 10.0.1.50
+                identity_file: ./keys/db.key
+              bootstrap:
+                ssh:
+                  hostname: 10.0.1.50
+                  identity_file: ./keys/bootstrap.key
+                disk_encryption_keys:
+                  - local_path: ./secrets/db/luks.key
+                    remote_path: /tmp/luks-key
+                post_bootstrap_hooks:
+                  - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+
+    monitoring:
+      url: github:myorg/monitoring#main
+      configurations:
+        prometheus:
+          machines:
+            prom-01:
+```
+
+The one used for testing to deploy [infrastructure](https://github.com/mihakrumpestar/infrastructure) is at [examples/panix.deploy.yml](https://github.com/mihakrumpestar/panix/blob/main/examples/panix.deploy.yml).

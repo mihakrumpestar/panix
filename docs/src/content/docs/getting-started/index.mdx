@@ -1,3 +1,27 @@
+---
+title: Quick Start
+description: Get Panix running and deploy your first NixOS machine.
+sidebar:
+  order: 1
+---
+
+## Prerequisites
+
+- [Nix](https://nixos.org/download.html) installed on your local machine
+- SSH key authentication to target machine(s) (password auth is not supported)
+- A Nix flake with your NixOS configuration(s)
+
+## 1. Prepare the Remote
+
+Boot into a NixOS installer, any Linux live ISO, or an already provisioned NixOS system.
+
+:::note
+Some distibutions live ISOs may be missing packages needed to start kexec. NixOS installer and most mainstream distros should work out of the box.
+:::
+
+## 2. Create panix.yml
+
+```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
 # Minimal Panix configuration demo.
@@ -34,3 +58,18 @@ fleet:
               ssh:
                 hostname: 10.0.0.100
                 port: 2222
+```
+
+## 3. Deploy
+
+```sh
+panix deploy
+```
+
+This runs the full pipeline:
+
+<center>
+Inspect → Bootstrap → Build → Transfer → Secrets → Activate
+</center>
+
+The interactive TUI shows real-time progress for each machine and phase. If a phase fails, press `r` to retry just the failed phases without restarting.

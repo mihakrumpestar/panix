@@ -1,0 +1,49 @@
+---
+title: Overview
+description: Converting bare metal or existing systems to NixOS.
+sidebar:
+  order: 1
+---
+
+## Showcase
+
+Full demo of the bootstrap process with kexec over Arch:
+
+<iframe title="Panix bootstrap with kexec" style="aspect-ratio: 16/9; width: 100%; height: auto; border: 0px;" src="https://spectra.video/videos/embed/t2j1bDbQGS2TgLGm1RqfPH?warningTitle=0" allow="fullscreen" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+
+> It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot in BIOS. Note that it was made with an older version of TUI, and therefore looks slightly different.
+
+## Overview
+
+The bootstrap flow is where Panix distinguishes itself most clearly:
+
+1. **Inspect phase** detects the target OS; if not NixOS, **kexec** boots into a NixOS installer image
+2. **Disko** partitions disks according to your configuration
+3. **Transfer** system closure
+4. **nixos-install** lays down the system
+5. **Reboot** into your new NixOS system
+
+```yaml
+machines:
+  bare-metal:
+    ssh:
+      hostname: 192.168.1.100
+    bootstrap:
+      disk_encryption_keys:       # Transferred BEFORE disko runs
+        - local_path: ./secrets/luks.key
+          remote_path: /tmp/luks-key
+      post_bootstrap_hooks:       # Run after disko partitioning
+        - systemd-cryptenroll --tpm2-device=auto /dev/nvme0n1p2
+```
+
+## Bootstrap Hooks
+
+Panix provides multiple hook points during bootstrap. See [Bootstrap Hooks](/guides/bootstrap/hooks/) for the full reference.
+
+## Bootstrap SSH
+
+For machines that need initial provisioning (bootstrap) you **must specify** SSH credentials separately. See [Bootstrap SSH](/guides/bootstrap/ssh/) for details.
+
+## Kexec
+
+For non-NixOS machines, Panix uses kexec to boot into a NixOS installer without physical access. See [Kexec](/guides/bootstrap/kexec/) for custom images and local tarballs.

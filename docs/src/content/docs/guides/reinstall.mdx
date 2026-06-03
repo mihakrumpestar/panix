@@ -1,0 +1,33 @@
+---
+title: Force Reinstall
+description: Force a reinstall of an already running NixOS system.
+sidebar:
+  order: 5
+---
+
+Panix can force a reinstall of an already running NixOS system. This is useful when you want to completely wipe and reinstall a machine from scratch.
+
+```yaml
+machines:
+  existing-nixos:
+    ssh:
+      hostname: 192.168.1.100
+    bootstrap:
+      allow_destructive_actions: true    # Required for force_bootstrap
+      force_bootstrap: true              # Force bootstrap even if NixOS detected
+      force_bootstrap_kexec: true        # Use kexec to boot into installer first
+      kexec:
+        ssh_port: 22                     # SSH port for kexec installer (default: 22)
+```
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `allow_destructive_actions` | Required to enable force bootstrap. Acknowledges destructive operations. |
+| `force_bootstrap` | Bootstrap even if the machine is already running NixOS. |
+| `force_bootstrap_kexec` | Use kexec to boot into a fresh installer environment before reinstalling. |
+
+:::caution
+Force reinstall with disko will repartition disks and wipe all data on the target machine. Ensure you have backups before proceeding.
+:::

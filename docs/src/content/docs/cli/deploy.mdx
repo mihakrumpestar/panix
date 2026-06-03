@@ -1,0 +1,94 @@
+---
+title: Deploy Flags
+description: Full flag reference for panix deploy.
+sidebar:
+  order: 2
+---
+
+{/* DEPLOY_FLAGS_START */}
+```sh
+> panix deploy --help
+Usage: panix deploy [flags]
+
+Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets ->
+activate)
+
+Flags:
+  -h, --help                       Show context-sensitive help.
+      --version                    Show version ($PANIX_VERSION)
+
+  -c, --config="panix.yml"         Config file ($PANIX_CONFIG)
+      --validate.flakes            Validate flake URLs and configuration keys
+                                   ($PANIX_VALIDATE_FLAKES)
+      --validate.bootstrap-secrets
+                                   Validate that bootstrap disk encryption
+                                   key local paths exist on disk
+                                   ($PANIX_VALIDATE_BOOTSTRAP_SECRETS)
+  -t, --tags=TAGS,...              Filter machines by tags (flakes,
+                                   configurations and machine names are already
+                                   registered as tags) ($PANIX_TAGS)
+  -s, --skip-phases=SKIP-PHASES,...
+                                   Declare phases to skip (not all phases can be
+                                   skipped) ($PANIX_SKIP_PHASES)
+      --timeout=2h                 Timeout per command (eg. '1h', '1m15s')
+                                   ($PANIX_TIMEOUT)
+      --activation-mode=ACTIVATION-MODE
+                                   Activation mode: check, switch, boot, test,
+                                   dry-activate (overrides machine specific
+                                   ones) ($PANIX_ACTIVATION_MODE)
+      --output="tui"               Output mode: tui, console, json
+                                   ($PANIX_OUTPUT)
+      --require-all-success        Abort if any task fails, primarily for CI/CD
+                                   ($PANIX_REQUIRE_ALL_SUCCESS)
+      --exit-on-complete           Exit TUI on completion ('retry' and
+                                   'restart' are disabled in this mode)
+                                   ($PANIX_EXIT_ON_COMPLETE)
+      --local-machine-hostname=STRING
+                                   Hostname of the machine that is local
+                                   (won't use ssh to connect to it) (default:
+                                   your deployment machine hostname)
+                                   ($PANIX_LOCAL_MACHINE_HOSTNAME)
+      --dry-run                    Show what would be done without executing
+                                   ($PANIX_DRY_RUN)
+      --dry-run-with-inspect       Show what would be done without
+                                   executing, but with real inspect query
+                                   ($PANIX_DRY_RUN_WITH_INSPECT)
+  -l, --log                        Enable logging to file ($PANIX_LOG)
+      --log-file="panix.log"       Log file path (epoch timestamp appended
+                                   before .log) ($PANIX_LOG_FILE)
+  -d, --debug                      Debug mode (enables logging) ($PANIX_DEBUG)
+      --snapshot.dir="."           Directory to save snapshots
+                                   ($PANIX_SNAPSHOT_DIR)
+      --snapshot.on-retry          Take snapshot before retry
+                                   ($PANIX_SNAPSHOT_ON_RETRY)
+      --snapshot.on-exit           Take snapshot on exit
+                                   ($PANIX_SNAPSHOT_ON_EXIT)
+      --tui.show-all-build-logs    Show all build logs in TUI (keybind h)
+                                   ($PANIX_TUI_SHOW_ALL_BUILD_LOGS)
+      --tui.show-active-only       Show only running or errored logs
+                                   in TUI build logs (keybind a)
+                                   ($PANIX_TUI_SHOW_ACTIVE_ONLY)
+      --tui.show-commands-in-labels
+                                   Show raw commands instead of descriptions
+                                   as labels in build logs (keybind c)
+                                   ($PANIX_TUI_SHOW_COMMANDS_IN_LABELS)
+      --tui.command-output-max-height=8
+                                   Maximum height for command labels
+                                   and outputs viewports in TUI
+                                   ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+      --profile.cpu=STRING         Path for CPU profile output (enables CPU
+                                   profiling) ($PANIX_PROFILE_CPU)
+      --profile.mem=STRING         Path for memory profile output (enables
+                                   memory profiling) ($PANIX_PROFILE_MEM)
+      --profile.block=STRING       Path for block profile output (enables block
+                                   profiling) ($PANIX_PROFILE_BLOCK)
+      --profile.mutex=STRING       Path for mutex profile output (enables mutex
+                                   profiling) ($PANIX_PROFILE_MUTEX)
+      --profile.goroutine=STRING
+                                   Path for goroutine profile output
+                                   (enables goroutine profiling)
+                                   ($PANIX_PROFILE_GOROUTINE)
+```
+{/* DEPLOY_FLAGS_END */}
+
+All flags can also be set via environment variables (shown in parentheses) or in the `flags` section of `panix.yml`.

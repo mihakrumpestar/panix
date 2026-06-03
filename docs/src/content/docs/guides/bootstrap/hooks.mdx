@@ -1,0 +1,47 @@
+---
+title: Hooks
+description: Hook points during the bootstrap process.
+sidebar:
+  order: 2
+---
+
+Panix provides multiple hook points during bootstrap:
+
+| Hook | When it runs | SSH used |
+|------|--------------|----------|
+| `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH |
+| `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH |
+| `post_bootstrap_provisioned_hooks` | After reboot into new system | Regular SSH |
+
+## Special Hook Commands
+
+- `waitForOnline`: Wait for machine to become reachable (useful after reboot)
+- `waitForOffline`: Wait for machine to become unreachable (useful during reboot)
+
+## Example
+
+```yaml
+machines:
+  server:
+    bootstrap:
+      post_bootstrap_hooks:
+        - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+      post_bootstrap_install_hooks:
+        - echo "Installation complete, preparing for reboot"
+      post_bootstrap_provisioned_hooks:
+        - reboot # second reboot
+        - waitForOffline
+        - waitForOnline
+        - systemctl enable --now my-service
+```
+
+## Disable Automatic Reboot
+
+To prevent automatic reboot after `nixos-install` (useful for manual inspection or custom reboot handling):
+
+```yaml
+machines:
+  server:
+    bootstrap:
+      disable_automatic_reboot: true
+```

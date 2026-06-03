@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+/*
+ * Panix TUI color scheme — dark, muted, terminal feel.
+ * Based on internal/config/colorscheme/color_scheme.go (Dracula-derived).
+ *
+ * Designed to be comfortable for long reading sessions.
+ * Low brightness, muted accents, deep backgrounds.
+ */
+
+/* ── Preserve list styles in markdown content ────────────────── */
+.sl-markdown-content ul {
+	list-style-type: disc;
+	padding-left: 1.5rem;
+	margin-top: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.sl-markdown-content ol {
+	list-style-type: decimal;
+	padding-left: 1.5rem;
+	margin-top: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.sl-markdown-content li {
+	margin-top: 0.25rem;
+	margin-bottom: 0.25rem;
+}
+
+:root {
+	/* ── Layout ────────────────────────────────────────────────── */
+	--sl-content-width: 55rem;
+
+	/* ── Grays — deep, muted, never bright ───────────────────── */
+	--sl-color-white: #c8cad8;
+	/* headings — muted, not white       */
+	--sl-color-gray-1: #9ca0b0;
+	/* body text — subdued               */
+	--sl-color-gray-2: #7a7e8e;
+	/* secondary text, TOC, sidebar text */
+	--sl-color-gray-3: #565a6e;
+	/* borders, comments, disabled       */
+	--sl-color-gray-4: #3e4256;
+	/* subtle separators                 */
+	--sl-color-gray-5: #2a2d3e;
+	/* code bg, hover states             */
+	--sl-color-gray-6: #1e2030;
+	/* sidebar, nav bg                   */
+	--sl-color-black: #12131f;
+	/* page bg — deepest                 */
+
+	/* ── Accent — muted cyan (TUI machine color) ────────────── */
+	--sl-color-accent-low: #0a2e3d;
+	--sl-color-accent: #6ec7d8;
+	/* desaturated from #8be9fd          */
+	--sl-color-accent-high: #a8dce6;
+
+	/* ── Semantic colors ────────────────────────────────────── */
+	--sl-color-text: var(--sl-color-gray-1);
+	--sl-color-text-accent: var(--sl-color-accent);
+	--sl-color-text-invert: var(--sl-color-black);
+	--sl-color-bg: var(--sl-color-black);
+	--sl-color-bg-nav: var(--sl-color-gray-6);
+	--sl-color-bg-sidebar: var(--sl-color-gray-6);
+	--sl-color-bg-inline-code: var(--sl-color-gray-5);
+	--sl-color-bg-accent: var(--sl-color-accent);
+	--sl-color-hairline-light: #3a2d5a;
+	--sl-color-hairline: #3a2d5a;
+	--sl-color-hairline-shade: #3a2d5a;
+
+	--sl-color-backdrop-overlay: rgba(18, 19, 31, 0.8);
+
+	/* ── Status colors — muted, not neon ────────────────────── */
+	--sl-color-green-low: #0f3d22;
+	--sl-color-green: #3ec96a;
+	/* muted from #50fa7b                */
+	--sl-color-green-high: #6edd8e;
+
+	--sl-color-orange-low: #3d2a14;
+	--sl-color-orange: #d9a055;
+	/* muted from #ffb86c                */
+	--sl-color-orange-high: #e6bf80;
+
+	--sl-color-purple-low: #2d2145;
+	--sl-color-purple: #9a7ad4;
+	/* muted from #bd93f9                */
+	--sl-color-purple-high: #b9a0e0;
+
+	--sl-color-red-low: #451212;
+	--sl-color-red: #d94444;
+	/* muted from #ff5555                */
+	--sl-color-red-high: #e07070;
+
+	--sl-color-blue-low: #0a2e3d;
+	--sl-color-blue: #6ec7d8;
+	/* same as accent                    */
+	--sl-color-blue-high: #a8dce6;
+
+	/* ── Shadows — deeper for dark bg ───────────────────────── */
+	--sl-shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.25), 0 2px 2px rgba(0, 0, 0, 0.3);
+	--sl-shadow-md: 0 8px 4px rgba(0, 0, 0, 0.12), 0 5px 3px rgba(0, 0, 0, 0.15),
+		0 3px 2px rgba(0, 0, 0, 0.2), 0 1px 1px rgba(0, 0, 0, 0.25);
+	--sl-shadow-lg: 0 25px 8px rgba(0, 0, 0, 0.06), 0 16px 6px rgba(0, 0, 0, 0.15),
+		0 9px 5px rgba(18, 19, 31, 0.5), 0 4px 4px rgba(0, 0, 0, 0.85),
+		0 4px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ── Override hairline in higher-priority layer ──────────────── */
+@layer starlight.utils {
+	:root {
+		--sl-color-hairline-light: #3a2d5a;
+		--sl-color-hairline: #3a2d5a;
+		--sl-color-hairline-shade: #3a2d5a;
+	}
+}
+
+/* ── Force dark — kill light mode ────────────────────────────── */
+:root[data-theme='light'] {
+	color-scheme: dark;
+}
+
+/* ── Code syntax — muted Dracula ─────────────────────────────── */
+:root {
+	--astro-code-foreground: #c8cad8;
+	--astro-code-background: #1a1c2b;
+	--astro-code-token-constant: #9a7ad4;
+	/* muted purple                      */
+	--astro-code-token-string: #d4c67a;
+	/* muted yellow                      */
+	--astro-code-token-comment: #565a6e;
+	/* muted comment                     */
+	--astro-code-token-keyword: #d47a9e;
+	/* muted pink                        */
+	--astro-code-token-parameter: #d94444;
+	/* muted red                         */
+	--astro-code-token-function: #3ec96a;
+	/* muted green                       */
+	--astro-code-token-string-expression: #d4c67a;
+	/* muted yellow                      */
+	--astro-code-token-punctuation: #565a6e;
+	/* muted punctuation                 */
+	--astro-code-token-link: #6ec7d8;
+	/* muted cyan                        */
+}
+
+/* ── Nav links styling ───────────────────────────────────────── */
+.title-wrapper ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.title-wrapper ul li a {
+	display: inline-block;
+	padding: 0.35rem 0.75rem;
+	border-radius: 0.375rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--sl-color-gray-2);
+	text-decoration: none;
+	transition: color 0.15s, background-color 0.15s;
+}
+
+.title-wrapper ul li a:hover {
+	color: var(--sl-color-white);
+	background-color: var(--sl-color-gray-5);
+}
+
+.title-wrapper ul li a[aria-current="page"] {
+	color: var(--sl-color-accent-high);
+	background-color: var(--sl-color-accent-low);
+}
+
+/* ── Social icons size ───────────────────────────────────────── */
+.social-icons a svg {
+	width: 1.5rem;
+	height: 1.5rem;
+	--sl-icon-size: 1.5rem;
+}
+
+/* ── Nav link size ───────────────────────────────────────────── */
+.title-wrapper ul li a {
+	font-size: 1rem;
+	padding: 0.4rem 0.85rem;
+}

@@ -1,0 +1,64 @@
+---
+title: Kexec
+description: How kexec works, custom images, local tarballs, and SSH reconnection.
+sidebar:
+  order: 4
+---
+
+Kexec allows detaching from your running OS by loading a new kernel and initramfs directly into memory, bypassing the BIOS/UEFI boot process. This means Panix can boot into a NixOS installer image without requiring physical access to reboot the machine. Once in the installer environment, disko can repartition the disks, and the standard bootstrap flow continues: transfer the closure (kexec does not reuse the previous one), run `nixos-install`, and reboot into the freshly installed system.
+
+## SSH After Kexec
+
+After kexec starts, Panix reconnects using:
+
+- Same SSH settings from previously used SSH method (hostname, username, identity_file)
+- Port from `kexec.ssh_port` (default: 22 for the default kexec image)
+
+If your custom kexec installer uses a different SSH port, configure it:
+
+```yaml
+bootstrap:
+  kexec:
+    ssh_port: 22222  # Custom SSH port for kexec installer
+```
+
+## Custom Kexec Image
+
+You can provide a custom kexec tarball:
+
+```yaml
+bootstrap:
+  kexec:
+    image: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
+    # <arch> placeholder replaced with detected architecture
+    extra_flags: # Optional flags passed to kexec (default: "")
+      - "--no-sync"
+    ssh_port: 22 # Optional kexec ssh port (default: 22)
+```
+
+## Local Kexec Tarball
+
+For machines without internet access or for faster deployments, download the kexec tarball locally and Panix will transfer it instead of downloading it remotely.
+
+**Download locally:**
+
+```bash
+export ARCH=x86_64  # or aarch64
+
+curl -L -o ./kexec-$ARCH.tar.gz \
+  https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$ARCH-linux.tar.gz
+```
+
+**Configure in `panix.yml`:**
+
+```yaml
+machines:
+  my-machine:
+    ssh:
+      hostname: 192.168.1.100
+    bootstrap:
+      kexec:
+        image: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
+```
+
+The `<arch>` placeholder is automatically replaced with the detected architecture (e.g., `x86_64`). Panix detects whether `url` is a local path or HTTP URL, local paths are transferred via `rsync`, URLs trigger remote download with `curl`.

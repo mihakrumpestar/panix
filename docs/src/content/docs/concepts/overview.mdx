@@ -1,0 +1,26 @@
+---
+title: What is Panix?
+description: Universal NixOS Deployment Tool - the problem it solves and what it provides.
+sidebar:
+  order: 1
+---
+
+## The Problem
+
+Deploying NixOS at scale introduces operational challenges that existing tools address partially but not holistically:
+
+- **Fragmented tooling**: `nixos-anywhere` handles bootstrapping bare-metal machines, while `deploy-rs`, `Colmena` and others manage deployment orchestration. Each tool excels within its domain, but integration between bootstrap and ongoing deployment cycles remains manual.
+- **Missing visibility**: Deployment failures require parsing scrollback logs after execution completes. There's no unified view of what phase failed, which machine is affected, or the current state across a heterogeneous fleet.
+- **Implicit dependencies**: Most deployment tools require modifying your flake to include their module or output, creating a dependency that complicates using alternative tools later.
+- **No retry mechanism**: When a phase fails mid-execution, the typical workflow is to restart from scratch. Partial progress is discarded rather than preserved and recoverable.
+
+## What Panix Provides
+
+Panix is a deployment orchestrator for NixOS flakes.
+
+- **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
+- **Phase-oriented execution**: Six sequential deployment phases: Inspect, Bootstrap, Build, Transfer, Secrets, and Activate execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
+- **Remote build mode**: Builds can execute on a target machine instead of locally, useful when the target has more resources or a different architecture. The closure is then copied between machines via the Nix remote store protocol.
+- **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
+- **Bootstrap support**: Machines can be converted to NixOS via NixOS live install or any live install or previously installed distro using kexec and `disko`, with full support for custom hooks and secrets at multiple stages.
+- **Flake-agnostic configuration**: The deployment configuration is separate from your flake. No modifications to your flake are required to use Panix.

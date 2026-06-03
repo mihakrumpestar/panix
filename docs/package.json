@@ -1,0 +1,22 @@
+{
+  "name": "panix-docs",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^6.0.1",
+    "@astrojs/starlight": "^0.39.3",
+    "@lorenzo_lewis/starlight-utils": "^0.3.2",
+    "@tailwindcss/vite": "^4.3.0",
+    "astro": "^6.3.1",
+    "astro-mermaid": "^2.0.2",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4.3.0"
+  }
+}

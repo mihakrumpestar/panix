@@ -1,0 +1,22 @@
+---
+title: Dry Run
+description: Preview what would happen without executing.
+sidebar:
+  order: 5
+---
+
+```bash
+# Dry run: show what would happen
+panix deploy --dry-run
+
+# Dry run with real status queries (inspects machines to show what would happen based on machine state)
+panix deploy --dry-run-with-inspect
+```
+
+## `--dry-run`
+
+Shows what Panix would do based on the configuration alone, without connecting to any machines. Useful for verifying configuration structure, tag filtering, and inheritance.
+
+## `--dry-run-with-inspect`
+
+Same as dry run, but executes the Inspect phase to query real machine states (reachability, OS, architecture, generations). This gives a more accurate picture of what each phase would do, since it knows which machines are NixOS, which need bootstrapping, etc.

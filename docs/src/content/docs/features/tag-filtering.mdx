@@ -1,0 +1,48 @@
+---
+title: Tag-Based Filtering
+description: Deploy subsets of your infrastructure using tags.
+sidebar:
+  order: 2
+---
+
+Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through inheritance. Deploy subsets of your infrastructure:
+
+```bash
+panix --tags production         # All production-tagged machines
+panix --tags webserver          # All machines under webserver config
+panix --tags server-01          # Single machine
+panix --tags server-01,special  # Single machine and tag special
+```
+
+## How Tags Work
+
+Given this configuration:
+
+```yaml
+fleet:
+  tags: [production]
+  flakes:
+    infrastructure:
+      tags: [critical]
+      configurations:
+        webserver:
+          tags: [web]
+          machines:
+            web-01:
+            web-02:
+```
+
+The resolved tags for `web-01` are: `[production, critical, web, infrastructure, webserver, web-01]`.
+
+- Fleet-level tags are inherited by all descendants
+- Flake and configuration names are automatically registered as tags
+- Machine names are automatically registered as tags
+- Tags at each level accumulate (never override)
+
+## Multiple Tags
+
+Separate multiple tags with commas. Machines matching **any** of the specified tags are included:
+
+```bash
+panix --tags web,database    # All machines tagged 'web' OR 'database'
+```

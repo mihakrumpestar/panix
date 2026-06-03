@@ -1,0 +1,34 @@
+---
+title: IDE Support
+description: YAML schema for autocompletion and validation in your editor.
+sidebar:
+  order: 7
+---
+
+You can directly reference the YAML schema for autocompletion and validation in your editor.
+
+## Remote Schema (Recommended)
+
+Add this comment at the top of your `panix.yml`:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
+```
+
+This always references the latest schema from the repository.
+
+## Local Schema
+
+Generate the schema locally:
+
+```bash
+panix schema
+```
+
+This writes `panix-schema.yaml` to the current directory. Reference it:
+
+```yaml
+# yaml-language-server: $schema=./panix-schema.yaml
+```
+
+Useful when working offline or when you want the schema to match your exact Panix version.

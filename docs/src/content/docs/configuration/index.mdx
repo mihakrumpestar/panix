@@ -1,3 +1,15 @@
+---
+title: Overview
+description: How to structure your panix.yml configuration file.
+sidebar:
+  order: 1
+---
+
+Panix is configured through a single YAML file (default: `panix.yml`). The configuration defines your fleet structure, SSH connections, build options, and deployment targets.
+
+## Minimal Example
+
+```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
 # Minimal Panix configuration demo.
@@ -34,3 +46,15 @@ fleet:
               ssh:
                 hostname: 10.0.0.100
                 port: 2222
+```
+
+## Top-Level Structure
+
+The configuration has two top-level keys:
+
+| Key | Purpose |
+|-----|---------|
+| `flags` | Global flags (activation mode, output mode, TUI settings, logging, snapshots, profiling) |
+| `fleet` | Fleet definition (flakes, configurations, machines, SSH, secrets, nix options) |
+
+Values of `flags` are all overridable via CLI arguments. See the [full YAML reference](/configuration/reference/) for every available option.

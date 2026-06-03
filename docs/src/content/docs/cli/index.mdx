@@ -1,0 +1,72 @@
+---
+title: CLI Reference
+description: Panix command-line interface overview and commands.
+sidebar:
+  order: 1
+---
+
+{/* CLI_HELP_START */}
+```sh
+> panix --help
+Usage: panix <command> [flags]
+
+Universal NixOS Deployment Tool
+
+Flags:
+  -h, --help       Show context-sensitive help.
+      --version    Show version ($PANIX_VERSION)
+
+Commands:
+  init [flags]
+    Initialize a new panix configuration file
+
+  schema [flags]
+    Generate YAML schema for configuration files
+
+  template [flags]
+    Process templates and anchors, output the result
+
+  eval [flags]
+    Fully evaluate and validate configuration (including templating) for
+    execution, output the result
+
+  snapshot --path=STRING [flags]
+    View snapshot in TUI
+
+  inspect [flags]
+    Inspect machines
+
+  build [flags]
+    Build NixOS closures
+
+  deploy [flags]
+    Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets ->
+    activate)
+
+  secrets [flags]
+    Deploy secrets to machines
+
+  rollback [flags]
+    Rollback to a previous generation, use optional --gen=NUMBER flag (default
+    is -1)
+
+Run "panix <command> --help" for more information on a command.
+```
+{/* CLI_HELP_END */}
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `init` | Initialize a new `panix.yml` configuration file |
+| `schema` | Generate YAML schema for configuration files |
+| `template` | Process templates and anchors, output the result |
+| `eval` | Fully evaluate and validate configuration for execution |
+| `snapshot` | View a snapshot in TUI |
+| `inspect` | Inspect machines (reachability, OS, architecture, generations) |
+| `build` | Build NixOS closures |
+| `deploy` | Full workflow: inspect → bootstrap → build → transfer → secrets → activate |
+| `secrets` | Deploy secrets to machines |
+| `rollback` | Rollback to a previous generation |
+
+See [Deploy Flags](/cli/deploy/) for the full `panix deploy` flag reference.

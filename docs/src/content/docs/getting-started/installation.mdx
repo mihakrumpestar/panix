@@ -1,0 +1,44 @@
+---
+title: Installation
+description: How to install Panix.
+sidebar:
+  order: 2
+---
+
+The methods:
+
+## 1. Run directly
+
+The simplest way to run Panix without installing:
+
+```sh
+nix run github:mihakrumpestar/panix -- deploy
+```
+
+## 2. Add to your flake
+
+Add Panix as a flake input and include it in your system packages:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    panix.url = "github:mihakrumpestar/panix";
+  };
+
+  outputs = { self, nixpkgs, panix, ... }@inputs: {
+    nixosConfigurations.my-server = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        {
+          environment.systemPackages = [
+            panix.packages.${system}.default
+          ];
+        }
+      ];
+    };
+  };
+}
+```

@@ -1,0 +1,19 @@
+---
+title: Requirements & Caveats
+description: System requirements and known limitations.
+sidebar:
+  order: 4
+---
+
+## Requirements
+
+- **Nix**: Panix uses `nix` found in PATH. It also uses common utilities: `uname`, `id`, `echo`, `cat`, `readlink`, `curl`, `tar`
+- **rsync**: Required on both local and remote for file transfers (included in kexec images)
+- **kexec memory**: Minimum 1GB RAM without swap for kexec bootstrap
+- **SSH key auth**: Only SSH key authentication is supported, no password auth
+- **Flake-only**: Only Nix flakes are supported (not legacy `configuration.nix` builds)
+
+## Caveats
+
+- **Nix store location**: Panix expects the Nix store to be in the standard location (`/nix/store`). If it is not, you will have to specify it using `nix` cli args.
+- **Nix store locking**: Nix does not allow concurrent writes to the store. Some builds may show a `waiting for store lock` warning briefly until the lock is released.

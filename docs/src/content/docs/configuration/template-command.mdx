@@ -1,0 +1,27 @@
+---
+title: panix template
+description: Preview processed YAML with templates evaluated and anchors resolved.
+sidebar:
+  order: 5
+---
+
+The `template` command previews the processed YAML configuration with templates evaluated and anchors resolved, without performing validation.
+
+```bash
+panix template                    # Output to stdout (colorized)
+panix template -o processed.yaml  # Output to file (plain YAML)
+```
+
+## What it Does
+
+- Resolves all `{{...}}` template expressions
+- Merges YAML anchors
+- Outputs only `flags` and `fleet` top level keys
+
+## Use Cases
+
+- Debug template expressions to see the final resolved values
+- Verify YAML anchor merging produces the expected output
+- Feed the output to other tools that expect plain YAML (no template syntax)
+
+For full validation (flake URLs, bootstrap paths, configuration keys), use [panix eval](/configuration/eval-command/) instead.

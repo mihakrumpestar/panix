@@ -117,40 +117,37 @@ tasks:
       #- go mod vendor
 
   generate:
-    desc: Run go generate and update README CLI section
+    desc: Run go generate and update CLI/YAML sections in README and docs
     cmds:
       - go generate ./...
       - |
-        python3 - <<'EOF'
-        import subprocess
-        import re
-        help_output = subprocess.run(['go', 'run', 'cmd/panix/main.go', '--help'], capture_output=True, text=True).stdout
-        deploy_help = subprocess.run(['go', 'run', 'cmd/panix/main.go', 'deploy', '--help'], capture_output=True, text=True).stdout
-        with open('README.md', 'r') as f:
-            content = f.read()
-        cli_section = f"\n### CLI\n\n```sh\n> panix --help\n{help_output}```\n\n<details>\n<summary>Deploy command flags</summary>\n\n```sh\n> panix deploy --help\n{deploy_help}```\n\n</details>\n"
-        pattern = r'\n### CLI\n\n```sh\n.*?```\n\n<details>\n<summary>Deploy command flags</summary>\n\n```sh\n.*?```\n\n</details>\n'
-        if not re.search(pattern, content, flags=re.DOTALL):
-            pattern = r'\n### CLI\n\n```sh\n.*?```\n'
-        content = re.sub(pattern, cli_section, content, flags=re.DOTALL)
-        with open('examples/panix.demo.yml', 'r') as f:
-            panix_yml = f.read()
-        panix_yml_section = "```yaml\n" + panix_yml + "\n```\n"
-        content = re.sub(
-            r'(### 3\. Create panix\.yml\n\n).*?(\n### 4\.)',
-            lambda m: m.group(1) + panix_yml_section + m.group(2),
-            content,
-            flags=re.DOTALL,
-        )
-        content = re.sub(
-            r'(#### Minimal Example\n\n).*?(\n#### Full Example)',
-            lambda m: m.group(1) + panix_yml_section + m.group(2),
-            content,
-            flags=re.DOTALL,
-        )
-        with open('README.md', 'w') as f:
-            f.write(content)
-        EOF
+        HELP_OUTPUT="$(go run cmd/panix/main.go --help)"
+        DEPLOY_HELP="$(go run cmd/panix/main.go deploy --help)"
+        PANIX_YML="$(cat examples/panix.demo.yml)"
+
+        # Helper: replace content between markers with a code block
+        # Markers are outside code blocks. Content is wrapped in ```lang ... ```
+        # Usage: replace_block FILE START_MARKER END_MARKER LANG NEW_CONTENT_FILE
+        replace_block() {
+          local file="$1" start="$2" end="$3" lang="$4" content_file="$5"
+          awk -v start="$start" -v end="$end" -v lang="$lang" -v content_file="$content_file" 'BEGIN { while ((getline line < content_file) > 0) { new_content = new_content line "\n" } close(content_file) } $0 == start { print; printf "```%s\n", lang; printf "%s", new_content; printf "```\n"; skip=1; next } $0 == end { skip=0 } !skip { print }' "$file" 2>/dev/null > "${file}.tmp" && mv "${file}.tmp" "$file"
+        }
+
+        # Write temp files for content
+        echo "$PANIX_YML" > /tmp/_panix_yml.txt
+        printf '> panix --help\n%s' "$HELP_OUTPUT" > /tmp/_cli_help.txt
+        printf '> panix deploy --help\n%s' "$DEPLOY_HELP" > /tmp/_deploy_help.txt
+
+        # Update README.md panix.yml
+        replace_block "README.md" "<!-- PANIX_YML_START -->" "<!-- PANIX_YML_END -->" yaml /tmp/_panix_yml.txt
+
+        # Update docs CLI help
+        replace_block "docs/src/content/docs/cli/index.mdx" "{/\* CLI_HELP_START \*/}" "{/\* CLI_HELP_END \*/}" sh /tmp/_cli_help.txt
+
+        # Update docs deploy flags
+        replace_block "docs/src/content/docs/cli/deploy.mdx" "{/\* DEPLOY_FLAGS_START \*/}" "{/\* DEPLOY_FLAGS_END \*/}" sh /tmp/_deploy_help.txt
+
+        rm -f /tmp/_panix_yml.txt /tmp/_cli_help.txt /tmp/_deploy_help.txt
 
   release:
     desc: Create a new GitHub release
@@ -204,3 +201,24 @@ tasks:
         fi
         gh release create "v$NEW_VERSION" --notes-file "$NOTES_TMP"
         rm -f "$NOTES_TMP"
+
+  # Note: to update astro, run: npx @astrojs/upgrade
+  docs:dev:
+    desc: Run live dev docs
+    dir: ./docs
+    cmds:
+      - bun dev
+
+  docs:build:
+    desc: Build docs static site
+    dir: ./docs
+    cmds:
+      - bun run build
+
+  docs:deploy:
+    desc: Deploy docs to Cloudflare Pages
+    dir: ./docs
+    deps:
+      - docs:build
+    cmds:
+      - bunx wrangler pages deploy --project-name panix dist

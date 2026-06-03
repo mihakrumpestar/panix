@@ -1,0 +1,96 @@
+---
+title: Other Commands
+description: init, schema, inspect, build, secrets, rollback, snapshot.
+sidebar:
+  order: 3
+---
+
+## init
+
+Initialize a new `panix.yml` configuration file:
+
+```bash
+panix init
+```
+
+## schema
+
+Generate YAML schema for configuration files:
+
+```bash
+panix schema
+```
+
+Writes `panix-schema.yaml` to the current directory. See [IDE Support](/configuration/ide-support/) for usage with editors.
+
+## template
+
+Process templates and anchors, output the result:
+
+```bash
+panix template                    # Output to stdout (colorized)
+panix template -o processed.yaml  # Output to file (plain YAML)
+```
+
+See [panix template](/configuration/template-command/) for details.
+
+## eval
+
+Fully evaluate and validate configuration:
+
+```bash
+panix eval                    # Output to stdout (colorized)
+panix eval -o processed.yaml  # Output to file (plain YAML)
+```
+
+See [panix eval](/configuration/eval-command/) for details.
+
+## inspect
+
+Inspect machines (reachability, OS, architecture, generations):
+
+```bash
+panix inspect
+```
+
+Runs only the Inspect phase. Useful for verifying SSH connectivity and machine states before a full deploy.
+
+## build
+
+Build NixOS closures:
+
+```bash
+panix build
+```
+
+Runs only the Build phase. Useful for pre-building without deploying.
+
+## secrets
+
+Deploy secrets to machines:
+
+```bash
+panix secrets
+```
+
+Runs only the Secrets phase. Useful for updating secrets without a full deploy.
+
+## rollback
+
+Rollback to a previous NixOS generation:
+
+```bash
+panix rollback            # Rollback to previous generation (-1)
+panix rollback --gen=-2   # Rollback to 2 generations ago
+panix rollback --gen=5    # Rollback to specific generation number
+```
+
+## snapshot
+
+View a snapshot in TUI:
+
+```bash
+panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
+```
+
+See [Snapshots](/guides/snapshots/) for details on taking and viewing snapshots.
