@@ -6,6 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessTerminalOutput_BasicWrites(t *testing.T) {
@@ -116,7 +117,7 @@ func TestProcessTerminalOutput_PendingNewlineOverwrite(t *testing.T) {
 	assert.True(t, cmdLog.PendingNewline, "PendingNewline should be set after trailing \\n")
 
 	processTestData([]byte("\roverwritten"), cmdLog)
-	assertLines(t, cmdLog, []string{"overwritten"})
+	assertLines(t, cmdLog, []string{"hello", "overwritten"})
 }
 
 func TestProcessTerminalOutput_ANSIOnly(t *testing.T) {
@@ -217,7 +218,7 @@ func TestProcessTerminalOutput_CarriageReturnAcrossReads(t *testing.T) {
 		{
 			"pending newline then CR then content",
 			[]string{"hello\r\n", "\r/nix/store/abc\n"},
-			[]string{"/nix/store/abc"},
+			[]string{"hello", "/nix/store/abc"},
 			false,
 		},
 	}
@@ -235,6 +236,148 @@ func TestProcessTerminalOutput_CarriageReturnAcrossReads(t *testing.T) {
 			assert.Equal(t, test.wantCR, cmdLog.CarriageReturn, "CarriageReturn flag")
 		})
 	}
+}
+
+func TestProcessTerminalOutput_CrossReadPendingNewlineCR(t *testing.T) {
+	t.Parallel()
+
+	cmdLog := newTestCommandLog()
+
+	processTestData([]byte("line1\r\n"), cmdLog)
+	assert.True(t, cmdLog.PendingNewline, "PendingNewline should be set after trailing \\n")
+
+	processTestData([]byte("\rline2\r\n"), cmdLog)
+	assertLines(t, cmdLog, []string{"line1", "line2"})
+}
+
+func TestProcessTerminalOutput_NixErrorOverwrite(t *testing.T) {
+	t.Parallel()
+
+	cmdLog := newTestCommandLog()
+
+	processTestData([]byte("[0/1 built] building foo\x1b[0m\x1b[K\r"), cmdLog)
+	assert.True(t, cmdLog.CarriageReturn, "progress line ends with \\r")
+
+	processTestData([]byte("\x1b[K\x1b[31;1merror:\x1b[0m hash mismatch\r\n"), cmdLog)
+	assertLines(t, cmdLog, []string{"\x1b[31;1merror:\x1b[0m hash mismatch"})
+}
+
+func TestProcessTerminalOutput_NixMultilineError(t *testing.T) {
+	t.Parallel()
+
+	cmdLog := newTestCommandLog()
+
+	oneRead := "" +
+		"\x1b[0m\x1b[K\r" +
+		"\x1b[31;1merror:\x1b[0m hash mismatch in fixed-output derivation '...drv':\x1b[0m\r\n" +
+		"         specified: sha256-deadbeef\x1b[0m\r\n" +
+		"            got:    sha256-cafebabe\x1b[0m\x1b[0m"
+
+	processTestData([]byte(oneRead), cmdLog)
+	assertLines(t, cmdLog, []string{
+		"\x1b[31;1merror:\x1b[0m hash mismatch in fixed-output derivation '...drv':\x1b[0m",
+		"         specified: sha256-deadbeef\x1b[0m",
+		"            got:    sha256-cafebabe\x1b[0m\x1b[0m",
+	})
+}
+
+func TestProcessTerminalOutput_NixErrorFollowedByProgress(t *testing.T) {
+	t.Parallel()
+
+	cmdLog := newTestCommandLog()
+
+	processTestData([]byte("            got:    sha256-cafebabe\x1b[0m\x1b[0m\r\n"), cmdLog)
+	assert.True(t, cmdLog.PendingNewline)
+
+	processTestData([]byte("\r[8/835 built (1 failed)] building rust\x1b[0m\x1b[K\r"), cmdLog)
+	assertLines(t, cmdLog, []string{
+		"            got:    sha256-cafebabe\x1b[0m\x1b[0m",
+		"[8/835 built (1 failed)] building rust\x1b[0m",
+	})
+}
+
+func TestProcessTerminalOutput_NixWarningSurvivesProgressBars(t *testing.T) {
+	t.Parallel()
+
+	cmdLog := newTestCommandLog()
+
+	processTestData([]byte(
+		"\x1b[0m\x1b[K\r"+
+			"\x1b[K\x1b[35;1mwarning:\x1b[0m Git tree is dirty\x1b[0m\r\n\r"+
+			"evaluating derivation\x1b[0m\x1b[K\r"+
+			"querying info\x1b[0m\x1b[K\r",
+	), cmdLog)
+
+	assertLines(t, cmdLog, []string{
+		"\x1b[35;1mwarning:\x1b[0m Git tree is dirty\x1b[0m",
+		"querying info\x1b[0m",
+	})
+	assert.True(t, cmdLog.CarriageReturn)
+
+	for range 50 {
+		processTestData([]byte(
+			"\x1b[0m\x1b[K\r"+
+				"[\x1b[32;1m0\x1b[0m/293 built, 0/47 copied]\x1b[0m\x1b[K\r",
+		), cmdLog)
+	}
+
+	lines := make([]string, cmdLog.Output.Len())
+	for i := range lines {
+		lines[i] = string(cmdLog.Output.Line(i))
+	}
+
+	require.Len(t, lines, 2)
+	assert.Contains(t, lines[0], "warning:")
+	assert.Contains(t, lines[1], "built")
+
+	processTestData([]byte(
+		"\x1b[0m\x1b[K\r"+
+			"\x1b[31;1merror:\x1b[0m hash mismatch\r\n"+
+			"         specified: sha256-deadbeef\x1b[0m\r\n"+
+			"            got:    sha256-cafebabe\x1b[0m\x1b[0m\r\n",
+	), cmdLog)
+
+	assertLines(t, cmdLog, []string{
+		"\x1b[35;1mwarning:\x1b[0m Git tree is dirty\x1b[0m",
+		"\x1b[31;1merror:\x1b[0m hash mismatch",
+		"         specified: sha256-deadbeef\x1b[0m",
+		"            got:    sha256-cafebabe\x1b[0m\x1b[0m",
+	})
+}
+
+func TestProcessTerminalOutput_NixFullWarningToError(t *testing.T) {
+	t.Parallel()
+
+	cmdLog := newTestCommandLog()
+	proc := terminalProcessor{output: cmdLog.Output}
+
+	raw := []byte(
+		"\x1b[0m\x1b[K\r" +
+			"\x1b[K" +
+			"\x1b[35;1mwarning:\x1b[0m Git tree is dirty\x1b[0m\r\n\r" +
+			"evaluating derivation\x1b[0m\x1b[K\r" +
+			"querying info\x1b[0m\x1b[K\r" +
+			"\x1b[0m\x1b[K\r[\x1b[32;1m0\x1b[0m/293 built]\x1b[0m\x1b[K\r" +
+			"\x1b[0m\x1b[K\r[\x1b[32;1m0\x1b[0m/238 built]\x1b[0m\x1b[K\r" +
+			"\x1b[0m\x1b[K\r\x1b[K" +
+			"\x1b[31;1merror:\x1b[0m hash mismatch\r\n" +
+			"         specified: sha256-deadbeef\x1b[0m\r\n" +
+			"            got:    sha256-cafebabe\x1b[0m\x1b[0m\r\n" +
+			"\r[8/835 built (1 failed)] building rust\x1b[0m\x1b[K\r",
+	)
+
+	chunkSize := 15
+	for i := 0; i < len(raw); i += chunkSize {
+		end := min(i+chunkSize, len(raw))
+
+		proc.process(raw[i:end], cmdLog)
+	}
+
+	finalizeCommandLog(cmdLog)
+
+	require.GreaterOrEqual(t, cmdLog.Output.Len(), 1)
+	assert.Contains(t, string(cmdLog.Output.Line(0)), "warning:", "warning must survive chunked reads")
+	assert.Contains(t, string(cmdLog.Output.Line(1)), "error:", "error must follow warning")
 }
 
 func TestFinalizeCommandLog(t *testing.T) {

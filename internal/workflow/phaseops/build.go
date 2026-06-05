@@ -87,7 +87,7 @@ func nixBuildCommand(configurationI *configuration.Configuration, machineI *mach
 			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
 	}
 
-	baseArgs = append(baseArgs, "--no-link", "--no-update-lock-file", "--print-out-paths")
+	baseArgs = append(baseArgs, "--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going")
 
 	return slices.Concat(
 		baseArgs,

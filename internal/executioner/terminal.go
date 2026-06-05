@@ -20,6 +20,7 @@ type terminalProcessor struct {
 	output          *buffer.LinesBufVer
 	cursorOnNewLine bool
 	cursorAtColZero bool
+	pending         []byte
 }
 
 // process handles a single read's worth of PTY output, splitting on \r and
@@ -39,6 +40,19 @@ type terminalProcessor struct {
 // next read's first content should overwrite that line. If no more output
 // comes, finalizeCommandLog removes the transient progress line.
 func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
+	if len(tp.pending) > 0 {
+		combined := make([]byte, 0, len(tp.pending)+len(buf))
+		combined = append(combined, tp.pending...)
+		combined = append(combined, buf...)
+		buf = combined
+		tp.pending = tp.pending[:0]
+	}
+
+	tp.pending = tp.trailingPrefix(buf)
+	if len(tp.pending) > 0 {
+		buf = buf[:len(buf)-len(tp.pending)]
+	}
+
 	buf = bytes.ReplaceAll(buf, eraseToEndOfLine, nil)
 	if len(buf) == 0 {
 		return
@@ -67,6 +81,17 @@ func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
 	tp.trimANSIOnlyTrailingLines()
 }
 
+func (tp *terminalProcessor) trailingPrefix(buf []byte) []byte {
+	p := eraseToEndOfLine
+	for i := len(p) - 1; i > 0; i-- {
+		if bytes.HasSuffix(buf, p[:i]) {
+			return buf[len(buf)-i:]
+		}
+	}
+
+	return nil
+}
+
 func (tp *terminalProcessor) processSegment(seg []byte, segIdx int, isLast, endsWithNewline bool) {
 	nlIdx := bytes.IndexByte(seg, '\n')
 	if nlIdx < 0 {
@@ -89,10 +114,18 @@ func (tp *terminalProcessor) processNoNewlineSegment(seg []byte, segIdx int) {
 		return
 	}
 
-	if len(seg) > 0 {
-		tp.output.OverrideLastLine(seg)
-		tp.resetCursorFlags()
+	if len(seg) == 0 {
+		return
 	}
+
+	if len(style.StripANSI(seg)) == 0 {
+		tp.resetCursorFlags()
+
+		return
+	}
+
+	tp.output.OverrideLastLine(seg)
+	tp.resetCursorFlags()
 }
 
 // processPreNewlineContent handles content before the first \n in a segment.
@@ -115,11 +148,19 @@ func (tp *terminalProcessor) processPreNewlineContent(preChunk []byte, segIdx, n
 //   - neither:         cursor mid-line → append to current line
 func (tp *terminalProcessor) writeFirstSegmentContent(data []byte) {
 	switch {
-	case tp.cursorAtColZero && len(data) > 0:
-		tp.output.OverrideLastLine(data)
+	case tp.cursorAtColZero:
+		if len(data) > 0 {
+			tp.output.OverrideLastLine(data)
+		}
+
 		tp.resetCursorFlags()
-	case tp.cursorOnNewLine && len(data) > 0:
-		tp.output.Write(data)
+	case tp.cursorOnNewLine:
+		if len(data) == 0 {
+			tp.output.Write(nil)
+		} else {
+			tp.output.Write(data)
+		}
+
 		tp.resetCursorFlags()
 	case !tp.cursorOnNewLine && !tp.cursorAtColZero:
 		appendLineContent(tp.output, data)
@@ -134,7 +175,7 @@ func (tp *terminalProcessor) writeOverridePreChunk(preChunk []byte, nlIdx int) {
 		tp.output.OverrideLastLine(preChunk)
 		tp.resetCursorFlags()
 	case nlIdx == 0 && (tp.cursorOnNewLine || tp.cursorAtColZero):
-		tp.output.Write([]byte{})
+		tp.output.Write(nil)
 		tp.resetCursorFlags()
 	}
 }
