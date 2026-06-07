@@ -23,14 +23,13 @@ func runPanixDeploy(configPath string, envVars ...string) error {
 	panixLogPath := filepath.Join(logDirPath, "panix-"+mode+".log")
 	panixOutputPath := filepath.Join(logDirPath, "panix-"+mode+".out")
 	e2eDir := filepath.Join(root, "tests", "e2e")
-	goArgs := "run " + root + "/cmd/panix"
 
 	termPath, termExecArgs := findTerminalEmulator()
 	if termPath != "" {
 		exitCodePath := filepath.Join(logDirPath, "panix-"+mode+".exitcode")
 
 		return runPanixInTerminal(termPath, termExecArgs,
-			wrapperPath(mode, goArgs, configPath, panixLogPath, panixOutputPath, envVars, e2eDir, exitCodePath), exitCodePath, panixOutputPath)
+			wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath, envVars, e2eDir, exitCodePath), exitCodePath, panixOutputPath)
 	}
 
 	return runPanixInConsole(root, configPath, panixLogPath, envVars, e2eDir)
@@ -76,7 +75,7 @@ func tailFile(path string) string {
 	return strings.Join(lines, "\n")
 }
 
-func wrapperPath(mode, goArgs, configPath, panixLogPath, panixOutputPath string, envVars []string, e2eDir, exitCodePath string) string {
+func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, envVars []string, e2eDir, exitCodePath string) string {
 	path := filepath.Join(logDirPath, "run-panix-"+mode+".sh")
 	envLines := make([]string, 0, len(envVars)+1)
 
@@ -86,9 +85,12 @@ func wrapperPath(mode, goArgs, configPath, panixLogPath, panixOutputPath string,
 
 	envLines = append(envLines, "export PANIX_E2E_DIR="+e2eDir)
 
+	goArgs := "go run " + root + "/cmd/panix"
+	panixCmd := `"${PANIX_BIN:-` + goArgs + `}"`
+
 	script := "#!/bin/sh\n" +
 		strings.Join(envLines, "\n") + "\n" +
-		"go " + goArgs + " deploy -c " + configPath + " --exit-on-complete --log --log-file " + panixLogPath +
+		panixCmd + " deploy -c " + configPath + " --exit-on-complete --log --log-file " + panixLogPath +
 		" 2> " + panixOutputPath + "\n" +
 		"echo $? > " + exitCodePath + "\n"
 
@@ -98,12 +100,18 @@ func wrapperPath(mode, goArgs, configPath, panixLogPath, panixOutputPath string,
 }
 
 func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, e2eDir string) error {
-	cmd := exec.CommandContext(context.Background(), "go", //nolint:gosec
-		"run", root+"/cmd/panix",
+	bin, baseArgs := panixExecArgs(root)
+
+	var cmdArgs []string
+
+	cmdArgs = append(cmdArgs, baseArgs...)
+	cmdArgs = append(cmdArgs,
 		"deploy", "-c", configPath,
 		"--output=console", "--exit-on-complete",
 		"--log", "--log-file", panixLogPath,
 	)
+
+	cmd := exec.CommandContext(context.Background(), bin, cmdArgs...) //nolint:gosec
 	cmd.Dir = root
 
 	cmd.Env = append(os.Environ(), envVars...)
@@ -139,4 +147,14 @@ func envValue(envVars []string, key string) string {
 	}
 
 	return ""
+}
+
+// panixExecArgs returns the binary name and base arguments for running panix.
+// If PANIX_BIN is set, uses that binary directly; otherwise uses "go run".
+func panixExecArgs(root string) (string, []string) {
+	if bin := os.Getenv("PANIX_BIN"); bin != "" {
+		return bin, nil
+	}
+
+	return "go", []string{"run", root + "/cmd/panix"}
 }

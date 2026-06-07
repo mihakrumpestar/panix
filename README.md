@@ -21,7 +21,7 @@
 [![NixOS](https://img.shields.io/badge/NIX-5277C3.svg?style=flat&logo=NixOS&logoColor=white)](https://nixos.org)
 ![GitHub Repo stars](https://img.shields.io/github/stars/mihakrumpestar/panix)
 
-**[Full Documentation](https://panix.xyz)**
+**[Documentation](https://panix.xyz)**
 
 </div>
 
@@ -32,7 +32,7 @@
 
 ## Demo
 
-![Demo](https://files.catbox.moe/dkq4fl.gif)
+![Demo](https://github.com/user-attachments/assets/55b2a31c-cd79-419b-9f10-63fc9d5130a6)
 
 Screenshot:
 
@@ -54,11 +54,10 @@ Panix is a stateless deployment orchestrator for NixOS flakes. It manages the en
 
 **Six phases, one execution:**
 
-<center>
+<div align="center">
 Inspect → Bootstrap → Build → Transfer → Secrets → Activate
-</center>
-
-</br>
+</div>
+<br>
 
 Each phase has a defined scope and purpose:
 
