@@ -26,6 +26,12 @@ fleet:
   flakes:
     test:
       url: path:{{ env "PANIX_E2E_DIR" }}/testflakes
+      nix:
+        build_flags:
+          - "--option"
+          - "eval-cache"
+          - "false"
+          - "--offline"
       configurations:
         test-vm:
           machines:
@@ -53,7 +59,7 @@ fleet:
               bootstrap:
                 ssh: *ssh_kexec
                 kexec:
-                  image: {{ $cache }}/kexec-installer-x86_64-linux.tar.gz
+                  image: {{ env "PANIX_KEXEC_PATH" }}
                   ssh_port: 10023
                 post_bootstrap_provisioned_hooks:
                   - waitForOnline
@@ -61,6 +67,11 @@ fleet:
         test-vm-remote:
           nix:
             build_mode: remote
+            build_flags:
+              - "--option"
+              - "eval-cache"
+              - "false"
+              - "--offline"
           machines:
             nixos-iso-vm-remote:
               ssh: &ssh_nixos_iso_remote
@@ -86,7 +97,7 @@ fleet:
               bootstrap:
                 ssh: *ssh_kexec_remote
                 kexec:
-                  image: {{ $cache }}/kexec-installer-x86_64-linux.tar.gz
+                  image: {{ env "PANIX_KEXEC_PATH" }}
                   ssh_port: 10026
                 post_bootstrap_provisioned_hooks:
                   - waitForOnline

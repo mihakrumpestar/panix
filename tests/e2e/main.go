@@ -47,9 +47,6 @@ func (s testScope) local() bool  { return s == testScopeBoth || s == testScopeLo
 func (s testScope) remote() bool { return s == testScopeBoth || s == testScopeRemote }
 
 const (
-	kexecFileName       = "kexec-installer-x86_64-linux.tar.gz"
-	kexecURL            = "https://github.com/nix-community/nixos-images/" +
-		"releases/latest/download/nixos-kexec-installer-noninteractive-x86_64-linux.tar.gz"
 	debianURL           = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 	blankDiskName       = "blank.qcow2"
 	blankDiskSize       = "10G"
@@ -91,7 +88,19 @@ func run() error {
 
 	killStaleQEMU()
 
-	err := runChecks()
+	cacheServer, err := startNixCacheServer()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if cacheServer != nil && cacheServer.Process != nil {
+			_ = cacheServer.Process.Kill()
+			_ = cacheServer.Wait()
+		}
+	}()
+
+	err = runChecks()
 	if err != nil {
 		return err
 	}
@@ -112,12 +121,12 @@ func run() error {
 	defer vms.kill()
 	defer cleanupFifos()
 
-	err = runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath)
+	err = runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath, res.kexecInstallerPath)
 	if err != nil {
 		return err
 	}
 
-	err = runPhase(configPath, "Redeploy", "PANIX_TEST_MODE=redeploy", res.keyPath)
+	err = runPhase(configPath, "Redeploy", "PANIX_TEST_MODE=redeploy", res.keyPath, res.kexecInstallerPath)
 	if err != nil {
 		return err
 	}
@@ -144,15 +153,16 @@ func runChecks() error {
 }
 
 type testResources struct {
-	keyPath            string
-	installerISOPath   string
-	cloudInitSeed      string
+	keyPath             string
+	installerISOPath    string
+	kexecInstallerPath  string
+	cloudInitSeed       string
 	cloudInitSeedRemote string
-	debianImagePath    string
-	debianOverlay      string
+	debianImagePath     string
+	debianOverlay       string
 	debianOverlayRemote string
-	blankDisk          string
-	blankDiskRemote    string
+	blankDisk           string
+	blankDiskRemote     string
 }
 
 func phase0Setup() (*testResources, error) {
@@ -167,9 +177,6 @@ func phase0Setup() (*testResources, error) {
 		res.keyPath, keyErr = ensureSSHKeys()
 
 		return keyErr
-	})
-	parGroup.Go("Download kexec image", func() error {
-		return ensureCached(kexecFileName, kexecURL)
 	})
 	parGroup.Go("Download Debian image", func() error {
 		return ensureCached(debianFileName, debianURL)
@@ -190,7 +197,7 @@ func phase0Setup() (*testResources, error) {
 		return nil, err
 	}
 
-	res.installerISOPath, err = buildStep("Build NixOS installer ISO", buildInstallerISO)
+	err = buildNixArtifacts(res)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +208,38 @@ func phase0Setup() (*testResources, error) {
 	}
 
 	return res, nil
+}
+
+func buildNixArtifacts(res *testResources) error {
+	parGroup := newParallelGroup()
+	parGroup.Go("Build kexec installer", func() error {
+		var buildErr error
+
+		res.kexecInstallerPath, buildErr = buildKexecInstaller()
+
+		return buildErr
+	})
+	parGroup.Go("Build NixOS installer ISO", func() error {
+		var buildErr error
+
+		res.installerISOPath, buildErr = buildInstallerISO()
+
+		return buildErr
+	})
+	parGroup.Go("Pre-build test-vm closure", func() error {
+		return preBuildClosure("test-vm", "nixosConfigurations.test-vm.config.system.build.toplevel")
+	})
+
+	if testScopeFlag.remote() {
+		parGroup.Go("Pre-build test-vm-remote closure", func() error {
+			return preBuildClosure("test-vm-remote", "nixosConfigurations.test-vm-remote.config.system.build.toplevel")
+		})
+		parGroup.Go("Pre-build test-vm-remote disko script", func() error {
+			return preBuildClosure("test-vm-remote disko", "nixosConfigurations.test-vm-remote.config.system.build.diskoScript")
+		})
+	}
+
+	return parGroup.Wait()
 }
 
 func createDisks(res *testResources) error {
@@ -361,12 +400,12 @@ func waitForAllSSH(keyPath string) error {
 	return parGroup.Wait()
 }
 
-func runPhase(configPath, phaseName, modeEnv, keyPath string) error {
+func runPhase(configPath, phaseName, modeEnv, keyPath, kexecPath string) error {
 	printPhasef("Phase: %s deploy", phaseName)
 
 	step := startStep("%s", "Run panix "+phaseName+" deploy")
 
-	err := runPanixDeploy(configPath, modeEnv)
+	err := runPanixDeploy(configPath, modeEnv, "PANIX_KEXEC_PATH="+kexecPath)
 	if err != nil {
 		step.Fail(err)
 
@@ -421,21 +460,6 @@ func bakeStep(name, keyPath string) (string, error) {
 	step := startStep("%s", name)
 
 	result, err := bakeDebianImage(keyPath)
-	if err != nil {
-		step.Fail(err)
-
-		return "", err
-	}
-
-	step.Done()
-
-	return result, nil
-}
-
-func buildStep(name string, fn func() (string, error)) (string, error) {
-	step := startStep("%s", name)
-
-	result, err := fn()
 	if err != nil {
 		step.Fail(err)
 

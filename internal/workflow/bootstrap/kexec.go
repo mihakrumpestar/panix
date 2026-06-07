@@ -113,13 +113,13 @@ func extractKexecTarball(exc *executioner.Executioner, machine *machine.Machine,
 func getTarArgs(kexecURL string) []string {
 	switch {
 	case strings.HasSuffix(kexecURL, ".tar.gz") || strings.HasSuffix(kexecURL, ".tgz"):
-		return []string{"-xvzf", "/tmp/kexec/kexec.tar"}
+		return []string{"-xzf", "/tmp/kexec/kexec.tar"}
 	case strings.HasSuffix(kexecURL, ".tar.xz"):
-		return []string{"-xvJf", "/tmp/kexec/kexec.tar"}
+		return []string{"-xJf", "/tmp/kexec/kexec.tar"}
 	case strings.HasSuffix(kexecURL, ".tar.zst"):
-		return []string{"--use-compress-program=zstd", "-xvf", "/tmp/kexec/kexec.tar"}
+		return []string{"--use-compress-program=zstd", "-xf", "/tmp/kexec/kexec.tar"}
 	default:
-		return []string{"-xvf", "/tmp/kexec/kexec.tar"}
+		return []string{"-xf", "/tmp/kexec/kexec.tar"}
 	}
 }
 

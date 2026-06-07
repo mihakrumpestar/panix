@@ -12,8 +12,6 @@ require (
 	github.com/boyter/scc/v3 v3.7.0
 	github.com/ccoveille/go-safecast/v2 v2.0.0
 	github.com/charmbracelet/ultraviolet v0.0.0-20260511121909-c840852527f3 // only for benchmarks
-	github.com/chelnak/ysmrr v0.6.0
-	github.com/fatih/color v1.19.0
 	github.com/gdamore/tcell/v3 v3.4.0 // only for benchmarks
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/go-sprout/sprout v1.0.3
@@ -32,7 +30,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/atomic v1.11.0
-	golang.org/x/crypto v0.52.0
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
 )

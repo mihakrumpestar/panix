@@ -32,7 +32,7 @@
 
 ## Demo
 
-![Demo](https://github.com/user-attachments/assets/55b2a31c-cd79-419b-9f10-63fc9d5130a6)
+![Demo](https://files.catbox.moe/dkq4fl.gif)
 
 Screenshot:
 

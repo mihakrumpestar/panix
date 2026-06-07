@@ -117,7 +117,11 @@ func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, 
 func findTerminalEmulator() (string, []string) {
 	path, err := exec.LookPath("konsole")
 	if err == nil {
-		return path, []string{"-e"}
+		return path, []string{
+			"-p", "TerminalColumns=200",
+			"-p", "TerminalRows=100",
+			"-e",
+		}
 	}
 
 	return "", nil

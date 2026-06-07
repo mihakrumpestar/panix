@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -175,20 +176,14 @@ func buildInstallerISO() (string, error) {
 	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
 	resultLink := filepath.Join(cacheDirPath, "installer-iso")
 
-	target, readErr := os.Readlink(resultLink)
-	if readErr == nil {
-		if isoPath := findISOFile(target); isoPath != "" {
-			return isoPath, nil
-		}
-	}
-
 	out, err := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
+		"--option", "eval-cache", "false",
 		"path:"+testflakesDir+"#installer-iso", "-o", resultLink).CombinedOutput()
 	if err != nil {
 		return "", errors.Wrapf(err, "build installer ISO: %s", string(out))
 	}
 
-	target, err = os.Readlink(resultLink)
+	target, err := os.Readlink(resultLink)
 	if err != nil {
 		return "", errors.Wrap(err, "read iso symlink")
 	}
@@ -206,6 +201,123 @@ func buildInstallerISO() (string, error) {
 	}
 
 	return isoPath, nil
+}
+
+func buildKexecInstaller() (string, error) {
+	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
+
+	cmd := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
+		"--option", "eval-cache", "false",
+		"--print-out-paths",
+		"path:"+testflakesDir+"#kexec-installer",
+	)
+
+	out, err := cmd.Output()
+	if err != nil {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
+			return "", errors.Wrapf(err, "build kexec installer: %s", string(exitErr.Stderr))
+		}
+
+		return "", errors.Wrap(err, "build kexec installer")
+	}
+
+	storePath := strings.TrimSpace(string(out))
+
+	kexecPath := findTarballFile(storePath)
+	if kexecPath == "" {
+		return "", errors.Errorf("no tarball found in kexec build output: %s", storePath)
+	}
+
+	return kexecPath, nil
+}
+
+func findTarballFile(storePath string) string {
+	// kexecInstallerTarball places .tar.gz at the store root
+	entries, err := os.ReadDir(storePath)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tar.gz") {
+				return filepath.Join(storePath, entry.Name())
+			}
+		}
+	}
+
+	// kexecTarball (new format) places .tar.xz in tarball/ subdirectory
+	candidate := filepath.Join(storePath, "tarball")
+
+	entries, err = os.ReadDir(candidate)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tar.xz") || strings.HasSuffix(entry.Name(), ".tar.gz")) {
+				return filepath.Join(candidate, entry.Name())
+			}
+		}
+	}
+
+	return ""
+}
+
+const (
+	cacheServerWaitTimeout = 10 * time.Second
+	cacheServerPollDelay   = 20 * time.Millisecond
+)
+
+func startNixCacheServer() (*exec.Cmd, error) {
+	cfgPath := filepath.Join(findProjectRoot(), "tests", "e2e", "harmonia.toml")
+
+	cmd := exec.CommandContext(context.Background(), "harmonia-cache")
+
+	cmd.Env = append(os.Environ(), "CONFIG_FILE="+cfgPath)
+
+	err := cmd.Start()
+	if err != nil {
+		return nil, errors.Wrap(err, "start nix cache server")
+	}
+
+	dialer := &net.Dialer{Timeout: time.Second}
+
+	deadline := time.Now().Add(cacheServerWaitTimeout)
+	for time.Now().Before(deadline) {
+		conn, dialErr := dialer.DialContext(context.Background(), "tcp", "127.0.0.1:5000")
+		if dialErr == nil {
+			closeWithoutErrCheck(conn)
+
+			return cmd, nil
+		}
+
+		time.Sleep(cacheServerPollDelay)
+	}
+
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+
+	return nil, errors.New("nix cache server did not start within 10s")
+}
+
+func preBuildClosure(name, flakeAttrPath string) error {
+	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
+
+	cmd := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
+		"--option", "eval-cache", "false",
+		"--print-out-paths",
+		"--no-link",
+		"path:"+testflakesDir+"#"+flakeAttrPath,
+	)
+
+	out, err := cmd.Output()
+	if err != nil {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
+			return errors.Wrapf(err, "pre-build %s: %s", name, string(exitErr.Stderr))
+		}
+
+		return errors.Wrapf(err, "pre-build %s", name)
+	}
+
+	_ = strings.TrimSpace(string(out))
+
+	return nil
 }
 
 func findISOFile(storePath string) string {

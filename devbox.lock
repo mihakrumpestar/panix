@@ -485,6 +485,54 @@
         }
       }
     },
+    "harmonia@latest": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#harmonia",
+      "source": "devbox-search",
+      "version": "3.1.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/yvvffa5xv85cnbd9vmf1kfiqafwgyfvp-harmonia-3.1.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/yvvffa5xv85cnbd9vmf1kfiqafwgyfvp-harmonia-3.1.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4vpbclqyjq1f6gcxsxnzx3d7w5k29g3g-harmonia-3.1.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4vpbclqyjq1f6gcxsxnzx3d7w5k29g3g-harmonia-3.1.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3is7qkk9y30i1wa88g7xc59gz020zbvj-harmonia-3.1.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/3is7qkk9y30i1wa88g7xc59gz020zbvj-harmonia-3.1.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ly285w5cqp0ad5fb1pyxy32qjp6vy9nb-harmonia-3.1.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ly285w5cqp0ad5fb1pyxy32qjp6vy9nb-harmonia-3.1.0"
+        }
+      }
+    },
     "nix-update@latest": {
       "last_modified": "2026-05-20T06:38:13Z",
       "resolved": "github:NixOS/nixpkgs/d99b013d5d1931ad77fe3912ed218170dec5d9a4#nix-update",

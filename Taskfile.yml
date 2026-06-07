@@ -50,6 +50,7 @@ tasks:
     cmds:
       - go mod tidy
       - golangci-lint run ./...
+      - golangci-lint run ./tests/e2e/...
       - |
         if grep -rn "; " internal/ --include="*.go" | grep -v "for " | grep -v "//"; then
           echo "Error: Inlining pattern detected"
@@ -104,6 +105,7 @@ tasks:
       - devbox update
       - go get -u all
       - go mod tidy
+      - go work sync
       #- go mod vendor
       - nix flake update
 
