@@ -200,7 +200,7 @@ func (m *Viewport) MaxLineWidth() int {
 
 	for idx, lineWidth := range m.lineWidths {
 		if lineWidth < 0 {
-			lineWidth = style.CellWidth(m.line(idx))
+			lineWidth = style.LineWidth(m.line(idx))
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -660,7 +660,7 @@ func (m *Viewport) padLines(contentW int) {
 
 		lineWidth := m.lineWidths[idx]
 		if lineWidth < 0 {
-			lineWidth = style.CellWidth(line)
+			lineWidth = style.LineWidth(line)
 			m.lineWidths[idx] = lineWidth
 		}
 
