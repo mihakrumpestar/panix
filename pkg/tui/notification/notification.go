@@ -102,18 +102,14 @@ func (n *Notification) render() {
 	}
 
 	foreground := n.fadedColor()
-	content := n.renderContent()
 
 	n.buf.Reset()
-	style.NewStyle().
+	n.baseStyle.
+		Foreground(foreground).
 		Border(style.RoundedBorder()).
 		BorderForeground(foreground).
 		Padding(0, 1).
-		RenderInto(n.buf.LinesBuf, content)
-}
-
-func (n *Notification) renderContent() [][]byte {
-	return [][]byte{n.baseStyle.Foreground(n.fadedColor()).RenderLine([]byte(n.text))}
+		RenderLineInto(n.buf.LinesBuf, []byte(n.text))
 }
 
 func (n *Notification) isExpired() bool {

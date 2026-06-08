@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultLinesBufLen = 120
+	DefaultLinesBufLen = 5
 )
 
 // LinesBuf is a pooled buffer for building output lines in a single
@@ -91,7 +91,7 @@ func (b *LinesBuf) Line(i int) []byte {
 	return b.buf[start:end]
 }
 
-// Lines reconstructs [][]byte. Allocates — prefer Line(i) when possible.
+// Lines reconstructs [][]byte. Allocates — prefer Line(i).
 func (b *LinesBuf) Lines() [][]byte {
 	length := len(b.indexes)
 	if length == 0 {

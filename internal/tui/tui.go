@@ -226,21 +226,24 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 	content.AppendFrom(m.buildLogs.Render(m.viewports, m.spinners))
 
 	if m.err != nil {
-		errContent := [][]byte{nil, []byte("=== Error ==="), nil, []byte(m.err.Error())}
+		errContent := buffer.NewLinesBuf()
+		errContent.EmptyLine()
+		errContent.WriteLine([]byte("=== Error ==="))
+		errContent.EmptyLine()
+		errContent.WriteLine([]byte(m.err.Error()))
 
-		m.conf.ColorScheme.Error.Color.RenderInto(content, errContent)
+		m.conf.ColorScheme.Error.Color.RenderIntoBuf(content, errContent)
+		errContent.Release()
 	}
 
 	if m.conf.Flags.Logging.Debug {
-		debugContent := [][]byte{
-			nil, []byte("=== Debug ==="), nil,
-			fmt.Appendf(nil, "terminal - h: %d, w: %d", m.dimensions.Height, m.dimensions.Width),
-			fmt.Appendf(nil, "header - h: %d", m.header.Len()),
-			fmt.Appendf(nil, "footer - h: %d", m.footer.Len()),
-			nil,
-		}
-
-		content.WriteLines(debugContent)
+		content.EmptyLine()
+		content.WriteLine([]byte("=== Debug ==="))
+		content.EmptyLine()
+		content.WriteLine(fmt.Appendf(nil, "terminal - h: %d, w: %d", m.dimensions.Height, m.dimensions.Width))
+		content.WriteLine(fmt.Appendf(nil, "header - h: %d", m.header.Len()))
+		content.WriteLine(fmt.Appendf(nil, "footer - h: %d", m.footer.Len()))
+		content.EmptyLine()
 
 		m.spinners.Debug(content)
 		m.viewports.Debug(content)
@@ -263,7 +266,7 @@ func (m *model) renderFullscreenViewportInto(buf *buffer.LinesBufDiff, renderCou
 	fullscreenXpath := m.viewports.GetFullscreenXpath()
 	content := m.viewports.GetViewportContent(fullscreenXpath)
 
-	if len(content) == 0 {
+	if content == nil || content.Len() == 0 {
 		m.viewports.ExitFullscreen()
 
 		return

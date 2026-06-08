@@ -9,6 +9,7 @@ import (
 	"codeberg.org/tslocum/cview"
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/vt"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 func makeStringLines(n int) []string {
@@ -136,7 +137,7 @@ func Benchmark__NewAndSetContentLines(b *testing.B) {
 
 	for b.Loop() {
 		mdl := New(WithWidth(80), WithHeight(24))
-		mdl.SetContentLines(lines)
+		mdl.setLines(lines)
 	}
 }
 
@@ -160,7 +161,7 @@ func Benchmark__SetContentLines(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		mdl.SetContentLines(lines)
+		mdl.setLines(lines)
 	}
 }
 
@@ -179,7 +180,7 @@ func Benchmark_Bubbles__SetContentLines(b *testing.B) {
 
 func Benchmark__View(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
-	mdl.SetContentLines(makeLines(1000))
+	mdl.setLines(makeLines(1000))
 	mdl.SetYOffset(500)
 
 	b.ResetTimer()
@@ -203,7 +204,7 @@ func Benchmark_Bubbles__View(b *testing.B) {
 
 func Benchmark__ViewANSI(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
-	mdl.SetContentLines(makeANSILines(1000))
+	mdl.setLines(makeANSILines(1000))
 	mdl.SetYOffset(500)
 
 	b.ResetTimer()
@@ -227,7 +228,7 @@ func Benchmark_Bubbles__ViewANSI(b *testing.B) {
 
 func Benchmark__ViewANSIScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
-	mdl.SetContentLines(makeANSILines(1000))
+	mdl.setLines(makeANSILines(1000))
 
 	b.ResetTimer()
 
@@ -251,7 +252,7 @@ func Benchmark_Bubbles__ViewANSIScroll(b *testing.B) {
 
 func Benchmark__ViewScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
-	mdl.SetContentLines(makeLines(1000))
+	mdl.setLines(makeLines(1000))
 
 	b.ResetTimer()
 
@@ -277,7 +278,7 @@ func Benchmark_Bubbles__ViewScroll(b *testing.B) {
 
 func Benchmark__ViewSmall(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
-	mdl.SetContentLines(makeLines(50))
+	mdl.setLines(makeLines(50))
 	mdl.SetYOffset(20)
 
 	b.ResetTimer()
@@ -301,7 +302,7 @@ func Benchmark_Bubbles__ViewSmall(b *testing.B) {
 
 func Benchmark__ViewSmallANSI(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
-	mdl.SetContentLines(makeANSILines(50))
+	mdl.setLines(makeANSILines(50))
 	mdl.SetYOffset(20)
 
 	b.ResetTimer()
@@ -325,7 +326,7 @@ func Benchmark_Bubbles__ViewSmallANSI(b *testing.B) {
 
 func Benchmark__ViewSmallANSIScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
-	mdl.SetContentLines(makeANSILines(50))
+	mdl.setLines(makeANSILines(50))
 
 	b.ResetTimer()
 
@@ -349,7 +350,7 @@ func Benchmark_Bubbles__ViewSmallANSIScroll(b *testing.B) {
 
 func Benchmark__ViewSmallScroll(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(8))
-	mdl.SetContentLines(makeLines(50))
+	mdl.setLines(makeLines(50))
 
 	b.ResetTimer()
 
@@ -376,7 +377,7 @@ func Benchmark_Bubbles__ViewSmallScroll(b *testing.B) {
 func Benchmark__SetContentLines_Append(b *testing.B) {
 	base := makeANSILines(500)
 	mdl := New(WithWidth(80), WithHeight(24))
-	mdl.SetContentLines(base)
+	mdl.setLines(base)
 
 	b.ResetTimer()
 
@@ -388,7 +389,7 @@ func Benchmark__SetContentLines_Append(b *testing.B) {
 			appended[len(base)+j] = fmt.Appendf(nil, "\x1b[32mnew line %d\x1b[0m appended content here", i*5+j)
 		}
 
-		mdl.SetContentLines(appended)
+		mdl.setLines(appended)
 		base = appended
 	}
 }
@@ -396,7 +397,7 @@ func Benchmark__SetContentLines_Append(b *testing.B) {
 func Benchmark__SetContentLines_Append_ThenView(b *testing.B) {
 	base := makeANSILines(500)
 	mdl := New(WithWidth(80), WithHeight(24))
-	mdl.SetContentLines(base)
+	mdl.setLines(base)
 	_ = mdl.Render()
 
 	b.ResetTimer()
@@ -409,22 +410,55 @@ func Benchmark__SetContentLines_Append_ThenView(b *testing.B) {
 			appended[len(base)+j] = fmt.Appendf(nil, "\x1b[32mnew line %d\x1b[0m appended content here", i*5+j)
 		}
 
-		mdl.SetContentLines(appended)
+		mdl.setLines(appended)
 		_ = mdl.Render()
 		base = appended
+	}
+}
+
+// --- Scrollbar benchmarks (measures renderUnborderedInto with scrollbar) ---
+
+func Benchmark__ViewScrollbar(b *testing.B) {
+	mdl := New(WithWidth(80), WithHeight(24),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")))
+	mdl.setLines(makeANSILines(1000))
+	mdl.SetYOffset(500)
+	_ = mdl.Render()
+
+	b.ResetTimer()
+
+	for i := range b.N {
+		mdl.SetYOffset((500 + i) % 977)
+		mdl.InvalidateCache()
+		_ = mdl.Render()
+	}
+}
+
+func Benchmark__ViewScrollbarSmall(b *testing.B) {
+	mdl := New(WithWidth(80), WithHeight(8),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")))
+	mdl.setLines(makeANSILines(50))
+	_ = mdl.Render()
+
+	b.ResetTimer()
+
+	for i := range b.N {
+		mdl.SetYOffset(i % 43)
+		mdl.InvalidateCache()
+		_ = mdl.Render()
 	}
 }
 
 func Benchmark__SetContentLines_FullReplace(b *testing.B) {
 	mdl := New(WithWidth(80), WithHeight(24))
 	lines := makeANSILines(500)
-	mdl.SetContentLines(lines)
+	mdl.setLines(lines)
 
 	b.ResetTimer()
 
 	for range b.N {
 		newLines := makeANSILines(500)
-		mdl.SetContentLines(newLines)
+		mdl.setLines(newLines)
 	}
 }
 

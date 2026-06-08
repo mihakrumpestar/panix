@@ -94,11 +94,8 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 func (s *StatsTable) Render(width int) *buffer.LinesBuf {
 	s.content.Reset()
 
-	statsTableHeader := [][]byte{
-		s.colorScheme.Header.Title.RenderLine([]byte("=== Stats Table ===")),
-		[]byte{},
-	}
-	s.content.WriteLines(statsTableHeader)
+	s.colorScheme.Header.Title.RenderLineInto(s.content, []byte("=== Stats Table ==="))
+	s.content.EmptyLine()
 
 	s.tbl.Width(width).SetRows(s.buildRows())
 	s.content.AppendFrom(s.tbl.Render())

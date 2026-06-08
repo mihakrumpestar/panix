@@ -619,7 +619,7 @@ func (t *Table) renderCell(cell []byte, colWidth, colIdx int,
 
 		sty = t.cellStyle(sty, colWidth)
 		tmp := buffer.NewLinesBuf()
-		sty.RenderInto(tmp, [][]byte{cell})
+		sty.RenderLineInto(tmp, cell)
 
 		for i := range tmp.Len() {
 			if i > 0 {

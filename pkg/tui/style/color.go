@@ -114,12 +114,15 @@ func colorToXPrefix(prefix []byte, c Color) []byte {
 		return nil
 	}
 
-	buf := make([]byte, 0, 50) //nolint:mnd
+	buf := make([]byte, 0, len(prefix)+20) //nolint:mnd
 	buf = append(buf, prefix...)
 
-	buf = append(buf, []byte(strconv.Itoa(int(red>>8))+";")...)   //nolint:mnd
-	buf = append(buf, []byte(strconv.Itoa(int(green>>8))+";")...) //nolint:mnd
-	buf = append(buf, []byte(strconv.Itoa(int(blue>>8))+"m")...)  //nolint:mnd
+	buf = strconv.AppendInt(buf, int64(red>>8), 10) //nolint:mnd
+	buf = append(buf, ';')
+	buf = strconv.AppendInt(buf, int64(green>>8), 10) //nolint:mnd
+	buf = append(buf, ';')
+	buf = strconv.AppendInt(buf, int64(blue>>8), 10) //nolint:mnd
+	buf = append(buf, 'm')
 
 	return buf
 }

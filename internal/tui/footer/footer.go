@@ -107,7 +107,7 @@ func (f *Footer) Render(quitting bool, width int) *buffer.LinesBuf {
 	}
 
 	f.cachedRender.Reset()
-	style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderInto(f.cachedRender, f.helpBuf.Lines())
+	style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderIntoBuf(f.cachedRender, f.helpBuf)
 
 	// 3. Join with notification (if present)
 	if notifBuf != nil {

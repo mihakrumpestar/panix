@@ -103,12 +103,8 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 
 	p.content.Reset()
 
-	phaseFlowHeader := [][]byte{
-		p.colorScheme.Header.Title.RenderLine([]byte("=== Phase Flow ===")),
-		[]byte{},
-	}
-
-	p.content.WriteLines(phaseFlowHeader)
+	p.colorScheme.Header.Title.RenderLineInto(p.content, []byte("=== Phase Flow ==="))
+	p.content.EmptyLine()
 	p.content.AppendFrom(p.pf.Render())
 	p.content.EmptyLine()
 

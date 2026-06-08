@@ -14,17 +14,11 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
-func splitLines(s string) [][]byte {
-	if s == "" {
-		return nil
-	}
-
-	return bytes.Split([]byte(s), []byte("\n"))
-}
-
-func splitLinesBuf(s string) *buffer.LinesBuf {
+func splitLines(s string) *buffer.LinesBuf {
 	lb := buffer.NewLinesBuf()
-	lb.WriteLines(splitLines(s))
+	if s != "" {
+		lb.WriteLines(bytes.Split([]byte(s), []byte("\n")))
+	}
 
 	return lb
 }
@@ -135,10 +129,10 @@ func TestGetViewportContent(t *testing.T) {
 	viewports.RenderViewportVersioned(xpath_, splitLines("content"), 1, 0)
 
 	content := viewports.GetViewportContent(xpath_)
-	assert.Equal(t, "content", string(content[0]))
+	assert.Equal(t, "content", string(content.Line(0)))
 
 	missing := viewports.GetViewportContent(xpath.New("missing"))
-	assert.Empty(t, missing)
+	assert.Nil(t, missing)
 }
 
 func TestReset(t *testing.T) {
@@ -162,7 +156,7 @@ func TestReset(t *testing.T) {
 	assert.Equal(t, viewports.mainXpath, viewports.activeXpath, "activeXpath should be main after reset")
 
 	content := viewports.GetViewportContent(xp1)
-	assert.Empty(t, content, "viewport should be removed after reset")
+	assert.Nil(t, content, "viewport should be removed after reset")
 }
 
 func TestRemoveIfExistsViewport(t *testing.T) {
@@ -179,7 +173,7 @@ func TestRemoveIfExistsViewport(t *testing.T) {
 	viewports.RemoveIfExistsViewport(xpath_)
 
 	content := viewports.GetViewportContent(xpath_)
-	assert.Empty(t, content, "viewport should be removed")
+	assert.Nil(t, content, "viewport should be removed")
 	assert.Equal(t, viewports.mainXpath, viewports.activeXpath, "activeXpath should be main after removing active viewport")
 }
 
@@ -226,7 +220,7 @@ func TestGetOrCreateMainViewport(t *testing.T) {
 	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
 
 	content := strings.Repeat("line\n", 100)
-	result := viewports.RenderMainViewport(splitLinesBuf(content), 1, 5)
+	result := viewports.RenderMainViewport(splitLines(content), 1, 5)
 	output := buffer.LinesBufToStringForTests(result)
 
 	assert.True(t, strings.Contains(output, "█") || strings.Contains(output, "░"),
@@ -326,18 +320,18 @@ func TestVersionTracking(t *testing.T) {
 	viewports.RenderViewportVersioned(xpath_, splitLines("content v1"), 1, 0)
 
 	content := viewports.GetViewportContent(xpath_)
-	assert.Equal(t, "content v1", string(content[0]))
+	assert.Equal(t, "content v1", string(content.Line(0)))
 
 	viewports.RenderViewportVersioned(xpath_, splitLines("content v1 updated"), 1, 0)
 
 	content = viewports.GetViewportContent(xpath_)
-	assert.Equal(t, "content v1", string(content[0]),
-		"content should not change with same version: %q", string(content[0]))
+	assert.Equal(t, "content v1", string(content.Line(0)),
+		"content should not change with same version: %q", string(content.Line(0)))
 
 	viewports.RenderViewportVersioned(xpath_, splitLines("content v2"), 2, 0)
 
 	content = viewports.GetViewportContent(xpath_)
-	assert.Equal(t, "content v2", string(content[0]))
+	assert.Equal(t, "content v2", string(content.Line(0)))
 }
 
 func TestActiveHighlighting(t *testing.T) {
@@ -472,13 +466,13 @@ func TestMultipleViewports(t *testing.T) {
 	viewports.RenderViewportVersioned(xp3, splitLines("content3"), 1, 0)
 
 	c1 := viewports.GetViewportContent(xp1)
-	assert.Equal(t, "content1", string(c1[0]), "viewport 1 should have correct content")
+	assert.Equal(t, "content1", string(c1.Line(0)), "viewport 1 should have correct content")
 
 	c2 := viewports.GetViewportContent(xp2)
-	assert.Equal(t, "content2", string(c2[0]), "viewport 2 should have correct content")
+	assert.Equal(t, "content2", string(c2.Line(0)), "viewport 2 should have correct content")
 
 	c3 := viewports.GetViewportContent(xp3)
-	assert.Equal(t, "content3", string(c3[0]), "viewport 3 should have correct content")
+	assert.Equal(t, "content3", string(c3.Line(0)), "viewport 3 should have correct content")
 
 	debugBuf := buffer.NewLinesBuf()
 	viewports.Debug(debugBuf)

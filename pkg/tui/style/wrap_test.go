@@ -54,13 +54,13 @@ func TestWrap_Equivalence(t *testing.T) {
 
 			inputLines := strings.Split(testCase.input, "\n")
 
-			inputBytes := make([][]byte, len(inputLines))
-			for i, l := range inputLines {
-				inputBytes[i] = []byte(l)
+			contentBuf := buffer.NewLinesBuf()
+			for _, l := range inputLines {
+				contentBuf.WriteLine([]byte(l))
 			}
 
 			buf := buffer.NewLinesBuf()
-			Wrap(buf, inputBytes, testCase.width, testCase.breakpoints)
+			WrapBuf(buf, contentBuf, testCase.width, testCase.breakpoints)
 
 			gotStrs := make([]string, buf.Len())
 			for i := range buf.Len() {
@@ -68,6 +68,7 @@ func TestWrap_Equivalence(t *testing.T) {
 			}
 
 			buf.Release()
+			contentBuf.Release()
 
 			got := strings.Join(gotStrs, "\n")
 
@@ -79,13 +80,13 @@ func TestWrap_Equivalence(t *testing.T) {
 func wrapStr(input string, width int) string {
 	lines := strings.Split(input, "\n")
 
-	inputBytes := make([][]byte, len(lines))
-	for i, l := range lines {
-		inputBytes[i] = []byte(l)
+	contentBuf := buffer.NewLinesBuf()
+	for _, l := range lines {
+		contentBuf.WriteLine([]byte(l))
 	}
 
 	buf := buffer.NewLinesBuf()
-	Wrap(buf, inputBytes, width, "")
+	WrapBuf(buf, contentBuf, width, "")
 
 	result := make([]string, buf.Len())
 	for i := range buf.Len() {
@@ -93,6 +94,7 @@ func wrapStr(input string, width int) string {
 	}
 
 	buf.Release()
+	contentBuf.Release()
 
 	return strings.Join(result, "\n")
 }

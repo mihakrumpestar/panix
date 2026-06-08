@@ -106,7 +106,7 @@ func (b *BuildLogs) Render(viewports *viewports.Viewports, spinners *spinners.Sp
 	b.styledTreeLine = b.conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
 	b.content.Reset()
-	b.conf.ColorScheme.Header.Title.RenderInto(b.content, [][]byte{headerTitle})
+	b.conf.ColorScheme.Header.Title.RenderLineInto(b.content, headerTitle)
 	b.content.EmptyLine()
 
 	for _, fp := range b.conf.Fleet.Flakes.Pairs() {
@@ -438,7 +438,10 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	copy(labelCopy, label.Bytes())
 
 	labelXpath := cmdXpath.NewXpathWithAppend("label")
-	labelResult := b.viewports.RenderLabelViewport(labelXpath, [][]byte{labelCopy}, labelVersion, labelWidth)
+	labelBuf := buffer.NewLinesBuf()
+	labelBuf.WriteLine(labelCopy)
+	labelResult := b.viewports.RenderLabelViewport(labelXpath, labelBuf, labelVersion, labelWidth)
+	labelBuf.Release()
 
 	label.Release()
 
@@ -484,7 +487,7 @@ func (b *BuildLogs) addCommandChildren(
 	outputXpath := cmdXpath.NewXpathWithAppend("output")
 
 	if output.Len() > 0 {
-		outResult := b.viewports.RenderViewportVersioned(outputXpath, output.Lines(), output.Version(), cmdIndent+treeStep)
+		outResult := b.viewports.RenderViewportVersioned(outputXpath, output.LinesBuf, output.Version(), cmdIndent+treeStep)
 		outBuf := b.acquireNodeBuf()
 		outBuf.AppendFrom(outResult)
 		cmdNode.ChildContent(outBuf)
@@ -502,12 +505,15 @@ func (b *BuildLogs) addCommandChildren(
 		errMsgCopy := make([]byte, errMsg.Len())
 		copy(errMsgCopy, errMsg.Bytes())
 
-		errResult := b.viewports.RenderLabelViewport(errXpath, [][]byte{errMsgCopy}, 0, cmdIndent+treeStep)
+		errBuf := buffer.NewLinesBuf()
+		errBuf.WriteLine(errMsgCopy)
+		errResult := b.viewports.RenderLabelViewport(errXpath, errBuf, 0, cmdIndent+treeStep)
+		errBuf.Release()
 
 		errMsg.Release()
 
 		b.errBuf.Reset()
-		b.conf.ColorScheme.Error.Color.RenderInto(b.errBuf, errResult.Lines())
+		b.conf.ColorScheme.Error.Color.RenderIntoBuf(b.errBuf, errResult)
 		errNodeBuf := b.acquireNodeBuf()
 		errNodeBuf.AppendFrom(b.errBuf)
 		cmdNode.ChildContent(errNodeBuf)

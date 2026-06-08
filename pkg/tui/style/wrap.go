@@ -7,34 +7,29 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
-// Wrap wraps lines of byte content to the given cell width, preserving ANSI
+// WrapBuf wraps lines from a LinesBuf to the given cell width, preserving ANSI
 // escape sequences and inserting newlines at word boundaries. Output is
-// written into buf.
-//
-// ANSI style carry-over: when a wrap-induced line break occurs, any active
-// ANSI SGR sequences (colors, bold, etc.) are re-emitted at the start of the
-// next wrapped line, and a reset is emitted before the break. This preserves
-// styled text across line wraps.
-//
-// Each element of content is treated as a line.
-//
-// breakpoints is a string of characters considered valid word-break points
-// (in addition to whitespace and hyphens). Pass "" for default behavior.
-func Wrap(dst *buffer.LinesBuf, content [][]byte, limit int, breakpoints string) {
+// written into dst. Uses Line(i) for zero-alloc access on the input.
+func WrapBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf, limit int, breakpoints string) {
 	dst.Reset()
 
-	if limit < 1 || len(content) == 0 {
-		for range content {
+	contentLen := content.Len()
+
+	if limit < 1 || contentLen == 0 {
+		for range contentLen {
 			dst.EmptyLine()
 		}
 
 		return
 	}
 
-	if len(content) == 1 && len(content[0]) <= limit {
-		dst.WriteLine(content[0])
+	if contentLen == 1 {
+		line := content.Line(0)
+		if len(line) <= limit {
+			dst.WriteLine(line)
 
-		return
+			return
+		}
 	}
 
 	hasBreakpoints := breakpoints != ""
@@ -59,26 +54,31 @@ func Wrap(dst *buffer.LinesBuf, content [][]byte, limit int, breakpoints string)
 	wrappedState.lineBuf = wrappedState.lineBuf[:0]
 	wrappedState.lineStyle = wrappedState.lineStyle[:0]
 
-	for _, line := range content {
-		if len(line) == 0 {
-			dst.EmptyLine()
-
-			continue
-		}
-
-		if !lineExceedsLimitBytes(line, limit) {
-			dst.WriteLine(line)
-
-			continue
-		}
-
-		wrappedState.data = line
-		wrappedState.wrapOneLine(line, hasBreakpoints)
+	for i := range contentLen {
+		wrappedState.wrapBufLine(content.Line(i), hasBreakpoints)
 	}
 
 	wrappedState.data = nil
 	wrappedState.outBuf = nil
 	wrapStatePool.Put(wrappedState)
+}
+
+// wrapBufLine processes a single line from a LinesBuf for wrapping.
+func (s *wrapState) wrapBufLine(line []byte, hasBreakpoints bool) {
+	if len(line) == 0 {
+		s.outBuf.EmptyLine()
+
+		return
+	}
+
+	if !lineExceedsLimitBytes(line, s.limit) {
+		s.outBuf.WriteLine(line)
+
+		return
+	}
+
+	s.data = line
+	s.wrapOneLine(line, hasBreakpoints)
 }
 
 var wrapStatePool = sync.Pool{
