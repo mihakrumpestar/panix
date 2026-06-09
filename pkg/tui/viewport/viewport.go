@@ -72,6 +72,11 @@ type Viewport struct {
 	paddedLineCount int   // how many lines are in paddedBuf; for incremental builds
 	contentChanged  bool  // set by SetContent, cleared by ensurePaddedCache
 
+	// Previous-frame snapshot for diff-based incremental rebuild (main viewport).
+	prevPaddedBuf   []byte
+	prevLineOffsets []int
+	prevContent     buffer.LinesBuf
+
 	// Scratch buffer reused for building individual output lines.
 	scratchBuf []byte
 
@@ -201,7 +206,7 @@ func (m *Viewport) MaxLineWidth() int {
 
 	for idx, lineWidth := range m.lineWidths {
 		if lineWidth < 0 {
-			lineWidth = style.LineWidth(m.line(idx))
+			lineWidth = style.CellWidth(m.line(idx))
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -663,15 +668,26 @@ func (m *Viewport) ensureBufSizes(contentW int) {
 // padLines builds or extends the padded-line buffer.
 // Starts from paddedLineCount, so that previously padded lines are
 // preserved when only new lines (or the last line) changed.
+// For the main viewport, uses a diff-based incremental approach:
+// line content is compared against the previous frame, and unchanged
+// lines are bulk-copied from the previous padded buffer.
 func (m *Viewport) padLines(contentW int) {
+	useBulkCopy := m.main && m.prevPaddedBuf != nil && m.prevContent.Len() > 0 && m.paddedBufCW == contentW
+
 	for idx := m.paddedLineCount; idx < m.linesLen; idx++ {
 		m.lineOffsets[idx] = len(m.paddedBuf)
+
+		if useBulkCopy && idx < m.prevContent.Len() && bytes.Equal(m.line(idx), m.prevContent.Line(idx)) {
+			m.paddedBuf = append(m.paddedBuf, m.prevPaddedBuf[m.prevLineOffsets[idx]:m.prevLineOffsets[idx+1]]...)
+
+			continue
+		}
 
 		line := m.line(idx)
 
 		lineWidth := m.lineWidths[idx]
 		if lineWidth < 0 {
-			lineWidth = style.LineWidth(line)
+			lineWidth = style.CellWidth(line)
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -700,6 +716,11 @@ func (m *Viewport) ensurePaddedCache(contentW int) {
 	m.padLines(contentW)
 	m.paddedBufCW = contentW
 	m.contentChanged = false
+
+	if m.main {
+		m.prevContent.Reset()
+		m.prevContent.CopyFrom(m.linesBuf)
+	}
 }
 
 // appendScrollbarCell appends the appropriate scrollbar cell directly to the
@@ -951,6 +972,11 @@ func (m *Viewport) setLines(lines [][]byte) {
 // incremental cache so that the next render does a full rebuild.
 // Used for the main viewport path when content is already in LinesBuf format.
 func (m *Viewport) setLinesBuf(content *buffer.LinesBuf) {
+	if m.main {
+		m.prevPaddedBuf = append(m.prevPaddedBuf[:0], m.paddedBuf...)
+		m.prevLineOffsets = append(m.prevLineOffsets[:0], m.lineOffsets...)
+	}
+
 	m.lineWidths = nil
 	m.paddedLineCount = 0
 	m.paddedBuf = m.paddedBuf[:0]

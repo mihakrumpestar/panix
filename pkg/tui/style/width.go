@@ -2,7 +2,6 @@ package style
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/rivo/uniseg"
@@ -183,70 +182,6 @@ func CountLines(str string) int {
 	}
 
 	return 1 + strings.Count(str, "\n")
-}
-
-// RuneWidth returns the display width of a rune (1 for ASCII, 2 for East Asian Wide).
-//
-//nolint:cyclop
-func RuneWidth(runeVal rune) int {
-	if runeVal >= 0x1100 &&
-		(runeVal <= 0x115F ||
-			runeVal == 0x2329 ||
-			runeVal == 0x27C2 ||
-			(runeVal >= 0x2E80 && runeVal <= 0xA4CF && runeVal != 0x303F) ||
-			(runeVal >= 0xAC00 && runeVal <= 0xD7A3) ||
-			(runeVal >= 0xF900 && runeVal <= 0xFAFF) ||
-			(runeVal >= 0xFE10 && runeVal <= 0xFE19) ||
-			(runeVal >= 0xFE30 && runeVal <= 0xFE6F) ||
-			(runeVal >= 0xFF01 && runeVal <= 0xFF60) ||
-			(runeVal >= 0xFFE0 && runeVal <= 0xFFE6) ||
-			(runeVal >= 0x1F300 && runeVal <= 0x1F9FF)) {
-		return 2
-	}
-
-	return 1
-}
-
-// LineWidth returns the visible terminal cell width of a byte slice using a
-// fast RuneWidth-based range table (no uniseg). Consistent with WrapBuf's
-// internal width tracking. For accurate grapheme-cluster width, use CellWidth.
-func LineWidth(data []byte) int {
-	width := 0
-	maxWidth := 0
-	pos := 0
-
-	for pos < len(data) {
-		char := data[pos]
-
-		if char >= 0x20 && char < 0x7F {
-			width++
-			pos++
-
-			continue
-		}
-
-		switch char {
-		case '\x1b':
-			pos = skipANSI(data, pos)
-		case '\n', '\r':
-			if width > maxWidth {
-				maxWidth = width
-			}
-
-			width = 0
-			pos++
-		default:
-			r, size := utf8.DecodeRune(data[pos:])
-			width += RuneWidth(r)
-			pos += size
-		}
-	}
-
-	if width > maxWidth {
-		maxWidth = width
-	}
-
-	return maxWidth
 }
 
 // MaxLineWidth returns the maximum terminal cell width across all lines in
