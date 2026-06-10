@@ -4,6 +4,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicslice"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 type PhaseLog struct {
@@ -18,8 +19,12 @@ func NewPhaseLog() *PhaseLog {
 	}
 }
 
-func (pLog *PhaseLog) NewCommand(description, statusIfRunning, statusIfFailed string, commandToRun, env []string) *command.CommandLog {
-	commandLog := command.NewCommandLog(description, statusIfRunning, statusIfFailed, commandToRun, env)
+func (pLog *PhaseLog) NewCommand(
+	phaseXpath xpath.Xpath,
+	description, statusIfRunning, statusIfFailed string,
+	commandToRun, env []string,
+) *command.CommandLog {
+	commandLog := command.NewCommandLog(phaseXpath, description, statusIfRunning, statusIfFailed, commandToRun, env)
 	pLog.CommandLogs.Append(commandLog)
 
 	return commandLog

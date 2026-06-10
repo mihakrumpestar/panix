@@ -17,7 +17,8 @@ import (
 )
 
 type Executioner struct {
-	conf ExecutionerConf
+	conf       ExecutionerConf
+	phaseXpath xpath.Xpath
 }
 
 type ExecutionerConf struct {
@@ -32,7 +33,10 @@ type ExecutionerConf struct {
 }
 
 func NewExecutioner(conf ExecutionerConf) *Executioner {
-	return &Executioner{conf}
+	return &Executioner{
+		conf:       conf,
+		phaseXpath: conf.Xpath.NewXpathWithAppend(string(conf.Phase)),
+	}
 }
 
 // Exec
@@ -112,7 +116,7 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 }
 
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
-	commandLog := ex.conf.PhaseLog.NewCommand(description, statusIfRunning, statusIfFailed, nil, nil)
+	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, nil, nil)
 
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, nil)
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 type CommandLog struct {
@@ -17,9 +18,16 @@ type CommandLog struct {
 	TimeAndState   *atomictimeandstate.AtomicTimeAndState `yaml:"-" json:"time_and_state,omitempty"`
 	PendingNewline bool                                   `yaml:"-" json:"-"`
 	CarriageReturn bool                                   `yaml:"-" json:"-"` // cursor at column 0 after trailing \r
+
+	Xpath       xpath.Xpath `yaml:"-" json:"xpath,omitempty"`
+	LabelXpath  xpath.Xpath `yaml:"-" json:"-"`
+	OutputXpath xpath.Xpath `yaml:"-" json:"-"`
+	ErrorXpath  xpath.Xpath `yaml:"-" json:"-"`
 }
 
-func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
+func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
+	cmdXpath := phaseXpath.NewXpathWithAppend(description)
+
 	commandLog := &CommandLog{
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
@@ -28,6 +36,11 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 
 		Output:       buffer.NewLinesBufVer(),
 		TimeAndState: atomictimeandstate.New(),
+
+		Xpath:       cmdXpath,
+		LabelXpath:  cmdXpath.NewXpathWithAppend("label"),
+		OutputXpath: cmdXpath.NewXpathWithAppend("output"),
+		ErrorXpath:  cmdXpath.NewXpathWithAppend("error"),
 	}
 
 	return commandLog

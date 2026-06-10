@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 func TestJoinCommand_Empty(t *testing.T) {
@@ -128,7 +130,7 @@ func TestJoinCommand_EqualsInValue(t *testing.T) {
 func TestNewCommandLog_Fields(t *testing.T) {
 	t.Parallel()
 
-	commandLog := NewCommandLog("desc", "running", "failed", []string{"ls", "-la"}, []string{"ENV=val"})
+	commandLog := NewCommandLog(xpath.New("test"), "desc", "running", "failed", []string{"ls", "-la"}, []string{"ENV=val"})
 
 	require.NotNil(t, commandLog)
 	assert.Equal(t, "desc", commandLog.Description)
@@ -142,7 +144,7 @@ func TestNewCommandLog_Fields(t *testing.T) {
 func TestNewCommandLog_NilCommandAndEnv(t *testing.T) {
 	t.Parallel()
 
-	cl := NewCommandLog("desc", "running", "failed", nil, nil)
+	cl := NewCommandLog(xpath.New("test"), "desc", "running", "failed", nil, nil)
 
 	require.NotNil(t, cl)
 	assert.Empty(t, cl.Command.Bytes())
