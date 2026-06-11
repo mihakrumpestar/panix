@@ -342,7 +342,9 @@ func (b *BuildLogs) addPhasesSingle(
 			continue
 		}
 
-		if b.addPhase(parent, entityXpath, pair.Key, pair.Value, entityVersion) && stopAtError {
+		phaseXpath := entityXpath.NewXpathWithAppend(pair.Key.String())
+
+		if b.addPhase(parent, phaseXpath, pair.Key, pair.Value, entityVersion) && stopAtError {
 			return true
 		}
 	}
@@ -371,7 +373,9 @@ func (b *BuildLogs) addPhasesMulti(
 			continue
 		}
 
-		if b.addPhase(parent, entityXpath, phaseMetadata.Phase, phaseLog, entityVersion) && stopAtError {
+		phaseXpath := entityXpath.NewXpathWithAppend(phaseMetadata.Phase.String())
+
+		if b.addPhase(parent, phaseXpath, phaseMetadata.Phase, phaseLog, entityVersion) && stopAtError {
 			return true
 		}
 	}
@@ -381,7 +385,7 @@ func (b *BuildLogs) addPhasesMulti(
 
 func (b *BuildLogs) addPhase(
 	parent *tree.Node,
-	entityXpath xpath.Xpath,
+	phaseXpath xpath.Xpath,
 	phaseI phase.Phase,
 	phaseLog *phaselogs.PhaseLog,
 	entityVersion uint64,
@@ -389,8 +393,6 @@ func (b *BuildLogs) addPhase(
 	if phaseLog == nil || b.shouldHidePhase(phaseI, phaseLog) {
 		return false
 	}
-
-	phaseXpath := entityXpath.NewXpathWithAppend(phaseI.String())
 
 	tas := phaseLog.TimeAndState
 
@@ -414,14 +416,13 @@ func (b *BuildLogs) addPhase(
 		return b.layoutLineStyled(depthWidth, timerLevelPhase, b.conf.ColorScheme.Phase.Color, leftRaw, durStyled, leftWidth, durWidth)
 	})
 
-	return b.addCommands(phaseNode, phaseLog, phaseI, phaseXpath, entityVersion)
+	return b.addCommands(phaseNode, phaseLog, phaseI, entityVersion)
 }
 
 func (b *BuildLogs) addCommands(
 	phaseNode *tree.Node,
 	phaseLog *phaselogs.PhaseLog,
 	p phase.Phase,
-	phaseXpath xpath.Xpath,
 	entityVersion uint64,
 ) bool {
 	hideable := b.isHideable(p)
@@ -447,7 +448,7 @@ func (b *BuildLogs) addCommands(
 			continue
 		}
 
-		b.addCommand(phaseNode, cmd, idx, phaseXpath, entityVersion)
+		b.addCommand(phaseNode, cmd, idx, entityVersion)
 
 		if cmd.TimeAndState != nil {
 			t := cmd.TimeAndState.Load()
@@ -460,12 +461,13 @@ func (b *BuildLogs) addCommands(
 	return hasError
 }
 
-func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx int, phaseXpath xpath.Xpath, entityVersion uint64) {
+func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx int, entityVersion uint64) {
 	if cmd == nil || b.viewports == nil {
 		return
 	}
 
-	cmdXpath := phaseXpath.NewXpathWithAppend(cmd.Description)
+	cmdXpath := cmd.Xpath
+	labelXpath := cmd.LabelXpath
 
 	labelContent, labelVersion := b.commandLabelContent(cmd)
 	label := buffer.NewLineBufPooled()
@@ -486,7 +488,6 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	labelCopy := make([]byte, label.Len())
 	copy(labelCopy, label.Bytes())
 
-	labelXpath := cmdXpath.NewXpathWithAppend("label")
 	labelBuf := buffer.NewLinesBuf()
 	labelBuf.WriteLine(labelCopy)
 
@@ -518,7 +519,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		return joinBuf
 	})
 
-	b.addCommandChildren(cmdNode, cmd, cmdXpath, tasCached, entityVersion)
+	b.addCommandChildren(cmdNode, cmd, tasCached, entityVersion)
 }
 
 func (b *BuildLogs) commandLabelContent(cmd *command.CommandLog) ([]byte, uint64) {
@@ -531,11 +532,11 @@ func (b *BuildLogs) commandLabelContent(cmd *command.CommandLog) ([]byte, uint64
 
 func (b *BuildLogs) addCommandChildren(
 	cmdNode *tree.Node, cmd *command.CommandLog,
-	cmdXpath xpath.Xpath, tasCached *atomictimeandstate.TimeAndState,
+	tasCached *atomictimeandstate.TimeAndState,
 	entityVersion uint64,
 ) {
 	output := cmd.Output
-	outputXpath := cmdXpath.NewXpathWithAppend("output")
+	outputXpath := cmd.OutputXpath
 
 	if output.Len() > 0 {
 		cmdNode.Child(outputXpath, output.Version(), func(depthWidth int) *buffer.LinesBuf {
@@ -547,7 +548,7 @@ func (b *BuildLogs) addCommandChildren(
 		})
 	}
 
-	errXpath := cmdXpath.NewXpathWithAppend("error")
+	errXpath := cmd.ErrorXpath
 
 	err := tasCached.EndError
 	if err != nil {

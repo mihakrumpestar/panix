@@ -425,7 +425,7 @@ func TestAddCommands_NilCommandLogs(t *testing.T) {
 
 	phaseNode := testRootNode("phase")
 
-	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, xpath.New("test"), 0)
+	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, 0)
 
 	assert.False(t, hasError, "addCommands with nil CommandLogs and no error should return false")
 }
@@ -448,7 +448,7 @@ func TestAddCommands_WithCommandError(t *testing.T) {
 
 	phaseNode := testRootNode("phase")
 
-	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, xpath.New("test"), 0)
+	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, 0)
 
 	assert.True(t, hasError, "addCommands should return true when command has error")
 	assert.NotZero(t, phaseNode.Len(), "addCommands should add command children")
@@ -480,7 +480,7 @@ func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
 
 	phaseNode := testRootNode("phase")
 
-	buildLogs.addCommands(phaseNode, phaseLog, phase.Inspect, xpath.New("test"), 0)
+	buildLogs.addCommands(phaseNode, phaseLog, phase.Inspect, 0)
 
 	assert.Equal(t, 1, phaseNode.Len(), "addCommands for hideable phase should show only last command, got %d children", phaseNode.Len())
 }
@@ -523,7 +523,7 @@ func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
 
 			phaseNode := testRootNode("phase")
 
-			buildLogs.addCommands(phaseNode, phaseLog, testCase.phaseI, xpath.New("test"), 0)
+			buildLogs.addCommands(phaseNode, phaseLog, testCase.phaseI, 0)
 
 			assert.Equal(t, testCase.wantCmds, phaseNode.Len(), "got %d children, want %d", phaseNode.Len(), testCase.wantCmds)
 		})
@@ -547,7 +547,7 @@ func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 	cmdNode := testRootNode("cmd")
 	tas := cmd.TimeAndState.Load()
 
-	buildLogs.addCommandChildren(cmdNode, cmd, xpath.New("test"), tas, 0)
+	buildLogs.addCommandChildren(cmdNode, cmd, tas, 0)
 
 	assert.GreaterOrEqual(t, cmdNode.Len(), 2,
 		"addCommandChildren should add output and error children, got %d", cmdNode.Len())
@@ -566,7 +566,7 @@ func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
 	cmdNode := testRootNode("cmd")
 	tas := cmd.TimeAndState.Load()
 
-	buildLogs.addCommandChildren(cmdNode, cmd, xpath.New("test"), tas, 0)
+	buildLogs.addCommandChildren(cmdNode, cmd, tas, 0)
 
 	assert.Equal(t, 0, cmdNode.Len(),
 		"addCommandChildren with no output and no error should add 0 children, got %d", cmdNode.Len())
