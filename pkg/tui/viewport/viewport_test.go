@@ -1546,3 +1546,83 @@ func TestSyncMainNoAutoScroll(t *testing.T) {
 
 	assert.Equal(t, 0, mdl.YOffset(), "main viewport should not auto-scroll, got yOffset=%d", mdl.YOffset())
 }
+
+func TestResizeWrappingPreservesLineWidth(t *testing.T) {
+	t.Parallel()
+
+	longContent := strLines(
+		"setting up /etc...",
+		"reloading user units for krumpy-miha...",
+		"restarting the following user units: nixos-activation.service",
+		"reloading user units for root...",
+		"restarting the following user units: nixos-activation.service",
+		"restarting sysinit-reactivation.target",
+		"the following new units were started: NetworkManager-dispatcher.service",
+	)
+
+	borderColor := style.Color("")
+
+	// Create viewport at wide width where content fits without wrapping.
+	mdl := New(
+		WithWidth(80),
+		WithHeight(15),
+		WithBorder(borderColor),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+	)
+
+	_ = mdl.SetContent(longContent)
+	_ = mdl.Render()
+
+	// Resize to a narrower width that forces wrapping.
+	err := mdl.Sync(longContent, 62, 15)
+	require.NoError(t, err)
+
+	rendered := mdl.Render()
+
+	for i := range rendered.Len() {
+		line := rendered.Line(i)
+		cw := style.CellWidth(line)
+		assert.Equal(t, 62, cw, "line %d width after resize: got %d, want 62", i, cw)
+	}
+}
+
+func TestResizeWrappingSweep(t *testing.T) {
+	t.Parallel()
+
+	longContent := strLines(
+		"setting up /etc...",
+		"reloading user units for krumpy-miha...",
+		"restarting the following user units: nixos-activation.service",
+		"reloading user units for root...",
+		"restarting the following user units: nixos-activation.service",
+		"restarting sysinit-reactivation.target",
+		"the following new units were started: NetworkManager-dispatcher.service",
+	)
+
+	borderColor := style.Color("")
+
+	// Sweep: create at width startW, resize to targetW, verify all lines.
+	for _, startW := range []int{50, 60, 70, 80} {
+		for _, targetW := range []int{40, 50, 55, 60, 62, 65, 70, 75, 80} {
+			mdl := New(
+				WithWidth(startW),
+				WithHeight(15),
+				WithBorder(borderColor),
+				WithScrollbar("█", "│", style.Color(""), style.Color("")),
+			)
+
+			_ = mdl.SetContent(longContent)
+			_ = mdl.Render()
+
+			err := mdl.Sync(longContent, targetW, 15)
+			require.NoError(t, err, "Sync startW=%d targetW=%d", startW, targetW)
+
+			rendered := mdl.Render()
+			for i := range rendered.Len() {
+				line := rendered.Line(i)
+				cw := style.CellWidth(line)
+				assert.Equal(t, targetW, cw, "startW=%d targetW=%d line %d", startW, targetW, i)
+			}
+		}
+	}
+}

@@ -910,12 +910,12 @@ func (m *Viewport) line(i int) []byte {
 
 // adoptLinesBuf takes ownership of buf, releasing any previous buffer.
 // The viewport accesses lines via buf.Line(i) — zero allocations.
-// For non-main viewports where content grows by appending, lineWidths
-// and paddedBuf are preserved for the unchanged prefix, avoiding O(n)
-// recomputation on every content update.
+// For non-main viewports where content grows by appending, paddedBuf is
+// preserved for the unchanged prefix, avoiding O(n) recomputation on
+// every content update. lineWidths are always recomputed because the
+// wrapping width may have changed, invalidating cached cell widths.
 func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf) {
 	oldLen := m.linesLen
-	oldWidths := m.lineWidths
 	oldPaddedCount := m.paddedLineCount
 
 	m.releaseLinesBuf()
@@ -926,19 +926,9 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf) {
 	m.cacheValid = false
 	m.contentChanged = true
 
-	if !m.main && oldWidths != nil && oldLen > 0 && m.linesLen >= oldLen {
-		oldWidths = append(oldWidths, make([]int, m.linesLen-oldLen)...)
-
-		m.lineWidths = oldWidths
-		for i := oldLen; i < m.linesLen; i++ {
-			m.lineWidths[i] = -1
-		}
-
-		if oldPaddedCount == oldLen {
-			m.lineWidths[oldLen-1] = -1
-			m.paddedBuf = m.paddedBuf[:m.lineOffsets[oldLen-1]]
-			m.paddedLineCount = oldLen - 1
-		}
+	if !m.main && oldLen > 0 && m.linesLen >= oldLen && oldPaddedCount == oldLen {
+		m.paddedBuf = m.paddedBuf[:m.lineOffsets[oldLen-1]]
+		m.paddedLineCount = oldLen - 1
 	}
 
 	maxOffset := max(m.linesLen-m.contentHeight(), 0)
