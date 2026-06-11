@@ -76,6 +76,7 @@ type Viewport struct {
 	prevPaddedBuf   []byte
 	prevLineOffsets []int
 	prevContent     buffer.LinesBuf
+	prevLineWidths  []int
 
 	// Scratch buffer reused for building individual output lines.
 	scratchBuf []byte
@@ -680,6 +681,11 @@ func (m *Viewport) padLines(contentW int) {
 		if useBulkCopy && idx < m.prevContent.Len() && bytes.Equal(m.line(idx), m.prevContent.Line(idx)) {
 			m.paddedBuf = append(m.paddedBuf, m.prevPaddedBuf[m.prevLineOffsets[idx]:m.prevLineOffsets[idx+1]]...)
 
+			// Carry over cached width from previous frame for unchanged lines.
+			if m.prevLineWidths != nil && idx < len(m.prevLineWidths) && m.prevLineWidths[idx] >= 0 {
+				m.lineWidths[idx] = m.prevLineWidths[idx]
+			}
+
 			continue
 		}
 
@@ -975,6 +981,7 @@ func (m *Viewport) setLinesBuf(content *buffer.LinesBuf) {
 	if m.main {
 		m.prevPaddedBuf = append(m.prevPaddedBuf[:0], m.paddedBuf...)
 		m.prevLineOffsets = append(m.prevLineOffsets[:0], m.lineOffsets...)
+		m.prevLineWidths = append(m.prevLineWidths[:0], m.lineWidths...)
 	}
 
 	m.lineWidths = nil

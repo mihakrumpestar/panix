@@ -290,7 +290,7 @@ func Benchmark_Bubbletea__RenderLinesQuarterChange(b *testing.B) {
 
 // --- Zone ---
 
-func Benchmark__ZoneMarkBuf(b *testing.B) {
+func Benchmark__ZoneMark(b *testing.B) {
 	ensureZoneGlobal()
 
 	content := makePlainContent(200, 50)
