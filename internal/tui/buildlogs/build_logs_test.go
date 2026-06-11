@@ -236,8 +236,9 @@ func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
 		"phase under machine should contain timer")
 
 	// The connector-to-timer gap should be 1 for both (timerLevelPhase=3 → 4-3=1).
-	assert.Equal(t, timerIndent-timerLevelPhase, timerIndent-timerLevelPhase,
-		"connector-to-timer gap should be identical for same timerLevel")
+	expectedGap := timerIndent - timerLevelPhase
+	assert.Equal(t, expectedGap, 1,
+		"connector-to-timer gap should be 1 for timerLevelPhase=3")
 
 	// Verify different timerLevel produces different gap.
 	timerOffsetDiffLevel := 6 + (timerIndent - 2) // level 2 → offset 2

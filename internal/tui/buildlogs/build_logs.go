@@ -145,7 +145,6 @@ func (b *BuildLogs) Render(
 	}
 
 	treeNode.WriteRenderTo(b.content)
-	treeNode.DrainFreeMap()
 
 	return b.content
 }

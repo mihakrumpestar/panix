@@ -388,7 +388,6 @@ func (pipe *zerotermPipeline) renderInto(buf *buffer.LinesBufDiff) {
 	pipe.sepStyle.RenderLineInto(buf.LinesBuf, separatorTextBytes)
 
 	pipe.treeRoot.WriteRenderTo(buf.LinesBuf)
-	pipe.treeRoot.DrainFreeMap()
 	pipe.sepStyle.RenderLineInto(buf.LinesBuf, separatorTextBytes)
 
 	buf.AppendFrom(pipe.tbl.Render())

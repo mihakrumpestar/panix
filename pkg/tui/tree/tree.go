@@ -7,11 +7,14 @@
 //
 //	root := tree.NewTree(style, step)
 //	for each frame:
-//	    root.BeginFrame()                          // move children to freeMap
+//	    root.BeginFrame()                          // prepare children for reuse
 //	    parent.Child(xp, version, calculate)       // rebuild tree depth-first
 //	    target := root.Render()                    // render with tree connectors
 //
-// The tree reuses nodes across frames via a freeMap (keyed by xpath).
+// The tree reuses nodes across frames via in-place positional matching.
+// Each node keeps its previous-frame children in prevChildren; during the
+// depth-first rebuild, Child() matches by xpath at the expected position
+// (O(1) for stable structure) with fallback to linear scan.
 // Leaf nodes cache their rendered content (with prefix/connectors) and
 // only re-render when version, cacheGen, depthWidth, or prefixKey changes.
 package tree
@@ -44,10 +47,6 @@ type treeState struct {
 	// invalidateGen is incremented on InvalidateCache(). Nodes compare
 	// their cacheGen against this to detect stale content lazily.
 	invalidateGen uint64
-
-	// freeMap holds nodes from the previous frame that haven't been reused yet.
-	// Keyed by xpath for O(1) lookup during Child() calls.
-	freeMap map[xpath.Xpath]*Node
 }
 
 // Node is a tree node that holds content, children, and rendering state.
@@ -55,6 +54,7 @@ type treeState struct {
 type Node struct {
 	content        *buffer.LinesBuf // this node's content (set by calculate callback)
 	children       []*Node          // child nodes (built by Child() calls)
+	prevChildren   []*Node          // children from previous frame, available for reuse
 	cacheEntry     *CacheEntry      // leaf-only: cached rendered output with prefix
 	treeStyle      *treeStyle       // shared connector/indent byte slices
 	state          *treeState       // shared tree state (root-only fields)
@@ -64,15 +64,15 @@ type Node struct {
 	depth          int              // depth in tree (root=0, flake=1, cfg=2, ...)
 	depthWidth     int              // indent width in columns (depth * step), used for cache invalidation
 	step           int              // indent width per depth level (propagated from root)
+	reuseIdx       int              // cursor into prevChildren for positional reuse in Child()
 }
 
 // CacheEntry stores the rendered output of a leaf node (content + prefix +
 // connector). The entry is invalidated when any of its key fields change.
 type CacheEntry struct {
-	version     uint64           // contentVersion when this entry was rendered
-	prefixKey   uint64           // encodes the path from root (isLastChild bitmask)
-	isLastChild bool             // whether this node is the last child at its level
-	content     *buffer.LinesBuf // rendered output: prefix + connector + node content
+	version uint64           // contentVersion when this entry was rendered
+	fullKey uint64           // (prefixKey << 1) | isLastChild — encodes full path
+	content *buffer.LinesBuf // rendered output: prefix + connector + node content
 }
 
 // treeStyle holds the pre-rendered byte slices for tree connectors and indents.
@@ -88,7 +88,6 @@ type treeStyle struct {
 // The root node is the only node that owns treeState.renderBuf.
 func NewTree(sty style.Style, step int) *Node {
 	state := &treeState{
-		freeMap:   make(map[xpath.Xpath]*Node),
 		renderBuf: buffer.NewLinesBuf(),
 	}
 
@@ -106,26 +105,17 @@ func NewTree(sty style.Style, step int) *Node {
 	return node
 }
 
-// BeginFrame moves all children to the freeMap for reuse and clears the
-// children list. Call Child() to repopulate. The freeMap ensures O(1)
-// lookup by xpath while preserving insertion order in the children slice.
+// BeginFrame prepares all nodes in the tree for reuse. Each node's current
+// children are saved to prevChildren and the children list is cleared.
+// During the subsequent depth-first rebuild, Child() matches nodes from
+// prevChildren by xpath at the expected position — O(1) for stable structure.
 func (n *Node) BeginFrame() {
-	moveToFree(n.state.freeMap, n.children)
-	n.children = n.children[:0]
-}
-
-// moveToFree recursively moves all nodes in the subtree to the freeMap.
-func moveToFree(freeMap map[xpath.Xpath]*Node, children []*Node) {
-	for _, child := range children {
-		moveToFree(freeMap, child.children)
-		child.children = child.children[:0]
-		freeMap[child.xpath] = child
-	}
+	n.beginFrameRecursive()
 }
 
 // Child finds or creates a child by xpath. If a node with the same xpath
-// exists in the freeMap (from a previous frame), it is reused. Otherwise a
-// new node is allocated from the pool. The child is always appended,
+// exists in prevChildren (from the previous frame), it is reused. Otherwise
+// a new node is allocated from the pool. The child is always appended,
 // preserving call order.
 //
 // calculate is called only on cache miss (new node, or version/cacheGen/
@@ -136,49 +126,46 @@ func (n *Node) Child(childXp xpath.Xpath, version uint64, calculate func(depthWi
 	childDepth := n.depth + 1
 	depthWidth := n.depth * n.step
 
-	// Try to reuse a node from the previous frame.
-	if free, ok := state.freeMap[childXp]; ok {
-		delete(state.freeMap, childXp)
+	prev := n.prevChildren
+	reuseIdx := n.reuseIdx
 
-		free.depth = childDepth
+	// Fast path: positional match at reuseIdx (O(1), no hashing).
+	// Works when tree structure is stable across frames.
+	if reuseIdx < len(prev) && prev[reuseIdx] != nil && prev[reuseIdx].xpath == childXp {
+		free := prev[reuseIdx]
+		prev[reuseIdx] = nil
+		n.reuseIdx = reuseIdx + 1
 
-		// Recalculate if version changed, cache was invalidated, or node
-		// moved to a different depth (depthWidth changed).
-		if free.contentVersion != version || free.cacheGen != state.invalidateGen || free.depthWidth != depthWidth {
-			free.content.Release()
-			free.content = calculate(depthWidth)
-			free.contentVersion = version
-			free.cacheGen = state.invalidateGen
-			free.depthWidth = depthWidth
-		}
-
-		n.children = append(n.children, free)
-
-		return free
+		return n.reuseNode(free, childDepth, version, state, depthWidth, calculate)
 	}
 
+	// Advance past consumed (nil) entries.
+	for reuseIdx < len(prev) && prev[reuseIdx] == nil {
+		reuseIdx++
+	}
+
+	// Slow path: linear scan for structural changes.
+	for i := reuseIdx; i < len(prev); i++ {
+		if prev[i] != nil && prev[i].xpath == childXp {
+			free := prev[i]
+			prev[i] = nil
+			n.reuseIdx = reuseIdx
+
+			return n.reuseNode(free, childDepth, version, state, depthWidth, calculate)
+		}
+	}
+
+	n.reuseIdx = reuseIdx
+
 	// No reuse — allocate a new node from the pool.
-	node := nodePool.Get().(*Node) //nolint:forcetypeassert // pool always returns *Node
-	node.xpath = childXp
-	node.content = calculate(depthWidth)
-	node.contentVersion = version
-	node.depth = childDepth
-	node.depthWidth = depthWidth
-	node.step = n.step
-	node.cacheGen = state.invalidateGen
-	node.treeStyle = n.treeStyle
-	node.state = state
-	node.cacheEntry = nil
-	node.children = node.children[:0]
-
-	n.children = append(n.children, node)
-
-	return node
+	return n.allocateNode(childXp, childDepth, version, state, depthWidth, calculate)
 }
 
 // Render renders the tree into the internal renderBuf and returns it.
 // Only works on the root node; non-root nodes return their renderBuf as-is.
-// After rendering, the freeMap is drained (unreused nodes are released).
+// Does NOT drain unreused nodes — they remain cached in prevChildren for
+// potential reuse on subsequent frames. Call Reset() on workflow restart
+// to release all nodes.
 func (n *Node) Render() *buffer.LinesBuf {
 	state := n.state
 	if state == nil || len(n.children) == 0 {
@@ -191,15 +178,14 @@ func (n *Node) Render() *buffer.LinesBuf {
 
 	state.renderBuf.Reset()
 	n.WriteRenderTo(state.renderBuf)
-	drainFreeMap(state)
 
 	return state.renderBuf
 }
 
 // WriteRenderTo renders the tree directly into the target buffer, bypassing
 // the internal renderBuf. This avoids an extra copy when the caller already
-// has a target buffer (e.g. build logs content). Does NOT drain the freeMap;
-// call DrainFreeMap() separately if needed.
+// has a target buffer (e.g. build logs content). Does NOT drain unreused nodes;
+// call DrainFreeList() separately if needed.
 func (n *Node) WriteRenderTo(target *buffer.LinesBuf) {
 	if len(n.children) == 0 {
 		return
@@ -235,11 +221,11 @@ func (n *Node) WriteRenderTo(target *buffer.LinesBuf) {
 	}
 }
 
-// DrainFreeMap releases all nodes remaining in the freeMap (nodes from the
-// previous frame that weren't reused). Call after WriteRenderTo if not using
-// Render() which drains automatically.
-func (n *Node) DrainFreeMap() {
-	drainFreeMap(n.state)
+// DrainFreeList explicitly releases all unreused nodes from prevChildren.
+// Normally not needed — nodes remain cached for reuse across frames.
+// Call only if you want to free memory without a full Reset().
+func (n *Node) DrainFreeList() {
+	drainRoot(n.state)
 }
 
 // Reset releases all children and cached state. For root nodes, also resets
@@ -253,7 +239,7 @@ func (n *Node) Reset() {
 
 	n.children = n.children[:0]
 	if state := n.state; state != nil {
-		drainFreeMap(state)
+		drainRoot(state)
 
 		if state.root == n {
 			state.renderBuf.Reset()
@@ -262,7 +248,8 @@ func (n *Node) Reset() {
 }
 
 // InvalidateCache forces all cached leaf content to be re-rendered on the
-// next frame. Bumps the generation counter and releases all cache entries.
+// next frame. Bumps the generation counter and releases all cache entries
+// in both the active tree (children) and dormant nodes (prevChildren).
 // Called on resize, navigation, or any event that changes rendering context.
 func (n *Node) InvalidateCache() {
 	if n == nil || n.state == nil {
@@ -274,8 +261,19 @@ func (n *Node) InvalidateCache() {
 
 	releaseCacheEntries(n.children)
 
-	for _, node := range state.freeMap {
-		releaseCacheEntry(node)
+	// Also release cache entries on dormant (untouched) nodes in prevChildren.
+	releasePrevCacheEntries(n.prevChildren)
+}
+
+// releasePrevCacheEntries recursively releases cache entries from dormant
+// nodes stored in prevChildren slices.
+func releasePrevCacheEntries(prev []*Node) {
+	for _, node := range prev {
+		if node != nil {
+			releaseCacheEntry(node)
+			releaseCacheEntries(node.children)
+			releasePrevCacheEntries(node.prevChildren)
+		}
 	}
 }
 
@@ -302,6 +300,76 @@ func releaseCacheEntry(node *Node) {
 // Len returns the number of children.
 func (n *Node) Len() int { return len(n.children) }
 
+func (n *Node) beginFrameRecursive() {
+	// Swap children and prevChildren — O(1) pointer swap instead of O(k) copy.
+	// After swap: prevChildren holds the old children for reuse,
+	// children is the old prevChildren buffer (cleared for rebuild).
+	n.prevChildren, n.children = n.children, n.prevChildren
+	n.children = n.children[:0]
+	n.reuseIdx = 0
+
+	// Recursively prepare all descendants.
+	for _, child := range n.prevChildren {
+		child.beginFrameRecursive()
+	}
+}
+
+// reuseNode prepares a previously-used node for its new position. Content is
+// recalculated only when version, cache generation, or depth width changed.
+func (n *Node) reuseNode(
+	free *Node,
+	childDepth int,
+	version uint64,
+	state *treeState,
+	depthWidth int,
+	calculate func(int) *buffer.LinesBuf,
+) *Node {
+	free.depth = childDepth
+
+	// Recalculate if version changed, cache was invalidated, or node
+	// moved to a different depth (depthWidth changed).
+	if free.contentVersion != version || free.cacheGen != state.invalidateGen || free.depthWidth != depthWidth {
+		free.content.Release()
+		free.content = calculate(depthWidth)
+		free.contentVersion = version
+		free.cacheGen = state.invalidateGen
+		free.depthWidth = depthWidth
+	}
+
+	n.children = append(n.children, free)
+
+	return free
+}
+
+// allocateNode creates a new node from the pool and populates it.
+func (n *Node) allocateNode(
+	childXp xpath.Xpath,
+	childDepth int,
+	version uint64,
+	state *treeState,
+	depthWidth int,
+	calculate func(int) *buffer.LinesBuf,
+) *Node {
+	node := nodePool.Get().(*Node) //nolint:forcetypeassert // pool always returns *Node
+	node.xpath = childXp
+	node.content = calculate(depthWidth)
+	node.contentVersion = version
+	node.depth = childDepth
+	node.depthWidth = depthWidth
+	node.step = n.step
+	node.cacheGen = state.invalidateGen
+	node.treeStyle = n.treeStyle
+	node.state = state
+	node.cacheEntry = nil
+	node.children = node.children[:0]
+	node.prevChildren = node.prevChildren[:0]
+	node.reuseIdx = 0
+
+	n.children = append(n.children, node)
+
+	return node
+}
+
 // renderNode renders this node and its subtree into buf, applying the
 // tree prefix (indent + connector) at each level.
 //
@@ -323,7 +391,8 @@ func (n *Node) renderNode(
 
 	// Leaf with state → use cached rendering.
 	if len(n.children) == 0 && n.state != nil {
-		n.renderLeaf(buf, pfx, conn, pfxBuf, pfxEnd, depth, isLastChild, prefixKey)
+		fullKey := (prefixKey << 1) | btoi(isLastChild)
+		n.renderLeaf(buf, pfx, conn, pfxBuf, pfxEnd, depth, fullKey)
 
 		return
 	}
@@ -357,8 +426,7 @@ func (n *Node) renderNode(
 // renderLeaf renders a leaf node using the per-node cache. The cache entry
 // is invalidated when any of these change:
 //   - contentVersion: caller-provided version (content changed)
-//   - prefixKey: path from root (sibling added/removed → connector changes)
-//   - isLastChild: whether this node is last at its level
+//   - fullKey: (prefixKey << 1) | isLastChild — encodes full path from root
 //
 // On cache hit, the pre-rendered content is appended directly (zero re-render).
 // On cache miss, content is re-rendered with the current prefix and cached.
@@ -367,14 +435,12 @@ func (n *Node) renderLeaf(
 	pfx, conn []byte,
 	pfxBuf []byte, pfxEnd []int,
 	depth int,
-	isLastChild bool,
-	prefixKey uint64,
+	fullKey uint64,
 ) {
 	entry := n.cacheEntry
 
 	// Cache hit: all key fields match → reuse pre-rendered content.
-	if entry != nil && entry.version == n.contentVersion &&
-		entry.prefixKey == prefixKey && entry.isLastChild == isLastChild {
+	if entry != nil && entry.version == n.contentVersion && entry.fullKey == fullKey {
 		buf.AppendFrom(entry.content)
 
 		return
@@ -391,8 +457,7 @@ func (n *Node) renderLeaf(
 	entry.content = buffer.NewLinesBuf()
 	writeLines(n.content, entry.content, pfx, conn, pfxBuf, pfxEnd, depth)
 	entry.version = n.contentVersion
-	entry.prefixKey = prefixKey
-	entry.isLastChild = isLastChild
+	entry.fullKey = fullKey
 	buf.AppendFrom(entry.content)
 }
 
@@ -462,28 +527,41 @@ func releaseNodes(children []*Node) {
 	}
 }
 
-// drainFreeMap releases all nodes in the freeMap and returns them to the pool.
-func drainFreeMap(state *treeState) {
-	for xpath, node := range state.freeMap {
-		releaseNodes(node.children)
+// drainRoot releases all unreused nodes remaining in prevChildren at every
+// level of the tree. Called after rendering to return unused nodes to the pool.
+func drainRoot(state *treeState) {
+	drainNodePrevChildren(state.root)
+}
 
-		if node.content != nil {
-			node.content.Release()
-			node.content = nil
+// drainNodePrevChildren recursively releases unreused nodes from prevChildren.
+func drainNodePrevChildren(node *Node) {
+	for _, child := range node.prevChildren {
+		if child != nil {
+			drainNodePrevChildren(child)
+			releaseNodeAndPool(child)
 		}
-
-		if node.cacheEntry != nil {
-			if node.cacheEntry.content != nil {
-				node.cacheEntry.content.Release()
-				node.cacheEntry.content = nil
-			}
-
-			node.cacheEntry = nil
-		}
-
-		nodePool.Put(node)
-		delete(state.freeMap, xpath)
 	}
+
+	node.prevChildren = node.prevChildren[:0]
+}
+
+// releaseNodeAndPool releases a single node's resources and returns it to the pool.
+func releaseNodeAndPool(node *Node) {
+	if node.content != nil {
+		node.content.Release()
+		node.content = nil
+	}
+
+	if node.cacheEntry != nil {
+		if node.cacheEntry.content != nil {
+			node.cacheEntry.content.Release()
+			node.cacheEntry.content = nil
+		}
+
+		node.cacheEntry = nil
+	}
+
+	nodePool.Put(node)
 }
 
 // Helpers
