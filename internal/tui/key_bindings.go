@@ -53,12 +53,14 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 
 	if m.statsTable.HandleNavigation(key, hasActiveInner) {
 		m.phaseFlow.Reset()
+		m.cachedTree.InvalidateCache()
 
 		return nil
 	}
 
 	if m.phaseFlow.HandleNavigation(key, hasActiveInner) {
 		m.statsTable.Reset()
+		m.cachedTree.InvalidateCache()
 
 		return nil
 	}
@@ -141,18 +143,21 @@ func (m *model) setFailedMachinesErrorIfNil() {
 
 func (m *model) handleToggle() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowAllBuildLogs = !m.conf.Flags.Tui.ShowAllBuildLogs
+	m.cachedTree.InvalidateCache()
 
 	return nil
 }
 
 func (m *model) handleToggleCommands() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowCommandsInLabels = !m.conf.Flags.Tui.ShowCommandsInLabels
+	m.cachedTree.InvalidateCache()
 
 	return nil
 }
 
 func (m *model) handleToggleActiveOnly() zeroterm.Cmd {
 	m.conf.Flags.Tui.ShowActiveOnly = !m.conf.Flags.Tui.ShowActiveOnly
+	m.cachedTree.InvalidateCache()
 
 	return nil
 }
@@ -205,8 +210,10 @@ func (m *model) handleEsc() zeroterm.Cmd {
 		m.viewports.DeselectAll()
 	case m.statsTable.SelectedIndex() >= 0:
 		m.statsTable.Reset()
+		m.cachedTree.InvalidateCache()
 	case m.phaseFlow.Selected.Index >= 0:
 		m.phaseFlow.Reset()
+		m.cachedTree.InvalidateCache()
 	}
 
 	return nil

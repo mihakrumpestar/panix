@@ -1,194 +1,311 @@
 package tree
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/stretchr/testify/assert"
 )
 
 func lb(s string) *buffer.LinesBuf {
 	buf := buffer.NewLinesBuf()
-	for line := range strings.SplitSeq(s, "\n") {
-		buf.WriteLine([]byte(line))
-	}
+	buf.WriteLine([]byte(s))
 
 	return buf
 }
 
-func rootStr(s string) *Node {
-	return NewTree(style.NewStyle()).NewNode(lb(s))
+const testStep = 3
+
+func addChild(parent *Node, xp string, content string, version uint64) *Node {
+	return parent.Child(xpath.New(xp), version, func(_ int) *buffer.LinesBuf {
+		return lb(content)
+	})
 }
 
 func viewString(n *Node) string {
-	buf := buffer.NewLinesBufDiff()
+	buf := n.Render()
 
-	n.Render(buf)
-
-	return buf.String()
+	return buffer.LinesBufToStringForTests(buf)
 }
 
-func TestSingleNode(t *testing.T) {
+func TestNewTree(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "root", viewString(rootStr("root")))
+	root := NewTree(style.NewStyle(), testStep)
+
+	assert.Equal(t, 0, root.depth)
+	assert.Nil(t, root.content)
+	assert.Empty(t, root.children)
 }
 
-func TestSingleChild(t *testing.T) {
+func TestChild_Add(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("root")
-	our.Child(rootStr("child"))
+	root := NewTree(style.NewStyle(), testStep)
+	child := addChild(root, "a", "content-a", 1)
 
-	got := viewString(our)
-
-	assert.Contains(t, got, "root")
-	assert.Contains(t, got, "child")
-
-	lines := strings.Split(got, "\n")
-	assert.Len(t, lines, 2)
+	assert.Equal(t, 1, child.depth)
+	assert.Equal(t, xpath.New("a"), child.xpath)
+	assert.Equal(t, uint64(1), child.contentVersion)
+	assert.Len(t, root.children, 1)
 }
 
-func TestMultipleChildren(t *testing.T) {
+func TestChild_Update(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("root")
-	for _, s := range []string{"a", "b", "c"} {
-		our.Child(rootStr(s))
-	}
+	root := NewTree(style.NewStyle(), testStep)
+	child1 := addChild(root, "a", "v1", 1)
 
-	got := viewString(our)
-	lines := strings.Split(got, "\n")
+	root.BeginFrame()
+	child2 := addChild(root, "a", "v2", 2)
 
-	assert.Len(t, lines, 4)
+	assert.Same(t, child1, child2)
+	assert.Equal(t, uint64(2), child2.contentVersion)
 }
 
-func TestNested(t *testing.T) {
+func TestChild_UpdateSameVersion(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("root")
-	for _, s := range []string{"a", "b"} {
-		child := rootStr(s)
-		for _, s2 := range []string{"x", "y"} {
-			child.Child(rootStr(s2))
-		}
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "v1", 1)
 
-		our.Child(child)
-	}
+	root.BeginFrame()
+	addChild(root, "a", "v1", 1)
 
-	got := viewString(our)
-	lines := strings.Split(got, "\n")
-
-	assert.Len(t, lines, 7)
+	assert.Len(t, root.children, 1)
 }
 
-func TestNoStyle(t *testing.T) {
+func TestChild_Multiple(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("root")
-	our.Child(rootStr("child"))
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "a", 1)
+	addChild(root, "b", "b", 1)
+	addChild(root, "c", "c", 1)
 
-	got := viewString(our)
-	lines := strings.Split(got, "\n")
-
-	assert.Len(t, lines, 2)
+	assert.Len(t, root.children, 3)
 }
 
-func TestDeepNesting(t *testing.T) {
+func TestChild_Depth(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("r")
-	{
-		a := rootStr("a")
-		a.Child(rootStr("a1"))
-		a.Child(rootStr("a2"))
-		our.Child(a)
+	root := NewTree(style.NewStyle(), testStep)
+	a := addChild(root, "a", "a", 1)
+	b := addChild(a, "a/b", "b", 1)
+	c := addChild(b, "a/b/c", "c", 1)
 
-		b := rootStr("b")
-		b1 := rootStr("b1")
-		b1.Child(rootStr("b1a"))
-		b.Child(b1)
-		our.Child(b)
-	}
-
-	got := viewString(our)
-	lines := strings.Split(got, "\n")
-
-	assert.Len(t, lines, 7)
+	assert.Equal(t, 1, a.depth)
+	assert.Equal(t, 2, b.depth)
+	assert.Equal(t, 3, c.depth)
 }
 
-func TestMixedStringAndNodeChildren(t *testing.T) {
+func TestRender_Empty(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("root")
-	our.Child(rootStr("string child"))
-	our.Child(rootStr("node child"))
+	root := NewTree(style.NewStyle(), testStep)
+	result := viewString(root)
 
-	got := viewString(our)
-	lines := strings.Split(got, "\n")
-
-	assert.Len(t, lines, 3)
+	assert.Empty(t, result)
 }
 
-func TestMultiline(t *testing.T) {
+func TestRender_SingleChild(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("r")
-	our.Child(rootStr("line1\nline2\nline3"))
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "hello", 1)
 
-	a := rootStr("a")
-	our.Child(a)
-	a.Child(rootStr("child-line1\nchild-line2"))
-
-	got := viewString(our)
-	lines := strings.Split(got, "\n")
-
-	assert.Len(t, lines, 7)
+	result := viewString(root)
+	assert.Contains(t, result, "hello")
 }
 
-func TestViewReuse(t *testing.T) {
+func TestRender_MultipleChildren(t *testing.T) {
 	t.Parallel()
 
-	tree := rootStr("root")
-	tree.Child(rootStr("a"))
-	tree.Child(rootStr("b"))
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "a", 1)
+	addChild(root, "b", "b", 1)
+	addChild(root, "c", "c", 1)
 
-	var prev string
-
-	for iteration := range 3 {
-		renderBuf := buffer.NewLinesBufDiff()
-		tree.Render(renderBuf)
-
-		got := renderBuf.String()
-
-		if iteration > 0 {
-			assert.Equal(t, prev, got, "iteration %d", iteration)
-		}
-
-		prev = got
-
-		assert.Contains(t, got, "root", "iteration %d", iteration)
-		assert.Contains(t, got, "a", "iteration %d", iteration)
-
-		lines := strings.Split(got, "\n")
-		assert.Len(t, lines, 3, "iteration %d", iteration)
-	}
+	result := viewString(root)
+	assert.Contains(t, result, "a")
+	assert.Contains(t, result, "b")
+	assert.Contains(t, result, "c")
 }
 
-func TestViewAppends(t *testing.T) {
+func TestRender_Nested(t *testing.T) {
 	t.Parallel()
 
-	our := rootStr("root")
-	our.Child(rootStr("child"))
+	root := NewTree(style.NewStyle(), testStep)
+	a := addChild(root, "a", "a", 1)
+	addChild(a, "a/x", "x", 1)
+	addChild(a, "a/y", "y", 1)
+	b := addChild(root, "b", "b", 1)
+	addChild(b, "b/z", "z", 1)
 
-	renderBuf := buffer.NewLinesBufDiff()
-	renderBuf.Write([]byte("prefix|"))
-	our.Render(renderBuf)
+	result := viewString(root)
+	assert.Contains(t, result, "a")
+	assert.Contains(t, result, "x")
+	assert.Contains(t, result, "y")
+	assert.Contains(t, result, "b")
+	assert.Contains(t, result, "z")
+}
 
-	got := renderBuf.String()
+func TestRender_CacheHit(t *testing.T) {
+	t.Parallel()
 
-	assert.True(t, strings.HasPrefix(got, "prefix|"))
-	assert.Contains(t, got, "root")
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "hello", 1)
+
+	result1 := viewString(root)
+	result2 := viewString(root)
+
+	assert.Equal(t, result1, result2)
+}
+
+func TestRender_CacheMiss_VersionChange(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "v1", 1)
+
+	result1 := viewString(root)
+
+	root.BeginFrame()
+	addChild(root, "a", "v2", 2)
+	result2 := viewString(root)
+
+	assert.NotEqual(t, result1, result2)
+	assert.Contains(t, result2, "v2")
+}
+
+func TestRender_CacheMiss_SiblingChange(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "a", 1)
+
+	viewString(root)
+
+	root.BeginFrame()
+	addChild(root, "a", "a", 1)
+	addChild(root, "b", "b", 1)
+	result2 := viewString(root)
+
+	assert.Contains(t, result2, "a")
+	assert.Contains(t, result2, "b")
+}
+
+func TestRender_ConnectorChange(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "flake", 1)
+
+	viewString(root)
+
+	root.BeginFrame()
+	addChild(root, "a", "flake", 1)
+	addChild(root, "b", "flake2", 1)
+	result2 := viewString(root)
+
+	// Root children (flakes) render without prefix — no connectors at this level.
+	assert.Contains(t, result2, "flake")
+	assert.Contains(t, result2, "flake2")
+}
+
+func TestRender_ConnectorsOnChildren(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	flake := addChild(root, "f", "flake", 1)
+	addChild(flake, "f/a", "child-a", 1)
+	addChild(flake, "f/b", "child-b", 1)
+
+	result := viewString(root)
+
+	assert.Contains(t, result, "├──")
+	assert.Contains(t, result, "╰──")
+	assert.Contains(t, result, "child-a")
+	assert.Contains(t, result, "child-b")
+}
+
+func TestReset(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "a", 1)
+	addChild(root, "b", "b", 1)
+
+	root.Reset()
+
+	assert.Empty(t, root.children)
+}
+
+func TestInvalidateCache(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "a", 1)
+
+	viewString(root)
+	root.InvalidateCache()
+	result := viewString(root)
+
+	assert.Contains(t, result, "a")
+}
+
+func TestRender_LeafCacheContent(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	addChild(root, "a", "leaf-content", 1)
+
+	result := viewString(root)
+	assert.Contains(t, result, "leaf-content")
+}
+
+func TestRender_NonLeafNotCached(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	a := addChild(root, "a", "parent", 1)
+	addChild(a, "a/x", "child", 1)
+
+	result1 := viewString(root)
+	result2 := viewString(root)
+
+	assert.Equal(t, result1, result2)
+	assert.Contains(t, result2, "parent")
+	assert.Contains(t, result2, "child")
+}
+
+func TestChild_PropagatesState(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep)
+	a := addChild(root, "a", "a", 1)
+	b := addChild(a, "a/b", "b", 1)
+
+	assert.NotNil(t, a.state)
+	assert.NotNil(t, b.state)
+	assert.Same(t, root.state, a.state)
+	assert.Same(t, root.state, b.state)
+}
+
+func TestReset_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var n *Node
+
+	assert.NotPanics(t, func() { n.Reset() })
+}
+
+func TestInvalidateCache_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var n *Node
+
+	assert.NotPanics(t, func() { n.InvalidateCache() })
 }

@@ -26,6 +26,9 @@ type Viewports struct {
 	mainXpath                    xpath.Xpath
 	activeXpath                  xpath.Xpath
 	highlightBuf                 *buffer.LinesBuf
+	lastActiveXpath              xpath.Xpath
+	lastActiveYOffset            int
+	dirty                        bool
 }
 
 type item struct {
@@ -69,6 +72,15 @@ func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHi
 // Dimensions
 
 func (v *Viewports) ContentWidth() int { return v.dimensions.Width - tuiviewport.ScrollbarColWidth() }
+
+func (v *Viewports) ContentVersion(xp xpath.Xpath) uint64 {
+	itm, ok := v.items.Get(xp)
+	if !ok {
+		return 0
+	}
+
+	return itm.contentVersion
+}
 
 // Fullscreen
 
@@ -162,6 +174,8 @@ func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 			v.activeXpath = v.mainXpath
 		}
 
+		v.checkDirty()
+
 		return nil
 	}
 
@@ -170,7 +184,17 @@ func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 		itm.model.Update(msg)
 	}
 
+	v.checkDirty()
+
 	return nil
+}
+
+// ConsumeDirty returns true if viewport state changed since last call, then resets the flag.
+func (v *Viewports) ConsumeDirty() bool {
+	d := v.dirty
+	v.dirty = false
+
+	return d
 }
 
 // Render methods
@@ -215,6 +239,22 @@ func (v *Viewports) Debug(buf *buffer.LinesBuf) {
 
 		if mdl.ScrollPercent() == 1 {
 			buf.AppendToLine([]byte(" @btm"))
+		}
+	}
+}
+
+func (v *Viewports) checkDirty() {
+	if v.activeXpath != v.lastActiveXpath {
+		v.dirty = true
+		v.lastActiveXpath = v.activeXpath
+	}
+
+	itm := v.activeItem()
+	if itm != nil {
+		yOffset := itm.model.YOffset()
+		if yOffset != v.lastActiveYOffset {
+			v.dirty = true
+			v.lastActiveYOffset = yOffset
 		}
 	}
 }

@@ -54,6 +54,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewport"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -345,31 +346,35 @@ func newZerotermPipeline() *zerotermPipeline {
 
 func buildZerotermTree() *tree.Node {
 	treeStyle := style.NewStyle().Foreground(style.Color("#6272A4"))
-	root := tree.NewTree(treeStyle)
+	root := tree.NewTree(treeStyle, 3)
 
-	var build func(depth int) *tree.Node
+	var build func(depth int, parent *tree.Node, parentXp string) *tree.Node
 
-	build = func(depth int) *tree.Node {
-		nodeBuf := buffer.NewLinesBuf()
-		if depth%2 == 0 {
-			nodeBuf.WriteString(fmt.Sprintf("\x1b[1;36mnode-d%d\x1b[0m", treeDepth-depth))
-		} else {
-			nodeBuf.WriteString(fmt.Sprintf("node-d%d", treeDepth-depth))
-		}
+	build = func(depth int, parent *tree.Node, parentXp string) *tree.Node {
+		nodeXp := parentXp + "/node"
 
-		child := root.NewNode(nodeBuf)
+		child := parent.Child(xpath.New(nodeXp), 1, func(_ int) *buffer.LinesBuf {
+			nodeBuf := buffer.NewLinesBuf()
+			if depth%2 == 0 {
+				nodeBuf.WriteString(fmt.Sprintf("\x1b[1;36mnode-d%d\x1b[0m", treeDepth-depth))
+			} else {
+				nodeBuf.WriteString(fmt.Sprintf("node-d%d", treeDepth-depth))
+			}
+
+			return nodeBuf
+		})
 
 		if depth > 0 {
-			for range treeBreadth {
-				child.Child(build(depth - 1))
+			for i := range treeBreadth {
+				build(depth-1, child, fmt.Sprintf("%s/%d", nodeXp, i))
 			}
 		}
 
 		return child
 	}
 
-	for range treeBreadth {
-		root.Child(build(treeDepth - 1))
+	for i := range treeBreadth {
+		build(treeDepth-1, root, fmt.Sprintf("root/%d", i))
 	}
 
 	return root
@@ -382,7 +387,8 @@ func (pipe *zerotermPipeline) renderInto(buf *buffer.LinesBufDiff) {
 	buf.AppendFrom(pipe.smallVP.Render())
 	pipe.sepStyle.RenderLineInto(buf.LinesBuf, separatorTextBytes)
 
-	pipe.treeRoot.Render(buf)
+	pipe.treeRoot.WriteRenderTo(buf.LinesBuf)
+	pipe.treeRoot.DrainFreeMap()
 	pipe.sepStyle.RenderLineInto(buf.LinesBuf, separatorTextBytes)
 
 	buf.AppendFrom(pipe.tbl.Render())

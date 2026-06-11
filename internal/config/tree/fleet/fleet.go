@@ -101,8 +101,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 
 			for _, machine := range configuration.Value.Machines.Pairs() {
 				dae := f.CacheFlattenedLogs[idx].DurationAndErrorCache
-
-				machine.Value.Logs.DurationAndErrorCache = dae
+				machine.Value.Logs.SetDurationAndError(dae)
 
 				if dae.Duration > largestMachineDuration {
 					largestMachineDuration = dae.Duration
@@ -111,21 +110,21 @@ func (f *Fleet) RecalculateDurationAndError() {
 				idx++
 			}
 
-			configuration.Value.Logs.DurationAndErrorCache.Duration = largestMachineDuration
+			configuration.Value.Logs.SetDuration(largestMachineDuration)
 
 			if largestMachineDuration > largestConfigurationDuration {
 				largestConfigurationDuration = largestMachineDuration
 			}
 		}
 
-		flake.Value.Logs.DurationAndErrorCache.Duration = largestConfigurationDuration
+		flake.Value.Logs.SetDuration(largestConfigurationDuration)
 
 		if largestConfigurationDuration > largestFlakeDuration {
 			largestFlakeDuration = largestConfigurationDuration
 		}
 	}
 
-	f.Logs.DurationAndErrorCache.Duration = largestFlakeDuration
+	f.Logs.SetDuration(largestFlakeDuration)
 }
 
 func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {

@@ -20,6 +20,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
@@ -44,6 +45,7 @@ type model struct {
 	viewports  *viewports.Viewports
 	statsTable *statstable.StatsTable
 	phaseFlow  *phaseflow.PhaseFlow
+	cachedTree *tree.Node
 }
 
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
@@ -72,6 +74,7 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
+		cachedTree: tree.NewTree(conf.ColorScheme.Tree.Enumerator, buildlogs.TreeStep),
 	}
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf.ColorScheme)
@@ -128,6 +131,11 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 
 	if m.workflow != nil {
 		cmd = append(cmd, m.viewports.Update(msg))
+
+		if m.viewports.ConsumeDirty() {
+			m.cachedTree.InvalidateCache()
+		}
+
 		cmd = append(cmd, m.footer.Update(msg))
 		cmd = append(cmd, m.spinners.Update(msg))
 	}
@@ -163,6 +171,7 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	case zeroterm.WindowSizeMsg:
 		m.dimensions.Width = msg.Width
 		m.dimensions.Height = msg.Height
+		m.cachedTree.InvalidateCache()
 	}
 
 	return zeroterm.BatchCmd(cmd...)
@@ -223,7 +232,7 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 		content.AppendFrom(m.phaseFlow.Render(contentWidth))
 	}
 
-	content.AppendFrom(m.buildLogs.Render(m.viewports, m.spinners))
+	content.AppendFrom(m.buildLogs.Render(m.cachedTree, m.viewports, m.spinners))
 
 	if m.err != nil {
 		errContent := buffer.NewLinesBuf()

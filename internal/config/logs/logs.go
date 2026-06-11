@@ -13,6 +13,7 @@ import (
 type Logs struct {
 	PhaseLogs             *phaselogs.PhaseLogs `yaml:"-" json:"phase_logs"`
 	DurationAndErrorCache DurationAndError     `yaml:"-" json:"duration_and_error"`
+	version               uint64
 }
 
 type DurationAndError struct {
@@ -26,7 +27,31 @@ func New() *Logs {
 	}
 }
 
+// Version returns the current version counter. Increments when duration or error state changes.
+func (l *Logs) Version() uint64 {
+	return l.version
+}
+
+// SetDurationAndError replaces the cached duration/error and bumps version if changed.
+func (l *Logs) SetDurationAndError(dae DurationAndError) {
+	if l.DurationAndErrorCache.Duration != dae.Duration || l.DurationAndErrorCache.Error != dae.Error {
+		l.version++
+	}
+
+	l.DurationAndErrorCache = dae
+}
+
+// SetDuration replaces the cached duration and bumps version if changed.
+func (l *Logs) SetDuration(d time.Duration) {
+	if l.DurationAndErrorCache.Duration != d {
+		l.version++
+	}
+
+	l.DurationAndErrorCache.Duration = d
+}
+
 func (l *Logs) RecalculateDurationAndError() error {
+	old := l.DurationAndErrorCache
 	durationAndError := DurationAndError{}
 
 	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
@@ -49,12 +74,17 @@ func (l *Logs) RecalculateDurationAndError() error {
 
 	l.DurationAndErrorCache = durationAndError
 
+	if durationAndError.Duration != old.Duration || durationAndError.Error != old.Error {
+		l.version++
+	}
+
 	return nil
 }
 
 func (l *Logs) Clear() {
 	l.PhaseLogs.Clear()
 	l.DurationAndErrorCache = DurationAndError{}
+	l.version++
 }
 
 func (l *Logs) PostUnmarshalInit() {

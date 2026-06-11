@@ -78,8 +78,8 @@ func (m *model) workflowRestartCmd() zeroterm.Cmd {
 	m.phaseFlow.Reset()
 	m.spinners.Reset()
 	m.viewports.Reset()
+	m.cachedTree.Reset()
 	m.err = nil
-	m.buildLogs = nil
 
 	w, err := workflow.NewWorkflow(m.ctx, m.conf)
 	if err != nil {
