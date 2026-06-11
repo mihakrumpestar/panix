@@ -57,6 +57,11 @@ type Viewport struct {
 	trackCell []byte
 	emptyCell []byte
 
+	// Cached horizontal border bytes. Invalidated when contentW or
+	// showBar changes. Avoids per-frame RenderLine allocations.
+	horizBorderCache    []byte
+	horizBorderCacheKey int // contentW*2 + showBarInt
+
 	// Pre-computed border bytes (built once in WithBorder / SetBorderStyle).
 	borderLeft  []byte
 	borderRight []byte
@@ -77,6 +82,11 @@ type Viewport struct {
 	prevLineOffsets []int
 	prevContent     buffer.LinesBuf
 	prevLineWidths  []int
+
+	// wrappedContentW tracks the contentW used for the current wrapped
+	// content (non-main viewports). Used by adoptLinesBuf to detect
+	// whether the wrapping width changed, invalidating cached lineWidths.
+	wrappedContentW int
 
 	// Scratch buffer reused for building individual output lines.
 	scratchBuf []byte
@@ -139,7 +149,8 @@ func WithMaxHeight(h int) Option {
 
 func New(opts ...Option) Viewport {
 	model := Viewport{
-		paddedBufCW: -1,
+		paddedBufCW:         -1,
+		horizBorderCacheKey: -1,
 	}
 
 	for _, opt := range opts {
@@ -184,6 +195,7 @@ func (m *Viewport) SetBorderStyle(borderColor style.Color) {
 
 	m.borderStyle = newStyle
 	m.buildBorderStrings()
+	m.horizBorderCacheKey = -1
 	m.cacheValid = false
 }
 
@@ -254,8 +266,13 @@ func (m *Viewport) SetContent(content [][]byte) error {
 		return nil
 	}
 
-	// Convert [][]byte to LinesBuf for WrapBuf.
-	contentBuf := buffer.NewLinesBuf()
+	// Convert [][]byte to LinesBuf for WrapBuf. Pre-size to avoid growth.
+	totalBytes := 0
+	for _, line := range content {
+		totalBytes += len(line)
+	}
+
+	contentBuf := buffer.NewLinesBuf(totalBytes)
 	contentBuf.WriteLines(content)
 
 	return m.SetContentBuf(contentBuf)
@@ -282,15 +299,23 @@ func (m *Viewport) SetContentBuf(content *buffer.LinesBuf) error {
 
 	contentW = max(1, contentW)
 
-	wrapBuf := buffer.NewLinesBuf()
+	oldWrappedW := m.wrappedContentW
+	m.wrappedContentW = contentW
+
+	// Pre-size wrapBuf from content size to avoid incremental growth.
+	wrapBuf := buffer.NewLinesBuf(m.contentByteEstimate(content))
 	style.WrapBuf(wrapBuf, content, contentW, "")
-	m.adoptLinesBuf(wrapBuf)
+	m.adoptLinesBuf(wrapBuf, oldWrappedW)
 
 	if m.scrollbar && !m.scrollbarReserve && m.linesLen > m.contentHeight() {
 		scrollbarW := max(1, contentW-scrollbarColWidth)
-		wrapBuf2 := buffer.NewLinesBuf()
+
+		oldWrappedW = m.wrappedContentW
+		m.wrappedContentW = scrollbarW
+
+		wrapBuf2 := buffer.NewLinesBuf(m.contentByteEstimate(content))
 		style.WrapBuf(wrapBuf2, content, scrollbarW, "")
-		m.adoptLinesBuf(wrapBuf2)
+		m.adoptLinesBuf(wrapBuf2, oldWrappedW)
 	}
 
 	return nil
@@ -304,7 +329,7 @@ func (m *Viewport) SetContentLines(lines [][]byte) {
 }
 
 // ensureLineWidths lazily allocates and initializes the width cache.
-// Uncached entries are represented by -1.
+// Uncached entries are represented by -1. Reuses existing capacity when possible.
 //
 //nolint:funcorder
 func (m *Viewport) ensureLineWidths() {
@@ -312,9 +337,33 @@ func (m *Viewport) ensureLineWidths() {
 		return
 	}
 
-	m.lineWidths = make([]int, m.linesLen)
+	if cap(m.lineWidths) >= m.linesLen {
+		m.lineWidths = m.lineWidths[:m.linesLen]
+	} else {
+		m.lineWidths = make([]int, m.linesLen)
+	}
+
 	for i := range m.lineWidths {
 		m.lineWidths[i] = -1
+	}
+}
+
+// invalidateLineWidths marks all cached widths as invalid while reusing
+// the existing slice capacity when possible.
+//
+//nolint:funcorder
+func (m *Viewport) invalidateLineWidths() {
+	if m.lineWidths == nil {
+		return
+	}
+
+	if cap(m.lineWidths) >= m.linesLen {
+		m.lineWidths = m.lineWidths[:m.linesLen]
+		for i := range m.lineWidths {
+			m.lineWidths[i] = -1
+		}
+	} else {
+		m.lineWidths = nil
 	}
 }
 
@@ -651,7 +700,10 @@ func (m *Viewport) ensureBufSizes(contentW int) {
 
 	est := len(m.paddedBuf) + (contentW+1)*remaining + 1
 	if cap(m.paddedBuf) < est {
-		newBuf := make([]byte, len(m.paddedBuf), est)
+		// Over-allocate by 50% to absorb incremental growth without
+		// re-allocating every frame when content is appended.
+		growEst := est + est/2
+		newBuf := make([]byte, len(m.paddedBuf), growEst)
 		copy(newBuf, m.paddedBuf)
 		m.paddedBuf = newBuf
 	}
@@ -659,7 +711,8 @@ func (m *Viewport) ensureBufSizes(contentW int) {
 	offsetLen := m.linesLen + 1
 	if cap(m.lineOffsets) < offsetLen {
 		oldOffsets := m.lineOffsets
-		m.lineOffsets = make([]int, offsetLen)
+		newCap := offsetLen + offsetLen/2
+		m.lineOffsets = make([]int, offsetLen, newCap)
 		copy(m.lineOffsets, oldOffsets)
 	} else {
 		m.lineOffsets = m.lineOffsets[:offsetLen]
@@ -826,7 +879,17 @@ func (m *Viewport) appendHorizBorder(buf []byte, contentW int, showBar bool) []b
 		horizLen += scrollbarColWidth
 	}
 
-	return append(buf, m.borderStyle.RenderLine(horizBorderBytes[:horizLen*3])...)
+	key := horizLen*2
+	if showBar {
+		key++
+	}
+
+	if m.horizBorderCacheKey != key {
+		m.horizBorderCache = m.borderStyle.RenderLine(horizBorderBytes[:horizLen*3])
+		m.horizBorderCacheKey = key
+	}
+
+	return append(buf, m.horizBorderCache...)
 }
 
 func (m *Viewport) contentHeight() int {
@@ -840,6 +903,17 @@ func (m *Viewport) contentHeight() int {
 
 func (m *Viewport) maxYOffset() int {
 	return max(m.linesLen-m.contentHeight(), 0)
+}
+
+// contentByteEstimate returns the total byte size of all lines in content.
+// Used to pre-size wrap buffers and avoid incremental growth allocations.
+func (m *Viewport) contentByteEstimate(content *buffer.LinesBuf) int {
+	total := 0
+	for i := range content.Len() {
+		total += len(content.Line(i))
+	}
+
+	return total
 }
 
 func (m *Viewport) handleKeyPress(msg zeroterm.KeyPressMsg) {
@@ -910,12 +984,12 @@ func (m *Viewport) line(i int) []byte {
 
 // adoptLinesBuf takes ownership of buf, releasing any previous buffer.
 // The viewport accesses lines via buf.Line(i) — zero allocations.
-// For non-main viewports where content grows by appending, paddedBuf is
-// preserved for the unchanged prefix, avoiding O(n) recomputation on
-// every content update. lineWidths are always recomputed because the
-// wrapping width may have changed, invalidating cached cell widths.
-func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf) {
+// For non-main viewports where content grows by appending, paddedBuf and
+// lineWidths are preserved for the unchanged prefix when the wrapping
+// width hasn't changed, avoiding O(n) CellWidth recomputation.
+func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 	oldLen := m.linesLen
+	oldWidths := m.lineWidths
 	oldPaddedCount := m.paddedLineCount
 
 	m.releaseLinesBuf()
@@ -926,15 +1000,52 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf) {
 	m.cacheValid = false
 	m.contentChanged = true
 
-	if !m.main && oldLen > 0 && m.linesLen >= oldLen && oldPaddedCount == oldLen {
-		m.paddedBuf = m.paddedBuf[:m.lineOffsets[oldLen-1]]
-		m.paddedLineCount = oldLen - 1
+	// Reuse lineWidths capacity when possible, avoiding fresh allocation.
+	if oldWidths != nil && cap(oldWidths) >= m.linesLen {
+		m.lineWidths = oldWidths[:m.linesLen]
+		for i := range m.lineWidths {
+			m.lineWidths[i] = -1
+		}
 	}
+
+	m.tryPreservePrefix(oldLen, oldWidths, oldPaddedCount, oldWrappedW)
 
 	maxOffset := max(m.linesLen-m.contentHeight(), 0)
 	if m.yOffset > maxOffset {
 		m.yOffset = maxOffset
 	}
+}
+
+// tryPreservePrefix attempts to preserve the paddedBuf prefix and carry
+// over cached lineWidths for non-main viewports when the wrapping width
+// is unchanged. This avoids O(n) recomputation for appended content.
+func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount int, oldWrappedW int) {
+	if m.main || oldLen == 0 || m.linesLen < oldLen || oldPaddedCount != oldLen {
+		return
+	}
+
+	m.paddedBuf = m.paddedBuf[:m.lineOffsets[oldLen-1]]
+	m.paddedLineCount = oldLen - 1
+
+	if oldWidths == nil || oldWrappedW != m.wrappedContentW {
+		return
+	}
+
+	if m.lineWidths == nil {
+		if cap(oldWidths) >= m.linesLen {
+			m.lineWidths = oldWidths[:m.linesLen]
+		} else {
+			m.lineWidths = make([]int, m.linesLen)
+		}
+	}
+
+	copy(m.lineWidths, oldWidths[:min(oldLen, m.linesLen)])
+
+	for i := oldLen; i < m.linesLen; i++ {
+		m.lineWidths[i] = -1
+	}
+
+	m.lineWidths[m.paddedLineCount] = -1
 }
 
 // releaseLinesBuf releases the owned buffer if any.
@@ -965,25 +1076,71 @@ func (m *Viewport) buildScrollbarCells() {
 	m.emptyCell = []byte("  ")
 }
 
-// setLines stores pre-wrapped lines directly into a LinesBuf, resetting the
-// incremental cache so that the next render does a full rebuild.
-// Used for the main viewport path and tests where content is already formatted.
+// setLines stores pre-wrapped lines directly, adopting a new LinesBuf.
+// For main viewports, preserves the padded prefix when the content width
+// is unchanged — padLines starts from paddedLineCount, processing only
+// new/changed lines. Avoids the O(n) snapshot copy that setLinesBuf does.
+// Reuses the existing LinesBuf capacity when possible.
 func (m *Viewport) setLines(lines [][]byte) {
-	m.lineWidths = nil
-	m.paddedLineCount = 0
-	m.paddedBuf = m.paddedBuf[:0]
+	// Check if we can preserve the padded prefix (same width, main viewport).
+	canPreservePrefix := m.main && m.paddedLineCount > 0 && m.paddedBufCW == m.ContentWidth()
 
-	buf := buffer.NewLinesBuf()
-	for _, line := range lines {
-		buf.WriteLine1(line)
+	var (
+		savedPaddedCount int
+		savedWidths      []int
+	)
+
+	if canPreservePrefix {
+		savedPaddedCount = m.paddedLineCount
+		savedWidths = m.lineWidths
+	} else {
+		m.paddedLineCount = 0
+		m.paddedBuf = m.paddedBuf[:0]
 	}
 
-	m.adoptLinesBuf(buf)
+	// Reuse existing LinesBuf capacity instead of pool get/put.
+	var buf *buffer.LinesBuf
+	if m.linesBuf != nil {
+		buf = m.linesBuf
+		buf.Reset()
+
+		m.linesBuf = nil
+		m.linesLen = 0
+	} else {
+		// Pre-size new LinesBuf from pool to avoid incremental growth.
+		totalBytes := 0
+		for _, line := range lines {
+			totalBytes += len(line)
+		}
+
+		buf = buffer.NewLinesBuf(totalBytes)
+	}
+
+	buf.WriteLines(lines)
+	m.adoptLinesBuf(buf, m.wrappedContentW)
+
+	if canPreservePrefix {
+		m.paddedLineCount = min(savedPaddedCount, m.linesLen)
+
+		if savedWidths != nil {
+			if cap(savedWidths) >= m.linesLen {
+				m.lineWidths = savedWidths[:m.linesLen]
+			} else {
+				m.lineWidths = make([]int, m.linesLen)
+				copy(m.lineWidths, savedWidths[:min(len(savedWidths), m.linesLen)])
+			}
+
+			for i := m.paddedLineCount; i < m.linesLen; i++ {
+				m.lineWidths[i] = -1
+			}
+		}
+	}
 }
 
 // setLinesBuf adopts a LinesBuf directly without copying, resetting the
 // incremental cache so that the next render does a full rebuild.
-// Used for the main viewport path when content is already in LinesBuf format.
+// For main viewports, snapshots previous padded state so that
+// tryBulkCopyLine can skip CellWidth computation for unchanged lines.
 func (m *Viewport) setLinesBuf(content *buffer.LinesBuf) {
 	if m.main {
 		m.prevPaddedBuf = append(m.prevPaddedBuf[:0], m.paddedBuf...)
@@ -991,9 +1148,9 @@ func (m *Viewport) setLinesBuf(content *buffer.LinesBuf) {
 		m.prevLineWidths = append(m.prevLineWidths[:0], m.lineWidths...)
 	}
 
-	m.lineWidths = nil
 	m.paddedLineCount = 0
 	m.paddedBuf = m.paddedBuf[:0]
+	m.invalidateLineWidths()
 
-	m.adoptLinesBuf(content)
+	m.adoptLinesBuf(content, m.wrappedContentW)
 }
