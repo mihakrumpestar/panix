@@ -9,6 +9,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+// LogState represents the aggregate state of a set of phase logs.
+type LogState uint8
+
+const (
+	LogStateIdle     LogState = iota // no phase has started
+	LogStateRunning                  // at least one phase is in progress
+	LogStateFinished                 // all phases finished
+)
+
 // Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
 type Logs struct {
 	PhaseLogs             *phaselogs.PhaseLogs `yaml:"-" json:"phase_logs"`
@@ -19,6 +28,7 @@ type Logs struct {
 type DurationAndError struct {
 	Duration time.Duration        `yaml:"-" json:"duration"`
 	Error    *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
+	State    LogState             `yaml:"-" json:"state"`
 }
 
 func New() *Logs {
@@ -27,26 +37,25 @@ func New() *Logs {
 	}
 }
 
-// Version returns the current version counter. Increments when duration or error state changes.
+// Version returns the current version counter. Increments on state transitions.
 func (l *Logs) Version() uint64 {
 	return l.version
 }
 
-// SetDurationAndError replaces the cached duration/error and bumps version if changed.
+// SetDurationAndError replaces the cached duration/error and bumps version on
+// state or error change. Duration-only changes are throttled by the spinner
+// generation and do not bump the version.
 func (l *Logs) SetDurationAndError(dae DurationAndError) {
-	if l.DurationAndErrorCache.Duration != dae.Duration || l.DurationAndErrorCache.Error != dae.Error {
+	if l.DurationAndErrorCache.State != dae.State || l.DurationAndErrorCache.Error != dae.Error {
 		l.version++
 	}
 
 	l.DurationAndErrorCache = dae
 }
 
-// SetDuration replaces the cached duration and bumps version if changed.
+// SetDuration replaces the cached duration. No version bump — duration
+// display is throttled by the spinner generation.
 func (l *Logs) SetDuration(d time.Duration) {
-	if l.DurationAndErrorCache.Duration != d {
-		l.version++
-	}
-
 	l.DurationAndErrorCache.Duration = d
 }
 
@@ -64,17 +73,26 @@ func (l *Logs) RecalculateDurationAndError() error {
 
 		durationAndError.Duration += duration
 
-		endError := tas.Load().EndError
+		tasLoaded := tas.Load()
+
+		endError := tasLoaded.EndError
 		if endError != nil {
 			durationAndError.Error = endError
 
 			break
 		}
+
+		if !tasLoaded.IsFinished() {
+			break
+		}
 	}
+
+	// Derive aggregate state from phase logs.
+	durationAndError.State = l.computeState()
 
 	l.DurationAndErrorCache = durationAndError
 
-	if durationAndError.Duration != old.Duration || durationAndError.Error != old.Error {
+	if durationAndError.State != old.State || durationAndError.Error != old.Error {
 		l.version++
 	}
 
@@ -95,6 +113,23 @@ func (l *Logs) PostUnmarshalInit() {
 	if l.PhaseLogs == nil {
 		l.PhaseLogs = phaselogs.NewPhaseLogs()
 	}
+}
+
+// computeState returns the aggregate state of all phase logs.
+func (l *Logs) computeState() LogState {
+	state := LogStateIdle
+
+	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
+		tasLoaded := phaseLogPair.Value.TimeAndState.Load()
+
+		if tasLoaded.IsFinished() {
+			state = LogStateFinished
+		} else if tasLoaded.HasStarted() {
+			return LogStateRunning
+		}
+	}
+
+	return state
 }
 
 // Helpers
@@ -145,12 +180,20 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		}
 
 		if tasLoaded.EndError != nil {
+			logs.DurationAndErrorCache.State = LogStateFinished
+
 			break
 		}
 
 		if !tasLoaded.IsFinished() {
+			if tasLoaded.HasStarted() {
+				logs.DurationAndErrorCache.State = LogStateRunning
+			}
+
 			break
 		}
+
+		logs.DurationAndErrorCache.State = LogStateFinished
 	}
 
 	return logs

@@ -394,25 +394,26 @@ func (b *BuildLogs) addPhase(
 		return false
 	}
 
-	tas := phaseLog.TimeAndState
-
-	tasLoaded := tas.Load()
-	icon := b.spinnerOrIcon(phaseXpath, b.conf.ColorScheme.Phase.Icon, tasLoaded)
-	durStyled, durWidth := b.durationBytes(tas)
-
 	upperName := upperPhaseNames[phaseI]
 	if upperName == nil {
 		upperName = []byte(strings.ToUpper(phaseI.String()))
 	}
 
-	b.iconBuf.Reset()
-	b.iconBuf.Write(icon)
-	b.iconBuf.Write(upperName)
-	leftRaw := b.iconBuf.Bytes()
+	displayVersion := entityVersion + phaseLog.TimeAndState.StateVersion()
 
-	leftWidth := style.CellWidth(icon) + len(upperName)
+	phaseNode := parent.Child(phaseXpath, displayVersion, func(depthWidth int) *buffer.LinesBuf {
+		tas := phaseLog.TimeAndState
+		tasLoaded := tas.Load()
+		icon := b.spinnerOrIcon(phaseXpath, b.conf.ColorScheme.Phase.Icon, tasLoaded)
+		durStyled, durWidth := b.durationBytes(tas)
 
-	phaseNode := parent.Child(phaseXpath, entityVersion, func(depthWidth int) *buffer.LinesBuf {
+		b.iconBuf.Reset()
+		b.iconBuf.Write(icon)
+		b.iconBuf.Write(upperName)
+		leftRaw := b.iconBuf.Bytes()
+
+		leftWidth := style.CellWidth(icon) + len(upperName)
+
 		return b.layoutLineStyled(depthWidth, timerLevelPhase, b.conf.ColorScheme.Phase.Color, leftRaw, durStyled, leftWidth, durWidth)
 	})
 
@@ -468,35 +469,34 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 
 	cmdXpath := cmd.Xpath
 	labelXpath := cmd.LabelXpath
-
 	labelContent, labelVersion := b.commandLabelContent(cmd)
-	label := buffer.NewLineBufPooled()
-	label.Write(labelContent)
 
-	tasCached := cmd.TimeAndState.Load()
+	displayVersion := entityVersion + cmd.TimeAndState.StateVersion()
 
-	b.iconBuf.Reset()
-	b.iconBuf.WriteString(strconv.Itoa(idx + 1))
-	icon := b.spinnerOrIcon(cmdXpath, b.iconBuf.Bytes(), tasCached)
+	cmdNode := parent.Child(cmdXpath, displayVersion, func(depthWidth int) *buffer.LinesBuf {
+		tasCached := cmd.TimeAndState.Load()
 
-	b.cmdIconBuf.Reset()
-	b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdIconBuf, icon)
+		b.iconBuf.Reset()
+		b.iconBuf.WriteString(strconv.Itoa(idx + 1))
+		icon := b.spinnerOrIcon(cmdXpath, b.iconBuf.Bytes(), tasCached)
 
-	durStyled, durWidth := b.durationBytes(cmd.TimeAndState)
+		b.cmdIconBuf.Reset()
+		b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdIconBuf, icon)
 
-	iconWidth := style.CellWidth(b.cmdIconBuf.Line(0))
-	labelCopy := make([]byte, label.Len())
-	copy(labelCopy, label.Bytes())
+		durStyled, durWidth := b.durationBytes(cmd.TimeAndState)
 
-	labelBuf := buffer.NewLinesBuf()
-	labelBuf.WriteLine(labelCopy)
+		iconWidth := style.CellWidth(b.cmdIconBuf.Line(0))
 
-	cmdNode := parent.Child(cmdXpath, entityVersion, func(depthWidth int) *buffer.LinesBuf {
+		labelCopy := make([]byte, len(labelContent))
+		copy(labelCopy, labelContent)
+
+		labelBuf := buffer.NewLinesBuf()
+		labelBuf.WriteLine(labelCopy)
+
 		labelWidth := depthWidth + iconWidth + durWidth
 
 		labelResult := b.viewports.RenderLabelViewport(labelXpath, labelBuf, labelVersion, labelWidth)
 		labelBuf.Release()
-		label.Release()
 
 		if cmd.Output.Len() > 0 {
 			for range labelResult.Len() - 1 {
@@ -519,7 +519,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		return joinBuf
 	})
 
-	b.addCommandChildren(cmdNode, cmd, tasCached, entityVersion)
+	b.addCommandChildren(cmdNode, cmd, cmd.TimeAndState.Load(), entityVersion)
 }
 
 func (b *BuildLogs) commandLabelContent(cmd *command.CommandLog) ([]byte, uint64) {
@@ -600,7 +600,7 @@ func (b *BuildLogs) entityNodeContent(indent int, entity colorscheme.ColorScheme
 }
 
 func (b *BuildLogs) entityVersion(logNode *logs.Logs) uint64 {
-	v := b.widthOffset
+	v := b.widthOffset + b.spinners.Generation()
 	if logNode != nil {
 		v += logNode.Version()
 	}

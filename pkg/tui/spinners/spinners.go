@@ -22,8 +22,9 @@ type Spinners struct {
 	frames   [][]byte
 	interval time.Duration
 
-	viewed  bool
-	ticking bool
+	viewed     bool
+	ticking    bool
+	generation uint64
 }
 
 func New(frames [][]byte, interval time.Duration) *Spinners {
@@ -58,10 +59,18 @@ func (s *Spinners) ProcessPendingTicks() zeroterm.Cmd {
 	return s.nextTick()
 }
 
+// Generation returns a counter that increments on each spinner tick.
+// Used to throttle display updates to the spinner frame rate (10fps).
+func (s *Spinners) Generation() uint64 {
+	return s.generation
+}
+
 func (s *Spinners) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	if _, ok := msg.(tickMsg); !ok {
 		return nil
 	}
+
+	s.generation++
 
 	for _, pair := range s.entries.Pairs() {
 		pair.Value.Update()
@@ -82,6 +91,7 @@ func (s *Spinners) Reset() {
 	s.entries.Clear()
 	s.viewed = false
 	s.ticking = false
+	s.generation = 0
 }
 
 func (s *Spinners) Debug(buf *buffer.LinesBuf) {

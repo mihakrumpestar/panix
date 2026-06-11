@@ -31,6 +31,7 @@ func (tas *AtomicTimeAndState) StartTimer() {
 	tas.Update(func(tas *TimeAndState) {
 		tas.StartTime = timeNow
 		tas.live = true
+		tas.stateVersion++
 	})
 }
 
@@ -45,7 +46,15 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 		tas.DurationCache = timeNow.Sub(tas.StartTime)
 		tas.EndTime = timeNow
 		tas.EndError = jsonerror.New(err)
+		tas.stateVersion++
 	})
+}
+
+// StateVersion returns a counter that increments on state transitions
+// (start, end). Used to invalidate display caches without bumping on
+// every duration tick.
+func (tas *AtomicTimeAndState) StateVersion() uint64 {
+	return tas.Load().stateVersion
 }
 
 func (tas *AtomicTimeAndState) UnmarshalJSON(data []byte) error {

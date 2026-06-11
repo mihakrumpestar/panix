@@ -678,34 +678,51 @@ func (m *Viewport) padLines(contentW int) {
 	for idx := m.paddedLineCount; idx < m.linesLen; idx++ {
 		m.lineOffsets[idx] = len(m.paddedBuf)
 
-		if useBulkCopy && idx < m.prevContent.Len() && bytes.Equal(m.line(idx), m.prevContent.Line(idx)) {
-			m.paddedBuf = append(m.paddedBuf, m.prevPaddedBuf[m.prevLineOffsets[idx]:m.prevLineOffsets[idx+1]]...)
-
-			// Carry over cached width from previous frame for unchanged lines.
-			if m.prevLineWidths != nil && idx < len(m.prevLineWidths) && m.prevLineWidths[idx] >= 0 {
-				m.lineWidths[idx] = m.prevLineWidths[idx]
-			}
-
+		if useBulkCopy && m.tryBulkCopyLine(idx) {
 			continue
 		}
 
-		line := m.line(idx)
-
-		lineWidth := m.lineWidths[idx]
-		if lineWidth < 0 {
-			lineWidth = style.CellWidth(line)
-			m.lineWidths[idx] = lineWidth
-		}
-
-		m.paddedBuf = append(m.paddedBuf, line...)
-
-		if lineWidth < contentW {
-			m.paddedBuf = append(m.paddedBuf, spaces[:contentW-lineWidth]...)
-		}
+		m.padNewLine(idx, contentW)
 	}
 
 	m.lineOffsets[m.linesLen] = len(m.paddedBuf)
 	m.paddedLineCount = m.linesLen
+}
+
+// tryBulkCopyLine attempts to bulk-copy an unchanged line from the previous
+// frame's padded buffer, carrying over the cached width. Returns true if
+// the line was identical and bulk-copied.
+func (m *Viewport) tryBulkCopyLine(idx int) bool {
+	if idx >= m.prevContent.Len() || !bytes.Equal(m.line(idx), m.prevContent.Line(idx)) {
+		return false
+	}
+
+	m.paddedBuf = append(m.paddedBuf, m.prevPaddedBuf[m.prevLineOffsets[idx]:m.prevLineOffsets[idx+1]]...)
+
+	// Carry over cached width from previous frame for unchanged lines.
+	if m.prevLineWidths != nil && idx < len(m.prevLineWidths) && m.prevLineWidths[idx] >= 0 {
+		m.lineWidths[idx] = m.prevLineWidths[idx]
+	}
+
+	return true
+}
+
+// padNewLine computes the width for a new or changed line and appends it
+// with right-padding to fill contentW.
+func (m *Viewport) padNewLine(idx int, contentW int) {
+	line := m.line(idx)
+
+	lineWidth := m.lineWidths[idx]
+	if lineWidth < 0 {
+		lineWidth = style.CellWidth(line)
+		m.lineWidths[idx] = lineWidth
+	}
+
+	m.paddedBuf = append(m.paddedBuf, line...)
+
+	if lineWidth < contentW {
+		m.paddedBuf = append(m.paddedBuf, spaces[:contentW-lineWidth]...)
+	}
 }
 
 func (m *Viewport) ensurePaddedCache(contentW int) {

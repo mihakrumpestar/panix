@@ -13,7 +13,8 @@ type TimeAndState struct {
 	DurationCache time.Duration        `json:"duration"`
 	EndError      *jsonerror.JSONError `json:"end_error,omitempty"`
 
-	live bool
+	live        bool
+	stateVersion uint64
 }
 
 func (tas *TimeAndState) HasStarted() bool {
