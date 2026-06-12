@@ -161,6 +161,35 @@ func StripANSI(line []byte) []byte {
 	return dst
 }
 
+// HasVisibleContent reports whether line contains any visible (non-ANSI)
+// characters. Zero allocation — scans without building a result slice.
+// Use instead of len(StripANSI(line)) == 0.
+func HasVisibleContent(line []byte) bool {
+	pos := 0
+	n := len(line)
+
+	for pos < n {
+		if line[pos] == '\x1b' {
+			pos = skipANSI(line, pos)
+
+			continue
+		}
+
+		if line[pos] >= 0x20 && line[pos] < 0x7F {
+			return true
+		}
+
+		// Non-ASCII: check if it's a visible character (not a control char).
+		if line[pos] >= 0x80 { //nolint:mnd // high byte = multi-byte UTF-8 start
+			return true
+		}
+
+		pos++
+	}
+
+	return false
+}
+
 // indexByte returns the index of c in b, or -1 if not found.
 // Avoids bytes.IndexByte import.
 func indexByte(b []byte, c byte) int {

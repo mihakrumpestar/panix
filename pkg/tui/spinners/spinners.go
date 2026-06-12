@@ -72,9 +72,11 @@ func (s *Spinners) Update(msg zeroterm.Msg) zeroterm.Cmd {
 
 	s.generation++
 
-	for _, pair := range s.entries.Pairs() {
-		pair.Value.Update()
-	}
+	s.entries.ForEach(func(_ xpath.Xpath, sp *spinner.Spinner) bool {
+		sp.Update()
+
+		return true
+	})
 
 	if s.viewed {
 		s.viewed = false

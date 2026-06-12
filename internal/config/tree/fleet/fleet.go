@@ -93,36 +93,42 @@ func (f *Fleet) RecalculateDurationAndError() {
 
 	var largestFlakeDuration time.Duration
 
-	for _, flake := range f.Flakes.Pairs() {
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		var largestConfigurationDuration time.Duration
 
-		for _, configuration := range flake.Value.Configurations.Pairs() {
+		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
 			var largestMachineDuration time.Duration
 
-			for _, machine := range configuration.Value.Machines.Pairs() {
+			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
 				dae := f.CacheFlattenedLogs[idx].DurationAndErrorCache
-				machine.Value.Logs.SetDurationAndError(dae)
+				machineV.Logs.SetDurationAndError(dae)
 
 				if dae.Duration > largestMachineDuration {
 					largestMachineDuration = dae.Duration
 				}
 
 				idx++
-			}
 
-			configuration.Value.Logs.SetDuration(largestMachineDuration)
+				return true
+			})
+
+			configurationV.Logs.SetDuration(largestMachineDuration)
 
 			if largestMachineDuration > largestConfigurationDuration {
 				largestConfigurationDuration = largestMachineDuration
 			}
-		}
 
-		flake.Value.Logs.SetDuration(largestConfigurationDuration)
+			return true
+		})
+
+		flakeV.Logs.SetDuration(largestConfigurationDuration)
 
 		if largestConfigurationDuration > largestFlakeDuration {
 			largestFlakeDuration = largestConfigurationDuration
 		}
-	}
+
+		return true
+	})
 
 	f.Logs.SetDuration(largestFlakeDuration)
 }
@@ -191,24 +197,24 @@ func (f *Fleet) ResetState() {
 	f.CacheFlattenedLogs = nil
 	f.CacheStatisticsPerPhase = nil
 
-	for _, flakeP := range f.Flakes.Pairs() {
-		flakeV := flakeP.Value
-
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		flakeV.Logs.Clear()
 
-		for _, configurationP := range flakeV.Configurations.Pairs() {
-			configurationV := configurationP.Value
-
+		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
 			configurationV.Logs.Clear()
 
-			for _, machineP := range configurationV.Machines.Pairs() {
-				machineV := machineP.Value
-
+			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
 				machineV.Logs.Clear()
 				machineV.MetaInspect.Clear()
-			}
-		}
-	}
+
+				return true
+			})
+
+			return true
+		})
+
+		return true
+	})
 }
 
 // Helpers
@@ -223,17 +229,19 @@ func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	return func(yield func(int, *FleetLeaf) bool) {
 		idx := 0
 
-		for _, flake := range f.Flakes.Pairs() {
-			for _, configuration := range flake.Value.Configurations.Pairs() {
-				for _, machine := range configuration.Value.Machines.Pairs() {
-					if !yield(idx, &FleetLeaf{flake.Value, configuration.Value, machine.Value}) {
-						return
+		f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
+			return flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
+				return configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+					if !yield(idx, &FleetLeaf{flakeV, configurationV, machineV}) {
+						return false
 					}
 
 					idx++
-				}
-			}
-		}
+
+					return true
+				})
+			})
+		})
 	}
 }
 
@@ -263,7 +271,10 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.Stat
 }
 
 func (f *Fleet) RefreshCaches() {
-	machineInfos := make([]MachineInfo, 0, f.MachineCount())
+	// Reuse previous slice capacity to avoid re-allocation.
+	if cap(f.CacheMachineInfos) > 0 {
+		f.CacheMachineInfos = f.CacheMachineInfos[:0]
+	}
 
 	for _, treeLeaf := range f.AllMachines() {
 		m := treeLeaf.Machine
@@ -274,8 +285,6 @@ func (f *Fleet) RefreshCaches() {
 			State:       *m.State.Load(),
 		}
 
-		machineInfos = append(machineInfos, mInfo)
+		f.CacheMachineInfos = append(f.CacheMachineInfos, mInfo)
 	}
-
-	f.CacheMachineInfos = machineInfos
 }

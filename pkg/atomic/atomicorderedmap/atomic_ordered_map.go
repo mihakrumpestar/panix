@@ -33,6 +33,16 @@ func New[K comparable, V any]() *AtomicOrderedMap[K, V] {
 	}
 }
 
+// NewWithCap creates a new AtomicOrderedMap with pre-allocated capacity.
+// Use when the approximate size is known to avoid incremental map growth.
+func NewWithCap[K comparable, V any](n int) *AtomicOrderedMap[K, V] {
+	return &AtomicOrderedMap[K, V]{
+		keys:   make([]K, 0, n),
+		index:  make(map[K]int, n),
+		values: make(map[K]V, n),
+	}
+}
+
 func (m *AtomicOrderedMap[K, V]) Set(key K, value V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -137,6 +147,28 @@ func (m *AtomicOrderedMap[K, V]) Pairs() []Pair[K, V] {
 	}
 
 	return result
+}
+
+// ForEach iterates all key-value pairs in insertion order, calling fn for
+// each. If fn returns false, iteration stops. Returns true if all pairs
+// were visited (fn never returned false). Zero allocation — prefer this
+// over Pairs() when you only need iteration.
+// Nil-safe: returns true if the AtomicOrderedMap is nil.
+func (m *AtomicOrderedMap[K, V]) ForEach(yield func(K, V) bool) bool {
+	if m == nil {
+		return true
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, k := range m.keys {
+		if !yield(k, m.values[k]) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // Records returns a map of all key-value pairs.

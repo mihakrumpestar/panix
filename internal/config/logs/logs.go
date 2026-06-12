@@ -146,14 +146,16 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 			continue
 		}
 
-		for _, pair := range pl.Pairs() {
-			ok := gathered.Exists(pair.Key)
+		pl.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
+			ok := gathered.Exists(phaseKey)
 			if ok {
 				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
 			}
 
-			gathered.Set(pair.Key, pair.Value)
-		}
+			gathered.Set(phaseKey, phaseValue)
+
+			return true
+		})
 	}
 
 	// Add phases in order (stopping after the first errored or still-running phase).

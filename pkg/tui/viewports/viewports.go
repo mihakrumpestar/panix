@@ -226,21 +226,23 @@ func (v *Viewports) Debug(buf *buffer.LinesBuf) {
 	buf.EmptyLine()
 	buf.WriteString(fmt.Sprintf("Viewports: %d (%dx%d) ContentWidth=%d", v.items.Len(), v.dimensions.Width, v.dimensions.Height, v.ContentWidth()))
 
-	for _, pair := range v.items.Pairs() {
-		mdl := pair.Value.model
+	v.items.ForEach(func(xpathKey xpath.Xpath, itm *item) bool {
+		mdl := itm.model
 		buf.WriteLine(fmt.Appendf(nil, "  '%s': %dx%d l:%d sb:%v sr:%v main:%v overflows:%v",
-			pair.Key, mdl.Width(), mdl.Height(), mdl.TotalLineCount(),
+			xpathKey, mdl.Width(), mdl.Height(), mdl.TotalLineCount(),
 			mdl.HasScrollbar(), mdl.HasScrollbarReserve(), mdl.IsMain(),
 			mdl.TotalLineCount() > mdl.Height()))
 
-		if pair.Key == v.activeXpath {
+		if xpathKey == v.activeXpath {
 			buf.AppendToLine([]byte(" [A]"))
 		}
 
 		if mdl.ScrollPercent() == 1 {
 			buf.AppendToLine([]byte(" @btm"))
 		}
-	}
+
+		return true
+	})
 }
 
 func (v *Viewports) checkDirty() {
@@ -450,11 +452,13 @@ func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 
 	var candidates []xpath.Xpath
 
-	for _, pair := range v.items.Pairs() {
-		if pair.Value.zoneID.Equal(clickedID) {
-			candidates = append(candidates, pair.Key)
+	v.items.ForEach(func(k xpath.Xpath, itm *item) bool {
+		if itm.zoneID.Equal(clickedID) {
+			candidates = append(candidates, k)
 		}
-	}
+
+		return true
+	})
 
 	if len(candidates) == 0 {
 		return ""

@@ -118,7 +118,7 @@ func (tp *terminalProcessor) processNoNewlineSegment(seg []byte, segIdx int) {
 		return
 	}
 
-	if len(style.StripANSI(seg)) == 0 {
+	if !style.HasVisibleContent(seg) {
 		tp.resetCursorFlags()
 
 		return
@@ -214,7 +214,7 @@ func (tp *terminalProcessor) trimANSIOnlyTrailingLines() {
 			break
 		}
 
-		if len(style.StripANSI(last)) > 0 {
+		if style.HasVisibleContent(last) {
 			break
 		}
 

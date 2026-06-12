@@ -8,6 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
+	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
@@ -119,10 +120,9 @@ func (b *BuildLogs) Render(
 		b.widthOffset = uint64(b.contentWidth) << widthShift //nolint:gosec // G115: contentWidth is always positive
 	}
 
-	for _, fp := range b.conf.Fleet.Flakes.Pairs() {
-		flake := fp.Value
+	b.conf.Fleet.Flakes.ForEach(func(_ string, flake *flake.Flake) bool {
 		if flake == nil {
-			continue
+			return true
 		}
 
 		flakeVersion := b.entityVersion(flake.Logs)
@@ -130,10 +130,9 @@ func (b *BuildLogs) Render(
 			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Flake, flake.Name, flake.Logs)
 		})
 
-		for _, cp := range flake.Configurations.Pairs() {
-			cfg := cp.Value
+		flake.Configurations.ForEach(func(_ string, cfg *configuration.Configuration) bool {
 			if cfg == nil {
-				continue
+				return true
 			}
 
 			cfgVersion := b.entityVersion(cfg.Logs)
@@ -141,8 +140,12 @@ func (b *BuildLogs) Render(
 				return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Configuration, cfg.Name, cfg.Logs)
 			})
 			b.buildConfigTree(cfgNode, cfg)
-		}
-	}
+
+			return true
+		})
+
+		return true
+	})
 
 	treeNode.WriteRenderTo(b.content)
 
@@ -200,13 +203,15 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Node, cfg *configuratio
 		return
 	}
 
-	for _, mp := range cfg.Machines.Pairs() {
-		if mp.Value == nil || mp.Value.Logs == nil {
-			continue
+	cfg.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
+		if machine == nil || machine.Logs == nil {
+			return true
 		}
 
-		b.addMachineWithPhases(cfgNode, mp.Value, phaseI)
-	}
+		b.addMachineWithPhases(cfgNode, machine, phaseI)
+
+		return true
+	})
 }
 
 func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
@@ -219,13 +224,15 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Conf
 			return
 		}
 
-		for _, mp := range cfg.Machines.Pairs() {
-			if mp.Value == nil || mp.Value.Logs == nil {
-				continue
+		cfg.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
+			if machine == nil || machine.Logs == nil {
+				return true
 			}
 
-			b.addMachineWithPhases(cfgNode, mp.Value, machinePhases...)
-		}
+			b.addMachineWithPhases(cfgNode, machine, machinePhases...)
+
+			return true
+		})
 
 		machinePhases = nil
 	}
@@ -266,18 +273,24 @@ func (b *BuildLogs) hasVisiblePhases(logNode *logs.Logs, allowed ...phase.Phase)
 
 	allowedSet := makeAllowedSet(allowed)
 
-	for _, pair := range logNode.PhaseLogs.Pairs() {
-		_, ok := allowedSet[pair.Key]
-		if !ok {
-			continue
-		}
+	hasVisible := false
 
-		if !b.shouldHidePhase(pair.Key, pair.Value) {
+	logNode.PhaseLogs.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
+		_, ok := allowedSet[phaseKey]
+		if !ok {
 			return true
 		}
-	}
 
-	return false
+		if !b.shouldHidePhase(phaseKey, phaseValue) {
+			hasVisible = true
+
+			return false
+		}
+
+		return true
+	})
+
+	return hasVisible
 }
 
 func (b *BuildLogs) phaseLogsAndXpath(pm phase.PhaseMetadata, cfg *configuration.Configuration, m *machine.Machine) (*logs.Logs, xpath.Xpath) {
@@ -337,19 +350,25 @@ func (b *BuildLogs) addPhasesSingle(
 	entityVersion uint64,
 	allowedPhase phase.Phase,
 ) bool {
-	for _, pair := range logNode.PhaseLogs.Pairs() {
-		if pair.Key != allowedPhase {
-			continue
-		}
+	stopped := false
 
-		phaseXpath := entityXpath.NewXpathWithAppend(pair.Key.String())
-
-		if b.addPhase(parent, phaseXpath, pair.Key, pair.Value, entityVersion) && stopAtError {
+	logNode.PhaseLogs.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
+		if phaseKey != allowedPhase {
 			return true
 		}
-	}
 
-	return false
+		phaseXpath := entityXpath.NewXpathWithAppend(phaseKey.String())
+
+		if b.addPhase(parent, phaseXpath, phaseKey, phaseValue, entityVersion) && stopAtError {
+			stopped = true
+
+			return false
+		}
+
+		return true
+	})
+
+	return stopped
 }
 
 func (b *BuildLogs) addPhasesMulti(

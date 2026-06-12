@@ -79,18 +79,19 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 		return p.content
 	}
 
-	pairs := spp.Pairs()
-	data := make([]flow.PhaseData, 0, len(pairs)+1)
+	data := make([]flow.PhaseData, 0, spp.Len()+1)
 
-	for _, pair := range pairs {
+	spp.ForEach(func(_ phase.Phase, value stats.StatsPack) bool {
 		phaseData := flow.PhaseData{}
-		if pair.Value != nil {
-			phaseData.Running = len(pair.Value[stats.Running])
-			phaseData.Failed = len(pair.Value[stats.Failed])
+		if value != nil {
+			phaseData.Running = len(value[stats.Running])
+			phaseData.Failed = len(value[stats.Failed])
 		}
 
 		data = append(data, phaseData)
-	}
+
+		return true
+	})
 
 	lastPair, _ := spp.Last()
 	doneData := flow.PhaseData{

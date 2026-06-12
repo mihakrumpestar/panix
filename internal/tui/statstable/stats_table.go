@@ -111,10 +111,10 @@ func (s *StatsTable) buildRows() [][][]byte {
 
 	var prevFlakeName, prevConfigurationName string
 
+	marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
+
 	for idx, machineInfo := range machineInfos {
 		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
-
-		marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
 
 		flakeDisplay := marker
 		if flakeName != prevFlakeName {
@@ -129,7 +129,7 @@ func (s *StatsTable) buildRows() [][][]byte {
 		}
 
 		rows[idx] = [][]byte{
-			[]byte(strconv.Itoa(idx + 1)),
+			strconv.AppendInt(nil, int64(idx+1), 10), //nolint:mnd // decimal base
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,
