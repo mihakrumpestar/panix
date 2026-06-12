@@ -5,104 +5,35 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/phase"
-	"github.com/mihakrumpestar/panix/pkg/jsonerror"
-	"github.com/pkg/errors"
-)
-
-// LogState represents the aggregate state of a set of phase logs.
-type LogState uint8
-
-const (
-	LogStateIdle     LogState = iota // no phase has started
-	LogStateRunning                  // at least one phase is in progress
-	LogStateFinished                 // all phases finished
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 )
 
 // Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
 type Logs struct {
-	PhaseLogs             *phaselogs.PhaseLogs `yaml:"-" json:"phase_logs"`
-	DurationAndErrorCache DurationAndError     `yaml:"-" json:"duration_and_error"`
-	version               uint64
-}
-
-type DurationAndError struct {
-	Duration time.Duration        `yaml:"-" json:"duration"`
-	Error    *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
-	State    LogState             `yaml:"-" json:"state"`
+	PhaseLogs *phaselogs.PhaseLogs             `yaml:"-" json:"phase_logs"`
+	TAS       *atomictimeandstate.TimeAndState `yaml:"-" json:"tas,omitempty"`
 }
 
 func New() *Logs {
 	return &Logs{
 		PhaseLogs: phaselogs.NewPhaseLogs(),
+		TAS:       &atomictimeandstate.TimeAndState{},
 	}
 }
 
-// Version returns the current version counter. Increments on state transitions.
+// Version returns the TAS state version counter. Increments on state transitions.
 func (l *Logs) Version() uint64 {
-	return l.version
+	return l.TAS.StateVersion()
 }
 
-// SetDurationAndError replaces the cached duration/error and bumps version on
-// state or error change. Duration-only changes are throttled by the spinner
-// generation and do not bump the version.
-func (l *Logs) SetDurationAndError(dae DurationAndError) {
-	if l.DurationAndErrorCache.State != dae.State || l.DurationAndErrorCache.Error != dae.Error {
-		l.version++
-	}
-
-	l.DurationAndErrorCache = dae
-}
-
-// SetDuration replaces the cached duration. No version bump — duration
-// display is throttled by the spinner generation.
+// SetDuration replaces the cached duration on TAS without bumping stateVersion.
 func (l *Logs) SetDuration(d time.Duration) {
-	l.DurationAndErrorCache.Duration = d
-}
-
-func (l *Logs) RecalculateDurationAndError() error {
-	old := l.DurationAndErrorCache
-	durationAndError := DurationAndError{}
-
-	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
-		tas := phaseLogPair.Value.TimeAndState
-
-		duration, err := tas.DurationOrElapsedTime()
-		if err != nil {
-			return errors.Wrap(err, "failed to get duration or elapsed time")
-		}
-
-		durationAndError.Duration += duration
-
-		tasLoaded := tas.Load()
-
-		endError := tasLoaded.EndError
-		if endError != nil {
-			durationAndError.Error = endError
-
-			break
-		}
-
-		if !tasLoaded.IsFinished() {
-			break
-		}
-	}
-
-	// Derive aggregate state from phase logs.
-	durationAndError.State = l.computeState()
-
-	l.DurationAndErrorCache = durationAndError
-
-	if durationAndError.State != old.State || durationAndError.Error != old.Error {
-		l.version++
-	}
-
-	return nil
+	l.TAS.SetDuration(d)
 }
 
 func (l *Logs) Clear() {
 	l.PhaseLogs.Clear()
-	l.DurationAndErrorCache = DurationAndError{}
-	l.version++
+	l.TAS = &atomictimeandstate.TimeAndState{}
 }
 
 func (l *Logs) PostUnmarshalInit() {
@@ -113,50 +44,22 @@ func (l *Logs) PostUnmarshalInit() {
 	if l.PhaseLogs == nil {
 		l.PhaseLogs = phaselogs.NewPhaseLogs()
 	}
-}
 
-// computeState returns the aggregate state of all phase logs.
-func (l *Logs) computeState() LogState {
-	state := LogStateIdle
-
-	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
-		tasLoaded := phaseLogPair.Value.TimeAndState.Load()
-
-		if tasLoaded.IsFinished() {
-			state = LogStateFinished
-		} else if tasLoaded.HasStarted() {
-			return LogStateRunning
-		}
+	if l.TAS == nil {
+		l.TAS = &atomictimeandstate.TimeAndState{}
 	}
-
-	return state
 }
 
-// Helpers
-
-// MergePhaseLogs merges multiple PhaseLogs.
+// MergePhaseLogs merges multiple PhaseLogs into a fresh Logs object.
+// The returned Logs.TAS has StartTime/EndTime set as state markers
+// (for HasStarted/IsFinished) but stateVersion is not bumped — the
+// caller is responsible for syncing into a persisted TAS via SyncFrom.
 func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) *Logs {
 	logs := New()
 
-	gathered := phaselogs.NewPhaseLogs()
+	gathered := gatherPhaseLogs(input)
 
-	// Gather all together
-	for _, pl := range input {
-		if pl == nil {
-			continue
-		}
-
-		pl.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
-			ok := gathered.Exists(phaseKey)
-			if ok {
-				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
-			}
-
-			gathered.Set(phaseKey, phaseValue)
-
-			return true
-		})
-	}
+	anyStarted := false
 
 	// Add phases in order (stopping after the first errored or still-running phase).
 	// Phases from higher scopes (e.g. configuration-level "build") may already be
@@ -175,28 +78,69 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		phaseDOET, _ := tas.DurationOrElapsedTime()
 		tasLoaded := tas.Load()
 
-		// Sum up all valid durations and set last error
-		logs.DurationAndErrorCache = DurationAndError{
-			Duration: logs.DurationAndErrorCache.Duration + phaseDOET,
-			Error:    tasLoaded.EndError,
+		logs.TAS.DurationCache += phaseDOET
+		logs.TAS.EndError = tasLoaded.EndError
+
+		if tasLoaded.HasStarted() {
+			anyStarted = true
 		}
 
 		if tasLoaded.EndError != nil {
-			logs.DurationAndErrorCache.State = LogStateFinished
-
 			break
 		}
 
 		if !tasLoaded.IsFinished() {
-			if tasLoaded.HasStarted() {
-				logs.DurationAndErrorCache.State = LogStateRunning
-			}
-
 			break
 		}
+	}
 
-		logs.DurationAndErrorCache.State = LogStateFinished
+	// Set state markers on TAS so HasStarted/IsFinished return correct values.
+	// These are approximate timestamps — the real times live on per-phase TAS.
+	if anyStarted {
+		logs.TAS.StartTime = time.Now()
+
+		if logs.isMergeFinished() {
+			logs.TAS.EndTime = time.Now()
+		}
 	}
 
 	return logs
+}
+
+// isMergeFinished returns true if the merged result should be considered finished:
+// either there was an error, or all phases completed.
+func (l *Logs) isMergeFinished() bool {
+	return l.TAS.EndError != nil || l.allPhasesFinished()
+}
+
+// gatherPhaseLogs collects all phase logs from input into a single ordered map.
+func gatherPhaseLogs(input []*phaselogs.PhaseLogs) *phaselogs.PhaseLogs {
+	gathered := phaselogs.NewPhaseLogs()
+
+	for _, pl := range input {
+		if pl == nil {
+			continue
+		}
+
+		pl.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
+			if gathered.Exists(phaseKey) {
+				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
+			}
+
+			gathered.Set(phaseKey, phaseValue)
+
+			return true
+		})
+	}
+
+	return gathered
+}
+
+// allPhasesFinished returns true if every phase in PhaseLogs is finished.
+// Uses ForEach (zero-allocation) instead of Pairs() since this is called
+// every frame per machine in MergePhaseLogs → isMergeFinished.
+func (l *Logs) allPhasesFinished() bool {
+	return l.PhaseLogs.ForEach(func(_ phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
+		return phaseLog.TimeAndState.Load().IsFinished()
+	})
 }

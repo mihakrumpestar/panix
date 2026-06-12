@@ -602,7 +602,7 @@ func (b *BuildLogs) addCommandChildren(
 func (b *BuildLogs) entityNodeContent(indent int, entity colorscheme.ColorSchemeLogEntity, name string, logNode *logs.Logs) *buffer.LinesBuf {
 	dur := 0.0
 	if logNode != nil {
-		dur = logNode.DurationAndErrorCache.Duration.Seconds()
+		dur = logNode.TAS.DurationCache.Seconds()
 	}
 
 	b.iconBuf.Reset()
@@ -620,12 +620,17 @@ func (b *BuildLogs) entityNodeContent(indent int, entity colorscheme.ColorScheme
 }
 
 func (b *BuildLogs) entityVersion(logNode *logs.Logs) uint64 {
-	v := b.widthOffset + b.spinners.Generation()
+	version := b.widthOffset
+
 	if logNode != nil {
-		v += logNode.Version()
+		version += logNode.Version()
+
+		if !logNode.TAS.IsFinished() {
+			version += b.spinners.Generation()
+		}
 	}
 
-	return v
+	return version
 }
 
 // layoutLineStyled renders styled left + pad + styled right into a node buffer.

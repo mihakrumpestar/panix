@@ -15,6 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
@@ -32,6 +33,10 @@ type Fleet struct {
 	CacheMachineInfos       []MachineInfo             `yaml:"-" json:"-"`
 	CacheFlattenedLogs      []*logs.Logs              `yaml:"-" json:"-"`
 	CacheStatisticsPerPhase *stats.StatisticsPerPhase `yaml:"-" json:"-"`
+
+	// cachedTAS persists TimeAndState across frames so that stateVersion
+	// accumulates correctly. Cleared on ResetState (workflow restart).
+	cachedTAS []*atomictimeandstate.TimeAndState
 }
 
 type MachineInfo struct {
@@ -73,19 +78,45 @@ func (f *Fleet) RecalculateCachesOnly(workflowPhases []phase.Phase) {
 }
 
 func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
-	flattenedLogs := make([]*logs.Logs, 0)
+	machineCount := f.MachineCount()
 
-	for _, treeLeaf := range f.AllMachines() {
+	// Grow slices if needed, reuse existing capacity.
+	if cap(f.CacheFlattenedLogs) >= machineCount {
+		f.CacheFlattenedLogs = f.CacheFlattenedLogs[:machineCount]
+	} else {
+		f.CacheFlattenedLogs = make([]*logs.Logs, machineCount)
+	}
+
+	if cap(f.cachedTAS) >= machineCount {
+		f.cachedTAS = f.cachedTAS[:machineCount]
+	} else {
+		newSlice := make([]*atomictimeandstate.TimeAndState, machineCount)
+		copy(newSlice, f.cachedTAS)
+		f.cachedTAS = newSlice
+	}
+
+	for machineIdx, treeLeaf := range f.AllMachines() {
+		if f.CacheFlattenedLogs[machineIdx] == nil {
+			f.CacheFlattenedLogs[machineIdx] = logs.New()
+		}
+
+		if f.cachedTAS[machineIdx] == nil {
+			f.cachedTAS[machineIdx] = &atomictimeandstate.TimeAndState{}
+		}
+
 		mergedLogs := logs.MergePhaseLogs(workflowPhases,
 			treeLeaf.Machine.Logs.PhaseLogs,
 			treeLeaf.Configuration.Logs.PhaseLogs,
 			treeLeaf.Flake.Logs.PhaseLogs,
 		)
 
-		flattenedLogs = append(flattenedLogs, mergedLogs)
-	}
+		// Sync aggregated state into persisted TAS — bumps stateVersion on transitions.
+		f.cachedTAS[machineIdx].SyncFrom(mergedLogs.TAS)
 
-	f.CacheFlattenedLogs = flattenedLogs
+		// Assign persisted TAS and PhaseLogs to the cached Logs entry.
+		f.CacheFlattenedLogs[machineIdx].PhaseLogs = mergedLogs.PhaseLogs
+		f.CacheFlattenedLogs[machineIdx].TAS = f.cachedTAS[machineIdx]
+	}
 }
 
 func (f *Fleet) RecalculateDurationAndError() {
@@ -96,15 +127,23 @@ func (f *Fleet) RecalculateDurationAndError() {
 	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		var largestConfigurationDuration time.Duration
 
+		flakeAnyRunning := false
+
 		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
 			var largestMachineDuration time.Duration
 
-			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
-				dae := f.CacheFlattenedLogs[idx].DurationAndErrorCache
-				machineV.Logs.SetDurationAndError(dae)
+			cfgAnyRunning := false
 
-				if dae.Duration > largestMachineDuration {
-					largestMachineDuration = dae.Duration
+			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+				machineV.Logs.TAS.SyncFrom(f.CacheFlattenedLogs[idx].TAS)
+
+				machineDur := machineV.Logs.TAS.DurationCache
+				if machineDur > largestMachineDuration {
+					largestMachineDuration = machineDur
+				}
+
+				if !machineV.Logs.TAS.IsFinished() {
+					cfgAnyRunning = true
 				}
 
 				idx++
@@ -112,16 +151,20 @@ func (f *Fleet) RecalculateDurationAndError() {
 				return true
 			})
 
-			configurationV.Logs.SetDuration(largestMachineDuration)
+			propagateDurationAndState(configurationV.Logs, largestMachineDuration, cfgAnyRunning)
 
 			if largestMachineDuration > largestConfigurationDuration {
 				largestConfigurationDuration = largestMachineDuration
 			}
 
+			if !configurationV.Logs.TAS.IsFinished() {
+				flakeAnyRunning = true
+			}
+
 			return true
 		})
 
-		flakeV.Logs.SetDuration(largestConfigurationDuration)
+		propagateDurationAndState(flakeV.Logs, largestConfigurationDuration, flakeAnyRunning)
 
 		if largestConfigurationDuration > largestFlakeDuration {
 			largestFlakeDuration = largestConfigurationDuration
@@ -130,7 +173,21 @@ func (f *Fleet) RecalculateDurationAndError() {
 		return true
 	})
 
-	f.Logs.SetDuration(largestFlakeDuration)
+	f.Logs.TAS.SetDuration(largestFlakeDuration)
+}
+
+// propagateDurationAndState sets duration on the TAS and transitions state
+// based on whether any child entity is still running.
+func propagateDurationAndState(target *logs.Logs, duration time.Duration, anyRunning bool) {
+	target.TAS.SetDuration(duration)
+
+	if anyRunning {
+		if !target.TAS.HasStarted() {
+			target.TAS.SetStarted(time.Now())
+		}
+	} else if !target.TAS.IsFinished() {
+		target.TAS.MarkFinished()
+	}
 }
 
 func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
@@ -196,6 +253,11 @@ func (f *Fleet) ResetState() {
 	f.CacheMachineInfos = nil
 	f.CacheFlattenedLogs = nil
 	f.CacheStatisticsPerPhase = nil
+
+	// Clear persisted TAS so stateVersion resets for the new workflow.
+	for i := range f.cachedTAS {
+		f.cachedTAS[i] = nil
+	}
 
 	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		flakeV.Logs.Clear()
