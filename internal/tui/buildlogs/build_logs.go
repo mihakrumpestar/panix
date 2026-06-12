@@ -496,7 +496,6 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		labelWidth := depthWidth + iconWidth + durWidth
 
 		labelResult := b.viewports.RenderLabelViewport(labelXpath, labelBuf, labelVersion, labelWidth)
-		labelBuf.Release()
 
 		if cmd.Output.Len() > 0 {
 			for range labelResult.Len() - 1 {
@@ -564,7 +563,6 @@ func (b *BuildLogs) addCommandChildren(
 			errBuf := buffer.NewLinesBuf()
 			errBuf.WriteLine(errMsgCopy)
 			errResult := b.viewports.RenderLabelViewport(errXpath, errBuf, 0, depthWidth)
-			errBuf.Release()
 
 			errMsg.Release()
 

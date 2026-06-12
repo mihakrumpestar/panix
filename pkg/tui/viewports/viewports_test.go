@@ -283,6 +283,30 @@ func TestFullscreenLabel_EnablesBorder(t *testing.T) {
 		"fullscreen label MUST have border (sides)")
 }
 
+func TestFullscreenLabel_UsesGetViewportContent(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	border := style.NewStyle().Foreground(style.Color("1"))
+	viewports := New(dims, 10, border, style.Style{}, style.Style{})
+
+	xpath_ := xpath.New("test", "label")
+
+	viewports.RenderLabelViewport(xpath_, splitLines("label content"), 0, 0)
+
+	content := viewports.GetViewportContent(xpath_)
+	require.NotNil(t, content, "GetViewportContent should return content")
+	assert.Equal(t, "label content", string(content.Line(0)))
+
+	result := viewports.RenderFullscreenViewport(xpath_, content, 0, 5)
+	fullscreenOutput := buffer.LinesBufToStringForTests(result)
+
+	assert.Contains(t, fullscreenOutput, "label content",
+		"fullscreen should contain label text when using GetViewportContent with same version")
+	assert.Contains(t, fullscreenOutput, "╭",
+		"fullscreen label MUST have border")
+}
+
 func TestRenderFullscreenViewport_FullWidth(t *testing.T) {
 	t.Parallel()
 
@@ -325,8 +349,8 @@ func TestVersionTracking(t *testing.T) {
 	viewports.RenderViewportVersioned(xpath_, splitLines("content v1 updated"), 1, 0)
 
 	content = viewports.GetViewportContent(xpath_)
-	assert.Equal(t, "content v1", string(content.Line(0)),
-		"content should not change with same version: %q", string(content.Line(0)))
+	assert.Equal(t, "content v1 updated", string(content.Line(0)),
+		"GetViewportContent always returns the latest buffer")
 
 	viewports.RenderViewportVersioned(xpath_, splitLines("content v2"), 2, 0)
 

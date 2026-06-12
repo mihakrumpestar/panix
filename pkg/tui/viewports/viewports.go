@@ -271,7 +271,7 @@ func (v *Viewports) render(
 	active := xpath == v.activeXpath
 	itm := v.getOrCreateItem(xpath, indent, explicitHeight, bordered, scrollbar)
 
-	contentChanged := itm.contentVersion != version
+	contentChanged := itm.contentVersion != version || itm.contentBuf != contentBuf
 	v.resolveContent(itm, version, contentBuf)
 
 	if bordered {
@@ -285,7 +285,7 @@ func (v *Viewports) render(
 		itm.lastWidth = width
 		itm.lastHeight = explicitHeight
 
-		err := itm.model.SyncBuf(contentBuf, width, explicitHeight)
+		err := itm.model.SyncBuf(itm.contentBuf, width, explicitHeight)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "viewport: %v\n", err)
 		}
@@ -323,10 +323,6 @@ func (v *Viewports) viewWidth(indent, explicitWidth int) int {
 }
 
 func (v *Viewports) resolveContent(itm *item, version uint64, contentBuf *buffer.LinesBuf) {
-	if itm.contentVersion == version {
-		return
-	}
-
 	if itm.contentBuf != nil && itm.contentBuf != contentBuf {
 		itm.contentBuf.Release()
 	}
@@ -346,8 +342,27 @@ func (v *Viewports) getOrCreateItem(
 		hasScrollbar := itm.model.HasScrollbar()
 
 		if hasBorder != bordered || hasScrollbar != scrollbar {
+			savedContent := itm.contentBuf
+			savedVersion := itm.contentVersion
+			itm.contentBuf = nil
 			itm.release()
 			v.items.Del(xpath)
+
+			itm = &item{
+				model:          tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, 0, bordered, scrollbar)...),
+				contentBuf:     savedContent,
+				contentVersion: savedVersion,
+				zoneID:         zeroterm.NewZoneID(),
+				zonedOutput:    buffer.NewLinesBuf(),
+			}
+
+			if xpath != v.mainXpath {
+				itm.model.GotoBottom()
+			}
+
+			v.items.Set(xpath, itm)
+
+			return itm
 		} else {
 			return itm
 		}
