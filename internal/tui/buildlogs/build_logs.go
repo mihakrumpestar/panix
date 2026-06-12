@@ -557,8 +557,11 @@ func (b *BuildLogs) addCommandChildren(
 	outputXpath := cmd.OutputXpath
 
 	if output.Len() > 0 {
-		cmdNode.Child(outputXpath, output.Version(), func(depthWidth int) *buffer.LinesBuf {
-			outResult := b.viewports.RenderViewportVersioned(outputXpath, output.LinesBuf, output.Version(), depthWidth)
+		ver := output.Version()
+		cmdNode.Child(outputXpath, ver, func(depthWidth int) *buffer.LinesBuf {
+			snap := output.Snapshot()
+			outResult := b.viewports.RenderViewportVersioned(outputXpath, snap, ver, depthWidth)
+
 			outBuf := buffer.NewLinesBuf()
 			outBuf.AppendFrom(outResult)
 
