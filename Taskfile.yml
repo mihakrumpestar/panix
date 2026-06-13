@@ -57,14 +57,14 @@ tasks:
           exit 1
         fi
         echo "0 issues"
-      #- govulncheck ./... # Disabled until we can upgrade go to 1.26.3
+      #- govulncheck ./... # Disabled until we can upgrade go to 1.26.4
 
   go:test:
     desc: Run tests with coverage check and summary
     cmds:
       - mkdir -p {{.TEST_DIR}}
       - set -o pipefail && CGO_ENABLED=1 go test -race -shuffle=on ./...
-        -coverprofile={{.COVER_PROFILE}} -covermode=atomic -coverpkg=./... -json
+        -coverprofile={{.COVER_PROFILE}} -covermode=atomic -coverpkg=./internal/...,./pkg/... -json
         | tee {{.TEST_DIR}}/test.json | tparse -trimpath
         "github.com/mihakrumpestar/panix"
       - go run github.com/vladopajic/go-test-coverage/v2@latest
@@ -99,15 +99,22 @@ tasks:
       - nix build .#default --extra-experimental-features "nix-command flakes"
       - ls -sh result/bin/panix
 
+  nix:vendor:
+    desc: Update vendor hash
+    cmds:
+      - nix-update --flake --version=skip default
+
+  # General
+
   update:
     desc: Update all deps
     cmds:
       - devbox update
       - go get -u all
       - go mod tidy
-      - go work sync
       #- go mod vendor
       - nix flake update
+      - task: nix:vendor
 
   ci:
     desc: Run all CI checks
@@ -203,6 +210,8 @@ tasks:
         fi
         gh release create "v$NEW_VERSION" --notes-file "$NOTES_TMP"
         rm -f "$NOTES_TMP"
+
+  # Docs
 
   # Note: to update astro, run: npx @astrojs/upgrade
   docs:dev:

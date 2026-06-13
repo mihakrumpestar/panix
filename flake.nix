@@ -35,9 +35,8 @@
             ];
 
             env.CGO_ENABLED = 0; # Disable CGO
-            env.GOWORK = "off";
 
-            vendorHash = "sha256-kRk5A2hvDHDwqk4FEE/cadbtrpsV43j1qJQot2dioJ8=";
+            vendorHash = "sha256-Ltftb6r6w/F1eXu3KZd0rMHwdKl5wzMPlLd0bg72Pds=";
 
             meta = with pkgs.lib; {
               description = "Universal NixOS Deployment Tool";
