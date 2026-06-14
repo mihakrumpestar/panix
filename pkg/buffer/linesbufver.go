@@ -233,7 +233,7 @@ func (b *LinesBufVer) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unmarshal lines: %w", err)
 	}
 
-	b.Reset()
+	b.inner = NewLinesBuf()
 
 	for _, line := range lines {
 		b.Write([]byte(line))

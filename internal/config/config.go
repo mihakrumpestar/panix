@@ -51,6 +51,7 @@ func (c *Config) PostUnmarshalInit() {
 	}
 
 	if c.Fleet != nil {
+		c.Fleet.PostUnmarshalInit()
 		c.Fleet.RecalculateCachesOnly(c.Phases)
 	}
 }

@@ -37,13 +37,24 @@ func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusI
 		Output:       buffer.NewLinesBufVer(),
 		TimeAndState: atomictimeandstate.New(),
 
-		Xpath:       cmdXpath,
-		LabelXpath:  cmdXpath.NewXpathWithAppend("label"),
-		OutputXpath: cmdXpath.NewXpathWithAppend("output"),
-		ErrorXpath:  cmdXpath.NewXpathWithAppend("error"),
+		Xpath: cmdXpath,
 	}
 
+	commandLog.initDerivedXpaths()
+
 	return commandLog
+}
+
+// PostUnmarshalInit recomputes derived xpaths that are not serialized (json:"-").
+// Must be called after JSON deserialization.
+func (cl *CommandLog) PostUnmarshalInit() {
+	cl.initDerivedXpaths()
+}
+
+func (cl *CommandLog) initDerivedXpaths() {
+	cl.LabelXpath = cl.Xpath.NewXpathWithAppend("label")
+	cl.OutputXpath = cl.Xpath.NewXpathWithAppend("output")
+	cl.ErrorXpath = cl.Xpath.NewXpathWithAppend("error")
 }
 
 // joinCommand joins env vars and command args into a shell-like LineBuf.

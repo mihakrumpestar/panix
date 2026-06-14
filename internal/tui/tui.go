@@ -129,7 +129,7 @@ func (m *model) Init() []zeroterm.Cmd {
 func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	var cmd []zeroterm.Cmd
 
-	if m.workflow != nil {
+	if m.workflow != nil || m.isSnapshot {
 		cmd = append(cmd, m.viewports.Update(msg))
 
 		if m.viewports.ConsumeDirty() {
@@ -178,7 +178,11 @@ func (m *model) Update(msg zeroterm.Msg) zeroterm.Cmd {
 }
 
 func (m *model) Render(buf *buffer.LinesBufDiff, renderCounter uint64) {
-	if m.workflow == nil || m.dimensions.Height == 0 || m.dimensions.Width == 0 {
+	if !m.isSnapshot && m.workflow == nil {
+		return
+	}
+
+	if m.dimensions.Height == 0 || m.dimensions.Width == 0 {
 		return
 	}
 
@@ -206,7 +210,7 @@ func (m *model) Render(buf *buffer.LinesBufDiff, renderCounter uint64) {
 // When finalRender is true, the viewport is rendered unconstrained (full height)
 // so the terminal retains the complete history after quit.
 func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint64, headerFooterHeight int, finalRender bool) {
-	if m.workflow == nil {
+	if !m.isSnapshot && m.workflow == nil {
 		return
 	}
 
@@ -220,8 +224,20 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 		m.buildLogs = buildlogs.New(m.conf, m.statsTable, m.phaseFlow)
 	}
 
-	contentWidth := m.viewports.ContentWidth()
+	content := m.renderMainContent()
 
+	var viewportHeight int
+	if !finalRender {
+		viewportHeight = m.dimensions.Height - headerFooterHeight
+	}
+
+	buf.AppendFrom(m.viewports.RenderMainViewport(content, renderCounter, viewportHeight))
+}
+
+// renderMainContent builds the stats table, phase flow, build logs, error,
+// and debug sections into a single buffer.
+func (m *model) renderMainContent() *buffer.LinesBuf {
+	contentWidth := m.viewports.ContentWidth()
 	content := buffer.NewLinesBuf()
 
 	if !m.conf.Flags.DryRun {
@@ -235,40 +251,43 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 	content.AppendFrom(m.buildLogs.Render(m.cachedTree, m.viewports, m.spinners))
 
 	if m.err != nil {
-		errContent := buffer.NewLinesBuf()
-		errContent.EmptyLine()
-		errContent.WriteLine([]byte("=== Error ==="))
-		errContent.EmptyLine()
-		errContent.WriteLine([]byte(m.err.Error()))
-
-		m.conf.ColorScheme.Error.Color.RenderIntoBuf(content, errContent)
-		errContent.Release()
+		m.renderError(content)
 	}
 
 	if m.conf.Flags.Logging.Debug {
-		content.EmptyLine()
-		content.WriteLine([]byte("=== Debug ==="))
-		content.EmptyLine()
-		content.WriteLine(fmt.Appendf(nil, "terminal - h: %d, w: %d", m.dimensions.Height, m.dimensions.Width))
-		content.WriteLine(fmt.Appendf(nil, "header - h: %d", m.header.Len()))
-		content.WriteLine(fmt.Appendf(nil, "footer - h: %d", m.footer.Len()))
-		content.EmptyLine()
-
-		m.spinners.Debug(content)
-		m.viewports.Debug(content)
+		m.renderDebug(content)
 	}
 
-	var viewportHeight int
-	if !finalRender {
-		viewportHeight = m.dimensions.Height - headerFooterHeight
-	}
+	return content
+}
 
-	buf.AppendFrom(m.viewports.RenderMainViewport(content, renderCounter, viewportHeight))
+func (m *model) renderError(content *buffer.LinesBuf) {
+	errContent := buffer.NewLinesBuf()
+	errContent.EmptyLine()
+	errContent.WriteLine([]byte("=== Error ==="))
+	errContent.EmptyLine()
+	errContent.WriteLine([]byte(m.err.Error()))
+
+	m.conf.ColorScheme.Error.Color.RenderIntoBuf(content, errContent)
+	errContent.Release()
+}
+
+func (m *model) renderDebug(content *buffer.LinesBuf) {
+	content.EmptyLine()
+	content.WriteLine([]byte("=== Debug ==="))
+	content.EmptyLine()
+	content.WriteLine(fmt.Appendf(nil, "terminal - h: %d, w: %d", m.dimensions.Height, m.dimensions.Width))
+	content.WriteLine(fmt.Appendf(nil, "header - h: %d", m.header.Len()))
+	content.WriteLine(fmt.Appendf(nil, "footer - h: %d", m.footer.Len()))
+	content.EmptyLine()
+
+	m.spinners.Debug(content)
+	m.viewports.Debug(content)
 }
 
 // renderFullscreenViewportInto renders the fullscreen viewport into buf.
 func (m *model) renderFullscreenViewportInto(buf *buffer.LinesBufDiff, renderCounter uint64, footerHeaderHeight int) {
-	if m.workflow == nil {
+	if !m.isSnapshot && m.workflow == nil {
 		return
 	}
 

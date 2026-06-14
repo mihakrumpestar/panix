@@ -61,6 +61,66 @@ func (f *Fleet) Init() error {
 	return nil
 }
 
+// PostUnmarshalInit recomputes derived state that is not serialized (json:"-").
+// Must be called after JSON deserialization (e.g. snapshot loading).
+func (f *Fleet) PostUnmarshalInit() {
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
+		if flakeV == nil {
+			return true
+		}
+
+		if flakeV.Logs != nil {
+			flakeV.Logs.PostUnmarshalInit()
+		}
+
+		flakeV.Configurations.ForEach(func(_ string, cfg *configuration.Configuration) bool {
+			if cfg == nil {
+				return true
+			}
+
+			if cfg.Logs != nil {
+				cfg.Logs.PostUnmarshalInit()
+			}
+
+			cfg.Machines.ForEach(func(_ string, mach *machine.Machine) bool {
+				postUnmarshalMachine(mach)
+
+				return true
+			})
+
+			return true
+		})
+
+		return true
+	})
+}
+
+func postUnmarshalMachine(mach *machine.Machine) {
+	if mach == nil {
+		return
+	}
+
+	mach.PostUnmarshalInit(mach.Name, nil)
+
+	if mach.Logs == nil {
+		return
+	}
+
+	mach.Logs.PhaseLogs.ForEach(func(_ phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
+		if phaseLog == nil || phaseLog.CommandLogs == nil {
+			return true
+		}
+
+		for _, cmd := range phaseLog.CommandLogs.Values() {
+			if cmd != nil {
+				cmd.PostUnmarshalInit()
+			}
+		}
+
+		return true
+	})
+}
+
 func (f *Fleet) Recalculate(workflowPhases []phase.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 	f.RecalculateDurationAndError()
