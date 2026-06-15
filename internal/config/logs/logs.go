@@ -60,6 +60,7 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 	gathered := gatherPhaseLogs(input)
 
 	anyStarted := false
+	acc := newIntervalAccumulator()
 
 	// Add phases in order (stopping after the first errored or still-running phase).
 	// Phases from higher scopes (e.g. configuration-level "build") may already be
@@ -75,14 +76,16 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		logs.PhaseLogs.Set(phase, phaseLog)
 
 		tas := phaseLog.TimeAndState
-		phaseDOET, _ := tas.DurationOrElapsedTime()
+		// Call DurationOrElapsedTime so running phases get their DurationCache updated.
+		_, _ = tas.DurationOrElapsedTime()
 		tasLoaded := tas.Load()
 
-		logs.TAS.DurationCache += phaseDOET
 		logs.TAS.EndError = tasLoaded.EndError
 
 		if tasLoaded.HasStarted() {
 			anyStarted = true
+
+			acc.add(tasLoaded.StartTime, tasLoaded.EndTime)
 		}
 
 		if tasLoaded.EndError != nil {
@@ -93,6 +96,8 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 			break
 		}
 	}
+
+	logs.TAS.DurationCache = acc.total()
 
 	// Set state markers on TAS so HasStarted/IsFinished return correct values.
 	// These are approximate timestamps — the real times live on per-phase TAS.
@@ -143,4 +148,54 @@ func (l *Logs) allPhasesFinished() bool {
 	return l.PhaseLogs.ForEach(func(_ phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
 		return phaseLog.TimeAndState.Load().IsFinished()
 	})
+}
+
+// intervalAccumulator merges overlapping time intervals on the fly, producing
+// the union duration. Phases must be added in chronological order.
+//
+// Phases from different scopes can run concurrently (e.g. configuration-level
+// "build" runs via OnceAsync while a machine-level "bootstrap" is still in
+// progress on another goroutine). Simply summing each phase's duration would
+// double-count the overlapping time window. The accumulator merges overlapping
+// intervals, counting each moment exactly once. This also correctly excludes
+// gaps between retry attempts, since a retried phase's StartTime is reset.
+type intervalAccumulator struct {
+	duration time.Duration
+	curStart time.Time
+	curEnd   time.Time
+}
+
+func newIntervalAccumulator() *intervalAccumulator {
+	return &intervalAccumulator{}
+}
+
+func (a *intervalAccumulator) add(start, end time.Time) {
+	if end.IsZero() {
+		end = time.Now()
+	}
+
+	switch {
+	case a.curStart.IsZero():
+		// First interval.
+		a.curStart = start
+		a.curEnd = end
+	case start.Before(a.curEnd):
+		// Overlapping — extend current interval.
+		if end.After(a.curEnd) {
+			a.curEnd = end
+		}
+	default:
+		// Non-overlapping — finalize current interval and start a new one.
+		a.duration += a.curEnd.Sub(a.curStart)
+		a.curStart = start
+		a.curEnd = end
+	}
+}
+
+func (a *intervalAccumulator) total() time.Duration {
+	if !a.curStart.IsZero() {
+		a.duration += a.curEnd.Sub(a.curStart)
+	}
+
+	return a.duration
 }
