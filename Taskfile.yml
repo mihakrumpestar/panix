@@ -1,5 +1,10 @@
 version: "3"
 
+includes:
+  bench:
+    taskfile: ./tests/e2e
+    flatten: true
+
 vars:
   DEBUG_DIR: ./debug
   PROFILE_DIR: ./profile
@@ -77,6 +82,31 @@ tasks:
       Flags: -benchtime=1s
     cmds:
       - go run ./tests/bench/ {{.CLI_ARGS}}
+
+  go:profile:report:
+    desc: |
+      Report from e2e CPU and memory profiles (top 50 functions, self time)
+      Usage: task go:profile:report [-- /path/to/profile/dir]
+    vars:
+      PROFILE_DIR: '{{.CLI_ARGS | default "./tests/e2e/profile"}}'
+      SORT: '{{.SORT | default ""}}'
+    cmds:
+      - echo "=== CPU Profile (top 50) ==="
+      - go tool pprof -text -nodecount=50 {{.SORT}} {{.PROFILE_DIR}}/cpu.prof
+      - echo "=== Memory Profile (top 50, in-use space) ==="
+      - go tool pprof -text -nodecount=50 {{.SORT}} -inuse_space {{.PROFILE_DIR}}/mem.prof
+      - echo "=== Memory Profile (top 50, alloc space) ==="
+      - go tool pprof -text -nodecount=50 {{.SORT}} -alloc_space {{.PROFILE_DIR}}/mem.prof
+
+  go:profile:report:cum:
+    desc: |
+      Report from e2e CPU and memory profiles (top 50 functions, cumulative)
+      Usage: task go:profile:report:cum [-- /path/to/profile/dir]
+    cmds:
+      - task: go:profile:report
+        vars:
+          CLI_ARGS: "{{.CLI_ARGS}}"
+          SORT: "-cum"
 
   go:test:e2e:
     desc: |
