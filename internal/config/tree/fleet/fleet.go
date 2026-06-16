@@ -244,6 +244,8 @@ func propagateDurationAndState(target *logs.Logs, duration time.Duration, anyRun
 	if anyRunning {
 		if !target.TAS.HasStarted() {
 			target.TAS.SetStarted(time.Now())
+		} else if target.TAS.IsFinished() {
+			target.TAS.MarkRunning()
 		}
 	} else if !target.TAS.IsFinished() {
 		target.TAS.MarkFinished()

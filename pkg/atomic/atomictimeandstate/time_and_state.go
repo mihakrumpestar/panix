@@ -62,6 +62,15 @@ func (tas *TimeAndState) MarkFinished() {
 	}
 }
 
+// MarkRunning resets EndTime and bumps stateVersion to transition a finished
+// entity back to running (e.g. after retry). No-op if already running.
+func (tas *TimeAndState) MarkRunning() {
+	if tas.IsFinished() {
+		tas.EndTime = time.Time{}
+		tas.stateVersion++
+	}
+}
+
 // SetDuration replaces the cached duration without bumping stateVersion.
 func (tas *TimeAndState) SetDuration(d time.Duration) {
 	tas.DurationCache = d
@@ -78,13 +87,18 @@ func (tas *TimeAndState) BumpVersion() {
 }
 
 // SyncFrom copies duration and error from other, and applies any state
-// transitions (started/finished) into tas, bumping stateVersion on change.
+// transitions (started/finished/running) into tas, bumping stateVersion on change.
 func (tas *TimeAndState) SyncFrom(other *TimeAndState) {
 	tas.DurationCache = other.DurationCache
 	tas.EndError = other.EndError
 
 	if other.HasStarted() && !tas.HasStarted() {
 		tas.SetStarted(time.Now())
+	}
+
+	// Backward transition: other is running but tas is finished (e.g. after retry).
+	if other.HasStarted() && !other.IsFinished() && tas.IsFinished() {
+		tas.MarkRunning()
 	}
 
 	if other.IsFinished() && !tas.IsFinished() {
