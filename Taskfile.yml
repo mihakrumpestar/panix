@@ -243,6 +243,12 @@ tasks:
 
   # Docs
 
+  docs:bun:
+    desc: Install deps
+    dir: ./docs
+    cmds:
+      - bun install
+
   # Note: to update astro, run: npx @astrojs/upgrade
   docs:dev:
     desc: Run live dev docs
