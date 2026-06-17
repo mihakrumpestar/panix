@@ -112,14 +112,6 @@ tasks:
             | head -1
         }
 
-        extract_mem_objects() {
-          go tool pprof -text -nodecount=0 -inuse_objects "$1" 2>&1 \
-            | grep 'Showing nodes accounting for' \
-            | grep -oP '[0-9,]+(?=\s+total)' \
-            | head -1 \
-            | tr -d ','
-        }
-
         normalize_mb() {
           local raw="$1"
           local num unit
@@ -171,32 +163,16 @@ tasks:
           }'
         }
 
-        fmt_obj_diff() {
-          awk -v base="$1" -v head="$2" 'BEGIN {
-            if (base == "" || head == "") { print "N/A"; exit }
-            diff = head - base
-            sign = diff >= 0 ? "+" : ""
-            if (base != 0) {
-              pct = (diff / base) * 100
-              printf "%s%d (%s%.1f%%)", sign, diff, sign, pct
-            } else {
-              printf "%s%d", sign, diff
-            }
-          }'
-        }
-
         # ── Extract metrics for all commits ──
 
-        declare -A DUR CPU CPU_PCT INUSE ALLOC OBJ
+        declare -A DUR CPU CPU_PCT ALLOC
 
         for commit in "${ALL_COMMITS[@]}"; do
           dir="$BENCH_DIR/$commit"
           DUR["$commit"]=$(extract_duration "$dir/cpu.prof")
           CPU["$commit"]=$(extract_cpu_samples "$dir/cpu.prof")
           CPU_PCT["$commit"]=$(calc_pct "${CPU[$commit]%s}" "${DUR[$commit]%s}")
-          INUSE["$commit"]=$(normalize_mb "$(extract_mem_total "$dir/mem.prof" "-inuse_space")")
           ALLOC["$commit"]=$(normalize_mb "$(extract_mem_total "$dir/mem.prof" "-alloc_space")")
-          OBJ["$commit"]=$(extract_mem_objects "$dir/mem.prof")
         done
 
         # ── Print table ──
@@ -207,14 +183,14 @@ tasks:
         HEADER=$(printf "%-24s" "")
         for commit in "${ALL_COMMITS[@]}"; do
           label="${commit:0:7}"
-          if [ "$commit" = "$HEAD" ]; then label="HEAD"; fi
+          if [ "$commit" = "$HEAD" ]; then label="HEAD (${commit:0:7})"; fi
           HEADER=$(printf "%s%-16s" "$HEADER" "$label")
         done
         # Diff columns (skip reference commit)
         for commit in "${ALL_COMMITS[@]}"; do
           [ "$commit" = "$REF" ] && continue
           label="${commit:0:7}"
-          if [ "$commit" = "$HEAD" ]; then label="HEAD"; fi
+          if [ "$commit" = "$HEAD" ]; then label="HEAD (${commit:0:7})"; fi
           HEADER=$(printf "%s%-20s" "$HEADER" "Diff ($label)")
         done
         echo "$HEADER"
@@ -240,21 +216,17 @@ tasks:
         }
 
         # Collect values into arrays for each metric
-        DUR_VALS=() CPU_VALS=() INUSE_VALS=() ALLOC_VALS=() OBJ_VALS=()
+        DUR_VALS=() CPU_VALS=() ALLOC_VALS=()
         for commit in "${ALL_COMMITS[@]}"; do
           DUR_VALS+=("${DUR[$commit]}")
           CPU_VALS+=("${CPU[$commit]} (${CPU_PCT[$commit]}%)")
-          INUSE_VALS+=("${INUSE[$commit]}")
           ALLOC_VALS+=("${ALLOC[$commit]}")
-          OBJ_VALS+=("${OBJ[$commit]}")
         done
 
         # Print rows
         print_row "Duration (wall)" "%s" "fmt_time_diff" "${DUR_VALS[@]}"
         print_row "Total CPU (util %)" "%s" "fmt_time_diff" "${CPU_VALS[@]}"
         print_row "Total alloc" "%s MB" "fmt_mem_diff" "${ALLOC_VALS[@]}"
-        print_row "In-use memory" "%s MB" "fmt_mem_diff" "${INUSE_VALS[@]}"
-        print_row "Heap objects" "%s" "fmt_obj_diff" "${OBJ_VALS[@]}"
 
         # ── pprof diff commands ──
 
