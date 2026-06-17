@@ -35,7 +35,8 @@ var horizBorderBytes = func() []byte {
 
 // Viewport renders scrollable, optionally bordered content with a scrollbar.
 type Viewport struct {
-	lines            [][]byte
+	linesBuf         *buffer.LinesBuf // owned buffer (adopted via adoptLinesBuf), nil if main viewport
+	linesLen         int              // cached len(linesBuf.indexes), 0 if empty
 	lineWidths       []int
 	width            int
 	height           int
@@ -56,6 +57,11 @@ type Viewport struct {
 	trackCell []byte
 	emptyCell []byte
 
+	// Cached horizontal border bytes. Invalidated when contentW or
+	// showBar changes. Avoids per-frame RenderLine allocations.
+	horizBorderCache    []byte
+	horizBorderCacheKey int // contentW*2 + showBarInt
+
 	// Pre-computed border bytes (built once in WithBorder / SetBorderStyle).
 	borderLeft  []byte
 	borderRight []byte
@@ -65,11 +71,22 @@ type Viewport struct {
 	borderBotR  []byte
 
 	// Contiguous padded-line buffer: all padded lines joined with '\n'.
-	paddedBuf      []byte
-	lineOffsets    []int // byte offset of each line start; len = len(lines)+1
-	paddedBufCW    int   // contentW paddedBuf was built for; -1 = invalid
-	cachedLines    [][]byte
-	contentChanged bool // set by SetContentLines, cleared by ensurePaddedCache
+	paddedBuf       []byte
+	lineOffsets     []int // byte offset of each line start; len = linesLen+1
+	paddedBufCW     int   // contentW paddedBuf was built for; -1 = invalid
+	paddedLineCount int   // how many lines are in paddedBuf; for incremental builds
+	contentChanged  bool  // set by SetContent, cleared by ensurePaddedCache
+
+	// Previous-frame snapshot for diff-based incremental rebuild (main viewport).
+	prevPaddedBuf   []byte
+	prevLineOffsets []int
+	prevContent     buffer.LinesBuf
+	prevLineWidths  []int
+
+	// wrappedContentW tracks the contentW used for the current wrapped
+	// content (non-main viewports). Used by adoptLinesBuf to detect
+	// whether the wrapping width changed, invalidating cached lineWidths.
+	wrappedContentW int
 
 	// Scratch buffer reused for building individual output lines.
 	scratchBuf []byte
@@ -132,7 +149,8 @@ func WithMaxHeight(h int) Option {
 
 func New(opts ...Option) Viewport {
 	model := Viewport{
-		paddedBufCW: -1,
+		paddedBufCW:         -1,
+		horizBorderCacheKey: -1,
 	}
 
 	for _, opt := range opts {
@@ -140,25 +158,6 @@ func New(opts ...Option) Viewport {
 	}
 
 	return model
-}
-
-//nolint:funcorder
-func (m *Viewport) buildScrollbarCells() {
-	m.thumbCell = m.thumbStyle.RenderLine([]byte(m.thumbChar))
-	if len(m.thumbCell) == 0 {
-		m.thumbCell = []byte(m.thumbChar)
-	} else {
-		m.thumbCell = append([]byte(" "), m.thumbCell...)
-	}
-
-	m.trackCell = m.trackStyle.RenderLine([]byte(m.trackChar))
-	if len(m.trackCell) == 0 {
-		m.trackCell = []byte(m.trackChar)
-	} else {
-		m.trackCell = append([]byte(" "), m.trackCell...)
-	}
-
-	m.emptyCell = []byte("  ")
 }
 
 //nolint:funcorder
@@ -196,6 +195,7 @@ func (m *Viewport) SetBorderStyle(borderColor style.Color) {
 
 	m.borderStyle = newStyle
 	m.buildBorderStrings()
+	m.horizBorderCacheKey = -1
 	m.cacheValid = false
 }
 
@@ -219,7 +219,7 @@ func (m *Viewport) MaxLineWidth() int {
 
 	for idx, lineWidth := range m.lineWidths {
 		if lineWidth < 0 {
-			lineWidth = style.CellWidth(m.lines[idx])
+			lineWidth = style.CellWidth(m.line(idx))
 			m.lineWidths[idx] = lineWidth
 		}
 
@@ -239,7 +239,7 @@ func (m *Viewport) ViewLine(idx int) []byte {
 	}
 
 	start := m.yOffset
-	if start >= len(m.lines) {
+	if start >= m.linesLen {
 		start = 0
 	}
 
@@ -248,16 +248,41 @@ func (m *Viewport) ViewLine(idx int) []byte {
 	}
 
 	lineIdx := start + idx
-	if lineIdx < len(m.lines) {
-		return m.lines[lineIdx]
+	if lineIdx < m.linesLen {
+		return m.line(lineIdx)
 	}
 
 	return nil
 }
 
+// SetContent is the single entry point for setting viewport content.
+// For main viewports (pre-wrapped): stores lines directly.
+// For non-main viewports: wraps to viewport width, adopts the LinesBuf.
+// No deep copies. No allocations beyond the wrapping LinesBuf (pooled).
 func (m *Viewport) SetContent(content [][]byte) error {
 	if m.main {
-		m.SetContentLines(content)
+		m.setLines(content)
+
+		return nil
+	}
+
+	// Convert [][]byte to LinesBuf for WrapBuf. Pre-size to avoid growth.
+	totalBytes := 0
+	for _, line := range content {
+		totalBytes += len(line)
+	}
+
+	contentBuf := buffer.NewLinesBuf(totalBytes)
+	contentBuf.WriteLines(content)
+
+	return m.SetContentBuf(contentBuf)
+}
+
+// SetContentBuf is the LinesBuf version of SetContent. Uses Line(i) for
+// zero-alloc access instead of requiring a [][]byte view.
+func (m *Viewport) SetContentBuf(content *buffer.LinesBuf) error {
+	if m.main {
+		m.setLinesBuf(content)
 
 		return nil
 	}
@@ -267,63 +292,44 @@ func (m *Viewport) SetContent(content [][]byte) error {
 		contentW -= borderOverhead
 	}
 
-	scrollbarActive := m.scrollbar && (m.scrollbarReserve || len(m.lines) > m.contentHeight())
+	scrollbarActive := m.scrollbar && (m.scrollbarReserve || m.linesLen > m.contentHeight())
 	if scrollbarActive {
 		contentW -= scrollbarColWidth
 	}
 
 	contentW = max(1, contentW)
 
-	wrapBuf := buffer.NewLinesBuf()
-	style.Wrap(wrapBuf, content, contentW, "")
-	m.SetContentLines(copyLines(wrapBuf.Lines()))
-	wrapBuf.Release()
+	oldWrappedW := m.wrappedContentW
+	m.wrappedContentW = contentW
 
-	if m.scrollbar && !m.scrollbarReserve && len(m.lines) > m.contentHeight() {
+	// Pre-size wrapBuf from content size to avoid incremental growth.
+	wrapBuf := buffer.NewLinesBuf(m.contentByteEstimate(content))
+	style.WrapBuf(wrapBuf, content, contentW, "")
+	m.adoptLinesBuf(wrapBuf, oldWrappedW)
+
+	if m.scrollbar && !m.scrollbarReserve && m.linesLen > m.contentHeight() {
 		scrollbarW := max(1, contentW-scrollbarColWidth)
-		wrapBuf = buffer.NewLinesBuf()
-		style.Wrap(wrapBuf, content, scrollbarW, "")
-		m.SetContentLines(copyLines(wrapBuf.Lines()))
-		wrapBuf.Release()
+
+		oldWrappedW = m.wrappedContentW
+		m.wrappedContentW = scrollbarW
+
+		wrapBuf2 := buffer.NewLinesBuf(m.contentByteEstimate(content))
+		style.WrapBuf(wrapBuf2, content, scrollbarW, "")
+		m.adoptLinesBuf(wrapBuf2, oldWrappedW)
 	}
 
 	return nil
 }
 
-// copyLines returns deep copies of lines so the caller can safely release
-// the source buffer (e.g. a pooled LinesBuf) without corrupting the copies.
-func copyLines(lines [][]byte) [][]byte {
-	cloned := make([][]byte, len(lines))
-	for i, line := range lines {
-		cloned[i] = bytes.Clone(line)
-	}
-
-	return cloned
-}
-
-// SetContentLines sets the content lines. Visual widths are computed lazily
-// on first access so that SetContentLines itself is O(1).
-// If the lines slice is identical to the current content (same length,
-// same strings), no caches are invalidated — subsequent Render() calls
-// hit the cached result directly.
-// When content changes, cached line widths are preserved for unchanged
-// lines so that CellWidth is only recomputed for new or modified lines.
+// SetContentLines stores pre-wrapped lines directly, bypassing wrapping.
+// Use when content is already formatted to the viewport's width.
+// For content that needs wrapping, use SetContent instead.
 func (m *Viewport) SetContentLines(lines [][]byte) {
-	oldLines := m.lines
-	m.lines = lines
-	m.lineWidths = m.buildPreservedWidths(lines, oldLines)
-	m.cacheValid = false
-	m.contentChanged = true
-
-	maxOffset := max(len(lines)-m.contentHeight(), 0)
-
-	if m.yOffset > maxOffset {
-		m.yOffset = maxOffset
-	}
+	m.setLines(lines)
 }
 
 // ensureLineWidths lazily allocates and initializes the width cache.
-// Uncached entries are represented by -1.
+// Uncached entries are represented by -1. Reuses existing capacity when possible.
 //
 //nolint:funcorder
 func (m *Viewport) ensureLineWidths() {
@@ -331,9 +337,33 @@ func (m *Viewport) ensureLineWidths() {
 		return
 	}
 
-	m.lineWidths = make([]int, len(m.lines))
+	if cap(m.lineWidths) >= m.linesLen {
+		m.lineWidths = m.lineWidths[:m.linesLen]
+	} else {
+		m.lineWidths = make([]int, m.linesLen)
+	}
+
 	for i := range m.lineWidths {
 		m.lineWidths[i] = -1
+	}
+}
+
+// invalidateLineWidths marks all cached widths as invalid while reusing
+// the existing slice capacity when possible.
+//
+//nolint:funcorder
+func (m *Viewport) invalidateLineWidths() {
+	if m.lineWidths == nil {
+		return
+	}
+
+	if cap(m.lineWidths) >= m.linesLen {
+		m.lineWidths = m.lineWidths[:m.linesLen]
+		for i := range m.lineWidths {
+			m.lineWidths[i] = -1
+		}
+	} else {
+		m.lineWidths = nil
 	}
 }
 
@@ -341,7 +371,7 @@ func (m *Viewport) ensureLineWidths() {
 // If height > 0, it is used as a fixed viewport height (e.g. main/fullscreen).
 // If height == 0, the viewport auto-sizes up to maxHeight.
 // Sync is a no-op when content, width, and height are all unchanged —
-// SetWidth/SetHeight/SetContentLines all short-circuit internally.
+// SetWidth/SetHeight/SetContent all short-circuit internally.
 func (m *Viewport) Sync(content [][]byte, width, height int) error {
 	wasAtBottom := m.ScrollPercent() == 1 && !m.main
 	yOffset := m.yOffset
@@ -363,14 +393,42 @@ func (m *Viewport) Sync(content [][]byte, width, height int) error {
 	if wasAtBottom {
 		m.GotoBottom()
 	} else {
-		m.SetYOffset(min(yOffset, max(0, len(m.lines)-m.contentHeight())))
+		m.SetYOffset(min(yOffset, max(0, m.linesLen-m.contentHeight())))
+	}
+
+	return nil
+}
+
+// SyncBuf is the LinesBuf version of Sync. Uses Line(i) for zero-alloc access.
+func (m *Viewport) SyncBuf(content *buffer.LinesBuf, width, height int) error {
+	wasAtBottom := m.ScrollPercent() == 1 && !m.main
+	yOffset := m.yOffset
+
+	m.SetWidth(width)
+
+	prelimH := m.preliminaryHeight(height)
+	if prelimH > 0 {
+		m.SetHeight(prelimH)
+	}
+
+	err := m.SetContentBuf(content)
+	if err != nil {
+		return err
+	}
+
+	m.SetHeight(m.finalHeight(height))
+
+	if wasAtBottom {
+		m.GotoBottom()
+	} else {
+		m.SetYOffset(min(yOffset, max(0, m.linesLen-m.contentHeight())))
 	}
 
 	return nil
 }
 
 func (m *Viewport) TotalLineCount() int {
-	return len(m.lines)
+	return m.linesLen
 }
 
 func (m *Viewport) Height() int {
@@ -387,7 +445,7 @@ func (m *Viewport) ContentWidth() int {
 		contentWidth -= borderOverhead
 	}
 
-	if m.scrollbar && (m.scrollbarReserve || len(m.lines) > m.contentHeight()) {
+	if m.scrollbar && (m.scrollbarReserve || m.linesLen > m.contentHeight()) {
 		contentWidth -= scrollbarColWidth
 	}
 
@@ -396,11 +454,11 @@ func (m *Viewport) ContentWidth() int {
 
 func (m *Viewport) ScrollPercent() float64 {
 	ch := m.contentHeight()
-	if ch >= len(m.lines) || len(m.lines) == 0 {
+	if ch >= m.linesLen || m.linesLen == 0 {
 		return 1
 	}
 
-	return float64(m.yOffset) / float64(len(m.lines)-ch)
+	return float64(m.yOffset) / float64(m.linesLen-ch)
 }
 
 func (m *Viewport) IsBordered() bool {
@@ -420,7 +478,7 @@ func (m *Viewport) YOffset() int {
 }
 
 func (m *Viewport) SetYOffset(offset int) {
-	maxOffset := max(len(m.lines)-m.contentHeight(), 0)
+	maxOffset := max(m.linesLen-m.contentHeight(), 0)
 	newY := max(0, min(offset, maxOffset))
 
 	if newY != m.yOffset {
@@ -430,7 +488,7 @@ func (m *Viewport) SetYOffset(offset int) {
 }
 
 func (m *Viewport) GotoBottom() {
-	offset := max(len(m.lines)-m.contentHeight(), 0)
+	offset := max(m.linesLen-m.contentHeight(), 0)
 
 	if m.yOffset != offset {
 		m.yOffset = offset
@@ -479,6 +537,12 @@ func (m *Viewport) Update(msg zeroterm.Msg) {
 	}
 }
 
+// InvalidateCache forces the next Render() to re-render from scratch.
+// Useful for benchmarks that change scroll position without changing content.
+func (m *Viewport) InvalidateCache() {
+	m.cacheValid = false
+}
+
 func (m *Viewport) Render() *buffer.LinesBuf {
 	if m.cacheValid {
 		return m.cachedOutput
@@ -493,47 +557,6 @@ func (m *Viewport) Render() *buffer.LinesBuf {
 	m.cacheValid = true
 
 	return m.cachedOutput
-}
-
-// buildPreservedWidths creates a lineWidths slice that preserves cached
-// widths for lines that haven't changed. Lines that are new or modified
-// get -1 (uncached), so CellWidth is only recomputed when necessary.
-// Returns nil when there are no old widths to preserve.
-func (m *Viewport) buildPreservedWidths(newLines, oldLines [][]byte) []int {
-	if m.lineWidths == nil {
-		return nil
-	}
-
-	height := len(newLines)
-	if cap(m.lineWidths) < height {
-		newWidths := make([]int, height)
-		copy(newWidths, m.lineWidths)
-		m.lineWidths = newWidths
-	} else {
-		m.lineWidths = m.lineWidths[:height]
-	}
-
-	minLen := min(len(newLines), len(oldLines))
-	copyCount := min(len(m.lineWidths), minLen)
-
-	for i := copyCount; i < height; i++ {
-		m.lineWidths[i] = -1
-	}
-
-	for idx := range minLen {
-		pNew, pOld := &newLines[idx], &oldLines[idx]
-
-		nLen, oLen := len(*pNew), len(*pOld)
-		if nLen == oLen && (nLen == 0 || &(*pNew)[0] == &(*pOld)[0]) {
-			continue
-		}
-
-		if !bytes.Equal(*pNew, *pOld) {
-			m.lineWidths[idx] = -1
-		}
-	}
-
-	return m.lineWidths
 }
 
 func (m *Viewport) contentDimensions() (int, int) {
@@ -561,14 +584,14 @@ func (m *Viewport) renderEmpty(buf *buffer.LinesBuf, contentW, contentH int) {
 }
 
 func (m *Viewport) scrollbarInfo(contentH int) (bool, int, int, bool) {
-	showBar := m.scrollbar && (len(m.lines) > contentH || m.scrollbarReserve)
+	showBar := m.scrollbar && (m.linesLen > contentH || m.scrollbarReserve)
 
-	if !showBar || len(m.lines) <= contentH {
+	if !showBar || m.linesLen <= contentH {
 		return showBar, 0, 0, false
 	}
 
-	thumb := max(1, contentH*contentH/len(m.lines))
-	maxScroll := max(1, len(m.lines)-contentH)
+	thumb := max(1, contentH*contentH/m.linesLen)
+	maxScroll := max(1, m.linesLen-contentH)
 	yOff := m.yOffset
 	thumbPos := (contentH - thumb) * yOff / maxScroll
 
@@ -584,18 +607,18 @@ func (m *Viewport) renderViewInto(buf *buffer.LinesBuf) {
 		return
 	}
 
-	if len(m.lines) == 0 {
+	if m.linesLen == 0 {
 		m.renderEmpty(buf, contentW, contentH)
 
 		return
 	}
 
-	if m.yOffset >= len(m.lines) {
+	if m.yOffset >= m.linesLen {
 		m.yOffset = 0
 	}
 
 	start := m.yOffset
-	end := min(start+contentH, len(m.lines))
+	end := min(start+contentH, m.linesLen)
 	showBar, thumbPos, thumbEnd, hasBar := m.scrollbarInfo(contentH)
 
 	if showBar {
@@ -670,145 +693,126 @@ func (m *Viewport) renderEmptyInto(buf *buffer.LinesBuf, contentW, contentH int,
 // unchanged lines.
 //
 
+// ensureBufSizes pre-allocates paddedBuf and lineOffsets capacity,
+// accounting for existing content when doing incremental builds.
 func (m *Viewport) ensureBufSizes(contentW int) {
-	est := (contentW+1)*len(m.lines) + 1
+	remaining := m.linesLen - m.paddedLineCount
+
+	est := len(m.paddedBuf) + (contentW+1)*remaining + 1
 	if cap(m.paddedBuf) < est {
-		m.paddedBuf = make([]byte, 0, est)
+		// Over-allocate by 50% to absorb incremental growth without
+		// re-allocating every frame when content is appended.
+		growEst := est + est/2
+		newBuf := make([]byte, len(m.paddedBuf), growEst)
+		copy(newBuf, m.paddedBuf)
+		m.paddedBuf = newBuf
 	}
 
-	n := len(m.lines) + 1
-	if cap(m.lineOffsets) < n {
-		m.lineOffsets = make([]int, n)
+	offsetLen := m.linesLen + 1
+	if cap(m.lineOffsets) < offsetLen {
+		oldOffsets := m.lineOffsets
+		newCap := offsetLen + offsetLen/2
+		m.lineOffsets = make([]int, offsetLen, newCap)
+		copy(m.lineOffsets, oldOffsets)
 	} else {
-		m.lineOffsets = m.lineOffsets[:n]
+		m.lineOffsets = m.lineOffsets[:offsetLen]
 	}
 }
 
+// padLines builds or extends the padded-line buffer.
+// Starts from paddedLineCount, so that previously padded lines are
+// preserved when only new lines (or the last line) changed.
+// For the main viewport, uses a diff-based incremental approach:
+// line content is compared against the previous frame, and unchanged
+// lines are bulk-copied from the previous padded buffer.
 func (m *Viewport) padLines(contentW int) {
-	buf := m.paddedBuf[:0]
-	for idx, line := range m.lines {
-		m.lineOffsets[idx] = len(buf)
+	useBulkCopy := m.main && m.prevPaddedBuf != nil && m.prevContent.Len() > 0 && m.paddedBufCW == contentW
 
-		lineWidth := m.lineWidths[idx]
-		if lineWidth < 0 {
-			lineWidth = style.CellWidth(line)
-			m.lineWidths[idx] = lineWidth
+	for idx := m.paddedLineCount; idx < m.linesLen; idx++ {
+		m.lineOffsets[idx] = len(m.paddedBuf)
+
+		if useBulkCopy && m.tryBulkCopyLine(idx) {
+			continue
 		}
 
-		buf = append(buf, line...)
-
-		if lineWidth < contentW {
-			buf = append(buf, spaces[:contentW-lineWidth]...)
-		}
+		m.padNewLine(idx, contentW)
 	}
 
-	m.lineOffsets[len(m.lines)] = len(buf)
-	m.paddedBuf = buf
+	m.lineOffsets[m.linesLen] = len(m.paddedBuf)
+	m.paddedLineCount = m.linesLen
+}
+
+// tryBulkCopyLine attempts to bulk-copy an unchanged line from the previous
+// frame's padded buffer, carrying over the cached width. Returns true if
+// the line was identical and bulk-copied.
+func (m *Viewport) tryBulkCopyLine(idx int) bool {
+	if idx >= m.prevContent.Len() || !bytes.Equal(m.line(idx), m.prevContent.Line(idx)) {
+		return false
+	}
+
+	m.paddedBuf = append(m.paddedBuf, m.prevPaddedBuf[m.prevLineOffsets[idx]:m.prevLineOffsets[idx+1]]...)
+
+	// Carry over cached width from previous frame for unchanged lines.
+	if m.prevLineWidths != nil && idx < len(m.prevLineWidths) && m.prevLineWidths[idx] >= 0 {
+		m.lineWidths[idx] = m.prevLineWidths[idx]
+	}
+
+	return true
+}
+
+// padNewLine computes the width for a new or changed line and appends it
+// with right-padding to fill contentW.
+func (m *Viewport) padNewLine(idx int, contentW int) {
+	line := m.line(idx)
+
+	lineWidth := m.lineWidths[idx]
+	if lineWidth < 0 {
+		lineWidth = style.CellWidth(line)
+		m.lineWidths[idx] = lineWidth
+	}
+
+	m.paddedBuf = append(m.paddedBuf, line...)
+
+	if lineWidth < contentW {
+		m.paddedBuf = append(m.paddedBuf, spaces[:contentW-lineWidth]...)
+	}
 }
 
 func (m *Viewport) ensurePaddedCache(contentW int) {
-	if !m.contentChanged && m.paddedBufCW == contentW && len(m.lineOffsets) == len(m.lines)+1 {
+	if !m.contentChanged && m.paddedBufCW == contentW && len(m.lineOffsets) == m.linesLen+1 {
 		return
 	}
 
-	if m.contentChanged && m.paddedBufCW == contentW && m.cachedLines != nil {
-		if m.tryAppendPaddedLines(contentW) {
-			return
-		}
+	if m.paddedBufCW != contentW {
+		m.paddedLineCount = 0
+		m.paddedBuf = m.paddedBuf[:0]
 	}
 
 	m.ensureBufSizes(contentW)
 	m.padLines(contentW)
 	m.paddedBufCW = contentW
-	m.cachedLines = m.lines
-	m.contentChanged = false
-}
-
-func (m *Viewport) linesUnchangedFromCache() bool {
-	for i := range len(m.cachedLines) {
-		cachedLineLen, cachedLine := &m.lines[i], &m.cachedLines[i]
-
-		nLen, cLen := len(*cachedLineLen), len(*cachedLine)
-		if nLen == cLen && (nLen == 0 || &(*cachedLineLen)[0] == &(*cachedLine)[0]) {
-			continue
-		}
-
-		if !bytes.Equal(*cachedLineLen, *cachedLine) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (m *Viewport) extendLineOffsets(newLineCount int) {
-	if cap(m.lineOffsets) < newLineCount+1 {
-		newOffsets := make([]int, newLineCount+1)
-		copy(newOffsets, m.lineOffsets)
-		m.lineOffsets = newOffsets
-	} else {
-		m.lineOffsets = m.lineOffsets[:newLineCount+1]
-	}
-}
-
-func (m *Viewport) appendNewLines(contentW, oldLineCount, newLineCount int) []byte {
-	buf := m.paddedBuf
-	for idx := oldLineCount; idx < newLineCount; idx++ {
-		m.lineOffsets[idx] = len(buf)
-
-		lineWidth := m.lineWidths[idx]
-		if lineWidth < 0 {
-			lineWidth = style.CellWidth(m.lines[idx])
-			m.lineWidths[idx] = lineWidth
-		}
-
-		buf = append(buf, m.lines[idx]...)
-		if lineWidth < contentW {
-			buf = append(buf, spaces[:contentW-lineWidth]...)
-		}
-	}
-
-	return buf
-}
-
-// tryAppendPaddedLines attempts a delta update: if the existing paddedBuf
-// still covers the old lines and only new lines were appended, extend
-// paddedBuf with the new lines instead of rebuilding from scratch.
-func (m *Viewport) tryAppendPaddedLines(contentW int) bool {
-	oldLineCount := len(m.cachedLines)
-	if oldLineCount >= len(m.lines) || oldLineCount == 0 {
-		return false
-	}
-
-	if !m.linesUnchangedFromCache() {
-		return false
-	}
-
-	newLineCount := len(m.lines)
-	m.extendLineOffsets(newLineCount)
-
-	buf := m.appendNewLines(contentW, oldLineCount, newLineCount)
-
-	m.lineOffsets[newLineCount] = len(buf)
-	m.paddedBuf = buf
-	m.cachedLines = m.lines
 	m.contentChanged = false
 
-	return true
+	if m.main {
+		m.prevContent.Reset()
+		m.prevContent.CopyFrom(m.linesBuf)
+	}
 }
 
-func (m *Viewport) renderScrollbarInLine(line []byte, showBar, hasBar, inThumb bool) []byte {
+// appendScrollbarCell appends the appropriate scrollbar cell directly to the
+// last line in buf, avoiding the intermediate scratchBuf copy.
+func (m *Viewport) appendScrollbarCell(buf *buffer.LinesBuf, showBar, hasBar, inThumb bool) {
 	if !showBar {
-		return line
+		return
 	}
 
 	switch {
 	case !hasBar:
-		return append(line, m.emptyCell...)
+		buf.AppendToLine(m.emptyCell)
 	case inThumb:
-		return append(line, m.thumbCell...)
+		buf.AppendToLine(m.thumbCell)
 	default:
-		return append(line, m.trackCell...)
+		buf.AppendToLine(m.trackCell)
 	}
 }
 
@@ -826,22 +830,16 @@ func (m *Viewport) renderBorderedInto(
 	buf.WriteLine1(line)
 
 	for idx := start; idx < end; idx++ {
-		line = line[:0]
-		line = append(line, m.borderLeft...)
-		line = append(line, m.paddedBuf[m.lineOffsets[idx]:m.lineOffsets[idx+1]]...)
-		line = m.renderScrollbarInLine(line, showBar, hasBar, idx-start >= thumbPos && idx-start < thumbEnd)
-		line = append(line, m.borderRight...)
-		buf.WriteLine1(line)
+		buf.WriteLine2(m.borderLeft, m.paddedBuf[m.lineOffsets[idx]:m.lineOffsets[idx+1]])
+		m.appendScrollbarCell(buf, showBar, hasBar, idx-start >= thumbPos && idx-start < thumbEnd)
+		buf.AppendToLine(m.borderRight)
 	}
 
 	fillStart := end - start
 	for idx := fillStart; idx < contentH; idx++ {
-		line = line[:0]
-		line = append(line, m.borderLeft...)
-		line = append(line, spaces[:contentW]...)
-		line = m.renderScrollbarInLine(line, showBar, hasBar, idx >= thumbPos && idx < thumbEnd)
-		line = append(line, m.borderRight...)
-		buf.WriteLine1(line)
+		buf.WriteLine2(m.borderLeft, spaces[:contentW])
+		m.appendScrollbarCell(buf, showBar, hasBar, idx >= thumbPos && idx < thumbEnd)
+		buf.AppendToLine(m.borderRight)
 	}
 
 	line = line[:0]
@@ -859,24 +857,18 @@ func (m *Viewport) renderUnborderedInto(
 	hasBar bool,
 ) {
 	if start < end {
-		line := m.scratchBuf[:0]
-		line = append(line, m.paddedBuf[m.lineOffsets[start]:m.lineOffsets[start+1]]...)
-		line = m.renderScrollbarInLine(line, showBar, hasBar, thumbPos == 0)
-		buf.WriteLine1(line)
+		buf.WriteLine1(m.paddedBuf[m.lineOffsets[start]:m.lineOffsets[start+1]])
+		m.appendScrollbarCell(buf, showBar, hasBar, thumbPos == 0)
 	}
 
 	for idx := start + 1; idx < end; idx++ {
-		line := m.scratchBuf[:0]
-		line = append(line, m.paddedBuf[m.lineOffsets[idx]:m.lineOffsets[idx+1]]...)
-		line = m.renderScrollbarInLine(line, showBar, hasBar, idx-start >= thumbPos && idx-start < thumbEnd)
-		buf.WriteLine1(line)
+		buf.WriteLine1(m.paddedBuf[m.lineOffsets[idx]:m.lineOffsets[idx+1]])
+		m.appendScrollbarCell(buf, showBar, hasBar, idx-start >= thumbPos && idx-start < thumbEnd)
 	}
 
 	for idx := end - start; idx < contentH; idx++ {
-		line := m.scratchBuf[:0]
-		line = append(line, spaces[:contentW]...)
-		line = m.renderScrollbarInLine(line, showBar, hasBar, idx >= thumbPos && idx < thumbEnd)
-		buf.WriteLine1(line)
+		buf.WriteLine1(spaces[:contentW])
+		m.appendScrollbarCell(buf, showBar, hasBar, idx >= thumbPos && idx < thumbEnd)
 	}
 }
 
@@ -887,7 +879,17 @@ func (m *Viewport) appendHorizBorder(buf []byte, contentW int, showBar bool) []b
 		horizLen += scrollbarColWidth
 	}
 
-	return append(buf, m.borderStyle.RenderLine(horizBorderBytes[:horizLen*3])...)
+	key := horizLen*2
+	if showBar {
+		key++
+	}
+
+	if m.horizBorderCacheKey != key {
+		m.horizBorderCache = m.borderStyle.RenderLine(horizBorderBytes[:horizLen*3])
+		m.horizBorderCacheKey = key
+	}
+
+	return append(buf, m.horizBorderCache...)
 }
 
 func (m *Viewport) contentHeight() int {
@@ -900,7 +902,18 @@ func (m *Viewport) contentHeight() int {
 }
 
 func (m *Viewport) maxYOffset() int {
-	return max(len(m.lines)-m.contentHeight(), 0)
+	return max(m.linesLen-m.contentHeight(), 0)
+}
+
+// contentByteEstimate returns the total byte size of all lines in content.
+// Used to pre-size wrap buffers and avoid incremental growth allocations.
+func (m *Viewport) contentByteEstimate(content *buffer.LinesBuf) int {
+	total := 0
+	for i := range content.Len() {
+		total += len(content.Line(i))
+	}
+
+	return total
 }
 
 func (m *Viewport) handleKeyPress(msg zeroterm.KeyPressMsg) {
@@ -951,7 +964,7 @@ func (m *Viewport) finalHeight(height int) int {
 		return max(1, height)
 	}
 
-	contentH := max(1, len(m.lines))
+	contentH := max(1, m.linesLen)
 	if m.maxHeight > 0 && contentH > m.maxHeight {
 		contentH = m.maxHeight
 	}
@@ -961,4 +974,183 @@ func (m *Viewport) finalHeight(height int) int {
 	}
 
 	return max(1, contentH)
+}
+
+// line returns the i-th line from the owned linesBuf.
+// Inlined by the compiler — two array lookups + one slice op.
+func (m *Viewport) line(i int) []byte {
+	return m.linesBuf.Line(i)
+}
+
+// adoptLinesBuf takes ownership of buf, releasing any previous buffer.
+// The viewport accesses lines via buf.Line(i) — zero allocations.
+// For non-main viewports where content grows by appending, paddedBuf and
+// lineWidths are preserved for the unchanged prefix when the wrapping
+// width hasn't changed, avoiding O(n) CellWidth recomputation.
+func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
+	oldLen := m.linesLen
+	oldWidths := m.lineWidths
+	oldPaddedCount := m.paddedLineCount
+
+	m.releaseLinesBuf()
+	m.linesBuf = buf
+	m.linesLen = buf.Len()
+	m.lineWidths = nil
+	m.paddedLineCount = 0
+	m.cacheValid = false
+	m.contentChanged = true
+
+	// Reuse lineWidths capacity when possible, avoiding fresh allocation.
+	if oldWidths != nil && cap(oldWidths) >= m.linesLen {
+		m.lineWidths = oldWidths[:m.linesLen]
+		for i := range m.lineWidths {
+			m.lineWidths[i] = -1
+		}
+	}
+
+	m.tryPreservePrefix(oldLen, oldWidths, oldPaddedCount, oldWrappedW)
+
+	maxOffset := max(m.linesLen-m.contentHeight(), 0)
+	if m.yOffset > maxOffset {
+		m.yOffset = maxOffset
+	}
+}
+
+// tryPreservePrefix attempts to preserve the paddedBuf prefix and carry
+// over cached lineWidths for non-main viewports when the wrapping width
+// is unchanged. This avoids O(n) recomputation for appended content.
+func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount int, oldWrappedW int) {
+	if m.main || oldLen == 0 || m.linesLen < oldLen || oldPaddedCount != oldLen {
+		return
+	}
+
+	m.paddedBuf = m.paddedBuf[:m.lineOffsets[oldLen-1]]
+	m.paddedLineCount = oldLen - 1
+
+	if oldWidths == nil || oldWrappedW != m.wrappedContentW {
+		return
+	}
+
+	if m.lineWidths == nil {
+		if cap(oldWidths) >= m.linesLen {
+			m.lineWidths = oldWidths[:m.linesLen]
+		} else {
+			m.lineWidths = make([]int, m.linesLen)
+		}
+	}
+
+	copy(m.lineWidths, oldWidths[:min(oldLen, m.linesLen)])
+
+	for i := oldLen; i < m.linesLen; i++ {
+		m.lineWidths[i] = -1
+	}
+
+	m.lineWidths[m.paddedLineCount] = -1
+}
+
+// releaseLinesBuf releases the owned buffer if any.
+func (m *Viewport) releaseLinesBuf() {
+	if m.linesBuf != nil {
+		m.linesBuf.Release()
+		m.linesBuf = nil
+	}
+
+	m.linesLen = 0
+}
+
+func (m *Viewport) buildScrollbarCells() {
+	m.thumbCell = m.thumbStyle.RenderLine([]byte(m.thumbChar))
+	if len(m.thumbCell) == 0 {
+		m.thumbCell = []byte(m.thumbChar)
+	} else {
+		m.thumbCell = append([]byte(" "), m.thumbCell...)
+	}
+
+	m.trackCell = m.trackStyle.RenderLine([]byte(m.trackChar))
+	if len(m.trackCell) == 0 {
+		m.trackCell = []byte(m.trackChar)
+	} else {
+		m.trackCell = append([]byte(" "), m.trackCell...)
+	}
+
+	m.emptyCell = []byte("  ")
+}
+
+// setLines stores pre-wrapped lines directly, adopting a new LinesBuf.
+// For main viewports, preserves the padded prefix when the content width
+// is unchanged — padLines starts from paddedLineCount, processing only
+// new/changed lines. Avoids the O(n) snapshot copy that setLinesBuf does.
+// Reuses the existing LinesBuf capacity when possible.
+func (m *Viewport) setLines(lines [][]byte) {
+	// Check if we can preserve the padded prefix (same width, main viewport).
+	canPreservePrefix := m.main && m.paddedLineCount > 0 && m.paddedBufCW == m.ContentWidth()
+
+	var (
+		savedPaddedCount int
+		savedWidths      []int
+	)
+
+	if canPreservePrefix {
+		savedPaddedCount = m.paddedLineCount
+		savedWidths = m.lineWidths
+	} else {
+		m.paddedLineCount = 0
+		m.paddedBuf = m.paddedBuf[:0]
+	}
+
+	// Reuse existing LinesBuf capacity instead of pool get/put.
+	var buf *buffer.LinesBuf
+	if m.linesBuf != nil {
+		buf = m.linesBuf
+		buf.Reset()
+
+		m.linesBuf = nil
+		m.linesLen = 0
+	} else {
+		// Pre-size new LinesBuf from pool to avoid incremental growth.
+		totalBytes := 0
+		for _, line := range lines {
+			totalBytes += len(line)
+		}
+
+		buf = buffer.NewLinesBuf(totalBytes)
+	}
+
+	buf.WriteLines(lines)
+	m.adoptLinesBuf(buf, m.wrappedContentW)
+
+	if canPreservePrefix {
+		m.paddedLineCount = min(savedPaddedCount, m.linesLen)
+
+		if savedWidths != nil {
+			if cap(savedWidths) >= m.linesLen {
+				m.lineWidths = savedWidths[:m.linesLen]
+			} else {
+				m.lineWidths = make([]int, m.linesLen)
+				copy(m.lineWidths, savedWidths[:min(len(savedWidths), m.linesLen)])
+			}
+
+			for i := m.paddedLineCount; i < m.linesLen; i++ {
+				m.lineWidths[i] = -1
+			}
+		}
+	}
+}
+
+// setLinesBuf adopts a LinesBuf directly without copying, resetting the
+// incremental cache so that the next render does a full rebuild.
+// For main viewports, snapshots previous padded state so that
+// tryBulkCopyLine can skip CellWidth computation for unchanged lines.
+func (m *Viewport) setLinesBuf(content *buffer.LinesBuf) {
+	if m.main {
+		m.prevPaddedBuf = append(m.prevPaddedBuf[:0], m.paddedBuf...)
+		m.prevLineOffsets = append(m.prevLineOffsets[:0], m.lineOffsets...)
+		m.prevLineWidths = append(m.prevLineWidths[:0], m.lineWidths...)
+	}
+
+	m.paddedLineCount = 0
+	m.paddedBuf = m.paddedBuf[:0]
+	m.invalidateLineWidths()
+
+	m.adoptLinesBuf(content, m.wrappedContentW)
 }

@@ -245,61 +245,67 @@ func (s Style) Bytes() []byte {
 	return buf
 }
 
-// Render applies the style to the given content and returns the result.
-//
-// Layout pipeline (matches lipgloss v2 semantics where Width includes borders):
-//
-//  1. Auto-derive width from content when border is set without explicit Width
-//  2. Cap effective width to MaxWidth when MaxWidth < Width
-//  3. Apply horizontal padding (padLeft, padRight)
-//  4. Apply vertical padding (padTop, padBottom)
-//  5. Compute contentWidth = width - borders - padding
-//  6. Pad or truncate each line to contentWidth (using alignment)
-//  7. Apply borders around the content
-//  8. Apply ANSI color/bold sequences to every line
-func (s Style) Render(content [][]byte) [][]byte {
-	if content == nil && !s.hasBorder && s.padTop == 0 && s.padBottom == 0 && s.width == 0 {
-		return nil
-	}
-
-	if !s.hasLayoutProperties() {
-		return s.renderColorOnly(content)
-	}
-
-	result := s.applyLayout(content)
-
-	return s.renderColorOnly(result)
-}
-
-// RenderInto renders content through the full style pipeline and writes
-// the result lines into dst. Equivalent to dst.WriteLines(s.Render(content))
-// but avoids the intermediate [][]byte allocation for the color pass.
+// RenderIntoBuf renders content from a LinesBuf through the full style pipeline
+// and writes the result lines into dst. Uses Line(i) for zero-alloc access.
+// For the color-only case (no layout), iterates directly without creating [][]byte.
 // Call Reset() on dst before if you want to overwrite it.
-func (s Style) RenderInto(dst *buffer.LinesBuf, content [][]byte) {
-	if content == nil && !s.hasBorder && s.padTop == 0 && s.padBottom == 0 && s.width == 0 {
-		return
+func (s Style) RenderIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
+	if content == nil || content.Len() == 0 {
+		if !s.hasBorder && s.padTop == 0 && s.padBottom == 0 && s.width == 0 {
+			return
+		}
 	}
 
 	if !s.hasLayoutProperties() {
-		s.renderColorOnlyInto(dst, content)
+		s.renderColorOnlyIntoBuf(dst, content)
 
 		return
 	}
 
-	result := s.applyLayout(content)
+	// Layout requires [][]byte — build temporary view from LinesBuf.
+	lines := content.Lines()
+	result := s.applyLayout(lines)
 	s.renderColorOnlyInto(dst, result)
 }
 
 // RenderLine renders a single line through the full style pipeline
 // (padding, alignment, borders, color) and returns the first result line.
-// Equivalent to Render([][]byte{line})[0] but avoids the outer slice allocation.
+// For the common color-only case, avoids the [][]byte allocation.
 func (s Style) RenderLine(line []byte) []byte {
-	result := s.Render([][]byte{line})
-	if len(result) == 0 {
+	if !s.hasLayoutProperties() {
+		if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold {
+			return line
+		}
+
+		prefix := s.stylePrefix()
+		reset := ansiReset
+
+		if !bytes.Contains(line, reset) {
+			buf := make([]byte, 0, len(prefix)+len(line)+len(reset))
+			buf = append(buf, prefix...)
+			buf = append(buf, line...)
+			buf = append(buf, reset...)
+
+			return buf
+		}
+
+		var buf []byte
+
+		buf = append(buf, prefix...)
+		buf = appendWithResetReemitBytes(buf, line, prefix, reset)
+		buf = append(buf, reset...)
+
+		return buf
+	}
+
+	result := s.applyLayout([][]byte{line})
+
+	styled := s.renderColorOnly(result)
+	if len(styled) == 0 {
 		return nil
 	}
 
-	return result[0]
+	return styled[0]
 }
 
 // AppendStyledLine appends a single line styled with color/bold attributes
@@ -379,6 +385,12 @@ func (s Style) RenderLineInto(dst *buffer.LinesBuf, line []byte) {
 // is re-emitted so that the style persists across pre-styled content
 // (e.g. table cells with selection background).
 func (s Style) RenderAppend(dst *buffer.LinesBuf, content []byte) {
+	if dst.Len() == 0 {
+		s.RenderLineInto(dst, content)
+
+		return
+	}
+
 	prefix := s.stylePrefix()
 	reset := ansiReset
 
@@ -429,6 +441,69 @@ func (s Style) renderColorOnlyInto(dst *buffer.LinesBuf, content [][]byte) {
 	}
 
 	for _, line := range content {
+		if !bytes.Contains(line, reset) {
+			dst.WriteLine3(prefix, line, reset)
+
+			continue
+		}
+
+		dst.EmptyLine()
+		dst.AppendToLine(prefix)
+		appendWithResetReemit(dst, line, prefix, reset)
+	}
+}
+
+// renderColorOnlyIntoBuf applies ANSI foreground/background/bold sequences to
+// every line of content using Line(i) for zero-alloc access.
+// After every ANSI reset (\x1b[m) found in a line, the style prefix is
+// re-emitted so that the style persists across pre-styled content.
+func (s Style) renderColorOnlyIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
+	if content.Len() == 0 {
+		return
+	}
+
+	if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold {
+		writeBufLines(dst, content)
+
+		return
+	}
+
+	prefix := s.stylePrefix()
+	reset := ansiReset
+
+	if len(prefix) == 0 && len(reset) == 0 {
+		writeBufLines(dst, content)
+
+		return
+	}
+
+	if len(prefix) == 0 {
+		writeBufLinesWithReset(dst, content, reset)
+
+		return
+	}
+
+	writeBufLinesStyled(dst, content, prefix, reset)
+}
+
+// writeBufLines writes all lines from content into dst as-is.
+func writeBufLines(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
+	for i := range content.Len() {
+		dst.WriteLine(content.Line(i))
+	}
+}
+
+// writeBufLinesWithReset writes all lines from content with a reset suffix.
+func writeBufLinesWithReset(dst *buffer.LinesBuf, content *buffer.LinesBuf, reset []byte) {
+	for i := range content.Len() {
+		dst.WriteLine2(content.Line(i), reset)
+	}
+}
+
+// writeBufLinesStyled writes all lines with prefix and reset, handling embedded resets.
+func writeBufLinesStyled(dst *buffer.LinesBuf, content *buffer.LinesBuf, prefix, reset []byte) {
+	for i := range content.Len() {
+		line := content.Line(i)
 		if !bytes.Contains(line, reset) {
 			dst.WriteLine3(prefix, line, reset)
 

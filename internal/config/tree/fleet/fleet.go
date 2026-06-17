@@ -15,6 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
@@ -32,6 +33,10 @@ type Fleet struct {
 	CacheMachineInfos       []MachineInfo             `yaml:"-" json:"-"`
 	CacheFlattenedLogs      []*logs.Logs              `yaml:"-" json:"-"`
 	CacheStatisticsPerPhase *stats.StatisticsPerPhase `yaml:"-" json:"-"`
+
+	// cachedTAS persists TimeAndState across frames so that stateVersion
+	// accumulates correctly. Cleared on ResetState (workflow restart).
+	cachedTAS []*atomictimeandstate.TimeAndState
 }
 
 type MachineInfo struct {
@@ -56,6 +61,66 @@ func (f *Fleet) Init() error {
 	return nil
 }
 
+// PostUnmarshalInit recomputes derived state that is not serialized (json:"-").
+// Must be called after JSON deserialization (e.g. snapshot loading).
+func (f *Fleet) PostUnmarshalInit() {
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
+		if flakeV == nil {
+			return true
+		}
+
+		if flakeV.Logs != nil {
+			flakeV.Logs.PostUnmarshalInit()
+		}
+
+		flakeV.Configurations.ForEach(func(_ string, cfg *configuration.Configuration) bool {
+			if cfg == nil {
+				return true
+			}
+
+			if cfg.Logs != nil {
+				cfg.Logs.PostUnmarshalInit()
+			}
+
+			cfg.Machines.ForEach(func(_ string, mach *machine.Machine) bool {
+				postUnmarshalMachine(mach)
+
+				return true
+			})
+
+			return true
+		})
+
+		return true
+	})
+}
+
+func postUnmarshalMachine(mach *machine.Machine) {
+	if mach == nil {
+		return
+	}
+
+	mach.PostUnmarshalInit(mach.Name, nil)
+
+	if mach.Logs == nil {
+		return
+	}
+
+	mach.Logs.PhaseLogs.ForEach(func(_ phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
+		if phaseLog == nil || phaseLog.CommandLogs == nil {
+			return true
+		}
+
+		for _, cmd := range phaseLog.CommandLogs.Values() {
+			if cmd != nil {
+				cmd.PostUnmarshalInit()
+			}
+		}
+
+		return true
+	})
+}
+
 func (f *Fleet) Recalculate(workflowPhases []phase.Phase) {
 	f.RecalculateFlattenedLogs(workflowPhases)
 	f.RecalculateDurationAndError()
@@ -73,19 +138,45 @@ func (f *Fleet) RecalculateCachesOnly(workflowPhases []phase.Phase) {
 }
 
 func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
-	flattenedLogs := make([]*logs.Logs, 0)
+	machineCount := f.MachineCount()
 
-	for _, treeLeaf := range f.AllMachines() {
+	// Grow slices if needed, reuse existing capacity.
+	if cap(f.CacheFlattenedLogs) >= machineCount {
+		f.CacheFlattenedLogs = f.CacheFlattenedLogs[:machineCount]
+	} else {
+		f.CacheFlattenedLogs = make([]*logs.Logs, machineCount)
+	}
+
+	if cap(f.cachedTAS) >= machineCount {
+		f.cachedTAS = f.cachedTAS[:machineCount]
+	} else {
+		newSlice := make([]*atomictimeandstate.TimeAndState, machineCount)
+		copy(newSlice, f.cachedTAS)
+		f.cachedTAS = newSlice
+	}
+
+	for machineIdx, treeLeaf := range f.AllMachines() {
+		if f.CacheFlattenedLogs[machineIdx] == nil {
+			f.CacheFlattenedLogs[machineIdx] = logs.New()
+		}
+
+		if f.cachedTAS[machineIdx] == nil {
+			f.cachedTAS[machineIdx] = &atomictimeandstate.TimeAndState{}
+		}
+
 		mergedLogs := logs.MergePhaseLogs(workflowPhases,
 			treeLeaf.Machine.Logs.PhaseLogs,
 			treeLeaf.Configuration.Logs.PhaseLogs,
 			treeLeaf.Flake.Logs.PhaseLogs,
 		)
 
-		flattenedLogs = append(flattenedLogs, mergedLogs)
-	}
+		// Sync aggregated state into persisted TAS — bumps stateVersion on transitions.
+		f.cachedTAS[machineIdx].SyncFrom(mergedLogs.TAS)
 
-	f.CacheFlattenedLogs = flattenedLogs
+		// Assign persisted TAS and PhaseLogs to the cached Logs entry.
+		f.CacheFlattenedLogs[machineIdx].PhaseLogs = mergedLogs.PhaseLogs
+		f.CacheFlattenedLogs[machineIdx].TAS = f.cachedTAS[machineIdx]
+	}
 }
 
 func (f *Fleet) RecalculateDurationAndError() {
@@ -93,39 +184,72 @@ func (f *Fleet) RecalculateDurationAndError() {
 
 	var largestFlakeDuration time.Duration
 
-	for _, flake := range f.Flakes.Pairs() {
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		var largestConfigurationDuration time.Duration
 
-		for _, configuration := range flake.Value.Configurations.Pairs() {
+		flakeAnyRunning := false
+
+		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
 			var largestMachineDuration time.Duration
 
-			for _, machine := range configuration.Value.Machines.Pairs() {
-				dae := f.CacheFlattenedLogs[idx].DurationAndErrorCache
+			cfgAnyRunning := false
 
-				machine.Value.Logs.DurationAndErrorCache = dae
+			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+				machineV.Logs.TAS.SyncFrom(f.CacheFlattenedLogs[idx].TAS)
 
-				if dae.Duration > largestMachineDuration {
-					largestMachineDuration = dae.Duration
+				machineDur := machineV.Logs.TAS.DurationCache
+				if machineDur > largestMachineDuration {
+					largestMachineDuration = machineDur
+				}
+
+				if !machineV.Logs.TAS.IsFinished() {
+					cfgAnyRunning = true
 				}
 
 				idx++
-			}
 
-			configuration.Value.Logs.DurationAndErrorCache.Duration = largestMachineDuration
+				return true
+			})
+
+			propagateDurationAndState(configurationV.Logs, largestMachineDuration, cfgAnyRunning)
 
 			if largestMachineDuration > largestConfigurationDuration {
 				largestConfigurationDuration = largestMachineDuration
 			}
-		}
 
-		flake.Value.Logs.DurationAndErrorCache.Duration = largestConfigurationDuration
+			if !configurationV.Logs.TAS.IsFinished() {
+				flakeAnyRunning = true
+			}
+
+			return true
+		})
+
+		propagateDurationAndState(flakeV.Logs, largestConfigurationDuration, flakeAnyRunning)
 
 		if largestConfigurationDuration > largestFlakeDuration {
 			largestFlakeDuration = largestConfigurationDuration
 		}
-	}
 
-	f.Logs.DurationAndErrorCache.Duration = largestFlakeDuration
+		return true
+	})
+
+	f.Logs.TAS.SetDuration(largestFlakeDuration)
+}
+
+// propagateDurationAndState sets duration on the TAS and transitions state
+// based on whether any child entity is still running.
+func propagateDurationAndState(target *logs.Logs, duration time.Duration, anyRunning bool) {
+	target.TAS.SetDuration(duration)
+
+	if anyRunning {
+		if !target.TAS.HasStarted() {
+			target.TAS.SetStarted(time.Now())
+		} else if target.TAS.IsFinished() {
+			target.TAS.MarkRunning()
+		}
+	} else if !target.TAS.IsFinished() {
+		target.TAS.MarkFinished()
+	}
 }
 
 func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
@@ -192,24 +316,29 @@ func (f *Fleet) ResetState() {
 	f.CacheFlattenedLogs = nil
 	f.CacheStatisticsPerPhase = nil
 
-	for _, flakeP := range f.Flakes.Pairs() {
-		flakeV := flakeP.Value
+	// Clear persisted TAS so stateVersion resets for the new workflow.
+	for i := range f.cachedTAS {
+		f.cachedTAS[i] = nil
+	}
 
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		flakeV.Logs.Clear()
 
-		for _, configurationP := range flakeV.Configurations.Pairs() {
-			configurationV := configurationP.Value
-
+		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
 			configurationV.Logs.Clear()
 
-			for _, machineP := range configurationV.Machines.Pairs() {
-				machineV := machineP.Value
-
+			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
 				machineV.Logs.Clear()
 				machineV.MetaInspect.Clear()
-			}
-		}
-	}
+
+				return true
+			})
+
+			return true
+		})
+
+		return true
+	})
 }
 
 // Helpers
@@ -224,17 +353,19 @@ func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 	return func(yield func(int, *FleetLeaf) bool) {
 		idx := 0
 
-		for _, flake := range f.Flakes.Pairs() {
-			for _, configuration := range flake.Value.Configurations.Pairs() {
-				for _, machine := range configuration.Value.Machines.Pairs() {
-					if !yield(idx, &FleetLeaf{flake.Value, configuration.Value, machine.Value}) {
-						return
+		f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
+			return flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
+				return configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+					if !yield(idx, &FleetLeaf{flakeV, configurationV, machineV}) {
+						return false
 					}
 
 					idx++
-				}
-			}
-		}
+
+					return true
+				})
+			})
+		})
 	}
 }
 
@@ -264,7 +395,10 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.Stat
 }
 
 func (f *Fleet) RefreshCaches() {
-	machineInfos := make([]MachineInfo, 0, f.MachineCount())
+	// Reuse previous slice capacity to avoid re-allocation.
+	if cap(f.CacheMachineInfos) > 0 {
+		f.CacheMachineInfos = f.CacheMachineInfos[:0]
+	}
 
 	for _, treeLeaf := range f.AllMachines() {
 		m := treeLeaf.Machine
@@ -275,8 +409,6 @@ func (f *Fleet) RefreshCaches() {
 			State:       *m.State.Load(),
 		}
 
-		machineInfos = append(machineInfos, mInfo)
+		f.CacheMachineInfos = append(f.CacheMachineInfos, mInfo)
 	}
-
-	f.CacheMachineInfos = machineInfos
 }

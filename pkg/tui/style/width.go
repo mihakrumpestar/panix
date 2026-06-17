@@ -161,6 +161,35 @@ func StripANSI(line []byte) []byte {
 	return dst
 }
 
+// HasVisibleContent reports whether line contains any visible (non-ANSI)
+// characters. Zero allocation — scans without building a result slice.
+// Use instead of len(StripANSI(line)) == 0.
+func HasVisibleContent(line []byte) bool {
+	pos := 0
+	n := len(line)
+
+	for pos < n {
+		if line[pos] == '\x1b' {
+			pos = skipANSI(line, pos)
+
+			continue
+		}
+
+		if line[pos] >= 0x20 && line[pos] < 0x7F {
+			return true
+		}
+
+		// Non-ASCII: check if it's a visible character (not a control char).
+		if line[pos] >= 0x80 { //nolint:mnd // high byte = multi-byte UTF-8 start
+			return true
+		}
+
+		pos++
+	}
+
+	return false
+}
+
 // indexByte returns the index of c in b, or -1 if not found.
 // Avoids bytes.IndexByte import.
 func indexByte(b []byte, c byte) int {
@@ -182,28 +211,6 @@ func CountLines(str string) int {
 	}
 
 	return 1 + strings.Count(str, "\n")
-}
-
-// RuneWidth returns the display width of a rune (1 for ASCII, 2 for East Asian Wide).
-//
-//nolint:cyclop
-func RuneWidth(runeVal rune) int {
-	if runeVal >= 0x1100 &&
-		(runeVal <= 0x115F ||
-			runeVal == 0x2329 ||
-			runeVal == 0x27C2 ||
-			(runeVal >= 0x2E80 && runeVal <= 0xA4CF && runeVal != 0x303F) ||
-			(runeVal >= 0xAC00 && runeVal <= 0xD7A3) ||
-			(runeVal >= 0xF900 && runeVal <= 0xFAFF) ||
-			(runeVal >= 0xFE10 && runeVal <= 0xFE19) ||
-			(runeVal >= 0xFE30 && runeVal <= 0xFE6F) ||
-			(runeVal >= 0xFF01 && runeVal <= 0xFF60) ||
-			(runeVal >= 0xFFE0 && runeVal <= 0xFFE6) ||
-			(runeVal >= 0x1F300 && runeVal <= 0x1F9FF)) {
-		return 2
-	}
-
-	return 1
 }
 
 // MaxLineWidth returns the maximum terminal cell width across all lines in

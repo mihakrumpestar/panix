@@ -47,7 +47,7 @@ func (h *Header) Render(width int) *buffer.LinesBuf {
 		h.cachedWidth = width
 
 		h.cachedRender.Reset()
-		style.NewStyle().MaxWidth(width).RenderInto(h.cachedRender, h.content.Lines())
+		style.NewStyle().MaxWidth(width).RenderIntoBuf(h.cachedRender, h.content)
 	}
 
 	return h.cachedRender
@@ -64,17 +64,17 @@ func renderLine(lineBuf *buffer.LinesBuf, snapshot config.Snapshot, colors *colo
 
 	sep := border.RenderLine(append(append([]byte{' '}, colors.Chars.HeaderSeparator...), ' '))
 
-	lineBuf.Append(title.RenderLine(append(append([]byte{}, colors.Chars.SnapshotIcon...), " Snapshot"...)))
-	lineBuf.Append(border.RenderLine(colors.Chars.HeaderTitleSep))
-	lineBuf.Append([]byte{' '})
+	title.RenderAppend(lineBuf, append(append([]byte{}, colors.Chars.SnapshotIcon...), " Snapshot"...))
+	border.RenderAppend(lineBuf, colors.Chars.HeaderTitleSep)
+	lineBuf.AppendToLine([]byte{' '})
 
-	lineBuf.Append(colors.Status.Running.RenderLine([]byte("v" + snapshot.PanixVersion)))
-	lineBuf.Append(sep)
-	lineBuf.Append(border.RenderLine([]byte(snapshot.Reason.String())))
-	lineBuf.Append(sep)
-	lineBuf.Append(border.RenderLine([]byte("started: " + formatTime(snapshot.StartTime))))
-	lineBuf.Append(sep)
-	lineBuf.Append(border.RenderLine([]byte("taken: " + formatTime(snapshot.SnapshotTime))))
+	colors.Status.Running.RenderAppend(lineBuf, []byte("v"+snapshot.PanixVersion))
+	lineBuf.AppendToLine(sep)
+	border.RenderAppend(lineBuf, []byte(snapshot.Reason.String()))
+	lineBuf.AppendToLine(sep)
+	border.RenderAppend(lineBuf, []byte("started: "+formatTime(snapshot.StartTime)))
+	lineBuf.AppendToLine(sep)
+	border.RenderAppend(lineBuf, []byte("taken: "+formatTime(snapshot.SnapshotTime)))
 
 	lineBuf.WriteLine(nil)
 }

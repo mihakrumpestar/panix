@@ -117,8 +117,7 @@ func (pf *PhaseFlow) joinStatusBuf(dst *buffer.LinesBuf, sepStyle style.Style, p
 
 	if pf.statusBuf.Len() == 0 {
 		if hasBg && pillWidth > 0 {
-			bgSpaces := selBgStyle.RenderLine(style.PaddingBytes(pillWidth))
-			dst.WriteLine(bgSpaces)
+			selBgStyle.RenderLineInto(dst, style.PaddingBytes(pillWidth))
 		} else {
 			dst.WriteLine(nil)
 		}

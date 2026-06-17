@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -139,13 +140,13 @@ func TestStyle_Bytes(t *testing.T) {
 func TestStyle_Render_Empty(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, NewStyle().Render(nil))
+	assert.Nil(t, renderForTest(NewStyle(), nil))
 }
 
 func TestStyle_Render_NoFormatting(t *testing.T) {
 	t.Parallel()
 
-	got := NewStyle().Render([][]byte{[]byte("hello")})
+	got := renderForTest(NewStyle(), [][]byte{[]byte("hello")})
 	assert.Len(t, got, 1)
 	assert.Equal(t, "hello", string(got[0]))
 }
@@ -153,7 +154,7 @@ func TestStyle_Render_NoFormatting(t *testing.T) {
 func TestStyle_Render_ForegroundOnly(t *testing.T) {
 	t.Parallel()
 
-	got := NewStyle().Foreground(Color("#8BE9FD")).Render([][]byte{[]byte("hello")})
+	got := renderForTest(NewStyle().Foreground(Color("#8BE9FD")), [][]byte{[]byte("hello")})
 	visible := StripANSI(got[0])
 
 	assert.Equal(t, "hello", string(visible))
@@ -163,7 +164,7 @@ func TestStyle_Render_ForegroundOnly(t *testing.T) {
 func TestStyle_Render_MultiLineColor(t *testing.T) {
 	t.Parallel()
 
-	got := NewStyle().Foreground(Color("#8BE9FD")).Render([][]byte{[]byte("line1\nline2")})
+	got := renderForTest(NewStyle().Foreground(Color("#8BE9FD")), [][]byte{[]byte("line1\nline2")})
 	for lineIdx, line := range got {
 		assert.True(t, bytes.Contains(line, []byte("\x1b[38;2;")), "Line %d missing fg prefix", lineIdx)
 	}
@@ -173,7 +174,7 @@ func TestStyle_Render_WithBorder(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(5).Border(NormalBorder())
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 
 	gotStr := bytesJoinLines(got)
 	assert.Contains(t, gotStr, "┌")
@@ -187,7 +188,7 @@ func TestStyle_Render_BorderTopOnly(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(5).Border(NormalBorder(), true, false, false, false)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	gotStr := bytesJoinLines(got)
 
 	assert.Contains(t, gotStr, "┌", "Missing top-left corner")
@@ -198,7 +199,7 @@ func TestStyle_Render_PaddingHorizontal(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(10).Padding(0, 2)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	visible := StripANSI(got[0])
 
 	assert.Equal(t, "hi", strings.TrimSpace(string(visible)))
@@ -208,7 +209,7 @@ func TestStyle_Render_PaddingVertical(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(5).PaddingTop(1).PaddingBottom(1)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 
 	assert.GreaterOrEqual(t, len(got), 3, "Expected 3+ lines")
 }
@@ -217,7 +218,7 @@ func TestStyle_Render_AlignLeft(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(10).Align(Left)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	visible := StripANSI(got[0])
 
 	assert.Equal(t, "hi        ", string(visible))
@@ -227,7 +228,7 @@ func TestStyle_Render_AlignCenter(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(10).Align(Center)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	visible := StripANSI(got[0])
 
 	assert.Equal(t, "    hi    ", string(visible))
@@ -237,7 +238,7 @@ func TestStyle_Render_AlignRight(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(10).Align(Right)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	visible := StripANSI(got[0])
 
 	assert.Equal(t, "        hi", string(visible))
@@ -247,7 +248,7 @@ func TestStyle_Render_MaxWidth_Truncate(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().MaxWidth(5)
-	got := sty.Render([][]byte{[]byte("hello world")})
+	got := renderForTest(sty, [][]byte{[]byte("hello world")})
 	visible := StripANSI(got[0])
 
 	assert.LessOrEqual(t, CellWidth(visible), 5)
@@ -257,7 +258,7 @@ func TestStyle_BorderForeground(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(5).Border(NormalBorder()).BorderForeground(Color("#FF0000"))
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	gotStr := bytesJoinLines(got)
 
 	assert.Contains(t, gotStr, "\x1b[38;2;255;0;0m")
@@ -271,7 +272,7 @@ func TestStyle_BorderSideForeground(t *testing.T) {
 		BorderRightForeground(Color("#00FF00")).
 		BorderBottomForeground(Color("#0000FF")).
 		BorderLeftForeground(Color("#FFFF00"))
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 	gotStr := bytesJoinLines(got)
 
 	for _, prefix := range []string{
@@ -403,7 +404,7 @@ func TestStyle_TruncateEllipsis(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(5).MaxWidth(5).TruncateEllipsis(true)
-	got := sty.Render([][]byte{[]byte("hello world")})
+	got := renderForTest(sty, [][]byte{[]byte("hello world")})
 	visible := StripANSI(got[0])
 
 	assert.Equal(t, "hel..", string(visible))
@@ -424,7 +425,7 @@ func TestWidthWithMaxWidth_ContentClipped(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(20).MaxWidth(10)
-	got := sty.Render([][]byte{[]byte("hello world and more")})
+	got := renderForTest(sty, [][]byte{[]byte("hello world and more")})
 
 	assert.LessOrEqual(t, maxLineWidthBytes(got), 10)
 }
@@ -433,7 +434,7 @@ func TestWidthWithMaxWidth_ShortContentNotOverPadded(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(30).MaxWidth(10)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 
 	assert.LessOrEqual(t, maxLineWidthBytes(got), 10)
 }
@@ -442,7 +443,7 @@ func TestWidthWithMaxWidth_WithBorder(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(20).MaxWidth(10).Border(RoundedBorder())
-	got := sty.Render([][]byte{[]byte("hello world and more")})
+	got := renderForTest(sty, [][]byte{[]byte("hello world and more")})
 
 	assert.LessOrEqual(t, maxLineWidthBytes(got), 10)
 }
@@ -451,7 +452,7 @@ func TestWidthWithMaxWidth_WithPadding(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(20).MaxWidth(10).Padding(0, 1)
-	got := sty.Render([][]byte{[]byte("hello world and more")})
+	got := renderForTest(sty, [][]byte{[]byte("hello world and more")})
 
 	assert.LessOrEqual(t, maxLineWidthBytes(got), 10)
 }
@@ -460,7 +461,35 @@ func TestWidthWithMaxWidth_EqualValues(t *testing.T) {
 	t.Parallel()
 
 	sty := NewStyle().Width(10).MaxWidth(10)
-	got := sty.Render([][]byte{[]byte("hi")})
+	got := renderForTest(sty, [][]byte{[]byte("hi")})
 
 	assert.Equal(t, 10, maxLineWidthBytes(got))
+}
+
+// Helpers
+
+func renderForTest(sty Style, content [][]byte) [][]byte {
+	if content == nil && !sty.hasBorder && sty.padTop == 0 && sty.padBottom == 0 && sty.width == 0 {
+		return nil
+	}
+
+	contentBuf := buffer.NewLinesBuf()
+	for _, line := range content {
+		contentBuf.WriteLine(line)
+	}
+
+	resultBuf := buffer.NewLinesBuf()
+	sty.RenderIntoBuf(resultBuf, contentBuf)
+
+	result := resultBuf.Lines()
+
+	resultCopy := make([][]byte, len(result))
+	for i, line := range result {
+		resultCopy[i] = bytes.Clone(line)
+	}
+
+	contentBuf.Release()
+	resultBuf.Release()
+
+	return resultCopy
 }

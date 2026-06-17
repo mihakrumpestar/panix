@@ -86,7 +86,7 @@ func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, e
 	envLines = append(envLines, "export PANIX_E2E_DIR="+e2eDir)
 
 	goArgs := "go run " + root + "/cmd/panix"
-	panixCmd := `"${PANIX_BIN:-` + goArgs + `}"`
+	panixCmd := "${PANIX_BIN:-" + goArgs + "}"
 
 	script := "#!/bin/sh\n" +
 		strings.Join(envLines, "\n") + "\n" +

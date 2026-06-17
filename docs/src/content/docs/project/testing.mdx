@@ -1,6 +1,6 @@
 ---
 title: Testing
-description: How to run unit and end-to-end tests.
+description: How to run unit tests, benchmarks, and end-to-end tests.
 sidebar:
   order: 2
 ---
@@ -10,6 +10,39 @@ sidebar:
 ```sh
 task go:test
 ```
+
+## Benchmarks
+
+A custom benchmark comparison tool (`tests/bench/`) discovers, runs, and renders Go benchmarks with multi-variant comparison.
+
+```sh
+task go:test:bench
+```
+
+Filter to specific packages:
+
+```sh
+task go:test:bench -- ./pkg/tui/...
+```
+
+Adjust per-benchmark duration:
+
+```sh
+task go:test:bench -- -benchtime=5s
+```
+
+**Naming convention**: benchmarks use `Benchmark_<Variant>__<Feature>` — the `__` separator splits variant from feature name. All benchmarks sharing the same feature are grouped for comparison. An unnamed/baseline variant uses `Benchmark__<Feature>`.
+
+**Output**: one table per package. Each cell shows time, bytes/allocs, and ratio vs the best variant. Columns are sorted by overall cumulative performance (ratio-based scoring). Example:
+
+```
+BufferWrite/ASCII        668 ns (0 B, 0 allocs)              — best (baseline)
+BufferWrite/ASCII        685 ns (0 B, 0 allocs) +1.03×       — 1.03× slower
+```
+
+Cross-package benchmarks live in `tests/bench/`:
+- `tests/bench/buffer/` — 16+ buffer implementation variants compared
+- `tests/bench/tui/` — full TUI pipeline: zeroterm vs Bubbletea vs cview
 
 ## E2E Tests
 
@@ -31,14 +64,58 @@ task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
 
 The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes).
 
-**What it does:**
+The tests are a standalone Go program (`go run ./tests/e2e/`), not `go test`. Use `PANIX_BIN=/path/to/panix` to test a pre-built binary instead of `go run`.
 
-1. Generates SSH keys, downloads kexec and Debian images, builds a NixOS installer ISO, preconfigures Debian image
-2. Starts QEMU VMs per test scope: NixOS ISO VM + Debian/kexec VM for local, and/or the same pair for remote
-3. Runs panix deploy (bootstrap) against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`
-4. Runs panix deploy (re-deploy) against all VMs (switch-to-configuration)
-5. Verifies NixOS installation on all VMs via SSH
+**Phase 0 — Setup** (parallel where possible):
+1. Generate SSH keys
+2. Download and bake Debian cloud image (rsync pre-installed via cloud-init)
+3. Build NixOS installer ISO, kexec installer, and NixOS closures
+4. Create cloud-init seed ISOs and disk images (blank target + Debian overlay)
+
+**Phase 1 — Bootstrap**: Runs `panix deploy` against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`.
+
+**Phase 2 — Redeploy**: Runs `panix deploy` again against the now-installed NixOS systems (switch-to-configuration).
+
+**Verification**: SSHes into each VM and checks for the `panix-e2e-test-pass` marker file and NixOS identity in `/etc/os-release`.
+
+**VM ports** (localhost SSH forwarding):
+
+| VM | Port |
+|---|---|
+| NixOS ISO (local) | 10022 |
+| Kexec/Debian (local) | 10023 |
+| NixOS ISO (remote) | 10025 |
+| Kexec/Debian (remote) | 10026 |
+
+**Nix cache server**: A harmonia instance starts automatically before tests run to serve as a local Nix cache, speeding up repeated builds and making them semi-reproducable (by not relying on Nix binary cache (and network speed) for deploy builds and time vise consistency).
 
 **What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
 
 **Logs** (`tests/e2e/log/`): Recreated each run. Per-VM console logs with timestamps, panix logs per deploy, snapshot JSONs.
+
+### E2E Profiling
+
+The E2E panix config enables profiling during the bootstrap phase. Profiles are written to `tests/e2e/profile/`:
+
+```sh
+task go:profile:report          # CPU + memory (top 50, self time)
+task go:profile:report:cum      # CPU + memory (top 50, cumulative)
+task go:profile:report -- /path/to/profile/dir   # custom profile dir
+```
+
+Panix supports CPU, memory, block, mutex, and goroutine profiling via the `profile.*` flags in `panix.yml`.
+
+### E2E Benchmarks
+
+Cross-commit performance benchmarking. Builds panix at specific commits, runs E2E, and compares profiles.
+
+```sh
+task bench:e2e                          # Run for default commits + HEAD, then show results
+task bench:e2e COMMITS="sha1 sha2"      # Custom commit list
+task bench:e2e:run COMMIT=sha           # Build & run E2E for a single commit
+task bench:e2e:result                   # Show comparison table from saved profiles
+```
+
+`bench:e2e:run` creates a git worktree, builds panix via `nix build`, runs the full E2E suite, and saves CPU/memory profiles to `tests/e2e/bench-results/<commit>/`.
+
+`bench:e2e:result` extracts duration, CPU utilization, and memory allocation from each commit's profiles, prints a comparison table with diffs from the reference commit, and outputs `go tool pprof` diff commands for interactive analysis.

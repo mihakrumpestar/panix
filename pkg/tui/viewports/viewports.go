@@ -26,11 +26,13 @@ type Viewports struct {
 	mainXpath                    xpath.Xpath
 	activeXpath                  xpath.Xpath
 	highlightBuf                 *buffer.LinesBuf
+	lastActiveXpath              xpath.Xpath
+	lastActiveYOffset            int
+	dirty                        bool
 }
 
 type item struct {
 	model          tuiviewport.Viewport
-	content        [][]byte
 	contentBuf     *buffer.LinesBuf
 	contentVersion uint64
 	lastWidth      int
@@ -71,6 +73,15 @@ func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHi
 
 func (v *Viewports) ContentWidth() int { return v.dimensions.Width - tuiviewport.ScrollbarColWidth() }
 
+func (v *Viewports) ContentVersion(xp xpath.Xpath) uint64 {
+	itm, ok := v.items.Get(xp)
+	if !ok {
+		return 0
+	}
+
+	return itm.contentVersion
+}
+
 // Fullscreen
 
 func (v *Viewports) IsFullscreen() bool              { return v.fullscreenXp.Depth() > 0 }
@@ -89,12 +100,16 @@ func (v *Viewports) GetActiveInnerViewportContent() ([][]byte, bool) {
 		return nil, false
 	}
 
-	it, ok := v.items.Get(v.activeXpath)
+	itm, ok := v.items.Get(v.activeXpath)
 	if !ok {
 		return nil, false
 	}
 
-	return it.content, true
+	if itm.contentBuf == nil {
+		return nil, false
+	}
+
+	return itm.contentBuf.Lines(), true
 }
 
 func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
@@ -105,10 +120,10 @@ func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 	return ""
 }
 
-func (v *Viewports) GetViewportContent(xp xpath.Xpath) [][]byte {
-	it, ok := v.items.Get(xp)
+func (v *Viewports) GetViewportContent(xp xpath.Xpath) *buffer.LinesBuf {
+	itm, ok := v.items.Get(xp)
 	if ok {
-		return it.content
+		return itm.contentBuf
 	}
 
 	return nil
@@ -159,6 +174,8 @@ func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 			v.activeXpath = v.mainXpath
 		}
 
+		v.checkDirty()
+
 		return nil
 	}
 
@@ -167,34 +184,40 @@ func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 		itm.model.Update(msg)
 	}
 
+	v.checkDirty()
+
 	return nil
+}
+
+// ConsumeDirty returns true if viewport state changed since last call, then resets the flag.
+func (v *Viewports) ConsumeDirty() bool {
+	d := v.dirty
+	v.dirty = false
+
+	return d
 }
 
 // Render methods
 
-func (v *Viewports) RenderViewportVersioned(xp xpath.Xpath, content [][]byte, version uint64, indent int) *buffer.LinesBuf {
-	return v.render(xp, content, nil, indent, 0, 0, true, true, false, version)
+func (v *Viewports) RenderViewportVersioned(xp xpath.Xpath, content *buffer.LinesBuf, version uint64, indent int) *buffer.LinesBuf {
+	return v.render(xp, content, indent, 0, true, true, false, version)
 }
 
-func (v *Viewports) RenderLabelViewport(xp xpath.Xpath, content [][]byte, version uint64, indent int) *buffer.LinesBuf {
-	return v.render(xp, content, nil, indent, 0, 0, false, false, true, version)
+func (v *Viewports) RenderLabelViewport(xp xpath.Xpath, content *buffer.LinesBuf, version uint64, indent int) *buffer.LinesBuf {
+	return v.render(xp, content, indent, 0, false, false, true, version)
 }
 
-// RenderMainViewport renders the main viewport. When explicitHeight > 0 the
-// viewport is constrained to that height; when 0 the viewport expands to show
-// all content (used for final output on quit).
 func (v *Viewports) RenderMainViewport(content *buffer.LinesBuf, version uint64, explicitHeight int) *buffer.LinesBuf {
-	return v.render(v.mainXpath, content.Lines(), content, 0, explicitHeight, 0, false, true, false, version)
+	return v.render(v.mainXpath, content, 0, explicitHeight, false, true, false, version)
 }
 
 func (v *Viewports) RenderFullscreenViewport(
 	xpath xpath.Xpath,
-	content [][]byte, version uint64, footerHeaderHeight int,
+	content *buffer.LinesBuf, version uint64, footerHeaderHeight int,
 ) *buffer.LinesBuf {
 	height := max(1, v.dimensions.Height-footerHeaderHeight)
-	width := max(1, v.dimensions.Width)
 
-	return v.render(xpath, content, nil, 0, height, width, true, true, false, version)
+	return v.render(xpath, content, 0, height, true, true, false, version)
 }
 
 // Debug
@@ -203,19 +226,37 @@ func (v *Viewports) Debug(buf *buffer.LinesBuf) {
 	buf.EmptyLine()
 	buf.WriteString(fmt.Sprintf("Viewports: %d (%dx%d) ContentWidth=%d", v.items.Len(), v.dimensions.Width, v.dimensions.Height, v.ContentWidth()))
 
-	for _, pair := range v.items.Pairs() {
-		mdl := pair.Value.model
+	v.items.ForEach(func(xpathKey xpath.Xpath, itm *item) bool {
+		mdl := itm.model
 		buf.WriteLine(fmt.Appendf(nil, "  '%s': %dx%d l:%d sb:%v sr:%v main:%v overflows:%v",
-			pair.Key, mdl.Width(), mdl.Height(), mdl.TotalLineCount(),
+			xpathKey, mdl.Width(), mdl.Height(), mdl.TotalLineCount(),
 			mdl.HasScrollbar(), mdl.HasScrollbarReserve(), mdl.IsMain(),
 			mdl.TotalLineCount() > mdl.Height()))
 
-		if pair.Key == v.activeXpath {
+		if xpathKey == v.activeXpath {
 			buf.AppendToLine([]byte(" [A]"))
 		}
 
 		if mdl.ScrollPercent() == 1 {
 			buf.AppendToLine([]byte(" @btm"))
+		}
+
+		return true
+	})
+}
+
+func (v *Viewports) checkDirty() {
+	if v.activeXpath != v.lastActiveXpath {
+		v.dirty = true
+		v.lastActiveXpath = v.activeXpath
+	}
+
+	itm := v.activeItem()
+	if itm != nil {
+		yOffset := itm.model.YOffset()
+		if yOffset != v.lastActiveYOffset {
+			v.dirty = true
+			v.lastActiveYOffset = yOffset
 		}
 	}
 }
@@ -224,32 +265,35 @@ func (v *Viewports) Debug(buf *buffer.LinesBuf) {
 
 func (v *Viewports) render(
 	xpath xpath.Xpath,
-	content [][]byte,
 	contentBuf *buffer.LinesBuf,
-	indent, explicitHeight, explicitWidth int,
+	indent, explicitHeight int,
 	bordered, scrollbar, highlightActive bool,
 	version uint64,
 ) *buffer.LinesBuf {
 	active := xpath == v.activeXpath
-	itm := v.getOrCreateItem(xpath, content, indent, explicitHeight, explicitWidth, bordered, scrollbar)
+	itm := v.getOrCreateItem(xpath, indent, explicitHeight, bordered, scrollbar)
 
-	contentChanged := itm.contentVersion != version
-	content = v.resolveContent(itm, version, content, contentBuf)
+	contentChanged := itm.contentVersion != version || itm.contentBuf != contentBuf
+	v.resolveContent(itm, version, contentBuf)
 
 	if bordered {
 		itm.model.SetBorderStyle(v.borderColor(active))
 	}
 
-	width := v.viewWidth(indent, explicitWidth)
+	width := v.viewWidth(indent, 0)
 	dimsChanged := width != itm.lastWidth || explicitHeight != itm.lastHeight
 
 	if contentChanged || dimsChanged {
 		itm.lastWidth = width
 		itm.lastHeight = explicitHeight
 
-		err := itm.model.Sync(content, width, explicitHeight)
+		err := itm.model.SyncBuf(itm.contentBuf, width, explicitHeight)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "viewport: %v\n", err)
+		}
+
+		if xpath == v.mainXpath {
+			itm.contentBuf = nil
 		}
 	}
 
@@ -257,7 +301,7 @@ func (v *Viewports) render(
 
 	if highlightActive && active {
 		v.highlightBuf.Reset()
-		v.selectionHighlightBackground.RenderInto(v.highlightBuf, rendered.Lines())
+		v.selectionHighlightBackground.RenderIntoBuf(v.highlightBuf, rendered)
 		rendered = v.highlightBuf
 	}
 
@@ -280,26 +324,18 @@ func (v *Viewports) viewWidth(indent, explicitWidth int) int {
 	return max(1, width)
 }
 
-func (v *Viewports) resolveContent(itm *item, version uint64, content [][]byte, contentBuf *buffer.LinesBuf) [][]byte {
-	if itm.contentVersion == version {
-		return itm.content
-	}
-
+func (v *Viewports) resolveContent(itm *item, version uint64, contentBuf *buffer.LinesBuf) {
 	if itm.contentBuf != nil && itm.contentBuf != contentBuf {
 		itm.contentBuf.Release()
 	}
 
-	itm.content = content
 	itm.contentBuf = contentBuf
 	itm.contentVersion = version
-
-	return itm.content
 }
 
 func (v *Viewports) getOrCreateItem(
 	xpath xpath.Xpath,
-	content [][]byte,
-	indent, explicitHeight, explicitWidth int,
+	indent, explicitHeight int,
 	bordered, scrollbar bool,
 ) *item {
 	itm, exists := v.items.Get(xpath)
@@ -308,16 +344,34 @@ func (v *Viewports) getOrCreateItem(
 		hasScrollbar := itm.model.HasScrollbar()
 
 		if hasBorder != bordered || hasScrollbar != scrollbar {
+			savedContent := itm.contentBuf
+			savedVersion := itm.contentVersion
+			itm.contentBuf = nil
 			itm.release()
 			v.items.Del(xpath)
+
+			itm = &item{
+				model:          tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, 0, bordered, scrollbar)...),
+				contentBuf:     savedContent,
+				contentVersion: savedVersion,
+				zoneID:         zeroterm.NewZoneID(),
+				zonedOutput:    buffer.NewLinesBuf(),
+			}
+
+			if xpath != v.mainXpath {
+				itm.model.GotoBottom()
+			}
+
+			v.items.Set(xpath, itm)
+
+			return itm
 		} else {
 			return itm
 		}
 	}
 
 	itm = &item{
-		model:       tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, explicitWidth, bordered, scrollbar)...),
-		content:     content,
+		model:       tuiviewport.New(v.buildViewportOpts(xpath, indent, explicitHeight, 0, bordered, scrollbar)...),
 		zoneID:      zeroterm.NewZoneID(),
 		zonedOutput: buffer.NewLinesBuf(),
 	}
@@ -398,11 +452,13 @@ func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 
 	var candidates []xpath.Xpath
 
-	for _, pair := range v.items.Pairs() {
-		if pair.Value.zoneID.Equal(clickedID) {
-			candidates = append(candidates, pair.Key)
+	v.items.ForEach(func(k xpath.Xpath, itm *item) bool {
+		if itm.zoneID.Equal(clickedID) {
+			candidates = append(candidates, k)
 		}
-	}
+
+		return true
+	})
 
 	if len(candidates) == 0 {
 		return ""

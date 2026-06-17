@@ -100,23 +100,28 @@ func (f *Footer) Render(quitting bool, width int) *buffer.LinesBuf {
 	helpWidth := width
 
 	if notifBuf != nil {
-		w := style.MaxLineWidth(notifBuf.LinesBuf)
+		notifSnap := notifBuf.Snapshot()
+
+		w := style.MaxLineWidth(notifSnap)
 		if w > 0 {
 			helpWidth = width - w
 		}
-	}
 
-	f.cachedRender.Reset()
-	style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderInto(f.cachedRender, f.helpBuf.Lines())
+		f.cachedRender.Reset()
+		style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderIntoBuf(f.cachedRender, f.helpBuf)
 
-	// 3. Join with notification (if present)
-	if notifBuf != nil {
+		// 3. Join with notification (if present)
 		// cachedRender holds styled help (join input) — reuse helpBuf as join output
 		f.helpBuf.Reset()
-		style.JoinHorizontalBufs(f.helpBuf, style.Center, f.cachedRender, notifBuf.LinesBuf)
+		style.JoinHorizontalBufs(f.helpBuf, style.Center, f.cachedRender, notifSnap)
 
 		// Swap: cachedRender ← final result, helpBuf ← disposable for next frame
 		f.helpBuf, f.cachedRender = f.cachedRender, f.helpBuf
+
+		notifSnap.Release()
+	} else {
+		f.cachedRender.Reset()
+		style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderIntoBuf(f.cachedRender, f.helpBuf)
 	}
 
 	return f.cachedRender

@@ -5,56 +5,35 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/phase"
-	"github.com/mihakrumpestar/panix/pkg/jsonerror"
-	"github.com/pkg/errors"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 )
 
 // Logs holds the log state embedded in Fleet, Flake, Configuration, Machine.
 type Logs struct {
-	PhaseLogs             *phaselogs.PhaseLogs `yaml:"-" json:"phase_logs"`
-	DurationAndErrorCache DurationAndError     `yaml:"-" json:"duration_and_error"`
-}
-
-type DurationAndError struct {
-	Duration time.Duration        `yaml:"-" json:"duration"`
-	Error    *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
+	PhaseLogs *phaselogs.PhaseLogs             `yaml:"-" json:"phase_logs"`
+	TAS       *atomictimeandstate.TimeAndState `yaml:"-" json:"tas,omitempty"`
 }
 
 func New() *Logs {
 	return &Logs{
 		PhaseLogs: phaselogs.NewPhaseLogs(),
+		TAS:       &atomictimeandstate.TimeAndState{},
 	}
 }
 
-func (l *Logs) RecalculateDurationAndError() error {
-	durationAndError := DurationAndError{}
+// Version returns the TAS state version counter. Increments on state transitions.
+func (l *Logs) Version() uint64 {
+	return l.TAS.StateVersion()
+}
 
-	for _, phaseLogPair := range l.PhaseLogs.Pairs() {
-		tas := phaseLogPair.Value.TimeAndState
-
-		duration, err := tas.DurationOrElapsedTime()
-		if err != nil {
-			return errors.Wrap(err, "failed to get duration or elapsed time")
-		}
-
-		durationAndError.Duration += duration
-
-		endError := tas.Load().EndError
-		if endError != nil {
-			durationAndError.Error = endError
-
-			break
-		}
-	}
-
-	l.DurationAndErrorCache = durationAndError
-
-	return nil
+// SetDuration replaces the cached duration on TAS without bumping stateVersion.
+func (l *Logs) SetDuration(d time.Duration) {
+	l.TAS.SetDuration(d)
 }
 
 func (l *Logs) Clear() {
 	l.PhaseLogs.Clear()
-	l.DurationAndErrorCache = DurationAndError{}
+	l.TAS = &atomictimeandstate.TimeAndState{}
 }
 
 func (l *Logs) PostUnmarshalInit() {
@@ -65,31 +44,23 @@ func (l *Logs) PostUnmarshalInit() {
 	if l.PhaseLogs == nil {
 		l.PhaseLogs = phaselogs.NewPhaseLogs()
 	}
+
+	if l.TAS == nil {
+		l.TAS = &atomictimeandstate.TimeAndState{}
+	}
 }
 
-// Helpers
-
-// MergePhaseLogs merges multiple PhaseLogs.
+// MergePhaseLogs merges multiple PhaseLogs into a fresh Logs object.
+// The returned Logs.TAS has StartTime/EndTime set as state markers
+// (for HasStarted/IsFinished) but stateVersion is not bumped — the
+// caller is responsible for syncing into a persisted TAS via SyncFrom.
 func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) *Logs {
 	logs := New()
 
-	gathered := phaselogs.NewPhaseLogs()
+	gathered := gatherPhaseLogs(input)
 
-	// Gather all together
-	for _, pl := range input {
-		if pl == nil {
-			continue
-		}
-
-		for _, pair := range pl.Pairs() {
-			ok := gathered.Exists(pair.Key)
-			if ok {
-				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
-			}
-
-			gathered.Set(pair.Key, pair.Value)
-		}
-	}
+	anyStarted := false
+	acc := newIntervalAccumulator()
 
 	// Add phases in order (stopping after the first errored or still-running phase).
 	// Phases from higher scopes (e.g. configuration-level "build") may already be
@@ -105,13 +76,16 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		logs.PhaseLogs.Set(phase, phaseLog)
 
 		tas := phaseLog.TimeAndState
-		phaseDOET, _ := tas.DurationOrElapsedTime()
+		// Call DurationOrElapsedTime so running phases get their DurationCache updated.
+		_, _ = tas.DurationOrElapsedTime()
 		tasLoaded := tas.Load()
 
-		// Sum up all valid durations and set last error
-		logs.DurationAndErrorCache = DurationAndError{
-			Duration: logs.DurationAndErrorCache.Duration + phaseDOET,
-			Error:    tasLoaded.EndError,
+		logs.TAS.EndError = tasLoaded.EndError
+
+		if tasLoaded.HasStarted() {
+			anyStarted = true
+
+			acc.add(tasLoaded.StartTime, tasLoaded.EndTime)
 		}
 
 		if tasLoaded.EndError != nil {
@@ -123,5 +97,105 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		}
 	}
 
+	logs.TAS.DurationCache = acc.total()
+
+	// Set state markers on TAS so HasStarted/IsFinished return correct values.
+	// These are approximate timestamps — the real times live on per-phase TAS.
+	if anyStarted {
+		logs.TAS.StartTime = time.Now()
+
+		if logs.isMergeFinished() {
+			logs.TAS.EndTime = time.Now()
+		}
+	}
+
 	return logs
+}
+
+// isMergeFinished returns true if the merged result should be considered finished:
+// either there was an error, or all phases completed.
+func (l *Logs) isMergeFinished() bool {
+	return l.TAS.EndError != nil || l.allPhasesFinished()
+}
+
+// gatherPhaseLogs collects all phase logs from input into a single ordered map.
+func gatherPhaseLogs(input []*phaselogs.PhaseLogs) *phaselogs.PhaseLogs {
+	gathered := phaselogs.NewPhaseLogs()
+
+	for _, pl := range input {
+		if pl == nil {
+			continue
+		}
+
+		pl.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
+			if gathered.Exists(phaseKey) {
+				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
+			}
+
+			gathered.Set(phaseKey, phaseValue)
+
+			return true
+		})
+	}
+
+	return gathered
+}
+
+// allPhasesFinished returns true if every phase in PhaseLogs is finished.
+// Uses ForEach (zero-allocation) instead of Pairs() since this is called
+// every frame per machine in MergePhaseLogs → isMergeFinished.
+func (l *Logs) allPhasesFinished() bool {
+	return l.PhaseLogs.ForEach(func(_ phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
+		return phaseLog.TimeAndState.Load().IsFinished()
+	})
+}
+
+// intervalAccumulator merges overlapping time intervals on the fly, producing
+// the union duration. Phases must be added in chronological order.
+//
+// Phases from different scopes can run concurrently (e.g. configuration-level
+// "build" runs via OnceAsync while a machine-level "bootstrap" is still in
+// progress on another goroutine). Simply summing each phase's duration would
+// double-count the overlapping time window. The accumulator merges overlapping
+// intervals, counting each moment exactly once. This also correctly excludes
+// gaps between retry attempts, since a retried phase's StartTime is reset.
+type intervalAccumulator struct {
+	duration time.Duration
+	curStart time.Time
+	curEnd   time.Time
+}
+
+func newIntervalAccumulator() *intervalAccumulator {
+	return &intervalAccumulator{}
+}
+
+func (a *intervalAccumulator) add(start, end time.Time) {
+	if end.IsZero() {
+		end = time.Now()
+	}
+
+	switch {
+	case a.curStart.IsZero():
+		// First interval.
+		a.curStart = start
+		a.curEnd = end
+	case start.Before(a.curEnd):
+		// Overlapping — extend current interval.
+		if end.After(a.curEnd) {
+			a.curEnd = end
+		}
+	default:
+		// Non-overlapping — finalize current interval and start a new one.
+		a.duration += a.curEnd.Sub(a.curStart)
+		a.curStart = start
+		a.curEnd = end
+	}
+}
+
+func (a *intervalAccumulator) total() time.Duration {
+	if !a.curStart.IsZero() {
+		a.duration += a.curEnd.Sub(a.curStart)
+	}
+
+	return a.duration
 }

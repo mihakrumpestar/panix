@@ -41,7 +41,7 @@ func TestSetContentLines(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("a", "b", "c"))
+	mdl.setLines(strLines("a", "b", "c"))
 
 	assert.Equal(t, 3, mdl.TotalLineCount())
 
@@ -57,13 +57,13 @@ func TestSetContentLinesKeepsScroll(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 	mdl.SetYOffset(2)
 
-	mdl.SetContentLines(strLines("a", "b", "c", "d", "e"))
+	mdl.setLines(strLines("a", "b", "c", "d", "e"))
 	assert.Equal(t, 2, mdl.YOffset(), "YOffset should stay 2")
 
-	mdl.SetContentLines(strLines("x", "y"))
+	mdl.setLines(strLines("x", "y"))
 	assert.Equal(t, 0, mdl.YOffset(), "YOffset should be 0 after shrink")
 }
 
@@ -71,7 +71,7 @@ func TestView(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4", "line5"))
+	mdl.setLines(strLines("line1", "line2", "line3", "line4", "line5"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
@@ -83,7 +83,7 @@ func TestViewPaddedToWidth(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(20), WithHeight(3))
-	mdl.SetContentLines(strLines("short", "a bit longer line", "x"))
+	mdl.setLines(strLines("short", "a bit longer line", "x"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
@@ -96,7 +96,7 @@ func TestViewHeightChanges(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	assert.Equal(t, 2, strings.Count(view, "\n"), "height 3 should have 2 newlines (3 lines)")
@@ -116,7 +116,7 @@ func TestScrollPercent(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4", "line5"))
+	mdl.setLines(strLines("line1", "line2", "line3", "line4", "line5"))
 
 		assert.InDelta(t, float64(0), mdl.ScrollPercent(), 0.001, "ScrollPercent at top")
 
@@ -134,7 +134,7 @@ func TestScrollPercentShortContent(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("a", "b"))
+	mdl.setLines(strLines("a", "b"))
 
 	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "short content ScrollPercent")
 }
@@ -143,7 +143,7 @@ func TestScrollPercentEmpty(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines())
+	mdl.setLines(strLines())
 
 	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "empty ScrollPercent")
 }
@@ -152,7 +152,7 @@ func TestGotoBottom(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4", "line5"))
+	mdl.setLines(strLines("line1", "line2", "line3", "line4", "line5"))
 	mdl.GotoBottom()
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
@@ -166,7 +166,7 @@ func TestGotoBottomShorterContent(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("a", "b"))
+	mdl.setLines(strLines("a", "b"))
 	mdl.GotoBottom()
 
 	assert.Equal(t, 0, mdl.YOffset(), "short content GotoBottom")
@@ -176,7 +176,7 @@ func TestSetYOffset(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4", "line5"))
+	mdl.setLines(strLines("line1", "line2", "line3", "line4", "line5"))
 	mdl.SetYOffset(2)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
@@ -189,7 +189,7 @@ func TestSetYOffsetClamped(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4", "line5"))
+	mdl.setLines(strLines("line1", "line2", "line3", "line4", "line5"))
 
 	mdl.SetYOffset(100)
 
@@ -204,7 +204,7 @@ func TestContentShorterThanViewport(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("line1", "line2"))
+	mdl.setLines(strLines("line1", "line2"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
@@ -217,7 +217,7 @@ func TestEmptyContent(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines())
+	mdl.setLines(strLines())
 
 	assert.Equal(t, 0, mdl.TotalLineCount(), "TotalLineCount for empty")
 }
@@ -226,7 +226,7 @@ func TestEmptyView(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines())
+	mdl.setLines(strLines())
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	assert.Empty(t, view, "empty view")
@@ -245,7 +245,7 @@ func TestSetWidthPreservesContent(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("a", "b", "c"))
+	mdl.setLines(strLines("a", "b", "c"))
 
 	mdl.SetWidth(40)
 
@@ -257,10 +257,10 @@ func TestSetWidthResetsScrollIfNeeded(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 	mdl.SetYOffset(2)
 
-	mdl.SetContentLines(strLines("a", "b", "c", "d", "e"))
+	mdl.setLines(strLines("a", "b", "c", "d", "e"))
 
 	assert.Equal(t, 2, mdl.YOffset())
 }
@@ -269,7 +269,7 @@ func TestViewAtBottomWithResize(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 	mdl.GotoBottom()
 
 	mdl.SetHeight(10)
@@ -287,7 +287,7 @@ func TestViewBeyondContent(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("line1", "line2"))
+	mdl.setLines(strLines("line1", "line2"))
 	mdl.SetYOffset(10)
 
 	assert.Equal(t, 0, mdl.YOffset(), "offset clamped to %d, want 0", mdl.YOffset())
@@ -297,7 +297,7 @@ func TestViewWithANSI(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(20), WithHeight(3))
-	mdl.SetContentLines(strLines("\x1b[31mred\x1b[0m", "plain", "\x1b[1mbold\x1b[0m"))
+	mdl.setLines(strLines("\x1b[31mred\x1b[0m", "plain", "\x1b[1mbold\x1b[0m"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(strings.TrimSuffix(view, "\n"), "\n")
@@ -340,7 +340,7 @@ func TestViewWidthZero(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(0), WithHeight(10))
-	mdl.SetContentLines(strLines("a", "b"))
+	mdl.setLines(strLines("a", "b"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	assert.Empty(t, view, "zero-width view")
@@ -350,7 +350,7 @@ func TestScrollDown(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	mdl.ScrollDown(1)
 
@@ -365,7 +365,7 @@ func TestScrollUp(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 	mdl.SetYOffset(2)
 
 	mdl.ScrollUp(1)
@@ -381,7 +381,7 @@ func TestPageDown(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"))
 
 	mdl.PageDown()
 
@@ -392,7 +392,7 @@ func TestPageUp(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"))
 	mdl.SetYOffset(5)
 
 	mdl.PageUp()
@@ -404,7 +404,7 @@ func TestHalfPageDown(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12", "l13", "l14", "l15"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12", "l13", "l14", "l15"))
 
 	mdl.HalfPageDown()
 
@@ -415,7 +415,7 @@ func TestHalfPageUp(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(10))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12", "l13", "l14", "l15"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12", "l13", "l14", "l15"))
 	mdl.SetYOffset(5)
 
 	mdl.HalfPageUp()
@@ -427,7 +427,7 @@ func TestAtTopAtBottom(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(80), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	assert.True(t, mdl.AtTop(), "should be at top initially")
 
@@ -447,7 +447,7 @@ func TestScrollbarVisibleWidthWithOverflow(t *testing.T) {
 
 	vpWidth := 20
 	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -462,7 +462,7 @@ func TestScrollbarContentWidthSmallerThanTotal(t *testing.T) {
 
 	vpWidth := 10
 	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("hi", "there", "x", "overflow1", "overflow2"))
+	mdl.setLines(strLines("hi", "there", "x", "overflow1", "overflow2"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -483,7 +483,7 @@ func TestScrollbarHiddenContentFits(t *testing.T) {
 
 	vpWidth := 20
 	mdl := New(WithWidth(vpWidth), WithHeight(10), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3"))
+	mdl.setLines(strLines("l1", "l2", "l3"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -500,7 +500,7 @@ func TestScrollbarNoScrollbarOption(t *testing.T) {
 
 	vpWidth := 20
 	mdl := New(WithWidth(vpWidth), WithHeight(3))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -516,7 +516,7 @@ func TestScrollbarThumbAtTop(t *testing.T) {
 	vpWidth := 20
 	vpHeight := 3
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -540,7 +540,7 @@ func TestScrollbarThumbAtBottom(t *testing.T) {
 	vpWidth := 20
 	vpHeight := 3
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
 	mdl.GotoBottom()
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
@@ -561,7 +561,7 @@ func TestScrollbarThumbSizeProportional(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -583,7 +583,7 @@ func TestScrollbarThumbSizeProportional(t *testing.T) {
 		longContent[idx] = []byte("line")
 	}
 
-	mdl2.SetContentLines(longContent)
+	mdl2.setLines(longContent)
 
 	view = buffer.LinesBufToStringForTests(mdl2.Render())
 	viewLines = strings.Split(view, "\n")
@@ -603,7 +603,7 @@ func TestScrollbarWithANSIStyles(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color("1"), style.Color("4")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -623,7 +623,7 @@ func TestScrollbarFillLinesAlsoGetScrollbar(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(10), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -643,7 +643,7 @@ func TestScrollbarNoScrollbarWhenContentFitsExactly(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(20), WithHeight(5), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
@@ -660,12 +660,12 @@ func TestScrollbarContentWidth(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("a", "b"))
+	mdl.setLines(strLines("a", "b"))
 
 	assert.Equal(t, 20, mdl.ContentWidth(), "ContentWidth no overflow")
 
 	mdl2 := New(WithWidth(20), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl2.SetContentLines(strLines("a", "b", "c", "d", "e"))
+	mdl2.setLines(strLines("a", "b", "c", "d", "e"))
 
 	assert.Equal(t, 18, mdl2.ContentWidth(), "ContentWidth with overflow")
 
@@ -678,7 +678,7 @@ func TestScrollbarExactLineComposition(t *testing.T) {
 
 	vpWidth := 10
 	mdl := New(WithWidth(vpWidth), WithHeight(3), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("hi", "there", "x", "y", "z"))
+	mdl.setLines(strLines("hi", "there", "x", "y", "z"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -712,7 +712,7 @@ func TestScrollbarScrollingMovesThumb(t *testing.T) {
 		content[idx] = []byte("line")
 	}
 
-	mdl.SetContentLines(content)
+	mdl.setLines(content)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
@@ -768,7 +768,7 @@ func TestBorderBasic(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(6), WithHeight(3), WithBorder(style.Color("")))
-	mdl.SetContentLines(strLines("AB"))
+	mdl.setLines(strLines("AB"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	expected := "╭────╮\n│AB  │\n╰────╯"
@@ -781,7 +781,7 @@ func TestBorderOutputSize(t *testing.T) {
 	width := 10
 	height := 4
 	mdl := New(WithWidth(width), WithHeight(height), WithBorder(style.Color("")))
-	mdl.SetContentLines(strLines("line1", "line2"))
+	mdl.setLines(strLines("line1", "line2"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(view, "\n")
@@ -798,7 +798,7 @@ func TestBorderWithOverflowAndScrollbar(t *testing.T) {
 	width := 12
 	height := 5
 	mdl := New(WithWidth(width), WithHeight(height), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("a", "b", "c", "d", "e", "f", "g", "h"))
+	mdl.setLines(strLines("a", "b", "c", "d", "e", "f", "g", "h"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	lines := strings.Split(view, "\n")
@@ -816,12 +816,12 @@ func TestBorderContentWidth(t *testing.T) {
 	assert.Equal(t, 8, mdl.ContentWidth(), "bordered ContentWidth")
 
 	mdl2 := New(WithWidth(10), WithHeight(5), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl2.SetContentLines(strLines("a", "b"))
+	mdl2.setLines(strLines("a", "b"))
 
 	assert.Equal(t, 8, mdl2.ContentWidth(), "bordered+scrollbar (fits) ContentWidth")
 
 	mdl3 := New(WithWidth(10), WithHeight(5), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl3.SetContentLines(strLines("a", "b", "c", "d", "e", "f"))
+	mdl3.setLines(strLines("a", "b", "c", "d", "e", "f"))
 
 	assert.Equal(t, 6, mdl3.ContentWidth(), "bordered+scrollbar (overflows) ContentWidth")
 }
@@ -830,13 +830,13 @@ func TestBorderScrolling(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(8), WithHeight(5), WithBorder(style.Color("")))
-	mdl.SetContentLines(strLines("a", "b", "c", "d", "e", "f"))
+	mdl.setLines(strLines("a", "b", "c", "d", "e", "f"))
 
 	assert.False(t, mdl.AtBottom(), "should not be at bottom")
 
 	mdl.ScrollDown(3)
 
-	assert.True(t, mdl.AtBottom(), "should be at bottom after scrolling 3, yOffset=%d, maxYOffset=%d", mdl.YOffset(), len(mdl.lines)-3)
+	assert.True(t, mdl.AtBottom(), "should be at bottom after scrolling 3, yOffset=%d, maxYOffset=%d", mdl.YOffset(), mdl.linesLen-3)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	lines := strings.Split(view, "\n")
@@ -848,7 +848,7 @@ func TestBorderStyled(t *testing.T) {
 	t.Parallel()
 
 	mdl := New(WithWidth(6), WithHeight(3), WithBorder(style.Color("1")))
-	mdl.SetContentLines(strLines("AB"))
+	mdl.setLines(strLines("AB"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	assert.True(t, strings.Contains(view, "\x1b[") && strings.Contains(view, "╭"),
@@ -885,7 +885,7 @@ func TestScrollbarAlwaysReservesWidth(t *testing.T) {
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
 
-	mdl.SetContentLines(strLines("short", "content"))
+	mdl.setLines(strLines("short", "content"))
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
 	viewLines := strings.Split(view, "\n")
@@ -893,7 +893,7 @@ func TestScrollbarAlwaysReservesWidth(t *testing.T) {
 		assert.Equal(t, vpWidth, style.CellWidth([]byte(line)), "content-fits line %d", idx)
 	}
 
-	mdl.SetContentLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12"))
+	mdl.setLines(strLines("l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10", "l11", "l12"))
 	view = buffer.LinesBufToStringForTests(mdl.Render())
 
 	viewLines = strings.Split(view, "\n")
@@ -915,7 +915,7 @@ func TestScrollbarVisibleAtBottom(t *testing.T) {
 		content[idx] = []byte("line")
 	}
 
-	mdl.SetContentLines(content)
+	mdl.setLines(content)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
@@ -946,7 +946,7 @@ func TestScrollbarVisibleAtEveryScrollPosition(t *testing.T) {
 		content[idx] = []byte("line")
 	}
 
-	mdl.SetContentLines(content)
+	mdl.setLines(content)
 
 	for offset := 0; offset <= mdl.maxYOffset(); offset++ {
 		mdl.SetYOffset(offset)
@@ -969,7 +969,7 @@ func TestScrollbarColumnIsSpacesWhenContentFits(t *testing.T) {
 	vpHeight := 10
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("a", "b"))
+	mdl.setLines(strLines("a", "b"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	assert.False(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
@@ -994,7 +994,7 @@ func TestBorderedScrollbarWidthConsistency(t *testing.T) {
 		content[idx] = []byte("x")
 	}
 
-	mdl.SetContentLines(content)
+	mdl.setLines(content)
 
 	for offset := 0; offset <= mdl.maxYOffset(); offset++ {
 		mdl.SetYOffset(offset)
@@ -1027,7 +1027,7 @@ func TestBorderedScrollbarVisibleAtBottom(t *testing.T) {
 		content[idx] = []byte("x")
 	}
 
-	mdl.SetContentLines(content)
+	mdl.setLines(content)
 
 	mdl.GotoBottom()
 	view := buffer.LinesBufToStringForTests(mdl.Render())
@@ -1078,7 +1078,8 @@ func TestBorderedSetContentWrapsCorrectly(t *testing.T) {
 	longContent := strings.Repeat("x", 60)
 	_ = mdl.SetContent(splitLines(longContent))
 
-	for idx, line := range mdl.lines {
+	for idx := range mdl.linesLen {
+		line := mdl.line(idx)
 		assert.LessOrEqual(t, style.CellWidth(line), narrowContentWidth,
 			"wrapped line %d: width = %d, want <= %d", idx, style.CellWidth(line), narrowContentWidth)
 	}
@@ -1103,7 +1104,7 @@ func TestScrollbarNoScrollbarOptionStillFullWidth(t *testing.T) {
 		content[idx] = []byte(strings.Repeat("x", vpWidth))
 	}
 
-	mdl.SetContentLines(content)
+	mdl.setLines(content)
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 
@@ -1120,7 +1121,7 @@ func TestBorderedScrollbarFitsContentFitsExactly(t *testing.T) {
 	vpHeight := 5
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("line1", "line2", "line3"))
+	mdl.setLines(strLines("line1", "line2", "line3"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	viewLines := strings.Split(view, "\n")
@@ -1142,7 +1143,7 @@ func TestBorderedScrollbarContentOverflowsByOne(t *testing.T) {
 	vpHeight := 5
 
 	mdl := New(WithWidth(vpWidth), WithHeight(vpHeight), WithBorder(style.Color("")), WithScrollbar("█", "│", style.Color(""), style.Color("")))
-	mdl.SetContentLines(strLines("line1", "line2", "line3", "line4"))
+	mdl.setLines(strLines("line1", "line2", "line3", "line4"))
 
 	view := buffer.LinesBufToStringForTests(mdl.Render())
 	assert.True(t, strings.Contains(view, "█") || strings.Contains(view, "│"),
@@ -1544,4 +1545,84 @@ func TestSyncMainNoAutoScroll(t *testing.T) {
 	require.NoError(t, err, "Sync should not error")
 
 	assert.Equal(t, 0, mdl.YOffset(), "main viewport should not auto-scroll, got yOffset=%d", mdl.YOffset())
+}
+
+func TestResizeWrappingPreservesLineWidth(t *testing.T) {
+	t.Parallel()
+
+	longContent := strLines(
+		"setting up /etc...",
+		"reloading user units for krumpy-miha...",
+		"restarting the following user units: nixos-activation.service",
+		"reloading user units for root...",
+		"restarting the following user units: nixos-activation.service",
+		"restarting sysinit-reactivation.target",
+		"the following new units were started: NetworkManager-dispatcher.service",
+	)
+
+	borderColor := style.Color("")
+
+	// Create viewport at wide width where content fits without wrapping.
+	mdl := New(
+		WithWidth(80),
+		WithHeight(15),
+		WithBorder(borderColor),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+	)
+
+	_ = mdl.SetContent(longContent)
+	_ = mdl.Render()
+
+	// Resize to a narrower width that forces wrapping.
+	err := mdl.Sync(longContent, 62, 15)
+	require.NoError(t, err)
+
+	rendered := mdl.Render()
+
+	for i := range rendered.Len() {
+		line := rendered.Line(i)
+		cw := style.CellWidth(line)
+		assert.Equal(t, 62, cw, "line %d width after resize: got %d, want 62", i, cw)
+	}
+}
+
+func TestResizeWrappingSweep(t *testing.T) {
+	t.Parallel()
+
+	longContent := strLines(
+		"setting up /etc...",
+		"reloading user units for krumpy-miha...",
+		"restarting the following user units: nixos-activation.service",
+		"reloading user units for root...",
+		"restarting the following user units: nixos-activation.service",
+		"restarting sysinit-reactivation.target",
+		"the following new units were started: NetworkManager-dispatcher.service",
+	)
+
+	borderColor := style.Color("")
+
+	// Sweep: create at width startW, resize to targetW, verify all lines.
+	for _, startW := range []int{50, 60, 70, 80} {
+		for _, targetW := range []int{40, 50, 55, 60, 62, 65, 70, 75, 80} {
+			mdl := New(
+				WithWidth(startW),
+				WithHeight(15),
+				WithBorder(borderColor),
+				WithScrollbar("█", "│", style.Color(""), style.Color("")),
+			)
+
+			_ = mdl.SetContent(longContent)
+			_ = mdl.Render()
+
+			err := mdl.Sync(longContent, targetW, 15)
+			require.NoError(t, err, "Sync startW=%d targetW=%d", startW, targetW)
+
+			rendered := mdl.Render()
+			for i := range rendered.Len() {
+				line := rendered.Line(i)
+				cw := style.CellWidth(line)
+				assert.Equal(t, targetW, cw, "startW=%d targetW=%d line %d", startW, targetW, i)
+			}
+		}
+	}
 }

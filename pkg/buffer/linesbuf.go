@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultLinesBufLen = 120
+	DefaultLinesBufLen = 5
 )
 
 // LinesBuf is a pooled buffer for building output lines in a single
@@ -28,13 +28,36 @@ var linesBufPool = sync.Pool{
 	},
 }
 
-func NewLinesBuf() *LinesBuf {
-	return linesBufPool.Get().(*LinesBuf) //nolint:forcetypeassert
+// NewLinesBuf returns a pooled LinesBuf. When size is provided, the
+// internal buffer is pre-allocated to at least that byte capacity,
+// avoiding incremental growth allocations. The caller is responsible
+// for calculating the desired size (e.g. sum of all line lengths).
+func NewLinesBuf(size ...int) *LinesBuf {
+	buf := linesBufPool.Get().(*LinesBuf) //nolint:forcetypeassert
+
+	if len(size) > 0 && size[0] > 0 {
+		buf.Grow(0, size[0])
+	}
+
+	return buf
 }
 
 func (b *LinesBuf) Reset() {
 	b.buf = b.buf[:0]
 	b.indexes = b.indexes[:0]
+}
+
+// Grow ensures capacity for at least lineCount lines totaling at least
+// byteCount bytes, without changing length. Call before WriteLines to
+// avoid incremental growth allocations.
+func (b *LinesBuf) Grow(lineCount, byteCount int) {
+	if byteCount > 0 && cap(b.buf) < byteCount {
+		b.buf = append(make([]byte, 0, byteCount), b.buf...)
+	}
+
+	if lineCount > 0 && cap(b.indexes) < lineCount {
+		b.indexes = append(make([]int, 0, lineCount), b.indexes...)
+	}
 }
 
 func (b *LinesBuf) Release() {
@@ -91,7 +114,7 @@ func (b *LinesBuf) Line(i int) []byte {
 	return b.buf[start:end]
 }
 
-// Lines reconstructs [][]byte. Allocates — prefer Line(i) when possible.
+// Lines reconstructs [][]byte. Allocates — prefer Line(i).
 func (b *LinesBuf) Lines() [][]byte {
 	length := len(b.indexes)
 	if length == 0 {

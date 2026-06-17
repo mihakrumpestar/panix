@@ -19,6 +19,17 @@ task
 
 Code has to pass `task ci` checks, if larger or critical sections were changed, then also `task go:test:e2e`.
 
+## Testing Conventions
+
+- **Table-driven tests**: use `[]struct{ name string; ... }` with `t.Run(tt.name, func(t *testing.T) { ... })`. See existing tests for examples.
+- **Parallel execution**: every subtest calls `t.Parallel()` at the top.
+- **Assertions**: use `testify/assert` for non-fatal checks, `testify/require` for fatal preconditions. Expected value comes first (enforced by `testifylint`).
+- **Same-package testing**: tests live in the same package as the code they test (no `_test` suffix packages).
+- **Test data**: use `testdata/` directories for fixture files (e.g. `internal/config/testdata/`).
+- **Test factories**: use `internal/testutil/faker.go` for generating fake domain objects (SSH clients, machines, configs, flakes, fleets).
+- **Linting**: `testifylint` is enforced via golangci-lint with all checks enabled.
+- **Coverage**: `task go:test` runs with `-race -shuffle=on`, generates a coverage profile at `test/cover.out` and a badge at `gen/coverage.svg`.
+
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
 ## Future

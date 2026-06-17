@@ -1,0 +1,252 @@
+version: "3"
+
+tasks:
+  bench:e2e:
+    desc: |
+      Run full e2e benchmark for all commits, then show results.
+      Usage: task bench:e2e [COMMITS="sha1 sha2"]
+    vars:
+      COMMITS: '{{.COMMITS | default "5646a10cf8aae283c419ed26b55343ce89ea20c6 2988f71b8edc40b601aa4d0da2270ba311923182"}}'
+      HEAD_COMMIT:
+        sh: git rev-parse HEAD
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        for commit in {{.COMMITS}}; do
+          task bench:e2e:run COMMIT="$commit"
+        done
+        task bench:e2e:run COMMIT="{{.HEAD_COMMIT}}"
+      - task: bench:e2e:result
+
+  bench:e2e:run:
+    desc: |
+      Build & run e2e for a specific commit.
+      Usage: task bench:e2e:run COMMIT=SHA
+    vars:
+      COMMIT: '{{.COMMIT}}'
+      BENCH_DIR: ./tests/e2e/bench-results
+      WORKTREE: /tmp/panix-bench-worktree
+      BIN: /tmp/panix-bench-bin
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        COMMIT="{{.COMMIT}}"
+        if [ -z "$COMMIT" ]; then
+          echo "ERROR: COMMIT is required"
+          exit 1
+        fi
+        SHORT="${COMMIT:0:7}"
+        echo "=== Benchmark: ${SHORT} ==="
+
+        if [ -d "{{.WORKTREE}}" ]; then
+          git worktree remove --force "{{.WORKTREE}}" 2>/dev/null || true
+        fi
+        git worktree add "{{.WORKTREE}}" "$COMMIT"
+
+        pushd "{{.WORKTREE}}" > /dev/null
+        GOWORK=off nix build .#default --extra-experimental-features "nix-command flakes"
+        rm -f "{{.BIN}}"
+        cp result/bin/panix "{{.BIN}}"
+        popd > /dev/null
+
+        echo "    Built: $SHORT ($(sha256sum "{{.BIN}}" | cut -c1-12))"
+
+        PANIX_BIN="{{.BIN}}" go run ./tests/e2e/ --test=both
+
+        mkdir -p "{{.BENCH_DIR}}/$COMMIT"
+        cp tests/e2e/profile/*.prof "{{.BENCH_DIR}}/$COMMIT/"
+        ls -lh "{{.BENCH_DIR}}/$COMMIT/"*.prof
+
+        git worktree remove "{{.WORKTREE}}" 2>/dev/null || true
+        rm -f "{{.BIN}}"
+        echo "    Profiles saved to {{.BENCH_DIR}}/$SHORT/"
+
+  bench:e2e:result:
+    desc: |
+      Show benchmark results: raw metrics + diffs from first commit.
+      Usage: task bench:e2e:result [COMMITS="sha1 sha2"]
+    vars:
+      COMMITS: '{{.COMMITS | default "5646a10cf8aae283c419ed26b55343ce89ea20c6 2988f71b8edc40b601aa4d0da2270ba311923182"}}'
+      BENCH_DIR: ./tests/e2e/bench-results
+      HEAD_COMMIT:
+        sh: git rev-parse HEAD
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        BENCH_DIR="{{.BENCH_DIR}}"
+        HEAD="{{.HEAD_COMMIT}}"
+
+        ALL_COMMITS=({{.COMMITS}} "$HEAD")
+        REF="${ALL_COMMITS[0]}"
+
+        # Verify all profile dirs exist
+        for commit in "${ALL_COMMITS[@]}"; do
+          if [ ! -d "$BENCH_DIR/$commit" ]; then
+            echo "ERROR: profiles not found at $BENCH_DIR/$commit"
+            echo "Run: task bench:e2e:run COMMIT=$commit"
+            exit 1
+          fi
+        done
+
+        # ── Extraction functions ──
+
+        extract_duration() {
+          go tool pprof -text -nodecount=0 "$1" 2>&1 \
+            | grep '^Duration:' \
+            | sed 's/.*Duration: \([^,]*\),.*/\1/'
+        }
+
+        extract_cpu_samples() {
+          go tool pprof -text -nodecount=0 "$1" 2>&1 \
+            | grep '^Duration:' \
+            | sed 's/.*Total samples = \([^ ]*\).*/\1/'
+        }
+
+        extract_mem_total() {
+          go tool pprof -text -nodecount=0 "$2" "$1" 2>&1 \
+            | grep 'Showing nodes accounting for' \
+            | grep -oP '[0-9.]+\s*[kMG]B(?=\s+total)' \
+            | head -1
+        }
+
+        normalize_mb() {
+          local raw="$1"
+          local num unit
+          num=$(echo "$raw" | grep -oP '[0-9.]+')
+          unit=$(echo "$raw" | grep -oP '[kMG]B')
+          case "$unit" in
+            kB) awk "BEGIN { printf \"%.2f\", $num / 1024 }" ;;
+            MB) echo "$num" ;;
+            GB) awk "BEGIN { printf \"%.2f\", $num * 1024 }" ;;
+            *)  echo "$num" ;;
+          esac
+        }
+
+        calc_pct() {
+          awk -v num="$1" -v den="$2" 'BEGIN {
+            if (den == 0 || den == "") { print "0.0"; exit }
+            printf "%.1f", (num / den) * 100
+          }'
+        }
+
+        # ── Diff formatters ──
+
+        fmt_time_diff() {
+          local base="${1%s}" head="${2%s}"
+          awk -v base="$base" -v head="$head" 'BEGIN {
+            if (base == "" || head == "") { print "N/A"; exit }
+            diff = head - base
+            sign = diff >= 0 ? "+" : ""
+            if (base != 0) {
+              pct = (diff / base) * 100
+              printf "%s%.2fs (%s%.1f%%)", sign, diff, sign, pct
+            } else {
+              printf "%s%.2fs", sign, diff
+            }
+          }'
+        }
+
+        fmt_mem_diff() {
+          awk -v base="$1" -v head="$2" 'BEGIN {
+            if (base == "" || head == "") { print "N/A"; exit }
+            diff = head - base
+            sign = diff >= 0 ? "+" : ""
+            if (base != 0) {
+              pct = (diff / base) * 100
+              printf "%s%.2f MB (%s%.1f%%)", sign, diff, sign, pct
+            } else {
+              printf "%s%.2f MB", sign, diff
+            }
+          }'
+        }
+
+        # ── Extract metrics for all commits ──
+
+        declare -A DUR CPU CPU_PCT ALLOC
+
+        for commit in "${ALL_COMMITS[@]}"; do
+          dir="$BENCH_DIR/$commit"
+          DUR["$commit"]=$(extract_duration "$dir/cpu.prof")
+          CPU["$commit"]=$(extract_cpu_samples "$dir/cpu.prof")
+          CPU_PCT["$commit"]=$(calc_pct "${CPU[$commit]%s}" "${DUR[$commit]%s}")
+          ALLOC["$commit"]=$(normalize_mb "$(extract_mem_total "$dir/mem.prof" "-alloc_space")")
+        done
+
+        # ── Print table ──
+
+        echo ""
+
+        # Header: labels
+        HEADER=$(printf "%-24s" "")
+        for commit in "${ALL_COMMITS[@]}"; do
+          label="${commit:0:7}"
+          if [ "$commit" = "$HEAD" ]; then label="HEAD (${commit:0:7})"; fi
+          HEADER=$(printf "%s%-16s" "$HEADER" "$label")
+        done
+        # Diff columns (skip reference commit)
+        for commit in "${ALL_COMMITS[@]}"; do
+          [ "$commit" = "$REF" ] && continue
+          label="${commit:0:7}"
+          if [ "$commit" = "$HEAD" ]; then label="HEAD (${commit:0:7})"; fi
+          HEADER=$(printf "%s%-20s" "$HEADER" "Diff ($label)")
+        done
+        echo "$HEADER"
+
+        # Row printer: raw values + diffs from reference
+        print_row() {
+          local label="$1" fmt_raw="$2" fmt_diff="$3"
+          shift 3
+          # $@ = value_for_each_commit (in ALL_COMMITS order)
+          local values=("$@")
+          local row
+          row=$(printf "%-24s" "$label")
+          for i in "${!ALL_COMMITS[@]}"; do
+            row=$(printf "%s%-16s" "$row" "$(printf "$fmt_raw" "${values[$i]}")")
+          done
+          # Diffs from reference
+          local ref_val="${values[0]}"
+          for i in "${!ALL_COMMITS[@]}"; do
+            [ "$i" -eq 0 ] && continue
+            row=$(printf "%s%-20s" "$row" "$("$fmt_diff" "$ref_val" "${values[$i]}")")
+          done
+          echo "$row"
+        }
+
+        # Collect values into arrays for each metric
+        DUR_VALS=() CPU_VALS=() ALLOC_VALS=()
+        for commit in "${ALL_COMMITS[@]}"; do
+          DUR_VALS+=("${DUR[$commit]}")
+          CPU_VALS+=("${CPU[$commit]} (${CPU_PCT[$commit]}%)")
+          ALLOC_VALS+=("${ALLOC[$commit]}")
+        done
+
+        # Print rows
+        print_row "Duration (wall)" "%s" "fmt_time_diff" "${DUR_VALS[@]}"
+        print_row "Total CPU (util %)" "%s" "fmt_time_diff" "${CPU_VALS[@]}"
+        print_row "Total alloc" "%s MB" "fmt_mem_diff" "${ALLOC_VALS[@]}"
+
+        # ── pprof diff commands ──
+
+        echo ""
+        echo "Diff (interactive web UI):"
+        for commit in "${ALL_COMMITS[@]}"; do
+          [ "$commit" = "$REF" ] && continue
+          label="${commit:0:7}"
+          if [ "$commit" = "$HEAD" ]; then label="HEAD"; fi
+          echo "  # ${REF:0:7} vs $label"
+          echo "  go tool pprof -http=:8080 -diff_base=$BENCH_DIR/$REF/cpu.prof $BENCH_DIR/$commit/cpu.prof"
+          echo "  go tool pprof -http=:8081 -diff_base=$BENCH_DIR/$REF/mem.prof $BENCH_DIR/$commit/mem.prof"
+        done
+        echo ""
+        echo "Diff (text):"
+        for commit in "${ALL_COMMITS[@]}"; do
+          [ "$commit" = "$REF" ] && continue
+          label="${commit:0:7}"
+          if [ "$commit" = "$HEAD" ]; then label="HEAD"; fi
+          echo "  # ${REF:0:7} vs $label"
+          echo "  go tool pprof -top -diff_base=$BENCH_DIR/$REF/cpu.prof $BENCH_DIR/$commit/cpu.prof"
+          echo "  go tool pprof -top -diff_base=$BENCH_DIR/$REF/mem.prof $BENCH_DIR/$commit/mem.prof"
+        done

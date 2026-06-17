@@ -26,32 +26,7 @@
 //     the viewport reaches 100 lines, then stops) +
 //     toggles one table cell status
 //
-// # Architectural differences affecting results
-//
-//   - Tree virtualization: cview TreeView.Draw() breaks when posY exceeds the
-//     allocated height, rendering only ~12 visible nodes. Zeroterm and bubbletea
-//     render all 85 tree lines into the buffer/string.
-//
-//   - Table immutability: lipgloss table is rebuilt entirely on every update
-//     (buildLipglossTableWithUpdate). Zeroterm updates in-place via SetRows.
-//     Cview updates a single cell via GetCell/SetCell.
-//
-//   - Tree pre-rendering: bubbletea pre-renders the tree string once
-//     (pipe.treeStr) and concatenates it each frame. Zeroterm re-renders
-//     the tree via Node.Render(buf) every frame. The Diff correctly detects
-//     unchanged tree lines, so RenderLines skips them — but the CPU cost of
-//     rendering into the buffer is still paid.
-//
-//   - Cview VT emulator: screen.Show() writes terminal bytes through a
-//     channel-synchronized VT emulator (emulator.Write), which parses escape
-//     sequences and updates a virtual screen. Zeroterm writes to a []byte
-//     and bubbletea writes to a bytes.Buffer.
-//
-//   - Cview TextView: uses SetBytes() which avoids the string→[]byte
-//     allocation that SetText performs internally. Both SetBytes and SetText
-//     are O(n) in content processing (copy + split + color tag parsing).
-//     Zeroterm SetContentLines and bubbletea SetContentLines store a slice
-//     reference (O(1)).
+
 package main
 
 import (
@@ -59,6 +34,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"strings"
+	"sync"
 	"testing"
 
 	bubbles "charm.land/bubbles/v2/viewport"
@@ -78,6 +54,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewport"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -102,6 +79,7 @@ const (
 	maxLargeVPLines = 100
 	linesPerUpdate  = 3
 	benchRandSeed   = 42
+	randomPoolSize  = 64 // pre-generated random line sets to cycle through
 )
 
 var (
@@ -120,6 +98,44 @@ var (
 	linePrefix = []byte("\x1b[32mnew line ")
 	lineSuffix = []byte("\x1b[0m appended content here")
 )
+
+// Pre-generated random line pools (lazy-init on first use).
+// Same random seed ensures identical random values across all pools.
+// Each pool is in the framework's native format for fair comparison.
+var (
+	randomZerotermPool  [][][]byte
+	randomBubbleteaPool [][]string
+	randomCviewPool     [][][]byte
+	randomCviewJoined   [][]byte
+	randomPoolOnce      sync.Once
+)
+
+func ensureRandomPools() {
+	randomPoolOnce.Do(func() {
+		rng := newBenchRNG()
+
+		randomZerotermPool = make([][][]byte, randomPoolSize)
+		randomBubbleteaPool = make([][]string, randomPoolSize)
+		randomCviewPool = make([][][]byte, randomPoolSize)
+		randomCviewJoined = make([][]byte, randomPoolSize)
+
+		for idx := range randomPoolSize {
+			ansiLines := makeRandomBenchANSILines(rng, largeVPContentLines)
+			randomZerotermPool[idx] = ansiLines
+
+			strs := make([]string, len(ansiLines))
+			for j, b := range ansiLines {
+				strs[j] = string(b)
+			}
+
+			randomBubbleteaPool[idx] = strs
+
+			cviewLines := makeRandomCviewColorLines(rng, largeVPContentLines)
+			randomCviewPool[idx] = cviewLines
+			randomCviewJoined[idx] = joinLines(cviewLines)
+		}
+	})
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Shared data generators
@@ -227,8 +243,7 @@ const (
 // Random line generators (for EveryFrameUpdate: full content randomization)
 // ────────────────────────────────────────────────────────────────────────────
 
-func makeRandomBenchANSILines(rng *rand.Rand) [][]byte {
-	lineCount := rng.IntN(maxLargeVPLines-80+1) + 80
+func makeRandomBenchANSILines(rng *rand.Rand, lineCount int) [][]byte {
 	lines := make([][]byte, lineCount)
 
 	for idx := range lineCount {
@@ -246,32 +261,7 @@ func makeRandomBenchANSILines(rng *rand.Rand) [][]byte {
 	return lines
 }
 
-func makeRandomBenchANSIContentString(rng *rand.Rand) string {
-	lineCount := rng.IntN(maxLargeVPLines-80+1) + 80
-
-	var builder strings.Builder
-
-	for idx := range lineCount {
-		val := rng.IntN(10000)
-		switch {
-		case val%10 == 0:
-			fmt.Fprintf(&builder, "\x1b[1;34msrc/pkg%-4d\x1b[0m \x1b[32mOK\x1b[0m package with a longer description that fills the line", val)
-		case val%3 == 0:
-			fmt.Fprintf(&builder, "\x1b[3%dmline %d: colored text with escape sequences\x1b[0m and plain suffix to fill width", val%6, val)
-		default:
-			fmt.Fprintf(&builder, "line %d: plain text with some content that is reasonably long for testing purposes here  ", val)
-		}
-
-		if idx < lineCount-1 {
-			builder.WriteByte('\n')
-		}
-	}
-
-	return builder.String()
-}
-
-func makeRandomCviewColorLines(rng *rand.Rand) [][]byte {
-	lineCount := rng.IntN(maxLargeVPLines-80+1) + 80
+func makeRandomCviewColorLines(rng *rand.Rand, lineCount int) [][]byte {
 	lines := make([][]byte, lineCount)
 
 	for idx := range lineCount {
@@ -309,10 +299,12 @@ type zerotermPipeline struct {
 	smallLines [][]byte
 	tblRows    [][][]byte
 
-	rng *rand.Rand
+	randomPoolIdx int
 }
 
 func newZerotermPipeline() *zerotermPipeline {
+	ensureRandomPools()
+
 	sepStyle := style.NewStyle().Foreground(style.Color("#6272A4")).Bold(true)
 
 	largeVP := viewport.New(viewport.WithWidth(benchWidth), viewport.WithHeight(largeVPVisibleLines))
@@ -340,7 +332,7 @@ func newZerotermPipeline() *zerotermPipeline {
 	})
 	tbl.SetRows(makeBenchTableRows())
 
-	pipe := &zerotermPipeline{
+	return &zerotermPipeline{
 		largeVP:    largeVP,
 		smallVP:    smallVP,
 		treeRoot:   buildZerotermTree(),
@@ -349,39 +341,40 @@ func newZerotermPipeline() *zerotermPipeline {
 		largeLines: largeLines,
 		smallLines: smallLines,
 		tblRows:    makeBenchTableRows(),
-		rng:        newBenchRNG(),
 	}
-
-	return pipe
 }
 
 func buildZerotermTree() *tree.Node {
 	treeStyle := style.NewStyle().Foreground(style.Color("#6272A4"))
-	root := tree.NewTree(treeStyle)
+	root := tree.NewTree(treeStyle, 3)
 
-	var build func(depth int) *tree.Node
+	var build func(depth int, parent *tree.Node, parentXp string) *tree.Node
 
-	build = func(depth int) *tree.Node {
-		nodeBuf := buffer.NewLinesBuf()
-		if depth%2 == 0 {
-			nodeBuf.WriteString(fmt.Sprintf("\x1b[1;36mnode-d%d\x1b[0m", treeDepth-depth))
-		} else {
-			nodeBuf.WriteString(fmt.Sprintf("node-d%d", treeDepth-depth))
-		}
+	build = func(depth int, parent *tree.Node, parentXp string) *tree.Node {
+		nodeXp := parentXp + "/node"
 
-		child := root.NewNode(nodeBuf)
+		child := parent.Child(xpath.New(nodeXp), 1, func(_ int) *buffer.LinesBuf {
+			nodeBuf := buffer.NewLinesBuf()
+			if depth%2 == 0 {
+				nodeBuf.WriteString(fmt.Sprintf("\x1b[1;36mnode-d%d\x1b[0m", treeDepth-depth))
+			} else {
+				nodeBuf.WriteString(fmt.Sprintf("node-d%d", treeDepth-depth))
+			}
+
+			return nodeBuf
+		})
 
 		if depth > 0 {
-			for range treeBreadth {
-				child.Child(build(depth - 1))
+			for i := range treeBreadth {
+				build(depth-1, child, fmt.Sprintf("%s/%d", nodeXp, i))
 			}
 		}
 
 		return child
 	}
 
-	for range treeBreadth {
-		root.Child(build(treeDepth - 1))
+	for i := range treeBreadth {
+		build(treeDepth-1, root, fmt.Sprintf("root/%d", i))
 	}
 
 	return root
@@ -394,14 +387,15 @@ func (pipe *zerotermPipeline) renderInto(buf *buffer.LinesBufDiff) {
 	buf.AppendFrom(pipe.smallVP.Render())
 	pipe.sepStyle.RenderLineInto(buf.LinesBuf, separatorTextBytes)
 
-	pipe.treeRoot.Render(buf)
+	pipe.treeRoot.WriteRenderTo(buf.LinesBuf)
 	pipe.sepStyle.RenderLineInto(buf.LinesBuf, separatorTextBytes)
 
 	buf.AppendFrom(pipe.tbl.Render())
 }
 
 func (pipe *zerotermPipeline) randomizeLargeViewport() {
-	pipe.largeLines = makeRandomBenchANSILines(pipe.rng)
+	pipe.largeLines = randomZerotermPool[pipe.randomPoolIdx%randomPoolSize]
+	pipe.randomPoolIdx++
 	pipe.largeVP.SetContentLines(pipe.largeLines)
 	pipe.largeVP.GotoBottom()
 }
@@ -511,14 +505,15 @@ type bubbleteaPipeline struct {
 	sepStyle        lipgloss.Style
 	treeStr         string
 	lastViewContent string
-	rng             *rand.Rand
+	randomPoolIdx   int
 }
 
 func newBubbleteaPipeline() *bubbleteaPipeline {
+	ensureRandomPools()
 	zone.NewGlobal()
 
 	largeVP := bubbles.New(bubbles.WithWidth(benchWidth), bubbles.WithHeight(largeVPVisibleLines))
-	smallVP := bubbles.New(bubbles.WithWidth(benchWidth), bubbles.WithHeight(smallVPVisibleLines))
+	smallVP := bubbles.New(bubbles.WithWidth(benchWidth), bubbles.WithHeight(smallVPContentLines))
 
 	largeContent := makeBenchANSIContentString(largeVPContentLines)
 	smallContent := makeBenchANSIContentString(smallVPContentLines)
@@ -536,7 +531,6 @@ func newBubbleteaPipeline() *bubbleteaPipeline {
 		smallContent: smallContent,
 		sepStyle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4")).Bold(true),
 		treeStr:      buildLipglossTree(),
-		rng:          newBenchRNG(),
 	}
 
 	pipe.tbl = pipe.buildLipglossTable()
@@ -632,7 +626,8 @@ func buildLipglossTree() string {
 }
 
 func (pipe *bubbleteaPipeline) randomizeLargeViewport() {
-	pipe.largeLines = strings.Split(makeRandomBenchANSIContentString(pipe.rng), "\n")
+	pipe.largeLines = randomBubbleteaPool[pipe.randomPoolIdx%randomPoolSize]
+	pipe.randomPoolIdx++
 	pipe.largeVP.SetContentLines(pipe.largeLines)
 	pipe.largeVP.GotoBottom()
 }
@@ -777,14 +772,14 @@ func benchBubbleteaPipeline(b *testing.B, updateMode int) {
 // ────────────────────────────────────────────────────────────────────────────
 
 type cviewPipeline struct {
-	flex       *cview.Flex
-	largeTV    *cview.TextView
-	smallTV    *cview.TextView
-	treeView   *cview.TreeView
-	tbl        *cview.Table
-	largeLines [][]byte
-	screen     tcell.Screen
-	rng        *rand.Rand
+	flex          *cview.Flex
+	largeTV       *cview.TextView
+	smallTV       *cview.TextView
+	treeView      *cview.TreeView
+	tbl           *cview.Table
+	largeLines    [][]byte
+	screen        tcell.Screen
+	randomPoolIdx int
 }
 
 func newCviewSepTV() *cview.TextView {
@@ -796,6 +791,8 @@ func newCviewSepTV() *cview.TextView {
 }
 
 func newCviewPipeline() *cviewPipeline {
+	ensureRandomPools()
+
 	flex := cview.NewFlex()
 	flex.SetDirection(cview.FlexRow)
 
@@ -848,7 +845,6 @@ func newCviewPipeline() *cviewPipeline {
 		tbl:        tbl,
 		largeLines: largeLines,
 		screen:     screen,
-		rng:        newBenchRNG(),
 	}
 
 	return pipe
@@ -929,8 +925,9 @@ func buildCviewTable() *cview.Table {
 }
 
 func (pipe *cviewPipeline) randomizeLargeViewport() {
-	pipe.largeLines = makeRandomCviewColorLines(pipe.rng)
-	pipe.largeTV.SetBytes(joinLines(pipe.largeLines))
+	pipe.largeLines = randomCviewPool[pipe.randomPoolIdx%randomPoolSize]
+	pipe.largeTV.SetBytes(randomCviewJoined[pipe.randomPoolIdx%randomPoolSize])
+	pipe.randomPoolIdx++
 	pipe.largeTV.ScrollToEnd()
 }
 

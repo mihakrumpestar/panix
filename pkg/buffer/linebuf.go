@@ -21,7 +21,7 @@ func (r *LineBuf) Set(data []byte) {
 	if len(data) <= cap(r.buf) {
 		r.buf = append(r.buf[:0], data...)
 	} else {
-		newCap := cap(r.buf) * 2
+		newCap := max(cap(r.buf)*2, DefaultLineBufLen)
 		for newCap < len(data) {
 			newCap *= 2
 		}

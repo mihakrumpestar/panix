@@ -83,7 +83,7 @@ type Tui struct {
 }
 
 type Snapshot struct {
-	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"dir,dir_exists" default:"."`
+	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"omitempty,dir,dir_exists" default:"."`
 	OnRetry bool   `yaml:"on_retry" json:"on_retry,omitempty" help:"Take snapshot before retry"`
 	OnExit  bool   `yaml:"on_exit" json:"on_exit,omitempty" help:"Take snapshot on exit"`
 }
@@ -91,7 +91,7 @@ type Snapshot struct {
 //nolint:lll
 type Logging struct {
 	Log     bool   `yaml:"log" json:"log,omitempty" short:"l" help:"Enable logging to file"`
-	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"filepath" default:"panix.log"`
+	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"omitempty,filepath" default:"panix.log"`
 	Debug   bool   `yaml:"debug" json:"debug,omitempty" short:"d" help:"Debug mode (enables logging)"`
 }
 

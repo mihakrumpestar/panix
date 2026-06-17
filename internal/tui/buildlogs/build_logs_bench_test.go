@@ -17,6 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
+	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
@@ -47,10 +48,12 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	)
 	spinnersInst := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
+	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+
 	b.ResetTimer()
 
 	for b.Loop() {
-		result := buildLogs.Render(viewportsInst, spinnersInst)
+		result := buildLogs.Render(ct, viewportsInst, spinnersInst)
 		_ = result
 	}
 }
@@ -128,7 +131,7 @@ func newTestMachine(phases []phase.Phase, running bool) *machine.Machine {
 
 		phaseLog.TimeAndState.EndTimerWithError(nil)
 
-		cmd := phaseLog.NewCommand(describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
+		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
 		cmd.TimeAndState.StartTimer()
 		cmd.TimeAndState.EndTimerWithError(nil)
 		cmd.Output.Write([]byte("done in 0.5s"))
@@ -145,7 +148,7 @@ func newTestMachineWithOutput(phases []phase.Phase) *machine.Machine {
 		phaseLog := mach.Logs.PhaseLogs.GetOrCreate(phaseI)
 		phaseLog.TimeAndState.StartTimer()
 
-		cmd := phaseLog.NewCommand(describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
+		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
 		cmd.TimeAndState.StartTimer()
 		cmd.Output.Write([]byte("output line 1"))
 		cmd.Output.Write([]byte("output line 2"))
@@ -164,7 +167,7 @@ func newTestMachineWithError(phases []phase.Phase) *machine.Machine {
 		phaseLog.TimeAndState.StartTimer()
 		phaseLog.TimeAndState.EndTimerWithError(os.ErrNotExist)
 
-		cmd := phaseLog.NewCommand(describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
+		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
 		cmd.TimeAndState.StartTimer()
 		cmd.TimeAndState.EndTimerWithError(os.ErrNotExist)
 

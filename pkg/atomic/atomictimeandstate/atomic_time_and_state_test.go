@@ -352,3 +352,117 @@ func TestJSONErrorNewNil(t *testing.T) {
 	je := jsonerror.New(nil)
 	assert.Nil(t, je, "jsonerror.New(nil) should return nil")
 }
+
+func TestMarkRunningFromFinished(t *testing.T) {
+	t.Parallel()
+
+	tas := &TimeAndState{}
+	tas.SetStarted(time.Now())
+	tas.SetFinished(time.Now(), nil)
+
+	require.True(t, tas.IsFinished(), "precondition: should be finished")
+
+	versionBefore := tas.StateVersion()
+
+	tas.MarkRunning()
+
+	assert.False(t, tas.IsFinished(), "MarkRunning() should clear EndTime")
+	assert.True(t, tas.EndTime.IsZero(), "MarkRunning() should zero EndTime")
+	assert.Equal(t, versionBefore+1, tas.StateVersion(), "MarkRunning() should bump stateVersion")
+}
+
+func TestMarkRunningNoOpWhenRunning(t *testing.T) {
+	t.Parallel()
+
+	tas := &TimeAndState{}
+	tas.SetStarted(time.Now())
+
+	require.False(t, tas.IsFinished(), "precondition: should not be finished")
+
+	versionBefore := tas.StateVersion()
+
+	tas.MarkRunning()
+
+	assert.False(t, tas.IsFinished(), "should still not be finished")
+	assert.Equal(t, versionBefore, tas.StateVersion(), "MarkRunning() should not bump stateVersion when already running")
+}
+
+func TestSyncFromBackwardTransition(t *testing.T) {
+	t.Parallel()
+
+	// tas is finished (simulating post-workflow state).
+	tas := &TimeAndState{}
+	tas.SetStarted(time.Now())
+	tas.SetFinished(time.Now(), errTest)
+	require.True(t, tas.IsFinished(), "precondition: tas should be finished")
+	require.NotNil(t, tas.EndError, "precondition: tas should have EndError")
+
+	// other is running (simulating post-retry state).
+	other := &TimeAndState{}
+	other.SetStarted(time.Now())
+	require.False(t, other.IsFinished(), "precondition: other should not be finished")
+
+	versionBefore := tas.StateVersion()
+
+	tas.SyncFrom(other)
+
+	assert.False(t, tas.IsFinished(), "SyncFrom should transition finished→running")
+	assert.True(t, tas.EndTime.IsZero(), "SyncFrom should clear EndTime on backward transition")
+	assert.Equal(t, versionBefore+1, tas.StateVersion(), "SyncFrom should bump stateVersion on backward transition")
+	assert.Nil(t, tas.EndError, "SyncFrom should clear EndError when other has none")
+}
+
+func TestSyncFromNoBackwardWhenBothRunning(t *testing.T) {
+	t.Parallel()
+
+	tas := &TimeAndState{}
+	tas.SetStarted(time.Now())
+
+	other := &TimeAndState{}
+	other.SetStarted(time.Now())
+
+	versionBefore := tas.StateVersion()
+
+	tas.SyncFrom(other)
+
+	assert.False(t, tas.IsFinished(), "should still not be finished")
+	assert.Equal(t, versionBefore, tas.StateVersion(), "no transition should not bump stateVersion")
+}
+
+func TestSyncFromNoBackwardWhenBothFinished(t *testing.T) {
+	t.Parallel()
+
+	tas := &TimeAndState{}
+	tas.SetStarted(time.Now())
+	tas.SetFinished(time.Now(), nil)
+
+	other := &TimeAndState{}
+	other.SetStarted(time.Now())
+	other.SetFinished(time.Now(), nil)
+
+	versionBefore := tas.StateVersion()
+
+	tas.SyncFrom(other)
+
+	assert.True(t, tas.IsFinished(), "should still be finished")
+	assert.Equal(t, versionBefore, tas.StateVersion(), "no transition should not bump stateVersion")
+}
+
+func TestSyncFromForwardFinished(t *testing.T) {
+	t.Parallel()
+
+	tas := &TimeAndState{}
+	tas.SetStarted(time.Now())
+	require.False(t, tas.IsFinished(), "precondition: tas should not be finished")
+
+	other := &TimeAndState{}
+	other.SetStarted(time.Now())
+	other.SetFinished(time.Now(), nil)
+
+	versionBefore := tas.StateVersion()
+
+	tas.SyncFrom(other)
+
+	assert.True(t, tas.IsFinished(), "SyncFrom should transition running→finished")
+	assert.Equal(t, versionBefore+1, tas.StateVersion(), "SyncFrom should bump stateVersion on forward transition")
+}

@@ -29,13 +29,12 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 		return New(appendXpath...)
 	}
 
-	var builder strings.Builder
+	// Fast path: single arg (most common case) — one allocation, no builder.
+	if len(appendXpath) == 1 {
+		return Xpath(xpathS + "/" + appendXpath[0])
+	}
 
-	builder.WriteString(xpathS)
-	builder.WriteByte('/')
-	builder.WriteString(strings.Join(appendXpath, "/"))
-
-	return Xpath(builder.String())
+	return Xpath(xpathS + "/" + strings.Join(appendXpath, "/"))
 }
 
 // FleetLeaf returns the last 3 elements of the path as strings.

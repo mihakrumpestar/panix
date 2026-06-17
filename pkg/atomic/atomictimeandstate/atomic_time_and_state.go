@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
-	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 	"github.com/pkg/errors"
 )
 
@@ -21,16 +20,14 @@ func New() *AtomicTimeAndState {
 }
 
 func (tas *AtomicTimeAndState) StartTimer() {
-	startTime := tas.Load().StartTime
-	if !startTime.IsZero() {
+	if !tas.Load().StartTime.IsZero() {
 		return
 	}
 
 	timeNow := time.Now()
 
-	tas.Update(func(tas *TimeAndState) {
-		tas.StartTime = timeNow
-		tas.live = true
+	tas.Update(func(t *TimeAndState) {
+		t.SetStarted(timeNow)
 	})
 }
 
@@ -41,11 +38,16 @@ func (tas *AtomicTimeAndState) EndTimerWithError(err error) {
 
 	timeNow := time.Now()
 
-	tas.Update(func(tas *TimeAndState) {
-		tas.DurationCache = timeNow.Sub(tas.StartTime)
-		tas.EndTime = timeNow
-		tas.EndError = jsonerror.New(err)
+	tas.Update(func(t *TimeAndState) {
+		t.SetFinished(timeNow, err)
 	})
+}
+
+// StateVersion returns a counter that increments on state transitions
+// (start, end). Used to invalidate display caches without bumping on
+// every duration tick.
+func (tas *AtomicTimeAndState) StateVersion() uint64 {
+	return tas.Load().StateVersion()
 }
 
 func (tas *AtomicTimeAndState) UnmarshalJSON(data []byte) error {

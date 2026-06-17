@@ -20,7 +20,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		return err
 	}
 
-	commandLog := ex.conf.PhaseLog.NewCommand(description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt.env)
+	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt.env)
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
 
 	var execErr error

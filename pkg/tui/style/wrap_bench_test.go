@@ -10,17 +10,19 @@ import (
 
 func Benchmark__Wrap_ShortLine(b *testing.B) {
 	input := "hello world foo bar"
-	inputBytes := [][]byte{[]byte(input)}
+	contentBuf := buffer.NewLinesBuf()
+	contentBuf.WriteLine([]byte(input))
 
 	buf := buffer.NewLinesBuf()
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		Wrap(buf, inputBytes, 20, "")
+		WrapBuf(buf, contentBuf, 20, "")
 	}
 
 	buf.Release()
+	contentBuf.Release()
 }
 
 func Benchmark_Lipgloss__Wrap_ShortLine(b *testing.B) {
@@ -35,17 +37,19 @@ func Benchmark_Lipgloss__Wrap_ShortLine(b *testing.B) {
 
 func Benchmark__Wrap_LongParagraph(b *testing.B) {
 	input := strings.Repeat("hello world foo bar baz ", 20)
-	inputBytes := [][]byte{[]byte(input)}
+	contentBuf := buffer.NewLinesBuf()
+	contentBuf.WriteLine([]byte(input))
 
 	buf := buffer.NewLinesBuf()
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		Wrap(buf, inputBytes, 80, "")
+		WrapBuf(buf, contentBuf, 80, "")
 	}
 
 	buf.Release()
+	contentBuf.Release()
 }
 
 func Benchmark_Lipgloss__Wrap_LongParagraph(b *testing.B) {
@@ -76,17 +80,20 @@ func Benchmark__Wrap_WithANSI(b *testing.B) {
 	input = append(input, rendered0...)
 	input = append(input, []byte("nix build .#nixosConfigurations.machine ")...)
 	input = append(input, rendered1...)
-	inputBytes := [][]byte{input}
+
+	contentBuf := buffer.NewLinesBuf()
+	contentBuf.WriteLine(input)
 
 	buf := buffer.NewLinesBuf()
 
 	b.ResetTimer()
 
 	for b.Loop() {
-		Wrap(buf, inputBytes, 40, "")
+		WrapBuf(buf, contentBuf, 40, "")
 	}
 
 	buf.Release()
+	contentBuf.Release()
 }
 
 func Benchmark_Lipgloss__Wrap_WithANSI(b *testing.B) {
@@ -104,9 +111,9 @@ func Benchmark__Wrap_MultiLine(b *testing.B) {
 	input := "line1\nline2 word line3 more text here that needs wrapping"
 	lines := strings.Split(input, "\n")
 
-	inputBytes := make([][]byte, len(lines))
-	for i, l := range lines {
-		inputBytes[i] = []byte(l)
+	contentBuf := buffer.NewLinesBuf()
+	for _, l := range lines {
+		contentBuf.WriteLine([]byte(l))
 	}
 
 	buf := buffer.NewLinesBuf()
@@ -114,10 +121,11 @@ func Benchmark__Wrap_MultiLine(b *testing.B) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		Wrap(buf, inputBytes, 20, "")
+		WrapBuf(buf, contentBuf, 20, "")
 	}
 
 	buf.Release()
+	contentBuf.Release()
 }
 
 func Benchmark_Lipgloss__Wrap_MultiLine(b *testing.B) {

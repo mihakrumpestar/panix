@@ -66,7 +66,7 @@ func logFinalState(conf *config.Config) {
 			Xpath:    fleetLeaf.Machine.Xpath,
 			Status:   string(machineState.Status),
 			Phase:    string(machineState.Phase),
-			Duration: Duration(fleetLeaf.Machine.Logs.DurationAndErrorCache.Duration),
+			Duration: Duration(fleetLeaf.Machine.Logs.TAS.DurationCache),
 		}
 
 		if machineState.Status == "failed" {

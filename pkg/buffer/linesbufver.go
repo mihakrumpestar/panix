@@ -11,8 +11,12 @@ import (
 // LinesBufVer is a versioned, thread-safe wrapper around LinesBuf.
 // It tracks a version counter incremented on every mutation for cache
 // invalidation. Create with NewLinesBufVer.
+//
+// The inner LinesBuf is unexported to prevent accidental unsynchronized
+// access. Use the locked methods (Write, Line, Len, etc.) for thread-safe
+// access, or Snapshot() for a consistent copy.
 type LinesBufVer struct {
-	*LinesBuf
+	inner *LinesBuf
 
 	version uint64
 	mu      sync.Mutex
@@ -23,7 +27,7 @@ type LinesBufVer struct {
 // NewLinesBufVer creates a new LinesBufVer.
 func NewLinesBufVer() *LinesBufVer {
 	return &LinesBufVer{
-		LinesBuf: NewLinesBuf(),
+		inner: NewLinesBuf(),
 	}
 }
 
@@ -47,7 +51,7 @@ func (b *LinesBufVer) Write(line []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.WriteLine(line)
+	b.inner.WriteLine(line)
 	b.version++
 }
 
@@ -62,7 +66,7 @@ func (b *LinesBufVer) WriteLines(lines [][]byte) {
 	defer b.mu.Unlock()
 
 	for _, line := range lines {
-		b.WriteLine(line)
+		b.inner.WriteLine(line)
 	}
 
 	b.version++
@@ -73,7 +77,7 @@ func (b *LinesBufVer) OverrideLastLine(line []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.LinesBuf.OverrideLastLine(line)
+	b.inner.OverrideLastLine(line)
 	b.version++
 }
 
@@ -82,7 +86,7 @@ func (b *LinesBufVer) RemoveLastLine() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.LinesBuf.RemoveLastLine()
+	b.inner.RemoveLastLine()
 	b.version++
 }
 
@@ -101,12 +105,12 @@ func (b *LinesBufVer) LastLine() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	n := b.LinesBuf.Len()
+	n := b.inner.Len()
 	if n == 0 {
 		return nil
 	}
 
-	return b.LinesBuf.Line(n - 1)
+	return b.inner.Line(n - 1)
 }
 
 // Len returns the number of lines. Thread-safe.
@@ -135,7 +139,7 @@ func (b *LinesBufVer) Lines() [][]byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	return b.LinesBuf.Lines()
+	return b.inner.Lines()
 }
 
 // String returns all lines joined by newlines.
@@ -148,7 +152,7 @@ func (b *LinesBufVer) String() string {
 		return ""
 	}
 
-	size := len(b.LinesBuf.buf) + length - 1
+	size := len(b.inner.buf) + length - 1
 	out := make([]byte, 0, size)
 
 	for i := range length {
@@ -175,8 +179,34 @@ func (b *LinesBufVer) Reset() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.LinesBuf.Reset()
+	b.inner.Reset()
 	b.version++
+}
+
+// CopyFrom replaces the content of b with a copy of src under the lock.
+// Increments version once. Use this when rendering into a temporary buffer
+// and atomically updating the shared state.
+func (b *LinesBufVer) CopyFrom(src *LinesBuf) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.inner.Reset()
+	b.inner.CopyFrom(src)
+	b.version++
+}
+
+// Snapshot returns a copy of the inner LinesBuf under the lock. The
+// caller owns the returned buffer and must call Release() when done.
+// Use this when passing content to a long-running read operation
+// (e.g. rendering) that should not hold the lock for its duration.
+func (b *LinesBufVer) Snapshot() *LinesBuf {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	snap := NewLinesBuf()
+	snap.CopyFrom(b.inner)
+
+	return snap
 }
 
 // JSON
@@ -203,10 +233,10 @@ func (b *LinesBufVer) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unmarshal lines: %w", err)
 	}
 
-	b.Reset()
+	b.inner = NewLinesBuf()
 
 	for _, line := range lines {
-		b.WriteLine([]byte(line))
+		b.Write([]byte(line))
 	}
 
 	return nil
@@ -216,7 +246,7 @@ func (b *LinesBufVer) UnmarshalJSON(data []byte) error {
 // directly to avoid re-locking.
 
 func (b *LinesBufVer) lenLocked() int {
-	return b.LinesBuf.Len()
+	return b.inner.Len()
 }
 
 func (b *LinesBufVer) lineLocked(i int) []byte {
@@ -224,7 +254,7 @@ func (b *LinesBufVer) lineLocked(i int) []byte {
 		return nil
 	}
 
-	return b.LinesBuf.Line(i)
+	return b.inner.Line(i)
 }
 
 func (b *LinesBufVer) bytesLocked() []byte {
@@ -233,7 +263,7 @@ func (b *LinesBufVer) bytesLocked() []byte {
 		return nil
 	}
 
-	size := len(b.LinesBuf.buf) + length - 1
+	size := len(b.inner.buf) + length - 1
 	result := make([]byte, 0, size)
 
 	for i := range length {
@@ -241,7 +271,7 @@ func (b *LinesBufVer) bytesLocked() []byte {
 			result = append(result, '\n')
 		}
 
-		result = append(result, b.LinesBuf.Line(i)...)
+		result = append(result, b.inner.Line(i)...)
 	}
 
 	return result
@@ -249,8 +279,8 @@ func (b *LinesBufVer) bytesLocked() []byte {
 
 func (b *LinesBufVer) appendLocked(buf []byte) {
 	if b.lenLocked() == 0 {
-		b.WriteLine(buf)
+		b.inner.WriteLine(buf)
 	} else {
-		b.AppendToLine(buf)
+		b.inner.AppendToLine(buf)
 	}
 }

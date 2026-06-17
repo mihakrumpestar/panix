@@ -94,11 +94,8 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 func (s *StatsTable) Render(width int) *buffer.LinesBuf {
 	s.content.Reset()
 
-	statsTableHeader := [][]byte{
-		s.colorScheme.Header.Title.RenderLine([]byte("=== Stats Table ===")),
-		[]byte{},
-	}
-	s.content.WriteLines(statsTableHeader)
+	s.colorScheme.Header.Title.RenderLineInto(s.content, []byte("=== Stats Table ==="))
+	s.content.EmptyLine()
 
 	s.tbl.Width(width).SetRows(s.buildRows())
 	s.content.AppendFrom(s.tbl.Render())
@@ -114,10 +111,10 @@ func (s *StatsTable) buildRows() [][][]byte {
 
 	var prevFlakeName, prevConfigurationName string
 
+	marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
+
 	for idx, machineInfo := range machineInfos {
 		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
-
-		marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
 
 		flakeDisplay := marker
 		if flakeName != prevFlakeName {
@@ -132,7 +129,7 @@ func (s *StatsTable) buildRows() [][][]byte {
 		}
 
 		rows[idx] = [][]byte{
-			[]byte(strconv.Itoa(idx + 1)),
+			strconv.AppendInt(nil, int64(idx+1), 10), //nolint:mnd // decimal base
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,

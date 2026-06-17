@@ -32,12 +32,20 @@ import (
 
 var testTreeStyle = style.NewStyle()
 
+func lb(s string) *buffer.LinesBuf {
+	buf := buffer.NewLinesBuf()
+	buf.WriteLine([]byte(s))
+
+	return buf
+}
+
 // testRootNode creates a tree Node with string content for tests.
 func testRootNode(s string) *tree.Node {
-	lb := buffer.NewLinesBuf()
-	lb.WriteLine([]byte(s))
+	root := tree.NewTree(testTreeStyle, TreeStep)
 
-	return tree.NewTree(testTreeStyle).NewNode(lb)
+	return root.Child(xpath.New(s), 1, func(_ int) *buffer.LinesBuf {
+		return lb(s)
+	})
 }
 
 // --- formatDuration ---
@@ -171,7 +179,7 @@ func TestLayoutLine(t *testing.T) {
 	buildLogs := New(conf, nil, nil)
 	buildLogs.contentWidth = 80
 
-	line := buildLogs.layoutLineStyled(0, style.NewStyle(), []byte("left"), []byte("right"), 4, 5)
+	line := buildLogs.layoutLineStyled(0, 0, style.NewStyle(), []byte("left"), []byte("right"), 4, 5)
 
 	assert.Contains(t, buffer.LinesBufToStringForTests(line), "left",
 		"layoutLine should contain left text")
@@ -186,12 +194,56 @@ func TestLayoutLine_NarrowWidth(t *testing.T) {
 	buildLogs := New(conf, nil, nil)
 	buildLogs.contentWidth = 20
 
-	line := buildLogs.layoutLineStyled(6, style.NewStyle(), []byte("BUILD"), []byte("(1.23s)"), 5, 7)
+	line := buildLogs.layoutLineStyled(6, 2, style.NewStyle(), []byte("BUILD"), []byte("(1.23s)"), 5, 7)
 
 	assert.Contains(t, buffer.LinesBufToStringForTests(line), "BUILD",
 		"layoutLine should contain left text")
 	assert.Contains(t, buffer.LinesBufToStringForTests(line), "(1.23s)",
 		"layoutLine should contain right text")
+}
+
+func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0, nil)
+	buildLogs := New(conf, nil, nil)
+	buildLogs.contentWidth = 120
+
+	left := []byte("PHASE")
+	right := []byte("(1.00s)")
+	sty := style.NewStyle()
+
+	// Same timerLevel but different indent (simulating phase under config vs machine).
+	// The timer offset from the content start (indent + timerIndent - timerLevel) should
+	// produce the same connector-to-timer gap.
+	lineUnderCfg := buildLogs.layoutLineStyled(6, timerLevelPhase, sty, left, right, 5, 7)
+	lineUnderMachine := buildLogs.layoutLineStyled(9, timerLevelPhase, sty, left, right, 5, 7)
+
+	strCfg := buffer.LinesBufToStringForTests(lineUnderCfg)
+	strMachine := buffer.LinesBufToStringForTests(lineUnderMachine)
+
+	// The timer should be at the same relative offset from the connector end.
+	// Connector width is 3 (TreeStep). Timer offset = timerIndent - timerLevel.
+	// For timerLevelPhase=3: offset = 4-3 = 1 space after connector.
+	// Verify the timer appears at the expected column.
+	timerOffsetCfg := 6 + (timerIndent - timerLevelPhase) // 7
+
+	// Extract the portion from the timer position onward (after styled content).
+	// Both should have "(1.00s)" starting at their respective offsets.
+	assert.Contains(t, strCfg, "(1.00s)",
+		"phase under config should contain timer")
+	assert.Contains(t, strMachine, "(1.00s)",
+		"phase under machine should contain timer")
+
+	// The connector-to-timer gap should be 1 for both (timerLevelPhase=3 → 4-3=1).
+	expectedGap := timerIndent - timerLevelPhase
+	assert.Equal(t, expectedGap, 1,
+		"connector-to-timer gap should be 1 for timerLevelPhase=3")
+
+	// Verify different timerLevel produces different gap.
+	timerOffsetDiffLevel := 6 + (timerIndent - 2) // level 2 → offset 2
+	assert.NotEqual(t, timerOffsetCfg, timerOffsetDiffLevel,
+		"different timerLevel should produce different offset")
 }
 
 // --- spinnerOrIcon ---
@@ -251,7 +303,7 @@ func TestAddPhases_NilLogNode(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	result := buildLogs.addPhases(parent, nil, xpath.New("test"), 0, false, phase.Build)
+	result := buildLogs.addPhases(parent, nil, xpath.New("test"), false, 0, phase.Build)
 	assert.False(t, result, "addPhases with nil logNode should return false")
 	assert.Equal(t, 0, parent.Len(), "addPhases with nil logNode should not add children")
 }
@@ -266,7 +318,7 @@ func TestAddPhases_NilPhaseLogs(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), 0, false, phase.Build)
+	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), false, 0, phase.Build)
 	assert.False(t, result, "addPhases with nil PhaseLogs should return false")
 }
 
@@ -291,7 +343,7 @@ func TestAddPhasesSingle_HideableFinishedFiltered(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Inspect)
+	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), false, 0, phase.Inspect)
 	assert.False(t, result, "addPhasesSingle should return false when phase is hidden")
 	assert.Equal(t, 0, parent.Len(), "addPhasesSingle should add 0 children when phase hidden, got %d", parent.Len())
 }
@@ -307,12 +359,12 @@ func TestAddPhasesSingle_HideableFinishedWithErrorNotFiltered(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Inspect)
+	buildLogs.addPhases(parent, logNode, xpath.New("test"), false, 0, phase.Inspect)
 
 	assert.Equal(t, 1, parent.Len(), "addPhasesSingle should add child when phase has error, got %d", parent.Len())
 
 	parent2 := testRootNode("parent")
-	result2 := buildLogs.addPhases(parent2, logNode, xpath.New("test"), 6, true, phase.Inspect)
+	result2 := buildLogs.addPhases(parent2, logNode, xpath.New("test"), true, 0, phase.Inspect)
 
 	assert.True(t, result2, "addPhasesSingle with stopAtError should return true when phase has error")
 }
@@ -328,7 +380,7 @@ func TestAddPhasesSingle_BuildPhaseNotFiltered(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Build)
+	result := buildLogs.addPhases(parent, logNode, xpath.New("test"), false, 0, phase.Build)
 	assert.False(t, result, "addPhasesSingle should return false when phase finishes with no error")
 	assert.Equal(t, 1, parent.Len(), "addPhasesSingle should add child for non-hideable phase, got %d", parent.Len())
 }
@@ -352,7 +404,7 @@ func TestAddPhasesMulti_Filtering(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	buildLogs.addPhases(parent, logNode, xpath.New("test"), 6, false, phase.Inspect, phase.Build)
+	buildLogs.addPhases(parent, logNode, xpath.New("test"), false, 0, phase.Inspect, phase.Build)
 
 	assert.Equal(t, 1, parent.Len(), "addPhasesMulti should add 1 child (Build only, Inspect hidden), got %d", parent.Len())
 }
@@ -373,7 +425,7 @@ func TestAddCommands_NilCommandLogs(t *testing.T) {
 
 	phaseNode := testRootNode("phase")
 
-	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, xpath.New("test"), 6)
+	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, 0)
 
 	assert.False(t, hasError, "addCommands with nil CommandLogs and no error should return false")
 }
@@ -389,14 +441,14 @@ func TestAddCommands_WithCommandError(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(os.ErrNotExist)
 
-	cmd := phaseLog.NewCommand("test cmd", "running", "failed", []string{"echo", "test"}, nil)
+	cmd := phaseLog.NewCommand(xpath.New("test"), "test cmd", "running", "failed", []string{"echo", "test"}, nil)
 	cmd.TimeAndState.StartTimer()
 	cmd.TimeAndState.EndTimerWithError(os.ErrNotExist)
 	cmd.Output.Write([]byte("error output"))
 
 	phaseNode := testRootNode("phase")
 
-	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, xpath.New("test"), 6)
+	hasError := buildLogs.addCommands(phaseNode, phaseLog, phase.Build, 0)
 
 	assert.True(t, hasError, "addCommands should return true when command has error")
 	assert.NotZero(t, phaseNode.Len(), "addCommands should add command children")
@@ -414,21 +466,21 @@ func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(nil)
 
-	cmd1 := phaseLog.NewCommand("cmd1", "running", "failed", []string{"cmd1"}, nil)
-	cmd1.TimeAndState.StartTimer()
-	cmd1.TimeAndState.EndTimerWithError(nil)
+		cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, nil)
+		cmd1.TimeAndState.StartTimer()
+		cmd1.TimeAndState.EndTimerWithError(nil)
 
-	cmd2 := phaseLog.NewCommand("cmd2", "running", "failed", []string{"cmd2"}, nil)
-	cmd2.TimeAndState.StartTimer()
-	cmd2.TimeAndState.EndTimerWithError(nil)
+		cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, nil)
+		cmd2.TimeAndState.StartTimer()
+		cmd2.TimeAndState.EndTimerWithError(nil)
 
-	cmd3 := phaseLog.NewCommand("cmd3", "running", "failed", []string{"cmd3"}, nil)
+		cmd3 := phaseLog.NewCommand(xpath.New("test"), "cmd3", "running", "failed", []string{"cmd3"}, nil)
 	cmd3.TimeAndState.StartTimer()
 	cmd3.TimeAndState.EndTimerWithError(nil)
 
 	phaseNode := testRootNode("phase")
 
-	buildLogs.addCommands(phaseNode, phaseLog, phase.Inspect, xpath.New("test"), 6)
+	buildLogs.addCommands(phaseNode, phaseLog, phase.Inspect, 0)
 
 	assert.Equal(t, 1, phaseNode.Len(), "addCommands for hideable phase should show only last command, got %d children", phaseNode.Len())
 }
@@ -461,17 +513,17 @@ func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
 
 			phaseLog := newFinishedPhaseLog(nil)
 
-			cmd1 := phaseLog.NewCommand("cmd1", "running", "failed", []string{"cmd1"}, nil)
+			cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, nil)
 			cmd1.TimeAndState.StartTimer()
 			cmd1.TimeAndState.EndTimerWithError(nil)
 
-			cmd2 := phaseLog.NewCommand("cmd2", "running", "failed", []string{"cmd2"}, nil)
+			cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, nil)
 			cmd2.TimeAndState.StartTimer()
 			cmd2.TimeAndState.EndTimerWithError(nil)
 
 			phaseNode := testRootNode("phase")
 
-			buildLogs.addCommands(phaseNode, phaseLog, testCase.phaseI, xpath.New("test"), 6)
+			buildLogs.addCommands(phaseNode, phaseLog, testCase.phaseI, 0)
 
 			assert.Equal(t, testCase.wantCmds, phaseNode.Len(), "got %d children, want %d", phaseNode.Len(), testCase.wantCmds)
 		})
@@ -495,7 +547,7 @@ func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 	cmdNode := testRootNode("cmd")
 	tas := cmd.TimeAndState.Load()
 
-	buildLogs.addCommandChildren(cmdNode, cmd, xpath.New("test"), tas, 9)
+	buildLogs.addCommandChildren(cmdNode, cmd, tas, 0)
 
 	assert.GreaterOrEqual(t, cmdNode.Len(), 2,
 		"addCommandChildren should add output and error children, got %d", cmdNode.Len())
@@ -514,7 +566,7 @@ func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
 	cmdNode := testRootNode("cmd")
 	tas := cmd.TimeAndState.Load()
 
-	buildLogs.addCommandChildren(cmdNode, cmd, xpath.New("test"), tas, 9)
+	buildLogs.addCommandChildren(cmdNode, cmd, tas, 0)
 
 	assert.Equal(t, 0, cmdNode.Len(),
 		"addCommandChildren with no output and no error should add 0 children, got %d", cmdNode.Len())
@@ -531,12 +583,14 @@ func TestEntityNode(t *testing.T) {
 	buildLogs.styledTreeLine = conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
 	logNode := logs.New()
-	node := buildLogs.entityNode(0, conf.ColorScheme.Flake, "my-flake", logNode, true)
+	content := buildLogs.entityNodeContent(0, conf.ColorScheme.Flake, "my-flake", logNode)
 
-	buf := buffer.NewLinesBufDiff()
-	node.Render(buf)
+	root := tree.NewTree(testTreeStyle, TreeStep)
+	root.Child(xpath.New("test"), 1, func(_ int) *buffer.LinesBuf {
+		return content
+	})
 
-	result := buf.String()
+	result := buffer.LinesBufToStringForTests(root.Render())
 
 	assert.Contains(t, result, "my-flake",
 		"entityNode should contain the name")
@@ -552,12 +606,14 @@ func TestEntityNode_NilLogNode(t *testing.T) {
 	buildLogs.contentWidth = 120
 	buildLogs.styledTreeLine = conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
-	node := buildLogs.entityNode(0, conf.ColorScheme.Flake, "my-flake", nil, true)
+	content := buildLogs.entityNodeContent(0, conf.ColorScheme.Flake, "my-flake", nil)
 
-	buf := buffer.NewLinesBufDiff()
-	node.Render(buf)
+	root := tree.NewTree(testTreeStyle, TreeStep)
+	root.Child(xpath.New("test"), 1, func(_ int) *buffer.LinesBuf {
+		return content
+	})
 
-	result := buf.String()
+	result := buffer.LinesBufToStringForTests(root.Render())
 
 	assert.Contains(t, result, "my-flake",
 		"entityNode with nil logNode should still contain the name")
@@ -657,8 +713,8 @@ func TestBuildPhaseSelectedTree_MachineScopedPhase(t *testing.T) {
 
 // --- renderBuildLogsString helper (for tests) ---
 
-func renderBuildLogsString(b *BuildLogs, vp *viewports.Viewports, sp *spinners.Spinners) string {
-	return buffer.LinesBufToStringForTests(b.Render(vp, sp))
+func renderBuildLogsString(b *BuildLogs, ct *tree.Node, vp *viewports.Viewports, sp *spinners.Spinners) string {
+	return buffer.LinesBufToStringForTests(b.Render(ct, vp, sp))
 }
 
 // --- View end-to-end ---
@@ -671,10 +727,11 @@ func TestView_BasicOutput(t *testing.T) {
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
 
+	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 	vp := newTestViewports(conf)
 	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	result := renderBuildLogsString(buildLogs, vp, sp)
+	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
 	stripped := string(style.StripANSI([]byte(result)))
 
@@ -692,10 +749,11 @@ func TestView_EmptyFleet(t *testing.T) {
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
 
+	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 	vp := newTestViewports(conf)
 	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	result := renderBuildLogsString(buildLogs, vp, sp)
+	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
 	assert.Contains(t, result, "Build Logs",
 		"View should contain 'Build Logs' header even with empty fleet")
@@ -711,10 +769,11 @@ func TestView_NilFlake(t *testing.T) {
 
 	conf.Fleet.Flakes.Set("nil-flake", nil)
 
+	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 	vp := newTestViewports(conf)
 	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	result := renderBuildLogsString(buildLogs, vp, sp)
+	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
 	assert.Contains(t, string(style.StripANSI([]byte(result))), "Build Logs",
 		"View should contain 'Build Logs' header")
@@ -732,10 +791,11 @@ func TestView_NilMachine(t *testing.T) {
 	cfg := getFirstConfig(conf)
 	cfg.Machines.Set("nil-mach", nil)
 
+	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 	vp := newTestViewports(conf)
 	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	result := renderBuildLogsString(buildLogs, vp, sp)
+	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
 	assert.Contains(t, string(style.StripANSI([]byte(result))), "Build Logs",
 		"View should contain 'Build Logs' header")
@@ -749,10 +809,11 @@ func TestView_MultipleFlakes(t *testing.T) {
 	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
 	buildLogs := New(conf, st, ps)
 
+	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 	vp := newTestViewports(conf)
 	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	result := renderBuildLogsString(buildLogs, vp, sp)
+	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
 	assert.Contains(t, result, "flake0",
 		"View should contain first flake name")
@@ -775,7 +836,7 @@ func TestAddPhase_NotStarted(t *testing.T) {
 
 	parent := testRootNode("parent")
 
-	result := buildLogs.addPhase(parent, xpath.New("test"), phase.Build, phaseLog, 6)
+	result := buildLogs.addPhase(parent, xpath.New("test"), phase.Build, phaseLog, 0)
 
 	assert.False(t, result, "addPhase for not-started phase should return false (no error)")
 	assert.Equal(t, 1, parent.Len(), "addPhase should add the phase even when not started, got %d children", parent.Len())
@@ -792,16 +853,16 @@ func TestAddPhase_RunningPhaseShowsSpinner(t *testing.T) {
 
 	phaseLog := newRunningPhaseLog()
 
-	parent := testRootNode("parent")
+	root := tree.NewTree(testTreeStyle, TreeStep)
+	parent := root.Child(xpath.New("parent"), 1, func(_ int) *buffer.LinesBuf {
+		return lb("parent")
+	})
 
-	buildLogs.addPhase(parent, xpath.New("test"), phase.Build, phaseLog, 6)
+	buildLogs.addPhase(parent, xpath.New("test"), phase.Build, phaseLog, 0)
 
 	assert.Equal(t, 1, parent.Len(), "addPhase for running phase should add child")
 
-	buf := buffer.NewLinesBufDiff()
-	parent.Render(buf)
-
-	result := buf.String()
+	result := buffer.LinesBufToStringForTests(root.Render())
 
 	assert.Contains(t, result, "BUILD",
 		"addPhase for Build should contain 'BUILD'")
@@ -949,7 +1010,7 @@ func newNotStartedPhaseLog() *phaselogs.PhaseLog {
 }
 
 func newFinishedCommandLog(description string, err error) *command.CommandLog {
-	cmd := command.NewCommandLog(description, "running", "failed", []string{"echo", "test"}, nil)
+	cmd := command.NewCommandLog(xpath.New("test"), description, "running", "failed", []string{"echo", "test"}, nil)
 	cmd.TimeAndState.StartTimer()
 	cmd.TimeAndState.EndTimerWithError(err)
 

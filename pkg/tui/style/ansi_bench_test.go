@@ -106,3 +106,38 @@ func Benchmark_Lipgloss__Render_WithEmoji(b *testing.B) {
 		_ = lgSty.Render(content)
 	}
 }
+
+// --- RenderLine benchmarks ---
+
+func Benchmark__RenderLine_Colored(b *testing.B) {
+	sty := NewStyle().Foreground(Color("#FF79C6"))
+	line := []byte("📋BUILD")
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = sty.RenderLine(line)
+	}
+}
+
+func Benchmark__RenderLine_NoStyle(b *testing.B) {
+	sty := NewStyle()
+	line := []byte("simple text")
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = sty.RenderLine(line)
+	}
+}
+
+func Benchmark__RenderLine_ColoredBold(b *testing.B) {
+	sty := NewStyle().Foreground(Color("#FF79C6")).Bold(true)
+	line := []byte("📋 flake1  (0.50s)")
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		_ = sty.RenderLine(line)
+	}
+}

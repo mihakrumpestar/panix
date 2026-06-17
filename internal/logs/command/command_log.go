@@ -5,6 +5,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
 type CommandLog struct {
@@ -17,9 +18,16 @@ type CommandLog struct {
 	TimeAndState   *atomictimeandstate.AtomicTimeAndState `yaml:"-" json:"time_and_state,omitempty"`
 	PendingNewline bool                                   `yaml:"-" json:"-"`
 	CarriageReturn bool                                   `yaml:"-" json:"-"` // cursor at column 0 after trailing \r
+
+	Xpath       xpath.Xpath `yaml:"-" json:"xpath,omitempty"`
+	LabelXpath  xpath.Xpath `yaml:"-" json:"-"`
+	OutputXpath xpath.Xpath `yaml:"-" json:"-"`
+	ErrorXpath  xpath.Xpath `yaml:"-" json:"-"`
 }
 
-func NewCommandLog(description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
+func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
+	cmdXpath := phaseXpath.NewXpathWithAppend(description)
+
 	commandLog := &CommandLog{
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
@@ -28,9 +36,25 @@ func NewCommandLog(description, statusIfRunning, statusIfFailed string, command,
 
 		Output:       buffer.NewLinesBufVer(),
 		TimeAndState: atomictimeandstate.New(),
+
+		Xpath: cmdXpath,
 	}
 
+	commandLog.initDerivedXpaths()
+
 	return commandLog
+}
+
+// PostUnmarshalInit recomputes derived xpaths that are not serialized (json:"-").
+// Must be called after JSON deserialization.
+func (cl *CommandLog) PostUnmarshalInit() {
+	cl.initDerivedXpaths()
+}
+
+func (cl *CommandLog) initDerivedXpaths() {
+	cl.LabelXpath = cl.Xpath.NewXpathWithAppend("label")
+	cl.OutputXpath = cl.Xpath.NewXpathWithAppend("output")
+	cl.ErrorXpath = cl.Xpath.NewXpathWithAppend("error")
 }
 
 // joinCommand joins env vars and command args into a shell-like LineBuf.
