@@ -432,6 +432,108 @@ func TestFinalizeCommandLog(t *testing.T) {
 	}
 }
 
+func TestProcessTerminalOutput_Backspaces(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{"simple backspace", "abc\b\b\bdone\n", []string{"done"}},
+		{
+			"progress pattern with done",
+			"Allocating group tables:  0/80\b\b\b\b\b     \b\b\b\b\bdone                            \n",
+			[]string{"Allocating group tables: done                            "},
+		},
+		{
+			"backspace across combined content",
+			"Creating filesystem with 2620672 4k blocks and 655360 inodes\n\t32768, 98304\n",
+			[]string{
+				"Creating filesystem with 2620672 4k blocks and 655360 inodes",
+				"    32768, 98304",
+			},
+		},
+		{"backspace with carriage return", "first\rsecond\b\bdone\n", []string{"secodone"}},
+		{"backspace at start of segment", "\b\ba\n", []string{"a"}},
+		{"backspace erasing everything", "abc\b\b\b\n", nil},
+		{
+			"multiple progress lines with backspaces",
+			"Discarding device blocks:       0/2620672" +
+				"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b               " +
+				"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bdone                            \n",
+			[]string{"Discarding device blocks: done                            "},
+		},
+		{"no backspaces", "normal line\n", []string{"normal line"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmdLog := newTestCommandLog()
+			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
+		})
+	}
+}
+
+func TestApplyBackspaces(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no backspace", "hello", "hello"},
+		{"simple", "ab\bc", "ac"},
+		{"multiple", "abc\b\b\bdone", "done"},
+		{"at start", "\b\ba", "a"},
+		{"erase all", "abc\b\b\b", ""},
+		{"progress done", "0/80\b\b\b\b\b     \b\b\b\b\bdone", "done"},
+		{"with newline", "abc\b\b\ndef\ndone", "a\ndef\ndone"},
+		{"empty", "", ""},
+		{"only backspace", "\b", ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := string(applyBackspaces([]byte(test.input)))
+			assert.Equal(t, test.want, got, "applyBackspaces(%q)", test.input)
+		})
+	}
+}
+
+func TestProcessTerminalOutput_TabExpansion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{"simple tab", "\t32768\n", []string{"    32768"}},
+		{"tab mid line", "hello\tworld\n", []string{"hello    world"}},
+		{"multiple tabs", "a\tb\tc\n", []string{"a    b    c"}},
+		{"tab at start", "\tdone\n", []string{"    done"}},
+		{"no tabs", "plain text\n", []string{"plain text"}},
+		{"tab with backspaces", "0/80\b\b\t\bdone\n", []string{"0/   done"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmdLog := newTestCommandLog()
+			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
+		})
+	}
+}
+
 // processTestData is a test helper that runs terminalProcessor.process on
 // the given data and CommandLog.
 func processTestData(data []byte, cmdLog *command.CommandLog) {

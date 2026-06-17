@@ -1626,3 +1626,160 @@ func TestResizeWrappingSweep(t *testing.T) {
 		}
 	}
 }
+
+func TestBackspaceProgressLines(t *testing.T) {
+	t.Parallel()
+
+	vpWidth := 80
+	vpHeight := 12
+
+	mdl := New(
+		WithWidth(vpWidth),
+		WithHeight(vpHeight),
+		WithBorder(style.Color("")),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+	)
+
+	// Simulate mkfs.ext4-style output after terminal processor strips \b
+	// and expands \t (this is what the viewport actually receives).
+	content := splitLines(strings.Join([]string{
+		"mke2fs 1.47.3 (8-Jul-2025)",
+		"Creating filesystem with 2620672 4k blocks and 655360 inodes",
+		"Filesystem UUID: 54043d88-d299-4c12-a1e0-58fd38c381d0",
+		"Superblock backups stored on blocks:",
+		"Allocating group tables: done                            ",
+		"Writing inode tables: done                            ",
+		"Creating journal (16384 blocks): done",
+		"Writing superblocks and filesystem accounting information: done",
+		"",
+		"Discarding device blocks: done                            ",
+	}, "\n"))
+
+	_ = mdl.SetContent(content)
+	rendered := mdl.Render()
+
+	for i := range rendered.Len() {
+		line := rendered.Line(i)
+		cw := style.CellWidth(line)
+		assert.Equal(t, vpWidth, cw, "line %d: visible width %d, want %d", i, cw, vpWidth)
+	}
+}
+
+func TestBackspaceBorderConsistency(t *testing.T) {
+	t.Parallel()
+
+	vpWidth := 60
+	vpHeight := 8
+
+	mdl := New(
+		WithWidth(vpWidth),
+		WithHeight(vpHeight),
+		WithBorder(style.Color("")),
+	)
+
+	content := splitLines(strings.Join([]string{
+		"normal line without backspaces",
+		"progress: done                            ",
+		"another normal line",
+		"Writing tables: done                            ",
+		"short",
+		"end",
+	}, "\n"))
+
+	_ = mdl.SetContent(content)
+	rendered := mdl.Render()
+
+	for i := range rendered.Len() {
+		line := rendered.Line(i)
+		cw := style.CellWidth(line)
+		assert.Equal(t, vpWidth, cw, "line %d: visible width %d, want %d", i, cw, vpWidth)
+	}
+}
+
+func TestTabWidthInViewport(t *testing.T) {
+	t.Parallel()
+
+	vpWidth := 40
+	vpHeight := 5
+
+	mdl := New(
+		WithWidth(vpWidth),
+		WithHeight(vpHeight),
+		WithBorder(style.Color("")),
+	)
+
+	// After terminal processor expands \t to 4 spaces.
+	content := strLines(
+		"    indented with tab",
+		"normal line",
+		"prefix    suffix",
+	)
+
+	_ = mdl.SetContent(content)
+	rendered := mdl.Render()
+
+	for i := range rendered.Len() {
+		line := rendered.Line(i)
+		cw := style.CellWidth(line)
+		assert.Equal(t, vpWidth, cw, "line %d: visible width %d, want %d", i, cw, vpWidth)
+	}
+}
+
+// TestViewportContentOverrideConsistency verifies that when content changes
+// (via \r overrides in the terminal processor), the viewport doesn't
+// preserve stale paddedBuf prefix from the previous frame. All lines must
+// have the same visible width after content replacement.
+func TestViewportContentOverrideConsistency(t *testing.T) {
+	t.Parallel()
+
+	vpWidth := 80
+	vpHeight := 8
+
+	mdl := New(
+		WithWidth(vpWidth),
+		WithHeight(vpHeight),
+		WithBorder(style.Color("")),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+	)
+
+	// Frame 1: content that overflows (scrollbar active).
+	frame1 := strLines(
+		"line one that is here",
+		"line two that is here",
+		"line three that is here",
+		"line four that is here",
+		"line five that is here",
+		"line six that is here",
+		"line seven that is here",
+		"line eight that is here",
+		"line nine that is here",
+		"line ten that is here",
+	)
+	_ = mdl.SetContent(frame1)
+	_ = mdl.Render()
+
+	// Frame 2: content changes (simulating \r override) — different lines,
+	// same count. tryPreservePrefix should NOT reuse stale padding.
+	frame2 := strLines(
+		"REPLACED line one xx",
+		"REPLACED line two xx",
+		"REPLACED line three",
+		"REPLACED line four",
+		"REPLACED line five",
+		"REPLACED line six",
+		"REPLACED line seven",
+		"REPLACED line eight",
+		"REPLACED line nine",
+		"REPLACED line ten",
+	)
+	_ = mdl.SetContent(frame2)
+	rendered := mdl.Render()
+
+	for i := range rendered.Len() {
+		line := rendered.Line(i)
+		cw := style.CellWidth(line)
+		assert.Equal(t, vpWidth, cw,
+			"line %d: visible width %d, want %d (stale padding from frame 1?)",
+			i, cw, vpWidth)
+	}
+}

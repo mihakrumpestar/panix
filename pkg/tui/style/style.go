@@ -1076,7 +1076,7 @@ func scanTruncationPoint(line []byte, maxW int) (int, bool) {
 
 		if char == '\x1b' {
 			graphemeState = -1
-			pos = skipANSI(line, pos)
+			pos = SkipANSI(line, pos)
 
 			continue
 		}

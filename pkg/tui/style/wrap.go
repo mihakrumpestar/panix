@@ -140,7 +140,7 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 
 		if byteI == '\x1b' {
 			graphemeState = -1
-			end := skipANSI(data, pos)
+			end := SkipANSI(data, pos)
 
 			if !s.hasWord {
 				s.wordStart = pos
@@ -223,7 +223,7 @@ func (s *wrapState) updateLineStyleAfterFlush(start, end int) {
 			continue
 		}
 
-		seqEnd := skipANSI(s.data, pos)
+		seqEnd := SkipANSI(s.data, pos)
 		seq := s.data[pos:seqEnd]
 
 		if isANSISGR(seq) {
@@ -433,7 +433,7 @@ func lineExceedsLimitBytes(data []byte, limit int) bool {
 		case byteI == '\n':
 			return true
 		case byteI == '\t':
-			width += 4
+			width += 4 //nolint:mnd
 			pos++
 			graphemeState = -1
 		case byteI == '\x1b':
@@ -462,7 +462,7 @@ func lineExceedsLimitBytes(data []byte, limit int) bool {
 }
 
 func skipANSIPos(data []byte, pos int) int {
-	end := skipANSI(data, pos)
+	end := SkipANSI(data, pos)
 	if end == pos {
 		return pos + 1
 	}

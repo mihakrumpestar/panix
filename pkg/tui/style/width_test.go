@@ -81,7 +81,7 @@ func TestSkipANSI(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		assert.Equal(t, tc.want, skipANSI([]byte(tc.input), 0), "skipANSI(%q)", tc.input)
+		assert.Equal(t, tc.want, SkipANSI([]byte(tc.input), 0), "skipANSI(%q)", tc.input)
 	}
 }
 

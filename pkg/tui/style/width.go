@@ -38,7 +38,7 @@ func CellWidth(data []byte) int {
 		switch char {
 		case '\x1b':
 			graphemeState = -1
-			pos = skipANSI(data, pos)
+			pos = SkipANSI(data, pos)
 		case '\n', '\r':
 			graphemeState = -1
 
@@ -64,7 +64,7 @@ func CellWidth(data []byte) int {
 	return maxWidth
 }
 
-// skipANSI skips a complete ANSI escape sequence starting at pos (which points
+// SkipANSI skips a complete ANSI escape sequence starting at pos (which points
 // to '\x1b') and returns the position immediately after the sequence. Handles:
 //
 //   - CSI sequences: \x1b[<params><final>  (final byte 0x40-0x7E)
@@ -73,7 +73,7 @@ func CellWidth(data []byte) int {
 //   - Bare ESC sequences: \x1b<0x40-0x5F> (2-byte C1 codes like \x1b[)
 //
 //nolint:cyclop,mnd
-func skipANSI(line []byte, pos int) int {
+func SkipANSI(line []byte, pos int) int {
 	if pos >= len(line) || line[pos] != '\x1b' {
 		return pos
 	}
@@ -149,7 +149,7 @@ func StripANSI(line []byte) []byte {
 
 	for pos < len(line) {
 		if line[pos] == '\x1b' {
-			pos = skipANSI(line, pos)
+			pos = SkipANSI(line, pos)
 
 			continue
 		}
@@ -170,7 +170,7 @@ func HasVisibleContent(line []byte) bool {
 
 	for pos < n {
 		if line[pos] == '\x1b' {
-			pos = skipANSI(line, pos)
+			pos = SkipANSI(line, pos)
 
 			continue
 		}
