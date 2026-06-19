@@ -122,7 +122,7 @@ func TestStartAllProfiles(t *testing.T) { //nolint:paralleltest // manipulates g
 }
 
 func TestStartCPUInvalidPath(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
-	_, err := Start(Profile{CPU: "/nonexistent/deep/nested/dir/cpu.prof"})
+	_, err := Start(Profile{CPU: "/dev/null/cpu.prof"})
 	assert.Error(t, err)
 }
 
@@ -145,7 +145,7 @@ func TestWriteProfileInvalidName(t *testing.T) { //nolint:paralleltest // manipu
 }
 
 func TestWriteProfileInvalidPath(t *testing.T) { //nolint:paralleltest // manipulates global pprof state
-	assert.Error(t, writeProfile("goroutine", "/nonexistent/deep/nested/dir/goroutine.prof"))
+	assert.Error(t, writeProfile("goroutine", "/dev/null/goroutine.prof"))
 }
 
 func TestWriteProfileCreatesDir(t *testing.T) { //nolint:paralleltest // manipulates global pprof state

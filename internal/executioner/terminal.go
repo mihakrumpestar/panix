@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"bytes"
+	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -11,7 +12,10 @@ import (
 var (
 	carriageReturn   = []byte("\r")
 	eraseToEndOfLine = []byte("\x1b[K")
+	tabToSpaces      = []byte("    ")
 )
+
+const escByte = '\x1b'
 
 // terminalProcessor holds the cursor state for processing PTY output across
 // segments and reads. It avoids threading (cursorOnNewLine, cursorAtColZero)
@@ -53,7 +57,14 @@ func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
 		buf = buf[:len(buf)-len(tp.pending)]
 	}
 
-	buf = bytes.ReplaceAll(buf, eraseToEndOfLine, nil)
+	if bytes.IndexByte(buf, escByte) >= 0 {
+		buf = bytes.ReplaceAll(buf, eraseToEndOfLine, nil)
+	}
+
+	if bytes.IndexByte(buf, '\t') >= 0 {
+		buf = bytes.ReplaceAll(buf, []byte("\t"), tabToSpaces)
+	}
+
 	if len(buf) == 0 {
 		return
 	}
@@ -69,7 +80,7 @@ func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
 
 	for segIdx, seg := range segments {
 		isLast := segIdx == lastSeg
-		tp.processSegment(seg, segIdx, isLast, endsWithNewline)
+		tp.processSegment(applyBackspaces(seg), segIdx, isLast, endsWithNewline)
 	}
 
 	if lastSeg > 0 && len(segments[lastSeg]) == 0 {
@@ -254,4 +265,71 @@ func finalizeCommandLog(commandLog *command.CommandLog) {
 
 	commandLog.CarriageReturn = false
 	commandLog.PendingNewline = false
+}
+
+// applyBackspaces simulates terminal backspace (\b) processing on a single
+// line segment. For each \b it removes the preceding visible character.
+// Returns data unchanged (zero-copy) when no \b is present.
+func applyBackspaces(data []byte) []byte {
+	idx := bytes.IndexByte(data, '\b')
+	if idx < 0 {
+		return data
+	}
+
+	out := make([]byte, 0, len(data))
+	out = append(out, data[:idx]...)
+	lastVisible := findLastVisible(out)
+
+	for pos := idx; pos < len(data); pos++ {
+		char := data[pos]
+
+		if char == '\b' {
+			if lastVisible >= 0 {
+				out = out[:lastVisible]
+				lastVisible = findLastVisible(out)
+			}
+
+			continue
+		}
+
+		if char == escByte {
+			end := style.SkipANSI(data, pos)
+			out = append(out, data[pos:end]...)
+			pos = end - 1
+
+			continue
+		}
+
+		out = append(out, char)
+
+		if char == '\n' || char == '\r' || byteWidth(char) > 0 {
+			lastVisible = len(out) - 1
+		}
+	}
+
+	return out
+}
+
+// findLastVisible returns the byte index of the last visible character in
+// data, or -1 if none is found.
+func findLastVisible(data []byte) int {
+	for i, v := range slices.Backward(data) {
+		if byteWidth(v) > 0 || v == '\n' || v == '\r' {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// byteWidth returns the terminal cell width of a single byte.
+func byteWidth(b byte) int {
+	switch {
+	case b >= 0x20 && b < 0x7F:
+		return 1
+	case b == '\t':
+		return 4 //nolint:mnd
+	default:
+		return 0
+	}
 }

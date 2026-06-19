@@ -1016,18 +1016,29 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 	}
 }
 
-// tryPreservePrefix attempts to preserve the paddedBuf prefix and carry
-// over cached lineWidths for non-main viewports when the wrapping width
-// is unchanged. This avoids O(n) recomputation for appended content.
+// tryPreservePrefix preserves the paddedBuf prefix for non-main viewports
+// when the wrapping width is unchanged, avoiding O(n) CellWidth recomputation.
+// A safety margin is applied: the last few old lines are always re-padded
+// because CLI tools (e.g. mkfs.ext4) use \r to override the last ~2 lines.
 func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount int, oldWrappedW int) {
 	if m.main || oldLen == 0 || m.linesLen < oldLen || oldPaddedCount != oldLen {
 		return
 	}
 
-	m.paddedBuf = m.paddedBuf[:m.lineOffsets[oldLen-1]]
-	m.paddedLineCount = oldLen - 1
+	if oldWrappedW != m.wrappedContentW {
+		return
+	}
 
-	if oldWidths == nil || oldWrappedW != m.wrappedContentW {
+	// Preserve everything except the last few lines — CLIs override at most
+	// ~2 lines via \r, so re-padding 3 covers the worst case with margin.
+	const safetyMargin = 3
+
+	preserveUpTo := max(0, oldLen-safetyMargin)
+
+	m.paddedBuf = m.paddedBuf[:m.lineOffsets[preserveUpTo]]
+	m.paddedLineCount = preserveUpTo
+
+	if oldWidths == nil {
 		return
 	}
 
@@ -1039,13 +1050,11 @@ func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount
 		}
 	}
 
-	copy(m.lineWidths, oldWidths[:min(oldLen, m.linesLen)])
+	copy(m.lineWidths, oldWidths[:min(preserveUpTo, m.linesLen)])
 
-	for i := oldLen; i < m.linesLen; i++ {
+	for i := preserveUpTo; i < m.linesLen; i++ {
 		m.lineWidths[i] = -1
 	}
-
-	m.lineWidths[m.paddedLineCount] = -1
 }
 
 // releaseLinesBuf releases the owned buffer if any.
