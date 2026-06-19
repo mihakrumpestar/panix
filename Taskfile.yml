@@ -55,7 +55,6 @@ tasks:
     cmds:
       - go mod tidy
       - golangci-lint run ./...
-      - golangci-lint run ./tests/e2e/...
       - |
         if grep -rn "; " internal/ --include="*.go" | grep -v "for " | grep -v "//"; then
           echo "Error: Inlining pattern detected"
@@ -263,9 +262,26 @@ tasks:
       - bun run build
 
   docs:deploy:
-    desc: Deploy docs to Cloudflare Pages
+    desc: Deploy docs to Cloudflare Pages (override branch with BRANCH=main)
     dir: ./docs
     deps:
       - docs:build
+    vars:
+      BRANCH: '{{.BRANCH | default ""}}'
     cmds:
-      - bunx wrangler pages deploy --project-name panix dist
+      - bunx wrangler pages deploy --project-name panix {{if .BRANCH}}--branch {{.BRANCH}} {{end}}dist
+
+  # Actions (local CI testing with act)
+
+  actions:ci:
+    desc: Run CI workflow locally with act
+    cmds:
+      - act push -W .github/workflows/ci.yml
+
+  actions:docs:
+    desc: Run docs-deploy workflow locally with act (secrets from keyring)
+    cmds:
+      - |
+        act push -W .github/workflows/docs-deploy.yml \
+          -s CLOUDFLARE_API_TOKEN="$(secret-tool lookup service cloudflare key api-token)" \
+          -s CLOUDFLARE_ACCOUNT_ID="$(secret-tool lookup service cloudflare key account-id)"
