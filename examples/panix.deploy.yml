@@ -2,7 +2,7 @@
 
 # Below is not a comment (writing it as a comment prevents from yaml syntaks errors),
 # it is Golang template function definition
-# {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
+# {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --tpm2-pcrs="" --wipe-slot=all {{.}}{{end}}
 
 anchor_bootstrap: &bootstrap_defaults
   kexec:
@@ -47,6 +47,9 @@ fleet:
             server-01:
               bootstrap:
                 <<: *bootstrap_defaults
+                #ssh:
+                #  hostname: 10.0.200.11
+                #  identity_file: temp_key
                 post_bootstrap_hooks:
                   - |
                     {{template "cryptenroll" "/dev/sda2"}}
