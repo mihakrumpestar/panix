@@ -22,6 +22,7 @@ type StatsTable struct {
 	tbl         *table.Table
 	colorScheme *colorscheme.ColorScheme
 	content     *buffer.LinesBuf
+	rowMarker   []byte
 }
 
 func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
@@ -62,6 +63,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		tbl:         tbl,
 		colorScheme: colorScheme,
 		content:     buffer.NewLinesBuf(),
+		rowMarker:   append([]byte{' '}, colorScheme.Chars.RowSpanMarker...),
 	}
 }
 
@@ -111,7 +113,7 @@ func (s *StatsTable) buildRows() [][][]byte {
 
 	var prevFlakeName, prevConfigurationName string
 
-	marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
+	marker := s.rowMarker
 
 	for idx, machineInfo := range machineInfos {
 		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
@@ -177,7 +179,7 @@ func getGeneration(machineInfo fleet.MachineInfo) []byte {
 		return nil
 	}
 
-	return []byte(strconv.FormatUint(uint64(machineInfo.MetaInspect.Generations.Current), 10))
+	return strconv.AppendUint(nil, uint64(machineInfo.MetaInspect.Generations.Current), 10) //nolint:mnd // decimal base
 }
 
 func joinBytes(prefix []byte, suffix string) []byte {

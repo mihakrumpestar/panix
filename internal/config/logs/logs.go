@@ -50,12 +50,15 @@ func (l *Logs) PostUnmarshalInit() {
 	}
 }
 
-// MergePhaseLogs merges multiple PhaseLogs into a fresh Logs object.
-// The returned Logs.TAS has StartTime/EndTime set as state markers
-// (for HasStarted/IsFinished) but stateVersion is not bumped — the
-// caller is responsible for syncing into a persisted TAS via SyncFrom.
-func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) *Logs {
-	logs := New()
+// MergePhaseLogsInto merges phase logs from multiple inputs into dst in-place.
+// dst.PhaseLogs is cleared and repopulated (reuses map capacity — zero allocation
+// when entry count is stable). The merge result is written to dst.TAS as a
+// temporary snapshot; the caller should sync it into a persisted TAS via SyncFrom.
+func MergePhaseLogsInto(dst *Logs, phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) {
+	dst.PhaseLogs.Clear()
+
+	// Reset TAS to a fresh state for this merge snapshot.
+	dst.TAS.Reset()
 
 	anyStarted := false
 	acc := newIntervalAccumulator()
@@ -72,14 +75,14 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 			continue
 		}
 
-		logs.PhaseLogs.Set(phase, phaseLog)
+		dst.PhaseLogs.Set(phase, phaseLog)
 
 		tas := phaseLog.TimeAndState
 		// Call DurationOrElapsedTime so running phases get their DurationCache updated.
 		_, _ = tas.DurationOrElapsedTime()
 		tasLoaded := tas.Load()
 
-		logs.TAS.EndError = tasLoaded.EndError
+		dst.TAS.EndError = tasLoaded.EndError
 
 		if tasLoaded.HasStarted() {
 			anyStarted = true
@@ -96,19 +99,17 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 		}
 	}
 
-	logs.TAS.DurationCache = acc.total()
+	dst.TAS.DurationCache = acc.total()
 
 	// Set state markers on TAS so HasStarted/IsFinished return correct values.
 	// These are approximate timestamps — the real times live on per-phase TAS.
 	if anyStarted {
-		logs.TAS.StartTime = time.Now()
+		dst.TAS.StartTime = time.Now()
 
-		if logs.TAS.EndError != nil || logs.allPhasesFinished() {
-			logs.TAS.EndTime = time.Now()
+		if dst.TAS.EndError != nil || dst.allPhasesFinished() {
+			dst.TAS.EndTime = time.Now()
 		}
 	}
-
-	return logs
 }
 
 // findPhaseLog looks up a phase in the given PhaseLogs inputs, returning the
@@ -129,8 +130,7 @@ func findPhaseLog(phase phase.Phase, inputs ...*phaselogs.PhaseLogs) *phaselogs.
 }
 
 // allPhasesFinished returns true if every phase in PhaseLogs is finished.
-// Uses ForEach (zero-allocation) instead of Pairs() since this is called
-// every frame per machine in MergePhaseLogs → isMergeFinished.
+// Uses ForEach (zero-allocation) since this is called every frame per machine.
 func (l *Logs) allPhasesFinished() bool {
 	return l.PhaseLogs.ForEach(func(_ phase.Phase, phaseLog *phaselogs.PhaseLog) bool {
 		return phaseLog.TimeAndState.Load().IsFinished()

@@ -167,18 +167,16 @@ func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
 			f.cachedTAS[machineIdx] = &atomictimeandstate.TimeAndState{}
 		}
 
-		mergedLogs := logs.MergePhaseLogs(workflowPhases,
+		// Merge phase logs in-place into the cached Logs entry.
+		// dst.TAS acts as a temp snapshot — synced into the persisted cachedTAS below.
+		logs.MergePhaseLogsInto(f.CacheFlattenedLogs[machineIdx], workflowPhases,
 			treeLeaf.Machine.Logs.PhaseLogs,
 			treeLeaf.Configuration.Logs.PhaseLogs,
 			treeLeaf.Flake.Logs.PhaseLogs,
 		)
 
 		// Sync aggregated state into persisted TAS — bumps stateVersion on transitions.
-		f.cachedTAS[machineIdx].SyncFrom(mergedLogs.TAS)
-
-		// Assign persisted TAS and PhaseLogs to the cached Logs entry.
-		f.CacheFlattenedLogs[machineIdx].PhaseLogs = mergedLogs.PhaseLogs
-		f.CacheFlattenedLogs[machineIdx].TAS = f.cachedTAS[machineIdx]
+		f.cachedTAS[machineIdx].SyncFrom(f.CacheFlattenedLogs[machineIdx].TAS)
 	}
 }
 
@@ -198,7 +196,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 			cfgAnyRunning := false
 
 			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
-				machineV.Logs.TAS.SyncFrom(f.CacheFlattenedLogs[idx].TAS)
+				machineV.Logs.TAS.SyncFrom(f.cachedTAS[idx])
 
 				machineDur := machineV.Logs.TAS.DurationCache
 				if machineDur > largestMachineDuration {

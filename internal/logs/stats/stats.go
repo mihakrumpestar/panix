@@ -48,10 +48,5 @@ func (spp *StatisticsPerPhase) DeepSet(phase phase.Phase, statsState StatsState,
 		spp.AtomicOrderedMap.Set(phase, statsPack)
 	}
 
-	xpaths, ok := statsPack[statsState]
-	if !ok {
-		xpaths = make([]xpath.Xpath, 0)
-	}
-
-	statsPack[statsState] = append(xpaths, xpathI)
+	statsPack[statsState] = append(statsPack[statsState], xpathI)
 }
