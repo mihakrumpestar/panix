@@ -208,7 +208,7 @@ func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Node, cfg *configuratio
 			return true
 		}
 
-		b.addMachineWithPhases(cfgNode, machine, phaseI)
+		b.addMachineWithPhases(cfgNode, machine, map[phase.Phase]struct{}{phaseI: {}})
 
 		return true
 	})
@@ -224,12 +224,14 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Conf
 			return
 		}
 
+		allowedSet := makeAllowedSet(machinePhases)
+
 		cfg.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
 			if machine == nil || machine.Logs == nil {
 				return true
 			}
 
-			b.addMachineWithPhases(cfgNode, machine, machinePhases...)
+			b.addMachineWithPhases(cfgNode, machine, allowedSet)
 
 			return true
 		})
@@ -249,12 +251,12 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Conf
 	flush()
 }
 
-func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Machine, allowed ...phase.Phase) {
+func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Machine, allowedSet map[phase.Phase]struct{}) {
 	if machine == nil || machine.Logs == nil {
 		return
 	}
 
-	if !b.hasVisiblePhases(machine.Logs, allowed...) {
+	if !b.hasVisiblePhases(machine.Logs, allowedSet) {
 		return
 	}
 
@@ -263,15 +265,13 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Mac
 		return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name, machine.Logs)
 	})
 
-	b.addPhases(machineNode, machine.Logs, machine.Xpath, false, entityVersion, allowed...)
+	b.addPhasesMulti(machineNode, machine.Logs, machine.Xpath, false, entityVersion, allowedSet)
 }
 
-func (b *BuildLogs) hasVisiblePhases(logNode *logs.Logs, allowed ...phase.Phase) bool {
+func (b *BuildLogs) hasVisiblePhases(logNode *logs.Logs, allowedSet map[phase.Phase]struct{}) bool {
 	if logNode == nil || logNode.PhaseLogs == nil {
 		return false
 	}
-
-	allowedSet := makeAllowedSet(allowed)
 
 	hasVisible := false
 
@@ -339,7 +339,7 @@ func (b *BuildLogs) addPhases(
 		return b.addPhasesSingle(parent, logNode, entityXpath, stopAtError, entityVersion, allowed[0])
 	}
 
-	return b.addPhasesMulti(parent, logNode, entityXpath, stopAtError, entityVersion, allowed)
+	return b.addPhasesMulti(parent, logNode, entityXpath, stopAtError, entityVersion, makeAllowedSet(allowed))
 }
 
 func (b *BuildLogs) addPhasesSingle(
@@ -377,10 +377,8 @@ func (b *BuildLogs) addPhasesMulti(
 	entityXpath xpath.Xpath,
 	stopAtError bool,
 	entityVersion uint64,
-	allowed []phase.Phase,
+	allowedSet map[phase.Phase]struct{},
 ) bool {
-	allowedSet := makeAllowedSet(allowed)
-
 	for _, phaseMetadata := range phase.PhaseRegistry {
 		_, ok := allowedSet[phaseMetadata.Phase]
 		if !ok {
@@ -455,17 +453,16 @@ func (b *BuildLogs) addCommands(
 
 	hasError := tasLoaded.EndError != nil
 
-	cmdValues := cmds.Values()
-	cmdLen := len(cmdValues)
+	cmdLen := cmds.Length()
 	lastIdx := cmdLen - 1
 
-	for idx, cmd := range cmdValues {
+	cmds.ForEach(func(idx int, cmd *command.CommandLog) bool {
 		if cmd == nil {
-			continue
+			return true
 		}
 
 		if !b.conf.Flags.Tui.ShowAllBuildLogs && hideable && idx != lastIdx {
-			continue
+			return true
 		}
 
 		b.addCommand(phaseNode, cmd, idx, entityVersion)
@@ -476,7 +473,9 @@ func (b *BuildLogs) addCommands(
 				hasError = true
 			}
 		}
-	}
+
+		return true
+	})
 
 	return hasError
 }

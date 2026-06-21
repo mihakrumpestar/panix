@@ -23,7 +23,7 @@ type StatsPack map[StatsState][]xpath.Xpath
 
 func New(workflowPhases []phase.Phase) *StatisticsPerPhase {
 	spp := &StatisticsPerPhase{
-		atomicorderedmap.New[phase.Phase, StatsPack](),
+		atomicorderedmap.NewWithCap[phase.Phase, StatsPack](len(workflowPhases)),
 	}
 
 	for _, phase := range workflowPhases {

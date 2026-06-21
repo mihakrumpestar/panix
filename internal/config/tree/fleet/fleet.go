@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/phase"
@@ -111,11 +112,13 @@ func postUnmarshalMachine(mach *machine.Machine) {
 			return true
 		}
 
-		for _, cmd := range phaseLog.CommandLogs.Values() {
+		phaseLog.CommandLogs.ForEach(func(_ int, cmd *command.CommandLog) bool {
 			if cmd != nil {
 				cmd.PostUnmarshalInit()
 			}
-		}
+
+			return true
+		})
 
 		return true
 	})

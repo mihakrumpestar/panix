@@ -57,8 +57,6 @@ func (l *Logs) PostUnmarshalInit() {
 func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) *Logs {
 	logs := New()
 
-	gathered := gatherPhaseLogs(input)
-
 	anyStarted := false
 	acc := newIntervalAccumulator()
 
@@ -68,8 +66,9 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 	// machine-level phase hasn't completed yet the machine hasn't actually reached
 	// this phase — so we must not include it in the merged view.
 	for _, phase := range phasesInOrder {
-		phaseLog, ok := gathered.Get(phase)
-		if !ok {
+		// Look up phase directly in inputs — avoids building an intermediate map.
+		phaseLog := findPhaseLog(phase, input...)
+		if phaseLog == nil {
 			continue
 		}
 
@@ -104,7 +103,7 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 	if anyStarted {
 		logs.TAS.StartTime = time.Now()
 
-		if logs.isMergeFinished() {
+		if logs.TAS.EndError != nil || logs.allPhasesFinished() {
 			logs.TAS.EndTime = time.Now()
 		}
 	}
@@ -112,33 +111,21 @@ func MergePhaseLogs(phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) 
 	return logs
 }
 
-// isMergeFinished returns true if the merged result should be considered finished:
-// either there was an error, or all phases completed.
-func (l *Logs) isMergeFinished() bool {
-	return l.TAS.EndError != nil || l.allPhasesFinished()
-}
-
-// gatherPhaseLogs collects all phase logs from input into a single ordered map.
-func gatherPhaseLogs(input []*phaselogs.PhaseLogs) *phaselogs.PhaseLogs {
-	gathered := phaselogs.NewPhaseLogs()
-
-	for _, pl := range input {
+// findPhaseLog looks up a phase in the given PhaseLogs inputs, returning the
+// first match. Returns nil if not found in any input.
+func findPhaseLog(phase phase.Phase, inputs ...*phaselogs.PhaseLogs) *phaselogs.PhaseLog {
+	for _, pl := range inputs {
 		if pl == nil {
 			continue
 		}
 
-		pl.ForEach(func(phaseKey phase.Phase, phaseValue *phaselogs.PhaseLog) bool {
-			if gathered.Exists(phaseKey) {
-				panic("internal error: MergePhaseLogs found duplicate keys in inputs")
-			}
-
-			gathered.Set(phaseKey, phaseValue)
-
-			return true
-		})
+		log, ok := pl.Get(phase)
+		if ok {
+			return log
+		}
 	}
 
-	return gathered
+	return nil
 }
 
 // allPhasesFinished returns true if every phase in PhaseLogs is finished.

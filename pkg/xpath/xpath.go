@@ -38,24 +38,36 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 }
 
 // FleetLeaf returns the last 3 elements of the path as strings.
+// Uses strings.LastIndex to avoid allocating a []string from strings.Split.
 func (x Xpath) FleetLeaf() (string, string, string) {
-	xpathS := x.String()
-
-	if xpathS == "" {
+	path := x.String()
+	if path == "" {
 		return "", "", ""
 	}
 
-	parts := strings.Split(xpathS, "/")
-	numOfParts := len(parts)
-
-	switch numOfParts {
-	case 1:
-		return "", "", parts[0]
-	case 2:
-		return "", parts[0], parts[1]
-	default:
-		return parts[numOfParts-3], parts[numOfParts-2], parts[numOfParts-1]
+	// Find last 3 segments by scanning backwards.
+	last := strings.LastIndex(path, "/")
+	if last < 0 {
+		return "", "", path
 	}
+
+	machine := path[last+1:]
+	rest := path[:last]
+
+	mid := strings.LastIndex(rest, "/")
+	if mid < 0 {
+		return "", rest, machine
+	}
+
+	config := rest[mid+1:]
+	rest = rest[:mid]
+
+	first := strings.LastIndex(rest, "/")
+	if first < 0 {
+		return rest, config, machine
+	}
+
+	return rest[first+1:], config, machine
 }
 
 func (x Xpath) String() string {
