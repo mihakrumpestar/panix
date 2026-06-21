@@ -31,7 +31,7 @@ var (
 )
 
 // simulateContent creates a realistic multi-line buffer with formatting work.
-func simulateContent(_ int) *buffer.LinesBuf {
+func simulateContent(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 	buf := buffer.NewLinesBuf()
 	for _, line := range benchContentLines {
 		buf.WriteLine([]byte(line))

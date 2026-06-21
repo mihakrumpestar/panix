@@ -2,6 +2,7 @@ package attributes
 
 import (
 	"dario.cat/mergo"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -25,6 +26,11 @@ type Attributes struct {
 
 	Name  string      `yaml:"-" json:"name,omitempty"`
 	Xpath xpath.Xpath `yaml:"-" json:"xpath,omitempty"`
+
+	// PhaseXpaths maps each phase to its full xpath (entityXpath + "/" + phaseName).
+	// Pre-computed once during Init — eliminates per-frame string concatenation
+	// in the TUI render loop.
+	PhaseXpaths map[phase.Phase]xpath.Xpath `yaml:"-" json:"-"`
 }
 
 type PlainFileOrDirToTransfer struct {
@@ -109,6 +115,13 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 		a.Name = name
 		a.Tags = append(a.Tags, name)
 		a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
+	}
+
+	// Pre-compute phase xpaths for this entity — used by TUI rendering.
+	a.PhaseXpaths = make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
+
+	for _, pm := range phase.PhaseRegistry {
+		a.PhaseXpaths[pm.Phase] = a.Xpath.NewXpathWithAppend(pm.Phase.String())
 	}
 
 	return nil

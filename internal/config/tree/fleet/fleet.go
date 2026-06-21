@@ -44,6 +44,16 @@ type MachineInfo struct {
 	Xpath       xpath.Xpath
 	MetaInspect machine.MetaInspect
 	State       machine.State
+
+	// Pre-converted []byte cells for the stats table renderer.
+	// Populated in RefreshCaches — avoids per-frame []byte(string) conversions.
+	MachineName       []byte
+	FlakeName         []byte
+	ConfigurationName []byte
+	Architecture      []byte
+	Date              []byte
+	OSVersion         []byte
+	Kernel            []byte
 }
 
 func (f *Fleet) Init() error {
@@ -402,12 +412,23 @@ func (f *Fleet) RefreshCaches() {
 	}
 
 	for _, treeLeaf := range f.AllMachines() {
-		m := treeLeaf.Machine
+		flake := treeLeaf.Flake
+		cfg := treeLeaf.Configuration
+		mach := treeLeaf.Machine
+
+		meta := mach.MetaInspect.Load()
 
 		mInfo := MachineInfo{
-			Xpath:       m.Xpath,
-			MetaInspect: *m.MetaInspect.Load(),
-			State:       *m.State.Load(),
+			Xpath:             mach.Xpath,
+			MetaInspect:       *meta,
+			State:             *mach.State.Load(),
+			MachineName:       []byte(mach.Name),
+			FlakeName:         []byte(flake.Name),
+			ConfigurationName: []byte(cfg.Name),
+			Architecture:      []byte(meta.Architecture),
+			Date:              []byte(meta.Date),
+			OSVersion:         []byte(meta.OSVersion),
+			Kernel:            []byte(meta.Kernel),
 		}
 
 		f.CacheMachineInfos = append(f.CacheMachineInfos, mInfo)

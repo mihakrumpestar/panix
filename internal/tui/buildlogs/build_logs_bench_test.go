@@ -89,6 +89,18 @@ func setupRender(conf *config.Config) (
 	return buildLogs, viewportsInst, spinnersInst, cachedTree
 }
 
+// initPhaseXpaths populates PhaseXpaths for an entity from its Xpath.
+func initPhaseXpaths(xp xpath.Xpath) map[phase.Phase]xpath.Xpath {
+	phaseXpaths := make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
+
+	for _, pm := range phase.PhaseRegistry {
+		phaseXpaths[pm.Phase] = xp.NewXpathWithAppend(pm.Phase.String())
+	}
+
+	return phaseXpaths
+}
+
+//nolint:funlen // test fixture builder
 func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *colorscheme.ColorScheme) *config.Config {
 	if colorScheme == nil {
 		colorScheme = colorscheme.DefaultColorScheme()
@@ -101,6 +113,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 		flakeObj := &flake.Flake{}
 		flakeObj.Name = flakeName
 		flakeObj.Xpath = xpath.New(flakeName)
+		flakeObj.PhaseXpaths = initPhaseXpaths(flakeObj.Xpath)
 		flakeObj.Logs = logs.New()
 		flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
 
@@ -109,6 +122,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 			cfg := &configuration.Configuration{}
 			cfg.Name = cfgName
 			cfg.Xpath = xpath.New(flakeName, cfgName)
+			cfg.PhaseXpaths = initPhaseXpaths(cfg.Xpath)
 			cfg.Logs = logs.New()
 			cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
@@ -130,6 +144,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 
 				mach.Name = machName
 				mach.Xpath = xpath.New(flakeName, cfgName, machName)
+				mach.PhaseXpaths = initPhaseXpaths(mach.Xpath)
 				cfg.Machines.Set(machName, mach)
 			}
 

@@ -19,7 +19,7 @@ func lb(s string) *buffer.LinesBuf {
 const testStep = 3
 
 func addChild(parent *Node, xp string, content string, version uint64) *Node {
-	return parent.Child(xpath.New(xp), version, func(_ int) *buffer.LinesBuf {
+	return parent.Child(xpath.New(xp), version, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 		return lb(content)
 	})
 }

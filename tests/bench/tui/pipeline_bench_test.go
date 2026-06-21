@@ -353,7 +353,7 @@ func buildZerotermTree() *tree.Node {
 	build = func(depth int, parent *tree.Node, parentXp string) *tree.Node {
 		nodeXp := parentXp + "/node"
 
-		child := parent.Child(xpath.New(nodeXp), 1, func(_ int) *buffer.LinesBuf {
+		child := parent.Child(xpath.New(nodeXp), 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 			nodeBuf := buffer.NewLinesBuf()
 			if depth%2 == 0 {
 				nodeBuf.WriteString(fmt.Sprintf("\x1b[1;36mnode-d%d\x1b[0m", treeDepth-depth))

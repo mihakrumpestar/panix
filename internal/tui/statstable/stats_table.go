@@ -116,18 +116,16 @@ func (s *StatsTable) buildRows() [][][]byte {
 	marker := s.rowMarker
 
 	for idx, machineInfo := range machineInfos {
-		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
-
 		flakeDisplay := marker
-		if flakeName != prevFlakeName {
-			flakeDisplay = []byte(flakeName)
-			prevFlakeName = flakeName
+		if string(machineInfo.FlakeName) != prevFlakeName {
+			flakeDisplay = machineInfo.FlakeName
+			prevFlakeName = string(machineInfo.FlakeName)
 		}
 
 		configDisplay := marker
-		if configurationName != prevConfigurationName || flakeName != prevFlakeName {
-			configDisplay = []byte(configurationName)
-			prevConfigurationName = configurationName
+		if string(machineInfo.ConfigurationName) != prevConfigurationName || string(machineInfo.FlakeName) != prevFlakeName {
+			configDisplay = machineInfo.ConfigurationName
+			prevConfigurationName = string(machineInfo.ConfigurationName)
 		}
 
 		rows[idx] = [][]byte{
@@ -135,13 +133,13 @@ func (s *StatsTable) buildRows() [][][]byte {
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,
-			[]byte(machineName),
-			[]byte(machineInfo.MetaInspect.Architecture),
+			machineInfo.MachineName,
+			machineInfo.Architecture,
 			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, s.colorScheme),
 			getGeneration(machineInfo),
-			[]byte(machineInfo.MetaInspect.Date),
-			[]byte(machineInfo.MetaInspect.OSVersion),
-			[]byte(machineInfo.MetaInspect.Kernel),
+			machineInfo.Date,
+			machineInfo.OSVersion,
+			machineInfo.Kernel,
 		}
 	}
 
