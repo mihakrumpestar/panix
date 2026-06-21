@@ -992,7 +992,12 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 	oldWidths := m.lineWidths
 	oldPaddedCount := m.paddedLineCount
 
-	m.releaseLinesBuf()
+	// Skip release when the buffer is the same pointer (shared with model).
+	// The model owns the lifecycle — viewport must not return it to the pool.
+	if m.linesBuf != buf {
+		m.releaseLinesBuf()
+	}
+
 	m.linesBuf = buf
 	m.linesLen = buf.Len()
 	m.lineWidths = nil

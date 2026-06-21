@@ -51,7 +51,13 @@ func (pf *PhaseFlow) SetZonePrefix(prefix string) *PhaseFlow {
 // SetData replaces the per-phase count data. The slice is copied internally.
 // Does not set outDirty — isCacheValid() detects data changes via comparison.
 func (pf *PhaseFlow) SetData(data []PhaseData) {
-	pf.data = append([]PhaseData(nil), data...)
+	pf.data = append(pf.data[:0], data...)
+}
+
+// SetDataNoCopy replaces the per-phase count data without copying.
+// The caller must not retain or modify the slice after calling this.
+func (pf *PhaseFlow) SetDataNoCopy(data []PhaseData) {
+	pf.data = data
 }
 
 func (pf *PhaseFlow) SelectedIndex() int { return pf.selectedIndex }
@@ -189,7 +195,7 @@ func (pf *PhaseFlow) Render() *buffer.LinesBuf {
 
 	pf.renderInto(pf.content)
 
-	pf.cacheData = append([]PhaseData(nil), pf.data...)
+	pf.cacheData = append(pf.cacheData[:0], pf.data...)
 	pf.cacheWidth = pf.width
 	pf.cacheSelIdx = pf.selectedIndex
 	pf.outDirty = false

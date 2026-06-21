@@ -24,7 +24,10 @@ type PhaseFlow struct {
 	phases      []phase.Phase
 	Selected    Selected
 	content     *buffer.LinesBuf
+	data        []flow.PhaseData
 }
+
+var phaseFlowHeader = []byte("=== Phase Flow ===")
 
 func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
 	pfStyles := flow.Styles{
@@ -79,7 +82,7 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 		return p.content
 	}
 
-	data := make([]flow.PhaseData, 0, spp.Len()+1)
+	p.data = p.data[:0]
 
 	spp.ForEach(func(_ phase.Phase, value stats.StatsPack) bool {
 		phaseData := flow.PhaseData{}
@@ -88,7 +91,7 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 			phaseData.Failed = len(value[stats.Failed])
 		}
 
-		data = append(data, phaseData)
+		p.data = append(p.data, phaseData)
 
 		return true
 	})
@@ -98,13 +101,13 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 		Done: len(lastPair.Value[stats.Done]),
 	}
 
-	data = append(data, doneData)
+	p.data = append(p.data, doneData)
 
-	p.pf.Width(width).SetData(data)
+	p.pf.Width(width).SetDataNoCopy(p.data)
 
 	p.content.Reset()
 
-	p.colorScheme.Header.Title.RenderLineInto(p.content, []byte("=== Phase Flow ==="))
+	p.colorScheme.Header.Title.RenderLineInto(p.content, phaseFlowHeader)
 	p.content.EmptyLine()
 	p.content.AppendFrom(p.pf.Render())
 	p.content.EmptyLine()

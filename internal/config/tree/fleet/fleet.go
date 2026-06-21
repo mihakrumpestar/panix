@@ -38,6 +38,10 @@ type Fleet struct {
 	// cachedTAS persists TimeAndState across frames so that stateVersion
 	// accumulates correctly. Cleared on ResetState (workflow restart).
 	cachedTAS []*atomictimeandstate.TimeAndState
+
+	// cachedStats is reused across frames via Reset() to avoid allocating
+	// a new StatisticsPerPhase map structure every frame.
+	cachedStats *stats.StatisticsPerPhase
 }
 
 type MachineInfo struct {
@@ -326,6 +330,7 @@ func (f *Fleet) ResetState() {
 	f.CacheMachineInfos = nil
 	f.CacheFlattenedLogs = nil
 	f.CacheStatisticsPerPhase = nil
+	f.cachedStats = nil
 
 	// Clear persisted TAS so stateVersion resets for the new workflow.
 	for i := range f.cachedTAS {
@@ -391,18 +396,22 @@ func (f *Fleet) MachineCount() int {
 }
 
 func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.StatisticsPerPhase {
-	statisticsPerPhase := stats.New(workflowPhases)
+	if f.cachedStats == nil {
+		f.cachedStats = stats.New(workflowPhases)
+	} else {
+		f.cachedStats.Reset()
+	}
 
 	for _, treeLeaf := range f.AllMachines() {
 		ms := treeLeaf.Machine
 		msState := ms.State.Load()
 
-		statisticsPerPhase.DeepSet(msState.Phase, msState.Status, ms.Xpath)
+		f.cachedStats.DeepSet(msState.Phase, msState.Status, ms.Xpath)
 	}
 
-	f.CacheStatisticsPerPhase = statisticsPerPhase
+	f.CacheStatisticsPerPhase = f.cachedStats
 
-	return statisticsPerPhase
+	return f.cachedStats
 }
 
 func (f *Fleet) RefreshCaches() {

@@ -1,6 +1,7 @@
 package statstable
 
 import (
+	"bytes"
 	"strconv"
 
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -111,21 +112,22 @@ func (s *StatsTable) buildRows() [][][]byte {
 	machineInfos := s.fleet.CacheMachineInfos
 	rows := make([][][]byte, len(machineInfos))
 
-	var prevFlakeName, prevConfigurationName string
+	var prevFlakeName, prevConfigurationName []byte
 
 	marker := s.rowMarker
 
 	for idx, machineInfo := range machineInfos {
 		flakeDisplay := marker
-		if string(machineInfo.FlakeName) != prevFlakeName {
+		if !bytes.Equal(machineInfo.FlakeName, prevFlakeName) {
 			flakeDisplay = machineInfo.FlakeName
-			prevFlakeName = string(machineInfo.FlakeName)
+			prevFlakeName = machineInfo.FlakeName
 		}
 
 		configDisplay := marker
-		if string(machineInfo.ConfigurationName) != prevConfigurationName || string(machineInfo.FlakeName) != prevFlakeName {
+		if !bytes.Equal(machineInfo.ConfigurationName, prevConfigurationName) ||
+			!bytes.Equal(machineInfo.FlakeName, prevFlakeName) {
 			configDisplay = machineInfo.ConfigurationName
-			prevConfigurationName = string(machineInfo.ConfigurationName)
+			prevConfigurationName = machineInfo.ConfigurationName
 		}
 
 		rows[idx] = [][]byte{
