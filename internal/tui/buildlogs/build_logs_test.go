@@ -728,7 +728,12 @@ func TestBuildPhaseSelectedTree_MachineScopedPhase(t *testing.T) {
 // --- renderBuildLogsString helper (for tests) ---
 
 func renderBuildLogsString(b *BuildLogs, ct *tree.Node, vp *viewports.Viewports, sp *spinners.Spinners) string {
-	return buffer.LinesBufToStringForTests(b.Render(ct, vp, sp))
+	target := buffer.NewLinesBuf()
+	b.RenderInto(target, ct, vp, sp)
+	result := buffer.LinesBufToStringForTests(target)
+	target.Release()
+
+	return result
 }
 
 // --- View end-to-end ---

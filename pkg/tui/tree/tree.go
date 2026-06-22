@@ -475,9 +475,11 @@ func writeLines(src *buffer.LinesBuf, buf *buffer.LinesBuf, pfx, conn, pfxBuf []
 	if pfx == nil {
 		if nLines == 0 {
 			buf.EmptyLine()
-		} else {
-			buf.AppendFrom(src)
+
+			return
 		}
+
+		buf.AppendFrom(src)
 
 		return
 	}
@@ -495,8 +497,8 @@ func writeLines(src *buffer.LinesBuf, buf *buffer.LinesBuf, pfx, conn, pfxBuf []
 	// Continuation lines: indent prefix only (no connector).
 	if nLines > 1 {
 		contPfx := pfxBuf[:pfxEnd[depth]]
-		for i := 1; i < nLines; i++ {
-			buf.WriteLine2(contPfx, src.Line(i))
+		for idx := 1; idx < nLines; idx++ {
+			buf.WriteLine2(contPfx, src.Line(idx))
 		}
 	}
 }

@@ -252,7 +252,7 @@ func (m *model) renderMainContent() *buffer.LinesBuf {
 		m.content.AppendFrom(m.phaseFlow.Render(contentWidth))
 	}
 
-	m.content.AppendFrom(m.buildLogs.Render(m.cachedTree, m.viewports, m.spinners))
+	m.buildLogs.RenderInto(m.content, m.cachedTree, m.viewports, m.spinners)
 
 	if m.err != nil {
 		m.renderError(m.content)

@@ -17,6 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
@@ -49,8 +50,9 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.ResetTimer()
 
 	for b.Loop() {
-		result := buildLogs.Render(cachedTree, viewportsInst, spinnersInst)
-		_ = result
+		target := buffer.NewLinesBuf()
+		buildLogs.RenderInto(target, cachedTree, viewportsInst, spinnersInst)
+		target.Release()
 	}
 }
 
@@ -65,8 +67,9 @@ func benchFull(b *testing.B, flakesCount, configsCount, machinesN int) {
 	for b.Loop() {
 		conf.Fleet.Recalculate(conf.Phases)
 
-		result := buildLogs.Render(cachedTree, viewportsInst, spinnersInst)
-		_ = result
+		target := buffer.NewLinesBuf()
+		buildLogs.RenderInto(target, cachedTree, viewportsInst, spinnersInst)
+		target.Release()
 	}
 }
 

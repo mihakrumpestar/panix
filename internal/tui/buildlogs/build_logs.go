@@ -79,7 +79,6 @@ type BuildLogs struct {
 	contentWidth   int
 	lastWidth      int
 	widthOffset    uint64
-	content        *buffer.LinesBuf
 
 	cmdIconBuf  *buffer.LinesBuf
 	cmdLabelBuf *buffer.LinesBuf
@@ -94,7 +93,6 @@ func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *ph
 		conf:        conf,
 		statsTable:  statsTable,
 		phaseStatus: phaseStatus,
-		content:     buffer.NewLinesBuf(),
 		cmdIconBuf:  buffer.NewLinesBuf(),
 		cmdLabelBuf: buffer.NewLinesBuf(),
 		cmdDurBuf:   buffer.NewLinesBuf(),
@@ -104,12 +102,17 @@ func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *ph
 	}
 }
 
-// Render renders the build logs tree and returns the output buffer.
-func (b *BuildLogs) Render(
+// RenderInto renders the build logs tree directly into target, avoiding
+// an intermediate buffer copy. Widths set by the tree renderer (via
+// writeLines/renderLeaf) are set directly on target, so the viewport can
+// adopt them via adoptCachedLineWidths — eliminating redundant CellWidth
+// scans in padNewLine.
+func (b *BuildLogs) RenderInto(
+	target *buffer.LinesBuf,
 	treeNode *tree.Node,
 	viewports *viewports.Viewports,
 	spinners *spinners.Spinners,
-) *buffer.LinesBuf {
+) {
 	b.viewports = viewports
 	b.spinners = spinners
 	b.contentWidth = viewports.ContentWidth()
@@ -118,9 +121,8 @@ func (b *BuildLogs) Render(
 	widthChanged := b.contentWidth != b.lastWidth
 	b.lastWidth = b.contentWidth
 
-	b.content.Reset()
-	b.conf.ColorScheme.Header.Title.RenderLineInto(b.content, headerTitle)
-	b.content.EmptyLine()
+	b.conf.ColorScheme.Header.Title.RenderLineInto(target, headerTitle)
+	target.EmptyLine()
 
 	treeNode.BeginFrame()
 
@@ -159,9 +161,7 @@ func (b *BuildLogs) Render(
 		return true
 	})
 
-	treeNode.WriteRenderTo(b.content)
-
-	return b.content
+	treeNode.WriteRenderTo(target)
 }
 
 func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
