@@ -9,6 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/pkg/errors"
 )
 
@@ -103,14 +104,14 @@ func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine)
 			}
 
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.Architecture = architecture
+				mi.Architecture = stringbyte.StringByte(architecture)
 			})
 
 			return nil
 		}),
 		executioner.OnDryRun(func() {
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.Architecture = "DRY_RUN"
+				mi.Architecture = stringbyte.StringByte("DRY_RUN")
 			})
 		}),
 	)
@@ -173,7 +174,7 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 				mi.Bootstrapped = false
 				mi.RequiresKexec = true
-				mi.OSVersion = "DRY_RUN"
+				mi.OSVersion = stringbyte.StringByte("DRY_RUN")
 			})
 		}),
 	)
@@ -193,7 +194,7 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 	if osr["ID"] == "nixos" && osr["VARIANT_ID"] == "installer" {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.Bootstrapped = false
-			mi.OSVersion = osr["VERSION"]
+			mi.OSVersion = stringbyte.StringByte(osr["VERSION"])
 		})
 
 		return nil
@@ -203,10 +204,10 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.RequiresKexec = true
 			mi.Bootstrapped = false
-			mi.OSVersion = osr["VERSION"]
+			mi.OSVersion = stringbyte.StringByte(osr["VERSION"])
 		})
 
-		err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+		err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture.String())
 		if err != nil {
 			return errors.Wrap(err, "kexec arch validation failed")
 		}
@@ -218,11 +219,11 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.Bootstrapped = false
 			mi.RequiresKexec = machineI.Bootstrap.ForceBootstrapKexec
-			mi.OSVersion = osr["VERSION"]
+			mi.OSVersion = stringbyte.StringByte(osr["VERSION"])
 		})
 
 		if machineI.Bootstrap.ForceBootstrapKexec {
-			err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture)
+			err = machineI.Bootstrap.Kexec.Image.IfDefaultImageIsArchSupported(machineI.MetaInspect.Load().Architecture.String())
 			if err != nil {
 				return errors.Wrap(err, "kexec arch validation failed")
 			}
@@ -233,7 +234,7 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 
 	machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 		mi.Bootstrapped = true
-		mi.OSVersion = osr["VERSION"]
+		mi.OSVersion = stringbyte.StringByte(osr["VERSION"])
 	})
 
 	return nil
@@ -272,15 +273,15 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
 				metaInspect.Generations = genData
 				if currentGenInfo.Date != "" {
-					metaInspect.Date = currentGenInfo.Date
+					metaInspect.Date = stringbyte.StringByte(currentGenInfo.Date)
 				}
 
 				if currentGenInfo.Nixos != "" {
-					metaInspect.OSVersion = currentGenInfo.Nixos
+					metaInspect.OSVersion = stringbyte.StringByte(currentGenInfo.Nixos)
 				}
 
 				if currentGenInfo.Kernel != "" {
-					metaInspect.Kernel = currentGenInfo.Kernel
+					metaInspect.Kernel = stringbyte.StringByte(currentGenInfo.Kernel)
 				}
 			})
 
@@ -292,9 +293,9 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 					Current:   1,
 					Available: []uint{1},
 				}
-				metaInspect.Date = "DRY_RUN"
-				metaInspect.OSVersion = "DRY_RUN"
-				metaInspect.Kernel = "DRY_RUN"
+				metaInspect.Date = stringbyte.StringByte("DRY_RUN")
+				metaInspect.OSVersion = stringbyte.StringByte("DRY_RUN")
+				metaInspect.Kernel = stringbyte.StringByte("DRY_RUN")
 			})
 		}),
 	)

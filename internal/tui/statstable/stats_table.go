@@ -78,7 +78,7 @@ func (s *StatsTable) SelectedXpath() xpath.Xpath {
 		return s.fleet.CacheMachineInfos[idx].Xpath
 	}
 
-	return ""
+	return xpath.Xpath{}
 }
 
 func (s *StatsTable) Reset() {
@@ -118,16 +118,16 @@ func (s *StatsTable) buildRows() [][][]byte {
 
 	for idx, machineInfo := range machineInfos {
 		flakeDisplay := marker
-		if !bytes.Equal(machineInfo.FlakeName, prevFlakeName) {
-			flakeDisplay = machineInfo.FlakeName
-			prevFlakeName = machineInfo.FlakeName
+		if !bytes.Equal(machineInfo.FlakeName.Bytes(), prevFlakeName) {
+			flakeDisplay = machineInfo.FlakeName.Bytes()
+			prevFlakeName = machineInfo.FlakeName.Bytes()
 		}
 
 		configDisplay := marker
-		if !bytes.Equal(machineInfo.ConfigurationName, prevConfigurationName) ||
-			!bytes.Equal(machineInfo.FlakeName, prevFlakeName) {
-			configDisplay = machineInfo.ConfigurationName
-			prevConfigurationName = machineInfo.ConfigurationName
+		if !bytes.Equal(machineInfo.ConfigurationName.Bytes(), prevConfigurationName) ||
+			!bytes.Equal(machineInfo.FlakeName.Bytes(), prevFlakeName) {
+			configDisplay = machineInfo.ConfigurationName.Bytes()
+			prevConfigurationName = machineInfo.ConfigurationName.Bytes()
 		}
 
 		rows[idx] = [][]byte{
@@ -135,13 +135,13 @@ func (s *StatsTable) buildRows() [][][]byte {
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,
-			machineInfo.MachineName,
-			machineInfo.Architecture,
-			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, s.colorScheme),
+			machineInfo.MachineName.Bytes(),
+			machineInfo.Architecture.Bytes(),
+			getStatusText(machineInfo.State.Status, machineInfo.StatusMsgBytes.Bytes(), s.colorScheme),
 			getGeneration(machineInfo),
-			machineInfo.Date,
-			machineInfo.OSVersion,
-			machineInfo.Kernel,
+			machineInfo.Date.Bytes(),
+			machineInfo.OSVersion.Bytes(),
+			machineInfo.Kernel.Bytes(),
 		}
 	}
 
@@ -161,14 +161,14 @@ func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme
 	}
 }
 
-func getStatusText(status stats.StatsState, statusMsg string, colorScheme *colorscheme.ColorScheme) []byte {
+func getStatusText(status stats.StatsState, statusMsg []byte, colorScheme *colorscheme.ColorScheme) []byte {
 	switch status {
 	case stats.Running:
-		return colorScheme.Status.Running.RenderLine([]byte(statusMsg))
+		return colorScheme.Status.Running.RenderLine(statusMsg)
 	case stats.Failed:
-		return colorScheme.Status.Failed.RenderLine([]byte(statusMsg))
+		return colorScheme.Status.Failed.RenderLine(statusMsg)
 	case stats.Done:
-		return colorScheme.Status.OK.RenderLine([]byte(statusMsg))
+		return colorScheme.Status.OK.RenderLine(statusMsg)
 	default:
 		return []byte("invalid")
 	}

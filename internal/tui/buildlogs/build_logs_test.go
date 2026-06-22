@@ -27,6 +27,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -1053,13 +1054,13 @@ func makeTestConfigWithSingleMachine() *config.Config {
 	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
 
 	flakeObj := &flake.Flake{}
-	flakeObj.Name = flakeName
+	flakeObj.Name = stringbyte.StringByte(flakeName)
 	flakeObj.Xpath = xpath.New(flakeName)
 	flakeObj.Logs = logs.New()
 	flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
 
 	cfg := &configuration.Configuration{}
-	cfg.Name = cfgName
+	cfg.Name = stringbyte.StringByte(cfgName)
 	cfg.Xpath = xpath.New(flakeName, cfgName)
 	cfg.Logs = logs.New()
 	cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()

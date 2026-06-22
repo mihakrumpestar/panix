@@ -67,7 +67,7 @@ const (
 
 // collectLeafXps recursively collects all leaf node xpaths.
 func collectLeafXps(n *Node, xps *[]string) {
-	if len(n.children) == 0 && n.xpath != "" {
+	if len(n.children) == 0 && n.xpath.String() != "" {
 		*xps = append(*xps, n.xpath.String())
 	}
 

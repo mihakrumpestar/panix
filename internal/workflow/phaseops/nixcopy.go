@@ -46,9 +46,9 @@ func CopyClosure(
 	}
 
 	log.Info().
-		Str("machine", machineI.Name).
+		Str("machine", machineI.Name.String()).
 		Strs("transferred", toTransfer).
-		Msgf("Transferred %s to %s", toTransfer, machineI.Name)
+		Msgf("Transferred %s to %s", toTransfer, machineI.Name.String())
 
 	return nil
 }

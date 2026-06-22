@@ -2,14 +2,17 @@ package xpath
 
 import (
 	"strings"
+
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 )
 
-// Note: all methods are immutable.
+// Xpath is a string type for entity paths (e.g. "flake0/cfg0/m0").
+type Xpath struct {
+	stringbyte.StringByte
+}
 
-type Xpath string
-
-func New(xpath ...string) Xpath {
-	return Xpath(strings.Join(xpath, "/"))
+func New(xpathParts ...string) Xpath {
+	return Xpath{stringbyte.StringByte(strings.Join(xpathParts, "/"))}
 }
 
 func (x Xpath) Depth() int {
@@ -31,10 +34,10 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 
 	// Fast path: single arg (most common case) — one allocation, no builder.
 	if len(appendXpath) == 1 {
-		return Xpath(xpathS + "/" + appendXpath[0])
+		return Xpath{stringbyte.StringByte(xpathS + "/" + appendXpath[0])}
 	}
 
-	return Xpath(xpathS + "/" + strings.Join(appendXpath, "/"))
+	return Xpath{stringbyte.StringByte(xpathS + "/" + strings.Join(appendXpath, "/"))}
 }
 
 // FleetLeaf returns the last 3 elements of the path as strings.
@@ -68,8 +71,4 @@ func (x Xpath) FleetLeaf() (string, string, string) {
 	}
 
 	return rest[first+1:], config, machine
-}
-
-func (x Xpath) String() string {
-	return string(x)
 }

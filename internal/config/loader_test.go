@@ -189,7 +189,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	// Fleet Xpath is empty (name=""), so flake xpath is just "my-flake"
 	expectedFlakeXpath := xpath.New("my-flake")
 	assertion.Equal(expectedFlakeXpath.String(), flk.Xpath.String())
-	assertion.Equal("my-flake", flk.Name)
+	assertion.Equal("my-flake", flk.Name.String())
 
 	cfg, ok := flk.Configurations.Get("my-config")
 	must.True(ok)
@@ -198,7 +198,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 
 	expectedCfgXpath := expectedFlakeXpath.NewXpathWithAppend("my-config")
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
-	assertion.Equal("my-config", cfg.Name)
+	assertion.Equal("my-config", cfg.Name.String())
 
 	mach, ok := cfg.Machines.Get("my-machine")
 	must.True(ok)
@@ -211,7 +211,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 
 	expectedMachineXpath := expectedCfgXpath.NewXpathWithAppend("my-machine")
 	assertion.Equal(expectedMachineXpath.String(), mach.Xpath.String())
-	assertion.Equal("my-machine", mach.Name)
+	assertion.Equal("my-machine", mach.Name.String())
 }
 
 func TestPostUnmarshalInitSetsColorScheme(t *testing.T) {

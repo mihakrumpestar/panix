@@ -67,8 +67,8 @@ func BuildInstallable(
 	}
 
 	log.Info().
-		Str("flake", fleetLeaf.Flake.Name).
-		Str("configuration", configurationI.Name).
+		Str("flake", fleetLeaf.Flake.Name.String()).
+		Str("configuration", configurationI.Name.String()).
 		Str("closure", storePath).
 		Str("mode", configurationI.Nix.BuildMode.String()).
 		Msgf("Built %s/%s -> %s", fleetLeaf.Flake.Name, configurationI.Name, storePath)

@@ -5,6 +5,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
@@ -24,8 +25,8 @@ type Attributes struct {
 
 	Bootstrap Bootstrap `yaml:"bootstrap" json:"bootstrap" desc:"Bootstrap configuration for initial provisioning"`
 
-	Name  string      `yaml:"-" json:"name,omitempty"`
-	Xpath xpath.Xpath `yaml:"-" json:"xpath,omitempty"`
+	Name  stringbyte.StringByte `yaml:"-" json:"name,omitempty"`
+	Xpath xpath.Xpath           `yaml:"-" json:"xpath,omitzero"`
 
 	// PhaseXpaths maps each phase to its full xpath (entityXpath + "/" + phaseName).
 	// Pre-computed once during Init — eliminates per-frame string concatenation
@@ -85,13 +86,13 @@ func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 // SSH config resolution errors (e.g., missing ~/.ssh/config) are logged as warnings
 // and do not prevent initialization — the SSH client retains alias hostname with defaults.
 func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) error {
-	err := a.SSH.Init(a.Name, localMachineHostname, nixInfo)
+	err := a.SSH.Init(a.Name.String(), localMachineHostname, nixInfo)
 	if err != nil {
 		return errors.Wrapf(err, "%s", a.Xpath.String())
 	}
 
 	if a.Bootstrap.SSH.IsInitialized() {
-		err = a.Bootstrap.SSH.Init(a.Name, localMachineHostname, nixInfo)
+		err = a.Bootstrap.SSH.Init(a.Name.String(), localMachineHostname, nixInfo)
 		if err != nil {
 			return errors.Wrapf(err, "%s", a.Xpath.String())
 		}
@@ -112,7 +113,7 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 
 	// Custom set/merge
 	if name != "" {
-		a.Name = name
+		a.Name = stringbyte.StringByte(name)
 		a.Tags = append(a.Tags, name)
 		a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
 	}

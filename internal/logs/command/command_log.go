@@ -19,7 +19,7 @@ type CommandLog struct {
 	PendingNewline bool                                   `yaml:"-" json:"-"`
 	CarriageReturn bool                                   `yaml:"-" json:"-"` // cursor at column 0 after trailing \r
 
-	Xpath       xpath.Xpath `yaml:"-" json:"xpath,omitempty"`
+	Xpath       xpath.Xpath `yaml:"-" json:"xpath,omitzero"`
 	LabelXpath  xpath.Xpath `yaml:"-" json:"-"`
 	OutputXpath xpath.Xpath `yaml:"-" json:"-"`
 	ErrorXpath  xpath.Xpath `yaml:"-" json:"-"`

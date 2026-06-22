@@ -130,6 +130,6 @@ func phaseLogsAndXpath(phaseI phase.Phase, fleetLeaf *fleet.FleetLeaf) (*logs.Lo
 	case phase.ScopeFlake, phase.ScopeFleet:
 		return fleetLeaf.Flake.Logs, fleetLeaf.Flake.Xpath, nil
 	default:
-		return nil, xpath.Xpath(""), errors.New("invalid phase scope")
+		return nil, xpath.Xpath{}, errors.New("invalid phase scope")
 	}
 }

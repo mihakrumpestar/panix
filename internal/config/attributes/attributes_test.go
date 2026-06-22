@@ -46,7 +46,7 @@ func TestPassAttributesIntoSetsNameAndXpath(t *testing.T) {
 	require.NoError(t, err)
 
 	assertion := assert.New(t)
-	assertion.Equal("my-config", child.Name)
+	assertion.Equal("my-config", child.Name.String())
 	assertion.Equal("fleet/my-flake/my-config", child.Xpath.String())
 }
 
@@ -156,7 +156,7 @@ func TestPassAttributesIntoEmptyNameNoNameTag(t *testing.T) {
 	require.NoError(t, err)
 
 	assertion := assert.New(t)
-	assertion.Empty(child.Name, "name should be empty when not provided")
+	assertion.Empty(child.Name.String(), "name should be empty when not provided")
 	assertion.NotContains(child.Tags, "", "empty string should not be added as tag")
 	assertion.Equal("fleet", child.Xpath.String(),
 		"xpath should inherit from parent when name is empty")
@@ -170,5 +170,5 @@ func TestNewAttributes(t *testing.T) {
 	assertion := assert.New(t)
 	assertion.NotNil(attr)
 	assertion.Empty(attr.Tags)
-	assertion.Empty(attr.Name)
+	assertion.Empty(attr.Name.String())
 }

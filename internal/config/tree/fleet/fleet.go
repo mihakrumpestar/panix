@@ -17,6 +17,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
@@ -50,14 +51,15 @@ type MachineInfo struct {
 	State       machine.State
 
 	// Pre-converted []byte cells for the stats table renderer.
-	// Populated in RefreshCaches — avoids per-frame []byte(string) conversions.
-	MachineName       []byte
-	FlakeName         []byte
-	ConfigurationName []byte
-	Architecture      []byte
-	Date              []byte
-	OSVersion         []byte
-	Kernel            []byte
+	// StringByte provides zero-copy Bytes() access.
+	MachineName       stringbyte.StringByte
+	FlakeName         stringbyte.StringByte
+	ConfigurationName stringbyte.StringByte
+	Architecture      stringbyte.StringByte
+	Date              stringbyte.StringByte
+	OSVersion         stringbyte.StringByte
+	Kernel            stringbyte.StringByte
+	StatusMsgBytes    stringbyte.StringByte
 }
 
 func (f *Fleet) Init() error {
@@ -115,7 +117,7 @@ func postUnmarshalMachine(mach *machine.Machine) {
 		return
 	}
 
-	mach.PostUnmarshalInit(mach.Name, nil)
+	mach.PostUnmarshalInit(mach.Name.String(), nil)
 
 	if mach.Logs == nil {
 		return
@@ -287,14 +289,14 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 
 			if !tas.IsFinished() {
 				machineState.Status = stats.Running
-				machineState.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.StatusMsg = stringbyte.StringByte(lastCommandLog.StatusIfRunning)
 
 				return
 			}
 
 			if endErr != nil && errors.Is(errors.Cause(endErr.Err()), context.Canceled) {
 				machineState.Status = stats.Running
-				machineState.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.StatusMsg = stringbyte.StringByte(lastCommandLog.StatusIfRunning)
 				machineState.Error = nil
 
 				return
@@ -302,7 +304,7 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 
 			if endErr != nil {
 				machineState.Status = stats.Failed
-				machineState.StatusMsg = lastCommandLog.StatusIfFailed
+				machineState.StatusMsg = stringbyte.StringByte(lastCommandLog.StatusIfFailed)
 				machineState.Error = endErr
 
 				return
@@ -315,7 +317,7 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 				machineState.StatusMsg = "done"
 			} else {
 				machineState.Status = stats.Done
-				machineState.StatusMsg = machineState.Phase.String() + " done"
+				machineState.StatusMsg = stringbyte.StringByte(machineState.Phase.String() + " done")
 			}
 		})
 	}
@@ -415,10 +417,7 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.Stat
 }
 
 func (f *Fleet) RefreshCaches() {
-	// Reuse previous slice capacity to avoid re-allocation.
-	if cap(f.CacheMachineInfos) > 0 {
-		f.CacheMachineInfos = f.CacheMachineInfos[:0]
-	}
+	idx := 0
 
 	for _, treeLeaf := range f.AllMachines() {
 		flake := treeLeaf.Flake
@@ -426,20 +425,32 @@ func (f *Fleet) RefreshCaches() {
 		mach := treeLeaf.Machine
 
 		meta := mach.MetaInspect.Load()
+		state := mach.State.Load()
 
-		mInfo := MachineInfo{
-			Xpath:             mach.Xpath,
-			MetaInspect:       *meta,
-			State:             *mach.State.Load(),
-			MachineName:       []byte(mach.Name),
-			FlakeName:         []byte(flake.Name),
-			ConfigurationName: []byte(cfg.Name),
-			Architecture:      []byte(meta.Architecture),
-			Date:              []byte(meta.Date),
-			OSVersion:         []byte(meta.OSVersion),
-			Kernel:            []byte(meta.Kernel),
+		// Grow slice if needed.
+		if idx >= len(f.CacheMachineInfos) {
+			f.CacheMachineInfos = append(f.CacheMachineInfos, MachineInfo{})
 		}
 
-		f.CacheMachineInfos = append(f.CacheMachineInfos, mInfo)
+		mInfo := &f.CacheMachineInfos[idx]
+
+		mInfo.Xpath = mach.Xpath
+		mInfo.MetaInspect = *meta
+		mInfo.State = *state
+
+		// Direct StringByte copies — zero conversion, zero allocation.
+		mInfo.MachineName = mach.Name
+		mInfo.FlakeName = flake.Name
+		mInfo.ConfigurationName = cfg.Name
+		mInfo.Architecture = meta.Architecture
+		mInfo.Date = meta.Date
+		mInfo.OSVersion = meta.OSVersion
+		mInfo.Kernel = meta.Kernel
+		mInfo.StatusMsgBytes = state.StatusMsg
+
+		idx++
 	}
+
+	// Truncate if machine count decreased.
+	f.CacheMachineInfos = f.CacheMachineInfos[:idx]
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -111,7 +112,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 	for flakeIdx := range flakesCount {
 		flakeName := "flake" + strconv.Itoa(flakeIdx)
 		flakeObj := &flake.Flake{}
-		flakeObj.Name = flakeName
+		flakeObj.Name = stringbyte.StringByte(flakeName)
 		flakeObj.Xpath = xpath.New(flakeName)
 		flakeObj.PhaseXpaths = initPhaseXpaths(flakeObj.Xpath)
 		flakeObj.Logs = logs.New()
@@ -120,7 +121,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 		for confIdx := range configsCount {
 			cfgName := "cfg" + strconv.Itoa(confIdx)
 			cfg := &configuration.Configuration{}
-			cfg.Name = cfgName
+			cfg.Name = stringbyte.StringByte(cfgName)
 			cfg.Xpath = xpath.New(flakeName, cfgName)
 			cfg.PhaseXpaths = initPhaseXpaths(cfg.Xpath)
 			cfg.Logs = logs.New()
@@ -142,7 +143,7 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 					mach = newTestMachineWithError(allPhases)
 				}
 
-				mach.Name = machName
+				mach.Name = stringbyte.StringByte(machName)
 				mach.Xpath = xpath.New(flakeName, cfgName, machName)
 				mach.PhaseXpaths = initPhaseXpaths(mach.Xpath)
 				cfg.Machines.Set(machName, mach)

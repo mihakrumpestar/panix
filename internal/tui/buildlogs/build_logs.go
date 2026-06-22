@@ -139,7 +139,7 @@ func (b *BuildLogs) Render(
 
 		flakeVersion := b.entityVersion(flake.Logs)
 		flakeNode := treeNode.Child(flake.Xpath, flakeVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Flake, flake.Name, flake.Logs, old)
+			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Flake, flake.Name.String(), flake.Logs, old)
 		})
 
 		flake.Configurations.ForEach(func(_ string, cfg *configuration.Configuration) bool {
@@ -149,7 +149,7 @@ func (b *BuildLogs) Render(
 
 			cfgVersion := b.entityVersion(cfg.Logs)
 			cfgNode := flakeNode.Child(cfg.Xpath, cfgVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-				return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Configuration, cfg.Name, cfg.Logs, old)
+				return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Configuration, cfg.Name.String(), cfg.Logs, old)
 			})
 			b.buildConfigTree(cfgNode, cfg)
 
@@ -188,7 +188,7 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configurat
 
 		entityVersion := b.entityVersion(machine.Logs)
 		machineNode := cfgNode.Child(machine.Xpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name, machine.Logs, old)
+			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name.String(), machine.Logs, old)
 		})
 
 		errored := b.addPhases(machineNode, machine.Logs, machine.PhaseXpaths, true, entityVersion, phase.Inspect)
@@ -274,7 +274,7 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Mac
 
 	entityVersion := b.entityVersion(machine.Logs)
 	machineNode := parent.Child(machine.Xpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-		return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name, machine.Logs, old)
+		return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name.String(), machine.Logs, old)
 	})
 
 	b.addPhasesMulti(machineNode, machine.Logs, machine.PhaseXpaths, false, entityVersion, allowedSet)

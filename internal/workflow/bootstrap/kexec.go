@@ -16,7 +16,7 @@ import (
 var ErrKexecBootFailed = errors.New("kexec did not boot into NixOS installer")
 
 func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
-	arch := machineI.MetaInspect.Load().Architecture
+	arch := machineI.MetaInspect.Load().Architecture.String()
 
 	if arch == "DRY_RUN" {
 		arch = "x86_64"
