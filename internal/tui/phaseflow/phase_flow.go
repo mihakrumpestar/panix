@@ -76,7 +76,7 @@ func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
 // Render renders the phase flow and returns the output buffer.
 func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 	spp := p.fleet.CacheStatisticsPerPhase
-	if spp == nil {
+	if spp == nil || len(p.phases) == 0 {
 		p.content.Reset()
 
 		return p.content
@@ -84,21 +84,30 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 
 	p.data = p.data[:0]
 
-	spp.ForEach(func(_ phase.Phase, value stats.StatsPack) bool {
+	// Iterate over known workflow phases (not map keys) so that stale entries
+	// in the ordered map — e.g. a "" phase from machines that haven't started —
+	// cannot shift the data alignment or corrupt the "DONE" column.
+	for _, ph := range p.phases {
 		phaseData := flow.PhaseData{}
-		if value != nil {
-			phaseData.Running = len(value[stats.Running])
-			phaseData.Failed = len(value[stats.Failed])
+
+		statsPack, ok := spp.Get(ph)
+		if ok && statsPack != nil {
+			phaseData.Running = len(statsPack[stats.Running])
+			phaseData.Failed = len(statsPack[stats.Failed])
 		}
 
 		p.data = append(p.data, phaseData)
+	}
 
-		return true
-	})
+	// The "DONE" pseudo-phase reads the Done count from the last real
+	// workflow phase — not from spp.Last(), which would return the wrong
+	// phase if the ordered map contains extra keys.
+	lastPhase := p.phases[len(p.phases)-1]
+	lastStats, _ := spp.Get(lastPhase)
 
-	lastPair, _ := spp.Last()
-	doneData := flow.PhaseData{
-		Done: len(lastPair.Value[stats.Done]),
+	doneData := flow.PhaseData{}
+	if lastStats != nil {
+		doneData.Done = len(lastStats[stats.Done])
 	}
 
 	p.data = append(p.data, doneData)

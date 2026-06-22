@@ -405,10 +405,18 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.Stat
 	}
 
 	for _, treeLeaf := range f.AllMachines() {
-		ms := treeLeaf.Machine
-		msState := ms.State.Load()
+		mach := treeLeaf.Machine
+		machState := mach.State.Load()
 
-		f.cachedStats.DeepSet(msState.Phase, msState.Status, ms.Xpath)
+		// Skip machines that haven't started any phase yet — their Phase and
+		// Status are empty strings. Adding them via DeepSet would insert a ""
+		// key into the ordered map, which shifts spp.Last() away from the real
+		// last workflow phase and breaks the PhaseFlow "DONE" column.
+		if machState.Phase == "" || machState.Status == "" {
+			continue
+		}
+
+		f.cachedStats.DeepSet(machState.Phase, machState.Status, mach.Xpath)
 	}
 
 	f.CacheStatisticsPerPhase = f.cachedStats
