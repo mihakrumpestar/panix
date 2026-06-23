@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/mihakrumpestar/panix/compare/v0.7.1..v0.8.0) - 2026-06-23
+
+### Bug Fixes
+
+- (pty) Handle split ANSI escapes and cursor flag leaks in terminal output processor; feat: added --keep-going to base args of nix build by @mihakrumpestar ([bba2a67](https://github.com/mihakrumpestar/panix/commit/bba2a671c50fdbc13ff3cd8b15a6e30ac52279cc))
+- Nix build, e2e test bench, readme by @mihakrumpestar ([f0ba28e](https://github.com/mihakrumpestar/panix/commit/f0ba28ea50890e8636afc9dfbff53d6f3b053bfd))
+
+### Features
+
+- Small optimizations in TUI  ([#9](https://github.com/mihakrumpestar/panix/pull/9)) by @mihakrumpestar ([fde5446](https://github.com/mihakrumpestar/panix/commit/fde54467ec7219bdedb2e5dd2f5a9323f50c82bd))
+
+### Testing
+
+- Make e2e test more deterministic (using local binary cache); chore: split go.mod for e2e tests and main by @mihakrumpestar ([9c0d7cd](https://github.com/mihakrumpestar/panix/commit/9c0d7cdcb1020682d0a8d8ea107a173b408480df))
+
 ## [0.7.1](https://github.com/mihakrumpestar/panix/compare/v0.7.0..v0.7.1) - 2026-06-03
 
 ### Bug Fixes
