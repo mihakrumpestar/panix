@@ -16,9 +16,12 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
+	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -28,17 +31,54 @@ func TestMain(m *testing.M) {
 
 var allPhases = phase.PhasesInOrder()
 
+// View-only benchmarks: Render without Recalculate (measures pure rendering cost).
 func Benchmark__View_1x3x1(b *testing.B)  { benchView(b, 1, 3, 1) }
 func Benchmark__View_1x3x4(b *testing.B)  { benchView(b, 1, 3, 4) }
 func Benchmark__View_2x16x4(b *testing.B) { benchView(b, 2, 16, 4) }
+
+// Full-path benchmarks: Recalculate + Render (measures the production TUI frame cost).
+func Benchmark__Full_1x3x1(b *testing.B)  { benchFull(b, 1, 3, 1) }
+func Benchmark__Full_1x3x4(b *testing.B)  { benchFull(b, 1, 3, 4) }
+func Benchmark__Full_2x16x4(b *testing.B) { benchFull(b, 2, 16, 4) }
 
 func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.Helper()
 
 	conf := makeTestConfig(flakesCount, configsCount, machinesN, colorscheme.DefaultColorScheme())
-	st := statstable.New(conf.Fleet, conf.ColorScheme)
-	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, st, ps)
+	buildLogs, viewportsInst, spinnersInst, cachedTree := setupRender(conf)
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		target := buffer.NewLinesBuf()
+		buildLogs.RenderInto(target, cachedTree, viewportsInst, spinnersInst)
+		target.Release()
+	}
+}
+
+func benchFull(b *testing.B, flakesCount, configsCount, machinesN int) {
+	b.Helper()
+
+	conf := makeTestConfig(flakesCount, configsCount, machinesN, colorscheme.DefaultColorScheme())
+	buildLogs, viewportsInst, spinnersInst, cachedTree := setupRender(conf)
+
+	b.ResetTimer()
+
+	for b.Loop() {
+		conf.Fleet.Recalculate(conf.Phases)
+
+		target := buffer.NewLinesBuf()
+		buildLogs.RenderInto(target, cachedTree, viewportsInst, spinnersInst)
+		target.Release()
+	}
+}
+
+func setupRender(conf *config.Config) (
+	*BuildLogs, *viewports.Viewports, *spinners.Spinners, *tree.Node,
+) {
+	statsTbl := statstable.New(conf.Fleet, conf.ColorScheme)
+	phaseFlow := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
+	buildLogs := New(conf, statsTbl, phaseFlow)
 
 	tableS := conf.ColorScheme.Table
 
@@ -48,16 +88,23 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	)
 	spinnersInst := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 
-	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	cachedTree := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 
-	b.ResetTimer()
-
-	for b.Loop() {
-		result := buildLogs.Render(ct, viewportsInst, spinnersInst)
-		_ = result
-	}
+	return buildLogs, viewportsInst, spinnersInst, cachedTree
 }
 
+// initPhaseXpaths populates PhaseXpaths for an entity from its Xpath.
+func initPhaseXpaths(xp xpath.Xpath) map[phase.Phase]xpath.Xpath {
+	phaseXpaths := make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
+
+	for _, pm := range phase.PhaseRegistry {
+		phaseXpaths[pm.Phase] = xp.NewXpathWithAppend(pm.Phase.String())
+	}
+
+	return phaseXpaths
+}
+
+//nolint:funlen // test fixture builder
 func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *colorscheme.ColorScheme) *config.Config {
 	if colorScheme == nil {
 		colorScheme = colorscheme.DefaultColorScheme()
@@ -68,16 +115,18 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 	for flakeIdx := range flakesCount {
 		flakeName := "flake" + strconv.Itoa(flakeIdx)
 		flakeObj := &flake.Flake{}
-		flakeObj.Name = flakeName
+		flakeObj.Name = stringbyte.StringByte(flakeName)
 		flakeObj.Xpath = xpath.New(flakeName)
+		flakeObj.PhaseXpaths = initPhaseXpaths(flakeObj.Xpath)
 		flakeObj.Logs = logs.New()
 		flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
 
 		for confIdx := range configsCount {
 			cfgName := "cfg" + strconv.Itoa(confIdx)
 			cfg := &configuration.Configuration{}
-			cfg.Name = cfgName
+			cfg.Name = stringbyte.StringByte(cfgName)
 			cfg.Xpath = xpath.New(flakeName, cfgName)
+			cfg.PhaseXpaths = initPhaseXpaths(cfg.Xpath)
 			cfg.Logs = logs.New()
 			cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
@@ -97,8 +146,9 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 					mach = newTestMachineWithError(allPhases)
 				}
 
-				mach.Name = machName
+				mach.Name = stringbyte.StringByte(machName)
 				mach.Xpath = xpath.New(flakeName, cfgName, machName)
+				mach.PhaseXpaths = initPhaseXpaths(mach.Xpath)
 				cfg.Machines.Set(machName, mach)
 			}
 
@@ -108,18 +158,23 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 		flakesMap.Set(flakeName, flakeObj)
 	}
 
+	fleetInst := &fleet.Fleet{
+		Flakes: flakesMap,
+		Logs:   logs.New(),
+	}
+
 	return &config.Config{
 		ColorScheme: colorScheme,
-		Fleet: &fleet.Fleet{
-			Flakes: flakesMap,
-		},
-		Phases: allPhases,
+		Fleet:       fleetInst,
+		Phases:      allPhases,
 	}
 }
 
 func newTestMachine(phases []phase.Phase, running bool) *machine.Machine {
 	mach := &machine.Machine{}
 	mach.Logs = logs.New()
+	mach.State = atomicpointer.New[machine.State]()
+	mach.MetaInspect = atomicpointer.New[machine.MetaInspect]()
 
 	for _, phaseI := range phases {
 		phaseLog := mach.Logs.PhaseLogs.GetOrCreate(phaseI)
@@ -143,6 +198,8 @@ func newTestMachine(phases []phase.Phase, running bool) *machine.Machine {
 func newTestMachineWithOutput(phases []phase.Phase) *machine.Machine {
 	mach := &machine.Machine{}
 	mach.Logs = logs.New()
+	mach.State = atomicpointer.New[machine.State]()
+	mach.MetaInspect = atomicpointer.New[machine.MetaInspect]()
 
 	for _, phaseI := range phases {
 		phaseLog := mach.Logs.PhaseLogs.GetOrCreate(phaseI)
@@ -161,6 +218,8 @@ func newTestMachineWithOutput(phases []phase.Phase) *machine.Machine {
 func newTestMachineWithError(phases []phase.Phase) *machine.Machine {
 	mach := &machine.Machine{}
 	mach.Logs = logs.New()
+	mach.State = atomicpointer.New[machine.State]()
+	mach.MetaInspect = atomicpointer.New[machine.MetaInspect]()
 
 	for idx, phaseI := range phases {
 		phaseLog := mach.Logs.PhaseLogs.GetOrCreate(phaseI)

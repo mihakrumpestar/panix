@@ -24,7 +24,10 @@ type PhaseFlow struct {
 	phases      []phase.Phase
 	Selected    Selected
 	content     *buffer.LinesBuf
+	data        []flow.PhaseData
 }
+
+var phaseFlowHeader = []byte("=== Phase Flow ===")
 
 func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
 	pfStyles := flow.Styles{
@@ -73,38 +76,47 @@ func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
 // Render renders the phase flow and returns the output buffer.
 func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 	spp := p.fleet.CacheStatisticsPerPhase
-	if spp == nil {
+	if spp == nil || len(p.phases) == 0 {
 		p.content.Reset()
 
 		return p.content
 	}
 
-	data := make([]flow.PhaseData, 0, spp.Len()+1)
+	p.data = p.data[:0]
 
-	spp.ForEach(func(_ phase.Phase, value stats.StatsPack) bool {
+	// Iterate over known workflow phases (not map keys) so that stale entries
+	// in the ordered map — e.g. a "" phase from machines that haven't started —
+	// cannot shift the data alignment or corrupt the "DONE" column.
+	for _, ph := range p.phases {
 		phaseData := flow.PhaseData{}
-		if value != nil {
-			phaseData.Running = len(value[stats.Running])
-			phaseData.Failed = len(value[stats.Failed])
+
+		statsPack, ok := spp.Get(ph)
+		if ok && statsPack != nil {
+			phaseData.Running = len(statsPack[stats.Running])
+			phaseData.Failed = len(statsPack[stats.Failed])
 		}
 
-		data = append(data, phaseData)
-
-		return true
-	})
-
-	lastPair, _ := spp.Last()
-	doneData := flow.PhaseData{
-		Done: len(lastPair.Value[stats.Done]),
+		p.data = append(p.data, phaseData)
 	}
 
-	data = append(data, doneData)
+	// The "DONE" pseudo-phase reads the Done count from the last real
+	// workflow phase — not from spp.Last(), which would return the wrong
+	// phase if the ordered map contains extra keys.
+	lastPhase := p.phases[len(p.phases)-1]
+	lastStats, _ := spp.Get(lastPhase)
 
-	p.pf.Width(width).SetData(data)
+	doneData := flow.PhaseData{}
+	if lastStats != nil {
+		doneData.Done = len(lastStats[stats.Done])
+	}
+
+	p.data = append(p.data, doneData)
+
+	p.pf.Width(width).SetDataNoCopy(p.data)
 
 	p.content.Reset()
 
-	p.colorScheme.Header.Title.RenderLineInto(p.content, []byte("=== Phase Flow ==="))
+	p.colorScheme.Header.Title.RenderLineInto(p.content, phaseFlowHeader)
 	p.content.EmptyLine()
 	p.content.AppendFrom(p.pf.Render())
 	p.content.EmptyLine()

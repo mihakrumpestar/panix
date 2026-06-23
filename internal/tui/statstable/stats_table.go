@@ -1,6 +1,7 @@
 package statstable
 
 import (
+	"bytes"
 	"strconv"
 
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -22,6 +23,7 @@ type StatsTable struct {
 	tbl         *table.Table
 	colorScheme *colorscheme.ColorScheme
 	content     *buffer.LinesBuf
+	rowMarker   []byte
 }
 
 func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
@@ -62,6 +64,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		tbl:         tbl,
 		colorScheme: colorScheme,
 		content:     buffer.NewLinesBuf(),
+		rowMarker:   append([]byte{' '}, colorScheme.Chars.RowSpanMarker...),
 	}
 }
 
@@ -75,7 +78,7 @@ func (s *StatsTable) SelectedXpath() xpath.Xpath {
 		return s.fleet.CacheMachineInfos[idx].Xpath
 	}
 
-	return ""
+	return xpath.Xpath{}
 }
 
 func (s *StatsTable) Reset() {
@@ -109,23 +112,22 @@ func (s *StatsTable) buildRows() [][][]byte {
 	machineInfos := s.fleet.CacheMachineInfos
 	rows := make([][][]byte, len(machineInfos))
 
-	var prevFlakeName, prevConfigurationName string
+	var prevFlakeName, prevConfigurationName []byte
 
-	marker := append([]byte{' '}, s.colorScheme.Chars.RowSpanMarker...)
+	marker := s.rowMarker
 
 	for idx, machineInfo := range machineInfos {
-		flakeName, configurationName, machineName := machineInfo.Xpath.FleetLeaf()
-
 		flakeDisplay := marker
-		if flakeName != prevFlakeName {
-			flakeDisplay = []byte(flakeName)
-			prevFlakeName = flakeName
+		if !bytes.Equal(machineInfo.FlakeName.Bytes(), prevFlakeName) {
+			flakeDisplay = machineInfo.FlakeName.Bytes()
+			prevFlakeName = machineInfo.FlakeName.Bytes()
 		}
 
 		configDisplay := marker
-		if configurationName != prevConfigurationName || flakeName != prevFlakeName {
-			configDisplay = []byte(configurationName)
-			prevConfigurationName = configurationName
+		if !bytes.Equal(machineInfo.ConfigurationName.Bytes(), prevConfigurationName) ||
+			!bytes.Equal(machineInfo.FlakeName.Bytes(), prevFlakeName) {
+			configDisplay = machineInfo.ConfigurationName.Bytes()
+			prevConfigurationName = machineInfo.ConfigurationName.Bytes()
 		}
 
 		rows[idx] = [][]byte{
@@ -133,13 +135,13 @@ func (s *StatsTable) buildRows() [][][]byte {
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
 			configDisplay,
-			[]byte(machineName),
-			[]byte(machineInfo.MetaInspect.Architecture),
-			getStatusText(machineInfo.State.Status, machineInfo.State.StatusMsg, s.colorScheme),
+			machineInfo.MachineName.Bytes(),
+			machineInfo.Architecture.Bytes(),
+			getStatusText(machineInfo.State.Status, machineInfo.StatusMsgBytes.Bytes(), s.colorScheme),
 			getGeneration(machineInfo),
-			[]byte(machineInfo.MetaInspect.Date),
-			[]byte(machineInfo.MetaInspect.OSVersion),
-			[]byte(machineInfo.MetaInspect.Kernel),
+			machineInfo.Date.Bytes(),
+			machineInfo.OSVersion.Bytes(),
+			machineInfo.Kernel.Bytes(),
 		}
 	}
 
@@ -159,14 +161,14 @@ func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme
 	}
 }
 
-func getStatusText(status stats.StatsState, statusMsg string, colorScheme *colorscheme.ColorScheme) []byte {
+func getStatusText(status stats.StatsState, statusMsg []byte, colorScheme *colorscheme.ColorScheme) []byte {
 	switch status {
 	case stats.Running:
-		return colorScheme.Status.Running.RenderLine([]byte(statusMsg))
+		return colorScheme.Status.Running.RenderLine(statusMsg)
 	case stats.Failed:
-		return colorScheme.Status.Failed.RenderLine([]byte(statusMsg))
+		return colorScheme.Status.Failed.RenderLine(statusMsg)
 	case stats.Done:
-		return colorScheme.Status.OK.RenderLine([]byte(statusMsg))
+		return colorScheme.Status.OK.RenderLine(statusMsg)
 	default:
 		return []byte("invalid")
 	}
@@ -177,7 +179,7 @@ func getGeneration(machineInfo fleet.MachineInfo) []byte {
 		return nil
 	}
 
-	return []byte(strconv.FormatUint(uint64(machineInfo.MetaInspect.Generations.Current), 10))
+	return strconv.AppendUint(nil, uint64(machineInfo.MetaInspect.Generations.Current), 10) //nolint:mnd // decimal base
 }
 
 func joinBytes(prefix []byte, suffix string) []byte {

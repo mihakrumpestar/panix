@@ -2,14 +2,17 @@ package xpath
 
 import (
 	"strings"
+
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 )
 
-// Note: all methods are immutable.
+// Xpath is a string type for entity paths (e.g. "flake0/cfg0/m0").
+type Xpath struct {
+	stringbyte.StringByte
+}
 
-type Xpath string
-
-func New(xpath ...string) Xpath {
-	return Xpath(strings.Join(xpath, "/"))
+func New(xpathParts ...string) Xpath {
+	return Xpath{stringbyte.StringByte(strings.Join(xpathParts, "/"))}
 }
 
 func (x Xpath) Depth() int {
@@ -31,33 +34,41 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 
 	// Fast path: single arg (most common case) — one allocation, no builder.
 	if len(appendXpath) == 1 {
-		return Xpath(xpathS + "/" + appendXpath[0])
+		return Xpath{stringbyte.StringByte(xpathS + "/" + appendXpath[0])}
 	}
 
-	return Xpath(xpathS + "/" + strings.Join(appendXpath, "/"))
+	return Xpath{stringbyte.StringByte(xpathS + "/" + strings.Join(appendXpath, "/"))}
 }
 
 // FleetLeaf returns the last 3 elements of the path as strings.
+// Uses strings.LastIndex to avoid allocating a []string from strings.Split.
 func (x Xpath) FleetLeaf() (string, string, string) {
-	xpathS := x.String()
-
-	if xpathS == "" {
+	path := x.String()
+	if path == "" {
 		return "", "", ""
 	}
 
-	parts := strings.Split(xpathS, "/")
-	numOfParts := len(parts)
-
-	switch numOfParts {
-	case 1:
-		return "", "", parts[0]
-	case 2:
-		return "", parts[0], parts[1]
-	default:
-		return parts[numOfParts-3], parts[numOfParts-2], parts[numOfParts-1]
+	// Find last 3 segments by scanning backwards.
+	last := strings.LastIndex(path, "/")
+	if last < 0 {
+		return "", "", path
 	}
-}
 
-func (x Xpath) String() string {
-	return string(x)
+	machine := path[last+1:]
+	rest := path[:last]
+
+	mid := strings.LastIndex(rest, "/")
+	if mid < 0 {
+		return "", rest, machine
+	}
+
+	config := rest[mid+1:]
+	rest = rest[:mid]
+
+	first := strings.LastIndex(rest, "/")
+	if first < 0 {
+		return rest, config, machine
+	}
+
+	return rest[first+1:], config, machine
 }

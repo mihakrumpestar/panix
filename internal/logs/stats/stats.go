@@ -23,7 +23,7 @@ type StatsPack map[StatsState][]xpath.Xpath
 
 func New(workflowPhases []phase.Phase) *StatisticsPerPhase {
 	spp := &StatisticsPerPhase{
-		atomicorderedmap.New[phase.Phase, StatsPack](),
+		atomicorderedmap.NewWithCap[phase.Phase, StatsPack](len(workflowPhases)),
 	}
 
 	for _, phase := range workflowPhases {
@@ -48,10 +48,19 @@ func (spp *StatisticsPerPhase) DeepSet(phase phase.Phase, statsState StatsState,
 		spp.AtomicOrderedMap.Set(phase, statsPack)
 	}
 
-	xpaths, ok := statsPack[statsState]
-	if !ok {
-		xpaths = make([]xpath.Xpath, 0)
-	}
+	statsPack[statsState] = append(statsPack[statsState], xpathI)
+}
 
-	statsPack[statsState] = append(xpaths, xpathI)
+// Reset clears all xpath slices in every StatsPack while preserving the map
+// structure and backing capacity. After Reset, all slices have len==0 but
+// retain their cap — so subsequent DeepSet appends are zero-allocation.
+// Must be called from the same goroutine that calls DeepSet (single-writer).
+func (spp *StatisticsPerPhase) Reset() {
+	spp.ForEach(func(_ phase.Phase, statsPack StatsPack) bool {
+		for state := range statsPack {
+			statsPack[state] = statsPack[state][:0]
+		}
+
+		return true
+	})
 }

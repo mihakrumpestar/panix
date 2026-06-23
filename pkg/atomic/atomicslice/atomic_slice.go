@@ -118,14 +118,16 @@ func (s *AtomicSlice[T]) Last() (T, bool) {
 	return s.Get(s.Length() - 1)
 }
 
-func (s *AtomicSlice[T]) Values() []T {
+// ForEach iterates over the slice under a read lock without copying.
+func (s *AtomicSlice[T]) ForEach(yield func(int, T) bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	result := make([]T, len(s.data))
-	copy(result, s.data)
-
-	return result
+	for i, v := range s.data {
+		if !yield(i, v) {
+			return
+		}
+	}
 }
 
 func (s *AtomicSlice[T]) Clear() {
@@ -135,20 +137,11 @@ func (s *AtomicSlice[T]) Clear() {
 	s.data = s.data[:0]
 }
 
-func (s *AtomicSlice[T]) Copy() *AtomicSlice[T] {
+func (s *AtomicSlice[T]) MarshalJSON() ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	copied := make([]T, len(s.data))
-	copy(copied, s.data)
-
-	return &AtomicSlice[T]{
-		data: copied,
-	}
-}
-
-func (s *AtomicSlice[T]) MarshalJSON() ([]byte, error) {
-	b, err := json.Marshal(s.Values())
+	b, err := json.Marshal(s.data)
 
 	return b, errors.Wrap(err, "marshal atomic slice")
 }

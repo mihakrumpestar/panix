@@ -31,7 +31,7 @@ var (
 )
 
 // simulateContent creates a realistic multi-line buffer with formatting work.
-func simulateContent(_ int) *buffer.LinesBuf {
+func simulateContent(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 	buf := buffer.NewLinesBuf()
 	for _, line := range benchContentLines {
 		buf.WriteLine([]byte(line))
@@ -67,7 +67,7 @@ const (
 
 // collectLeafXps recursively collects all leaf node xpaths.
 func collectLeafXps(n *Node, xps *[]string) {
-	if len(n.children) == 0 && n.xpath != "" {
+	if len(n.children) == 0 && n.xpath.String() != "" {
 		*xps = append(*xps, n.xpath.String())
 	}
 

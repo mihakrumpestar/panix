@@ -13,6 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/pkg/errors"
 )
 
@@ -41,16 +42,16 @@ type MetaInspect struct {
 	Bootstrapped   bool `yaml:"-" json:"bootstrapped,omitempty"`
 	RequiresKexec  bool `yaml:"-" json:"requires_kexec,omitempty"`
 
-	Architecture string       `yaml:"-" json:"architecture,omitempty"`
-	Generations  *Generations `yaml:"-" json:"generations,omitempty"`
-	Date         string       `yaml:"-" json:"date,omitempty"`
-	OSVersion    string       `yaml:"-" json:"nixos,omitempty"`
-	Kernel       string       `yaml:"-" json:"kernel,omitempty"`
+	Architecture stringbyte.StringByte `yaml:"-" json:"architecture,omitempty"`
+	Generations  *Generations     `yaml:"-" json:"generations,omitempty"`
+	Date         stringbyte.StringByte `yaml:"-" json:"date,omitempty"`
+	OSVersion    stringbyte.StringByte `yaml:"-" json:"nixos,omitempty"`
+	Kernel       stringbyte.StringByte `yaml:"-" json:"kernel,omitempty"`
 }
 
 type State struct {
 	Status    stats.StatsState     `yaml:"-" json:"status"`
-	StatusMsg string               `yaml:"-" json:"status_msg"`
+	StatusMsg stringbyte.StringByte     `yaml:"-" json:"status_msg"`
 	Phase     phase.Phase          `yaml:"-" json:"phase"`
 	Error     *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
 	ActiveSSH SSHType              `yaml:"-" json:"active_ssh,omitempty" default:"regular"`

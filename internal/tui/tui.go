@@ -46,6 +46,10 @@ type model struct {
 	statsTable *statstable.StatsTable
 	phaseFlow  *phaseflow.PhaseFlow
 	cachedTree *tree.Node
+
+	// content is a persistent buffer for the main content area.
+	// Reused across frames via Reset() — avoids pool buffer loss on GC.
+	content *buffer.LinesBuf
 }
 
 func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
@@ -67,14 +71,14 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		dimensions: dimensions,
 		isSnapshot: isSnapshot,
 
-		header:   header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
-		spinners: spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
-		viewports: viewports.New(dimensions, conf.Flags.CommandOutputMaxHeight, tableS.Border,
-			tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
-		),
+		header:     header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
+		spinners:   spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
+		viewports:  viewports.New(dimensions, conf.Flags.CommandOutputMaxHeight,
+			tableS.Border, tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
 		cachedTree: tree.NewTree(conf.ColorScheme.Tree.Enumerator, buildlogs.TreeStep),
+		content:    buffer.NewLinesBuf(),
 	}
 
 	mdl.footer = footer.New(mdl.keyDefs(), conf.ColorScheme)
@@ -238,27 +242,27 @@ func (m *model) viewMainContentInto(buf *buffer.LinesBufDiff, renderCounter uint
 // and debug sections into a single buffer.
 func (m *model) renderMainContent() *buffer.LinesBuf {
 	contentWidth := m.viewports.ContentWidth()
-	content := buffer.NewLinesBuf()
+	m.content.Reset()
 
 	if !m.conf.Flags.DryRun {
 		if slices.Contains(m.conf.Phases, phase.Inspect) {
-			content.AppendFrom(m.statsTable.Render(contentWidth))
+			m.content.AppendFrom(m.statsTable.Render(contentWidth))
 		}
 
-		content.AppendFrom(m.phaseFlow.Render(contentWidth))
+		m.content.AppendFrom(m.phaseFlow.Render(contentWidth))
 	}
 
-	content.AppendFrom(m.buildLogs.Render(m.cachedTree, m.viewports, m.spinners))
+	m.buildLogs.RenderInto(m.content, m.cachedTree, m.viewports, m.spinners)
 
 	if m.err != nil {
-		m.renderError(content)
+		m.renderError(m.content)
 	}
 
 	if m.conf.Flags.Logging.Debug {
-		m.renderDebug(content)
+		m.renderDebug(m.content)
 	}
 
-	return content
+	return m.content
 }
 
 func (m *model) renderError(content *buffer.LinesBuf) {

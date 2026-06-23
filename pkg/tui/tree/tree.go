@@ -119,9 +119,12 @@ func (n *Node) BeginFrame() {
 // preserving call order.
 //
 // calculate is called only on cache miss (new node, or version/cacheGen/
-// depthWidth changed) with the parent's depth width (parent.depth * step).
+// depthWidth changed) with the parent's depth width (parent.depth * step)
+// and the node's previous content buffer (nil for new nodes). The callback
+// should Reset() and refill old instead of allocating a new buffer — this
+// preserves capacity across GC cycles, avoiding repeated buffer growth.
 // On cache hit the function is NOT called.
-func (n *Node) Child(childXp xpath.Xpath, version uint64, calculate func(depthWidth int) *buffer.LinesBuf) *Node {
+func (n *Node) Child(childXp xpath.Xpath, version uint64, calculate func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf) *Node {
 	state := n.state
 	childDepth := n.depth + 1
 	depthWidth := n.depth * n.step
@@ -322,15 +325,16 @@ func (n *Node) reuseNode(
 	version uint64,
 	state *treeState,
 	depthWidth int,
-	calculate func(int) *buffer.LinesBuf,
+	calculate func(int, *buffer.LinesBuf) *buffer.LinesBuf,
 ) *Node {
 	free.depth = childDepth
 
 	// Recalculate if version changed, cache was invalidated, or node
 	// moved to a different depth (depthWidth changed).
 	if free.contentVersion != version || free.cacheGen != state.invalidateGen || free.depthWidth != depthWidth {
-		free.content.Release()
-		free.content = calculate(depthWidth)
+		// Pass old content buffer to calculate for Reset()+refill —
+		// preserves capacity across GC cycles.
+		free.content = calculate(depthWidth, free.content)
 		free.contentVersion = version
 		free.cacheGen = state.invalidateGen
 		free.depthWidth = depthWidth
@@ -348,11 +352,11 @@ func (n *Node) allocateNode(
 	version uint64,
 	state *treeState,
 	depthWidth int,
-	calculate func(int) *buffer.LinesBuf,
+	calculate func(int, *buffer.LinesBuf) *buffer.LinesBuf,
 ) *Node {
 	node := nodePool.Get().(*Node) //nolint:forcetypeassert // pool always returns *Node
 	node.xpath = childXp
-	node.content = calculate(depthWidth)
+	node.content = calculate(depthWidth, nil)
 	node.contentVersion = version
 	node.depth = childDepth
 	node.depthWidth = depthWidth
@@ -471,9 +475,11 @@ func writeLines(src *buffer.LinesBuf, buf *buffer.LinesBuf, pfx, conn, pfxBuf []
 	if pfx == nil {
 		if nLines == 0 {
 			buf.EmptyLine()
-		} else {
-			buf.AppendFrom(src)
+
+			return
 		}
+
+		buf.AppendFrom(src)
 
 		return
 	}
@@ -491,8 +497,8 @@ func writeLines(src *buffer.LinesBuf, buf *buffer.LinesBuf, pfx, conn, pfxBuf []
 	// Continuation lines: indent prefix only (no connector).
 	if nLines > 1 {
 		contPfx := pfxBuf[:pfxEnd[depth]]
-		for i := 1; i < nLines; i++ {
-			buf.WriteLine2(contPfx, src.Line(i))
+		for idx := 1; idx < nLines; idx++ {
+			buf.WriteLine2(contPfx, src.Line(idx))
 		}
 	}
 }

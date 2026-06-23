@@ -11,11 +11,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
 )
@@ -37,12 +39,27 @@ type Fleet struct {
 	// cachedTAS persists TimeAndState across frames so that stateVersion
 	// accumulates correctly. Cleared on ResetState (workflow restart).
 	cachedTAS []*atomictimeandstate.TimeAndState
+
+	// cachedStats is reused across frames via Reset() to avoid allocating
+	// a new StatisticsPerPhase map structure every frame.
+	cachedStats *stats.StatisticsPerPhase
 }
 
 type MachineInfo struct {
 	Xpath       xpath.Xpath
 	MetaInspect machine.MetaInspect
 	State       machine.State
+
+	// Pre-converted []byte cells for the stats table renderer.
+	// StringByte provides zero-copy Bytes() access.
+	MachineName       stringbyte.StringByte
+	FlakeName         stringbyte.StringByte
+	ConfigurationName stringbyte.StringByte
+	Architecture      stringbyte.StringByte
+	Date              stringbyte.StringByte
+	OSVersion         stringbyte.StringByte
+	Kernel            stringbyte.StringByte
+	StatusMsgBytes    stringbyte.StringByte
 }
 
 func (f *Fleet) Init() error {
@@ -100,7 +117,7 @@ func postUnmarshalMachine(mach *machine.Machine) {
 		return
 	}
 
-	mach.PostUnmarshalInit(mach.Name, nil)
+	mach.PostUnmarshalInit(mach.Name.String(), nil)
 
 	if mach.Logs == nil {
 		return
@@ -111,11 +128,13 @@ func postUnmarshalMachine(mach *machine.Machine) {
 			return true
 		}
 
-		for _, cmd := range phaseLog.CommandLogs.Values() {
+		phaseLog.CommandLogs.ForEach(func(_ int, cmd *command.CommandLog) bool {
 			if cmd != nil {
 				cmd.PostUnmarshalInit()
 			}
-		}
+
+			return true
+		})
 
 		return true
 	})
@@ -164,18 +183,16 @@ func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
 			f.cachedTAS[machineIdx] = &atomictimeandstate.TimeAndState{}
 		}
 
-		mergedLogs := logs.MergePhaseLogs(workflowPhases,
+		// Merge phase logs in-place into the cached Logs entry.
+		// dst.TAS acts as a temp snapshot — synced into the persisted cachedTAS below.
+		logs.MergePhaseLogsInto(f.CacheFlattenedLogs[machineIdx], workflowPhases,
 			treeLeaf.Machine.Logs.PhaseLogs,
 			treeLeaf.Configuration.Logs.PhaseLogs,
 			treeLeaf.Flake.Logs.PhaseLogs,
 		)
 
 		// Sync aggregated state into persisted TAS — bumps stateVersion on transitions.
-		f.cachedTAS[machineIdx].SyncFrom(mergedLogs.TAS)
-
-		// Assign persisted TAS and PhaseLogs to the cached Logs entry.
-		f.CacheFlattenedLogs[machineIdx].PhaseLogs = mergedLogs.PhaseLogs
-		f.CacheFlattenedLogs[machineIdx].TAS = f.cachedTAS[machineIdx]
+		f.cachedTAS[machineIdx].SyncFrom(f.CacheFlattenedLogs[machineIdx].TAS)
 	}
 }
 
@@ -195,7 +212,7 @@ func (f *Fleet) RecalculateDurationAndError() {
 			cfgAnyRunning := false
 
 			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
-				machineV.Logs.TAS.SyncFrom(f.CacheFlattenedLogs[idx].TAS)
+				machineV.Logs.TAS.SyncFrom(f.cachedTAS[idx])
 
 				machineDur := machineV.Logs.TAS.DurationCache
 				if machineDur > largestMachineDuration {
@@ -272,14 +289,14 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 
 			if !tas.IsFinished() {
 				machineState.Status = stats.Running
-				machineState.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.StatusMsg = stringbyte.StringByte(lastCommandLog.StatusIfRunning)
 
 				return
 			}
 
 			if endErr != nil && errors.Is(errors.Cause(endErr.Err()), context.Canceled) {
 				machineState.Status = stats.Running
-				machineState.StatusMsg = lastCommandLog.StatusIfRunning
+				machineState.StatusMsg = stringbyte.StringByte(lastCommandLog.StatusIfRunning)
 				machineState.Error = nil
 
 				return
@@ -287,7 +304,7 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 
 			if endErr != nil {
 				machineState.Status = stats.Failed
-				machineState.StatusMsg = lastCommandLog.StatusIfFailed
+				machineState.StatusMsg = stringbyte.StringByte(lastCommandLog.StatusIfFailed)
 				machineState.Error = endErr
 
 				return
@@ -300,7 +317,7 @@ func (f *Fleet) RecalculateMachinesState(workflowPhases []phase.Phase) {
 				machineState.StatusMsg = "done"
 			} else {
 				machineState.Status = stats.Done
-				machineState.StatusMsg = machineState.Phase.String() + " done"
+				machineState.StatusMsg = stringbyte.StringByte(machineState.Phase.String() + " done")
 			}
 		})
 	}
@@ -315,6 +332,7 @@ func (f *Fleet) ResetState() {
 	f.CacheMachineInfos = nil
 	f.CacheFlattenedLogs = nil
 	f.CacheStatisticsPerPhase = nil
+	f.cachedStats = nil
 
 	// Clear persisted TAS so stateVersion resets for the new workflow.
 	for i := range f.cachedTAS {
@@ -380,35 +398,67 @@ func (f *Fleet) MachineCount() int {
 }
 
 func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.StatisticsPerPhase {
-	statisticsPerPhase := stats.New(workflowPhases)
-
-	for _, treeLeaf := range f.AllMachines() {
-		ms := treeLeaf.Machine
-		msState := ms.State.Load()
-
-		statisticsPerPhase.DeepSet(msState.Phase, msState.Status, ms.Xpath)
+	if f.cachedStats == nil {
+		f.cachedStats = stats.New(workflowPhases)
+	} else {
+		f.cachedStats.Reset()
 	}
 
-	f.CacheStatisticsPerPhase = statisticsPerPhase
+	for _, treeLeaf := range f.AllMachines() {
+		mach := treeLeaf.Machine
+		machState := mach.State.Load()
 
-	return statisticsPerPhase
+		// Skip machines that haven't started any phase yet — their Phase and
+		// Status are empty strings. Adding them via DeepSet would insert a ""
+		// key into the ordered map, which shifts spp.Last() away from the real
+		// last workflow phase and breaks the PhaseFlow "DONE" column.
+		if machState.Phase == "" || machState.Status == "" {
+			continue
+		}
+
+		f.cachedStats.DeepSet(machState.Phase, machState.Status, mach.Xpath)
+	}
+
+	f.CacheStatisticsPerPhase = f.cachedStats
+
+	return f.cachedStats
 }
 
 func (f *Fleet) RefreshCaches() {
-	// Reuse previous slice capacity to avoid re-allocation.
-	if cap(f.CacheMachineInfos) > 0 {
-		f.CacheMachineInfos = f.CacheMachineInfos[:0]
-	}
+	idx := 0
 
 	for _, treeLeaf := range f.AllMachines() {
-		m := treeLeaf.Machine
+		flake := treeLeaf.Flake
+		cfg := treeLeaf.Configuration
+		mach := treeLeaf.Machine
 
-		mInfo := MachineInfo{
-			Xpath:       m.Xpath,
-			MetaInspect: *m.MetaInspect.Load(),
-			State:       *m.State.Load(),
+		meta := mach.MetaInspect.Load()
+		state := mach.State.Load()
+
+		// Grow slice if needed.
+		if idx >= len(f.CacheMachineInfos) {
+			f.CacheMachineInfos = append(f.CacheMachineInfos, MachineInfo{})
 		}
 
-		f.CacheMachineInfos = append(f.CacheMachineInfos, mInfo)
+		mInfo := &f.CacheMachineInfos[idx]
+
+		mInfo.Xpath = mach.Xpath
+		mInfo.MetaInspect = *meta
+		mInfo.State = *state
+
+		// Direct StringByte copies — zero conversion, zero allocation.
+		mInfo.MachineName = mach.Name
+		mInfo.FlakeName = flake.Name
+		mInfo.ConfigurationName = cfg.Name
+		mInfo.Architecture = meta.Architecture
+		mInfo.Date = meta.Date
+		mInfo.OSVersion = meta.OSVersion
+		mInfo.Kernel = meta.Kernel
+		mInfo.StatusMsgBytes = state.StatusMsg
+
+		idx++
 	}
+
+	// Truncate if machine count decreased.
+	f.CacheMachineInfos = f.CacheMachineInfos[:idx]
 }

@@ -2,10 +2,11 @@ package atomicslice
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -24,10 +25,11 @@ func TestNewFrom(t *testing.T) {
 
 	assert.Equal(t, len(items), slice.Length(), "Length()")
 
-	values := slice.Values()
-	for idx, val := range values {
-		assert.Equal(t, items[idx], val, "Values()[%d]", idx)
-	}
+	slice.ForEach(func(idx int, val int) bool {
+		assert.Equal(t, items[idx], val, "ForEach[%d]", idx)
+
+		return true
+	})
 }
 
 func TestNewFromEmpty(t *testing.T) {
@@ -50,12 +52,13 @@ func TestAppend(t *testing.T) {
 
 	assert.Equal(t, 3, slice.Length(), "Length()")
 
-	values := slice.Values()
-
 	expected := []string{"a", "b", "c"}
-	for idx, val := range values {
-		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
-	}
+
+	slice.ForEach(func(idx int, val string) bool {
+		assert.Equal(t, expected[idx], val, "ForEach[%d]", idx)
+
+		return true
+	})
 }
 
 func TestGet(t *testing.T) {
@@ -115,7 +118,7 @@ func TestLastEmpty(t *testing.T) {
 	assert.Equal(t, 0, val, "Last() on empty slice value")
 }
 
-func TestValues(t *testing.T) {
+func TestForEach(t *testing.T) {
 	t.Parallel()
 
 	slice := New[string]()
@@ -123,23 +126,50 @@ func TestValues(t *testing.T) {
 	slice.Append("y")
 	slice.Append("z")
 
-	values := slice.Values()
-	require.Len(t, values, 3, "Values() length")
+	var collected []string
 
-	expected := []string{"x", "y", "z"}
-	for idx, val := range values {
-		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
-	}
+	slice.ForEach(func(_ int, val string) bool {
+		collected = append(collected, val)
+
+		return true
+	})
+
+	assert.Equal(t, []string{"x", "y", "z"}, collected, "ForEach collected all items")
 }
 
-func TestValuesEmpty(t *testing.T) {
+func TestForEachEarlyExit(t *testing.T) {
 	t.Parallel()
 
 	slice := New[int]()
-	values := slice.Values()
+	slice.Append(1)
+	slice.Append(2)
+	slice.Append(3)
 
-	assert.NotNil(t, values, "Values() for empty slice")
-	assert.Empty(t, values)
+	var collected []int
+
+	slice.ForEach(func(_ int, val int) bool {
+		collected = append(collected, val)
+
+		return val != 2
+	})
+
+	assert.Equal(t, []int{1, 2}, collected, "ForEach stopped early")
+}
+
+func TestForEachEmpty(t *testing.T) {
+	t.Parallel()
+
+	slice := New[int]()
+
+	called := false
+
+	slice.ForEach(func(_ int, _ int) bool {
+		called = true
+
+		return true
+	})
+
+	assert.False(t, called, "ForEach on empty slice should not call yield")
 }
 
 func TestClear(t *testing.T) {
@@ -153,44 +183,6 @@ func TestClear(t *testing.T) {
 	slice.Clear()
 
 	assert.Equal(t, 0, slice.Length(), "Length() after Clear")
-
-	values := slice.Values()
-	assert.Empty(t, values, "Values() length after Clear")
-}
-
-func TestCopy(t *testing.T) {
-	t.Parallel()
-
-	slice := New[int]()
-	slice.Append(1)
-	slice.Append(2)
-	slice.Append(3)
-
-	copySlice := slice.Copy()
-
-	assert.Equal(t, slice.Length(), copySlice.Length(), "Copy().Length()")
-
-	originalValues := slice.Values()
-	copyValues := copySlice.Values()
-
-	for idx := range originalValues {
-		assert.Equal(t, originalValues[idx], copyValues[idx], "Copy().Values()[%d]", idx)
-	}
-}
-
-func TestCopyIndependence(t *testing.T) {
-	t.Parallel()
-
-	slice := New[int]()
-	slice.Append(1)
-	slice.Append(2)
-
-	copySlice := slice.Copy()
-	copySlice.Append(3)
-
-	assert.NotEqual(t, slice.Length(), copySlice.Length(), "modifying copy should not affect original")
-	assert.Equal(t, 2, slice.Length(), "original Length()")
-	assert.Equal(t, 3, copySlice.Length(), "copy Length()")
 }
 
 func TestJSONMarshalUnmarshal(t *testing.T) {
@@ -209,14 +201,15 @@ func TestJSONMarshalUnmarshal(t *testing.T) {
 	err = json.Unmarshal(data, slice2)
 	require.NoError(t, err, "UnmarshalJSON() error")
 
-	values1 := slice.Values()
-	values2 := slice2.Values()
+	assert.Equal(t, slice.Length(), slice2.Length(), "unmarshaled length")
 
-	require.Len(t, values2, len(values1), "unmarshaled length")
+	slice.ForEach(func(idx int, val1 int) bool {
+		val2, ok := slice2.Get(idx)
+		assert.True(t, ok, "Get(%d) ok", idx)
+		assert.Equal(t, val1, val2, "Get(%d) value", idx)
 
-	for idx := range values1 {
-		assert.Equal(t, values1[idx], values2[idx], "Values()[%d]", idx)
-	}
+		return true
+	})
 }
 
 func TestJSONUnmarshalEmpty(t *testing.T) {
@@ -279,7 +272,7 @@ func TestConcurrentAccess(t *testing.T) {
 		waitGroup.Go(func() {
 			for range numOps {
 				_ = slice.Length()
-				_ = slice.Values()
+				slice.ForEach(func(_ int, _ int) bool { return true })
 				_, _ = slice.Get(0)
 				_, _ = slice.Last()
 			}
@@ -379,12 +372,13 @@ func TestRemove(t *testing.T) {
 
 	assert.Equal(t, 2, slice.Length(), "Length() after Remove")
 
-	values := slice.Values()
-
 	expected := []int{1, 3}
-	for idx, val := range values {
-		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
-	}
+
+	slice.ForEach(func(idx int, val int) bool {
+		assert.Equal(t, expected[idx], val, "ForEach[%d]", idx)
+
+		return true
+	})
 }
 
 func TestRemoveLast(t *testing.T) {
@@ -425,12 +419,13 @@ func TestInsert(t *testing.T) {
 
 	require.Equal(t, 3, slice.Length(), "Length()")
 
-	values := slice.Values()
-
 	expected := []int{1, 2, 3}
-	for idx, val := range values {
-		assert.Equal(t, expected[idx], val, "Values()[%d]", idx)
-	}
+
+	slice.ForEach(func(idx int, val int) bool {
+		assert.Equal(t, expected[idx], val, "ForEach[%d]", idx)
+
+		return true
+	})
 }
 
 func TestContains(t *testing.T) {

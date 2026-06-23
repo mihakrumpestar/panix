@@ -117,7 +117,7 @@ func (v *Viewports) GetActiveInnerViewportXpath() xpath.Xpath {
 		return v.activeXpath
 	}
 
-	return ""
+	return xpath.Xpath{}
 }
 
 func (v *Viewports) GetViewportContent(xp xpath.Xpath) *buffer.LinesBuf {
@@ -442,12 +442,12 @@ func (v *Viewports) activeItem() *item {
 
 func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 	if click.Lines == nil || click.Y < 0 || click.Y >= click.Lines.Len() {
-		return ""
+		return xpath.Xpath{}
 	}
 
 	clickedID, ok := zeroterm.ZoneIDAtCol(click.Lines.Line(click.Y), click.X)
 	if !ok {
-		return ""
+		return xpath.Xpath{}
 	}
 
 	var candidates []xpath.Xpath
@@ -461,7 +461,7 @@ func (v *Viewports) clickTarget(click zeroterm.MouseClickMsg) xpath.Xpath {
 	})
 
 	if len(candidates) == 0 {
-		return ""
+		return xpath.Xpath{}
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Depth() > candidates[j].Depth() })

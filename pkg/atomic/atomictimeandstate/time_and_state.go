@@ -13,7 +13,7 @@ type TimeAndState struct {
 	DurationCache time.Duration        `json:"duration"`
 	EndError      *jsonerror.JSONError `json:"end_error,omitempty"`
 
-	live        bool
+	live         bool
 	stateVersion uint64
 }
 
@@ -83,6 +83,16 @@ func (tas *TimeAndState) StateVersion() uint64 {
 
 // BumpVersion increments stateVersion unconditionally.
 func (tas *TimeAndState) BumpVersion() {
+	tas.stateVersion++
+}
+
+// Reset state and bump stateVersion.
+func (tas *TimeAndState) Reset() {
+	tas.StartTime = time.Time{}
+	tas.EndTime = time.Time{}
+	tas.DurationCache = 0
+	tas.EndError = nil
+
 	tas.stateVersion++
 }
 
