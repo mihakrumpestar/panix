@@ -12,16 +12,15 @@ import (
 )
 
 type Config struct {
-	Flags       flags.Flags              `yaml:"flags" json:"flags" desc:"Flags (CLI and YAML)"`
-	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required" desc:"Fleet configuration"`
-	Nix         *nixver.Info             `yaml:"-" json:"nix,omitempty"`
-	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-"`
+	Nix *nixver.Info `yaml:"-" json:"nix,omitempty"`
 
 	// Internal - exportable
-	Snapshot Snapshot `yaml:"-" json:"snapshot"`
+	Snapshot Snapshot      `yaml:"-" json:"snapshot"`
+	Phases   []phase.Phase `yaml:"-" json:"phases"`
 
-	// Internal - not exportable
-	Phases []phase.Phase `yaml:"-" json:"phases"`
+	Flags       flags.Flags              `yaml:"flags" json:"flags" desc:"Flags (CLI and YAML)"`
+	Fleet       *fleet.Fleet             `yaml:"fleet,required" json:"fleet" validate:"required" desc:"Fleet configuration"`
+	ColorScheme *colorscheme.ColorScheme `yaml:"-" json:"-"`
 }
 
 type Snapshot struct {

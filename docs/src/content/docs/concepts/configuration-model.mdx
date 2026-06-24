@@ -39,6 +39,19 @@ fleet:
                   remote_path: /etc/ssl/cert.pem
 ```
 
+## Why Configurations Are Separate From Machines
+
+In NixOS, a `nixosConfiguration` defines a system: packages, services, filesystem layout.
+
+Traditional deployment tools assume a 1:1 mapping: one machine, one `nixosConfiguration`. Deploying 50 identical machines would require 50 `nixosConfiguration` entries and 50 builds, even though the systems are identical.
+
+Panix breaks this 1:1 mapping. Many machines can share a single `nixosConfiguration`, each receiving its hostname and network identity from DHCP. This has two compounding effects:
+
+- **Build deduplication**: One `nixosConfiguration` means one build, regardless of how many machines consume it. Deploying 50 identical machines costs 1 build, not 50.
+- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same configuration, since none of them need machine-specific NixOS config written first.
+
+The machine's role in Panix is purely operational: it holds the SSH connection, the target address, and the transfer and activation state. The configuration is the blueprint; the machine is where it lands.
+
 ## How Inheritance Works
 
 - **Tags**: Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through the hierarchy.
