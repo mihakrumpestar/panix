@@ -1,136 +1,139 @@
 
   ./internal/tui/buildlogs
 
-  Feature     │                      Ours
-  ────────────┼──────────────────────────
-  View_1x3x1  │        5.1 µs (939 B, 35)
-  View_1x3x4  │     27.0 µs (2.6 KB, 137)
-  View_2x16x4 │  307.0 µs (31.0 KB, 1447)
+  Feature     │                     Ours
+  ────────────┼─────────────────────────
+  Full_1x3x1  │       5.7 µs (608 B, 14)
+  Full_1x3x4  │     30.5 µs (1.9 KB, 26)
+  Full_2x16x4 │  306.4 µs (29.8 KB, 263)
+  View_1x3x1  │       3.6 µs (363 B, 11)
+  View_1x3x4  │      18.9 µs (386 B, 11)
+  View_2x16x4 │   221.6 µs (6.1 KB, 101)
 
   ./pkg/buffer
 
   Feature   │               Ours
   ──────────┼───────────────────
-  Line      │    170 ns (0 B, 0)
-  LineSmall │     17 ns (0 B, 0)
-  Lines     │ 452 ns (2.6 KB, 1)
+  Line      │    152 ns (0 B, 0)
+  LineSmall │     15 ns (0 B, 0)
+  Lines     │ 441 ns (2.6 KB, 1)
 
   ./pkg/tui/flow
 
   Feature                    │                 Ours
   ───────────────────────────┼─────────────────────
-  Render_4Phases             │       40 ns (0 B, 0)
-  Render_7Phases             │       53 ns (0 B, 0)
-  Render_7Phases_Selected    │       45 ns (0 B, 0)
+  Render_4Phases             │       39 ns (0 B, 0)
+  Render_7Phases             │       42 ns (0 B, 0)
+  Render_7Phases_Selected    │       41 ns (0 B, 0)
   Render_CacheHit            │       30 ns (0 B, 0)
-  Render_FullRebuild_7Phases │  12.3 µs (849 B, 29)
-  Render_FullRebuild_7Sel    │  12.6 µs (873 B, 30)
+  Render_FullRebuild_7Phases │  12.1 µs (673 B, 28)
+  Render_FullRebuild_7Sel    │  12.2 µs (697 B, 29)
 
   ./pkg/tui/style
 
-  Feature                       │             Ours │                Lipgloss +24.1×
+  Feature                       │             Ours │                Lipgloss +25.1×
   ──────────────────────────────┼──────────────────┼───────────────────────────────
-  Height_LongMultiLine          │   14 ns (0 B, 0) │                 14 ns (0 B, 0)
-  Height_MultiLine              │    5 ns (0 B, 0) │           5 ns (0 B, 0) −1.03×
-  Height_SingleLine             │    4 ns (0 B, 0) │           4 ns (0 B, 0) −1.09×
-  JoinHorizontal                │  193 ns (0 B, 0) │                              -
-  JoinHorizontal_MultiLine      │  2.6 µs (0 B, 0) │                              -
-  JoinHorizontal_Top_DiffHeight │  296 ns (0 B, 0) │      1.6 µs (456 B, 12) +5.40×
-  JoinHorizontal_Top_SameHeight │  184 ns (0 B, 0) │       831 ns (184 B, 7) +4.53×
-  JoinHorizontal_Top_WithANSI   │  260 ns (0 B, 0) │      1.9 µs (800 B, 12) +7.39×
-  JoinVertical                  │  155 ns (0 B, 0) │       1.3 µs (248 B, 6) +8.42×
-  RenderLine_Colored            │  57 ns (32 B, 1) │                              -
-  RenderLine_ColoredBold        │  64 ns (48 B, 1) │                              -
-  RenderLine_NoStyle            │   22 ns (0 B, 0) │                              -
-  Render_LongLine               │   29 ns (0 B, 0) │        5.1 µs (713 B, 9) +180×
-  Render_MultiLine              │   54 ns (0 B, 0) │      3.4 µs (681 B, 16) +63.3×
-  Render_SingleLine             │   25 ns (0 B, 0) │       2.0 µs (121 B, 8) +82.2×
-  Render_WithEmoji              │   25 ns (0 B, 0) │       2.3 µs (161 B, 8) +90.3×
-  Width_ASCII                   │    9 ns (0 B, 0) │         187 ns (0 B, 0) +20.1×
-  Width_CommandNumber           │    3 ns (0 B, 0) │          35 ns (0 B, 0) +10.2×
-  Width_Emoji                   │  286 ns (0 B, 0) │         405 ns (0 B, 0) +1.41×
-  Width_WithANSI                │   66 ns (0 B, 0) │         171 ns (0 B, 0) +2.60×
-  Wrap_LongParagraph            │  3.6 µs (0 B, 0) │   14.9 µs (4.1 KB, 497) +4.16×
-  Wrap_MultiLine                │  413 ns (0 B, 0) │      2.0 µs (705 B, 68) +4.84×
-  Wrap_ShortLine                │    8 ns (0 B, 0) │       908 ns (545 B, 30) +112×
-  Wrap_WithANSI                 │  616 ns (0 B, 0) │    3.4 µs (1.1 KB, 118) +5.51×
+  Height_LongMultiLine          │   12 ns (0 B, 0) │          12 ns (0 B, 0) −1.02×
+  Height_MultiLine              │    5 ns (0 B, 0) │           4 ns (0 B, 0) −1.09×
+  Height_SingleLine             │    4 ns (0 B, 0) │           4 ns (0 B, 0) −1.06×
+  JoinHorizontal                │  181 ns (0 B, 0) │                              -
+  JoinHorizontal_MultiLine      │  2.8 µs (0 B, 0) │                              -
+  JoinHorizontal_Top_DiffHeight │  268 ns (0 B, 0) │      1.5 µs (456 B, 12) +5.66×
+  JoinHorizontal_Top_SameHeight │  169 ns (0 B, 0) │       783 ns (184 B, 7) +4.63×
+  JoinHorizontal_Top_WithANSI   │  240 ns (0 B, 0) │      1.9 µs (800 B, 12) +7.91×
+  JoinVertical                  │  145 ns (0 B, 0) │       1.2 µs (248 B, 6) +8.56×
+  RenderLine_Colored            │  52 ns (32 B, 1) │                              -
+  RenderLine_ColoredBold        │  58 ns (48 B, 1) │                              -
+  RenderLine_NoStyle            │   21 ns (0 B, 0) │                              -
+  Render_LongLine               │   26 ns (0 B, 0) │        4.8 µs (713 B, 9) +189×
+  Render_MultiLine              │   47 ns (0 B, 0) │      3.2 µs (681 B, 16) +69.4×
+  Render_SingleLine             │   23 ns (0 B, 0) │       1.9 µs (121 B, 8) +83.8×
+  Render_WithEmoji              │   22 ns (0 B, 0) │       2.1 µs (161 B, 8) +95.5×
+  Width_ASCII                   │    8 ns (0 B, 0) │         168 ns (0 B, 0) +21.3×
+  Width_CommandNumber           │    3 ns (0 B, 0) │          31 ns (0 B, 0) +9.82×
+  Width_Emoji                   │  257 ns (0 B, 0) │         370 ns (0 B, 0) +1.44×
+  Width_WithANSI                │   60 ns (0 B, 0) │         182 ns (0 B, 0) +3.04×
+  Wrap_LongParagraph            │  3.2 µs (0 B, 0) │   15.3 µs (4.1 KB, 497) +4.79×
+  Wrap_MultiLine                │  375 ns (0 B, 0) │      1.9 µs (703 B, 68) +5.11×
+  Wrap_ShortLine                │    7 ns (0 B, 0) │       798 ns (545 B, 30) +112×
+  Wrap_WithANSI                 │  574 ns (0 B, 0) │    3.2 µs (1.1 KB, 118) +5.65×
 
   ./pkg/tui/table
 
-  Feature                │                   Ours │                   Lipgloss +191953×
+  Feature                │                   Ours │                   Lipgloss +191141×
   ───────────────────────┼────────────────────────┼────────────────────────────────────
-  Table_Large            │        1.2 µs (0 B, 0) │     4.0 ms (674.0 KB, 16844) +3316×
-  Table_Large_FreshRows  │  31.6 µs (3.6 KB, 197) │        8.0 ms (1.3 MB, 34893) +252×
-  Table_LongContent      │          2 ns (0 B, 0) │    200.2 µs (27.6 KB, 595) +112828×
-  Table_NoChange         │        1.3 µs (0 B, 0) │     4.0 ms (671.8 KB, 16844) +3172×
-  Table_SelectionChange  │  13.5 µs (2.8 KB, 143) │      4.0 ms (671.5 KB, 16844) +297×
-  Table_Small            │          2 ns (0 B, 0) │   355.9 µs (53.1 KB, 1126) +176897×
-  Table_WithColumnStyles │          2 ns (0 B, 0) │   2.1 ms (375.8 KB, 6331) +1046914×
+  Table_Large            │        1.1 µs (0 B, 0) │     3.8 ms (669.4 KB, 16844) +3384×
+  Table_Large_FreshRows  │  29.7 µs (3.6 KB, 197) │        8.0 ms (1.3 MB, 34893) +269×
+  Table_LongContent      │          2 ns (0 B, 0) │    185.3 µs (27.4 KB, 595) +116996×
+  Table_NoChange         │        1.1 µs (0 B, 0) │     3.9 ms (673.0 KB, 16844) +3498×
+  Table_SelectionChange  │  13.9 µs (2.8 KB, 143) │      3.8 ms (673.8 KB, 16844) +272×
+  Table_Small            │          2 ns (0 B, 0) │   329.4 µs (52.6 KB, 1126) +182062×
+  Table_WithColumnStyles │          2 ns (0 B, 0) │   1.9 ms (374.2 KB, 6331) +1031514×
 
   ./pkg/tui/tree
 
-  Feature        │              Ours │                 Lipgloss +408×
-  ───────────────┼───────────────────┼───────────────────────────────
-  TreeAllChange  │  12.9 µs (0 B, 0) │  2.7 ms (448.2 KB, 7410) +209×
-  TreeHalfChange │   8.9 µs (0 B, 0) │  2.7 ms (448.2 KB, 7410) +305×
-  TreeNoChange   │   3.8 µs (0 B, 0) │  2.7 ms (448.2 KB, 7410) +715×
+  Feature        │                     Ours │                  Lipgloss +308×
+  ───────────────┼──────────────────────────┼────────────────────────────────
+  TreeAllChange  │  37.4 µs (134.5 KB, 300) │  2.5 ms (448.2 KB, 7410) +67.9×
+  TreeHalfChange │   25.4 µs (67.2 KB, 150) │  2.5 ms (448.2 KB, 7410) +99.9×
+  TreeNoChange   │          3.3 µs (0 B, 0) │   2.5 ms (448.2 KB, 7410) +760×
 
   ./pkg/tui/viewport
 
-  Feature                         │                     Ours │                     Bubbles +2055× │                         Cview +9318×
+  Feature                         │                     Ours │                     Bubbles +2022× │                         Cview +9241×
   ────────────────────────────────┼──────────────────────────┼────────────────────────────────────┼─────────────────────────────────────
-  New                             │       454 ns (2.6 KB, 1) │         1.0 µs (3.4 KB, 17) +2.20× │             170 ns (656 B, 3) −2.67×
-  NewAndSetContentLines           │   19.9 µs (103.6 KB, 13) │         1.2 ms (3.4 KB, 17) +61.8× │        45.0 µs (242.6 KB, 18) +2.26×
-  SetContentLines                 │          7.7 µs (0 B, 0) │              1.2 ms (0 B, 0) +161× │        45.1 µs (242.0 KB, 15) +5.89×
-  SetContentLines_Append          │  333.8 µs (603.5 KB, 11) │                                  - │         3.3 µs (1.5 KB, 24) −102.54×
-  SetContentLines_Append_ThenView │    1.4 ms (808.9 KB, 12) │                                  - │        4.5 ms (3.1 MB, 41055) +3.27×
-  SetContentLines_FullReplace     │   68.5 µs (52.8 KB, 721) │                                  - │      205.3 µs (210.8 KB, 836) +3.00×
-  View                            │            2 ns (0 B, 0) │   158.5 µs (33.5 KB, 1934) +85772× │   708.2 µs (209.4 KB, 7514) +383244×
-  ViewANSI                        │            2 ns (0 B, 0) │   149.1 µs (33.7 KB, 1840) +85409× │   728.9 µs (217.9 KB, 7057) +417450×
-  ViewANSIScroll                  │           46 ns (0 B, 0) │    147.8 µs (33.0 KB, 1835) +3193× │    726.8 µs (215.3 KB, 7065) +15694×
-  ViewScroll                      │           42 ns (0 B, 0) │    162.3 µs (33.6 KB, 1934) +3848× │    690.5 µs (209.4 KB, 7514) +16378×
-  ViewScrollbar                   │          309 ns (0 B, 0) │                                  - │                                    -
-  ViewScrollbarSmall              │          112 ns (0 B, 0) │                                  - │                                    -
-  ViewSmall                       │            2 ns (0 B, 0) │     57.8 µs (12.0 KB, 663) +32401× │    229.4 µs (69.8 KB, 2504) +128662×
-  ViewSmallANSI                   │            2 ns (0 B, 0) │     53.4 µs (11.3 KB, 621) +29888× │    234.9 µs (71.3 KB, 2311) +131511×
-  ViewSmallANSIScroll             │           27 ns (0 B, 0) │      55.0 µs (11.6 KB, 621) +2041× │      235.6 µs (70.8 KB, 2329) +8740×
-  ViewSmallScroll                 │           25 ns (0 B, 0) │      58.7 µs (12.0 KB, 663) +2330× │      232.8 µs (69.8 KB, 2504) +9235×
+  New                             │       431 ns (2.6 KB, 1) │         945 ns (3.4 KB, 17) +2.19× │             156 ns (656 B, 3) −2.76×
+  NewAndSetContentLines           │   18.6 µs (103.6 KB, 13) │         1.1 ms (3.4 KB, 17) +59.8× │        41.0 µs (242.6 KB, 18) +2.20×
+  SetContentLines                 │          6.6 µs (0 B, 0) │              1.1 ms (0 B, 0) +169× │        40.4 µs (242.0 KB, 15) +6.12×
+  SetContentLines_Append          │  316.9 µs (603.5 KB, 11) │                                  - │         2.9 µs (1.5 KB, 24) −110.17×
+  SetContentLines_Append_ThenView │    1.3 ms (808.8 KB, 12) │                                  - │        4.6 ms (3.2 MB, 42901) +3.54×
+  SetContentLines_FullReplace     │   65.3 µs (52.8 KB, 721) │                                  - │      180.6 µs (210.8 KB, 836) +2.77×
+  View                            │            2 ns (0 B, 0) │   149.2 µs (33.3 KB, 1934) +94341× │   685.5 µs (209.4 KB, 7514) +433567×
+  ViewANSI                        │            2 ns (0 B, 0) │   149.2 µs (33.8 KB, 1840) +85327× │   710.5 µs (216.5 KB, 7057) +406486×
+  ViewANSIScroll                  │           41 ns (0 B, 0) │    141.1 µs (33.0 KB, 1836) +3476× │    702.2 µs (214.9 KB, 7065) +17296×
+  ViewScroll                      │           38 ns (0 B, 0) │    150.0 µs (33.5 KB, 1934) +3935× │    665.4 µs (209.4 KB, 7514) +17461×
+  ViewScrollbar                   │          275 ns (0 B, 0) │                                  - │                                    -
+  ViewScrollbarSmall              │          115 ns (0 B, 0) │                                  - │                                    -
+  ViewSmall                       │            2 ns (0 B, 0) │     53.9 µs (11.9 KB, 663) +34172× │    221.9 µs (69.8 KB, 2504) +140682×
+  ViewSmallANSI                   │            2 ns (0 B, 0) │     50.5 µs (11.2 KB, 621) +30815× │    225.8 µs (71.2 KB, 2311) +137838×
+  ViewSmallANSIScroll             │           24 ns (0 B, 0) │      50.4 µs (11.6 KB, 621) +2087× │      238.7 µs (70.7 KB, 2329) +9878×
+  ViewSmallScroll                 │           22 ns (0 B, 0) │      53.9 µs (11.9 KB, 663) +2399× │      222.7 µs (69.8 KB, 2504) +9915×
 
   ./pkg/tui/zeroterm
 
-  Feature                  │            Ours │                Bubbletea +1894×
+  Feature                  │            Ours │                Bubbletea +1874×
   ─────────────────────────┼─────────────────┼────────────────────────────────
-  RenderLinesFullChange    │ 124 ns (0 B, 0) │    8.2 µs (10.1 KB, 400) +66.1×
-  RenderLinesQuarterChange │ 107 ns (0 B, 0) │   453.3 µs (7.0 KB, 228) +4224×
-  RenderPipe               │ 150 ns (0 B, 0) │   766.0 µs (1.2 MB, 309) +5120×
-  RenderPipeNoChange       │ 114 ns (0 B, 0) │     4.3 µs (5.1 KB, 200) +37.5×
-  ZoneMark                 │ 788 ns (0 B, 0) │      20.5 µs (5.2 KB, 6) +26.0×
+  RenderLinesFullChange    │ 110 ns (0 B, 0) │    8.5 µs (10.1 KB, 400) +77.2×
+  RenderLinesQuarterChange │  94 ns (0 B, 0) │   402.1 µs (7.0 KB, 228) +4256×
+  RenderPipe               │ 134 ns (0 B, 0) │   668.2 µs (1.2 MB, 309) +4975×
+  RenderPipeNoChange       │  97 ns (0 B, 0) │     3.9 µs (5.1 KB, 200) +39.9×
+  ZoneMark                 │ 702 ns (0 B, 0) │      19.6 µs (5.2 KB, 6) +27.9×
 
   ./tests/bench/buffer
 
-  Feature                  │  PreAllocDiffRef │         BlobDiffRef +0.02× │  PooledPreAllocDiffRef +0.06× │      ByteSliceSlice +0.07× │     PooledByteSlice +0.11× │       ArenaResetRef +0.11× │       ContiguousRef +0.14× │  PooledContiguousRef +0.16× │      BitmaskDiffRef +0.19× │        DoubleBufRef +0.21× │  OptMutexRef_Unsafe +0.22× │         BytesBuffer +0.23× │      InlineShortRef +0.34× │  AtomicContiguousRef +0.52× │    OptMutexRef_Safe +0.52× │            StringSlice +2.21×
-  ─────────────────────────┼──────────────────┼────────────────────────────┼───────────────────────────────┼────────────────────────────┼────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────┼────────────────────────────┼────────────────────────────┼────────────────────────────┼────────────────────────────┼────────────────────────────┼─────────────────────────────┼────────────────────────────┼──────────────────────────────
-  DiffLines                │  476 ns (0 B, 0) │   608 ns (192 B, 2) +1.28× │        488 ns (0 B, 0) +1.03× │   520 ns (192 B, 2) +1.09× │   568 ns (192 B, 2) +1.19× │   579 ns (192 B, 2) +1.22× │   598 ns (192 B, 2) +1.26× │    593 ns (192 B, 2) +1.24× │   586 ns (192 B, 2) +1.23× │   582 ns (192 B, 2) +1.22× │   588 ns (192 B, 2) +1.24× │   602 ns (192 B, 2) +1.27× │   710 ns (192 B, 2) +1.49× │    602 ns (192 B, 2) +1.26× │   592 ns (192 B, 2) +1.24× │      533 ns (192 B, 2) +1.12×
-  MinimalDiffLines         │    8 ns (0 B, 0) │       6 ns (0 B, 0) −1.21× │          8 ns (0 B, 0) −1.01× │       7 ns (0 B, 0) −1.06× │       7 ns (0 B, 0) −1.06× │      10 ns (0 B, 0) +1.38× │      11 ns (0 B, 0) +1.41× │       11 ns (0 B, 0) +1.39× │      11 ns (0 B, 0) +1.43× │      11 ns (0 B, 0) +1.46× │      13 ns (0 B, 0) +1.66× │       8 ns (0 B, 0) +1.05× │       8 ns (0 B, 0) +1.09× │       17 ns (0 B, 0) +2.29× │      18 ns (0 B, 0) +2.36× │          7 ns (0 B, 0) −1.07×
-  MinimalOverrideLastLine  │    5 ns (0 B, 0) │       5 ns (0 B, 0) +1.03× │          6 ns (0 B, 0) +1.08× │       5 ns (0 B, 0) −1.02× │       5 ns (0 B, 0) −1.03× │              5 ns (0 B, 0) │              5 ns (0 B, 0) │        5 ns (0 B, 0) +1.01× │       5 ns (0 B, 0) +1.02× │       6 ns (0 B, 0) +1.14× │       6 ns (0 B, 0) +1.05× │       6 ns (0 B, 0) +1.16× │       5 ns (0 B, 0) −1.06× │        7 ns (0 B, 0) +1.29× │       7 ns (0 B, 0) +1.36× │        19 ns (24 B, 1) +3.69×
-  MinimalReset             │    6 ns (0 B, 0) │       6 ns (0 B, 0) +1.08× │          6 ns (0 B, 0) −1.01× │       7 ns (0 B, 0) +1.21× │       7 ns (0 B, 0) +1.21× │       6 ns (0 B, 0) −1.01× │              6 ns (0 B, 0) │               6 ns (0 B, 0) │       8 ns (0 B, 0) +1.37× │       7 ns (0 B, 0) +1.29× │       7 ns (0 B, 0) +1.25× │       8 ns (0 B, 0) +1.42× │      10 ns (0 B, 0) +1.71× │       10 ns (0 B, 0) +1.68× │      10 ns (0 B, 0) +1.66× │        23 ns (24 B, 1) +4.04×
-  MinimalWriteAndDiff      │   13 ns (0 B, 0) │      12 ns (0 B, 0) −1.07× │         13 ns (0 B, 0) −1.03× │      13 ns (0 B, 0) +1.01× │      14 ns (0 B, 0) +1.03× │      16 ns (0 B, 0) +1.23× │      17 ns (0 B, 0) +1.27× │       16 ns (0 B, 0) +1.20× │      18 ns (0 B, 0) +1.32× │      18 ns (0 B, 0) +1.33× │      19 ns (0 B, 0) +1.43× │      16 ns (0 B, 0) +1.19× │      17 ns (0 B, 0) +1.29× │       26 ns (0 B, 0) +1.99× │      28 ns (0 B, 0) +2.08× │        30 ns (24 B, 1) +2.27×
-  MinimalWriteLine         │    6 ns (0 B, 0) │              6 ns (0 B, 0) │          6 ns (0 B, 0) +1.02× │       7 ns (0 B, 0) +1.19× │       7 ns (0 B, 0) +1.17× │              6 ns (0 B, 0) │       6 ns (0 B, 0) +1.01× │        6 ns (0 B, 0) +1.02× │       8 ns (0 B, 0) +1.30× │       7 ns (0 B, 0) +1.20× │       8 ns (0 B, 0) +1.28× │       8 ns (0 B, 0) +1.37× │      10 ns (0 B, 0) +1.68× │       10 ns (0 B, 0) +1.63× │      10 ns (0 B, 0) +1.65× │        24 ns (24 B, 1) +3.97×
-  MinimalWriteOverrideDiff │   18 ns (0 B, 0) │      16 ns (0 B, 0) −1.07× │         18 ns (0 B, 0) +1.01× │      18 ns (0 B, 0) +1.04× │      18 ns (0 B, 0) +1.04× │      21 ns (0 B, 0) +1.19× │      21 ns (0 B, 0) +1.18× │       21 ns (0 B, 0) +1.17× │      24 ns (0 B, 0) +1.39× │      23 ns (0 B, 0) +1.29× │      24 ns (0 B, 0) +1.35× │      21 ns (0 B, 0) +1.21× │      20 ns (0 B, 0) +1.16× │       33 ns (0 B, 0) +1.87× │      33 ns (0 B, 0) +1.87× │        49 ns (48 B, 2) +2.80×
-  OverrideLastLine         │    8 ns (0 B, 0) │       8 ns (0 B, 0) +1.02× │          8 ns (0 B, 0) +1.06× │       8 ns (0 B, 0) +1.02× │       8 ns (0 B, 0) +1.06× │       8 ns (0 B, 0) +1.04× │       8 ns (0 B, 0) +1.05× │        9 ns (0 B, 0) +1.08× │       8 ns (0 B, 0) +1.02× │       9 ns (0 B, 0) +1.08× │       8 ns (0 B, 0) +1.03× │       9 ns (0 B, 0) +1.17× │       9 ns (0 B, 0) +1.10× │       10 ns (0 B, 0) +1.21× │      10 ns (0 B, 0) +1.23× │       39 ns (176 B, 1) +4.93×
-  Reset                    │  771 ns (0 B, 0) │     803 ns (0 B, 0) +1.04× │        837 ns (0 B, 0) +1.08× │     824 ns (0 B, 0) +1.07× │     941 ns (0 B, 0) +1.22× │     777 ns (0 B, 0) +1.01× │     920 ns (0 B, 0) +1.19× │      802 ns (0 B, 0) +1.04× │     783 ns (0 B, 0) +1.02× │     861 ns (0 B, 0) +1.12× │     760 ns (0 B, 0) −1.01× │     947 ns (0 B, 0) +1.23× │     1.1 µs (0 B, 0) +1.40× │      921 ns (0 B, 0) +1.19× │     882 ns (0 B, 0) +1.14× │   3.2 µs (14.1 KB, 80) +4.20×
-  WriteAndDiff             │  1.3 µs (0 B, 0) │   1.4 µs (192 B, 2) +1.11× │        1.3 µs (0 B, 0) +1.01× │   1.4 µs (192 B, 2) +1.07× │   1.6 µs (192 B, 2) +1.22× │   1.4 µs (192 B, 2) +1.10× │   1.5 µs (192 B, 2) +1.13× │    1.4 µs (192 B, 2) +1.09× │   1.4 µs (192 B, 2) +1.07× │   1.4 µs (192 B, 2) +1.11× │   1.4 µs (192 B, 2) +1.06× │   1.6 µs (192 B, 2) +1.24× │   1.7 µs (192 B, 2) +1.34× │    1.6 µs (192 B, 2) +1.25× │   1.5 µs (192 B, 2) +1.16× │   4.1 µs (14.3 KB, 82) +3.23×
-  WriteLine                │  730 ns (0 B, 0) │            731 ns (0 B, 0) │        1.0 µs (0 B, 0) +1.41× │     820 ns (0 B, 0) +1.12× │     848 ns (0 B, 0) +1.16× │     734 ns (0 B, 0) +1.01× │     738 ns (0 B, 0) +1.01× │      1.0 µs (0 B, 0) +1.41× │     743 ns (0 B, 0) +1.02× │     815 ns (0 B, 0) +1.12× │     752 ns (0 B, 0) +1.03× │     903 ns (0 B, 0) +1.24× │     1.2 µs (0 B, 0) +1.60× │      820 ns (0 B, 0) +1.12× │     824 ns (0 B, 0) +1.13× │   3.2 µs (14.1 KB, 80) +4.40×
-  WriteOverrideDiff        │  1.3 µs (0 B, 0) │   1.4 µs (192 B, 2) +1.09× │        1.3 µs (0 B, 0) +1.05× │   1.4 µs (192 B, 2) +1.09× │   1.4 µs (192 B, 2) +1.11× │   1.4 µs (192 B, 2) +1.10× │   1.4 µs (192 B, 2) +1.09× │    1.5 µs (192 B, 2) +1.17× │   1.4 µs (192 B, 2) +1.08× │   1.4 µs (192 B, 2) +1.11× │   1.6 µs (192 B, 2) +1.24× │   1.6 µs (192 B, 2) +1.24× │   1.7 µs (192 B, 2) +1.35× │    1.5 µs (192 B, 2) +1.19× │   1.5 µs (192 B, 2) +1.16× │   4.4 µs (14.5 KB, 83) +3.41×
+  Feature                  │        BlobDiffRef │      PooledPreAllocDiffRef │     PreAllocDiffRef +0.02× │        ByteSliceSlice +0.06× │         ArenaResetRef +0.10× │         ContiguousRef +0.13× │   PooledContiguousRef +0.18× │    OptMutexRef_Unsafe +0.21× │        BitmaskDiffRef +0.21× │          DoubleBufRef +0.21× │          BytesBuffer +0.24× │       PooledByteSlice +0.30× │      InlineShortRef +0.35× │  AtomicContiguousRef +0.51× │    OptMutexRef_Safe +0.56× │            StringSlice +2.18×
+  ─────────────────────────┼────────────────────┼────────────────────────────┼────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼──────────────────────────────┼─────────────────────────────┼──────────────────────────────┼────────────────────────────┼─────────────────────────────┼────────────────────────────┼──────────────────────────────
+  DiffLines                │  559 ns (192 B, 2) │     446 ns (0 B, 0) −1.25× │     436 ns (0 B, 0) −1.28× │     532 ns (192 B, 2) −1.05× │     542 ns (192 B, 2) −1.03× │     544 ns (192 B, 2) −1.03× │    863 ns (1.9 KB, 5) +1.54× │     542 ns (192 B, 2) −1.03× │     530 ns (192 B, 2) −1.05× │     546 ns (192 B, 2) −1.02× │    553 ns (192 B, 2) −1.01× │     478 ns (192 B, 2) −1.17× │   588 ns (192 B, 2) +1.05× │    554 ns (192 B, 2) −1.01× │   608 ns (192 B, 2) +1.09× │      477 ns (192 B, 2) −1.17×
+  MinimalDiffLines         │      6 ns (0 B, 0) │       7 ns (0 B, 0) +1.20× │       7 ns (0 B, 0) +1.18× │         7 ns (0 B, 0) +1.14× │        10 ns (0 B, 0) +1.69× │        10 ns (0 B, 0) +1.73× │        10 ns (0 B, 0) +1.68× │        11 ns (0 B, 0) +1.93× │        10 ns (0 B, 0) +1.69× │        10 ns (0 B, 0) +1.79× │        7 ns (0 B, 0) +1.26× │        22 ns (8 B, 1) +3.76× │       8 ns (0 B, 0) +1.34× │       18 ns (0 B, 0) +3.06× │      17 ns (0 B, 0) +2.92× │          6 ns (0 B, 0) +1.11×
+  MinimalOverrideLastLine  │      5 ns (0 B, 0) │              5 ns (0 B, 0) │       5 ns (0 B, 0) −1.01× │         5 ns (0 B, 0) −1.06× │         5 ns (0 B, 0) +1.01× │                5 ns (0 B, 0) │                5 ns (0 B, 0) │         5 ns (0 B, 0) +1.04× │                5 ns (0 B, 0) │         5 ns (0 B, 0) +1.10× │        5 ns (0 B, 0) +1.14× │         5 ns (0 B, 0) −1.01× │       4 ns (0 B, 0) −1.14× │        6 ns (0 B, 0) +1.29× │       7 ns (0 B, 0) +1.36× │        20 ns (24 B, 1) +4.08×
+  MinimalReset             │      5 ns (0 B, 0) │              5 ns (0 B, 0) │              5 ns (0 B, 0) │         6 ns (0 B, 0) +1.17× │         6 ns (0 B, 0) +1.07× │                5 ns (0 B, 0) │         5 ns (0 B, 0) +1.01× │         7 ns (0 B, 0) +1.26× │         7 ns (0 B, 0) +1.34× │         8 ns (0 B, 0) +1.46× │        8 ns (0 B, 0) +1.54× │         6 ns (0 B, 0) +1.18× │      10 ns (0 B, 0) +1.84× │        9 ns (0 B, 0) +1.67× │       9 ns (0 B, 0) +1.69× │        22 ns (24 B, 1) +4.26×
+  MinimalWriteAndDiff      │     11 ns (0 B, 0) │      12 ns (0 B, 0) +1.09× │      13 ns (0 B, 0) +1.20× │        12 ns (0 B, 0) +1.16× │        15 ns (0 B, 0) +1.37× │        15 ns (0 B, 0) +1.38× │        15 ns (0 B, 0) +1.37× │        18 ns (0 B, 0) +1.67× │        16 ns (0 B, 0) +1.51× │        16 ns (0 B, 0) +1.52× │       14 ns (0 B, 0) +1.34× │        12 ns (0 B, 0) +1.16× │      16 ns (0 B, 0) +1.50× │       24 ns (0 B, 0) +2.29× │      28 ns (0 B, 0) +2.65× │        28 ns (24 B, 1) +2.68×
+  MinimalWriteLine         │      5 ns (0 B, 0) │       6 ns (0 B, 0) +1.14× │              5 ns (0 B, 0) │         7 ns (0 B, 0) +1.20× │                5 ns (0 B, 0) │         6 ns (0 B, 0) +1.10× │         6 ns (0 B, 0) +1.15× │         7 ns (0 B, 0) +1.26× │         7 ns (0 B, 0) +1.38× │         7 ns (0 B, 0) +1.21× │        7 ns (0 B, 0) +1.38× │         7 ns (0 B, 0) +1.21× │      10 ns (0 B, 0) +1.81× │        9 ns (0 B, 0) +1.62× │       9 ns (0 B, 0) +1.66× │        26 ns (24 B, 1) +4.78×
+  MinimalWriteOverrideDiff │     15 ns (0 B, 0) │      16 ns (0 B, 0) +1.07× │      16 ns (0 B, 0) +1.07× │        16 ns (0 B, 0) +1.10× │        19 ns (0 B, 0) +1.28× │        19 ns (0 B, 0) +1.27× │        19 ns (0 B, 0) +1.26× │        22 ns (0 B, 0) +1.45× │        20 ns (0 B, 0) +1.37× │        21 ns (0 B, 0) +1.39× │       19 ns (0 B, 0) +1.28× │        16 ns (0 B, 0) +1.10× │      20 ns (0 B, 0) +1.32× │       30 ns (0 B, 0) +2.00× │      30 ns (0 B, 0) +2.02× │        45 ns (48 B, 2) +3.01×
+  OverrideLastLine         │      7 ns (0 B, 0) │       8 ns (0 B, 0) +1.07× │              7 ns (0 B, 0) │                7 ns (0 B, 0) │         7 ns (0 B, 0) +1.01× │         9 ns (0 B, 0) +1.18× │         7 ns (0 B, 0) +1.02× │         8 ns (0 B, 0) +1.04× │         7 ns (0 B, 0) +1.03× │         8 ns (0 B, 0) +1.07× │        9 ns (0 B, 0) +1.18× │                7 ns (0 B, 0) │       8 ns (0 B, 0) +1.09× │        9 ns (0 B, 0) +1.21× │       9 ns (0 B, 0) +1.24× │       34 ns (176 B, 1) +4.63×
+  Reset                    │    702 ns (0 B, 0) │            704 ns (0 B, 0) │     727 ns (0 B, 0) +1.03× │       747 ns (0 B, 0) +1.06× │              701 ns (0 B, 0) │       708 ns (0 B, 0) +1.01× │       777 ns (0 B, 0) +1.11× │       804 ns (0 B, 0) +1.15× │       752 ns (0 B, 0) +1.07× │       764 ns (0 B, 0) +1.09× │      917 ns (0 B, 0) +1.31× │       943 ns (0 B, 0) +1.34× │     1.0 µs (0 B, 0) +1.44× │      807 ns (0 B, 0) +1.15× │     816 ns (0 B, 0) +1.16× │   2.8 µs (14.1 KB, 80) +4.00×
+  WriteAndDiff             │  1.3 µs (192 B, 2) │     1.2 µs (0 B, 0) −1.12× │     1.2 µs (0 B, 0) −1.10× │            1.3 µs (192 B, 2) │     1.3 µs (192 B, 2) −1.01× │     1.3 µs (192 B, 2) +1.01× │     1.3 µs (192 B, 2) +1.01× │     1.2 µs (192 B, 2) −1.03× │     1.3 µs (192 B, 2) −1.02× │     1.3 µs (192 B, 2) +1.01× │    1.6 µs (192 B, 2) +1.25× │     1.6 µs (192 B, 2) +1.26× │   1.5 µs (192 B, 2) +1.17× │    1.4 µs (192 B, 2) +1.07× │   1.4 µs (192 B, 2) +1.07× │   3.6 µs (14.3 KB, 82) +2.77×
+  WriteLine                │    666 ns (0 B, 0) │     708 ns (0 B, 0) +1.06× │     900 ns (0 B, 0) +1.35× │       756 ns (0 B, 0) +1.13× │       657 ns (0 B, 0) −1.01× │       702 ns (0 B, 0) +1.05× │       656 ns (0 B, 0) −1.02× │       679 ns (0 B, 0) +1.02× │       974 ns (0 B, 0) +1.46× │       721 ns (0 B, 0) +1.08× │      825 ns (0 B, 0) +1.24× │       733 ns (0 B, 0) +1.10× │     1.0 µs (0 B, 0) +1.56× │      756 ns (0 B, 0) +1.13× │     742 ns (0 B, 0) +1.11× │   2.8 µs (14.1 KB, 80) +4.18×
+  WriteOverrideDiff        │  1.4 µs (192 B, 2) │     1.2 µs (0 B, 0) −1.21× │     1.2 µs (0 B, 0) −1.19× │     1.4 µs (192 B, 2) −1.03× │     1.4 µs (192 B, 2) −1.04× │     1.3 µs (192 B, 2) −1.05× │     1.3 µs (192 B, 2) −1.04× │     1.3 µs (192 B, 2) −1.10× │     1.3 µs (192 B, 2) −1.08× │     1.4 µs (192 B, 2) −1.02× │    1.5 µs (192 B, 2) +1.09× │     1.3 µs (192 B, 2) −1.11× │   1.9 µs (192 B, 2) +1.37× │           1.4 µs (192 B, 2) │   1.5 µs (192 B, 2) +1.04× │   3.5 µs (14.5 KB, 83) +2.47×
 
   ./tests/bench/tui
 
-  Feature                     │             Ours │                   Bubbletea +237× │                     Cview +561×
+  Feature                     │             Ours │                   Bubbletea +262× │                     Cview +605×
   ────────────────────────────┼──────────────────┼───────────────────────────────────┼────────────────────────────────
-  Pipeline_EveryFrameUpdate   │  9.7 µs (0 B, 0) │     1.6 ms (206.4 KB, 5475) +166× │    2.5 ms (1.1 MB, 27882) +260×
-  Pipeline_NoChange           │  2.8 µs (0 B, 0) │   797.9 µs (190.0 KB, 4781) +282× │  2.2 ms (854.5 KB, 22534) +761×
-  Pipeline_QuarterFrameUpdate │  2.9 µs (0 B, 0) │   764.4 µs (184.1 KB, 4133) +266× │  1.9 ms (820.7 KB, 20466) +665×
+  Pipeline_EveryFrameUpdate   │  8.7 µs (0 B, 0) │     1.9 ms (206.3 KB, 5476) +215× │    2.4 ms (1.1 MB, 27891) +279×
+  Pipeline_NoChange           │  2.5 µs (0 B, 0) │   749.2 µs (189.3 KB, 4781) +297× │  2.1 ms (854.4 KB, 22533) +823×
+  Pipeline_QuarterFrameUpdate │  2.6 µs (0 B, 0) │   715.6 µs (183.5 KB, 4133) +276× │  1.9 ms (819.9 KB, 20464) +715×
 
   goos: linux  goarch: amd64  cpu: AMD Ryzen 9 5900HX with Radeon Graphics
   benchtime: 1s
-  ran: 2026-06-17 08:26:18
+  ran: 2026-06-24 08:40:08

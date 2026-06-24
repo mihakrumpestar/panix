@@ -1,18 +1,23 @@
 ---
 title: Optimization Roadmap
-description: "The journey from 17.8 GB allocations to 76 MB: how Panix achieved 97% CPU reduction and 99.6% memory reduction."
+description: "The journey from 17.6 GB allocations to 44 MB: how Panix achieved 97% CPU reduction and 99% memory reduction across four optimization phases."
 sidebar:
   order: 2
 ---
 
-This article walks through the performance optimization journey of Panix. What started as investigating slow TUI rendering turned into a four-month deep dive that reduced CPU usage by 97% and memory allocations by 99.6%.
+This article walks through the performance optimization journey of Panix. What started as investigating slow TUI rendering turned into a four-month deep dive that reduced CPU usage by 97% and memory allocations by 99%.
 
 ## Final Results
 
-| Metric | Baseline (5646a10) | Intermediate (2988f71) | Final (20b5a7a) | Improvement |
-|---|---|---|---|---|
-| **Total CPU** | 49.67s (53.6%) | 9.81s (10.8%) | 1.50s (1.7%) | **-48.17s (-97.0%)** |
-| **Total alloc** | 17,885.14 MB | 4,470.30 MB | 76.87 MB | **-17,808.27 MB (-99.6%)** |
+Benchmarks run 5 times per commit, values are mean ± std.
+
+| Metric | Phase 1: Basic Caching (5646a10) | Phase 2: Optimized Bubble Tea (2988f71) | Phase 3: Initial zeroterm (e2b5802) | Phase 4: Final (808a739) | Improvement |
+|---|---|---|---|---|---|
+| **Duration** | 93.81 ± 3.99s | 91.45 ± 1.67s | 90.86 ± 2.55s | 89.76 ± 2.08s | **-4.3%** |
+| **CPU Samples** | 51.94 ± 4.52s | 10.15 ± 0.21s | 2.36 ± 0.17s | 1.42 ± 0.09s | **-97.3%** |
+| **CPU Utilization** | 55.29 ± 2.65% | 11.10 ± 0.27% | 2.59 ± 0.13% | 1.58 ± 0.07% | **-97.1%** |
+| **Total Alloc** | 17,649.10 ± 969.73 MB | 4,388.47 ± 76.51 MB | 432.80 ± 17.84 MB | 44.23 ± 4.87 MB | **-99.7%** |
+| **Total Alloc (objects)** | 34,584,210 ± 1,660,990 | 4,072,698 ± 523,252 | 2,829,148 ± 168,550 | 273,916 ± 49,438 | **-99.2%** |
 
 *Benchmarks run on e2e deploy test with real Nix builds (see [testing page](/project/testing)). Parentheses contain commit hashes, commits may be referenced only in a PR.*
 
@@ -28,9 +33,15 @@ cpu: AMD Ryzen 9 5900HX with Radeon Graphics
 Benchmarks apply for all the changes accounted in that phase description.
 :::
 
-## Phase 1: Baseline
+## The beginning (naive approach)
 
-We had a working TUI built on [Bubbletea](https://github.com/charmbracelet/bubbletea), but profiling showed that the renderer was doing far too much work. Every frame, every component: stats table, footer, viewports, phase status, build logs, was re-rendered from scratch, even when nothing had changed. It was fine at first, but with the introduction of e2e tests it became obvious that Panix's single thread was maxing out and making the TUI unresponsive.
+We had a working TUI built on [Bubble Tea](https://github.com/charmbracelet/bubbletea). It was fine at first, but with the introduction of e2e tests it became obvious that Panix's single thread was maxing out and making the TUI unresponsive.
+
+It was obvious, that the renderer was doing far too much work. Every frame, every component: stats table, footer, viewports, phase status, build logs, was re-rendered from scratch, even when nothing had changed.
+
+---
+
+## Phase 1: Basic Caching
 
 The initial solution was hash-based caching: compute an FNV hash of each component's content, skip the render when the hash matches the previous frame. The stats table alone saw a **96.7% CPU reduction**. Then we applied the same pattern to the footer, viewports, phase status, and build logs. The trade-off was minor: animated spinners in the stats table had to go, since they require constant re-rendering by definition.
 
@@ -38,29 +49,33 @@ The key insight from this phase was simple: the app was spending over 90% of its
 
 ---
 
-## Phase 2: Intermediate
+## Phase 2: Optimized Bubble Tea Components
 
-The previous phase showed the potential of caching, but it was clear that building around existing TUI frameworks would largely solve the performance problem, but never eliminate it. So the major change was building a custom TUI rendering engine from scratch (PR #2). This was the single most impactful decision in the entire optimization effort.
+With caching in place, the next target was the components themselves. The viewport got improved cache hits by tracking whether only appended content changed. The tree renderer was rebuilt with node reuse based on xpath. A custom `tui.style` package replaced Bubble Tea's string-heavy styling with pre-rendered ANSI sequences. Benchmarks were added for all TUI packages to measure progress.
 
-`zeroterm` was built because Bubbletea, despite being an excellent framework, re-renders entire views every frame with no built-in support for incremental rendering and using `string`s as an intermediate in all operations. Bubbletea has to split, combine, append or cut strings at almost every step, making it a heavy burden on the Go garbage collector. For a deployment tool that monitors dozens of machines simultaneously and updates in real time, this meant the renderer was doing O(n) work every frame even when only a single line changed.
-
-The result is a rendering engine that's **166x faster** when updating every frame, **282x faster** when nothing changed, and **266x faster** for partial updates, compared to Bubbletea. See [Custom TUI Engine](/internals/tui-engine) for architecture details and benchmarks.
+These were meaningful improvements, but they were optimizations on top of a framework that re-renders entire views every frame. CPU dropped to 11% and allocations to 4.4 GB, but it was clear that the framework itself was the ceiling.
 
 ---
 
-## Phase 3: Final
+## Phase 3: Initial zeroterm
 
-With the architecture in place, the final phase was about squeezing out the remaining allocations and CPU cycles from less optimized parts of the codebase.
+The major change was building a custom TUI rendering engine from scratch ([PR #2](https://github.com/mihakrumpestar/panix/pull/2)). This was the single most impactful decision in the entire optimization effort.
 
-Those were:
+`zeroterm` was built because Bubble Tea, despite being an excellent framework, re-renders entire views every frame with no built-in support for incremental rendering and using `string`s as an intermediate in all operations. Bubble Tea has to split, combine, append or cut strings at almost every step, making it a heavy burden on the Go garbage collector. For a deployment tool that monitors dozens of machines simultaneously and updates in real time, this meant the renderer was doing O(n) work every frame even when only a single line changed.
 
-- Viewport optimizations (the scrollable content padded buffer and horizontal border cache).
-- The tree renderer was rebuilt as a retained-mode component with node reuse based on xpath.
-- XPath pre-computation and caching eliminated expensive string building from the hot path.
-- Zero-allocation iteration replaced `Pairs()` with `ForEach()`, so that it no longer allocated pair slice on every call.
-- Rate-limiting label update rate was a subtler fix (build log labels were updating at the full render rate (60fps) even though they only change with spinner state (8fps)).
+The entire `pkg/tui/` and `pkg/buffer/` packages were built from scratch: a contiguous line buffer (`LinesBuf`) for zero-copy line access, double-buffered frame diffing via `bytes.Equal` for zero-allocation change detection, pooled buffers via `sync.Pool`, pre-rendered ANSI prefixes and padding, and retained-mode components with incremental caching. CPU dropped from 11% to 2.6%, and allocations fell from 4.4 GB to 433 MB.
 
-Before these, the initial intermediate components and logic were already enumerated multiple times.
+The result is a rendering engine that's **215x faster** when updating every frame, **297x faster** when nothing changed, and **276x faster** for partial updates, compared to Bubble Tea. See [Custom TUI Engine](/internals/tui-engine) for architecture details and benchmarks.
+
+---
+
+## Phase 4: Final
+
+With the zeroterm architecture in place, the final phase was about rewriting the components built on top of it to fully leverage zero-allocation patterns.
+
+[PR #7](https://github.com/mihakrumpestar/panix/pull/7) rewrote the viewport (scrollable content buffer, horizontal border cache), rebuilt the tree renderer, and optimized the style system. [PR #9](https://github.com/mihakrumpestar/panix/pull/9) rewrote build_logs to use the contiguous buffer directly, added a `stringbyte` package for zero-allocation string/byte conversions, optimized `atomicslice`, and improved xpath caching. The stats table and phase flow components were also reworked to minimize per-frame allocations.
+
+These changes brought allocations from 433 MB down to 44 MB and CPU to 1.6%.
 
 ---
 
@@ -68,6 +83,6 @@ Before these, the initial intermediate components and logic were already enumera
 
 - **Measure before you optimize.** Without building a benchmark, we would have been guessing. Several times, an "optimization" turned out to make things worse, and the benchmarks caught it immediately.
 - **Caching is the biggest lever.** Most TUI components don't change between frames, and detecting that is cheap.
-- **Allocations compound.** No single allocation was the problem. But when every component allocates on every frame, and you're rendering 60 times per second with dozens of log outputs, it adds up to gigabytes. Eliminating allocations one type at a time: pooled buffers, callback iteration, pre-computed values, eventually brought total allocations from 17.8 GB down to 76 MB.
-- **Sometimes you need to build your own.** Bubbletea is a good framework (altho is still lacking certain features like other frameworks (like build-in scrollbars)), but it wasn't designed for the kind of high-frequency, incremental rendering that Panix needed. Building a custom engine was a significant investment, but more than 100x performance improvement justified it.
-- **Cache invalidation is hard.**
+- **Allocations compound.** No single allocation was the problem. But when every component allocates on every frame, and you're rendering 60 times per second with dozens of log outputs, it adds up to gigabytes. Eliminating allocations one type at a time: pooled buffers, callback iteration, pre-computed values, eventually brought total allocations from 17.6 GB down to 44 MB.
+- **Sometimes you need to build your own.** Bubble Tea is a good framework (altho is still lacking certain features like other frameworks (like build-in scrollbars)), but it wasn't designed for the kind of high-frequency, incremental rendering that Panix needed. Building a custom engine was a significant investment, but more than 200x performance improvement justified it.
+- **Cache invalidation is hard.** One mistake, and cache won't work, or may produce visual artifacts due to being stale or improperly reused.

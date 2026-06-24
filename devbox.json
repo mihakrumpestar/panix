@@ -22,6 +22,11 @@
     "cdrkit@latest", // For genisoimage
     "bun@latest",
     "harmonia@latest",
+    // For benchmark graphing
+    "python313",
+    "python313Packages.matplotlib",
+    "python313Packages.numpy",
+    "python313Packages.pandas",
   ],
   "env": {
     "DEVBOX_NO_PROMPT": "true",
