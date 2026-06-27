@@ -80,6 +80,7 @@ type Tui struct {
 	ShowActiveOnly         bool `yaml:"show_active_only" json:"show_active_only,omitempty" help:"Show only running or errored logs in TUI build logs (keybind a)"`
 	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" json:"show_commands_in_labels,omitempty" help:"Show raw commands instead of descriptions as labels in build logs (keybind c)"`
 	CommandOutputMaxHeight int  `yaml:"command_output_max_height" json:"command_output_max_height" help:"Maximum height for command labels and outputs viewports in TUI" default:"8"`
+	CommandOutputMaxLines  uint64 `yaml:"command_output_max_lines" json:"command_output_max_lines" help:"Maximum output lines to keep per command in TUI (older lines are trimmed from the front in batches)" default:"10000"`
 }
 
 type Snapshot struct {

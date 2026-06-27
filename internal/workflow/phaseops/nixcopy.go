@@ -40,6 +40,7 @@ func CopyClosure(
 		executioner.SkipIfLocal(),
 		executioner.DisableAutoSSHCommand(),
 		executioner.Env(sshOpts),
+		executioner.Trim(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "transfer failed")

@@ -23,8 +23,10 @@ func (pLog *PhaseLog) NewCommand(
 	phaseXpath xpath.Xpath,
 	description, statusIfRunning, statusIfFailed string,
 	commandToRun, env []string,
+	maxOutputLines uint64,
 ) *command.CommandLog {
 	commandLog := command.NewCommandLog(phaseXpath, description, statusIfRunning, statusIfFailed, commandToRun, env)
+	commandLog.Output.SetMaxLines(maxOutputLines)
 	pLog.CommandLogs.Append(commandLog)
 
 	return commandLog

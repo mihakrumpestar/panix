@@ -17,6 +17,14 @@ const (
 type LinesBuf struct {
 	buf     []byte
 	indexes []int
+
+	// lineOffset is the cumulative count of lines trimmed from the front.
+	// Carried through snapshots for viewport cache invalidation.
+	lineOffset uint64
+
+	// maxLines is the trim threshold (0 = unlimited).
+	// Configuration: preserved by Reset, not copied by CopyFrom, zeroed by Release.
+	maxLines uint64
 }
 
 var linesBufPool = sync.Pool{
@@ -45,6 +53,8 @@ func NewLinesBuf(size ...int) *LinesBuf {
 func (b *LinesBuf) Reset() {
 	b.buf = b.buf[:0]
 	b.indexes = b.indexes[:0]
+	b.lineOffset = 0
+	// maxLines is configuration, not content; preserved across Reset.
 }
 
 // Grow ensures capacity for at least lineCount lines totaling at least
@@ -62,6 +72,7 @@ func (b *LinesBuf) Grow(lineCount, byteCount int) {
 
 func (b *LinesBuf) Release() {
 	b.Reset()
+	b.maxLines = 0
 	linesBufPool.Put(b)
 }
 
@@ -152,6 +163,45 @@ func (b *LinesBuf) RemoveLastLine() {
 	startIdx := b.indexes[len(b.indexes)-1]
 	b.buf = b.buf[:startIdx]
 	b.indexes = b.indexes[:len(b.indexes)-1]
+}
+
+// TrimFront removes the first count lines and increments lineOffset.
+// No-op if count <= 0. Clears the buffer if count >= Len().
+func (b *LinesBuf) TrimFront(count int) {
+	if count <= 0 || len(b.indexes) == 0 {
+		return
+	}
+
+	b.lineOffset += uint64(count)
+
+	if count >= len(b.indexes) {
+		b.buf = b.buf[:0]
+		b.indexes = b.indexes[:0]
+
+		return
+	}
+
+	cutOffset := b.indexes[count]
+
+	copy(b.buf, b.buf[cutOffset:])
+	b.buf = b.buf[:len(b.buf)-cutOffset]
+
+	remaining := len(b.indexes) - count
+	for i := range remaining {
+		b.indexes[i] = b.indexes[count+i] - cutOffset
+	}
+
+	b.indexes = b.indexes[:remaining]
+}
+
+// LineOffset returns the cumulative count of lines trimmed from the front.
+func (b *LinesBuf) LineOffset() uint64 {
+	return b.lineOffset
+}
+
+// MaxLines returns the trim threshold (0 = unlimited).
+func (b *LinesBuf) MaxLines() uint64 {
+	return b.maxLines
 }
 
 // LastLine returns the content of the last line, or nil if empty.
@@ -274,9 +324,11 @@ func (b *LinesBuf) WritePaddedView(data []byte, offsets []int, start, end int) {
 }
 
 // CopyFrom copies all data from src into b, reusing b's capacity when possible.
+// Copies lineOffset but not maxLines (configuration).
 func (b *LinesBuf) CopyFrom(src *LinesBuf) {
 	b.buf = append(b.buf[:0], src.buf...)
 	b.indexes = append(b.indexes[:0], src.indexes...)
+	b.lineOffset = src.lineOffset
 }
 
 // AppendInt appends the decimal representation of val to buf and returns the

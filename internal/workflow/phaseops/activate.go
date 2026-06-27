@@ -13,6 +13,7 @@ func SetSystemProfile(exc *executioner.Executioner, machine *machine.Machine, cl
 		"setting system profile",
 		"failed to set system profile",
 		append(machine.MaybeSudo(), "nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", closurePath),
+		executioner.Trim(),
 	)
 
 	return errors.Wrap(err, "failed to set system profile")
@@ -26,6 +27,7 @@ func ActivateConfiguration(exc *executioner.Executioner, machine *machine.Machin
 		"activating configuration",
 		"activation failed",
 		append(machine.MaybeSudo(), binPath, string(mode)),
+		executioner.Trim(),
 	)
 
 	return errors.Wrap(err, "failed to activate configuration")

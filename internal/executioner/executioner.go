@@ -22,14 +22,15 @@ type Executioner struct {
 }
 
 type ExecutionerConf struct {
-	Ctx          context.Context
-	Timeout      time.Duration
-	DryRun       bool
-	Xpath        xpath.Xpath
-	Machine      *machine.Machine
-	Phase        phase.Phase
-	PhaseLog     *log_sphase.PhaseLog
-	OnUpdateHook func()
+	Ctx            context.Context
+	Timeout        time.Duration
+	DryRun         bool
+	Xpath          xpath.Xpath
+	Machine        *machine.Machine
+	Phase          phase.Phase
+	PhaseLog       *log_sphase.PhaseLog
+	OnUpdateHook   func()
+	MaxOutputLines uint64
 }
 
 func NewExecutioner(conf ExecutionerConf) *Executioner {
@@ -44,6 +45,7 @@ func NewExecutioner(conf ExecutionerConf) *Executioner {
 type ExecOptions struct {
 	skipIfLocal           bool
 	disableAutoSSHCommand bool
+	trim                  bool
 	onFailure             func(*logs_command.CommandLog, error) error
 	onSuccess             func(*logs_command.CommandLog) error
 	onDryRun              func()
@@ -90,6 +92,15 @@ func Env(env []string) ExecOption {
 	}
 }
 
+// Trim enables output trimming for this command using the configured
+// max output lines. Use for commands that can produce unbounded output
+// (e.g. nix copy, nix build).
+func Trim() ExecOption {
+	return func(excOpt *ExecOptions) {
+		excOpt.trim = true
+	}
+}
+
 func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string, commandWithArgs []string, opts ...ExecOption) error {
 	excOpt := &ExecOptions{}
 	for _, opt := range opts {
@@ -116,7 +127,7 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 }
 
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
-	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, nil, nil)
+	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, nil, nil, 0)
 
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, nil)
 

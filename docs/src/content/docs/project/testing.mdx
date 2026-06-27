@@ -62,7 +62,7 @@ task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
 task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
 ```
 
-The whole test usually takes only ~1.5 min (local only), or ~2.4 min (both modes).
+The whole test usually takes only ~1.5 min (local only), or ~2 min (both modes).
 
 The tests are a standalone Go program (`go run ./tests/e2e/`), not `go test`. Use `PANIX_BIN=/path/to/panix` to test a pre-built binary instead of `go run`.
 

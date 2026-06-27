@@ -20,7 +20,17 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		return err
 	}
 
-	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, commandWithArgs, excOpt.env)
+	// Trimming is opt-in: only commands that explicitly request it
+	// (e.g. nix copy, nix build) get their output trimmed.
+	var maxOutputLines uint64
+	if excOpt.trim {
+		maxOutputLines = ex.conf.MaxOutputLines
+	}
+
+	commandLog := ex.conf.PhaseLog.NewCommand(
+		ex.phaseXpath, description, statusIfRunning, statusIfFailed,
+		commandWithArgs, excOpt.env, maxOutputLines,
+	)
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
 
 	var execErr error

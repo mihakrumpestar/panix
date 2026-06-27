@@ -119,6 +119,10 @@ properties:
             type: integer
             description: "Maximum height for command labels and outputs viewports in TUI (default: 8)"
             default: 8
+          command_output_max_lines:
+            type: integer
+            description: "Maximum output lines to keep per command in TUI (older lines are trimmed from the front in batches) (default: 10000)"
+            default: 10000
           show_active_only:
             type: boolean
             description: Show only running or errored logs in TUI build logs (keybind a)

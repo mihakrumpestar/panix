@@ -67,6 +67,7 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 			[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
 			nixosInstallFlags,
 		),
+		executioner.Trim(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "nixos-install failed")

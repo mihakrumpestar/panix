@@ -56,6 +56,7 @@ func TransferFile(
 		transferOfWhat+" transfer failed",
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
+		executioner.Trim(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "transfer failed")

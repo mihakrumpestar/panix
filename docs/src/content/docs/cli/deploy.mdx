@@ -76,6 +76,11 @@ Flags:
                                    Maximum height for command labels
                                    and outputs viewports in TUI
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_HEIGHT)
+      --tui.command-output-max-lines=10000
+                                   Maximum output lines to keep per
+                                   command in TUI (older lines are
+                                   trimmed from the front in batches)
+                                   ($PANIX_TUI_COMMAND_OUTPUT_MAX_LINES)
       --profile.cpu=STRING         Path for CPU profile output (enables CPU
                                    profiling) ($PANIX_PROFILE_CPU)
       --profile.mem=STRING         Path for memory profile output (enables

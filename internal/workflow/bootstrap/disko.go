@@ -47,6 +47,7 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 		"partitioning disk",
 		"diskoScript failed",
 		[]string{diskoScript},
+		executioner.Trim(),
 	)
 	if err != nil {
 		return errors.Wrap(err, "disko failed")

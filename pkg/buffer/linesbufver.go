@@ -31,6 +31,23 @@ func NewLinesBufVer() *LinesBufVer {
 	}
 }
 
+// SetMaxLines sets the trim threshold. 0 means unlimited.
+// Trimming happens in batches (10% of maxLines) to amortise cache rebuilds.
+func (b *LinesBufVer) SetMaxLines(n uint64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.inner.maxLines = n
+}
+
+// LineOffset returns the cumulative count of lines trimmed from the front.
+func (b *LinesBufVer) LineOffset() uint64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.inner.lineOffset
+}
+
 // Append appends bytes to the current (last) line. If no lines exist yet,
 // a new line is started.
 func (b *LinesBufVer) Append(buf []byte) {
@@ -53,6 +70,7 @@ func (b *LinesBufVer) Write(line []byte) {
 
 	b.inner.WriteLine(line)
 	b.version++
+	b.maybeTrimLocked()
 }
 
 // WriteString writes a new line from a string.
@@ -70,6 +88,7 @@ func (b *LinesBufVer) WriteLines(lines [][]byte) {
 	}
 
 	b.version++
+	b.maybeTrimLocked()
 }
 
 // OverrideLastLine rewrites the last line in-place.
@@ -174,7 +193,7 @@ func (b *LinesBufVer) Bytes() []byte {
 	return b.bytesLocked()
 }
 
-// Reset clears all content while preserving underlying capacity.
+// Reset clears all content. maxLines is preserved.
 func (b *LinesBufVer) Reset() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -183,9 +202,8 @@ func (b *LinesBufVer) Reset() {
 	b.version++
 }
 
-// CopyFrom replaces the content of b with a copy of src under the lock.
-// Increments version once. Use this when rendering into a temporary buffer
-// and atomically updating the shared state.
+// CopyFrom replaces content with a copy of src under the lock.
+// maxLines is preserved.
 func (b *LinesBufVer) CopyFrom(src *LinesBuf) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -195,10 +213,8 @@ func (b *LinesBufVer) CopyFrom(src *LinesBuf) {
 	b.version++
 }
 
-// Snapshot returns a copy of the inner LinesBuf under the lock. The
-// caller owns the returned buffer and must call Release() when done.
-// Use this when passing content to a long-running read operation
-// (e.g. rendering) that should not hold the lock for its duration.
+// Snapshot returns a copy of the inner LinesBuf under the lock.
+// The caller must call Release() when done. Carries lineOffset but not maxLines.
 func (b *LinesBufVer) Snapshot() *LinesBuf {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -283,4 +299,27 @@ func (b *LinesBufVer) appendLocked(buf []byte) {
 	} else {
 		b.inner.AppendToLine(buf)
 	}
+}
+
+// maybeTrimLocked trims excess lines from the front when len > maxLines.
+// Trims a batch (10% of maxLines, min 1) to avoid invalidating caches
+// on every write. Does not bump version: the caller already did.
+func (b *LinesBufVer) maybeTrimLocked() {
+	if b.inner.maxLines == 0 {
+		return
+	}
+
+	current := uint64(b.lenLocked()) //nolint:gosec // G115: line count is always non-negative
+	if current <= b.inner.maxLines {
+		return
+	}
+
+	excess := current - b.inner.maxLines
+
+	// Trim at least 10% of maxLines to avoid trimming on every write.
+	batchSize := max(b.inner.maxLines/10, 1) //nolint:mnd
+
+	trimCount := max(batchSize, excess)
+
+	b.inner.TrimFront(int(trimCount)) //nolint:gosec // G115: trimCount originated from int line count
 }

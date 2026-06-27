@@ -73,14 +73,15 @@ func (w *Workflow) runPhase(
 	dryRun := w.conf.Flags.DryRun || (w.conf.Flags.DryRunWithInspect && phaseI != phase.Inspect)
 
 	executionerConf := executioner.ExecutionerConf{
-		Ctx:          ctx,
-		Timeout:      w.conf.Flags.Timeout,
-		DryRun:       dryRun,
-		Xpath:        xpath,
-		Machine:      fleetLeaf.Machine,
-		Phase:        phaseI,
-		PhaseLog:     phaseLog,
-		OnUpdateHook: w.updateHook.Signal,
+		Ctx:            ctx,
+		Timeout:        w.conf.Flags.Timeout,
+		DryRun:         dryRun,
+		Xpath:          xpath,
+		Machine:        fleetLeaf.Machine,
+		Phase:          phaseI,
+		PhaseLog:       phaseLog,
+		OnUpdateHook:   w.updateHook.Signal,
+		MaxOutputLines: w.conf.Flags.Tui.CommandOutputMaxLines,
 	}
 	exc := executioner.NewExecutioner(executionerConf)
 	err = handler.RunPhase(exc, fleetLeaf)

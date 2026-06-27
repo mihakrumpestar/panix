@@ -88,6 +88,10 @@ type Viewport struct {
 	// whether the wrapping width changed, invalidating cached lineWidths.
 	wrappedContentW int
 
+	// prevLineOffset tracks lineOffset of the last adopted LinesBuf.
+	// When it changes, content was trimmed from the front.
+	prevLineOffset uint64
+
 	// Scratch buffer reused for building individual output lines.
 	scratchBuf []byte
 
@@ -879,7 +883,7 @@ func (m *Viewport) appendHorizBorder(buf []byte, contentW int, showBar bool) []b
 		horizLen += scrollbarColWidth
 	}
 
-	key := horizLen*2
+	key := horizLen * 2
 	if showBar {
 		key++
 	}
@@ -983,7 +987,7 @@ func (m *Viewport) line(i int) []byte {
 }
 
 // adoptLinesBuf takes ownership of buf, releasing any previous buffer.
-// The viewport accesses lines via buf.Line(i) — zero allocations.
+// The viewport accesses lines via buf.Line(i) with zero allocations.
 // For non-main viewports where content grows by appending, paddedBuf and
 // lineWidths are preserved for the unchanged prefix when the wrapping
 // width hasn't changed, avoiding O(n) CellWidth recomputation.
@@ -992,8 +996,13 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 	oldWidths := m.lineWidths
 	oldPaddedCount := m.paddedLineCount
 
+	// If lineOffset changed, content was trimmed from the front.
+	newLineOffset := buf.LineOffset()
+	contentShifted := newLineOffset != m.prevLineOffset
+	m.prevLineOffset = newLineOffset
+
 	// Skip release when the buffer is the same pointer (shared with model).
-	// The model owns the lifecycle — viewport must not return it to the pool.
+	// The model owns the lifecycle; viewport must not return it to the pool.
 	if m.linesBuf != buf {
 		m.releaseLinesBuf()
 	}
@@ -1013,7 +1022,7 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 		}
 	}
 
-	m.tryPreservePrefix(oldLen, oldWidths, oldPaddedCount, oldWrappedW)
+	m.tryPreservePrefix(oldLen, oldWidths, oldPaddedCount, oldWrappedW, contentShifted)
 
 	maxOffset := max(m.linesLen-m.contentHeight(), 0)
 	if m.yOffset > maxOffset {
@@ -1023,9 +1032,9 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 
 // tryPreservePrefix preserves the paddedBuf prefix for non-main viewports
 // when the wrapping width is unchanged, avoiding O(n) CellWidth recomputation.
-// A safety margin is applied: the last few old lines are always re-padded
-// because CLI tools (e.g. mkfs.ext4) use \r to override the last ~2 lines.
-func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount int, oldWrappedW int) {
+// The last few lines are always re-padded (CLI tools use \r to override them).
+// Bails when contentShifted (front trimmed) since the prefix is stale.
+func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount int, oldWrappedW int, contentShifted bool) {
 	if m.main || oldLen == 0 || m.linesLen < oldLen || oldPaddedCount != oldLen {
 		return
 	}
@@ -1034,7 +1043,11 @@ func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount
 		return
 	}
 
-	// Preserve everything except the last few lines — CLIs override at most
+	if contentShifted {
+		return
+	}
+
+	// Preserve everything except the last few lines; CLIs override at most
 	// ~2 lines via \r, so re-padding 3 covers the worst case with margin.
 	const safetyMargin = 3
 
@@ -1043,6 +1056,12 @@ func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount
 	m.paddedBuf = m.paddedBuf[:m.lineOffsets[preserveUpTo]]
 	m.paddedLineCount = preserveUpTo
 
+	m.restorePreservedWidths(oldWidths, preserveUpTo)
+}
+
+// restorePreservedWidths copies cached cell widths for preserved lines and
+// marks the rest as uncached (-1).
+func (m *Viewport) restorePreservedWidths(oldWidths []int, preserveUpTo int) {
 	if oldWidths == nil {
 		return
 	}

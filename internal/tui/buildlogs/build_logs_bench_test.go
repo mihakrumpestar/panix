@@ -186,7 +186,7 @@ func newTestMachine(phases []phase.Phase, running bool) *machine.Machine {
 
 		phaseLog.TimeAndState.EndTimerWithError(nil)
 
-		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
+		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil, 0)
 		cmd.TimeAndState.StartTimer()
 		cmd.TimeAndState.EndTimerWithError(nil)
 		cmd.Output.Write([]byte("done in 0.5s"))
@@ -205,7 +205,7 @@ func newTestMachineWithOutput(phases []phase.Phase) *machine.Machine {
 		phaseLog := mach.Logs.PhaseLogs.GetOrCreate(phaseI)
 		phaseLog.TimeAndState.StartTimer()
 
-		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
+		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil, 0)
 		cmd.TimeAndState.StartTimer()
 		cmd.Output.Write([]byte("output line 1"))
 		cmd.Output.Write([]byte("output line 2"))
@@ -226,7 +226,7 @@ func newTestMachineWithError(phases []phase.Phase) *machine.Machine {
 		phaseLog.TimeAndState.StartTimer()
 		phaseLog.TimeAndState.EndTimerWithError(os.ErrNotExist)
 
-		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil)
+		cmd := phaseLog.NewCommand(xpath.New("test"), describe(phaseI), "in progress...", "failed", []string{"nix", string(phaseI)}, nil, 0)
 		cmd.TimeAndState.StartTimer()
 		cmd.TimeAndState.EndTimerWithError(os.ErrNotExist)
 

@@ -49,6 +49,7 @@ func BuildInstallable(
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
 		executioner.Env(env),
+		executioner.Trim(),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			storePath = string(style.StripANSI(log.Output.LastLine()))
 
