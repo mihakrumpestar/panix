@@ -155,7 +155,6 @@ def scan_bench_dir(
                     "short_commit": commit[:7],
                     "label": labels.get(commit, commit[:7]),
                     "duration_s": duration,
-                    "cpu_samples_s": cpu_samples,
                     "cpu_util_pct": cpu_util,
                     "total_alloc_mb": alloc_mb,
                     "total_alloc_objects": alloc_objects,
@@ -189,7 +188,6 @@ def generate_csv(results: list[dict], output_path: Path) -> None:
         "short_commit",
         "label",
         "duration_s",
-        "cpu_samples_s",
         "cpu_util_pct",
         "total_alloc_mb",
         "total_alloc_objects",
@@ -233,11 +231,10 @@ def generate_summary(
     multi = runs_per_commit > 1
     display_labels = _commit_labels(commits, head_commit, labels)
 
-    # Lower is better for all five metrics
+    # Lower is better for all four metrics
     # (key, display_name, is_integer)
     metrics = [
         ("duration_s", "Duration (s)", False),
-        ("cpu_samples_s", "CPU Samples (s)", False),
         ("cpu_util_pct", "CPU Util (%)", False),
         ("total_alloc_mb", "Total Alloc (MB)", False),
         ("total_alloc_objects", "Total Alloc (objects)", True),
@@ -275,7 +272,6 @@ def generate_summary(
     lines.append("")
     lines.append("  Metrics extracted from pprof:")
     lines.append("    - Duration (s):          Wall-clock time of e2e run (from cpu.prof)")
-    lines.append("    - CPU Samples (s):       Total CPU sampling time (from cpu.prof)")
     lines.append("    - CPU Util (%):          CPU samples / wall duration × 100")
     lines.append("    - Total Alloc (MB):      Heap allocation bytes (from mem.prof -alloc_space)")
     lines.append("    - Total Alloc (objects): Heap allocation count (from mem.prof -alloc_objects)")
@@ -394,7 +390,6 @@ def generate_graphs(
     # (key, title, is_integer)
     metrics = [
         ("duration_s", "Wall Duration (s)", False),
-        ("cpu_samples_s", "CPU Samples (s)", False),
         ("cpu_util_pct", "CPU Utilization (%)", False),
         ("total_alloc_mb", "Total Alloc (MB)", False),
         ("total_alloc_objects", "Total Alloc (objects)", True),
@@ -404,9 +399,9 @@ def generate_graphs(
     colors = ["#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE", "#AA3377"]
 
     n_metrics = len(metrics)
-    n_cols = 3
+    n_cols = 2
     n_rows = (n_metrics + n_cols - 1) // n_cols
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 5 * n_rows))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 5 * n_rows))
     axes_flat = axes.flatten()
 
     x = np.arange(len(commits))
@@ -479,7 +474,6 @@ def generate_graphs(
         else:
             ax.set_xticklabels(display_labels, fontsize=9)
         ax.set_title(title, fontsize=11, fontweight="bold")
-        ax.grid(axis="y", alpha=0.3, linestyle="--")
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 

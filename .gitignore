@@ -50,3 +50,4 @@ tests/e2e/testflakes/ssh-key.pub
 # Benchmarks
 /bench
 tests/bench/results.txt
+__pycache__
