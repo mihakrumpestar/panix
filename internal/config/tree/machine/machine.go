@@ -121,7 +121,7 @@ func (m *Machine) GetActiveSSH() ssh.SSHClient {
 			sshClient = m.Bootstrap.SSH
 		}
 
-		sshClient.Port = m.Bootstrap.Kexec.SSHPort
+		sshClient.Port = m.Bootstrap.Kexec.SSHPort.Get()
 	}
 
 	if !sshClient.IsInitialized() {

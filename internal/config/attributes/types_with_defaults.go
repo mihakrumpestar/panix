@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+
+	"github.com/mihakrumpestar/panix/pkg/ssh"
 )
 
 // KexecImage
@@ -38,6 +40,22 @@ func (k KexecImage) IfDefaultImageIsArchSupported(arch string) error {
 	}
 
 	return nil
+}
+
+// KexecSSHPort
+
+type KexecSSHPort uint16
+
+func (p KexecSSHPort) Get() uint16 {
+	if p == 0 {
+		return ssh.SSHDefaultPort
+	}
+
+	return uint16(p)
+}
+
+func (p KexecSSHPort) String() string {
+	return strconv.Itoa(int(p.Get()))
 }
 
 // SudoProgram
