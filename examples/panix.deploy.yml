@@ -72,6 +72,9 @@ fleet:
             kiosk:
               bootstrap:
                 <<: *bootstrap_defaults
+                #ssh:
+                #  hostname: 10.0.200.75
+                #  identity_file: temp_key
                 post_bootstrap_hooks:
                   - |
-                    {{template "cryptenroll" "/dev/mmcblk1p2"}}
+                    {{template "cryptenroll" "/dev/nvme0n1p2"}}

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.1](https://github.com/mihakrumpestar/panix/compare/v0.8.0..v0.8.1) - 2026-07-08
+
+### Bug Fixes
+
+- Make kexec properly use default port 22 by @mihakrumpestar ([02a0922](https://github.com/mihakrumpestar/panix/commit/02a092240903a3df7846db2ae69b7d0f469a80b9))
+
+### Features
+
+- Improve e2e benchmarks and update go benchmarks, update docs by @mihakrumpestar ([7b1c022](https://github.com/mihakrumpestar/panix/commit/7b1c02259ae0e4419a09ce7f99936d11ca04cc6e))
+- Improve snapshot json entities ordering, improve docs by @mihakrumpestar ([981407b](https://github.com/mihakrumpestar/panix/commit/981407b9eeeceaf6febdeb605ff1868e43524fb2))
+- Add limit to scrollback max lines, fixes #10 by @mihakrumpestar ([98c721b](https://github.com/mihakrumpestar/panix/commit/98c721b7009b64d77a9e6c5640f00175a0778cd4))
+
+### Miscellaneous
+
+- Simplify bench_graph output by @mihakrumpestar ([d322285](https://github.com/mihakrumpestar/panix/commit/d32228511f6a8e2318039cff44d5024d8392551f))
+
 ## [0.8.0](https://github.com/mihakrumpestar/panix/compare/v0.7.1..v0.8.0) - 2026-06-23
 
 ### Bug Fixes
