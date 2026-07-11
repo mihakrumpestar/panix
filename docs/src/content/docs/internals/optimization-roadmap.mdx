@@ -65,8 +65,6 @@ The major change was building a custom TUI rendering engine from scratch ([PR #2
 
 The entire `pkg/tui/` and `pkg/buffer/` packages were built from scratch: a contiguous line buffer (`LinesBuf`) for zero-copy line access, double-buffered frame diffing via `bytes.Equal` for zero-allocation change detection, pooled buffers via `sync.Pool`, pre-rendered ANSI prefixes and padding, and retained-mode components with incremental caching. CPU dropped from 11% to 2.6%, and allocations fell from 4.4 GB to 433 MB.
 
-The result is a rendering engine that's **215x faster** when updating every frame, **297x faster** when nothing changed, and **276x faster** for partial updates, compared to Bubble Tea. See [Custom TUI Engine](/internals/tui-engine) for architecture details and benchmarks.
-
 ---
 
 ## Phase 4: Final

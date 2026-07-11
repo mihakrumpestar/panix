@@ -76,7 +76,7 @@ tasks:
         git worktree add "{{.WORKTREE}}" "$COMMIT"
 
         pushd "{{.WORKTREE}}" > /dev/null
-        GOWORK=off nix build .#default --extra-experimental-features "nix-command flakes"
+        nix build .#default --extra-experimental-features "nix-command flakes"
         rm -f "{{.BIN}}"
         cp result/bin/panix "{{.BIN}}"
         popd > /dev/null

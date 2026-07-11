@@ -710,7 +710,7 @@
       }
     },
     "python313": {
-      "plugin_version": "0.0.4",
+      "plugin_version": "0.0.5",
       "resolved": "github:NixOS/nixpkgs/49a4bd0573c376468dd7996ddb6f9fa31d8c4d97?narHash=sha256-Zn5KTggEmUB3lXn%2FccERNcBdddE6IaOFber9dWViWDg%3D#python313",
       "source": "nixpkg"
     },
