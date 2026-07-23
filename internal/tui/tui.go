@@ -71,9 +71,9 @@ func New(ctx context.Context, conf *config.Config, isSnapshot bool) error {
 		dimensions: dimensions,
 		isSnapshot: isSnapshot,
 
-		header:     header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
-		spinners:   spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
-		viewports:  viewports.New(dimensions, conf.Flags.CommandOutputMaxHeight,
+		header:   header.New(isSnapshot, conf.Snapshot, conf.ColorScheme),
+		spinners: spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
+		viewports: viewports.New(dimensions, conf.Flags.CommandOutputMaxHeight,
 			tableS.Border, tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder),
 		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
 		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
@@ -294,6 +294,10 @@ func (m *model) renderFullscreenViewportInto(buf *buffer.LinesBufDiff, renderCou
 	if !m.isSnapshot && m.workflow == nil {
 		return
 	}
+
+	// Refresh viewport content buffers so the fullscreen viewport shows live data.
+	m.content.Reset()
+	m.buildLogs.RenderInto(m.content, m.cachedTree, m.viewports, m.spinners)
 
 	fullscreenXpath := m.viewports.GetFullscreenXpath()
 	content := m.viewports.GetViewportContent(fullscreenXpath)
