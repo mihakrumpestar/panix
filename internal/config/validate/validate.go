@@ -7,8 +7,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/pkg/errors"
 	"github.com/stoewer/go-strcase"
 )
@@ -38,6 +39,11 @@ func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags) e
 	err = validateBuildModes(f)
 	if err != nil {
 		return errors.Wrap(err, "invalid build mode configuration")
+	}
+
+	err = validateOutputTypes(f)
+	if err != nil {
+		return errors.Wrap(err, "invalid output type configuration")
 	}
 
 	return nil
@@ -70,7 +76,7 @@ func humanizeValidationErrors(err error) string {
 
 // skipParts are Go type/field names that appear in validator namespaces but aren't meaningful in user-facing paths.
 var skipParts = map[string]bool{
-	"Config": true, "Flake": true, "Configuration": true, "Machine": true, "Attributes": true, "Values": true,
+	"Config": true, "Flake": true, "Installable": true, "Machine": true, "Attributes": true, "Values": true,
 }
 
 func humanizePath(namespace string) string {
@@ -116,12 +122,19 @@ func validateBuildModes(f *fleet.Fleet) error {
 	var errs []string
 
 	for _, flakePair := range f.Flakes.Pairs() {
-		for _, configPair := range flakePair.Value.Configurations.Pairs() {
-			config := configPair.Value
-			configPath := config.Xpath.String()
+		flakePair.Value.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]) bool {
+			if attrMap == nil {
+				return true
+			}
 
-			errs = validateBuildMode(config, configPath, errs)
-		}
+			attrMap.ForEach(func(_ string, installable *installablepkg.Installable) bool {
+				errs = validateBuildMode(installable, installable.Xpath.String(), errs)
+
+				return true
+			})
+
+			return true
+		})
 	}
 
 	if len(errs) > 0 {
@@ -131,15 +144,15 @@ func validateBuildModes(f *fleet.Fleet) error {
 	return nil
 }
 
-func validateBuildMode(config *configuration.Configuration, configPath string, errs []string) []string {
-	if config.Nix.BuildMode != nix.BuildModeRemote {
+func validateBuildMode(out *installablepkg.Installable, outPath string, errs []string) []string {
+	if out.Nix.BuildMode != nix.BuildModeRemote {
 		return errs
 	}
 
 	machineCount := 0
 	firstMachineIsLocal := false
 
-	for i, machinePair := range config.Machines.Pairs() {
+	for i, machinePair := range out.Machines.Pairs() {
 		machineCount++
 
 		if i == 0 && machinePair.Value != nil && machinePair.Value.SSH.IsLocal() {
@@ -148,12 +161,52 @@ func validateBuildMode(config *configuration.Configuration, configPath string, e
 	}
 
 	if machineCount == 0 {
-		errs = append(errs, configPath+": remote mode requires at least 1 machine")
+		errs = append(errs, outPath+": remote mode requires at least 1 machine")
 	}
 
 	if firstMachineIsLocal {
-		errs = append(errs, configPath+": remote mode requires the first machine to be remote (not local)")
+		errs = append(errs, outPath+": remote mode requires the first machine to be remote (not local)")
 	}
 
 	return errs
+}
+
+func validateOutputTypes(fleetConfig *fleet.Fleet) error {
+	var errs []string
+
+	knownTypes := installablepkg.KnownOutputTypes()
+
+	knownTypeStrs := make([]string, len(knownTypes))
+	for i, t := range knownTypes {
+		knownTypeStrs[i] = t.String()
+	}
+
+	for _, flakePair := range fleetConfig.Flakes.Pairs() {
+		flakePair.Value.Installables.ForEach(func(typeKey string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]) bool {
+			if attrMap == nil {
+				return true
+			}
+
+			attrMap.ForEach(func(nameKey string, installable *installablepkg.Installable) bool {
+				if installable == nil {
+					return true
+				}
+
+				if !installablepkg.FlakeOutputType(typeKey).IsKnown() {
+					errs = append(errs, fmt.Sprintf("%s: unknown output type '%s', known types: %s",
+						installable.Xpath.String(), typeKey, strings.Join(knownTypeStrs, ", ")))
+				}
+
+				return true
+			})
+
+			return true
+		})
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "\n"))
+	}
+
+	return nil
 }

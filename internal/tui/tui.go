@@ -48,7 +48,7 @@ type model struct {
 	cachedTree *tree.Node
 
 	// content is a persistent buffer for the main content area.
-	// Reused across frames via Reset() — avoids pool buffer loss on GC.
+	// Reused across frames via Reset(); avoids pool buffer loss on GC.
 	content *buffer.LinesBuf
 }
 

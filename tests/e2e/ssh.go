@@ -126,3 +126,34 @@ func verifyNixOSInstallation(port int, keyPath string) error {
 
 	return nil
 }
+
+func verifyHomeManager(keyPath string) error {
+	parGroup := newParallelGroup()
+
+	if testScopeFlag.local() {
+		parGroup.Go("Verify home-manager on NixOS ISO VM", func() error {
+			return verifyHomeManagerMarker(nixosISOPort, keyPath)
+		})
+		parGroup.Go("Verify home-manager on Debian-nix VM", func() error {
+			return verifyHomeManagerMarker(debianNixVMPort, keyPath)
+		})
+	}
+
+	return parGroup.Wait()
+}
+
+func verifyHomeManagerMarker(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	output, err := sshRun(port, keyPath, "cat /root/.panix-home-test-marker")
+	if err != nil {
+		return errors.Wrapf(err, "verify home-manager on %s", addr)
+	}
+
+	marker := strings.TrimSpace(output)
+	if !strings.Contains(marker, markerContent) {
+		return errors.Errorf("home-manager marker not found on %s: %s", addr, marker)
+	}
+
+	return nil
+}

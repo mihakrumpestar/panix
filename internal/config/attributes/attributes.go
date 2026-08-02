@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Flake, Configuration, and Machine Attributes
+// Flake, Installable, and Machine Attributes
 
 //nolint:lll
 type Attributes struct {
@@ -29,7 +29,7 @@ type Attributes struct {
 	Xpath xpath.Xpath           `yaml:"-" json:"xpath,omitzero"`
 
 	// PhaseXpaths maps each phase to its full xpath (entityXpath + "/" + phaseName).
-	// Pre-computed once during Init — eliminates per-frame string concatenation
+	// Pre-computed once during Init. Eliminates per-frame string concatenation
 	// in the TUI render loop.
 	PhaseXpaths map[phase.Phase]xpath.Xpath `yaml:"-" json:"-"`
 }
@@ -84,7 +84,7 @@ func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 
 // InitSSH initializes SSH configuration for this machine.
 // SSH config resolution errors (e.g., missing ~/.ssh/config) are logged as warnings
-// and do not prevent initialization — the SSH client retains alias hostname with defaults.
+// and do not prevent initialization; the SSH client retains alias hostname with defaults.
 func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) error {
 	err := a.SSH.Init(a.Name.String(), localMachineHostname, nixInfo)
 	if err != nil {
@@ -118,7 +118,7 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 		a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
 	}
 
-	// Pre-compute phase xpaths for this entity — used by TUI rendering.
+	// Pre-compute phase xpaths for this entity, used by TUI rendering.
 	a.PhaseXpaths = make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
 
 	for _, pm := range phase.PhaseRegistry {

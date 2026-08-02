@@ -9,9 +9,9 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
@@ -30,14 +30,14 @@ func BuildInstallable(
 	installables []string,
 	whatIsBuilding string,
 ) (string, error) {
-	configurationI := fleetLeaf.Configuration
+	installable := fleetLeaf.Installable
 	machine := fleetLeaf.Machine
 
-	commandWithArgs := nixBuildCommand(configurationI, machine, installables)
+	commandWithArgs := nixBuildCommand(installable, machine, installables)
 
 	var storePath string
 
-	env, err := nixBuildEnv(configurationI, machine)
+	env, err := nixBuildEnv(installable, machine)
 	if err != nil {
 		return "", err
 	}
@@ -54,7 +54,7 @@ func BuildInstallable(
 			storePath = string(style.StripANSI(log.Output.LastLine()))
 
 			if storePath == "" || !strings.HasPrefix(storePath, "/nix/store/") {
-				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", fleetLeaf.Flake.Name, configurationI.Name, strconv.Quote(storePath))
+				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", fleetLeaf.Flake.Name, installable.Name, strconv.Quote(storePath))
 			}
 
 			return nil
@@ -69,20 +69,20 @@ func BuildInstallable(
 
 	log.Info().
 		Str("flake", fleetLeaf.Flake.Name.String()).
-		Str("configuration", configurationI.Name.String()).
+		Str("installable", installable.Name.String()).
 		Str("closure", storePath).
-		Str("mode", configurationI.Nix.BuildMode.String()).
-		Msgf("Built %s/%s -> %s", fleetLeaf.Flake.Name, configurationI.Name, storePath)
+		Str("mode", installable.Nix.BuildMode.String()).
+		Msgf("Built %s/%s -> %s", fleetLeaf.Flake.Name, installable.Name, storePath)
 
 	return storePath, nil
 }
 
-func nixBuildCommand(configurationI *configuration.Configuration, machineI *machine.Machine, installables []string) []string {
+func nixBuildCommand(installable *installable.Installable, machineI *machine.Machine, installables []string) []string {
 	baseArgs := []string{"nix"}
 	baseArgs = append(baseArgs, NixExperimentalFeatures...)
 	baseArgs = append(baseArgs, "build")
 
-	if configurationI.Nix.BuildMode == nix.BuildModeRemote {
+	if installable.Nix.BuildMode == nix.BuildModeRemote {
 		storeURL := machineI.SSH.NixStoreURL()
 		baseArgs = append(baseArgs,
 			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
@@ -92,13 +92,13 @@ func nixBuildCommand(configurationI *configuration.Configuration, machineI *mach
 
 	return slices.Concat(
 		baseArgs,
-		slices.Concat(configurationI.Nix.ExtraFlags, configurationI.Nix.BuildFlags),
+		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.BuildFlags),
 		installables,
 	)
 }
 
-func nixBuildEnv(configurationI *configuration.Configuration, machineI *machine.Machine) ([]string, error) {
-	evalCacheEnv, err := nixEvalCacheEnv(configurationI.Xpath.String())
+func nixBuildEnv(installable *installable.Installable, machineI *machine.Machine) ([]string, error) {
+	evalCacheEnv, err := nixEvalCacheEnv(installable.Xpath.String())
 	if err != nil {
 		return nil, err
 	}

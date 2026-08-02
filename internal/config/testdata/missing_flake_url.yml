@@ -2,7 +2,8 @@ fleet:
   flakes:
     my-flake:
       url:
-      configurations:
-        my-config:
-          machines:
-            my-machine:
+      installables:
+        nixosConfigurations:
+          my-config:
+            machines:
+              my-machine:

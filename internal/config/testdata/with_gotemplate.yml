@@ -2,9 +2,10 @@ fleet:
   flakes:
     my-flake:
       url: 'path:./my-flake'
-      configurations:
-        my-config:
-          machines:
-            my-machine:
-              ssh:
-                hostname: '{{ "host.example.com" }}'
+      installables:
+        nixosConfigurations:
+          my-config:
+            machines:
+              my-machine:
+                ssh:
+                  hostname: '{{ "host.example.com" }}'

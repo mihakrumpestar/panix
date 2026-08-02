@@ -24,7 +24,7 @@ type Winsize = unix.Winsize
 // See: https://github.com/creack/pty/issues/21
 // Read reads output from the PTY master (what the child process writes to its terminal).
 // When the child exits and the slave PTY closes, the Linux kernel returns EIO from the
-// master read. This is a normal PTY lifecycle event, not an error — Read translates it
+// master read. This is a normal PTY lifecycle event, not an error. Read translates it
 // to a zero-byte read with nil error so the caller can treat 0 bytes as end-of-stream.
 // See: https://github.com/creack/pty/issues/21
 func (p *Pty) Read(b []byte) (int, error) {

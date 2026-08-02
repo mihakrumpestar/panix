@@ -53,7 +53,7 @@ type Model interface {
 	Update(msg Msg) Cmd
 	// Render writes the screen lines into the LinesBuffer.
 	// renderCounter is a monotonically increasing counter managed by the
-	// Program — callers use it for change detection (e.g., viewport
+	// Program; callers use it for change detection (e.g., viewport
 	// content versioning) without tracking it themselves.
 	Render(buf *buffer.LinesBufDiff, renderCounter uint64)
 }

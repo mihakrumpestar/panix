@@ -77,7 +77,12 @@ func tailFile(path string) string {
 
 func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, envVars []string, e2eDir, exitCodePath string) string {
 	path := filepath.Join(logDirPath, "run-panix-"+mode+".sh")
-	envLines := make([]string, 0, len(envVars)+1)
+
+	// Strip PANIX_TEST_MODE from the inherited environment so the explicit envVars value wins.
+	envLines := make([]string, 0, len(envVars)+2)
+
+	// Explicitly unset PANIX_TEST_MODE before setting it via envVars.
+	envLines = append(envLines, "unset PANIX_TEST_MODE")
 
 	for _, envVar := range envVars {
 		envLines = append(envLines, "export "+envVar)
@@ -114,8 +119,10 @@ func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, 
 	cmd := exec.CommandContext(context.Background(), bin, cmdArgs...) //nolint:gosec
 	cmd.Dir = root
 
-	cmd.Env = append(os.Environ(), envVars...)
-	cmd.Env = append(cmd.Env, "PANIX_E2E_DIR="+e2eDir)
+	// Strip PANIX_TEST_MODE from inherited env so the explicit envVars value is used.
+	// Without this, an externally-set PANIX_TEST_MODE leaks into all phases via os.Environ().
+	cleanEnv := sanitizedOsEnviron("PANIX_TEST_MODE")
+	cmd.Env = append(append(cleanEnv, envVars...), "PANIX_E2E_DIR="+e2eDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -157,4 +164,27 @@ func panixExecArgs(root string) (string, []string) {
 	}
 
 	return "go", []string{"run", root + "/cmd/panix"}
+}
+
+// sanitizedOsEnviron returns os.Environ() with the given env vars removed.
+// This prevents externally-set env vars (e.g. PANIX_TEST_MODE) from leaking
+// into panix deploy calls that set their own value via envVars.
+func sanitizedOsEnviron(stripKeys ...string) []string {
+	stripSet := make(map[string]struct{}, len(stripKeys))
+	for _, k := range stripKeys {
+		stripSet[k] = struct{}{}
+	}
+
+	var result []string
+
+	for _, env := range os.Environ() {
+		key, _, _ := strings.Cut(env, "=")
+		if _, strip := stripSet[key]; strip {
+			continue
+		}
+
+		result = append(result, env)
+	}
+
+	return result
 }

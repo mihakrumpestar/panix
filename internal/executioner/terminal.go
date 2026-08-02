@@ -30,11 +30,11 @@ type terminalProcessor struct {
 // process handles a single read's worth of PTY output, splitting on \r and
 // applying terminal semantics:
 //
-//   - \r (carriage return): move cursor to column 0 — subsequent content
+//   - \r (carriage return): move cursor to column 0 - subsequent content
 //     overwrites the current line
 //   - \n (line feed): commit current line, start a new one
-//   - \r\n: standard PTY line ending — commit current line, start new one
-//   - \x1b[K: erase to end of line — stripped before processing
+//   - \r\n: standard PTY line ending - commit current line, start new one
+//   - \x1b[K: erase to end of line - stripped before processing
 //
 // A trailing \n means the cursor sits on a new empty line. Rather than
 // storing a spurious empty line, we set PendingNewline so the next read's
@@ -117,7 +117,7 @@ func (tp *terminalProcessor) processSegment(seg []byte, segIdx int, isLast, ends
 
 // processNoNewlineSegment handles a segment with no \n.
 // segIdx==0: first segment (no preceding \r in this read).
-// segIdx>0:  content after a \r — cursor at column 0, overwrite.
+// segIdx>0:  content after a \r, cursor at column 0, overwrite.
 func (tp *terminalProcessor) processNoNewlineSegment(seg []byte, segIdx int) {
 	if segIdx == 0 {
 		tp.writeFirstSegmentContent(seg)
@@ -255,7 +255,7 @@ func appendLineContent(buf *buffer.LinesBufVer, data []byte) {
 
 // finalizeCommandLog cleans up the command log after all PTY output has been
 // read. When CarriageReturn is true, the cursor was at column 0 of the last
-// line — meaning the line was a transient progress indicator (like nix copy's
+// line, meaning the line was a transient progress indicator (like nix copy's
 // "[1/614/615 copied]...") that would have been overwritten by the next
 // update. Since no more output is coming, remove it.
 func finalizeCommandLog(commandLog *command.CommandLog) {

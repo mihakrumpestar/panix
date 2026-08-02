@@ -53,7 +53,7 @@ func (tas *TimeAndState) SetFinished(endTime time.Time, err error) {
 }
 
 // MarkFinished sets EndTime and bumps stateVersion, but only if not already finished.
-// Unlike SetFinished, this does NOT overwrite DurationCache — the caller is
+// Unlike SetFinished, this does NOT overwrite DurationCache. The caller is
 // responsible for setting the duration separately (e.g. via SetDuration).
 func (tas *TimeAndState) MarkFinished() {
 	if !tas.IsFinished() {

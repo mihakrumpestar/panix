@@ -127,6 +127,7 @@ func NewSchema(cfg SchemaConfig) *generator {
 // properties that contain a map[K]V field (e.g., ordered map implementations).
 // It prefers the map field with validate:"dive" tag as the main content field.
 // Returns the value type V, or nil if the struct is not a map-like wrapper.
+// Recurses into embedded anonymous struct fields (e.g., OutputMap embeds *AtomicOrderedMap).
 func findMapValueType(typ reflect.Type) reflect.Type {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -141,9 +142,23 @@ func findMapValueType(typ reflect.Type) reflect.Type {
 		return nil
 	}
 
-	// No YAML-visible properties — look for a map[K]V field.
-	// Prefer the field with validate:"dive" as it marks the main content.
-	return findMapFieldType(typ)
+	// No YAML-visible properties; look for a map[K]V field directly.
+	if vt := findMapFieldType(typ); vt != nil {
+		return vt
+	}
+
+	// Recurse into embedded anonymous struct fields (e.g., OutputMap embeds *AtomicOrderedMap).
+	for field := range typ.Fields() {
+		if !field.Anonymous {
+			continue
+		}
+
+		if vt := findMapValueType(field.Type); vt != nil {
+			return vt
+		}
+	}
+
+	return nil
 }
 
 // hasYAMLVisibleFields reports whether the struct has any exported fields
@@ -522,6 +537,8 @@ func (g *generator) buildObjectTypeDef(typ reflect.Type) (*TypeDefinition, error
 // processMapType handles map-like struct wrappers, generating
 // a schema with type: object and additionalProperties for the value type.
 // If the field has schema:"nullable_values" tag, values may be null.
+// If the field has schema:"two_level_map" tag, generates two nested
+// additionalProperties levels (e.g., map[string]map[string]V).
 func (g *generator) processMapType(valueType reflect.Type, field reflect.StructField) (*TypeDefinition, error) {
 	valueSchema, err := g.processType(valueType, reflect.StructField{})
 	if err != nil {
@@ -534,7 +551,9 @@ func (g *generator) processMapType(valueType reflect.Type, field reflect.StructF
 	if schemaTag != "" {
 		for tag := range strings.SplitSeq(schemaTag, ",") {
 			tag = strings.TrimSpace(tag)
-			if tag == "nullable_values" {
+
+			switch tag {
+			case "nullable_values":
 				additionalProps = &additionalPropertiesWrapper{
 					Value: map[string]any{
 						"anyOf": []any{
@@ -544,7 +563,14 @@ func (g *generator) processMapType(valueType reflect.Type, field reflect.StructF
 					},
 				}
 
-				break
+			case "two_level_map":
+				// Wrap the value schema in another additionalProperties layer,
+				// producing: { type: object, additionalProperties: { type: object, additionalProperties: <valueSchema> } }
+				innerTypeDef := &TypeDefinition{
+					Type:                 "object",
+					AdditionalProperties: additionalProps,
+				}
+				additionalProps = &additionalPropertiesWrapper{Value: innerTypeDef}
 			}
 		}
 	}

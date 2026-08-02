@@ -1,4 +1,4 @@
-package configuration
+package installable
 
 import (
 	"slices"
@@ -8,8 +8,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (c *Configuration) Filter(flags flags.Flags) {
-	c.Machines.DeleteFunc(func(name string, machineI *machine.Machine) bool {
+// Filter removes machines from this installable that are disabled or don't
+// match the requested tags.
+func (i *Installable) Filter(flags flags.Flags) {
+	i.Machines.DeleteFunc(func(name string, machineI *machine.Machine) bool {
 		if machineI == nil || machineI.Disabled || !machineContainsTags(machineI.Tags, flags.Tags) {
 			log.Debug().Bool("machine == nil", machineI == nil).
 				Bool("disabled", machineI != nil && machineI.Disabled).

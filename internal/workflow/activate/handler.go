@@ -6,6 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/pkg/errors"
@@ -18,7 +19,7 @@ type Handler struct {
 func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	machine := fleetLeaf.Machine
 
-	systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
+	systemClosure := fleetLeaf.Installable.MetaBuild.Closure
 
 	isBootstrapped := false
 
@@ -30,32 +31,31 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 	// Run bootstrap if not bootstrapped, or force bootstrap is set
 	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
-	if shouldBootstrap {
-		return executeBootstrap(exc, machine, fleetLeaf.Configuration.Nix.NixosInstallFlags, systemClosure)
+	// Only nixosConfigurations outputs trigger nixos-install.
+	if fleetLeaf.Installable.Type.IsBootstrappable() && shouldBootstrap {
+		return executeBootstrap(exc, machine, fleetLeaf.Installable.Nix.NixosInstallFlags, systemClosure)
 	}
 
-	return executeActivation(exc, h.ActivationModeOverride, machine, systemClosure)
+	return executeActivation(exc, h.ActivationModeOverride, fleetLeaf, systemClosure)
 }
 
 func executeActivation(
 	exc *executioner.Executioner,
 	activationModeOverride attributes.ActivationMode,
-	machine *machine.Machine,
-	systemClosure string,
+	fleetLeaf *fleet.FleetLeaf,
+	closure string,
 ) error {
-	mode := machine.ActivationMode.Get()
+	mode := fleetLeaf.Machine.ActivationMode.Get()
 	if activationModeOverride != "" {
 		mode = activationModeOverride
 	}
 
-	if mode != attributes.ActivationModeTest {
-		err := phaseops.SetSystemProfile(exc, machine, systemClosure)
-		if err != nil {
-			return errors.Wrap(err, "failed to set system profile")
-		}
+	preset, ok := installable.GetPreset(fleetLeaf.Installable.Type)
+	if !ok {
+		return errors.Errorf("unknown output type: %s", fleetLeaf.Installable.Type)
 	}
 
-	return errors.Wrap(phaseops.ActivateConfiguration(exc, machine, systemClosure, mode), "activation failed")
+	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, preset, closure, mode), "activation failed")
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {

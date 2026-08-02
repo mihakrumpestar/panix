@@ -5,6 +5,8 @@
     disko.inputs.nixpkgs.follows = "nixpkgs";
     nixos-images.url = "github:nix-community/nixos-images";
     nixos-images.inputs.nixos-unstable.follows = "nixpkgs";
+    home-manager.url = "github:nix-community/home-manager";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -13,6 +15,7 @@
       nixpkgs,
       disko,
       nixos-images,
+      home-manager,
     }:
     let
       system = "x86_64-linux";
@@ -52,6 +55,18 @@
           ./configuration.nix
           authorizedKeysModule
           substitutersModule
+        ];
+      };
+
+      homeConfigurations.test-home = home-manager.lib.homeManagerConfiguration {
+        inherit pkgs;
+        modules = [
+          {
+            home.username = "root";
+            home.homeDirectory = "/root";
+            home.stateVersion = "26.11";
+            home.file.".panix-home-test-marker".text = "panix-e2e-test-pass";
+          }
         ];
       };
 

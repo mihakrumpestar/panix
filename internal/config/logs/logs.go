@@ -51,7 +51,7 @@ func (l *Logs) PostUnmarshalInit() {
 }
 
 // MergePhaseLogsInto merges phase logs from multiple inputs into dst in-place.
-// dst.PhaseLogs is cleared and repopulated (reuses map capacity — zero allocation
+// dst.PhaseLogs is cleared and repopulated (reuses map capacity, zero allocation
 // when entry count is stable). The merge result is written to dst.TAS as a
 // temporary snapshot; the caller should sync it into a persisted TAS via SyncFrom.
 func MergePhaseLogsInto(dst *Logs, phasesInOrder []phase.Phase, input ...*phaselogs.PhaseLogs) {
@@ -67,9 +67,9 @@ func MergePhaseLogsInto(dst *Logs, phasesInOrder []phase.Phase, input ...*phasel
 	// Phases from higher scopes (e.g. configuration-level "build") may already be
 	// finished by another machine's goroutine via OnceAsync, but if the previous
 	// machine-level phase hasn't completed yet the machine hasn't actually reached
-	// this phase — so we must not include it in the merged view.
+	// this phase, so we must not include it in the merged view.
 	for _, phase := range phasesInOrder {
-		// Look up phase directly in inputs — avoids building an intermediate map.
+		// Look up phase directly in inputs; avoids building an intermediate map.
 		phaseLog := findPhaseLog(phase, input...)
 		if phaseLog == nil {
 			continue
@@ -102,7 +102,7 @@ func MergePhaseLogsInto(dst *Logs, phasesInOrder []phase.Phase, input ...*phasel
 	dst.TAS.DurationCache = acc.total()
 
 	// Set state markers on TAS so HasStarted/IsFinished return correct values.
-	// These are approximate timestamps — the real times live on per-phase TAS.
+	// These are approximate timestamps; the real times live on per-phase TAS.
 	if anyStarted {
 		dst.TAS.StartTime = time.Now()
 
@@ -167,12 +167,12 @@ func (a *intervalAccumulator) add(start, end time.Time) {
 		a.curStart = start
 		a.curEnd = end
 	case start.Before(a.curEnd):
-		// Overlapping — extend current interval.
+		// Overlapping; extend current interval.
 		if end.After(a.curEnd) {
 			a.curEnd = end
 		}
 	default:
-		// Non-overlapping — finalize current interval and start a new one.
+		// Non-overlapping; finalize current interval and start a new one.
 		a.duration += a.curEnd.Sub(a.curStart)
 		a.curStart = start
 		a.curEnd = end

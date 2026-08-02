@@ -111,7 +111,7 @@ func (f *Footer) Render(quitting bool, width int) *buffer.LinesBuf {
 		style.NewStyle().Width(helpWidth).MaxWidth(helpWidth).RenderIntoBuf(f.cachedRender, f.helpBuf)
 
 		// 3. Join with notification (if present)
-		// cachedRender holds styled help (join input) — reuse helpBuf as join output
+		// cachedRender holds styled help (join input), reuse helpBuf as join output
 		f.helpBuf.Reset()
 		style.JoinHorizontalBufs(f.helpBuf, style.Center, f.cachedRender, notifSnap)
 

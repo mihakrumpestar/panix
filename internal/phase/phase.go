@@ -49,10 +49,10 @@ func (p Phase) ShouldRunOnce() bool {
 type PhaseScope int
 
 const (
-	ScopeMachine       PhaseScope = iota // Once per machine
-	ScopeConfiguration                   // Once per configuration
-	ScopeFlake                           // Once per flake
-	ScopeFleet                           // Once per fleet
+	ScopeMachine     PhaseScope = iota // Once per machine
+	ScopeInstallable                   // Once per installable
+	ScopeFlake                         // Once per flake
+	ScopeFleet                         // Once per fleet
 )
 
 // PhaseMetadata defines the behavior of each phase.
@@ -66,7 +66,7 @@ type PhaseMetadata struct {
 var PhaseRegistry = []PhaseMetadata{
 	{Phase: Inspect, Scope: ScopeMachine, ValidFirst: true},
 	{Phase: Bootstrap, Scope: ScopeMachine},
-	{Phase: Build, Scope: ScopeConfiguration, ValidFirst: true},
+	{Phase: Build, Scope: ScopeInstallable, ValidFirst: true},
 	{Phase: Transfer, Scope: ScopeMachine},
 	{Phase: Secrets, Scope: ScopeMachine},
 	{Phase: Activate, Scope: ScopeMachine},

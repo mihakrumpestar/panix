@@ -184,113 +184,107 @@ properties:
             bootstrap:
               description: Bootstrap configuration for initial provisioning
               $ref: "#/definitions/Bootstrap"
-            configurations:
-              type: object
-              description: Configurations in flake
-              additionalProperties:
-                type: object
-                properties:
-                  activation_mode:
-                    type: string
-                    description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-                    default: switch
-                    enum:
-                    - check
-                    - switch
-                    - boot
-                    - test
-                    - dry-activate
-                  bootstrap:
-                    description: Bootstrap configuration for initial provisioning
-                    $ref: "#/definitions/Bootstrap"
-                  build_path:
-                    type: string
-                    description: "Build path within the flake output (e.g. config.system.build.toplevel) (default: config.system.build.toplevel)"
-                    default: config.system.build.toplevel
-                  disabled:
-                    type: boolean
-                    description: Disable this
-                  flake_output:
-                    type: string
-                    description: "Nix flake output attribute (e.g. nixosConfigurations.<name>) (default: nixosConfigurations.<name>)"
-                    default: nixosConfigurations.<name>
-                  hardware_config_path:
-                    type: string
-                    description: Path to hardware config
-                  machines:
-                    type: object
-                    description: Machines configuration
-                    additionalProperties:
-                      anyOf:
-                      - type: object
-                        properties:
-                          activation_mode:
-                            type: string
-                            description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-                            default: switch
-                            enum:
-                            - check
-                            - switch
-                            - boot
-                            - test
-                            - dry-activate
-                          bootstrap:
-                            description: Bootstrap configuration for initial provisioning
-                            $ref: "#/definitions/Bootstrap"
-                          disabled:
-                            type: boolean
-                            description: Disable this
-                          hardware_config_path:
-                            type: string
-                            description: Path to hardware config
-                          secrets:
-                            type: array
-                            description: Files or directories to transfer to the remote machine
-                            items:
-                              $ref: "#/definitions/PlainFileOrDirToTransfer"
-                          ssh:
-                            description: SSH configuration for remote access
-                            $ref: "#/definitions/SSHClient"
-                          sudo_program:
-                            type: string
-                            description: "Override the sudo program (default: sudo)"
-                            default: sudo
-                          tags:
-                            type: array
-                            description: Tags for filtering (flakes, configs and machines are already registered as tags)
-                            items:
-                              type: string
-                        additionalProperties: false
-                      - type: "null"
-                  nix:
-                    description: Nix build and copy configuration
-                    $ref: "#/definitions/NixConfig"
-                  secrets:
-                    type: array
-                    description: Files or directories to transfer to the remote machine
-                    items:
-                      $ref: "#/definitions/PlainFileOrDirToTransfer"
-                  ssh:
-                    description: SSH configuration for remote access
-                    $ref: "#/definitions/SSHClient"
-                  sudo_program:
-                    type: string
-                    description: "Override the sudo program (default: sudo)"
-                    default: sudo
-                  tags:
-                    type: array
-                    description: Tags for filtering (flakes, configs and machines are already registered as tags)
-                    items:
-                      type: string
-                required:
-                - machines
-                additionalProperties: false
             disabled:
               type: boolean
               description: Disable this
             hardware_config_path:
               type: string
               description: Path to hardware config
+            installables:
+              type: object
+              description: Installables (e.g. nixosConfigurations, homeConfigurations)
+              additionalProperties:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    activation_mode:
+                      type: string
+                      description: "Activation mode: check, switch, boot, test, dry-activate (only for nixosConfigurations) (default: switch)"
+                      default: switch
+                      enum:
+                      - check
+                      - switch
+                      - boot
+                      - test
+                      - dry-activate
+                    bootstrap:
+                      description: Bootstrap configuration for initial provisioning
+                      $ref: "#/definitions/Bootstrap"
+                    disabled:
+                      type: boolean
+                      description: Disable this
+                    hardware_config_path:
+                      type: string
+                      description: Path to hardware config
+                    machines:
+                      type: object
+                      description: Machines configuration
+                      additionalProperties:
+                        anyOf:
+                        - type: object
+                          properties:
+                            activation_mode:
+                              type: string
+                              description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
+                              default: switch
+                              enum:
+                              - check
+                              - switch
+                              - boot
+                              - test
+                              - dry-activate
+                            bootstrap:
+                              description: Bootstrap configuration for initial provisioning
+                              $ref: "#/definitions/Bootstrap"
+                            disabled:
+                              type: boolean
+                              description: Disable this
+                            hardware_config_path:
+                              type: string
+                              description: Path to hardware config
+                            secrets:
+                              type: array
+                              description: Files or directories to transfer to the remote machine
+                              items:
+                                $ref: "#/definitions/PlainFileOrDirToTransfer"
+                            ssh:
+                              description: SSH configuration for remote access
+                              $ref: "#/definitions/SSHClient"
+                            sudo_program:
+                              type: string
+                              description: "Override the sudo program (default: sudo)"
+                              default: sudo
+                            tags:
+                              type: array
+                              description: Tags for filtering (flakes, configs and machines are already registered as tags)
+                              items:
+                                type: string
+                          additionalProperties: false
+                        - type: "null"
+                    nix:
+                      description: Nix build and copy configuration
+                      $ref: "#/definitions/NixConfig"
+                    secrets:
+                      type: array
+                      description: Files or directories to transfer to the remote machine
+                      items:
+                        $ref: "#/definitions/PlainFileOrDirToTransfer"
+                    ssh:
+                      description: SSH configuration for remote access
+                      $ref: "#/definitions/SSHClient"
+                    sudo_program:
+                      type: string
+                      description: "Override the sudo program (default: sudo)"
+                      default: sudo
+                    tags:
+                      type: array
+                      description: Tags for filtering (flakes, configs and machines are already registered as tags)
+                      items:
+                        type: string
+                  required:
+                  - machines
+                  additionalProperties: false
             nix:
               description: Nix build and copy configuration
               $ref: "#/definitions/NixConfig"
@@ -316,7 +310,7 @@ properties:
               description: "Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax (default: .)"
               default: .
           required:
-          - configurations
+          - installables
           additionalProperties: false
       hardware_config_path:
         type: string

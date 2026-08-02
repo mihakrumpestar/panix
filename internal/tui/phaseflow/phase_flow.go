@@ -85,7 +85,7 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 	p.data = p.data[:0]
 
 	// Iterate over known workflow phases (not map keys) so that stale entries
-	// in the ordered map — e.g. a "" phase from machines that haven't started —
+	// in the ordered map, e.g. a "" phase from machines that haven't started,
 	// cannot shift the data alignment or corrupt the "DONE" column.
 	for _, ph := range p.phases {
 		phaseData := flow.PhaseData{}
@@ -100,7 +100,7 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 	}
 
 	// The "DONE" pseudo-phase reads the Done count from the last real
-	// workflow phase — not from spp.Last(), which would return the wrong
+	// workflow phase, not from spp.Last(), which would return the wrong
 	// phase if the ordered map contains extra keys.
 	lastPhase := p.phases[len(p.phases)-1]
 	lastStats, _ := spp.Get(lastPhase)

@@ -1,6 +1,7 @@
 package inspect
 
 import (
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -185,6 +186,102 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 	return nil
 }
 
+func checkNixAvailable(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := exc.Exec(
+		"nix check",
+		"checking nix availability",
+		"nix not found on remote machine",
+		[]string{"nix", "--version"},
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.NixAvailable = true
+			})
+
+			return nil
+		}),
+		executioner.OnDryRun(func() {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.NixAvailable = true
+			})
+		}),
+	)
+
+	return errors.Wrap(err, "nix availability check failed")
+}
+
+// detectSystemInfo populates OS version and kernel for all system types.
+// Date is populated from the active generation's timestamp by readGenerations.
+func detectSystemInfo(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := detectOSVersion(exc, machineI)
+	if err != nil {
+		return err
+	}
+
+	return detectKernel(exc, machineI)
+}
+
+func detectOSVersion(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := exc.Exec(
+		"system info",
+		"detecting system info",
+		"system info detection failed",
+		[]string{"cat", "/etc/os-release"},
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			osr, err := osrelease.ReadString(log.Output.String())
+			if err != nil {
+				return errors.Wrap(err, "error parsing /etc/os-release")
+			}
+
+			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
+				version, ok := osr["VERSION"]
+				if ok {
+					metaInspect.OSVersion = stringbyte.StringByte(version)
+				} else {
+					pretty, ok2 := osr["PRETTY_NAME"]
+					if ok2 {
+						metaInspect.OSVersion = stringbyte.StringByte(pretty)
+					}
+				}
+			})
+
+			return nil
+		}),
+		executioner.OnDryRun(func() {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.OSVersion = stringbyte.StringByte("DRY_RUN")
+			})
+		}),
+	)
+
+	return errors.Wrap(err, "system info detection failed")
+}
+
+func detectKernel(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := exc.Exec(
+		"kernel version",
+		"detecting kernel version",
+		"kernel detection failed",
+		[]string{"uname", "-r"},
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			kernel := strings.TrimSpace(log.Output.String())
+			if kernel != "" {
+				machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+					mi.Kernel = stringbyte.StringByte(kernel)
+				})
+			}
+
+			return nil
+		}),
+		executioner.OnDryRun(func() {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.Kernel = stringbyte.StringByte("DRY_RUN")
+			})
+		}),
+	)
+
+	return errors.Wrap(err, "kernel detection failed")
+}
+
 func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 	osr, err := osrelease.ReadString(output)
 	if err != nil {
@@ -258,34 +355,39 @@ func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machin
 	return nil
 }
 
-func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) error {
+// readGenerations reads profile generations via nix-env --list-generations.
+// Works for any profile path (system, home-manager, system-manager, etc.).
+func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, profilePath string) error {
 	err := exc.Exec(
 		"list generations",
 		"listing generations",
 		"failed to list generations",
-		[]string{"nixos-rebuild", "list-generations"},
+		append(machineI.MaybeSudo(), "nix-env", "--profile", profilePath, "--list-generations"),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			genData, currentGenInfo, err := parseGenerationsOutput(log.Output.String())
-			if err != nil {
-				return err
-			}
+			genData, date := parseNixEnvGenerations(log.Output.String())
 
 			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
 				metaInspect.Generations = genData
-				if currentGenInfo.Date != "" {
-					metaInspect.Date = stringbyte.StringByte(currentGenInfo.Date)
-				}
-
-				if currentGenInfo.Nixos != "" {
-					metaInspect.OSVersion = stringbyte.StringByte(currentGenInfo.Nixos)
-				}
-
-				if currentGenInfo.Kernel != "" {
-					metaInspect.Kernel = stringbyte.StringByte(currentGenInfo.Kernel)
+				if date != "" {
+					metaInspect.Date = stringbyte.StringByte(date)
 				}
 			})
 
 			return nil
+		}),
+		executioner.OnFailure(func(_ *command.CommandLog, err error) error {
+			// Exit code 1: profile doesn't exist yet (first deploy).
+			// Exit code 127: nix-env not in PATH (e.g. kexec VM before NixOS install).
+			// Both are expected; other errors (daemon broken, permissions, etc.) propagate.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				code := exitErr.ExitCode()
+				if code == 1 || code == 127 {
+					return nil
+				}
+			}
+
+			return err
 		}),
 		executioner.OnDryRun(func() {
 			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
@@ -293,14 +395,62 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine) er
 					Current:   1,
 					Available: []uint{1},
 				}
-				metaInspect.Date = stringbyte.StringByte("DRY_RUN")
-				metaInspect.OSVersion = stringbyte.StringByte("DRY_RUN")
-				metaInspect.Kernel = stringbyte.StringByte("DRY_RUN")
 			})
 		}),
 	)
 
 	return errors.Wrap(err, "failed to list generations")
+}
+
+// parseNixEnvGenerations parses output from `nix-env --profile <path> --list-generations`.
+// Format:
+//
+//	1   2026-08-01 15:00:44
+//	2   2026-08-01 15:10:22   (current)
+func parseNixEnvGenerations(output string) (*machine.Generations, string) {
+	lines := strings.Split(output, "\n")
+
+	generations := &machine.Generations{}
+
+	var currentDate string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 1 {
+			continue
+		}
+
+		genNum, err := strconv.ParseUint(fields[0], 10, 0)
+		if err != nil {
+			continue
+		}
+
+		generations.Available = append(generations.Available, uint(genNum))
+
+		isCurrent := strings.Contains(line, "(current)")
+		if isCurrent {
+			generations.Current = uint(genNum)
+
+			if len(fields) >= 3 { //nolint:mnd
+				currentDate = fields[1] + " " + fields[2]
+			}
+		}
+	}
+
+	if len(generations.Available) == 0 {
+		return nil, "" // no generations yet, not an error
+	}
+
+	if generations.Current == 0 && len(generations.Available) > 0 {
+		generations.Current = generations.Available[len(generations.Available)-1]
+	}
+
+	return generations, currentDate
 }
 
 func validateSSHMachineState(exc *executioner.Executioner, machineI *machine.Machine) error {
@@ -351,78 +501,4 @@ func validateSecretsPaths(exc *executioner.Executioner, machineI *machine.Machin
 	}
 
 	return nil
-}
-
-// Helpers
-
-type generationInfo struct {
-	Date   string
-	Nixos  string
-	Kernel string
-}
-
-func parseGenerationsOutput(output string) (*machine.Generations, generationInfo, error) {
-	lines := strings.Split(output, "\n")
-
-	generations := &machine.Generations{}
-
-	var currentGenInfo generationInfo
-
-	for i, line := range lines {
-		genNum, info, isCurrent, ok := parseGenerationLine(i, line)
-		if !ok {
-			continue
-		}
-
-		if isCurrent {
-			generations.Current = genNum
-			currentGenInfo = info
-		}
-
-		generations.Available = append(generations.Available, genNum)
-	}
-
-	if len(generations.Available) == 0 {
-		return nil, generationInfo{}, errors.New("no generations found - ensure this is a NixOS system with system profiles")
-	}
-
-	return generations, currentGenInfo, nil
-}
-
-func parseGenerationLine(idx int, line string) (uint, generationInfo, bool, bool) {
-	const minFields = 1
-
-	line = strings.TrimSpace(line)
-	if line == "" || idx == 0 {
-		return 0, generationInfo{}, false, false
-	}
-
-	fields := strings.Fields(line)
-	if len(fields) < minFields {
-		return 0, generationInfo{}, false, false
-	}
-
-	parsedNum, err := strconv.ParseUint(fields[0], 10, 0)
-	if err != nil {
-		return 0, generationInfo{}, false, false
-	}
-
-	const currentFieldIdx = 6
-
-	isCurrent := len(fields) > currentFieldIdx && fields[len(fields)-1] == "True"
-
-	var info generationInfo
-	if len(fields) >= 2 {
-		info.Date = fields[1]
-	}
-
-	if len(fields) >= 4 { //nolint:mnd
-		info.Nixos = fields[3]
-	}
-
-	if len(fields) >= 5 { //nolint:mnd
-		info.Kernel = fields[4]
-	}
-
-	return uint(parsedNum), info, isCurrent, true
 }

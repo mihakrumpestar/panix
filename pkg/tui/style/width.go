@@ -162,7 +162,7 @@ func StripANSI(line []byte) []byte {
 }
 
 // HasVisibleContent reports whether line contains any visible (non-ANSI)
-// characters. Zero allocation — scans without building a result slice.
+// characters. Zero allocation: scans without building a result slice.
 // Use instead of len(StripANSI(line)) == 0.
 func HasVisibleContent(line []byte) bool {
 	pos := 0

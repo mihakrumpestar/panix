@@ -11,10 +11,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func createCloudInitISO(outputName, instanceID, hostname, pubKeyPath string, withRsync bool) (string, error) {
+// createCloudInitISO creates a cloud-init seed ISO.
+// When withNix is true, nix is installed via the Determinate Systems installer.
+// When shutdown is true, the VM shuts down after cloud-init completes (used for image baking).
+func createCloudInitISO(outputName, instanceID, hostname, pubKeyPath string, withNix bool, shutdown bool) (string, error) {
 	seedPath := filepath.Join(cacheDirPath, outputName)
 
-	cached, err := checkExistingSeed(seedPath, pubKeyPath, withRsync)
+	cached, err := checkExistingSeed(seedPath, pubKeyPath, withNix, shutdown)
 	if err != nil {
 		return "", err
 	}
@@ -23,11 +26,11 @@ func createCloudInitISO(outputName, instanceID, hostname, pubKeyPath string, wit
 		return cached, nil
 	}
 
-	return writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath, withRsync)
+	return writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath, withNix, shutdown)
 }
 
-func checkExistingSeed(seedPath, pubKeyPath string, withRsync bool) (string, error) {
-	if withRsync {
+func checkExistingSeed(seedPath, pubKeyPath string, withNix bool, shutdown bool) (string, error) {
+	if withNix || shutdown {
 		return "", nil
 	}
 
@@ -49,7 +52,7 @@ func checkExistingSeed(seedPath, pubKeyPath string, withRsync bool) (string, err
 	return "", nil
 }
 
-func writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath string, withRsync bool) (string, error) {
+func writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath string, withNix bool, shutdown bool) (string, error) {
 	pubKeyContent, err := os.ReadFile(pubKeyPath) //nolint:gosec
 	if err != nil {
 		return "", errors.Wrap(err, "read pub key")
@@ -71,7 +74,7 @@ func writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath string, withRs
 		return "", errors.Wrap(err, "write meta-data")
 	}
 
-	userData := buildCloudInitUserData(pubKey, withRsync)
+	userData := buildCloudInitUserData(pubKey, withNix, shutdown)
 
 	err = os.WriteFile(filepath.Join(tmpDir, "user-data"), []byte(userData), pubFilePerm)
 	if err != nil {
@@ -85,7 +88,7 @@ func writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath string, withRs
 		return "", errors.Wrapf(err, "create cloud-init seed: %s", string(out))
 	}
 
-	if !withRsync {
+	if !withNix && !shutdown {
 		err = os.WriteFile(seedPath+".key", []byte(pubKey), pubFilePerm) //nolint:gosec
 		if err != nil {
 			return "", errors.Wrap(err, "write seed key cache")
@@ -95,12 +98,22 @@ func writeCloudInitISO(seedPath, instanceID, hostname, pubKeyPath string, withRs
 	return seedPath, nil
 }
 
-func buildCloudInitUserData(pubKey string, withRsync bool) string {
+func buildCloudInitUserData(pubKey string, withNix bool, shutdown bool) string {
 	userData := "#cloud-config\ndisable_root: false\n"
 
-	if withRsync {
-		userData += "package_update: false\npackages:\n  - rsync\n"
+	packages := []string{"rsync"}
+	if withNix {
+		packages = append(packages, "curl", "ca-certificates")
 	}
+
+	userData += "package_update: true\npackages:\n"
+
+	var userDataSb110 strings.Builder
+	for _, pkg := range packages {
+		fmt.Fprintf(&userDataSb110, "  - %s\n", pkg)
+	}
+
+	userData += userDataSb110.String()
 
 	userData += fmt.Sprintf(
 		"write_files:\n"+
@@ -118,7 +131,15 @@ func buildCloudInitUserData(pubKey string, withRsync bool) string {
 		pubKey,
 	)
 
-	if withRsync {
+	if withNix {
+		// Install nix (Determinate Systems installer).
+		// Used during image baking — the baked image is reused across test runs.
+		// The panix SSH executioner sources /etc/profile.d/nix.sh before commands,
+		// so no symlink hackery is needed.
+		userData += "  - curl -sSfL https://install.determinate.systems/nix | sh -s -- install --no-confirm\n"
+	}
+
+	if shutdown {
 		userData += "  - shutdown -h now\n"
 	}
 

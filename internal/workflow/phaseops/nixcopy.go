@@ -4,9 +4,9 @@ import (
 	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/config/nix"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
@@ -20,16 +20,16 @@ func CopyClosure(
 	transferClosure bool,
 ) error {
 	machineI := fleetLeaf.Machine
-	configurationI := fleetLeaf.Configuration
+	installable := fleetLeaf.Installable
 	activeSSH := machineI.GetActiveSSH()
 
-	toURL := nixCopyToURL(activeSSH, machineI, transferClosure)
+	toURL := nixCopyToURL(activeSSH, machineI, installable.Type, transferClosure)
 	sshOpts := activeSSH.MaybeNixSSHOpts()
 
-	baseArgs := nixCopyBaseArgs(configurationI, toURL)
+	baseArgs := nixCopyBaseArgs(installable, toURL)
 	commandWithArgs := slices.Concat(
 		baseArgs,
-		slices.Concat(configurationI.Nix.ExtraFlags, configurationI.Nix.CopyFlags),
+		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.CopyFlags),
 		toTransfer,
 	)
 
@@ -54,26 +54,29 @@ func CopyClosure(
 	return nil
 }
 
-func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, transferClosure bool) string {
+func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, outputType installable.FlakeOutputType, transferClosure bool) string {
 	var storeURLParams []string
 
+	// Only redirect to /mnt for bootstrappable output types that are being bootstrapped.
+	// Non-bootstrappable output types (homeConfigurations, packages, etc.) always copy
+	// to the live system's /nix/store, not /mnt.
 	mi := machineI.MetaInspect.Load()
-	if mi != nil && !mi.Bootstrapped && transferClosure {
+	if mi != nil && !mi.Bootstrapped && transferClosure && outputType.IsBootstrappable() {
 		storeURLParams = append(storeURLParams, "remote-store=local?root=/mnt")
 	}
 
 	return activeSSH.NixStoreURLWithParams(storeURLParams...)
 }
 
-func nixCopyBaseArgs(configurationI *configuration.Configuration, toURL string) []string {
+func nixCopyBaseArgs(installable *installable.Installable, toURL string) []string {
 	baseArgs := []string{"nix"}
 	baseArgs = append(baseArgs, NixExperimentalFeatures...)
 	baseArgs = append(baseArgs, "copy")
 
-	if configurationI.Nix.BuildMode == nix.BuildModeRemote {
+	if installable.Nix.BuildMode == nix.BuildModeRemote {
 		var fromSSH ssh.SSHClient
 
-		for i, pair := range configurationI.Machines.Pairs() {
+		for i, pair := range installable.Machines.Pairs() {
 			if i == 0 && pair.Value != nil {
 				fromSSH = pair.Value.GetActiveSSH()
 

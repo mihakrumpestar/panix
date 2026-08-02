@@ -8,10 +8,10 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
@@ -110,6 +110,8 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 		colorScheme = colorscheme.DefaultColorScheme()
 	}
 
+	const outputType = installable.FlakeOutputType("nixosConfigurations")
+
 	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
 
 	for flakeIdx := range flakesCount {
@@ -119,16 +121,20 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 		flakeObj.Xpath = xpath.New(flakeName)
 		flakeObj.PhaseXpaths = initPhaseXpaths(flakeObj.Xpath)
 		flakeObj.Logs = logs.New()
-		flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
+		flakeObj.Installables = atomicorderedmap.New[string, *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]]()
+
+		attrMap := atomicorderedmap.New[string, *installable.Installable]()
+		flakeObj.Installables.Set("nixosConfigurations", attrMap)
 
 		for confIdx := range configsCount {
 			cfgName := "cfg" + strconv.Itoa(confIdx)
-			cfg := &configuration.Configuration{}
-			cfg.Name = stringbyte.StringByte(cfgName)
-			cfg.Xpath = xpath.New(flakeName, cfgName)
-			cfg.PhaseXpaths = initPhaseXpaths(cfg.Xpath)
-			cfg.Logs = logs.New()
-			cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
+			out := &installable.Installable{}
+			out.Name = installable.AttributeName(cfgName)
+			out.Type = outputType
+			out.Xpath = xpath.New(flakeName, cfgName)
+			out.PhaseXpaths = initPhaseXpaths(out.Xpath)
+			out.Logs = logs.New()
+			out.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
 			for machIdx := range machinesN {
 				machName := "m" + strconv.Itoa(machIdx)
@@ -149,10 +155,10 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 				mach.Name = stringbyte.StringByte(machName)
 				mach.Xpath = xpath.New(flakeName, cfgName, machName)
 				mach.PhaseXpaths = initPhaseXpaths(mach.Xpath)
-				cfg.Machines.Set(machName, mach)
+				out.Machines.Set(machName, mach)
 			}
 
-			flakeObj.Configurations.Set(cfgName, cfg)
+			attrMap.Set(cfgName, out)
 		}
 
 		flakesMap.Set(flakeName, flakeObj)

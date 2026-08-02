@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/pkg/errors"
 )
 
@@ -43,23 +45,7 @@ func validateFlakes(fleet *fleet.Fleet) error {
 			}
 		})
 
-		for _, configPair := range flakePair.Value.Configurations.Pairs() {
-			attrPath := strings.ReplaceAll(configPair.Value.FlakeOutput.String(), "<name>", configPair.Key)
-			installable := fmt.Sprintf("%s#%s", flakeURL, attrPath)
-
-			waitGroup.Add(1)
-
-			go func(configName, inst string) {
-				defer waitGroup.Done()
-
-				if !checkFlakeOutputExists(inst) {
-					mu.Lock()
-
-					errs = append(errs, fmt.Sprintf("  - configuration '%s' output not found in flake '%s' (%s)", configName, flakeName, inst))
-					mu.Unlock()
-				}
-			}(configPair.Key, installable)
-		}
+		validateInstallablesExist(&waitGroup, &mu, &errs, flakePair.Value.Installables, flakeURL, flakeName)
 	}
 
 	waitGroup.Wait()
@@ -69,6 +55,53 @@ func validateFlakes(fleet *fleet.Fleet) error {
 	}
 
 	return nil
+}
+
+// validateInstallablesExist launches goroutines to check that each installable
+// exists in the given flake URL. Errors are appended to errs under mu.
+func validateInstallablesExist(
+	waitGroup *sync.WaitGroup,
+	mu *sync.Mutex,
+	errs *[]string,
+	installables *atomicorderedmap.AtomicOrderedMap[string, *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]],
+	flakeURL, flakeName string,
+) {
+	for _, typePair := range installables.Pairs() {
+		typeKey := typePair.Key
+
+		attrMap := typePair.Value
+		if attrMap == nil {
+			continue
+		}
+
+		for _, namePair := range attrMap.Pairs() {
+			nameKey := namePair.Key
+
+			installable := namePair.Value
+			if installable == nil {
+				continue
+			}
+
+			flakeInstallable := installablepkg.ResolveFlakeInstallable(
+				installablepkg.FlakeOutputType(typeKey),
+				installablepkg.AttributeName(nameKey),
+			)
+			installablePath := fmt.Sprintf("%s#%s", flakeURL, flakeInstallable)
+
+			waitGroup.Add(1)
+
+			go func(outputName, inst string) {
+				defer waitGroup.Done()
+
+				if !checkInstallableExists(inst) {
+					mu.Lock()
+
+					*errs = append(*errs, fmt.Sprintf("  - output '%s' not found in flake '%s' (%s)", outputName, flakeName, inst))
+					mu.Unlock()
+				}
+			}(nameKey, installablePath)
+		}
+	}
 }
 
 func checkFlakeURLExists(url string) bool {
@@ -92,7 +125,7 @@ func checkFlakeURLExists(url string) bool {
 	return json.Unmarshal(output, &metadata) == nil
 }
 
-func checkFlakeOutputExists(installable string) bool {
+func checkInstallableExists(installable string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), nixFlakeValidationTimeout)
 	defer cancel()
 

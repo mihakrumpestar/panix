@@ -140,7 +140,9 @@ func TestMaybeNixSSHOpts_Defaults(t *testing.T) {
 	opts := client.MaybeNixSSHOpts()
 
 	assertion := assert.New(t)
-	assertion.Equal([]string{"NIX_SSHOPTS=-o StrictHostKeyChecking=accept-new"}, opts)
+	assertion.Contains(opts[0], "StrictHostKeyChecking=accept-new")
+	assertion.Contains(opts[0], "ControlMaster=auto")
+	assertion.Contains(opts[0], "ControlPersist=60")
 }
 
 func TestMaybeNixSSHOpts_DisableStrictKeyChecking(t *testing.T) {
@@ -155,7 +157,11 @@ func TestMaybeNixSSHOpts_DisableStrictKeyChecking(t *testing.T) {
 	opts := client.MaybeNixSSHOpts()
 
 	assertion := assert.New(t)
-	assertion.Equal([]string{"NIX_SSHOPTS=-o IdentitiesOnly=yes -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"}, opts)
+	assertion.Contains(opts[0], "IdentitiesOnly=yes")
+	assertion.Contains(opts[0], "UserKnownHostsFile=/dev/null")
+	assertion.Contains(opts[0], "StrictHostKeyChecking=no")
+	assertion.Contains(opts[0], "ControlMaster=auto")
+	assertion.Contains(opts[0], "ControlPersist=60")
 }
 
 func TestMaybeNixSSHOpts_DisableAutoAddHostKey(t *testing.T) {
@@ -169,7 +175,9 @@ func TestMaybeNixSSHOpts_DisableAutoAddHostKey(t *testing.T) {
 	opts := client.MaybeNixSSHOpts()
 
 	assertion := assert.New(t)
-	assertion.Equal([]string{"NIX_SSHOPTS="}, opts)
+	assertion.Contains(opts[0], "ControlMaster=auto")
+	assertion.NotContains(opts[0], "StrictHostKeyChecking")
+	assertion.NotContains(opts[0], "UserKnownHostsFile")
 }
 
 func TestNixStoreURL_Alias(t *testing.T) {

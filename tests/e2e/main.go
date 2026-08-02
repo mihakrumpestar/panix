@@ -20,9 +20,22 @@ const (
 	testScopeBoth   testScope = "both"
 )
 
-var errInvalidTestScope = errors.New("invalid test scope, must be local, remote, or both")
+type deployPhase string
 
-var testScopeFlag testScope
+const (
+	phaseAll        deployPhase = "all"
+	phaseBootstrap  deployPhase = "bootstrap"
+	phaseRedeploy   deployPhase = "redeploy"
+	phaseHome       deployPhase = "home"
+)
+
+var errInvalidTestScope = errors.New("invalid test scope, must be local, remote, or both")
+var errInvalidPhase = errors.New("invalid phase, must be: all, bootstrap, redeploy, or home")
+
+var (
+	testScopeFlag testScope
+	phaseFlag     deployPhase
+)
 
 func parseFlags() {
 	flag.Func("test", "test scope: local, remote, both (default: both)", func(val string) error {
@@ -36,10 +49,25 @@ func parseFlags() {
 		}
 	})
 
+	flag.Func("phase", "deploy phase to run: all, bootstrap, redeploy, home (default: all)", func(val string) error {
+		switch deployPhase(val) {
+		case phaseAll, phaseBootstrap, phaseRedeploy, phaseHome:
+			phaseFlag = deployPhase(val)
+
+			return nil
+		default:
+			return fmt.Errorf("%w: %q", errInvalidPhase, val)
+		}
+	})
+
 	flag.Parse()
 
 	if testScopeFlag == "" {
 		testScopeFlag = testScopeBoth
+	}
+
+	if phaseFlag == "" {
+		phaseFlag = phaseAll
 	}
 }
 
@@ -53,12 +81,15 @@ const (
 	blankDiskRemoteName = "blank-remote.qcow2"
 	overlayName         = "debian-overlay.qcow2"
 	overlayRemoteName   = "debian-overlay-remote.qcow2"
+	overlayNixName      = "debian-overlay-nix.qcow2"
 	seedName            = "seed.iso"
 	seedRemoteName      = "seed-remote.iso"
+	seedNixName         = "seed-nix.iso"
 	nixosISOPort        = 10022
 	kexecVMPort         = 10023
 	remoteISOPort       = 10025
 	remoteKexecPort     = 10026
+	debianNixVMPort     = 10027
 )
 
 func main() {
@@ -121,12 +152,7 @@ func run() error {
 	defer vms.kill()
 	defer cleanupFifos()
 
-	err = runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath, res.kexecInstallerPath)
-	if err != nil {
-		return err
-	}
-
-	err = runPhase(configPath, "Redeploy", "PANIX_TEST_MODE=redeploy", res.keyPath, res.kexecInstallerPath)
+	err = runDeployPhases(configPath, res)
 	if err != nil {
 		return err
 	}
@@ -134,6 +160,30 @@ func run() error {
 	printFinalf("All tests passed!")
 
 	_ = writeBadgeSVG(true)
+
+	return nil
+}
+
+func runDeployPhases(configPath string, res *testResources) error {
+	if phaseFlag == phaseBootstrap || phaseFlag == phaseAll {
+		err := runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath, res.kexecInstallerPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if phaseFlag == phaseRedeploy || phaseFlag == phaseAll {
+		err := runPhase(configPath, "Redeploy", "PANIX_TEST_MODE=redeploy", res.keyPath, res.kexecInstallerPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if phaseFlag == phaseHome || phaseFlag == phaseAll {
+		if testScopeFlag.local() {
+			return runHomeManagerPhase(configPath, res.keyPath)
+		}
+	}
 
 	return nil
 }
@@ -158,9 +208,12 @@ type testResources struct {
 	kexecInstallerPath  string
 	cloudInitSeed       string
 	cloudInitSeedRemote string
+	cloudInitSeedNix    string
 	debianImagePath     string
+	debianNixImagePath  string
 	debianOverlay       string
 	debianOverlayRemote string
+	debianOverlayNix    string
 	blankDisk           string
 	blankDiskRemote     string
 }
@@ -190,6 +243,19 @@ func phase0Setup() (*testResources, error) {
 	res.debianImagePath, err = bakeStep("Bake Debian image (rsync pre-install)", res.keyPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if testScopeFlag.local() {
+		err = simpleStep("Bake Debian image (nix pre-install)", func() error {
+			var bakeErr error
+
+			res.debianNixImagePath, bakeErr = bakeDebianNixImage(res.keyPath)
+
+			return bakeErr
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = simpleStep("Stage SSH public key", func() error { return stageSSHPubKey(res.keyPath) })
@@ -230,6 +296,12 @@ func buildNixArtifacts(res *testResources) error {
 		return preBuildClosure("test-vm", "nixosConfigurations.test-vm.config.system.build.toplevel")
 	})
 
+	if testScopeFlag.local() {
+		parGroup.Go("Pre-build home-manager closure", func() error {
+			return preBuildClosure("home-manager", "homeConfigurations.test-home.activationPackage")
+		})
+	}
+
 	if testScopeFlag.remote() {
 		parGroup.Go("Pre-build test-vm-remote closure", func() error {
 			return preBuildClosure("test-vm-remote", "nixosConfigurations.test-vm-remote.config.system.build.toplevel")
@@ -246,54 +318,86 @@ func createDisks(res *testResources) error {
 	parGroup := newParallelGroup()
 
 	if testScopeFlag.local() {
-		parGroup.Go("Create cloud-init seed", func() error {
-			var seedErr error
-
-			res.cloudInitSeed, seedErr = createCloudInitISO(seedName, "panix-kexec-test", "kexec-vm", res.keyPath+".pub", false)
-
-			return seedErr
-		})
-		parGroup.Go("Create Debian overlay disk", func() error {
-			var diskErr error
-
-			res.debianOverlay, diskErr = createDisk(overlayName, "-b", res.debianImagePath, "-F", "qcow2")
-
-			return diskErr
-		})
-		parGroup.Go("Create blank disk", func() error {
-			var diskErr error
-
-			res.blankDisk, diskErr = createDisk(blankDiskName, blankDiskSize)
-
-			return diskErr
-		})
+		createLocalDisks(parGroup, res)
 	}
 
 	if testScopeFlag.remote() {
-		parGroup.Go("Create cloud-init seed (remote)", func() error {
-			var seedErr error
-
-			res.cloudInitSeedRemote, seedErr = createCloudInitISO(seedRemoteName, "panix-kexec-test-remote", "kexec-vm-remote", res.keyPath+".pub", false)
-
-			return seedErr
-		})
-		parGroup.Go("Create Debian overlay disk (remote)", func() error {
-			var diskErr error
-
-			res.debianOverlayRemote, diskErr = createDisk(overlayRemoteName, "-b", res.debianImagePath, "-F", "qcow2")
-
-			return diskErr
-		})
-		parGroup.Go("Create blank disk (remote)", func() error {
-			var diskErr error
-
-			res.blankDiskRemote, diskErr = createDisk(blankDiskRemoteName, blankDiskSize)
-
-			return diskErr
-		})
+		createRemoteDisks(parGroup, res)
 	}
 
 	return parGroup.Wait()
+}
+
+func createLocalDisks(parGroup *parallelGroup, res *testResources) {
+	parGroup.Go("Create cloud-init seed", func() error {
+		var seedErr error
+
+		res.cloudInitSeed, seedErr = createCloudInitISO(
+			seedName, "panix-kexec-test", "kexec-vm",
+			res.keyPath+".pub", false, false,
+		)
+
+		return seedErr
+	})
+	parGroup.Go("Create Debian overlay disk", func() error {
+		var diskErr error
+
+		res.debianOverlay, diskErr = createDisk(overlayName, "-b", res.debianImagePath, "-F", "qcow2")
+
+		return diskErr
+	})
+	parGroup.Go("Create blank disk", func() error {
+		var diskErr error
+
+		res.blankDisk, diskErr = createDisk(blankDiskName, blankDiskSize)
+
+		return diskErr
+	})
+	parGroup.Go("Create Debian-nix cloud-init seed", func() error {
+		var seedErr error
+
+		// Simple SSH-only seed — nix is already baked into the image.
+		res.cloudInitSeedNix, seedErr = createCloudInitISO(
+			seedNixName, "debian-nix", "debian-nix-vm",
+			res.keyPath+".pub", false, false,
+		)
+
+		return seedErr
+	})
+	parGroup.Go("Create Debian-nix overlay disk", func() error {
+		var diskErr error
+
+		res.debianOverlayNix, diskErr = createDisk(overlayNixName, "-b", res.debianNixImagePath, "-F", "qcow2")
+
+		return diskErr
+	})
+}
+
+func createRemoteDisks(parGroup *parallelGroup, res *testResources) {
+	parGroup.Go("Create cloud-init seed (remote)", func() error {
+		var seedErr error
+
+		res.cloudInitSeedRemote, seedErr = createCloudInitISO(
+			seedRemoteName, "panix-kexec-test-remote", "kexec-vm-remote",
+			res.keyPath+".pub", false, false,
+		)
+
+		return seedErr
+	})
+	parGroup.Go("Create Debian overlay disk (remote)", func() error {
+		var diskErr error
+
+		res.debianOverlayRemote, diskErr = createDisk(overlayRemoteName, "-b", res.debianImagePath, "-F", "qcow2")
+
+		return diskErr
+	})
+	parGroup.Go("Create blank disk (remote)", func() error {
+		var diskErr error
+
+		res.blankDiskRemote, diskErr = createDisk(blankDiskRemoteName, blankDiskSize)
+
+		return diskErr
+	})
 }
 
 type testVMs struct {
@@ -301,6 +405,7 @@ type testVMs struct {
 	kexecVM       *qemuVM
 	remoteISOVM   *qemuVM
 	remoteKexecVM *qemuVM
+	debianNixVM   *qemuVM
 }
 
 func startTestVMs(res *testResources) (*testVMs, error) {
@@ -309,43 +414,15 @@ func startTestVMs(res *testResources) (*testVMs, error) {
 	var err error
 
 	if testScopeFlag.local() {
-		vms.isoVM, err = startVMStep("Start NixOS ISO VM (port %d)", nixosISOPort, "iso-vm",
-			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDisk),
-			"-cdrom", res.installerISOPath,
-		)
+		err = startLocalVMs(vms, res)
 		if err != nil {
-			return nil, err
-		}
-
-		vms.kexecVM, err = startVMStep("Start kexec VM (port %d)", kexecVMPort, "kexec-vm",
-			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlay),
-			"-cdrom", res.cloudInitSeed,
-		)
-		if err != nil {
-			vms.kill()
-
 			return nil, err
 		}
 	}
 
 	if testScopeFlag.remote() {
-		vms.remoteISOVM, err = startVMStep("Start remote NixOS ISO VM (port %d)", remoteISOPort, "iso-vm-remote",
-			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDiskRemote),
-			"-cdrom", res.installerISOPath,
-		)
+		err = startRemoteVMs(vms, res)
 		if err != nil {
-			vms.kill()
-
-			return nil, err
-		}
-
-		vms.remoteKexecVM, err = startVMStep("Start remote kexec VM (port %d)", remoteKexecPort, "kexec-vm-remote",
-			"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayRemote),
-			"-cdrom", res.cloudInitSeedRemote,
-		)
-		if err != nil {
-			vms.kill()
-
 			return nil, err
 		}
 	}
@@ -356,6 +433,66 @@ func startTestVMs(res *testResources) (*testVMs, error) {
 	}
 
 	return vms, nil
+}
+
+func startLocalVMs(vms *testVMs, res *testResources) error {
+	var err error
+
+	vms.isoVM, err = startVMStep("Start NixOS ISO VM (port %d)", nixosISOPort, "iso-vm",
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDisk),
+		"-cdrom", res.installerISOPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	vms.kexecVM, err = startVMStep("Start kexec VM (port %d)", kexecVMPort, "kexec-vm",
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlay),
+		"-cdrom", res.cloudInitSeed,
+	)
+	if err != nil {
+		vms.kill()
+
+		return err
+	}
+
+	vms.debianNixVM, err = startVMStep("Start Debian-nix VM (port %d)", debianNixVMPort, "debian-nix-vm",
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayNix),
+		"-cdrom", res.cloudInitSeedNix,
+	)
+	if err != nil {
+		vms.kill()
+
+		return err
+	}
+
+	return nil
+}
+
+func startRemoteVMs(vms *testVMs, res *testResources) error {
+	var err error
+
+	vms.remoteISOVM, err = startVMStep("Start remote NixOS ISO VM (port %d)", remoteISOPort, "iso-vm-remote",
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDiskRemote),
+		"-cdrom", res.installerISOPath,
+	)
+	if err != nil {
+		vms.kill()
+
+		return err
+	}
+
+	vms.remoteKexecVM, err = startVMStep("Start remote kexec VM (port %d)", remoteKexecPort, "kexec-vm-remote",
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayRemote),
+		"-cdrom", res.cloudInitSeedRemote,
+	)
+	if err != nil {
+		vms.kill()
+
+		return err
+	}
+
+	return nil
 }
 
 func (vms *testVMs) kill() {
@@ -374,6 +511,10 @@ func (vms *testVMs) kill() {
 	if vms.remoteKexecVM != nil {
 		vms.remoteKexecVM.kill()
 	}
+
+	if vms.debianNixVM != nil {
+		vms.debianNixVM.kill()
+	}
 }
 
 func waitForAllSSH(keyPath string) error {
@@ -385,6 +526,9 @@ func waitForAllSSH(keyPath string) error {
 		})
 		parGroup.Go("Wait for SSH on kexec VM", func() error {
 			return waitForSSH(kexecVMPort, keyPath)
+		})
+		parGroup.Go("Wait for SSH on Debian-nix VM", func() error {
+			return waitForSSH(debianNixVMPort, keyPath)
 		})
 	}
 
@@ -415,6 +559,23 @@ func runPhase(configPath, phaseName, modeEnv, keyPath, kexecPath string) error {
 	step.Done()
 
 	return verifyAll(keyPath)
+}
+
+func runHomeManagerPhase(configPath, keyPath string) error {
+	printPhasef("Phase: Home-manager deploy")
+
+	step := startStep("%s", "Run panix Home-manager deploy")
+
+	err := runPanixDeploy(configPath, "PANIX_TEST_MODE=home")
+	if err != nil {
+		step.Fail(err)
+
+		return err
+	}
+
+	step.Done()
+
+	return verifyHomeManager(keyPath)
 }
 
 func verifyAll(keyPath string) error {

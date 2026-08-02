@@ -149,7 +149,7 @@ func JoinHorizontalBufs(buf *buffer.LinesBuf, pos Position, blocks ...*buffer.Li
 }
 
 // linesBufToBlockInfo builds a blockInfo from a LinesBuf without scanning for
-// newlines — lines and widths come directly from the LinesBuf's line index.
+// newlines; lines and widths come directly from the LinesBuf's line index.
 func linesBufToBlockInfo(s *joinScratch, buf *buffer.LinesBuf) blockInfo {
 	n := buf.Len()
 	lines := s.allocLines(n)

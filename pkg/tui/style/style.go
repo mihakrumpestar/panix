@@ -262,7 +262,7 @@ func (s Style) RenderIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
 		return
 	}
 
-	// Layout requires [][]byte — build temporary view from LinesBuf.
+	// Layout requires [][]byte: build temporary view from LinesBuf.
 	lines := content.Lines()
 	result := s.applyLayout(lines)
 	s.renderColorOnlyInto(dst, result)
@@ -380,7 +380,7 @@ func (s Style) RenderLineInto(dst *buffer.LinesBuf, line []byte) {
 
 // RenderAppend applies the style's color/bold attributes to content and
 // appends the result to the current line of dst. Layout properties
-// (width, padding, borders) are ignored — the caller controls line structure.
+// (width, padding, borders) are ignored; the caller controls line structure.
 // After every ANSI reset (\x1b[m) found in content, the style prefix
 // is re-emitted so that the style persists across pre-styled content
 // (e.g. table cells with selection background).
@@ -1051,7 +1051,7 @@ func truncateToWidth(line []byte, maxW int, ellipsis bool) []byte {
 		return line
 	}
 
-	// Content exceeds maxW — truncate.
+	// Content exceeds maxW; truncate.
 	if ellipsis && maxW > 2 {
 		truncated := truncateToWidth(line, maxW-2, false)
 		buf := make([]byte, len(truncated)+2)

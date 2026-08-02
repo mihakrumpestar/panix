@@ -32,7 +32,7 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 		return New(appendXpath...)
 	}
 
-	// Fast path: single arg (most common case) — one allocation, no builder.
+	// Fast path: single arg (most common case), one allocation, no builder.
 	if len(appendXpath) == 1 {
 		return Xpath{stringbyte.StringByte(xpathS + "/" + appendXpath[0])}
 	}
@@ -40,35 +40,47 @@ func (x Xpath) NewXpathWithAppend(appendXpath ...string) Xpath {
 	return Xpath{stringbyte.StringByte(xpathS + "/" + strings.Join(appendXpath, "/"))}
 }
 
-// FleetLeaf returns the last 3 elements of the path as strings.
+// FleetLeaf returns the last 4 elements of the path as strings:
+// (flake, outputType, outputName, machine).
 // Uses strings.LastIndex to avoid allocating a []string from strings.Split.
-func (x Xpath) FleetLeaf() (string, string, string) {
+func (x Xpath) FleetLeaf() (string, string, string, string) {
 	path := x.String()
 	if path == "" {
-		return "", "", ""
+		return "", "", "", ""
 	}
 
-	// Find last 3 segments by scanning backwards.
+	// Segment 4 (machine)
 	last := strings.LastIndex(path, "/")
 	if last < 0 {
-		return "", "", path
+		return "", "", "", path
 	}
 
 	machine := path[last+1:]
 	rest := path[:last]
 
+	// Segment 3 (outputName)
 	mid := strings.LastIndex(rest, "/")
 	if mid < 0 {
-		return "", rest, machine
+		return "", "", rest, machine
 	}
 
-	config := rest[mid+1:]
+	outputName := rest[mid+1:]
 	rest = rest[:mid]
 
+	// Segment 2 (outputType)
 	first := strings.LastIndex(rest, "/")
 	if first < 0 {
-		return rest, config, machine
+		return "", rest, outputName, machine
 	}
 
-	return rest[first+1:], config, machine
+	outputType := rest[first+1:]
+	rest = rest[:first]
+
+	// Segment 1 (flake)
+	flakeStart := strings.LastIndex(rest, "/")
+	if flakeStart < 0 {
+		return rest, outputType, outputName, machine
+	}
+
+	return rest[flakeStart+1:], outputType, outputName, machine
 }

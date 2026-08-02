@@ -100,12 +100,13 @@ func TestNewXpathWithAppend(t *testing.T) {
 	}
 }
 
-func TestFleetLeaf(t *testing.T) {
+func TestMachineOutput(t *testing.T) {
 	t.Parallel()
 
 	fake := faker.New()
 	segMach := fake.RandomStringWithLength(4)
-	segConf := fake.RandomStringWithLength(4)
+	segName := fake.RandomStringWithLength(4)
+	segType := fake.RandomStringWithLength(4)
 	segFlake := fake.RandomStringWithLength(4)
 	segExtra := fake.RandomStringWithLength(4)
 	segOne := fake.RandomStringWithLength(4)
@@ -114,15 +115,17 @@ func TestFleetLeaf(t *testing.T) {
 	tests := []struct {
 		xpath     Xpath
 		wantFlake string
-		wantConf  string
+		wantType  string
+		wantName  string
 		wantMach  string
 	}{
-		{Xpath{}, "", "", ""},
-		{New(segMach), "", "", segMach},
-		{New(segConf, segMach), "", segConf, segMach},
-		{New(segFlake, segConf, segMach), segFlake, segConf, segMach},
-		{New(segExtra, segFlake, segConf, segMach), segFlake, segConf, segMach},
-		{New(segOne, segTwo, segFlake, segConf, segMach), segFlake, segConf, segMach},
+		{Xpath{}, "", "", "", ""},
+		{New(segMach), "", "", "", segMach},
+		{New(segName, segMach), "", "", segName, segMach},
+		{New(segType, segName, segMach), "", segType, segName, segMach},
+		{New(segFlake, segType, segName, segMach), segFlake, segType, segName, segMach},
+		{New(segExtra, segFlake, segType, segName, segMach), segFlake, segType, segName, segMach},
+		{New(segOne, segTwo, segFlake, segType, segName, segMach), segFlake, segType, segName, segMach},
 	}
 
 	for _, test := range tests {
@@ -130,9 +133,10 @@ func TestFleetLeaf(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
-			gotFlake, gotConf, gotMach := test.xpath.FleetLeaf()
+			gotFlake, gotType, gotName, gotMach := test.xpath.FleetLeaf()
 			assertion.Equal(test.wantFlake, gotFlake)
-			assertion.Equal(test.wantConf, gotConf)
+			assertion.Equal(test.wantType, gotType)
+			assertion.Equal(test.wantName, gotName)
 			assertion.Equal(test.wantMach, gotMach)
 		})
 	}

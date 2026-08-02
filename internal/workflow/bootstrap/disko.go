@@ -16,10 +16,10 @@ var ErrDiskoNoOutputPaths = errors.New("disko build output did not contain any o
 // Keys must be available for LUKS unlocking during partitioning.
 func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	flake := fleetLeaf.Flake
-	configuration := fleetLeaf.Configuration
+	installable := fleetLeaf.Installable
 	machine := fleetLeaf.Machine
 
-	installables := []string{fmt.Sprintf("%s#nixosConfigurations.%s.config.system.build.diskoScript", flake.URL, configuration.Name)}
+	installables := []string{fmt.Sprintf("%s#%s.%s.config.system.build.diskoScript", flake.URL, installable.Type, installable.Name)}
 
 	diskoScript, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "disko")
 	if err != nil {

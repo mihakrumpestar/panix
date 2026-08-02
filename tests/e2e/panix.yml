@@ -5,6 +5,7 @@
 {{- $key := printf "%s/id_ed25519" $cache -}}
 {{- $mode := env "PANIX_TEST_MODE" | default "bootstrap" -}}
 {{- $isBootstrap := eq $mode "bootstrap" -}}
+{{- $isHome := eq $mode "home" -}}
 
 flags:
   timeout: 600s
@@ -22,6 +23,7 @@ flags:
     goroutine: {{ $profile }}/goroutine.prof
 {{ end }}
 
+{{ if $isHome }}
 fleet:
   flakes:
     test:
@@ -32,73 +34,104 @@ fleet:
           - "eval-cache"
           - "false"
           - "--offline"
-      configurations:
-        test-vm:
-          machines:
-            nixos-iso-vm:
-              ssh: &ssh_nixos_iso
-                hostname: 127.0.0.1
-                port: 10022
-                username: root
-                identity_file: {{ $key }}
-                disable_strict_key_checking: true
+      installables:
+        homeConfigurations:
+          test-home:
+            machines:
+              nixos-iso-vm:
+                ssh: &ssh_nixos_iso
+                  hostname: 127.0.0.1
+                  port: 10022
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
+              debian-nix-vm:
+                ssh: &ssh_debian_nix
+                  hostname: 127.0.0.1
+                  port: 10027
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
+{{ else }}
+fleet:
+  flakes:
+    test:
+      url: path:{{ env "PANIX_E2E_DIR" }}/testflakes
+      nix:
+        build_flags:
+          - "--option"
+          - "eval-cache"
+          - "false"
+          - "--offline"
+      installables:
+        nixosConfigurations:
+          test-vm:
+            machines:
+              nixos-iso-vm:
+                ssh: &ssh_nixos_iso
+                  hostname: 127.0.0.1
+                  port: 10022
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
 {{ if $isBootstrap }}
-              bootstrap:
-                ssh: *ssh_nixos_iso
-                post_bootstrap_provisioned_hooks:
-                  - waitForOnline
+                bootstrap:
+                  ssh: *ssh_nixos_iso
+                  post_bootstrap_provisioned_hooks:
+                    - waitForOnline
 {{ end }}
-            kexec-vm:
-              ssh: &ssh_kexec
-                hostname: 127.0.0.1
-                port: 10023
-                username: root
-                identity_file: {{ $key }}
-                disable_strict_key_checking: true
+              kexec-vm:
+                ssh: &ssh_kexec
+                  hostname: 127.0.0.1
+                  port: 10023
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
 {{ if $isBootstrap }}
-              bootstrap:
-                ssh: *ssh_kexec
-                kexec:
-                  image: {{ env "PANIX_KEXEC_PATH" }}
-                  ssh_port: 10023
-                post_bootstrap_provisioned_hooks:
-                  - waitForOnline
+                bootstrap:
+                  ssh: *ssh_kexec
+                  kexec:
+                    image: {{ env "PANIX_KEXEC_PATH" }}
+                    ssh_port: 10023
+                  post_bootstrap_provisioned_hooks:
+                    - waitForOnline
 {{ end }}
-        test-vm-remote:
-          nix:
-            build_mode: remote
-            build_flags:
-              - "--option"
-              - "eval-cache"
-              - "false"
-              - "--offline"
-          machines:
-            nixos-iso-vm-remote:
-              ssh: &ssh_nixos_iso_remote
-                hostname: 127.0.0.1
-                port: 10025
-                username: root
-                identity_file: {{ $key }}
-                disable_strict_key_checking: true
+          test-vm-remote:
+            nix:
+              build_mode: remote
+              build_flags:
+                - "--option"
+                - "eval-cache"
+                - "false"
+                - "--offline"
+            machines:
+              nixos-iso-vm-remote:
+                ssh: &ssh_nixos_iso_remote
+                  hostname: 127.0.0.1
+                  port: 10025
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
 {{ if $isBootstrap }}
-              bootstrap:
-                ssh: *ssh_nixos_iso_remote
-                post_bootstrap_provisioned_hooks:
-                  - waitForOnline
+                bootstrap:
+                  ssh: *ssh_nixos_iso_remote
+                  post_bootstrap_provisioned_hooks:
+                    - waitForOnline
 {{ end }}
-            kexec-vm-remote:
-              ssh: &ssh_kexec_remote
-                hostname: 127.0.0.1
-                port: 10026
-                username: root
-                identity_file: {{ $key }}
-                disable_strict_key_checking: true
+              kexec-vm-remote:
+                ssh: &ssh_kexec_remote
+                  hostname: 127.0.0.1
+                  port: 10026
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
 {{ if $isBootstrap }}
-              bootstrap:
-                ssh: *ssh_kexec_remote
-                kexec:
-                  image: {{ env "PANIX_KEXEC_PATH" }}
-                  ssh_port: 10026
-                post_bootstrap_provisioned_hooks:
-                  - waitForOnline
+                bootstrap:
+                  ssh: *ssh_kexec_remote
+                  kexec:
+                    image: {{ env "PANIX_KEXEC_PATH" }}
+                    ssh_port: 10026
+                  post_bootstrap_provisioned_hooks:
+                    - waitForOnline
+{{ end }}
 {{ end }}

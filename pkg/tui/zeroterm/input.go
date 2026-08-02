@@ -6,7 +6,7 @@ const x10MouseLen = 6
 
 // parseInput parses raw terminal input bytes into Messages.
 // canHaveMoreData indicates that the read buffer was full and more data
-// may be available — incomplete sequences should not be flushed.
+// may be available; incomplete sequences should not be flushed.
 //
 //nolint:mnd
 func parseInput(data []byte, canHaveMoreData bool) ([]Msg, int) {
@@ -15,10 +15,10 @@ func parseInput(data []byte, canHaveMoreData bool) ([]Msg, int) {
 	pos := 0
 	for pos < len(data) {
 		// Detect X10 mouse events first (before CSI parsing).
-		// X10 format: ESC[M Cb Cx Cy — the 3 bytes after M are raw
+		// X10 format: ESC[M Cb Cx Cy. The 3 bytes after M are raw
 		// (offset by 32), not valid CSI parameters, so they MUST be
 		// consumed here before the CSI parser misinterprets them.
-		//nolint:gosec // G602: safe — bounds check on left ensures pos+N < len(data)
+		//nolint:gosec // G602: safe - bounds check on left ensures pos+N < len(data)
 		if pos+x10MouseLen <= len(data) && data[pos] == '\x1b' && data[pos+1] == '[' && data[pos+2] == 'M' {
 			msgs = append(msgs, parseX10Mouse(data, pos+3))
 			pos += x10MouseLen
@@ -252,7 +252,7 @@ func applyModifier(base string, mod int) string {
 }
 
 // parseX10Mouse parses an X10 mouse event.
-// Format: ESC[M Cb Cx Cy — Cb, Cx, Cy are single bytes offset by 32.
+// Format: ESC[M Cb Cx Cy. Cb, Cx, Cy are single bytes offset by 32.
 // cbPos points to the first byte after 'M' in data.
 //
 // Button field bits (after subtracting 32):

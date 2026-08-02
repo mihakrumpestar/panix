@@ -130,7 +130,7 @@ func (t *Terminal) StopWatchResize() {
 }
 
 // writeSeq writes an ANSI escape sequence and syncs the output. Errors are
-// logged but not propagated — the terminal is unusable if these fail.
+// logged but not propagated; the terminal is unusable if these fail.
 func (t *Terminal) writeSeq(seq string) {
 	_, _ = t.out.WriteString(seq)
 	_ = t.out.Sync()

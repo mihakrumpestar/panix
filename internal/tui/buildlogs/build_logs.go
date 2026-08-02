@@ -3,18 +3,20 @@ package buildlogs
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
+	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
@@ -105,7 +107,7 @@ func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *ph
 // RenderInto renders the build logs tree directly into target, avoiding
 // an intermediate buffer copy. Widths set by the tree renderer (via
 // writeLines/renderLeaf) are set directly on target, so the viewport can
-// adopt them via adoptCachedLineWidths — eliminating redundant CellWidth
+// adopt them via adoptCachedLineWidths, eliminating redundant CellWidth
 // scans in padNewLine.
 func (b *BuildLogs) RenderInto(
 	target *buffer.LinesBuf,
@@ -144,19 +146,7 @@ func (b *BuildLogs) RenderInto(
 			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Flake, flake.Name.String(), flake.Logs, old)
 		})
 
-		flake.Configurations.ForEach(func(_ string, cfg *configuration.Configuration) bool {
-			if cfg == nil {
-				return true
-			}
-
-			cfgVersion := b.entityVersion(cfg.Logs)
-			cfgNode := flakeNode.Child(cfg.Xpath, cfgVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-				return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Configuration, cfg.Name.String(), cfg.Logs, old)
-			})
-			b.buildConfigTree(cfgNode, cfg)
-
-			return true
-		})
+		b.buildInstallablesTree(flakeNode, flake)
 
 		return true
 	})
@@ -164,19 +154,82 @@ func (b *BuildLogs) RenderInto(
 	treeNode.WriteRenderTo(target)
 }
 
-func (b *BuildLogs) buildConfigTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
+// buildInstallablesTree renders the two-level installables map (type → name → installable)
+// as nested tree nodes under flakeNode.
+func (b *BuildLogs) buildInstallablesTree(flakeNode *tree.Node, flake *flake.Flake) {
+	flake.Installables.ForEach(func(typeKey string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]) bool {
+		if attrMap == nil {
+			return true
+		}
+
+		// Pre-compute max duration across all installables of this type
+		// so the type grouping node can display it.
+		var maxTypeDuration time.Duration
+
+		typeRunning := false
+
+		attrMap.ForEach(func(_ string, inst *installable.Installable) bool {
+			if inst != nil && inst.Logs != nil {
+				dur := inst.Logs.TAS.DurationCache
+				if dur > maxTypeDuration {
+					maxTypeDuration = dur
+				}
+
+				if !inst.Logs.TAS.IsFinished() {
+					typeRunning = true
+				}
+			}
+
+			return true
+		})
+
+		// Create output type grouping node (e.g., "nixosConfigurations").
+		// tree.Node.Child is idempotent: same xpath returns the same node,
+		// so multiple outputs of the same type share one type node.
+		// Version is coarse (1/10th second) to avoid re-rendering every frame.
+		outputTypeXpath := flake.Xpath.NewXpathWithAppend(typeKey)
+
+		typeVersion := b.widthOffset
+		if typeRunning {
+			typeVersion += b.spinners.Generation()
+		}
+
+		typeNode := flakeNode.Child(outputTypeXpath, typeVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
+			return b.entityNodeContentWithDuration(depthWidth, b.conf.ColorScheme.Installable, typeKey, maxTypeDuration, old)
+		})
+
+		attrMap.ForEach(func(nameKey string, installable *installable.Installable) bool {
+			if installable == nil {
+				return true
+			}
+
+			// Create output name node (e.g., "server1").
+			outVersion := b.entityVersion(installable.Logs)
+			outNode := typeNode.Child(installable.Xpath, outVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
+				return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Installable, installable.Name.String(), installable.Logs, old)
+			})
+			b.buildOutputTree(outNode, installable)
+
+			return true
+		})
+
+		return true
+	})
+}
+
+func (b *BuildLogs) buildOutputTree(outNode *tree.Node, installable *installable.Installable) {
 	switch {
 	case b.statsTable.SelectedIndex() >= 0:
-		b.buildMachineSelectedTree(cfgNode, cfg)
+		b.buildMachineSelectedTree(outNode, installable)
 	case b.phaseStatus.Selected.Index >= 0:
-		b.buildPhaseSelectedTree(cfgNode, cfg)
+		b.buildPhaseSelectedTree(outNode, installable)
 	default:
-		b.buildDefaultTree(cfgNode, cfg)
+		b.buildDefaultTree(outNode, installable)
 	}
 }
 
-func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
-	for _, mp := range cfg.Machines.Pairs() {
+func (b *BuildLogs) buildMachineSelectedTree(outNode *tree.Node, installable *installable.Installable) {
+	for _, mp := range installable.Machines.Pairs() {
 		machine := mp.Value
 		if machine == nil || machine.Xpath != b.statsTable.SelectedXpath() {
 			continue
@@ -187,14 +240,14 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configurat
 		}
 
 		entityVersion := b.entityVersion(machine.Logs)
-		machineNode := cfgNode.Child(machine.Xpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
+		machineNode := outNode.Child(machine.Xpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
 			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name.String(), machine.Logs, old)
 		})
 
 		errored := b.addPhases(machineNode, machine.Logs, machine.PhaseXpaths, true, entityVersion, phase.Inspect)
 		if !errored {
 			for _, pm := range phase.PhaseRegistry[1:] {
-				logs_, xps := b.phaseLogsAndXpath(pm, cfg, machine)
+				logs_, xps := b.phaseLogsAndXpath(pm, installable, machine)
 				if b.addPhases(machineNode, logs_, xps, true, entityVersion, pm.Phase) {
 					break
 				}
@@ -205,29 +258,29 @@ func (b *BuildLogs) buildMachineSelectedTree(cfgNode *tree.Node, cfg *configurat
 	}
 }
 
-func (b *BuildLogs) buildPhaseSelectedTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
+func (b *BuildLogs) buildPhaseSelectedTree(outNode *tree.Node, installable *installable.Installable) {
 	phaseI := phase.Phase(b.phaseStatus.Selected.Phase)
-	cfgVersion := b.entityVersion(cfg.Logs)
+	outVersion := b.entityVersion(installable.Logs)
 
-	if phaseI.GetPhaseScope() == phase.ScopeConfiguration {
-		b.addPhases(cfgNode, cfg.Logs, cfg.PhaseXpaths, false, cfgVersion, phaseI)
+	if phaseI.GetPhaseScope() == phase.ScopeInstallable {
+		b.addPhases(outNode, installable.Logs, installable.PhaseXpaths, false, outVersion, phaseI)
 
 		return
 	}
 
-	cfg.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
+	installable.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
 		if machine == nil || machine.Logs == nil {
 			return true
 		}
 
-		b.addMachineWithPhases(cfgNode, machine, map[phase.Phase]struct{}{phaseI: {}})
+		b.addMachineWithPhases(outNode, machine, map[phase.Phase]struct{}{phaseI: {}})
 
 		return true
 	})
 }
 
-func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Configuration) {
-	cfgVersion := b.entityVersion(cfg.Logs)
+func (b *BuildLogs) buildDefaultTree(outNode *tree.Node, installable *installable.Installable) {
+	outVersion := b.entityVersion(installable.Logs)
 
 	var machinePhases []phase.Phase
 
@@ -238,12 +291,12 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Conf
 
 		allowedSet := makeAllowedSet(machinePhases)
 
-		cfg.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
+		installable.Machines.ForEach(func(_ string, machine *machine.Machine) bool {
 			if machine == nil || machine.Logs == nil {
 				return true
 			}
 
-			b.addMachineWithPhases(cfgNode, machine, allowedSet)
+			b.addMachineWithPhases(outNode, machine, allowedSet)
 
 			return true
 		})
@@ -252,9 +305,9 @@ func (b *BuildLogs) buildDefaultTree(cfgNode *tree.Node, cfg *configuration.Conf
 	}
 
 	for _, phaseMetadata := range phase.PhaseRegistry {
-		if phaseMetadata.Scope == phase.ScopeConfiguration {
+		if phaseMetadata.Scope == phase.ScopeInstallable {
 			flush()
-			b.addPhases(cfgNode, cfg.Logs, cfg.PhaseXpaths, false, cfgVersion, phaseMetadata.Phase)
+			b.addPhases(outNode, installable.Logs, installable.PhaseXpaths, false, outVersion, phaseMetadata.Phase)
 		} else {
 			machinePhases = append(machinePhases, phaseMetadata.Phase)
 		}
@@ -307,11 +360,11 @@ func (b *BuildLogs) hasVisiblePhases(logNode *logs.Logs, allowedSet map[phase.Ph
 
 func (b *BuildLogs) phaseLogsAndXpath(
 	pm phase.PhaseMetadata,
-	cfg *configuration.Configuration,
+	installable *installable.Installable,
 	mach *machine.Machine,
 ) (*logs.Logs, map[phase.Phase]xpath.Xpath) {
-	if pm.Scope == phase.ScopeConfiguration {
-		return cfg.Logs, cfg.PhaseXpaths
+	if pm.Scope == phase.ScopeInstallable {
+		return installable.Logs, installable.PhaseXpaths
 	}
 
 	return mach.Logs, mach.PhaseXpaths
@@ -621,10 +674,22 @@ func (b *BuildLogs) entityNodeContent(
 	logNode *logs.Logs,
 	old *buffer.LinesBuf,
 ) *buffer.LinesBuf {
-	dur := 0.0
+	var duration time.Duration
 	if logNode != nil {
-		dur = logNode.TAS.DurationCache.Seconds()
+		duration = logNode.TAS.DurationCache
 	}
+
+	return b.entityNodeContentWithDuration(indent, entity, name, duration, old)
+}
+
+func (b *BuildLogs) entityNodeContentWithDuration(
+	indent int,
+	entity colorscheme.ColorSchemeLogEntity,
+	name string,
+	duration time.Duration,
+	old *buffer.LinesBuf,
+) *buffer.LinesBuf {
+	dur := duration.Seconds()
 
 	b.iconBuf.Reset()
 	b.iconBuf.Write(entity.Icon)

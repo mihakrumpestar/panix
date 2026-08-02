@@ -78,7 +78,7 @@ func OnSuccess(f func(*logs_command.CommandLog) error) ExecOption {
 	}
 }
 
-// OnDryRun is mandatory - every command that has OnSuccess must also provide OnDryRun.
+// OnDryRun is mandatory: every command that has OnSuccess must also provide OnDryRun.
 func OnDryRun(f func()) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.onDryRun = f

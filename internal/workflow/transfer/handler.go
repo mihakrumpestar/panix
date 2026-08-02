@@ -12,9 +12,9 @@ type Handler struct{}
 
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 	// BuildModeRemote + single machine: closure is already on the target
-	if fleetLeaf.Configuration.Nix.BuildMode == nix.BuildModeRemote {
+	if fleetLeaf.Installable.Nix.BuildMode == nix.BuildModeRemote {
 		machineCount := 0
-		for range fleetLeaf.Configuration.Machines.Pairs() {
+		for range fleetLeaf.Installable.Machines.Pairs() {
 			machineCount++
 		}
 
@@ -28,7 +28,7 @@ func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 }
 
 func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
-	systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
+	systemClosure := fleetLeaf.Installable.MetaBuild.Closure
 
 	return errors.Wrap(phaseops.CopyClosure(exc, fleetLeaf, []string{systemClosure}, true), "transfer failed")
 }

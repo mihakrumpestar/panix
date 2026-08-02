@@ -6,10 +6,10 @@ import (
 	"github.com/jaswdr/faker"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
@@ -79,25 +79,33 @@ func (f *Faker) MachineWithForceBootstrap() *machine.Machine {
 	return mach
 }
 
-func (f *Faker) Configuration(machines ...*machine.Machine) *configuration.Configuration {
-	cfg := &configuration.Configuration{}
-	cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
+func (f *Faker) Installable(machines ...*machine.Machine) *installable.Installable {
+	out := &installable.Installable{}
+	out.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
 	for _, mach := range machines {
-		cfg.Machines.Set(f.nextID(), mach)
+		out.Machines.Set(f.nextID(), mach)
 	}
 
-	return cfg
+	return out
 }
 
-func (f *Faker) Flake(configs ...*configuration.Configuration) *flake.Flake {
+func (f *Faker) Flake(outputs ...*installable.Installable) *flake.Flake {
 	flk := &flake.Flake{
 		URL: f.Internet().URL(),
 	}
-	flk.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
+	flk.Installables = atomicorderedmap.New[string, *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]]()
 
-	for _, cfg := range configs {
-		flk.Configurations.Set(f.nextID(), cfg)
+	const typeKey = "nixosConfigurations"
+
+	for _, out := range outputs {
+		attrMap, _ := flk.Installables.Get(typeKey)
+		if attrMap == nil {
+			attrMap = atomicorderedmap.New[string, *installable.Installable]()
+			flk.Installables.Set(typeKey, attrMap)
+		}
+
+		attrMap.Set(f.nextID(), out)
 	}
 
 	return flk

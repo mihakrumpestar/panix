@@ -18,7 +18,7 @@ const (
 	vmCPUs       = "4"
 	bakeVMMemory = "2G"
 	bakeVMPort   = 10024
-	bakeTimeout  = 3 * time.Minute
+	bakeTimeout  = 5 * time.Minute
 
 	consoleLogName = "console.log"
 	debianFileName = "debian-12-generic-amd64.qcow2"
@@ -153,6 +153,22 @@ func bakeDebianImage(keyPath string) (string, error) {
 		return bakedPath, nil
 	}
 
+	return bakeDebianWithSeed(bakedPath, "bake-seed.iso", "debian-bake", "bake-vm", keyPath, false, markerPath)
+}
+
+func bakeDebianNixImage(keyPath string) (string, error) {
+	bakedPath := filepath.Join(cacheDirPath, "debian-baked-nix.qcow2")
+	markerPath := bakedPath + ".nix-ok"
+
+	_, markerErr := os.Stat(markerPath)
+	if markerErr == nil {
+		return bakedPath, nil
+	}
+
+	return bakeDebianWithSeed(bakedPath, "bake-seed-nix.iso", "debian-bake-nix", "bake-vm-nix", keyPath, true, markerPath)
+}
+
+func bakeDebianWithSeed(bakedPath, seedName, instanceID, hostname, keyPath string, withNix bool, markerPath string) (string, error) {
 	_ = os.Remove(bakedPath)
 
 	basePath := filepath.Join(cacheDirPath, debianFileName)
@@ -162,12 +178,12 @@ func bakeDebianImage(keyPath string) (string, error) {
 		return "", errors.Wrapf(err, "cp base image: %s", string(out))
 	}
 
-	seedPath, err := createCloudInitISO("bake-seed.iso", "debian-bake", "bake-vm", keyPath+".pub", true)
+	seedPath, err := createCloudInitISO(seedName, instanceID, hostname, keyPath+".pub", withNix, true)
 	if err != nil {
 		return "", err
 	}
 
-	consolePath := filepath.Join(logDirPath, "bake-vm-console.log")
+	consolePath := filepath.Join(logDirPath, hostname+"-console.log")
 	cmd := exec.CommandContext(context.Background(), "qemu-system-x86_64", //nolint:gosec
 		"-enable-kvm", "-cpu", "host", "-m", bakeVMMemory,
 		"-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", bakeVMPort),
