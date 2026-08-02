@@ -40,7 +40,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	// Generation reading (all types with a profile path)
 	preset, ok := installable.GetPreset(fleetLeaf.Installable.Type)
 	if ok && preset.ProfilePath != "" {
-		return readGenerations(exc, machineI, preset.ProfilePath)
+		return readGenerations(exc, machineI, preset.ProfilePath, fleetLeaf.Installable.User)
 	}
 
 	return nil

@@ -61,7 +61,7 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		return errors.Wrap(err, "generation validation failed")
 	}
 
-	return executeRollback(exc, machineI, installableType, targetGenNum)
+	return executeRollback(exc, machineI, installableType, fleetLeaf.Installable.User, targetGenNum)
 }
 
 var (
@@ -101,7 +101,13 @@ func getSpecificGeneration(availableGenerations []uint, specificGeneration uint)
 	return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", specificGeneration)
 }
 
-func executeRollback(exc *executioner.Executioner, machine *machine.Machine, installableType installable.FlakeOutputType, targetGenNum uint) error {
+func executeRollback(
+	exc *executioner.Executioner,
+	machine *machine.Machine,
+	installableType installable.FlakeOutputType,
+	targetUser string,
+	targetGenNum uint,
+) error {
 	closurePath, err := findGenerationClosure(exc, machine, installableType, targetGenNum)
 	if err != nil {
 		return errors.Wrap(err, "failed to find generation closure")
@@ -112,7 +118,10 @@ func executeRollback(exc *executioner.Executioner, machine *machine.Machine, ins
 		return errors.Errorf("unknown installable type: %s", installableType)
 	}
 
-	return errors.Wrap(phaseops.Activate(exc, machine, preset, closurePath, attributes.ActivationModeSwitch), "failed to activate rollback generation")
+	return errors.Wrap(
+		phaseops.Activate(exc, machine, preset, closurePath, attributes.ActivationModeSwitch, targetUser),
+		"failed to activate rollback generation",
+	)
 }
 
 func findGenerationClosure(

@@ -55,7 +55,7 @@ func executeActivation(
 		return errors.Errorf("unknown output type: %s", fleetLeaf.Installable.Type)
 	}
 
-	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, preset, closure, mode), "activation failed")
+	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, preset, closure, mode, fleetLeaf.Installable.User), "activation failed")
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {

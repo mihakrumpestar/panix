@@ -13,6 +13,10 @@ import (
 const scriptPerm = 0o755
 
 func runPanixDeploy(configPath string, envVars ...string) error {
+	return runPanixDeployWithArgs(configPath, nil, envVars...)
+}
+
+func runPanixDeployWithArgs(configPath string, extraArgs []string, envVars ...string) error {
 	root := findProjectRoot()
 
 	mode := envValue(envVars, "PANIX_TEST_MODE")
@@ -29,14 +33,13 @@ func runPanixDeploy(configPath string, envVars ...string) error {
 		exitCodePath := filepath.Join(logDirPath, "panix-"+mode+".exitcode")
 
 		return runPanixInTerminal(termPath, termExecArgs,
-			wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath, envVars, e2eDir, exitCodePath), exitCodePath, panixOutputPath)
+			wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath, extraArgs, envVars, e2eDir, exitCodePath), exitCodePath, panixOutputPath)
 	}
 
-	return runPanixInConsole(root, configPath, panixLogPath, envVars, e2eDir)
+	return runPanixInConsole(root, configPath, panixLogPath, extraArgs, envVars, e2eDir)
 }
 
 func runPanixInTerminal(termPath string, termExecArgs []string, wrapperPath, exitCodePath, panixOutputPath string) error {
-	// Remove stale exit code and output files so we can detect if panix never wrote them
 	_ = os.Remove(exitCodePath)
 	_ = os.Remove(panixOutputPath)
 
@@ -47,7 +50,7 @@ func runPanixInTerminal(termPath string, termExecArgs []string, wrapperPath, exi
 
 	data, readErr := os.ReadFile(exitCodePath) //nolint:gosec
 	if readErr != nil {
-		return errors.New("panix exit code file not found — panix may have crashed before writing it")
+		return errors.New("panix exit code file not found, panix may have crashed before writing it")
 	}
 
 	code := strings.TrimSpace(string(data))
@@ -75,13 +78,15 @@ func tailFile(path string) string {
 	return strings.Join(lines, "\n")
 }
 
-func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, envVars []string, e2eDir, exitCodePath string) string {
+func wrapperPath(
+	mode, root, configPath, panixLogPath, panixOutputPath string,
+	extraArgs []string,
+	envVars []string,
+	e2eDir, exitCodePath string,
+) string {
 	path := filepath.Join(logDirPath, "run-panix-"+mode+".sh")
 
-	// Strip PANIX_TEST_MODE from the inherited environment so the explicit envVars value wins.
 	envLines := make([]string, 0, len(envVars)+2)
-
-	// Explicitly unset PANIX_TEST_MODE before setting it via envVars.
 	envLines = append(envLines, "unset PANIX_TEST_MODE")
 
 	for _, envVar := range envVars {
@@ -93,10 +98,15 @@ func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, e
 	goArgs := "go run " + root + "/cmd/panix"
 	panixCmd := "${PANIX_BIN:-" + goArgs + "}"
 
+	extraArgsStr := ""
+	if len(extraArgs) > 0 {
+		extraArgsStr = " " + strings.Join(extraArgs, " ")
+	}
+
 	script := "#!/bin/sh\n" +
 		strings.Join(envLines, "\n") + "\n" +
 		panixCmd + " deploy -c " + configPath + " --exit-on-complete --log --log-file " + panixLogPath +
-		" " + panixArgs +
+		extraArgsStr +
 		" 2> " + panixOutputPath + "\n" +
 		"echo $? > " + exitCodePath + "\n"
 
@@ -105,7 +115,7 @@ func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, e
 	return path
 }
 
-func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, e2eDir string) error {
+func runPanixInConsole(root, configPath, panixLogPath string, extraArgs []string, envVars []string, e2eDir string) error {
 	bin, baseArgs := panixExecArgs(root)
 
 	var cmdArgs []string
@@ -116,13 +126,11 @@ func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, 
 		"--output=console", "--exit-on-complete",
 		"--log", "--log-file", panixLogPath,
 	)
-	cmdArgs = append(cmdArgs, splitPanixArgs(panixArgs)...)
+	cmdArgs = append(cmdArgs, extraArgs...)
 
 	cmd := exec.CommandContext(context.Background(), bin, cmdArgs...) //nolint:gosec
 	cmd.Dir = root
 
-	// Strip PANIX_TEST_MODE from inherited env so the explicit envVars value is used.
-	// Without this, an externally-set PANIX_TEST_MODE leaks into all phases via os.Environ().
 	cleanEnv := sanitizedOsEnviron("PANIX_TEST_MODE")
 	cmd.Env = append(append(cleanEnv, envVars...), "PANIX_E2E_DIR="+e2eDir)
 	cmd.Stdout = os.Stdout
@@ -158,8 +166,6 @@ func envValue(envVars []string, key string) string {
 	return ""
 }
 
-// panixExecArgs returns the binary name and base arguments for running panix.
-// If PANIX_BIN is set, uses that binary directly; otherwise uses "go run".
 func panixExecArgs(root string) (string, []string) {
 	if bin := os.Getenv("PANIX_BIN"); bin != "" {
 		return bin, nil
@@ -168,9 +174,6 @@ func panixExecArgs(root string) (string, []string) {
 	return "go", []string{"run", root + "/cmd/panix"}
 }
 
-// sanitizedOsEnviron returns os.Environ() with the given env vars removed.
-// This prevents externally-set env vars (e.g. PANIX_TEST_MODE) from leaking
-// into panix deploy calls that set their own value via envVars.
 func sanitizedOsEnviron(stripKeys ...string) []string {
 	stripSet := make(map[string]struct{}, len(stripKeys))
 	for _, k := range stripKeys {
@@ -189,46 +192,4 @@ func sanitizedOsEnviron(stripKeys ...string) []string {
 	}
 
 	return result
-}
-
-// splitPanixArgs splits a shell-style argument string into individual args.
-// Empty string returns nil (no extra args).
-func splitPanixArgs(argStr string) []string {
-	argStr = strings.TrimSpace(argStr)
-	if argStr == "" {
-		return nil
-	}
-
-	var args []string
-
-	var current strings.Builder
-
-	inQuote := false
-
-	for i := range len(argStr) {
-		char := argStr[i]
-
-		if char == '"' {
-			inQuote = !inQuote
-
-			continue
-		}
-
-		if char == ' ' && !inQuote {
-			if current.Len() > 0 {
-				args = append(args, current.String())
-				current.Reset()
-			}
-
-			continue
-		}
-
-		current.WriteByte(char)
-	}
-
-	if current.Len() > 0 {
-		args = append(args, current.String())
-	}
-
-	return args
 }

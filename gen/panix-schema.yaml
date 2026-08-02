@@ -282,6 +282,9 @@ properties:
                       description: Tags for filtering (flakes, configs and machines are already registered as tags)
                       items:
                         type: string
+                    user:
+                      type: string
+                      description: Target user for activation (user-level types only). When set, activation runs as this user via sudo -H -u. If empty, uses the SSH username.
                   required:
                   - machines
                   additionalProperties: false

@@ -122,4 +122,11 @@ fleet:
                   username: root
                   identity_file: {{ $key }}
                   disable_strict_key_checking: true
+          test-home-alice:
+            user: alice
+            machines:
+              nixos-iso-vm:
+                ssh: *ssh_nixos_iso
+              debian-nix-vm:
+                ssh: *ssh_debian_nix
 {{ end }}

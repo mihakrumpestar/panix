@@ -81,7 +81,45 @@ Each (installable, machine) pair is independent. There is no activation ordering
 If the target machine is in NixOS installer, non-nixosConfigurations installable types will also try to run (in this case, it is best to specify `--tags=nixosConfigurations`, to exclude other types from being run on bootstrap).
 :::
 
-Each installable type auto-infers its build path, activation mechanism, profile path, and whether profile setting is needed. You don't need to configure these manually. The SSH username on the machine determines which user the activation runs as for user-level types like `homeConfigurations`.
+Each installable type auto-infers its build path, activation mechanism, profile path, and whether profile setting is needed. You don't need to configure these manually.
+
+For user-level types like `homeConfigurations`, the activation runs as the SSH user by default. If you SSH as root but need to deploy home-manager to a different user, set the `user` field on the installable:
+
+```yaml
+fleet:
+  flakes:
+    infra:
+      url: ./infra
+      installables:
+        nixosConfigurations:
+          server1:
+            machines:
+              server1:
+                ssh:
+                  username: root
+                  hostname: server1.lan
+
+        homeConfigurations:
+          primary:
+            user: alice              # Activation runs as alice via su -l alice
+            machines:
+              server1:
+                ssh:
+                  username: root      # SSH as root, but activate as alice
+                  hostname: server1.lan
+
+          bobs-config:
+            user: bob
+            machines:
+              server1:
+                ssh:
+                  username: root
+                  hostname: server1.lan
+```
+
+The `user` field is only meaningful for user-level types (`homeConfigurations`, `nixOnDroidConfigurations`, `packages`). It is ignored for system-level types (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`).
+
+When set, panix wraps the activation command in `su -l <user> -c` so the activation script runs with the correct user's `$HOME` and profile. Generation listing (`nix-env --list-generations`) also runs as that user.
 
 :::caution
 Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) are a newer feature. NixOS system deployments are well-tested, but other output types may have edge cases. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).

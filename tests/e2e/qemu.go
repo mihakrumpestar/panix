@@ -18,7 +18,7 @@ const (
 	vmCPUs       = "4"
 	bakeVMMemory = "2G"
 	bakeVMPort   = 10024
-	bakeTimeout  = 5 * time.Minute
+	bakeTimeout  = 10 * time.Minute
 
 	consoleLogName = "console.log"
 )

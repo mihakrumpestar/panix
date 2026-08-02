@@ -1,6 +1,8 @@
 package phaseops
 
 import (
+	"strings"
+
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -23,29 +25,78 @@ func SetProfile(exc *executioner.Executioner, mach *machine.Machine, profilePath
 }
 
 // Activate runs the activation for the given preset's output type.
-// For profiled types: optionally sets the profile, then runs the activation script.
+// For system-level types: uses MaybeSudo() (sudo if SSH user isn't root).
+// For user-level types with a target user: wraps activation in `su -l <user> -c`.
+// For user-level types without a target user: runs as the SSH user directly.
 // For packages: runs nix profile install.
-func Activate(exc *executioner.Executioner, mach *machine.Machine, preset installable.Preset, closure string, mode attributes.ActivationMode) error {
-	if preset.ProfilePath != "" && preset.SetProfile {
-		if !preset.SupportsModes || (mode != attributes.ActivationModeTest && mode != attributes.ActivationModeDryActivate) {
-			err := SetProfile(exc, mach, preset.ProfilePath, closure)
-			if err != nil {
-				return errors.Wrap(err, "failed to set profile")
-			}
-		}
+func Activate(
+	exc *executioner.Executioner,
+	mach *machine.Machine,
+	preset installable.Preset,
+	closure string,
+	mode attributes.ActivationMode,
+	targetUser string,
+) error {
+	err := maybeSetProfile(exc, mach, preset, closure, mode)
+	if err != nil {
+		return err
 	}
 
 	if preset.ActivationPath == "" {
-		// packages type: nix profile install
-		err := exc.Exec(
-			"activate", "installing package", "package installation failed",
-			[]string{"nix", "--extra-experimental-features", "nix-command flakes", "profile", "install", closure},
-			executioner.Trim(),
-		)
-
-		return errors.Wrap(err, "failed to install package")
+		return activatePackage(exc, mach, preset, closure, targetUser)
 	}
 
+	return activateScript(exc, mach, preset, closure, mode, targetUser)
+}
+
+func maybeSetProfile(
+	exc *executioner.Executioner,
+	mach *machine.Machine,
+	preset installable.Preset,
+	closure string,
+	mode attributes.ActivationMode,
+) error {
+	if preset.ProfilePath == "" || !preset.SetProfile {
+		return nil
+	}
+
+	if preset.SupportsModes && (mode == attributes.ActivationModeTest || mode == attributes.ActivationModeDryActivate) {
+		return nil
+	}
+
+	return errors.Wrap(SetProfile(exc, mach, preset.ProfilePath, closure), "failed to set profile")
+}
+
+func activatePackage(
+	exc *executioner.Executioner,
+	_ *machine.Machine,
+	preset installable.Preset,
+	closure string,
+	targetUser string,
+) error {
+	args := []string{"nix", "--extra-experimental-features", "nix-command flakes", "profile", "install", closure}
+
+	if !preset.IsSystemLevel && targetUser != "" {
+		args = asUser(targetUser, args)
+	}
+
+	err := exc.Exec(
+		"activate", "installing package", "package installation failed",
+		args,
+		executioner.Trim(),
+	)
+
+	return errors.Wrap(err, "failed to install package")
+}
+
+func activateScript(
+	exc *executioner.Executioner,
+	mach *machine.Machine,
+	preset installable.Preset,
+	closure string,
+	mode attributes.ActivationMode,
+	targetUser string,
+) error {
 	args := []string{}
 	if preset.IsSystemLevel {
 		args = append(args, mach.MaybeSudo()...)
@@ -56,6 +107,10 @@ func Activate(exc *executioner.Executioner, mach *machine.Machine, preset instal
 		args = append(args, string(mode))
 	}
 
+	if !preset.IsSystemLevel && targetUser != "" {
+		args = asUser(targetUser, args)
+	}
+
 	err := exc.Exec(
 		"activate", "activating", "activation failed",
 		args,
@@ -63,4 +118,23 @@ func Activate(exc *executioner.Executioner, mach *machine.Machine, preset instal
 	)
 
 	return errors.Wrap(err, "failed to activate")
+}
+
+// AsUser wraps a command to run as a different user via `su -l <user> -c '<command>'`.
+// Uses su instead of sudo because sudo may not be in PATH on NixOS
+// (it's at /run/wrappers/bin/sudo). su is universally available.
+func AsUser(user string, command []string) []string {
+	if user == "" {
+		return command
+	}
+
+	cmdStr := strings.Join(command, " ")
+	// Escape single quotes for shell safety
+	cmdStr = strings.ReplaceAll(cmdStr, "'", `'\''`)
+
+	return []string{"su", "-l", user, "-c", "'" + cmdStr + "'"}
+}
+
+func asUser(user string, command []string) []string {
+	return AsUser(user, command)
 }

@@ -113,11 +113,10 @@ tasks:
       Flags (pass after --):
         --test=local|remote|both    Test scope (default: both)
         --phase=all|bootstrap|redeploy  Deploy phase (default: all)
-        --panix-args="..."          Extra args passed to every panix deploy
-                                    (e.g. --tags=homeConfigurations)
+        --redeploy-type=all|nixos|home  Which types to redeploy (default: all)
       Examples:
         task go:test:e2e -- --test=local
-        task go:test:e2e -- --phase=redeploy --panix-args="--tags=homeConfigurations"
+        task go:test:e2e -- --phase=redeploy --redeploy-type=home
     cmds:
       - go run ./tests/e2e/ {{.CLI_ARGS}}
 

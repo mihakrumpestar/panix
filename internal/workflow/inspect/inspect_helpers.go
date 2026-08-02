@@ -9,6 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/pkg/errors"
@@ -357,12 +358,21 @@ func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machin
 
 // readGenerations reads profile generations via nix-env --list-generations.
 // Works for any profile path (system, home-manager, system-manager, etc.).
-func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, profilePath string) error {
+// When targetUser is set, the command runs as that user via su -l.
+func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, profilePath string, targetUser string) error {
+	args := []string{"nix-env", "--profile", profilePath, "--list-generations"}
+
+	if targetUser != "" {
+		args = phaseops.AsUser(targetUser, args)
+	} else {
+		args = append(machineI.MaybeSudo(), args...)
+	}
+
 	err := exc.Exec(
 		"list generations",
 		"listing generations",
 		"failed to list generations",
-		append(machineI.MaybeSudo(), "nix-env", "--profile", profilePath, "--list-generations"),
+		args,
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			genData, date := parseNixEnvGenerations(log.Output.String())
 

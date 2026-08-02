@@ -34,6 +34,13 @@
 
       authorizedKeysModule = {
         users.users.root.openssh.authorizedKeys.keys = [ sshPubKey ];
+        users.users.alice = {
+          isSystemUser = true;
+          home = "/home/alice";
+          createHome = true;
+          group = "users";
+          shell = pkgs.bash;
+        };
       };
       opensshModule = {
         services.openssh.enable = true;
@@ -56,6 +63,7 @@
           hostname,
           withNix ? false,
           shutdown ? false,
+          createUser ? false,
         }:
         let
           metaData = pkgs.writeText "meta-data" ''
@@ -78,6 +86,14 @@
           # (hostname/instance-id) with a minimal user-data.
           nixInstallCmd = lib.optionalString withNix "  - curl -sSfL https://install.determinate.systems/nix | sh -s -- install --no-confirm\n";
           shutdownCmd = lib.optionalString shutdown "  - shutdown -h now\n";
+          createUserCmd = lib.optionalString createUser (lib.concatStrings [
+            "  - useradd -m -s /bin/bash alice\n"
+            "  - mkdir -p /home/alice/.ssh\n"
+            "  - cp /root/.ssh/authorized_keys /home/alice/.ssh/authorized_keys\n"
+            "  - chown -R alice:alice /home/alice/.ssh\n"
+            "  - chmod 700 /home/alice/.ssh\n"
+            "  - chmod 600 /home/alice/.ssh/authorized_keys\n"
+          ]);
 
           userData = pkgs.writeText "user-data" (
             if shutdown then
@@ -100,6 +116,7 @@
                 "  - mkdir -p /etc/ssh/sshd_config.d && echo 'PermitRootLogin yes' > /etc/ssh/sshd_config.d/root-login.conf\n"
                 "  - systemctl restart sshd\n"
                 nixInstallCmd
+                createUserCmd
                 shutdownCmd
               ]
             else
@@ -145,6 +162,20 @@
             home = {
               username = "root";
               homeDirectory = "/root";
+              stateVersion = lib.trivial.release;
+              file.".panix-home-test-marker".text = "panix-e2e-test-pass";
+            };
+          }
+        ];
+      };
+
+      homeConfigurations.test-home-alice = home-manager.lib.homeManagerConfiguration {
+        inherit pkgs;
+        modules = [
+          {
+            home = {
+              username = "alice";
+              homeDirectory = "/home/alice";
               stateVersion = lib.trivial.release;
               file.".panix-home-test-marker".text = "panix-e2e-test-pass";
             };
@@ -246,6 +277,7 @@
           hostname = "bake-vm-nix";
           withNix = true;
           shutdown = true;
+          createUser = true;
         };
       };
     };

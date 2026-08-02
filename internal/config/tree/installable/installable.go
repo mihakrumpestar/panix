@@ -17,6 +17,7 @@ type Installable struct {
 	Nix            nix.NixConfig                                                `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
 	Type           FlakeOutputType                                              `yaml:"-" json:"type" desc:"Flake output type (e.g. nixosConfigurations, homeConfigurations)"`
 	Name           AttributeName                                                `yaml:"-" json:"name" desc:"Attribute name (e.g. server1, alice)"`
+	User           string                                                       `yaml:"user" json:"user,omitempty" desc:"Target user for activation (user-level types only). When set, activation runs as this user via sudo -H -u. If empty, uses the SSH username."`
 	ActivationMode attributes.ActivationModeD                                   `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode: check, switch, boot, test, dry-activate (only for nixosConfigurations)" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"`
 	Machines       *atomicorderedmap.AtomicOrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required" desc:"Machines configuration" schema:"nullable_values"`
 

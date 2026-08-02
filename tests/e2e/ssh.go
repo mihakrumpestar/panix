@@ -131,21 +131,28 @@ func verifyHomeManager(keyPath string) error {
 	parGroup := newParallelGroup()
 
 	if testScopeFlag.local() {
-		parGroup.Go("Verify home-manager on NixOS ISO VM", func() error {
-			return verifyHomeManagerMarker(nixosISOPort, keyPath)
+		parGroup.Go("Verify home-manager (root) on NixOS ISO VM", func() error {
+			return verifyHomeManagerMarker(nixosISOPort, keyPath, "root")
 		})
-		parGroup.Go("Verify home-manager on Debian-nix VM", func() error {
-			return verifyHomeManagerMarker(debianNixVMPort, keyPath)
+		parGroup.Go("Verify home-manager (root) on Debian-nix VM", func() error {
+			return verifyHomeManagerMarker(debianNixVMPort, keyPath, "root")
+		})
+		parGroup.Go("Verify home-manager (alice) on NixOS ISO VM", func() error {
+			return verifyHomeManagerMarkerAsUser(nixosISOPort, keyPath, "alice")
+		})
+		parGroup.Go("Verify home-manager (alice) on Debian-nix VM", func() error {
+			return verifyHomeManagerMarkerAsUser(debianNixVMPort, keyPath, "alice")
 		})
 	}
 
 	return parGroup.Wait()
 }
 
-func verifyHomeManagerMarker(port int, keyPath string) error {
+func verifyHomeManagerMarker(port int, keyPath string, user string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	path := fmt.Sprintf("/%s/.panix-home-test-marker", user)
 
-	output, err := sshRun(port, keyPath, "cat /root/.panix-home-test-marker")
+	output, err := sshRun(port, keyPath, "cat "+path)
 	if err != nil {
 		return errors.Wrapf(err, "verify home-manager on %s", addr)
 	}
@@ -153,6 +160,25 @@ func verifyHomeManagerMarker(port int, keyPath string) error {
 	marker := strings.TrimSpace(output)
 	if !strings.Contains(marker, markerContent) {
 		return errors.Errorf("home-manager marker not found on %s: %s", addr, marker)
+	}
+
+	return nil
+}
+
+// verifyHomeManagerMarkerAsUser checks the marker file exists in the user's
+// home directory by running `cat` as that user via sudo.
+func verifyHomeManagerMarkerAsUser(port int, keyPath string, user string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cmd := fmt.Sprintf("su -l %s -c 'cat ~/.panix-home-test-marker'", user)
+
+	output, err := sshRun(port, keyPath, cmd)
+	if err != nil {
+		return errors.Wrapf(err, "verify home-manager (user=%s) on %s", user, addr)
+	}
+
+	marker := strings.TrimSpace(output)
+	if !strings.Contains(marker, markerContent) {
+		return errors.Errorf("home-manager marker not found for user %s on %s: %s", user, addr, marker)
 	}
 
 	return nil
