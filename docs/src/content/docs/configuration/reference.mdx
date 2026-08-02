@@ -13,7 +13,7 @@ For the YAML schema, see [gen/panix-schema.yaml](https://github.com/mihakrumpest
 # All options
 flags: # Listed are default values, all also overridable using CLI arguments
   activation_mode: switch              # Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)
-  tags: []                             # Filter machines by tags (flakes, configs, machine names are auto-registered as tags)
+  tags: []                             # Filter machines by tags (flakes, installables, machine names are auto-registered as tags)
   timeout: 2h                          # Workflow timeout (e.g. '1h', '1m15s')
   exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
   require_all_success: false           # Abort if any task fails (for CI/CD)
@@ -63,39 +63,48 @@ fleet:
         - local_path: ./secrets/infra/api.key
           remote_path: /var/secrets/api.key
 
-      configurations:
-        webserver:
-          tags: [web]                  # Accumulated: [production, critical, web]
-          nix:
-            build_mode: remote          # Build on first machine instead of locally
-          machines:
-            web-01:                    # SSH from config/ssh block, no override needed
-            web-02:
-              ssh:
-                hostname: web-02.example.com  # Machine-specific hostname override
+      installables:
+        nixosConfigurations:             # System-level: activates as root
+          webserver:
+            tags: [web]                  # Accumulated: [production, critical, web]
+            nix:
+              build_mode: remote          # Build on first machine instead of locally
+            machines:
+              web-01:                    # SSH from config/ssh block, no override needed
+              web-02:
+                ssh:
+                  hostname: web-02.example.com  # Machine-specific hostname override
 
-        database:
-          machines:
-            db-01:
-              ssh:
-                hostname: 10.0.1.50
-                identity_file: ./keys/db.key
-              bootstrap:
+          database:
+            machines:
+              db-01:
                 ssh:
                   hostname: 10.0.1.50
-                  identity_file: ./keys/bootstrap.key
-                disk_encryption_keys:
-                  - local_path: ./secrets/db/luks.key
-                    remote_path: /tmp/luks-key
-                post_bootstrap_hooks:
-                  - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+                  identity_file: ./keys/db.key
+                bootstrap:
+                  ssh:
+                    hostname: 10.0.1.50
+                    identity_file: ./keys/bootstrap.key
+                  disk_encryption_keys:
+                    - local_path: ./secrets/db/luks.key
+                      remote_path: /tmp/luks-key
+                  post_bootstrap_hooks:
+                    - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+
+        homeConfigurations:              # User-level: activates as SSH user
+          admin:
+            machines:
+              web-01:
+                ssh:
+                  username: admin         # Activation runs as this user
 
     monitoring:
       url: github:myorg/monitoring#main
-      configurations:
-        prometheus:
-          machines:
-            prom-01:
+      installables:
+        nixosConfigurations:
+          prometheus:
+            machines:
+              prom-01:
 ```
 
 The one used for testing to deploy [infrastructure](https://github.com/mihakrumpestar/infrastructure) is at [examples/panix.deploy.yml](https://github.com/mihakrumpestar/panix/blob/main/examples/panix.deploy.yml).

@@ -19,7 +19,7 @@ The resulting closure is then transferred to each target machine via `nix copy`.
 
 ## Remote Mode
 
-Builds run on the **first machine** of the configuration via the Nix remote store protocol:
+Builds run on the **first machine** of the installable via the Nix remote store protocol:
 
 ```bash
 nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths <flake-url>#<installable>
@@ -28,7 +28,7 @@ nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "
 This is useful when the target machine has more resources (CPU/RAM) than the deployment machine, or when deployment and target machine are not the same architecture.
 
 :::note
-For configurations with multiple machines, the closure is built on the first machine, then copied from the first machine to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine configurations in remote mode skip the transfer phase entirely since the closure is already on the target.
+For installables with multiple machines, the closure is built on the first machine, then copied from the first machine to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine installables in remote mode skip the transfer phase entirely since the closure is already on the target.
 :::
 
 **Requirements:**
@@ -43,20 +43,21 @@ fleet:
   flakes:
     my-flake:
       url: <url>
-      configurations:
-        my-server:
-          nix:
-            build_mode: remote          # Build on the first machine instead of locally
-          machines:
-            builder-and-target:         # First machine = remote builder and target
-              ssh:
-                hostname: 192.168.1.100
-            target-2:                   # Closure copied from builder to target-2
-              ssh:
-                hostname: 192.168.1.101
+      installables:
+        nixosConfigurations:
+          my-server:
+            nix:
+              build_mode: remote          # Build on the first machine instead of locally
+            machines:
+              builder-and-target:         # First machine = remote builder and target
+                ssh:
+                  hostname: 192.168.1.100
+              target-2:                   # Closure copied from builder to target-2
+                ssh:
+                  hostname: 192.168.1.101
 ```
 
-`build_mode` can be set at fleet, flake, or configuration level (inherited like other `nix` options). It cannot be set at machine level, as a configuration's machines share the same build mode (since build is a configuration-level phase).
+`build_mode` can be set at fleet, flake, or installable level (inherited like other `nix` options). It cannot be set at machine level, as an installable's machines share the same build mode (since build is a per-installable phase).
 
 ## Advanced Distributed Builds
 

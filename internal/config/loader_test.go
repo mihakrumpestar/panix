@@ -219,6 +219,12 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
 	assertion.Equal("my-config", cfg.Name.String())
 
+	// Verify tags include both output type and attribute name
+	assertion.Contains(cfg.Tags, "nixosConfigurations",
+		"installable type should be registered as a tag")
+	assertion.Contains(cfg.Tags, "my-config",
+		"installable name should be registered as a tag")
+
 	mach, ok := cfg.Machines.Get("my-machine")
 	must.True(ok)
 

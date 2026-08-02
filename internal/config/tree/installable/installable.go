@@ -34,6 +34,7 @@ type MetaBuild struct {
 // The xpath uses the composite key (type/name) to avoid collisions between
 // outputs with the same attribute name but different types
 // (e.g. nixosConfigurations/server1 vs homeConfigurations/server1).
+// Both the output type and attribute name are registered as tags.
 func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttributes *attributes.Attributes, parentNix *nix.NixConfig) error {
 	i.Type = typeKey
 	i.Name = AttributeName(nameKey)
@@ -45,13 +46,14 @@ func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttrib
 		return errors.Wrap(err, "failed to init installable attributes")
 	}
 
-	// Set the Name field to just the attribute name (not the composite key).
-	// Tags were appended with the composite key by Init; fix the last tag entry
-	// to be just the attribute name so --tags <name> works.
+	// Init appended the composite key as a tag. Replace it with the
+	// attribute name, and also append the output type as a separate tag.
 	i.Attributes.Name = stringbyte.StringByte(nameKey)
 	if len(i.Attributes.Tags) > 0 {
 		i.Attributes.Tags[len(i.Attributes.Tags)-1] = nameKey
 	}
+
+	i.Attributes.Tags = append(i.Attributes.Tags, typeKey.String())
 
 	err = i.Nix.Init(parentNix)
 	if err != nil {

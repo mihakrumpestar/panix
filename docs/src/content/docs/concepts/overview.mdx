@@ -19,8 +19,9 @@ Deploying NixOS at scale introduces operational challenges that existing tools a
 Panix is a deployment orchestrator for NixOS flakes.
 
 - **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
-- **Phase-oriented execution**: Six sequential deployment phases: Inspect, Bootstrap, Build, Transfer, Secrets, and Activate execute with defined scopes. The Build phase runs once per configuration, deduplicating work across machines sharing the same `nixosConfiguration`.
-- **Configuration/machine separation**: Multiple machines can share a single `nixosConfiguration`, deduplicating builds and enabling parallel bootstrap of identical fleet nodes. See [Configuration Model](/concepts/configuration-model/) for the reasoning behind this design.
+- **Phase-oriented execution**: Six sequential deployment phases: Inspect, Bootstrap, Build, Transfer, Secrets, and Activate execute with defined scopes. The Build phase runs once per installable, deduplicating work across machines sharing the same installable.
+- **Installable/machine separation**: Multiple machines can share a single installable, deduplicating builds and enabling parallel bootstrap of identical fleet nodes. See [Configuration Model](/concepts/configuration-model/) for the reasoning behind this design.
+- **Multi-output-type deployments**: A single machine can receive multiple installable types (e.g. a `nixosConfigurations` system closure and a `homeConfigurations` user profile). Each type auto-infers its build path, activation mechanism, and profile management.
 - **Remote build mode**: Builds can execute on a target machine instead of locally, useful when the target has more resources or a different architecture. The closure is then copied between machines via the Nix remote store protocol.
 - **Real-time TUI**: An interactive interface provides visibility into each phase per machine. You can observe failures as they occur, inspect logs, and retry failed phases without restarting the entire workflow.
 - **Bootstrap support**: Machines can be converted to NixOS via NixOS live install or any live install or previously installed distro using kexec and `disko`, with full support for custom hooks and secrets at multiple stages.

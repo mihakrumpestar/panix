@@ -1,14 +1,14 @@
 ---
 title: Configuration Model
-description: Hierarchical configuration inheritance - Fleet → Flake → Configuration → Machine.
+description: Hierarchical configuration inheritance - Fleet → Flake → Installable → Machine.
 sidebar:
   order: 3
 ---
 
-Your infrastructure has natural hierarchies: flakes contain configurations, configurations contain machines. Panix's configuration model reflects this:
+Your infrastructure has natural hierarchies: flakes contain installables, installables contain machines. Panix's configuration model reflects this:
 
 <center>
-**Fleet → Flake → Configuration → Machine**
+**Fleet → Flake → Installable → Machine**
 </center>
 
 Attributes at each level cascade down, **without overriding** child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the fleet, extend at any level:
@@ -27,48 +27,99 @@ fleet:
         - local_path: ./secrets/prod/api.key
           remote_path: /var/secrets/api.key
       
-      configurations:
-        webserver:
-          tags: [web]             # Accumulated: [production, critical, web]
-          
-          machines:
-            web-01:               # Accumulated: [production, critical, web, web-01]
-            web-02:
-              secrets:            # APPENDED to all inherited secrets
-                - local_path: ./secrets/web-02/cert.pem
-                  remote_path: /etc/ssl/cert.pem
+      installables:
+        nixosConfigurations:
+          webserver:
+            tags: [web]           # Accumulated: [production, critical, web]
+            
+            machines:
+              web-01:             # Accumulated: [production, critical, web, web-01]
+              web-02:
+                secrets:          # APPENDED to all inherited secrets
+                  - local_path: ./secrets/web-02/cert.pem
+                    remote_path: /etc/ssl/cert.pem
 ```
 
-## Why Configurations Are Separate From Machines
+## Why Installables Are Separate From Machines
 
-In NixOS, a `nixosConfiguration` defines a system: packages, services, filesystem layout.
+An installable is a flake output: a `nixosConfigurations` entry, a `homeConfigurations` entry, a `packages` entry, etc. with its attribute name. It defines what to build and deploy.
 
-Traditional deployment tools assume a 1:1 mapping: one machine, one `nixosConfiguration`. Deploying 50 identical machines would require 50 `nixosConfiguration` entries and 50 builds, even though the systems are identical.
+Traditional deployment tools assume a 1:1 mapping: one machine, one configuration. Deploying 50 identical machines (with identical configurations) would require 50 entries and 50 builds, even though the systems are identical.
 
-Panix breaks this 1:1 mapping. Many machines can share a single `nixosConfiguration`, each receiving its hostname and network identity from DHCP. This has two compounding effects:
+Panix breaks this 1:1 mapping. Many machines can share a single installable, each receiving its hostname and network identity from DHCP (you configure that on your own). This has two compounding effects:
 
-- **Build deduplication**: One `nixosConfiguration` means one build, regardless of how many machines consume it. Deploying 50 identical machines costs 1 build, not 50.
-- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same configuration, since none of them need machine-specific NixOS config written first.
+- **Build deduplication**: One installable means one build, regardless of how many machines consume it. Deploying 50 identical machines costs 1 build, not 50.
+- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same installable, since none of them need machine-specific. This is not the case for all configurations and situations, but can be very useful in certain applications.
 
-The machine's role in Panix is purely operational: it holds the SSH connection, the target address, and the transfer and activation state. The configuration is the blueprint; the machine is where it lands.
+The machine's role in Panix is purely operational: it holds the SSH connection, the target address, and the transfer and activation state. The installable is the blueprint; the machine is where it lands.
+
+## Multiple Output Types Per Machine
+
+A machine often needs more than just a system configuration. You might want a NixOS system and a home-manager profile on the same box. Panix supports this by letting you define multiple installable types under a single flake:
+
+```yaml
+fleet:
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          server1:
+            machines:
+              server1:            # system-level activation (root)
+        
+        homeConfigurations:
+          alice:
+            machines:
+              server1:            # user-level activation (alice)
+                ssh:
+                  username: alice
+```
+
+:::caution
+Each (installable, machine) pair is independent. There is no activation ordering between them. There is also no gating when bootstrapping.
+
+If the target machine is in NixOS installer, non-nixosConfigurations installable types will also try to run (in this case, it is best to specify `--tags=nixosConfigurations`, to exclude other types from being run on bootstrap).
+:::
+
+Each installable type auto-infers its build path, activation mechanism, profile path, and whether profile setting is needed. You don't need to configure these manually. The SSH username on the machine determines which user the activation runs as for user-level types like `homeConfigurations`.
+
+:::caution
+Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) are a newer feature. NixOS system deployments are well-tested, but other output types may have edge cases. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
+:::
+
+### Supported Installable Types
+
+| Type | Use case | Activation |
+|------|----------|------------|
+| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (supports bootstrap) |
+| `darwinConfigurations` | [nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS) | `activate` script |
+| `systemConfigs` | [system-manager](https://github.com/numtide/system-manager) | `bin/activate` |
+| `homeConfigurations` | [home-manager](https://github.com/nix-community/home-manager) | `activationPackage/activate` |
+| `nixOnDroidConfigurations` | [Nix-on-Droid](https://github.com/nix-community/nix-on-droid) | `activate` script |
+| `packages` | Arbitrary packages | `nix profile install` |
+
+Bootstrap (kexec, disko, nixos-install) only applies to `nixosConfigurations`.
 
 ## How Inheritance Works
 
-- **Tags**: Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through the hierarchy.
-- **Secrets**: Secrets defined at fleet/flake/configuration levels append down to machines. They are never replaced, only accumulated.
+- **Tags**: Every name (flake, installable type, installable name, machine) is automatically a tag. Tags accumulate through the hierarchy.
+- **Secrets**: Secrets defined at fleet/flake/installable levels append down to machines. They are never replaced, only accumulated.
 - **SSH**: Settings cascade down. A machine can override any SSH parameter.
 - **Bootstrap**: Settings cascade down. Hooks at each level are collected.
 - **Nix flags**: `extra_flags`, `build_flags`, `copy_flags` accumulate through inheritance.
 
 ## Disabling Parts of the Configuration
 
-You can disable flakes, configurations, or machines by setting `disabled: true`:
+You can disable flakes, installables, or machines by setting `disabled: true`:
 
 ```yaml
 fleet:
   flakes:
     my-flake:
-      disabled: true  # This flake and all its children are skipped
+      installables:
+        nixosConfigurations:
+          old-server:
+            disabled: true  # This installable and all its machines are skipped
 ```
 
 Disabled sections are filtered out during evaluation and do not participate in any phase.

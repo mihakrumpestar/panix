@@ -50,7 +50,7 @@ Panix eliminates all of this: one binary, one config file, full lifecycle. From 
 
 ## What Panix Does
 
-Panix is a stateless deployment orchestrator for NixOS flakes. It manages the entire lifecycle of deploying NixOS configurations to machines, from provisioning bare metal to ongoing updates, as a single, observable, recoverable pipeline.
+Panix is a stateless deployment orchestrator for NixOS flakes. It manages the entire lifecycle of deploying NixOS systems to machines, from provisioning bare metal to ongoing updates, as a single, observable, recoverable pipeline.
 
 **Six phases, one execution:**
 
@@ -63,7 +63,7 @@ Each phase has a defined scope and purpose:
 
 - **Inspect** detects OS, architecture, SSH reachability, and existing generations.
 - **Bootstrap** kexecs into a NixOS installer, partitions disks with disko, and optionally encrypts.
-- **Build** compiles the system closure once per configuration, deduplicated across machines sharing the same config.
+- **Build** compiles the system closure once per installable, deduplicated across machines sharing the same installable.
 - **Transfer** copies closures to targets in parallel via `nix copy`.
 - **Secrets** rsyncs files with ownership and permissions, never entering the Nix store.
 - **Activate** switches to the new configuration, or installs from scratch on fresh machines.
@@ -73,7 +73,7 @@ And an additional phase for **rollbacks**.
 **What makes it different:**
 
 - **Real-time TUI**: per-machine, per-phase visibility. Watch every phase unfold. Press `r` to retry only failed phases. Press `ctrl+r` to restart the entire workflow. No scrollback parsing.
-- **Scope-aware deduplication**: three machines sharing the same `nixosConfiguration` trigger one build, not three.
+- **Scope-aware deduplication**: three machines sharing the same installable trigger one build, not three.
 - **Remote builds**: build on a target machine when it has more resources or a different architecture. The closure copies directly between machines.
 - **Multi-flake deployments**: span multiple repositories in a single run. Each flake is independently buildable.
 - **Tag-based filtering**: every name is a tag. Deploy subsets: `panix --tags production`, `panix --tags webserver`.
@@ -101,7 +101,7 @@ And an additional phase for **rollbacks**.
 #   build_mode:  local              (build locally, then nix copy)
 #   activation:  switch             (switch-to-configuration switch)
 #   SSH:         machine name matched against ~/.ssh/config
-#   flake attr:  nixosConfigurations.<name>
+#   installable: <outputType>.<name>  (e.g. nixosConfigurations.workstation)
 #   inheritance: fleet → flake → installable → machine
 #                (tags, secrets, SSH, bootstrap, nix cascade down)
 

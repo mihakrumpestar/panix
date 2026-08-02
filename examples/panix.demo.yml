@@ -8,7 +8,7 @@
 #   build_mode:  local              (build locally, then nix copy)
 #   activation:  switch             (switch-to-configuration switch)
 #   SSH:         machine name matched against ~/.ssh/config
-#   flake attr:  nixosConfigurations.<name>
+#   installable: <outputType>.<name>  (e.g. nixosConfigurations.workstation)
 #   inheritance: fleet → flake → installable → machine
 #                (tags, secrets, SSH, bootstrap, nix cascade down)
 

@@ -14,19 +14,20 @@ fleet:
   
   flakes:
     my-flake:
-      configurations:
-        webserver:
-          nix:
-            build_flags: ["--max-jobs", "8"]       # nix build only
-            copy_flags: ["--compress"]             # nix copy only
-            extra_flags: []                        # Flags for build and copy
-          
-          machines:
-            web-01:
+      installables:
+        nixosConfigurations:
+          webserver:
+            nix:
+              build_flags: ["--max-jobs", "8"]       # nix build only
+              copy_flags: ["--compress"]             # nix copy only
+              extra_flags: []                        # Flags for build and copy
+            
+            machines:
+              web-01:
 ```
 
 ## Inheritance
 
-Flags accumulate through inheritance (fleet → flake → configuration). Slices are appended, not replaced.
+Flags accumulate through inheritance (fleet → flake → installable). Slices are appended, not replaced.
 
 `nix` config settings cannot be set at the `machine` level.

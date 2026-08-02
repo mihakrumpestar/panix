@@ -105,7 +105,7 @@ properties:
         additionalProperties: false
       tags:
         type: array
-        description: Filter machines by tags (flakes, configurations and machine names are already registered as tags)
+        description: Filter machines by tags (flakes, installables (output type and attribute name) and machine names are already registered as tags)
         items:
           type: string
       timeout:
@@ -414,7 +414,7 @@ definitions:
           type: string
       build_mode:
         type: string
-        description: "Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine configurations, transfer is skipped (closure is already on target). For multi-machine configurations, the closure is copied from the first machine to the rest. (default: local)"
+        description: "Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine installables, transfer is skipped (closure is already on target). For multi-machine installables, the closure is copied from the first machine to the rest. (default: local)"
         default: local
         enum:
         - local

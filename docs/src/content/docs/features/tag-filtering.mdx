@@ -5,13 +5,15 @@ sidebar:
   order: 2
 ---
 
-Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through inheritance. Deploy subsets of your infrastructure:
+Every name (flake, installable type, installable name, machine) is automatically a tag. Tags accumulate through inheritance. Deploy subsets of your infrastructure:
 
 ```bash
-panix --tags production         # All production-tagged machines
-panix --tags webserver          # All machines under webserver config
-panix --tags server-01          # Single machine
-panix --tags server-01,special  # Single machine and tag special
+panix --tags production            # All production-tagged machines
+panix --tags webserver             # All machines under the webserver installable
+panix --tags nixosConfigurations   # All machines under NixOS system installables
+panix --tags homeConfigurations    # All machines under home-manager installables
+panix --tags server-01             # Single machine
+panix --tags server-01,web         # Machines matching either tag
 ```
 
 ## How Tags Work
@@ -24,19 +26,25 @@ fleet:
   flakes:
     infrastructure:
       tags: [critical]
-      configurations:
-        webserver:
-          tags: [web]
-          machines:
-            web-01:
-            web-02:
+      installables:
+        nixosConfigurations:
+          webserver:
+            tags: [web]
+            machines:
+              web-01:
+              web-02:
+        homeConfigurations:
+          alice:
+            machines:
+              web-01:
 ```
 
-The resolved tags for `web-01` are: `[production, critical, web, infrastructure, webserver, web-01]`.
+The resolved tags for `web-01` under `nixosConfigurations` are: `[production, critical, web, infrastructure, webserver, nixosConfigurations, web-01]`.
+
+The resolved tags for `web-01` under `homeConfigurations` are: `[production, critical, infrastructure, alice, homeConfigurations, web-01]`.
 
 - Fleet-level tags are inherited by all descendants
-- Flake and configuration names are automatically registered as tags
-- Machine names are automatically registered as tags
+- Flake, installable type, installable name, and machine name are automatically registered as tags
 - Tags at each level accumulate (never override)
 
 ## Multiple Tags
@@ -44,5 +52,6 @@ The resolved tags for `web-01` are: `[production, critical, web, infrastructure,
 Separate multiple tags with commas. Machines matching **any** of the specified tags are included:
 
 ```bash
-panix --tags web,database    # All machines tagged 'web' OR 'database'
+panix --tags web,database       # All machines tagged 'web' OR 'database'
+panix --tags nixosConfigurations,homeConfigurations  # All system and home-manager machines
 ```

@@ -17,15 +17,16 @@ fleet:
     my-flake:
       url: |
         {{ env "MY_FLAKE_URL" }}
-      configurations:
-        server:
-          machines:
-            server-01:
-              ssh:
-                hostname: |
-                  {{ env "SERVER_HOST" | default "192.168.1.100" }}
-                port: |
-                  {{ env "SSH_PORT" | default "22" }}
+      installables:
+        nixosConfigurations:
+          server:
+            machines:
+              server-01:
+                ssh:
+                  hostname: |
+                    {{ env "SERVER_HOST" | default "192.168.1.100" }}
+                  port: |
+                    {{ env "SSH_PORT" | default "22" }}
 ```
 
 ## Conditional Logic
@@ -55,20 +56,21 @@ Define reusable templates with `{{define}}` and invoke them with `{{template}}`:
 fleet:
   flakes:
     infrastructure:
-      configurations:
-        server:
-          machines:
-            server-01:
-              bootstrap:
-                post_bootstrap_hooks:
-                  - |
-                    {{template "cryptenroll" "/dev/sda2"}}
-            
-            server-02:
-              bootstrap:
-                post_bootstrap_hooks:
-                  - |
-                    {{template "cryptenroll" "/dev/nvme0n1p2"}}
+      installables:
+        nixosConfigurations:
+          server:
+            machines:
+              server-01:
+                bootstrap:
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/sda2"}}
+              
+              server-02:
+                bootstrap:
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/nvme0n1p2"}}
 ```
 
 ## Built-in Functions

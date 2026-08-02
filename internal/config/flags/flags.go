@@ -48,7 +48,7 @@ type WorkflowFlags struct {
 type EvalFlags struct {
 	ValidateFlags `yaml:",inline"`
 
-	Tags           []string                  `yaml:"tags" json:"tags,omitempty" short:"t" help:"Filter machines by tags (flakes, configurations and machine names are already registered as tags)"`
+	Tags           []string                  `yaml:"tags" json:"tags,omitempty" short:"t" help:"Filter machines by tags (flakes, installables (output type and attribute name) and machine names are already registered as tags)"`
 	SkipPhases     []phase.Phase             `yaml:"skip_phases" json:"skip_phases,omitempty" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
 	Timeout        time.Duration             `yaml:"timeout" json:"timeout,omitempty" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
 	ActivationMode attributes.ActivationMode `yaml:"activation_mode" json:"activation_mode,omitempty" help:"Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)" validate:"omitempty,oneof=check switch boot test dry-activate"`
@@ -76,10 +76,10 @@ type Validate struct {
 
 //nolint:lll
 type Tui struct {
-	ShowAllBuildLogs       bool `yaml:"show_all_build_logs" json:"show_all_build_logs,omitempty" help:"Show all build logs in TUI (keybind h)"`
-	ShowActiveOnly         bool `yaml:"show_active_only" json:"show_active_only,omitempty" help:"Show only running or errored logs in TUI build logs (keybind a)"`
-	ShowCommandsInLabels   bool `yaml:"show_commands_in_labels" json:"show_commands_in_labels,omitempty" help:"Show raw commands instead of descriptions as labels in build logs (keybind c)"`
-	CommandOutputMaxHeight int  `yaml:"command_output_max_height" json:"command_output_max_height" help:"Maximum height for command labels and outputs viewports in TUI" default:"8"`
+	ShowAllBuildLogs       bool   `yaml:"show_all_build_logs" json:"show_all_build_logs,omitempty" help:"Show all build logs in TUI (keybind h)"`
+	ShowActiveOnly         bool   `yaml:"show_active_only" json:"show_active_only,omitempty" help:"Show only running or errored logs in TUI build logs (keybind a)"`
+	ShowCommandsInLabels   bool   `yaml:"show_commands_in_labels" json:"show_commands_in_labels,omitempty" help:"Show raw commands instead of descriptions as labels in build logs (keybind c)"`
+	CommandOutputMaxHeight int    `yaml:"command_output_max_height" json:"command_output_max_height" help:"Maximum height for command labels and outputs viewports in TUI" default:"8"`
 	CommandOutputMaxLines  uint64 `yaml:"command_output_max_lines" json:"command_output_max_lines" help:"Maximum output lines to keep per command in TUI (older lines are trimmed from the front in batches)" default:"10000"`
 }
 
