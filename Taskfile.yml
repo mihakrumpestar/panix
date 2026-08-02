@@ -123,9 +123,8 @@ tasks:
 
   go:test:e2e:build:
     desc: |
-      Build all e2e test Nix artifacts (installer ISO, kexec installer, cloud-init
-      seeds, NixOS closures). Requires tests/e2e/testflakes/ssh.pub — run
-      e2e tests once first to generate SSH keys.
+      Build all e2e Nix artifacts (installer ISO, kexec installer, cloud-init
+      seeds, NixOS closures).
     cmds:
       - |
         set -euo pipefail
