@@ -110,9 +110,41 @@ tasks:
   go:test:e2e:
     desc: |
       Run e2e tests (requires KVM, QEMU, Nix)
-      Flags: -- --test=bothlocal|remote
+      Flags (pass after --):
+        --test=local|remote|both    Test scope (default: both)
+        --phase=all|bootstrap|redeploy  Deploy phase (default: all)
+        --panix-args="..."          Extra args passed to every panix deploy
+                                    (e.g. --tags=homeConfigurations)
+      Examples:
+        task go:test:e2e -- --test=local
+        task go:test:e2e -- --phase=redeploy --panix-args="--tags=homeConfigurations"
     cmds:
       - go run ./tests/e2e/ {{.CLI_ARGS}}
+
+  go:test:e2e:build:
+    desc: |
+      Build all e2e test Nix artifacts (installer ISO, kexec installer, cloud-init
+      seeds, NixOS closures). Requires tests/e2e/testflakes/ssh.pub — run
+      e2e tests once first to generate SSH keys.
+    cmds:
+      - |
+        set -euo pipefail
+        FLAKE="path:./tests/e2e/testflakes"
+        echo "Building all e2e test Nix artifacts..."
+        nix build --no-link --print-out-paths \
+          "$FLAKE#installer-iso" \
+          "$FLAKE#kexec-installer" \
+          "$FLAKE#debian-cloud-image" \
+          "$FLAKE#seed-iso" \
+          "$FLAKE#seed-remote-iso" \
+          "$FLAKE#seed-nix-iso" \
+          "$FLAKE#bake-seed-iso" \
+          "$FLAKE#bake-seed-nix-iso" \
+          "$FLAKE#nixosConfigurations.test-vm.config.system.build.toplevel" \
+          "$FLAKE#nixosConfigurations.test-vm-remote.config.system.build.toplevel" \
+          "$FLAKE#nixosConfigurations.test-vm-remote.config.system.build.diskoScript" \
+          "$FLAKE#homeConfigurations.test-home.activationPackage"
+        echo "All e2e test artifacts built."
 
   # Nix
 
@@ -143,6 +175,7 @@ tasks:
       - go mod tidy
       #- go mod vendor
       - nix flake update
+      - nix flake update --flake ./tests/e2e/testflakes
       - task: nix:vendor
 
   ci:

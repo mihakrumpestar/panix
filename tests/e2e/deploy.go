@@ -96,6 +96,7 @@ func wrapperPath(mode, root, configPath, panixLogPath, panixOutputPath string, e
 	script := "#!/bin/sh\n" +
 		strings.Join(envLines, "\n") + "\n" +
 		panixCmd + " deploy -c " + configPath + " --exit-on-complete --log --log-file " + panixLogPath +
+		" " + panixArgs +
 		" 2> " + panixOutputPath + "\n" +
 		"echo $? > " + exitCodePath + "\n"
 
@@ -115,6 +116,7 @@ func runPanixInConsole(root, configPath, panixLogPath string, envVars []string, 
 		"--output=console", "--exit-on-complete",
 		"--log", "--log-file", panixLogPath,
 	)
+	cmdArgs = append(cmdArgs, splitPanixArgs(panixArgs)...)
 
 	cmd := exec.CommandContext(context.Background(), bin, cmdArgs...) //nolint:gosec
 	cmd.Dir = root
@@ -187,4 +189,46 @@ func sanitizedOsEnviron(stripKeys ...string) []string {
 	}
 
 	return result
+}
+
+// splitPanixArgs splits a shell-style argument string into individual args.
+// Empty string returns nil (no extra args).
+func splitPanixArgs(argStr string) []string {
+	argStr = strings.TrimSpace(argStr)
+	if argStr == "" {
+		return nil
+	}
+
+	var args []string
+
+	var current strings.Builder
+
+	inQuote := false
+
+	for i := range len(argStr) {
+		char := argStr[i]
+
+		if char == '"' {
+			inQuote = !inQuote
+
+			continue
+		}
+
+		if char == ' ' && !inQuote {
+			if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+
+			continue
+		}
+
+		current.WriteByte(char)
+	}
+
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+
+	return args
 }

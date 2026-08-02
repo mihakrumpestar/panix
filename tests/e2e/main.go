@@ -23,18 +23,18 @@ const (
 type deployPhase string
 
 const (
-	phaseAll        deployPhase = "all"
-	phaseBootstrap  deployPhase = "bootstrap"
-	phaseRedeploy   deployPhase = "redeploy"
-	phaseHome       deployPhase = "home"
+	phaseAll       deployPhase = "all"
+	phaseBootstrap deployPhase = "bootstrap"
+	phaseRedeploy  deployPhase = "redeploy"
 )
 
 var errInvalidTestScope = errors.New("invalid test scope, must be local, remote, or both")
-var errInvalidPhase = errors.New("invalid phase, must be: all, bootstrap, redeploy, or home")
+var errInvalidPhase = errors.New("invalid phase, must be: all, bootstrap, or redeploy")
 
 var (
 	testScopeFlag testScope
 	phaseFlag     deployPhase
+	panixArgs     string
 )
 
 func parseFlags() {
@@ -49,9 +49,9 @@ func parseFlags() {
 		}
 	})
 
-	flag.Func("phase", "deploy phase to run: all, bootstrap, redeploy, home (default: all)", func(val string) error {
+	flag.Func("phase", "deploy phase to run: all, bootstrap, redeploy (default: all)", func(val string) error {
 		switch deployPhase(val) {
-		case phaseAll, phaseBootstrap, phaseRedeploy, phaseHome:
+		case phaseAll, phaseBootstrap, phaseRedeploy:
 			phaseFlag = deployPhase(val)
 
 			return nil
@@ -59,6 +59,8 @@ func parseFlags() {
 			return fmt.Errorf("%w: %q", errInvalidPhase, val)
 		}
 	})
+
+	flag.StringVar(&panixArgs, "panix-args", "", "Extra CLI args passed to every panix deploy invocation (e.g. --tags=homeConfigurations)")
 
 	flag.Parse()
 
@@ -75,16 +77,12 @@ func (s testScope) local() bool  { return s == testScopeBoth || s == testScopeLo
 func (s testScope) remote() bool { return s == testScopeBoth || s == testScopeRemote }
 
 const (
-	debianURL           = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 	blankDiskName       = "blank.qcow2"
 	blankDiskSize       = "10G"
 	blankDiskRemoteName = "blank-remote.qcow2"
 	overlayName         = "debian-overlay.qcow2"
 	overlayRemoteName   = "debian-overlay-remote.qcow2"
 	overlayNixName      = "debian-overlay-nix.qcow2"
-	seedName            = "seed.iso"
-	seedRemoteName      = "seed-remote.iso"
-	seedNixName         = "seed-nix.iso"
 	nixosISOPort        = 10022
 	kexecVMPort         = 10023
 	remoteISOPort       = 10025
@@ -166,23 +164,68 @@ func run() error {
 
 func runDeployPhases(configPath string, res *testResources) error {
 	if phaseFlag == phaseBootstrap || phaseFlag == phaseAll {
-		err := runPhase(configPath, "Bootstrap", "PANIX_TEST_MODE=bootstrap", res.keyPath, res.kexecInstallerPath)
+		err := runBootstrapPhase(configPath, res)
 		if err != nil {
 			return err
 		}
 	}
 
 	if phaseFlag == phaseRedeploy || phaseFlag == phaseAll {
-		err := runPhase(configPath, "Redeploy", "PANIX_TEST_MODE=redeploy", res.keyPath, res.kexecInstallerPath)
+		err := runRedeployPhase(configPath, res)
 		if err != nil {
 			return err
 		}
 	}
 
-	if phaseFlag == phaseHome || phaseFlag == phaseAll {
-		if testScopeFlag.local() {
-			return runHomeManagerPhase(configPath, res.keyPath)
-		}
+	return nil
+}
+
+func runBootstrapPhase(configPath string, res *testResources) error {
+	printPhasef("Phase: Bootstrap deploy")
+
+	step := startStep("%s", "Run panix deploy")
+
+	err := runPanixDeploy(configPath,
+		"PANIX_TEST_MODE=bootstrap",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err != nil {
+		step.Fail(err)
+
+		return err
+	}
+
+	step.Done()
+
+	return verifyAll(res.keyPath)
+}
+
+func runRedeployPhase(configPath string, res *testResources) error {
+	printPhasef("Phase: Redeploy deploy")
+
+	step := startStep("%s", "Run panix deploy")
+
+	err := runPanixDeploy(configPath,
+		"PANIX_TEST_MODE=redeploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err != nil {
+		step.Fail(err)
+
+		return err
+	}
+
+	step.Done()
+
+	err = verifyAll(res.keyPath)
+	if err != nil {
+		return err
+	}
+
+	if testScopeFlag.local() {
+		return verifyHomeManager(res.keyPath)
 	}
 
 	return nil
@@ -224,15 +267,12 @@ func phase0Setup() (*testResources, error) {
 	res := &testResources{}
 
 	parGroup := newParallelGroup()
-	parGroup.Go("Generate SSH keys", func() error {
+	parGroup.Go("Resolve SSH keys", func() error {
 		var keyErr error
 
 		res.keyPath, keyErr = ensureSSHKeys()
 
 		return keyErr
-	})
-	parGroup.Go("Download Debian image", func() error {
-		return ensureCached(debianFileName, debianURL)
 	})
 
 	err := parGroup.Wait()
@@ -240,7 +280,7 @@ func phase0Setup() (*testResources, error) {
 		return nil, err
 	}
 
-	res.debianImagePath, err = bakeStep("Bake Debian image (rsync pre-install)", res.keyPath)
+	res.debianImagePath, err = bakeStep("Bake Debian image (rsync pre-install)")
 	if err != nil {
 		return nil, err
 	}
@@ -249,18 +289,13 @@ func phase0Setup() (*testResources, error) {
 		err = simpleStep("Bake Debian image (nix pre-install)", func() error {
 			var bakeErr error
 
-			res.debianNixImagePath, bakeErr = bakeDebianNixImage(res.keyPath)
+			res.debianNixImagePath, bakeErr = bakeDebianNixImage()
 
 			return bakeErr
 		})
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	err = simpleStep("Stage SSH public key", func() error { return stageSSHPubKey(res.keyPath) })
-	if err != nil {
-		return nil, err
 	}
 
 	err = buildNixArtifacts(res)
@@ -332,10 +367,7 @@ func createLocalDisks(parGroup *parallelGroup, res *testResources) {
 	parGroup.Go("Create cloud-init seed", func() error {
 		var seedErr error
 
-		res.cloudInitSeed, seedErr = createCloudInitISO(
-			seedName, "panix-kexec-test", "kexec-vm",
-			res.keyPath+".pub", false, false,
-		)
+		res.cloudInitSeed, seedErr = nixBuild("seed-iso")
 
 		return seedErr
 	})
@@ -357,10 +389,7 @@ func createLocalDisks(parGroup *parallelGroup, res *testResources) {
 		var seedErr error
 
 		// Simple SSH-only seed — nix is already baked into the image.
-		res.cloudInitSeedNix, seedErr = createCloudInitISO(
-			seedNixName, "debian-nix", "debian-nix-vm",
-			res.keyPath+".pub", false, false,
-		)
+		res.cloudInitSeedNix, seedErr = nixBuild("seed-nix-iso")
 
 		return seedErr
 	})
@@ -377,10 +406,7 @@ func createRemoteDisks(parGroup *parallelGroup, res *testResources) {
 	parGroup.Go("Create cloud-init seed (remote)", func() error {
 		var seedErr error
 
-		res.cloudInitSeedRemote, seedErr = createCloudInitISO(
-			seedRemoteName, "panix-kexec-test-remote", "kexec-vm-remote",
-			res.keyPath+".pub", false, false,
-		)
+		res.cloudInitSeedRemote, seedErr = nixBuild("seed-remote-iso")
 
 		return seedErr
 	})
@@ -544,40 +570,6 @@ func waitForAllSSH(keyPath string) error {
 	return parGroup.Wait()
 }
 
-func runPhase(configPath, phaseName, modeEnv, keyPath, kexecPath string) error {
-	printPhasef("Phase: %s deploy", phaseName)
-
-	step := startStep("%s", "Run panix "+phaseName+" deploy")
-
-	err := runPanixDeploy(configPath, modeEnv, "PANIX_KEXEC_PATH="+kexecPath)
-	if err != nil {
-		step.Fail(err)
-
-		return err
-	}
-
-	step.Done()
-
-	return verifyAll(keyPath)
-}
-
-func runHomeManagerPhase(configPath, keyPath string) error {
-	printPhasef("Phase: Home-manager deploy")
-
-	step := startStep("%s", "Run panix Home-manager deploy")
-
-	err := runPanixDeploy(configPath, "PANIX_TEST_MODE=home")
-	if err != nil {
-		step.Fail(err)
-
-		return err
-	}
-
-	step.Done()
-
-	return verifyHomeManager(keyPath)
-}
-
 func verifyAll(keyPath string) error {
 	parGroup := newParallelGroup()
 
@@ -617,10 +609,10 @@ func startVMStep(format string, port int, logName string, extraArgs ...string) (
 	return guest, nil
 }
 
-func bakeStep(name, keyPath string) (string, error) {
+func bakeStep(name string) (string, error) {
 	step := startStep("%s", name)
 
-	result, err := bakeDebianImage(keyPath)
+	result, err := bakeDebianImage()
 	if err != nil {
 		step.Fail(err)
 

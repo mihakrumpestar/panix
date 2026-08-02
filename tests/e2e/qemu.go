@@ -21,7 +21,6 @@ const (
 	bakeTimeout  = 5 * time.Minute
 
 	consoleLogName = "console.log"
-	debianFileName = "debian-12-generic-amd64.qcow2"
 )
 
 var errBakeTimeout = errors.New("bake VM timed out")
@@ -144,7 +143,7 @@ func createDisk(name string, args ...string) (string, error) {
 	return path, nil
 }
 
-func bakeDebianImage(keyPath string) (string, error) {
+func bakeDebianImage() (string, error) {
 	bakedPath := filepath.Join(cacheDirPath, "debian-baked.qcow2")
 	markerPath := bakedPath + ".rsync-ok"
 
@@ -153,10 +152,15 @@ func bakeDebianImage(keyPath string) (string, error) {
 		return bakedPath, nil
 	}
 
-	return bakeDebianWithSeed(bakedPath, "bake-seed.iso", "debian-bake", "bake-vm", keyPath, false, markerPath)
+	basePath, err := nixBuild("debian-cloud-image")
+	if err != nil {
+		return "", err
+	}
+
+	return bakeDebianWithSeed(bakedPath, basePath, "bake-seed-iso", "bake-vm", markerPath)
 }
 
-func bakeDebianNixImage(keyPath string) (string, error) {
+func bakeDebianNixImage() (string, error) {
 	bakedPath := filepath.Join(cacheDirPath, "debian-baked-nix.qcow2")
 	markerPath := bakedPath + ".nix-ok"
 
@@ -165,20 +169,25 @@ func bakeDebianNixImage(keyPath string) (string, error) {
 		return bakedPath, nil
 	}
 
-	return bakeDebianWithSeed(bakedPath, "bake-seed-nix.iso", "debian-bake-nix", "bake-vm-nix", keyPath, true, markerPath)
+	basePath, err := nixBuild("debian-cloud-image")
+	if err != nil {
+		return "", err
+	}
+
+	return bakeDebianWithSeed(bakedPath, basePath, "bake-seed-nix-iso", "bake-vm-nix", markerPath)
 }
 
-func bakeDebianWithSeed(bakedPath, seedName, instanceID, hostname, keyPath string, withNix bool, markerPath string) (string, error) {
+func bakeDebianWithSeed(bakedPath, basePath, seedAttr, hostname, markerPath string) (string, error) {
 	_ = os.Remove(bakedPath)
 
-	basePath := filepath.Join(cacheDirPath, debianFileName)
+	cpArgs := []string{"--reflink=auto", "--no-preserve=mode", basePath, bakedPath}
 
-	out, err := exec.CommandContext(context.Background(), "cp", "--reflink=auto", basePath, bakedPath).CombinedOutput() //nolint:gosec
+	out, err := exec.CommandContext(context.Background(), "cp", cpArgs...).CombinedOutput() //nolint:gosec
 	if err != nil {
 		return "", errors.Wrapf(err, "cp base image: %s", string(out))
 	}
 
-	seedPath, err := createCloudInitISO(seedName, instanceID, hostname, keyPath+".pub", withNix, true)
+	seedPath, err := nixBuild(seedAttr)
 	if err != nil {
 		return "", err
 	}

@@ -1,11 +1,12 @@
 {{- $dir := env "PANIX_E2E_DIR" -}}
-{{- $cache := printf "%s/.cache" $dir -}}
 {{- $log := printf "%s/log" $dir -}}
 {{- $profile := printf "%s/profile" $dir -}}
-{{- $key := printf "%s/id_ed25519" $cache -}}
+{{- $key := printf "%s/testflakes/ssh.key" $dir -}}
 {{- $mode := env "PANIX_TEST_MODE" | default "bootstrap" -}}
+{{- $scope := env "PANIX_TEST_SCOPE" | default "both" -}}
 {{- $isBootstrap := eq $mode "bootstrap" -}}
-{{- $isHome := eq $mode "home" -}}
+{{- $isLocal := or (eq $scope "local") (eq $scope "both") -}}
+{{- $isRemote := or (eq $scope "remote") (eq $scope "both") -}}
 
 flags:
   timeout: 600s
@@ -23,36 +24,6 @@ flags:
     goroutine: {{ $profile }}/goroutine.prof
 {{ end }}
 
-{{ if $isHome }}
-fleet:
-  flakes:
-    test:
-      url: path:{{ env "PANIX_E2E_DIR" }}/testflakes
-      nix:
-        build_flags:
-          - "--option"
-          - "eval-cache"
-          - "false"
-          - "--offline"
-      installables:
-        homeConfigurations:
-          test-home:
-            machines:
-              nixos-iso-vm:
-                ssh: &ssh_nixos_iso
-                  hostname: 127.0.0.1
-                  port: 10022
-                  username: root
-                  identity_file: {{ $key }}
-                  disable_strict_key_checking: true
-              debian-nix-vm:
-                ssh: &ssh_debian_nix
-                  hostname: 127.0.0.1
-                  port: 10027
-                  username: root
-                  identity_file: {{ $key }}
-                  disable_strict_key_checking: true
-{{ else }}
 fleet:
   flakes:
     test:
@@ -65,6 +36,7 @@ fleet:
           - "--offline"
       installables:
         nixosConfigurations:
+{{ if $isLocal }}
           test-vm:
             machines:
               nixos-iso-vm:
@@ -96,6 +68,8 @@ fleet:
                   post_bootstrap_provisioned_hooks:
                     - waitForOnline
 {{ end }}
+{{ end }}
+{{ if $isRemote }}
           test-vm-remote:
             nix:
               build_mode: remote
@@ -134,4 +108,18 @@ fleet:
                   post_bootstrap_provisioned_hooks:
                     - waitForOnline
 {{ end }}
+{{ end }}
+{{ if and $isLocal (not $isBootstrap) }}
+        homeConfigurations:
+          test-home:
+            machines:
+              nixos-iso-vm:
+                ssh: *ssh_nixos_iso
+              debian-nix-vm:
+                ssh: &ssh_debian_nix
+                  hostname: 127.0.0.1
+                  port: 10027
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
 {{ end }}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +18,6 @@ import (
 const (
 	cacheDirName = ".cache"
 	logDirName   = "log"
-	sshKeyName   = "id_ed25519"
 	dirPerm      = 0o750
 	filePerm     = 0o600
 	pubFilePerm  = 0o644
@@ -75,14 +73,6 @@ func checkDeps() error {
 		}
 	}
 
-	_, err := exec.LookPath("genisoimage")
-	if err != nil {
-		_, err2 := exec.LookPath("mkisofs")
-		if err2 != nil {
-			return errors.New("neither genisoimage nor mkisofs found")
-		}
-	}
-
 	return nil
 }
 
@@ -90,112 +80,48 @@ func closeWithoutErrCheck(closer io.Closer) {
 	_ = closer.Close()
 }
 
-func removeWithoutErrCheck(path string) {
-	_ = os.RemoveAll(path)
-}
-
+// ensureSSHKeys returns the path to the committed test-only SSH key pair in
+// testflakes/ssh.key. The key pair is static and committed to the repo so that
+// nix builds (which read ssh.pub via builtins.readFile) work without a
+// prior test run.
 func ensureSSHKeys() (string, error) {
-	keyPath := filepath.Join(cacheDirPath, sshKeyName)
+	keyPath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", "ssh.key")
 
 	_, err := os.Stat(keyPath)
-	if err == nil {
-		return keyPath, nil
-	}
-
-	err = exec.CommandContext(context.Background(), "ssh-keygen", //nolint:gosec
-		"-t", "ed25519", "-N", "", "-f", keyPath).Run()
 	if err != nil {
-		return "", errors.Wrap(err, "ssh-keygen")
-	}
-
-	err = os.Chmod(keyPath, filePerm)
-	if err != nil {
-		return "", errors.Wrap(err, "chmod key")
+		return "", errors.Wrap(err, "test SSH key not found in testflakes/ssh.key — ensure the key pair is committed")
 	}
 
 	return keyPath, nil
 }
 
-func downloadFile(downloadURL, dest string) error {
-	err := os.MkdirAll(filepath.Dir(dest), dirPerm)
+// nixBuild builds a flake attribute from testflakes and returns the store path.
+func nixBuild(attr string) (string, error) {
+	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
+
+	out, err := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
+		"--print-out-paths", "--no-link",
+		"path:"+testflakesDir+"#"+attr,
+	).Output()
 	if err != nil {
-		return errors.Wrap(err, "create download dir")
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
+			return "", errors.Wrapf(err, "nix build %s: %s", attr, string(exitErr.Stderr))
+		}
+
+		return "", errors.Wrapf(err, "nix build %s", attr)
 	}
 
-	file, err := os.Create(dest) //nolint:gosec
-	if err != nil {
-		return errors.Wrap(err, "create download file")
-	}
-
-	defer closeWithoutErrCheck(file)
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, downloadURL, nil)
-	if err != nil {
-		return errors.Wrapf(err, "download %s", downloadURL)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errors.Wrapf(err, "download %s", downloadURL)
-	}
-
-	defer closeWithoutErrCheck(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.Errorf("download %s: %s", downloadURL, resp.Status)
-	}
-
-	_, err = io.Copy(file, resp.Body)
-
-	return errors.Wrapf(err, "write %s", dest)
-}
-
-func ensureCached(name, downloadURL string) error {
-	path := filepath.Join(cacheDirPath, name)
-
-	_, err := os.Stat(path)
-	if err == nil {
-		return nil
-	}
-
-	return downloadFile(downloadURL, path)
-}
-
-func stageSSHPubKey(keyPath string) error {
-	destPath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", "ssh-key.pub")
-
-	content, err := os.ReadFile(keyPath + ".pub") //nolint:gosec
-	if err != nil {
-		return errors.Wrap(err, "read pub key")
-	}
-
-	return errors.Wrap(os.WriteFile(destPath, content, pubFilePerm), "stage pub key") //nolint:gosec
+	return strings.TrimSpace(string(out)), nil
 }
 
 func buildInstallerISO() (string, error) {
-	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
-	resultLink := filepath.Join(cacheDirPath, "installer-iso")
-
-	out, err := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
-		"--option", "eval-cache", "false",
-		"path:"+testflakesDir+"#installer-iso", "-o", resultLink).CombinedOutput()
+	storePath, err := nixBuild("installer-iso")
 	if err != nil {
-		return "", errors.Wrapf(err, "build installer ISO: %s", string(out))
+		return "", err
 	}
 
-	target, err := os.Readlink(resultLink)
-	if err != nil {
-		return "", errors.Wrap(err, "read iso symlink")
-	}
-
-	if !filepath.IsAbs(target) {
-		target, err = filepath.Abs(filepath.Join(filepath.Dir(resultLink), target))
-		if err != nil {
-			return "", errors.Wrap(err, "resolve iso path")
-		}
-	}
-
-	isoPath := findISOFile(target)
+	isoPath := findISOFile(storePath)
 	if isoPath == "" {
 		return "", errNoISO
 	}
@@ -204,25 +130,10 @@ func buildInstallerISO() (string, error) {
 }
 
 func buildKexecInstaller() (string, error) {
-	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
-
-	cmd := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
-		"--option", "eval-cache", "false",
-		"--print-out-paths",
-		"path:"+testflakesDir+"#kexec-installer",
-	)
-
-	out, err := cmd.Output()
+	storePath, err := nixBuild("kexec-installer")
 	if err != nil {
-		exitErr := &exec.ExitError{}
-		if errors.As(err, &exitErr) {
-			return "", errors.Wrapf(err, "build kexec installer: %s", string(exitErr.Stderr))
-		}
-
-		return "", errors.Wrap(err, "build kexec installer")
+		return "", err
 	}
-
-	storePath := strings.TrimSpace(string(out))
 
 	kexecPath := findTarballFile(storePath)
 	if kexecPath == "" {
@@ -296,26 +207,10 @@ func startNixCacheServer() (*exec.Cmd, error) {
 }
 
 func preBuildClosure(name, flakeAttrPath string) error {
-	testflakesDir := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes")
-
-	cmd := exec.CommandContext(context.Background(), "nix", "build", //nolint:gosec
-		"--option", "eval-cache", "false",
-		"--print-out-paths",
-		"--no-link",
-		"path:"+testflakesDir+"#"+flakeAttrPath,
-	)
-
-	out, err := cmd.Output()
+	_, err := nixBuild(flakeAttrPath)
 	if err != nil {
-		exitErr := &exec.ExitError{}
-		if errors.As(err, &exitErr) {
-			return errors.Wrapf(err, "pre-build %s: %s", name, string(exitErr.Stderr))
-		}
-
 		return errors.Wrapf(err, "pre-build %s", name)
 	}
-
-	_ = strings.TrimSpace(string(out))
 
 	return nil
 }
