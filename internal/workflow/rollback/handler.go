@@ -6,10 +6,8 @@ import (
 	"strings"
 
 	"github.com/ccoveille/go-safecast/v2"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
@@ -24,12 +22,11 @@ type Handler struct {
 // profiles (i.e. packages, which are installed via nix profile install
 // and have no generation concept).
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
-	return fleetLeaf.Installable.Type.GetProfilePath() == ""
+	return fleetLeaf.Installable.Preset.ProfilePath == ""
 }
 
 func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	machineI := fleetLeaf.Machine
-	installableType := fleetLeaf.Installable.Type
 
 	mi := machineI.MetaInspect.Load()
 	if mi == nil || mi.Generations == nil || len(mi.Generations.Available) == 0 {
@@ -61,7 +58,7 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		return errors.Wrap(err, "generation validation failed")
 	}
 
-	return executeRollback(exc, machineI, installableType, fleetLeaf.Installable.User, targetGenNum)
+	return executeRollback(exc, fleetLeaf, targetGenNum)
 }
 
 var (
@@ -103,23 +100,18 @@ func getSpecificGeneration(availableGenerations []uint, specificGeneration uint)
 
 func executeRollback(
 	exc *executioner.Executioner,
-	machine *machine.Machine,
-	installableType installable.FlakeOutputType,
-	targetUser string,
+	fleetLeaf *fleet.FleetLeaf,
 	targetGenNum uint,
 ) error {
-	closurePath, err := findGenerationClosure(exc, machine, installableType, targetGenNum)
+	preset := fleetLeaf.Installable.Preset
+
+	closurePath, err := findGenerationClosure(exc, fleetLeaf.Machine, preset.ProfilePath, targetGenNum)
 	if err != nil {
 		return errors.Wrap(err, "failed to find generation closure")
 	}
 
-	preset, ok := installable.GetPreset(installableType)
-	if !ok {
-		return errors.Errorf("unknown installable type: %s", installableType)
-	}
-
 	return errors.Wrap(
-		phaseops.Activate(exc, machine, preset, closurePath, attributes.ActivationModeSwitch, targetUser),
+		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User),
 		"failed to activate rollback generation",
 	)
 }
@@ -127,12 +119,11 @@ func executeRollback(
 func findGenerationClosure(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
-	installableType installable.FlakeOutputType,
+	profilePath string,
 	generation uint,
 ) (string, error) {
 	var closurePath string
 
-	profilePath := installableType.GetProfilePath()
 	generationLink := fmt.Sprintf("%s-%d-link", profilePath, generation)
 
 	err := exc.Exec(

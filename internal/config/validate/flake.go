@@ -85,6 +85,7 @@ func validateInstallablesExist(
 			flakeInstallable := installablepkg.ResolveFlakeInstallable(
 				installablepkg.FlakeOutputType(typeKey),
 				installablepkg.AttributeName(nameKey),
+				installable.Preset.BuildPath,
 			)
 			installablePath := fmt.Sprintf("%s#%s", flakeURL, flakeInstallable)
 

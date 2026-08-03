@@ -1,9 +1,9 @@
 package phaseops
 
 import (
+	"slices"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -34,7 +34,7 @@ func Activate(
 	mach *machine.Machine,
 	preset installable.Preset,
 	closure string,
-	mode attributes.ActivationMode,
+	mode string,
 	targetUser string,
 ) error {
 	err := maybeSetProfile(exc, mach, preset, closure, mode)
@@ -54,13 +54,13 @@ func maybeSetProfile(
 	mach *machine.Machine,
 	preset installable.Preset,
 	closure string,
-	mode attributes.ActivationMode,
+	mode string,
 ) error {
-	if preset.ProfilePath == "" || !preset.SetProfile {
+	if preset.ProfilePath == "" || preset.SetProfile == nil || !*preset.SetProfile {
 		return nil
 	}
 
-	if preset.SupportsModes && (mode == attributes.ActivationModeTest || mode == attributes.ActivationModeDryActivate) {
+	if supportsMode(preset.ActivationModes, mode) && (mode == "test" || mode == "dry-activate") {
 		return nil
 	}
 
@@ -94,7 +94,7 @@ func activateScript(
 	mach *machine.Machine,
 	preset installable.Preset,
 	closure string,
-	mode attributes.ActivationMode,
+	mode string,
 	targetUser string,
 ) error {
 	args := []string{}
@@ -103,8 +103,8 @@ func activateScript(
 	}
 
 	args = append(args, closure+"/"+preset.ActivationPath)
-	if preset.SupportsModes {
-		args = append(args, string(mode))
+	if len(preset.ActivationModes) > 0 {
+		args = append(args, mode)
 	}
 
 	if !preset.IsSystemLevel && targetUser != "" {
@@ -137,4 +137,9 @@ func AsUser(user string, command []string) []string {
 
 func asUser(user string, command []string) []string {
 	return AsUser(user, command)
+}
+
+// supportsMode checks if the given mode is in the supported modes list.
+func supportsMode(supported []string, mode string) bool {
+	return slices.Contains(supported, mode)
 }

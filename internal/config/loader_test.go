@@ -279,31 +279,6 @@ func TestSudoProgramDefaults(t *testing.T) {
 	}
 }
 
-func TestActivationModeDefaults(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input attributes.ActivationModeD
-		want  string
-	}{
-		{"empty defaults to switch", attributes.ActivationModeD(""), "switch"},
-		{"check preserved", attributes.ActivationModeD("check"), "check"},
-		{"boot preserved", attributes.ActivationModeD("boot"), "boot"},
-		{"test preserved", attributes.ActivationModeD("test"), "test"},
-		{"dry-activate preserved", attributes.ActivationModeD("dry-activate"), "dry-activate"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assertion := assert.New(t)
-			assertion.Equal(tt.want, tt.input.String())
-		})
-	}
-}
-
 func TestFileModeDefaults(t *testing.T) {
 	t.Parallel()
 

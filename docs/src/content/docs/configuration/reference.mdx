@@ -12,7 +12,8 @@ For the YAML schema, see [gen/panix-schema.yaml](https://github.com/mihakrumpest
 
 # All options
 flags: # Listed are default values, all also overridable using CLI arguments
-  activation_mode: switch              # Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)
+  activation_mode: test                # Activation mode override. Bare value (e.g. 'test') applies to all types.
+                                        # Per-type: 'nixosConfigurations=test;homeConfigurations=switch'
   tags: []                             # Filter machines by tags (flakes, installables, machine names are auto-registered as tags)
   timeout: 2h                          # Workflow timeout (e.g. '1h', '1m15s')
   exit_on_complete: false              # Exit TUI on completion (disables retry/restart)

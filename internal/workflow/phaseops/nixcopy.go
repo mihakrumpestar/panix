@@ -61,7 +61,7 @@ func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, outputType
 	// Non-bootstrappable output types (homeConfigurations, packages, etc.) always copy
 	// to the live system's /nix/store, not /mnt.
 	mi := machineI.MetaInspect.Load()
-	if mi != nil && !mi.Bootstrapped && transferClosure && outputType.IsBootstrappable() {
+	if mi != nil && !mi.Bootstrapped && transferClosure && installable.IsBootstrappableType(outputType) {
 		storeURLParams = append(storeURLParams, "remote-store=local?root=/mnt")
 	}
 

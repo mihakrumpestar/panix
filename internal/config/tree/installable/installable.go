@@ -15,15 +15,16 @@ type Installable struct {
 	attributes.Attributes `yaml:",inline"`
 
 	Nix            nix.NixConfig                                                `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
-	Type           FlakeOutputType                                              `yaml:"-" json:"type" desc:"Flake output type (e.g. nixosConfigurations, homeConfigurations)"`
-	Name           AttributeName                                                `yaml:"-" json:"name" desc:"Attribute name (e.g. server1, alice)"`
-	User           string                                                       `yaml:"user" json:"user,omitempty" desc:"Target user for activation (user-level types only). When set, activation runs as this user via sudo -H -u. If empty, uses the SSH username."`
-	ActivationMode attributes.ActivationModeD                                   `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode: check, switch, boot, test, dry-activate (only for nixosConfigurations)" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"`
+	Preset         Preset                                                       `yaml:"preset" json:"preset"`
+	User           string                                                       `yaml:"user" json:"user,omitempty" desc:"Target user for activation (user-level types only). When set, activation runs as this user via su -l. If empty, uses the SSH username."`
+	ActivationMode string                                                       `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode (overrides preset default)"`
 	Machines       *atomicorderedmap.AtomicOrderedMap[string, *machine.Machine] `yaml:"machines,required" json:"machines" validate:"required" desc:"Machines configuration" schema:"nullable_values"`
 
 	// Internal
-	MetaBuild *MetaBuild `yaml:"-" json:"meta_build,omitempty"`
-	Logs      *logs.Logs `yaml:"-" json:"logs,omitempty"`
+	Type      FlakeOutputType `yaml:"-" json:"type" desc:"Flake output type (e.g. nixosConfigurations, homeConfigurations)"`
+	Name      AttributeName   `yaml:"-" json:"name" desc:"Attribute name (e.g. server1, alice)"`
+	MetaBuild *MetaBuild      `yaml:"-" json:"meta_build,omitempty"`
+	Logs      *logs.Logs      `yaml:"-" json:"logs,omitempty"`
 }
 
 type MetaBuild struct {
@@ -36,6 +37,10 @@ type MetaBuild struct {
 // outputs with the same attribute name but different types
 // (e.g. nixosConfigurations/server1 vs homeConfigurations/server1).
 // Both the output type and attribute name are registered as tags.
+//
+// After setting the type, preset defaults for this output type are merged into
+// the Preset's zero-value user-configurable fields. Type-level fields (not
+// user-configurable) are always taken from the defaults.
 func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttributes *attributes.Attributes, parentNix *nix.NixConfig) error {
 	i.Type = typeKey
 	i.Name = AttributeName(nameKey)
@@ -61,7 +66,48 @@ func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttrib
 		return errors.Wrap(err, "failed to initialize installable nix config")
 	}
 
+	// Apply type defaults to zero-value preset fields.
+	defaults, ok := presets[typeKey]
+	if ok {
+		i.applyPresetDefaults(defaults)
+	}
+
 	i.Logs = logs.New()
 
 	return nil
+}
+
+// applyPresetDefaults fills zero-value Preset fields with type defaults.
+func (i *Installable) applyPresetDefaults(defaults Preset) {
+	if i.Preset.BuildPath == "" {
+		i.Preset.BuildPath = defaults.BuildPath
+	}
+
+	if i.Preset.ProfilePath == "" {
+		i.Preset.ProfilePath = defaults.ProfilePath
+	}
+
+	if i.Preset.ActivationPath == "" {
+		i.Preset.ActivationPath = defaults.ActivationPath
+	}
+
+	if i.Preset.SetProfile == nil {
+		i.Preset.SetProfile = defaults.SetProfile
+	}
+
+	if !i.Preset.IsSystemLevel {
+		i.Preset.IsSystemLevel = defaults.IsSystemLevel
+	}
+
+	if !i.Preset.IsBootstrappable {
+		i.Preset.IsBootstrappable = defaults.IsBootstrappable
+	}
+
+	if len(i.Preset.ActivationModes) == 0 {
+		i.Preset.ActivationModes = defaults.ActivationModes
+	}
+
+	if i.Preset.ActivationDefaultMode == "" {
+		i.Preset.ActivationDefaultMode = defaults.ActivationDefaultMode
+	}
 }

@@ -3,17 +3,16 @@ package activate
 import (
 	"slices"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
-	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/pkg/errors"
 )
 
 type Handler struct {
-	ActivationModeOverride attributes.ActivationMode
+	ActivationMode flags.ActivationMode
 }
 
 func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
@@ -31,31 +30,32 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 	// Run bootstrap if not bootstrapped, or force bootstrap is set
 	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
-	// Only nixosConfigurations outputs trigger nixos-install.
-	if fleetLeaf.Installable.Type.IsBootstrappable() && shouldBootstrap {
+	if fleetLeaf.Installable.Preset.IsBootstrappable && shouldBootstrap {
 		return executeBootstrap(exc, machine, fleetLeaf.Installable.Nix.NixosInstallFlags, systemClosure)
 	}
 
-	return executeActivation(exc, h.ActivationModeOverride, fleetLeaf, systemClosure)
+	return executeActivation(exc, h.ActivationMode, fleetLeaf, systemClosure)
 }
 
 func executeActivation(
 	exc *executioner.Executioner,
-	activationModeOverride attributes.ActivationMode,
+	activationMode flags.ActivationMode,
 	fleetLeaf *fleet.FleetLeaf,
 	closure string,
 ) error {
-	mode := fleetLeaf.Machine.ActivationMode.Get()
-	if activationModeOverride != "" {
-		mode = activationModeOverride
+	preset := &fleetLeaf.Installable.Preset
+
+	mode := preset.ActivationDefaultMode
+	if fleetLeaf.Installable.ActivationMode != "" {
+		mode = fleetLeaf.Installable.ActivationMode
 	}
 
-	preset, ok := installable.GetPreset(fleetLeaf.Installable.Type)
-	if !ok {
-		return errors.Errorf("unknown output type: %s", fleetLeaf.Installable.Type)
+	override := activationMode.Get(fleetLeaf.Installable.Type.String())
+	if override != "" {
+		mode = override
 	}
 
-	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, preset, closure, mode, fleetLeaf.Installable.User), "activation failed")
+	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User), "activation failed")
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {

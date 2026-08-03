@@ -9,7 +9,7 @@ import (
 type Handler struct{}
 
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
-	if !fleetLeaf.Installable.Type.IsBootstrappable() {
+	if !fleetLeaf.Installable.Preset.IsBootstrappable {
 		return true
 	}
 

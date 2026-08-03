@@ -5,11 +5,11 @@ import (
 
 	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
+	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/activate"
 	"github.com/mihakrumpestar/panix/internal/workflow/bootstrap"
 	"github.com/mihakrumpestar/panix/internal/workflow/build"
 	"github.com/mihakrumpestar/panix/internal/workflow/inspect"
-	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/phasehandler"
 	"github.com/mihakrumpestar/panix/internal/workflow/rollback"
 	"github.com/mihakrumpestar/panix/internal/workflow/secrets"
@@ -65,7 +65,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 			phase.Bootstrap: bootstrap.Handler{},
 			phase.Transfer:  transfer.Handler{},
 			phase.Secrets:   secrets.Handler{},
-			phase.Activate:  activate.Handler{ActivationModeOverride: conf.Flags.ActivationMode},
+			phase.Activate:  activate.Handler{ActivationMode: conf.Flags.ActivationMode},
 			phase.Rollback:  rollback.Handler{TargetGeneration: conf.Flags.Generation},
 		},
 		onceRegistry: atomicorderedmap.New[string, *onceasync.OnceAsync](),

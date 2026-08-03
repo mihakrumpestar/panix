@@ -19,48 +19,13 @@ func (n AttributeName) String() string {
 	return string(n)
 }
 
-// GetBuildPath returns the build path for this output type's preset.
-// Returns empty string for root-level types (systemConfigs, packages)
-// where the output itself is the derivation; no sub-attribute to append.
-func (t FlakeOutputType) GetBuildPath() string {
-	p, ok := presets[t]
-	if !ok {
-		return ""
-	}
-
-	return p.BuildPath
-}
-
-// GetProfilePath returns the nix profile path for this output type's preset.
-// Returns empty string for types that don't use profile management (packages).
-func (t FlakeOutputType) GetProfilePath() string {
-	p, ok := presets[t]
-	if !ok {
-		return ""
-	}
-
-	return p.ProfilePath
-}
-
-// ShouldSetProfile returns true if nix-env --profile --set should be run
-// before activation for this output type.
-func (t FlakeOutputType) ShouldSetProfile() bool {
-	p, ok := presets[t]
-	if !ok {
-		return false
-	}
-
-	return p.SetProfile
-}
-
 // ResolveFlakeInstallable constructs the full nix installable attrpath
 // from the output type, attribute name, and build path.
 // For root-level types (empty build path), returns just "type.name".
 // For others, returns "type.name.buildPath".
-func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName) string {
+func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName, buildPath string) string {
 	base := outputType.String() + "." + attrName.String()
 
-	buildPath := outputType.GetBuildPath()
 	if buildPath == "" {
 		return base
 	}

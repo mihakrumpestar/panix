@@ -2,7 +2,6 @@ package inspect
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 )
@@ -18,7 +17,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	}
 
 	// Bootstrap detection (only for bootstrappable types)
-	if fleetLeaf.Installable.Type.IsBootstrappable() {
+	if fleetLeaf.Installable.Preset.IsBootstrappable {
 		err = runBootstrapInspect(exc, machineI)
 		if err != nil {
 			return err
@@ -38,9 +37,8 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	}
 
 	// Generation reading (all types with a profile path)
-	preset, ok := installable.GetPreset(fleetLeaf.Installable.Type)
-	if ok && preset.ProfilePath != "" {
-		return readGenerations(exc, machineI, preset.ProfilePath, fleetLeaf.Installable.User)
+	if fleetLeaf.Installable.Preset.ProfilePath != "" {
+		return readGenerations(exc, machineI, fleetLeaf.Installable.Preset.ProfilePath, fleetLeaf.Installable.User)
 	}
 
 	return nil

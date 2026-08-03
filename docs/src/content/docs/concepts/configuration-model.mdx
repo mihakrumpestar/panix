@@ -121,6 +121,25 @@ The `user` field is only meaningful for user-level types (`homeConfigurations`, 
 
 When set, panix wraps the activation command in `su -l <user> -c` so the activation script runs with the correct user's `$HOME` and profile. Generation listing (`nix-env --list-generations`) also runs as that user.
 
+### Preset Overrides
+
+Each installable type has defaults (build path, activation script, profile path) inferred from the type. You can override any of these per-installable under the `preset:` key:
+
+```yaml
+installables:
+  nixosConfigurations:
+    server1:
+      preset:
+        build_path: config.system.build.toplevel
+        activation_path: bin/switch-to-configuration
+        profile_path: /nix/var/nix/profiles/system
+        set_profile: true
+      machines:
+        server1:
+```
+
+All preset fields are optional. When omitted, the type default is used.
+
 :::caution
 Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) are a newer feature. NixOS system deployments are well-tested, but other output types may have edge cases. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
 :::

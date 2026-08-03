@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/phase"
 )
 
@@ -151,14 +150,14 @@ func TestWorkflowFlagsActivationMode(t *testing.T) {
 
 	tests := []struct {
 		name string
-		mode attributes.ActivationMode
+		mode string
 		want string
 	}{
-		{"switch mode", attributes.ActivationModeSwitch, "switch"},
-		{"boot mode", attributes.ActivationModeBoot, "boot"},
-		{"test mode", attributes.ActivationModeTest, "test"},
-		{"check mode", attributes.ActivationModeCheck, "check"},
-		{"dry-activate mode", attributes.ActivationModeDryActivate, "dry-activate"},
+		{"switch mode", "switch", "switch"},
+		{"boot mode", "boot", "boot"},
+		{"test mode", "test", "test"},
+		{"check mode", "check", "check"},
+		{"dry-activate mode", "dry-activate", "dry-activate"},
 	}
 
 	for _, tt := range tests {
@@ -166,7 +165,7 @@ func TestWorkflowFlagsActivationMode(t *testing.T) {
 			t.Parallel()
 
 			assertion := assert.New(t)
-			assertion.Equal(tt.want, string(tt.mode))
+			assertion.Equal(tt.want, tt.mode)
 		})
 	}
 }

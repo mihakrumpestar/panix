@@ -6,7 +6,6 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/mattn/go-isatty"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/profile"
 	"github.com/pkg/errors"
@@ -48,10 +47,10 @@ type WorkflowFlags struct {
 type EvalFlags struct {
 	ValidateFlags `yaml:",inline"`
 
-	Tags           []string                  `yaml:"tags" json:"tags,omitempty" short:"t" help:"Filter machines by tags (flakes, installables (output type and attribute name) and machine names are already registered as tags)"`
-	SkipPhases     []phase.Phase             `yaml:"skip_phases" json:"skip_phases,omitempty" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
-	Timeout        time.Duration             `yaml:"timeout" json:"timeout,omitempty" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
-	ActivationMode attributes.ActivationMode `yaml:"activation_mode" json:"activation_mode,omitempty" help:"Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)" validate:"omitempty,oneof=check switch boot test dry-activate"`
+	Tags           []string       `yaml:"tags" json:"tags,omitempty" short:"t" help:"Filter machines by tags (flakes, installables (output type and attribute name) and machine names are already registered as tags)"`
+	SkipPhases     []phase.Phase  `yaml:"skip_phases" json:"skip_phases,omitempty" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
+	Timeout        time.Duration  `yaml:"timeout" json:"timeout,omitempty" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
+	ActivationMode ActivationMode `yaml:"activation_mode" json:"activation_mode" help:"Activation mode override. Bare value (e.g. 'test') applies to all types. Per-type: 'nixosConfigurations=test;homeConfigurations=switch'"`
 }
 
 //nolint:lll

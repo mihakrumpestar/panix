@@ -21,7 +21,6 @@ type Attributes struct {
 	Disabled           bool            `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
 	SudoProgram        SudoProgram     `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the sudo program" default:"sudo"`
 	HardwareConfigPath string          `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Path to hardware config"`
-	ActivationMode     ActivationModeD `yaml:"activation_mode" json:"activation_mode,omitempty" desc:"Activation mode: check, switch, boot, test, dry-activate" default:"switch" validate:"omitempty,oneof=check switch boot test dry-activate"`
 
 	Bootstrap Bootstrap `yaml:"bootstrap" json:"bootstrap" desc:"Bootstrap configuration for initial provisioning"`
 

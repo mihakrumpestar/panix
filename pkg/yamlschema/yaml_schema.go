@@ -450,12 +450,10 @@ func (g *generator) processByKind(kind reflect.Kind, typ reflect.Type, field ref
 		return g.applyConstraints(&TypeDefinition{Type: "string"}, field.Tag.Get("validate")), nil
 
 	case reflect.Slice:
-		itemType, err := g.processType(typ.Elem(), field)
-		if err != nil {
-			return nil, err
-		}
+		return g.processSlice(typ, field)
 
-		return g.applyConstraints(&TypeDefinition{Type: "array", Items: itemType}, field.Tag.Get("validate")), nil
+	case reflect.Map:
+		return g.processMap(typ, field)
 
 	case reflect.Struct:
 		td, err := g.buildObjectTypeDef(typ)
@@ -468,6 +466,27 @@ func (g *generator) processByKind(kind reflect.Kind, typ reflect.Type, field ref
 	default:
 		return nil, errors.Errorf("unsupported type kind: %v", kind)
 	}
+}
+
+func (g *generator) processSlice(typ reflect.Type, field reflect.StructField) (any, error) {
+	itemType, err := g.processType(typ.Elem(), field)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.applyConstraints(&TypeDefinition{Type: "array", Items: itemType}, field.Tag.Get("validate")), nil
+}
+
+func (g *generator) processMap(typ reflect.Type, field reflect.StructField) (any, error) {
+	valueType, err := g.processType(typ.Elem(), field)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TypeDefinition{
+		Type:                 "object",
+		AdditionalProperties: &additionalPropertiesWrapper{Value: valueType},
+	}, nil
 }
 
 func (g *generator) applyConstraints(typeDef *TypeDefinition, validateTag string) *TypeDefinition {

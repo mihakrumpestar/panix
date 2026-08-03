@@ -64,7 +64,7 @@ tasks:
       #- govulncheck ./... # Disabled until we can upgrade go to 1.26.4
 
   go:test:
-    desc: Run tests with coverage check and summary
+    desc: Run tests with coverage check and summary (race flag requires CGO_ENABLED=1)
     cmds:
       - mkdir -p {{.TEST_DIR}}
       - set -o pipefail && CGO_ENABLED=1 go test -race -shuffle=on ./...

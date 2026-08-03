@@ -34,9 +34,10 @@ Flags:
       --timeout=2h                 Timeout per command (eg. '1h', '1m15s')
                                    ($PANIX_TIMEOUT)
       --activation-mode=ACTIVATION-MODE
-                                   Activation mode: check, switch, boot, test,
-                                   dry-activate (overrides machine specific
-                                   ones) ($PANIX_ACTIVATION_MODE)
+                                   Activation mode override. Bare value (e.g.
+                                   'test') applies to all types. Per-type:
+                                   'nixosConfigurations=test;homeConfigurations=switch'
+                                   ($PANIX_ACTIVATION_MODE)
       --output="tui"               Output mode: tui, console, json
                                    ($PANIX_OUTPUT)
       --require-all-success        Abort if any task fails, primarily for CI/CD
