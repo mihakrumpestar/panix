@@ -21,8 +21,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const WorkerPoolMaxConcurrency = 1000
-
 type Workflow struct {
 	parentCtx context.Context
 	ctx       context.Context
@@ -53,7 +51,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
-			Pool:  pond.NewPool(WorkerPoolMaxConcurrency, pond.WithContext(ctxWithCancel)),
+			Pool:  pond.NewPool(conf.Flags.Runtime.MaxConcurrency, pond.WithContext(ctxWithCancel)),
 			Retry: retry.NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),

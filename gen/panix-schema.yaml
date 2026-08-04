@@ -86,6 +86,30 @@ properties:
         type: integer
         description: "0=current generation, -N=Nth before current, N=specific generation (default: -1)"
         default: -1
+      runtime:
+        type: object
+        properties:
+          disconnect_timeout:
+            type: string
+            description: "Timeout for waiting for a host to disconnect during reboot (e.g. '5s', '10m') (default: 5m)"
+            default: 5m
+          flake_validation_timeout:
+            type: string
+            description: "Timeout for nix flake metadata/eval during validation (default: 60s)"
+            default: 60s
+          max_concurrency:
+            type: integer
+            description: "Maximum concurrent workers in the worker pool (default: 1000)"
+            default: 1000
+          reconnect_timeout:
+            type: string
+            description: "Timeout for waiting for a host to reconnect after reboot (e.g. '10s', '20m') (default: 10m)"
+            default: 10m
+          ssh_reachability_timeout:
+            type: string
+            description: "TCP dial timeout for SSH reachability probe (default: 2s)"
+            default: 2s
+        additionalProperties: false
       skip_phases:
         type: array
         description: Declare phases to skip (not all phases can be skipped)
@@ -208,6 +232,11 @@ properties:
                             hardware_config_path:
                               type: string
                               description: Path to hardware config
+                            rsync_default_flags:
+                              type: array
+                              description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                              items:
+                                type: string
                             secrets:
                               type: array
                               description: Files or directories to transfer to the remote machine
@@ -260,6 +289,11 @@ properties:
                           type: boolean
                           description: Run nix-env --profile --set before activation
                       additionalProperties: false
+                    rsync_default_flags:
+                      type: array
+                      description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                      items:
+                        type: string
                     secrets:
                       type: array
                       description: Files or directories to transfer to the remote machine
@@ -286,6 +320,11 @@ properties:
             nix:
               description: Nix build and copy configuration
               $ref: "#/definitions/NixConfig"
+            rsync_default_flags:
+              type: array
+              description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+              items:
+                type: string
             secrets:
               type: array
               description: Files or directories to transfer to the remote machine
@@ -316,6 +355,11 @@ properties:
       nix:
         description: Nix build and copy configuration
         $ref: "#/definitions/NixConfig"
+      rsync_default_flags:
+        type: array
+        description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+        items:
+          type: string
       secrets:
         type: array
         description: Files or directories to transfer to the remote machine
@@ -388,6 +432,11 @@ definitions:
   KexecConfig:
     type: object
     properties:
+      curl_default_flags:
+        type: array
+        description: "List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L, -C, -])"
+        items:
+          type: string
       extra_flags:
         type: array
         description: Extra flags to pass to kexec (e.g. '--no-sync')
@@ -405,9 +454,14 @@ definitions:
   NixConfig:
     type: object
     properties:
+      build_default_flags:
+        type: array
+        description: "List of base flags for 'nix build' command (default: [--no-link, --no-update-lock-file, --print-out-paths, --keep-going])"
+        items:
+          type: string
       build_flags:
         type: array
-        description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+        description: List of extra flags for 'nix build' command (e.g. [--max-jobs, 4])
         items:
           type: string
       build_mode:
@@ -417,19 +471,39 @@ definitions:
         enum:
         - local
         - remote
+      copy_default_flags:
+        type: array
+        description: "List of base flags for 'nix copy' command (default: [--no-check-sigs])"
+        items:
+          type: string
       copy_flags:
         type: array
-        description: Extra flags for 'nix copy' command (e.g. '--compress')
+        description: List of extra flags for 'nix copy' command (e.g. [--compress])
+        items:
+          type: string
+      experimental_features:
+        type: array
+        description: "List of flags to enable nix experimental features (default: [--extra-experimental-features, nix-command flakes])"
         items:
           type: string
       extra_flags:
         type: array
-        description: Extra flags applied to both 'nix build' and 'nix copy'
+        description: List of extra flags applied to both 'nix build' and 'nix copy'
+        items:
+          type: string
+      nixos_install_default_flags:
+        type: array
+        description: "List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"
         items:
           type: string
       nixos_install_flags:
         type: array
-        description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+        description: List of extra flags for 'nixos-install' command (e.g. [--no-bootloader])
+        items:
+          type: string
+      profile_install_default_flags:
+        type: array
+        description: "List of base flags for 'nix profile install' command (default: [])"
         items:
           type: string
     additionalProperties: false

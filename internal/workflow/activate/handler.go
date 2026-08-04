@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -31,10 +32,10 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
 	if fleetLeaf.Installable.Preset.IsBootstrappable && shouldBootstrap {
-		return executeBootstrap(exc, machine, fleetLeaf.Installable.Nix.NixosInstallFlags, systemClosure)
+		return executeBootstrap(exc, machine, &fleetLeaf.Installable.Nix, systemClosure)
 	}
 
-	return executeActivation(exc, h.ActivationMode, fleetLeaf, systemClosure)
+	return executeActivation(exc, h.ActivationMode, fleetLeaf, systemClosure, &fleetLeaf.Installable.Nix)
 }
 
 func executeActivation(
@@ -42,6 +43,7 @@ func executeActivation(
 	activationMode flags.ActivationMode,
 	fleetLeaf *fleet.FleetLeaf,
 	closure string,
+	nixCfg *nix.NixConfig,
 ) error {
 	preset := &fleetLeaf.Installable.Preset
 
@@ -55,17 +57,19 @@ func executeActivation(
 		mode = override
 	}
 
-	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User), "activation failed")
+	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg), "activation failed")
 }
 
-func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {
+func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixCfg *nix.NixConfig, systemClosure string) error {
 	err := exc.Exec(
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
 		slices.Concat(
-			[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
-			nixosInstallFlags,
+			[]string{"nixos-install"},
+			nixCfg.GetNixosInstallDefaultFlags(),
+			[]string{"--system", systemClosure, "--root", "/mnt"},
+			nixCfg.NixosInstallFlags,
 		),
 		executioner.Trim(),
 	)

@@ -70,7 +70,7 @@ func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, outputType
 
 func nixCopyBaseArgs(installable *installable.Installable, toURL string) []string {
 	baseArgs := []string{"nix"}
-	baseArgs = append(baseArgs, NixExperimentalFeatures...)
+	baseArgs = append(baseArgs, installable.Nix.GetExperimentalFeatures()...)
 	baseArgs = append(baseArgs, "copy")
 
 	if installable.Nix.BuildMode == nix.BuildModeRemote {
@@ -89,7 +89,8 @@ func nixCopyBaseArgs(installable *installable.Installable, toURL string) []strin
 		}
 	}
 
-	baseArgs = append(baseArgs, "--to", toURL, "--no-check-sigs")
+	baseArgs = append(baseArgs, "--to", toURL)
+	baseArgs = append(baseArgs, installable.Nix.GetCopyDefaultFlags()...)
 
 	return baseArgs
 }

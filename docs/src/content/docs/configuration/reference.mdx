@@ -44,12 +44,27 @@ flags: # Listed are default values, all also overridable using CLI arguments
     block: ""                          # Path for block profile output (enables block profiling)
     mutex: ""                          # Path for mutex profile output (enables mutex profiling)
     goroutine: ""                      # Path for goroutine profile output (enables goroutine profiling)
+  runtime:                             # Operational timeouts and concurrency
+    max_concurrency: 1000              # Max parallel workers in the worker pool
+    disconnect_timeout: 5m             # Wait for host to disconnect during reboot
+    reconnect_timeout: 10m             # Wait for host to reconnect after reboot
+    ssh_reachability_timeout: 2s       # TCP dial timeout for SSH probe
+    flake_validation_timeout: 60s      # Timeout for nix flake metadata/eval
 
 # Only some options, read yaml schema for all
 fleet:
   tags: [production]                   # Inherited by all descendants
+  rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override base rsync flags (default shown)
   nix:
+    # Default flags — REPLACE built-in base flags (leave unset for built-in defaults, [] clears)
+    experimental_features: ["--extra-experimental-features", "nix-command flakes"]
+    build_default_flags: ["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]
+    copy_default_flags: ["--no-check-sigs"]
+    nixos_install_default_flags: ["--no-root-passwd", "--no-channel-copy"]
+    profile_install_default_flags: []  # nix profile install has no built-in defaults
+    # Extra flags — APPEND after default flags
     extra_flags: ["--option", "sandbox", "false"]
+    # build_flags, copy_flags, nixos_install_flags also available (see nix-flags feature page)
   ssh:
     username: root
     disable_strict_key_checking: true   # Lab/test networks only
@@ -58,6 +73,7 @@ fleet:
     infrastructure:
       url: path:../infra-flake
       tags: [critical]                 # Accumulated with fleet: [production, critical]
+      rsync_default_flags: ["-rcPEx", "--mkpath"]  # Inherited by installables/machines (override)
       nix:
         build_flags: ["--max-jobs", "8"]
       secrets:                         # APPENDED to fleet secrets (none inherited)
@@ -68,6 +84,7 @@ fleet:
         nixosConfigurations:             # System-level: activates as root
           webserver:
             tags: [web]                  # Accumulated: [production, critical, web]
+            rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override at installable level
             nix:
               build_mode: remote          # Build on first machine instead of locally
             machines:
@@ -82,6 +99,7 @@ fleet:
                 ssh:
                   hostname: 10.0.1.50
                   identity_file: ./keys/db.key
+                rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override at machine level
                 bootstrap:
                   ssh:
                     hostname: 10.0.1.50
@@ -91,6 +109,8 @@ fleet:
                       remote_path: /tmp/luks-key
                   post_bootstrap_hooks:
                     - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+                  kexec:
+                    curl_default_flags: ["--fail", "-#", "-L", "-C", "-"]  # Override base curl flags (default shown)
 
         homeConfigurations:              # User-level: activates as SSH user
           admin:

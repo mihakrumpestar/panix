@@ -26,8 +26,65 @@ fleet:
               web-01:
 ```
 
+## Default Flags vs Extra Flags
+
+Panix distinguishes two categories of nix command flags:
+
+| Category | Fields | Behavior |
+|----------|--------|----------|
+| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_install_default_flags` | **Replace** the built-in base flags when set. Leave unset to use built-in defaults. Set to `[]` to clear. |
+| **Extra flags** | `extra_flags`, `build_flags`, `copy_flags`, `nixos_install_flags` | **Append** after the default flags. Accumulate through inheritance. |
+
+The final command is assembled as: `default flags` + `extra flags`.
+
+### Built-in defaults
+
+When no `*_default_flags` field is set, these built-in defaults are used:
+
+| Field | Built-in default |
+|-------|-----------------|
+| `experimental_features` | `["--extra-experimental-features", "nix-command flakes"]` |
+| `build_default_flags` | `["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]` |
+| `copy_default_flags` | `["--no-check-sigs"]` |
+| `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy"]` |
+| `profile_install_default_flags` | `[]` (none) |
+
+Setting a `*_default_flags` field to `[]` explicitly **clears** the built-in defaults for that command.
+
+:::caution
+`--print-out-paths` is used to read the output path, without it Panix won't work. 
+:::
+
+### Example
+
+```yaml
+fleet:
+  nix:
+    # Default flags — REPLACE built-in base flags (leave unset for defaults)
+    build_default_flags: ["--no-link", "--print-out-paths"]  # overrides default build flags
+    copy_default_flags: []                                   # clears all copy default flags
+
+    # Extra flags — APPEND after default flags
+    extra_flags: ["--option", "sandbox", "false"]  # applied to both build and copy
+    build_flags: ["--max-jobs", "8"]               # nix build only
+```
+
+With this config, the effective `nix build` flags are:
+`["--no-link", "--print-out-paths"]` (defaults) + `["--option", "sandbox", "false"]` (extra) + `["--max-jobs", "8"]` (build extra)
+
+### Non-nix commands
+
+The same override pattern applies to non-nix commands:
+
+- `rsync_default_flags` (attributes level: fleet/flake/installable/machine) — default: `["-rcPEx", "--mkpath"]`
+- `curl_default_flags` (under `bootstrap.kexec`) — default: `["--fail", "-#", "-L", "-C", "-"]`
+
+These **replace** the built-in defaults when set, and inherit down the hierarchy with override semantics (same as nix default flags).
+
 ## Inheritance
 
-Flags accumulate through inheritance (fleet → flake → installable). Slices are appended, not replaced.
+**Extra flags** accumulate through inheritance (fleet → flake → installable). Slices are appended, not replaced.
+
+**Default flags** use override semantics: if a child sets a value, it is kept as-is; if left unset (`nil`), it inherits the parent's value. This prevents parent defaults from polluting a child's explicit override.
 
 `nix` config settings cannot be set at the `machine` level.

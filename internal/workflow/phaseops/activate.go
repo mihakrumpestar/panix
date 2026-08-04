@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -36,6 +37,7 @@ func Activate(
 	closure string,
 	mode string,
 	targetUser string,
+	nixCfg *nix.NixConfig,
 ) error {
 	err := maybeSetProfile(exc, mach, preset, closure, mode)
 	if err != nil {
@@ -43,7 +45,7 @@ func Activate(
 	}
 
 	if preset.ActivationPath == "" {
-		return activatePackage(exc, mach, preset, closure, targetUser)
+		return activatePackage(exc, mach, preset, closure, targetUser, nixCfg)
 	}
 
 	return activateScript(exc, mach, preset, closure, mode, targetUser)
@@ -73,8 +75,15 @@ func activatePackage(
 	preset installable.Preset,
 	closure string,
 	targetUser string,
+	nixCfg *nix.NixConfig,
 ) error {
-	args := []string{"nix", "--extra-experimental-features", "nix-command flakes", "profile", "install", closure}
+	args := slices.Concat(
+		[]string{"nix"},
+		nixCfg.GetExperimentalFeatures(),
+		[]string{"profile", "install"},
+		nixCfg.GetProfileInstallDefaultFlags(),
+		[]string{closure},
+	)
 
 	if !preset.IsSystemLevel && targetUser != "" {
 		args = asUser(targetUser, args)

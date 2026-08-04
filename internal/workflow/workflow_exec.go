@@ -82,6 +82,11 @@ func (w *Workflow) runPhase(
 		PhaseLog:       phaseLog,
 		OnUpdateHook:   w.updateHook.Signal,
 		MaxOutputLines: w.conf.Flags.Tui.CommandOutputMaxLines,
+		Timeouts: executioner.ExecutionerTimeouts{
+			Disconnect:      w.conf.Flags.Runtime.DisconnectTimeout,
+			Reconnect:       w.conf.Flags.Runtime.ReconnectTimeout,
+			SSHReachability: w.conf.Flags.Runtime.SSHReachabilityTimeout,
+		},
 	}
 	exc := executioner.NewExecutioner(executionerConf)
 	err = handler.RunPhase(exc, fleetLeaf)

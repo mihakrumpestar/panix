@@ -16,15 +16,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-const nixFlakeValidationTimeout = 60 * time.Second
-
-var nixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
-
-func validateFlakes(fleet *fleet.Fleet) error {
+func validateFlakes(fleet *fleet.Fleet, timeout time.Duration) error {
 	var (
 		mu   sync.Mutex
 		errs []string
 	)
+
+	// Use the fleet-level experimental features config for validation commands.
+	// Per-installable overrides don't apply here because validation runs before
+	// per-installable config is fully exercised.
+	experimentalFeatures := fleet.Nix.GetExperimentalFeatures()
 
 	var waitGroup sync.WaitGroup
 
@@ -37,7 +38,7 @@ func validateFlakes(fleet *fleet.Fleet) error {
 		flakeName := flakePair.Key
 
 		waitGroup.Go(func() {
-			if !checkFlakeURLExists(flakeURL) {
+			if !checkFlakeURLExists(flakeURL, timeout, experimentalFeatures) {
 				mu.Lock()
 
 				errs = append(errs, fmt.Sprintf("  - flake URL '%s' does not exist or is unreachable (%s)", flakeName, flakeURL))
@@ -45,7 +46,7 @@ func validateFlakes(fleet *fleet.Fleet) error {
 			}
 		})
 
-		validateInstallablesExist(&waitGroup, &mu, &errs, flakePair.Value.Installables, flakeURL, flakeName)
+		validateInstallablesExist(&waitGroup, &mu, &errs, flakePair.Value.Installables, flakeURL, flakeName, timeout, experimentalFeatures)
 	}
 
 	waitGroup.Wait()
@@ -65,6 +66,8 @@ func validateInstallablesExist(
 	errs *[]string,
 	installables *atomicorderedmap.AtomicOrderedMap[string, *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]],
 	flakeURL, flakeName string,
+	timeout time.Duration,
+	experimentalFeatures []string,
 ) {
 	for _, typePair := range installables.Pairs() {
 		typeKey := typePair.Key
@@ -94,7 +97,7 @@ func validateInstallablesExist(
 			go func(outputName, inst string) {
 				defer waitGroup.Done()
 
-				if !checkInstallableExists(inst) {
+				if !checkInstallableExists(inst, timeout, experimentalFeatures) {
 					mu.Lock()
 
 					*errs = append(*errs, fmt.Sprintf("  - output '%s' not found in flake '%s' (%s)", outputName, flakeName, inst))
@@ -105,14 +108,14 @@ func validateInstallablesExist(
 	}
 }
 
-func checkFlakeURLExists(url string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), nixFlakeValidationTimeout)
+func checkFlakeURLExists(url string, timeout time.Duration, experimentalFeatures []string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	//nolint:gosec
 	cmd := exec.CommandContext(ctx, "nix",
 		slices.Concat(
-			nixExperimentalFeatures,
+			experimentalFeatures,
 			[]string{"flake", "metadata", "--json", url},
 		)...)
 
@@ -126,14 +129,14 @@ func checkFlakeURLExists(url string) bool {
 	return json.Unmarshal(output, &metadata) == nil
 }
 
-func checkInstallableExists(installable string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), nixFlakeValidationTimeout)
+func checkInstallableExists(installable string, timeout time.Duration, experimentalFeatures []string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	//nolint:gosec
 	cmd := exec.CommandContext(ctx, "nix",
 		slices.Concat(
-			nixExperimentalFeatures,
+			experimentalFeatures,
 			[]string{"eval", installable, "--apply", "x: true", "--json"},
 		)...)
 

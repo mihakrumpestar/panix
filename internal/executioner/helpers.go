@@ -15,13 +15,14 @@ var (
 	ErrHostReconnectTimeout  = errors.New("host did not reconnect within timeout")
 )
 
-const (
-	WaitForDisconnectTimeoutTimes = 300 // 5 min disconnect timeout
-	WaitForDisconnectInterval     = time.Second
+// waitPollInterval is the polling interval used by WaitForDisconnect and
+// WaitForReconnect when checking host reachability.
+const waitPollInterval = time.Second
 
-	WaitForReconnectTimeoutTimes  = 600 // 10 min reconnect timeout
-	WaitForReconnectCheckInterval = time.Second
-)
+// waitPollReachabilityTimeout is the TCP dial timeout for each reachability
+// probe inside the disconnect/reconnect wait loops. This is intentionally
+// shorter than the overall wait timeout, it bounds a single poll attempt.
+const waitPollReachabilityTimeout = time.Second
 
 func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookName string) error {
 	machine := ex.conf.Machine
@@ -64,16 +65,17 @@ func WaitForDisconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg stri
 		statusMsg,
 		"failed to wait for disconnect",
 		func(_ *logs_command.CommandLog) error {
-			for range WaitForDisconnectTimeoutTimes {
+			deadline := time.Now().Add(exc.conf.Timeouts.Disconnect)
+			for time.Now().Before(deadline) {
 				select {
 				case <-exc.conf.Ctx.Done():
 					return exc.conf.Ctx.Err()
 				default:
-					if !sshClient.ReachabilityCheck(time.Second) {
+					if !sshClient.ReachabilityCheck(waitPollReachabilityTimeout) {
 						return nil
 					}
 
-					time.Sleep(WaitForDisconnectInterval)
+					time.Sleep(waitPollInterval)
 				}
 			}
 
@@ -88,16 +90,17 @@ func WaitForReconnect(exc *Executioner, sshClient ssh.SSHClient, statusMsg, fail
 		statusMsg,
 		failMsg,
 		func(_ *logs_command.CommandLog) error {
-			for range WaitForReconnectTimeoutTimes {
+			deadline := time.Now().Add(exc.conf.Timeouts.Reconnect)
+			for time.Now().Before(deadline) {
 				select {
 				case <-exc.conf.Ctx.Done():
 					return exc.conf.Ctx.Err()
 				default:
-					if sshClient.ReachabilityCheck(time.Second) {
+					if sshClient.ReachabilityCheck(waitPollReachabilityTimeout) {
 						return nil
 					}
 
-					time.Sleep(WaitForDisconnectInterval)
+					time.Sleep(waitPollInterval)
 				}
 			}
 

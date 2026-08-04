@@ -31,6 +31,15 @@ type ExecutionerConf struct {
 	PhaseLog       *log_sphase.PhaseLog
 	OnUpdateHook   func()
 	MaxOutputLines uint64
+	Timeouts       ExecutionerTimeouts
+}
+
+// ExecutionerTimeouts groups the operational timeout tunables used by
+// disconnect/reconnect wait loops and SSH reachability checks.
+type ExecutionerTimeouts struct {
+	Disconnect      time.Duration
+	Reconnect       time.Duration
+	SSHReachability time.Duration
 }
 
 func NewExecutioner(conf ExecutionerConf) *Executioner {
@@ -38,6 +47,11 @@ func NewExecutioner(conf ExecutionerConf) *Executioner {
 		conf:       conf,
 		phaseXpath: conf.Xpath.NewXpathWithAppend(string(conf.Phase)),
 	}
+}
+
+// SSHReachabilityTimeout returns the configured SSH reachability check timeout.
+func (ex *Executioner) SSHReachabilityTimeout() time.Duration {
+	return ex.conf.Timeouts.SSHReachability
 }
 
 // Exec

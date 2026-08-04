@@ -4,7 +4,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -20,8 +19,6 @@ var (
 	ErrPlatformUnsupported     = errors.New("platform unsupported, kexec supports limited platforms")
 )
 
-const sshReachabilityCheckTimeout = 2 * time.Second
-
 func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.ExecFn(
 		"SSH reachability check",
@@ -29,7 +26,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 		"SSH unreachable",
 		func(_ *command.CommandLog) error {
 			if machineI.Bootstrap.SSH.IsInitialized() {
-				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(sshReachabilityCheckTimeout)
+				bootstrapSSHReachable := machineI.Bootstrap.SSH.ReachabilityCheck(exc.SSHReachabilityTimeout())
 				if !bootstrapSSHReachable {
 					return errors.New("bootstrap SSH is configured but unreachable")
 				}
@@ -41,7 +38,7 @@ func checkSSHReachability(exc *executioner.Executioner, machineI *machine.Machin
 
 				machineI.State.Update(func(s *machine.State) { s.ActiveSSH = machine.SSHTypeBootstrap })
 			} else {
-				regularSSHReachable := machineI.SSH.ReachabilityCheck(sshReachabilityCheckTimeout)
+				regularSSHReachable := machineI.SSH.ReachabilityCheck(exc.SSHReachabilityTimeout())
 
 				if !regularSSHReachable {
 					return errors.New("regular SSH is unreachable")

@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
@@ -14,7 +15,7 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags) error { //nolint:varnamelen
+func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags, flakeValidationTimeout time.Duration) error { //nolint:varnamelen
 	validate := validator.New(validator.WithRequiredStructEnabled(), validator.WithPrivateFieldValidation(), validator.WithRequiredStructEnabled())
 
 	registerPathValidators(validate)
@@ -30,7 +31,7 @@ func ValidateStructTags[T any](s T, f *fleet.Fleet, flags flags.ValidateFlags) e
 	}
 
 	if flags.Validate.Flakes {
-		err = validateFlakes(f)
+		err = validateFlakes(f, flakeValidationTimeout)
 		if err != nil {
 			return errors.Wrap(err, "invalid flakes configuration")
 		}

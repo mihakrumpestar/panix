@@ -111,7 +111,7 @@ func executeRollback(
 	}
 
 	return errors.Wrap(
-		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User),
+		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User, &fleetLeaf.Installable.Nix),
 		"failed to activate rollback generation",
 	)
 }

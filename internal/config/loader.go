@@ -66,7 +66,7 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 	}
 
 	// Validate configuration
-	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags)
+	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags, conf.Flags.Runtime.FlakeValidationTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}

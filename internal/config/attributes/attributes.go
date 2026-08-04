@@ -10,6 +10,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Default base flags for non-nix commands.
+var (
+	DefaultRsyncFlags = []string{"-rcPEx", "--mkpath"}
+	DefaultCurlFlags  = []string{"--fail", "-#", "-L", "-C", "-"}
+)
+
 // Flake, Installable, and Machine Attributes
 
 //nolint:lll
@@ -18,9 +24,10 @@ type Attributes struct {
 	Tags    []string                   `yaml:"tags" json:"tags,omitempty" desc:"Tags for filtering (flakes, configs and machines are already registered as tags)"`
 	Secrets []PlainFileOrDirToTransfer `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine" validate:"dive"`
 
-	Disabled           bool            `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
-	SudoProgram        SudoProgram     `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the sudo program" default:"sudo"`
-	HardwareConfigPath string          `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Path to hardware config"`
+	Disabled           bool        `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
+	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the sudo program" default:"sudo"`
+	HardwareConfigPath string      `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Path to hardware config"`
+	RsyncDefaultFlags  []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync command (default: [-rcPEx, --mkpath])"`
 
 	Bootstrap Bootstrap `yaml:"bootstrap" json:"bootstrap" desc:"Bootstrap configuration for initial provisioning"`
 
@@ -58,9 +65,10 @@ type Bootstrap struct {
 
 //nolint:lll
 type KexecConfig struct {
-	Image      KexecImage `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"`
-	ExtraFlags []string   `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
-	SSHPort    KexecSSHPort `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
+	Image            KexecImage   `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"`
+	ExtraFlags       []string     `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
+	SSHPort          KexecSSHPort `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
+	CurlDefaultFlags []string     `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L, -C, -])"`
 }
 
 type PostBootstrapHookCommand string
@@ -70,6 +78,28 @@ const PostBootstrapHookWaitForOffline PostBootstrapHookCommand = "waitForOffline
 
 func New() *Attributes {
 	return &Attributes{}
+}
+
+// GetRsyncDefaultFlags returns the configured rsync default flags,
+// or the built-in defaults if not set (nil). An explicitly empty slice ([])
+// clears the defaults.
+func (a *Attributes) GetRsyncDefaultFlags() []string {
+	if a.RsyncDefaultFlags != nil {
+		return a.RsyncDefaultFlags
+	}
+
+	return DefaultRsyncFlags
+}
+
+// GetCurlDefaultFlags returns the configured curl default flags,
+// or the built-in defaults if not set (nil). An explicitly empty slice ([])
+// clears the defaults.
+func (k *KexecConfig) GetCurlDefaultFlags() []string {
+	if k.CurlDefaultFlags != nil {
+		return k.CurlDefaultFlags
+	}
+
+	return DefaultCurlFlags
 }
 
 func (a *Attributes) Init(name string, parentAttr *Attributes) error {
@@ -104,10 +134,27 @@ func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) e
 // For this to work poperly all attributes have to be non-pointers (except leafs,
 // as mergo does not merge individual fields of pointer types, just whole pointer)
 // Has to be run before rest of the Init.
+//
+// "Default" flag fields (RsyncDefaultFlags) use override semantics: if the child
+// has a value, it is kept; nil inherits from parent. This prevents parent defaults
+// from polluting a child's explicit override.
 func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) error {
+	// Save child's default-flag slices before merge so we can restore them.
+	childRsyncDefault := a.RsyncDefaultFlags
+	childCurlDefault := a.Bootstrap.Kexec.CurlDefaultFlags
+
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge attributes")
+	}
+
+	// Restore child's default-flag slices (override, not append).
+	if childRsyncDefault != nil {
+		a.RsyncDefaultFlags = childRsyncDefault
+	}
+
+	if childCurlDefault != nil {
+		a.Bootstrap.Kexec.CurlDefaultFlags = childCurlDefault
 	}
 
 	// Custom set/merge

@@ -95,7 +95,49 @@ Flags:
                                    Path for goroutine profile output
                                    (enables goroutine profiling)
                                    ($PANIX_PROFILE_GOROUTINE)
+      --runtime.max-concurrency=1000
+                                   Maximum concurrent workers in the worker pool
+                                   ($PANIX_RUNTIME_MAX_CONCURRENCY)
+      --runtime.disconnect-timeout=5m
+                                   Timeout for waiting for a host to
+                                   disconnect during reboot (e.g. '5s', '10m')
+                                   ($PANIX_RUNTIME_DISCONNECT_TIMEOUT)
+      --runtime.reconnect-timeout=10m
+                                   Timeout for waiting for a host to
+                                   reconnect after reboot (e.g. '10s', '20m')
+                                   ($PANIX_RUNTIME_RECONNECT_TIMEOUT)
+      --runtime.ssh-reachability-timeout=2s
+                                   TCP dial timeout for SSH reachability probe
+                                   ($PANIX_RUNTIME_SSH_REACHABILITY_TIMEOUT)
+      --runtime.flake-validation-timeout=60s
+                                   Timeout for nix flake
+                                   metadata/eval during validation
+                                   ($PANIX_RUNTIME_FLAKE_VALIDATION_TIMEOUT)
 ```
 {/* DEPLOY_FLAGS_END */}
 
 All flags can also be set via environment variables (shown in parentheses) or in the `flags` section of `panix.yml`.
+
+## Runtime Tunables
+
+The `--runtime.*` flags configure operational timeouts and concurrency. They can be set via CLI flag, environment variable, or the `runtime:` block under `flags` in `panix.yml`.
+
+| Flag | Env var | Default | Description |
+|------|---------|---------|-------------|
+| `--runtime.max-concurrency` | `PANIX_RUNTIME_MAX_CONCURRENCY` | `1000` | Max parallel workers in the worker pool |
+| `--runtime.disconnect-timeout` | `PANIX_RUNTIME_DISCONNECT_TIMEOUT` | `5m` | Wait for host to disconnect during reboot |
+| `--runtime.reconnect-timeout` | `PANIX_RUNTIME_RECONNECT_TIMEOUT` | `10m` | Wait for host to reconnect after reboot |
+| `--runtime.ssh-reachability-timeout` | `PANIX_RUNTIME_SSH_REACHABILITY_TIMEOUT` | `2s` | TCP dial timeout for SSH reachability probe |
+| `--runtime.flake-validation-timeout` | `PANIX_RUNTIME_FLAKE_VALIDATION_TIMEOUT` | `60s` | Timeout for nix flake metadata/eval during validation |
+
+YAML example:
+
+```yaml
+flags:
+  runtime:
+    max_concurrency: 500
+    disconnect_timeout: 5m
+    reconnect_timeout: 10m
+    ssh_reachability_timeout: 2s
+    flake_validation_timeout: 60s
+```

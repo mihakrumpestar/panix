@@ -22,8 +22,6 @@ import (
 
 var ErrNoBuildOutputs = errors.New("invalid build output: no outputs")
 
-var NixExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
-
 func BuildInstallable(
 	exc *executioner.Executioner,
 	fleetLeaf *fleet.FleetLeaf,
@@ -79,7 +77,7 @@ func BuildInstallable(
 
 func nixBuildCommand(installable *installable.Installable, machineI *machine.Machine, installables []string) []string {
 	baseArgs := []string{"nix"}
-	baseArgs = append(baseArgs, NixExperimentalFeatures...)
+	baseArgs = append(baseArgs, installable.Nix.GetExperimentalFeatures()...)
 	baseArgs = append(baseArgs, "build")
 
 	if installable.Nix.BuildMode == nix.BuildModeRemote {
@@ -88,7 +86,7 @@ func nixBuildCommand(installable *installable.Installable, machineI *machine.Mac
 			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
 	}
 
-	baseArgs = append(baseArgs, "--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going")
+	baseArgs = append(baseArgs, installable.Nix.GetBuildDefaultFlags()...)
 
 	return slices.Concat(
 		baseArgs,

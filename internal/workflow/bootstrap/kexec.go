@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
@@ -79,7 +80,7 @@ func downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Mach
 			"download kexec tarball",
 			"downloading kexec tarball",
 			"failed to download kexec tarball",
-			[]string{"curl", "--fail", "-#", "-L", "-C", "-", "-o", "/tmp/kexec/kexec.tar", kexecURL},
+			slices.Concat([]string{"curl"}, machine.Bootstrap.Kexec.GetCurlDefaultFlags(), []string{"-o", "/tmp/kexec/kexec.tar", kexecURL}),
 		)
 	} else {
 		err = phaseops.TransferFile(exc, machine, attributes.PlainFileOrDirToTransfer{

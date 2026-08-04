@@ -41,6 +41,7 @@ type WorkflowFlags struct {
 	Snapshot        `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."`
 	Tui             `yaml:"tui" json:"tui" embed:"" prefix:"tui."`
 	profile.Profile `yaml:"profile" json:"profile" embed:"" prefix:"profile."`
+	Runtime         `yaml:"runtime" json:"runtime" embed:"" prefix:"runtime."`
 }
 
 //nolint:lll
@@ -93,6 +94,15 @@ type Logging struct {
 	Log     bool   `yaml:"log" json:"log,omitempty" short:"l" help:"Enable logging to file"`
 	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"omitempty,filepath" default:"panix.log"`
 	Debug   bool   `yaml:"debug" json:"debug,omitempty" short:"d" help:"Debug mode (enables logging)"`
+}
+
+//nolint:lll
+type Runtime struct {
+	MaxConcurrency         int           `yaml:"max_concurrency" json:"max_concurrency" help:"Maximum concurrent workers in the worker pool" default:"1000" validate:"min=1"`
+	DisconnectTimeout      time.Duration `yaml:"disconnect_timeout" json:"disconnect_timeout,omitempty" help:"Timeout for waiting for a host to disconnect during reboot (e.g. '5s', '10m')" default:"5m" validate:"ne=0"`
+	ReconnectTimeout       time.Duration `yaml:"reconnect_timeout" json:"reconnect_timeout,omitempty" help:"Timeout for waiting for a host to reconnect after reboot (e.g. '10s', '20m')" default:"10m" validate:"ne=0"`
+	SSHReachabilityTimeout time.Duration `yaml:"ssh_reachability_timeout" json:"ssh_reachability_timeout,omitempty" help:"TCP dial timeout for SSH reachability probe" default:"2s" validate:"ne=0"`
+	FlakeValidationTimeout time.Duration `yaml:"flake_validation_timeout" json:"flake_validation_timeout,omitempty" help:"Timeout for nix flake metadata/eval during validation" default:"60s" validate:"ne=0"`
 }
 
 func (f *Flags) DefautlIfNoTTY() {
