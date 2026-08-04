@@ -1,6 +1,7 @@
 package executioner
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/logs/command"
@@ -221,6 +222,17 @@ func TestProcessTerminalOutput_CarriageReturnAcrossReads(t *testing.T) {
 			[]string{"hello", "/nix/store/abc"},
 			false,
 		},
+		{
+			// Regression: nix emits \x1b[?25h (DEC private "show cursor")
+			// between the last \r and the final store path. When the PTY
+			// read boundary splits after the ANSI-only segment, the store
+			// path must still overwrite the "evaluating derivation" progress
+			// line, not append to it.
+			"ANSI-only trailing segment then store path",
+			[]string{"evaluating derivation '...'\x1b[0m\x1b[K\r\x1b[K\x1b[?25h", "/nix/store/abc\r\n"},
+			[]string{"/nix/store/abc"},
+			false,
+		},
 	}
 
 	for _, test := range tests {
@@ -236,6 +248,73 @@ func TestProcessTerminalOutput_CarriageReturnAcrossReads(t *testing.T) {
 			assert.Equal(t, test.wantCR, cmdLog.CarriageReturn, "CarriageReturn flag")
 		})
 	}
+}
+
+// TestProcessTerminalOutput_RealNixBuildOutput tests the exact raw PTY bytes
+// captured from a real `nix build` invocation. The critical sequence is:
+//
+//	\revaluating derivation '...'\x1b[0m\x1b[K\r\x1b[K\x1b[?25h/nix/store/...\r\n
+//
+// nix emits \x1b[?25h (show cursor) between the last \r and the final store
+// path. When the PTY read boundary splits after the ANSI-only segment, the
+// store path must overwrite the "evaluating derivation" progress line.
+func TestProcessTerminalOutput_RealNixBuildOutput(t *testing.T) {
+	t.Parallel()
+
+	// Exact raw bytes captured from PTY (see /tmp/opencode capture).
+	raw := []byte(
+		"\x1b[?25l\r\x1b[0m\x1b[K\r\x1b[K" +
+			"\x1b[35;1mwarning:\x1b[0m Git tree '/home/krumpy-miha/repos/personal/infrastructure' is dirty\x1b[0m\r\n" +
+			"\revaluating derivation 'git+file:///home/krumpy-miha/repos/personal/infrastructure#nixosConfigurations.personal-workstation.config.system.build.toplevel'\x1b[0m\x1b[K\r" + //nolint:lll
+			"\x1b[K\x1b[?25h/nix/store/5wnyk59dnz2mf9k5mclg1bhk68i2whbp-nixos-system-personal-workstation-26.11.20260719.241313f\r\n",
+	)
+
+	t.Run("single read", func(t *testing.T) {
+		t.Parallel()
+
+		cmdLog := newTestCommandLog()
+		processTestData(raw, cmdLog)
+
+		assertLines(t, cmdLog, []string{
+			"\x1b[35;1mwarning:\x1b[0m Git tree '/home/krumpy-miha/repos/personal/infrastructure' is dirty\x1b[0m",
+			"/nix/store/5wnyk59dnz2mf9k5mclg1bhk68i2whbp-nixos-system-personal-workstation-26.11.20260719.241313f",
+		})
+	})
+
+	t.Run("split after ANSI-only segment", func(t *testing.T) {
+		t.Parallel()
+
+		// Split point: after \x1b[?25h, before /nix/store/...
+		// This is the exact boundary that triggered the original bug.
+		splitAt := bytes.Index(raw, []byte("\x1b[?25h")) + len("\x1b[?25h")
+
+		cmdLog := newTestCommandLog()
+		processTestData(raw[:splitAt], cmdLog)
+		processTestData(raw[splitAt:], cmdLog)
+
+		assertLines(t, cmdLog, []string{
+			"\x1b[35;1mwarning:\x1b[0m Git tree '/home/krumpy-miha/repos/personal/infrastructure' is dirty\x1b[0m",
+			"/nix/store/5wnyk59dnz2mf9k5mclg1bhk68i2whbp-nixos-system-personal-workstation-26.11.20260719.241313f",
+		})
+	})
+
+	t.Run("chunked reads", func(t *testing.T) {
+		t.Parallel()
+
+		cmdLog := newTestCommandLog()
+
+		chunkSize := 15
+		for i := 0; i < len(raw); i += chunkSize {
+			end := min(i+chunkSize, len(raw))
+			processTestData(raw[i:end], cmdLog)
+		}
+
+		require.GreaterOrEqual(t, cmdLog.Output.Len(), 2)
+		assert.Contains(t, string(cmdLog.Output.Line(0)), "warning:")
+		assert.Contains(t, string(cmdLog.Output.Line(1)), "/nix/store/")
+		assert.NotContains(t, string(cmdLog.Output.Line(1)), "evaluating derivation",
+			"progress line must be overwritten, not retained")
+	})
 }
 
 func TestProcessTerminalOutput_CrossReadPendingNewlineCR(t *testing.T) {

@@ -205,20 +205,14 @@ func runDeployPhases(configPath string, res *testResources) error {
 func runBootstrapPhase(configPath string, res *testResources) error {
 	printPhasef("Phase: Bootstrap deploy")
 
-	step := startStep("%s", "Run panix deploy")
-
-	err := runPanixDeploy(configPath,
+	err := runPanixDeployStep("Run panix deploy", configPath,
 		"PANIX_TEST_MODE=bootstrap",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
 	)
 	if err != nil {
-		step.Fail(err)
-
 		return err
 	}
-
-	step.Done()
 
 	return verifyAll(res.keyPath)
 }
@@ -244,21 +238,15 @@ func runRedeployPhase(configPath string, res *testResources) error {
 func runRedeployNixOS(configPath string, res *testResources) error {
 	printPhasef("Phase: Redeploy NixOS")
 
-	step := startStep("Run panix deploy (nixos)")
-
-	err := runPanixDeployWithArgs(configPath,
+	err := runPanixDeployStepWithArgs("Run panix deploy (nixos)", configPath,
 		[]string{"--tags", "nixosConfigurations"},
 		"PANIX_TEST_MODE=redeploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
 	)
 	if err != nil {
-		step.Fail(err)
-
 		return err
 	}
-
-	step.Done()
 
 	return verifyAll(res.keyPath)
 }
@@ -266,21 +254,15 @@ func runRedeployNixOS(configPath string, res *testResources) error {
 func runRedeployHome(configPath string, res *testResources) error {
 	printPhasef("Phase: Redeploy home-manager")
 
-	step := startStep("Run panix deploy (home-manager)")
-
-	err := runPanixDeployWithArgs(configPath,
+	err := runPanixDeployStepWithArgs("Run panix deploy (home-manager)", configPath,
 		[]string{"--tags", "homeConfigurations"},
 		"PANIX_TEST_MODE=redeploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
 	)
 	if err != nil {
-		step.Fail(err)
-
 		return err
 	}
-
-	step.Done()
 
 	if testScopeFlag.local() {
 		return verifyHomeManager(res.keyPath)
@@ -696,6 +678,36 @@ func simpleStep(name string, fn func() error) error {
 	}
 
 	step.Done()
+
+	return nil
+}
+
+func runPanixDeployStep(name, configPath string, envVars ...string) error {
+	return runPanixDeployStepWithArgs(name, configPath, nil, envVars...)
+}
+
+func runPanixDeployStepWithArgs(name, configPath string, extraArgs []string, envVars ...string) error {
+	start := time.Now()
+
+	fmt.Printf("  → %s\n", name)
+
+	err := runPanixDeployWithArgs(configPath, extraArgs, envVars...)
+
+	elapsed := formatElapsed(time.Since(start))
+
+	if err != nil {
+		mode := envValue(envVars, "PANIX_TEST_MODE")
+		if mode == "" {
+			mode = "default"
+		}
+
+		fmt.Printf("  ✗ %s  FAILED (%s): %s\n", name, elapsed, err)
+		fmt.Printf("    see logs in: %s/panix-%s.*.log\n", logDirPath, mode)
+
+		return err
+	}
+
+	fmt.Printf("  ✓ %s  %s\n", name, elapsed)
 
 	return nil
 }
