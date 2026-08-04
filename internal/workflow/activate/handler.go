@@ -71,6 +71,7 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 			[]string{"--system", systemClosure, "--root", "/mnt"},
 			nixCfg.NixosInstallFlags,
 		),
+		executioner.Env(nixCfg.GetNixosInstallEnv()),
 		executioner.Trim(),
 	)
 	if err != nil {

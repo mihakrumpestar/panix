@@ -1,6 +1,10 @@
 package nix
 
 import (
+	"maps"
+
+	"sort"
+
 	"dario.cat/mergo"
 	"github.com/pkg/errors"
 )
@@ -32,6 +36,24 @@ type NixConfig struct {
 	BuildFlags        []string `yaml:"build_flags" json:"build_flags,omitempty" desc:"List of extra flags for 'nix build' command (e.g. [--max-jobs, 4])"`
 	CopyFlags         []string `yaml:"copy_flags" json:"copy_flags,omitempty" desc:"List of extra flags for 'nix copy' command (e.g. [--compress])"`
 	NixosInstallFlags []string `yaml:"nixos_install_flags" json:"nixos_install_flags,omitempty" desc:"List of extra flags for 'nixos-install' command (e.g. [--no-bootloader])"`
+
+	// Env sets environment variables for all nix commands. Some nix settings
+	// are only available via env vars (e.g. NIX_USER_CONF_FILES, NIX_CONF_DIR,
+	// NIX_DAEMON_SOCKET_PATH, NIX_STORE_DIR). Command-specific env fields
+	// (build_env, copy_env, nixos_install_env, profile_install_env) are merged
+	// on top of these, with specific keys overriding global ones.
+	// Inheritance: parent env entries are inherited; child keys override
+	// parent keys with the same name.
+	Env map[string]string `yaml:"env" json:"env,omitempty" desc:"Environment variables applied to all nix commands (e.g. NIX_USER_CONF_FILES, NIX_STORE_DIR). Command-specific env fields override these."`
+
+	// Command-specific env vars are merged on top of the global env field.
+	// Keys in the specific map override the same keys in the global env.
+	// Inheritance is the same as global env: parent entries inherited, child
+	// keys override parent keys.
+	BuildEnv          map[string]string `yaml:"build_env" json:"build_env,omitempty" desc:"Environment variables for 'nix build' only (merged on top of env)"`
+	CopyEnv           map[string]string `yaml:"copy_env" json:"copy_env,omitempty" desc:"Environment variables for 'nix copy' only (merged on top of env)"`
+	NixosInstallEnv   map[string]string `yaml:"nixos_install_env" json:"nixos_install_env,omitempty" desc:"Environment variables for 'nixos-install' only (merged on top of env)"`
+	ProfileInstallEnv map[string]string `yaml:"profile_install_env" json:"profile_install_env,omitempty" desc:"Environment variables for 'nix profile install' only (merged on top of env)"`
 }
 
 // GetExperimentalFeatures returns the configured experimental features flags,
@@ -81,6 +103,63 @@ func (c *NixConfig) GetProfileInstallDefaultFlags() []string {
 	return c.ProfileInstallDefaultFlags
 }
 
+// GetBuildEnv returns env vars for `nix build`: the global env merged with
+// build-specific env (specific keys override global). Returns KEY=VALUE
+// strings sorted by key, or nil if neither is set.
+func (c *NixConfig) GetBuildEnv() []string {
+	return mergeEnvToSlice(c.Env, c.BuildEnv)
+}
+
+// GetCopyEnv returns env vars for `nix copy`: the global env merged with
+// copy-specific env (specific keys override global). Returns KEY=VALUE
+// strings sorted by key, or nil if neither is set.
+func (c *NixConfig) GetCopyEnv() []string {
+	return mergeEnvToSlice(c.Env, c.CopyEnv)
+}
+
+// GetNixosInstallEnv returns env vars for `nixos-install`: the global env
+// merged with nixos-install-specific env (specific keys override global).
+// Returns KEY=VALUE strings sorted by key, or nil if neither is set.
+func (c *NixConfig) GetNixosInstallEnv() []string {
+	return mergeEnvToSlice(c.Env, c.NixosInstallEnv)
+}
+
+// GetProfileInstallEnv returns env vars for `nix profile install`: the global
+// env merged with profile-install-specific env (specific keys override
+// global). Returns KEY=VALUE strings sorted by key, or nil if neither is set.
+func (c *NixConfig) GetProfileInstallEnv() []string {
+	return mergeEnvToSlice(c.Env, c.ProfileInstallEnv)
+}
+
+// mergeEnvToSlice merges a global env map with a specific env map (specific
+// overrides global on key conflicts), then returns sorted "KEY=VALUE" strings.
+// Returns nil if both maps are empty.
+func mergeEnvToSlice(global, specific map[string]string) []string {
+	if len(global) == 0 && len(specific) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(global)+len(specific))
+	maps.Copy(merged, global)
+
+	// Specific overrides global.
+	maps.Copy(merged, specific)
+
+	keys := make([]string, 0, len(merged))
+	for k := range merged {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	result := make([]string, 0, len(merged))
+	for _, k := range keys {
+		result = append(result, k+"="+merged[k])
+	}
+
+	return result
+}
+
 // Init merges parent NixConfig into this one.
 //
 // "Extra" flag fields (ExtraFlags, BuildFlags, CopyFlags, NixosInstallFlags) use
@@ -107,10 +186,15 @@ func (c *NixConfig) Init(parent *NixConfig) error {
 // mergeParent merges parent NixConfig into this one. "Extra" flag fields use
 // append semantics (mergo.WithAppendSlice), while "default" flag fields use
 // override semantics (child's non-nil value is preserved after merge).
+// Env maps use merge semantics: parent entries are always inherited, child
+// keys override parent keys with the same name.
 func (c *NixConfig) mergeParent(parent *NixConfig) {
-	// Save child's default-flag slices before merge so we can restore them.
-	// mergo.WithAppendSlice would incorrectly append parent defaults into child.
-	saved := newNixDefaultFlagsSnapshot(c)
+	// Save child's default-flag slices and env maps before merge so we can
+	// restore them. mergo.WithAppendSlice would incorrectly append parent
+	// defaults into child slices, and would pollute non-nil child maps with
+	// parent entries.
+	savedFlags := newNixDefaultFlagsSnapshot(c)
+	savedEnv := newNixEnvSnapshot(c)
 
 	err := mergo.Merge(c, parent, mergo.WithAppendSlice)
 	if err != nil {
@@ -119,7 +203,12 @@ func (c *NixConfig) mergeParent(parent *NixConfig) {
 		panic(errors.Wrap(err, "failed to inherit nix config"))
 	}
 
-	saved.restore(c)
+	savedFlags.restore(c)
+	savedEnv.restore(c)
+
+	// Now manually merge parent env entries into child. Parent entries are
+	// inherited; child keys override parent keys with the same name.
+	mergeEnvMaps(c, parent)
 }
 
 // nixDefaultFlagsSnapshot captures the "default" flag slices of a NixConfig
@@ -162,6 +251,71 @@ func (s nixDefaultFlagsSnapshot) restore(cfg *NixConfig) {
 
 	if s.profileInstallDefaultFlags != nil {
 		cfg.ProfileInstallDefaultFlags = s.profileInstallDefaultFlags
+	}
+}
+
+// nixEnvSnapshot captures all env maps of a NixConfig before a mergo merge,
+// so they can be restored afterward. Unlike default-flag slices, env maps
+// use merge semantics (parent entries always inherited), so the snapshot
+// restores the child's original map reference — mergo would have polluted
+// it with parent entries.
+type nixEnvSnapshot struct {
+	env               map[string]string
+	buildEnv          map[string]string
+	copyEnv           map[string]string
+	nixosInstallEnv   map[string]string
+	profileInstallEnv map[string]string
+}
+
+func newNixEnvSnapshot(cfg *NixConfig) nixEnvSnapshot {
+	return nixEnvSnapshot{
+		env:               cfg.Env,
+		buildEnv:          cfg.BuildEnv,
+		copyEnv:           cfg.CopyEnv,
+		nixosInstallEnv:   cfg.NixosInstallEnv,
+		profileInstallEnv: cfg.ProfileInstallEnv,
+	}
+}
+
+// restore writes back all saved env maps, preserving the child's original
+// entries before mergo polluted them with parent data.
+func (s nixEnvSnapshot) restore(cfg *NixConfig) {
+	cfg.Env = s.env
+	cfg.BuildEnv = s.buildEnv
+	cfg.CopyEnv = s.copyEnv
+	cfg.NixosInstallEnv = s.nixosInstallEnv
+	cfg.ProfileInstallEnv = s.profileInstallEnv
+}
+
+// mergeEnvMaps inherits all env maps (global + command-specific) from parent
+// into child. For each map, parent entries are inherited and child keys
+// override parent keys with the same name. A nil child map inherits all
+// parent entries; a non-nil child map (even if empty) inherits parent entries
+// for keys it doesn't define — there are no built-in env defaults to "clear".
+func mergeEnvMaps(child, parent *NixConfig) {
+	mergeEnvMap(&child.Env, parent.Env)
+	mergeEnvMap(&child.BuildEnv, parent.BuildEnv)
+	mergeEnvMap(&child.CopyEnv, parent.CopyEnv)
+	mergeEnvMap(&child.NixosInstallEnv, parent.NixosInstallEnv)
+	mergeEnvMap(&child.ProfileInstallEnv, parent.ProfileInstallEnv)
+}
+
+// mergeEnvMap inherits entries from parent into child. If both define the
+// same key, the child's value wins.
+func mergeEnvMap(child *map[string]string, parent map[string]string) {
+	if len(parent) == 0 {
+		return
+	}
+
+	if *child == nil {
+		*child = make(map[string]string, len(parent))
+	}
+
+	for k, v := range parent {
+		_, exists := (*child)[k]
+		if !exists {
+			(*child)[k] = v
+		}
 	}
 }
 

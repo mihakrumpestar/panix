@@ -338,3 +338,207 @@ func Test_NixConfig_Init_ExtraFlags_AppendSemantics(t *testing.T) {
 	assertion.Equal([]string{"--child-extra", "--parent-extra"}, child.ExtraFlags,
 		"ExtraFlags should append parent values to child (append semantics)")
 }
+
+// --- Command-specific env getters (merge global + specific) ---
+
+func Test_CommandEnvGetters_GlobalAndSpecificMerged(t *testing.T) {
+	t.Parallel()
+
+	// Global env is inherited by all command-specific getters; specific keys
+	// override global keys with the same name.
+	nixC := &NixConfig{
+		Env: map[string]string{
+			"NIX_SSL_CERT_FILE": "/global",
+			"NIX_BUILD_CORES":   "4",
+		},
+		BuildEnv: map[string]string{
+			"NIX_BUILD_CORES": "8", // overrides global
+		},
+		CopyEnv: map[string]string{
+			"NIX_CONFIG": "max-jobs = 2", // copy-only
+		},
+		NixosInstallEnv:   map[string]string{"NIX_CONFIG": "max-jobs = 1"},
+		ProfileInstallEnv: map[string]string{},
+	}
+
+	tests := []struct {
+		name string
+		got  []string
+		want []string
+	}{
+		{
+			name: "GetBuildEnv: global merged, specific overrides",
+			got:  nixC.GetBuildEnv(),
+			want: []string{"NIX_BUILD_CORES=8", "NIX_SSL_CERT_FILE=/global"},
+		},
+		{
+			name: "GetCopyEnv: global + copy-only",
+			got:  nixC.GetCopyEnv(),
+			want: []string{"NIX_BUILD_CORES=4", "NIX_CONFIG=max-jobs = 2", "NIX_SSL_CERT_FILE=/global"},
+		},
+		{
+			name: "GetNixosInstallEnv: global + nixos-install-only",
+			got:  nixC.GetNixosInstallEnv(),
+			want: []string{"NIX_BUILD_CORES=4", "NIX_CONFIG=max-jobs = 1", "NIX_SSL_CERT_FILE=/global"},
+		},
+		{
+			name: "GetProfileInstallEnv: global only (specific is empty map)",
+			got:  nixC.GetProfileInstallEnv(),
+			want: []string{"NIX_BUILD_CORES=4", "NIX_SSL_CERT_FILE=/global"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assertion := assert.New(t)
+			assertion.Equal(tt.want, tt.got)
+		})
+	}
+}
+
+func Test_CommandEnvGetters_BothNilReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	nixC := &NixConfig{}
+
+	assertion := assert.New(t)
+	assertion.Nil(nixC.GetBuildEnv())
+	assertion.Nil(nixC.GetCopyEnv())
+	assertion.Nil(nixC.GetNixosInstallEnv())
+	assertion.Nil(nixC.GetProfileInstallEnv())
+}
+
+func Test_CommandEnvGetters_GlobalOnly(t *testing.T) {
+	t.Parallel()
+
+	nixC := &NixConfig{Env: map[string]string{"NIX_SSL_CERT_FILE": "/certs"}}
+
+	want := []string{"NIX_SSL_CERT_FILE=/certs"}
+
+	assertion := assert.New(t)
+	assertion.Equal(want, nixC.GetBuildEnv())
+	assertion.Equal(want, nixC.GetCopyEnv())
+	assertion.Equal(want, nixC.GetNixosInstallEnv())
+	assertion.Equal(want, nixC.GetProfileInstallEnv())
+}
+
+func Test_CommandEnvGetters_SpecificOnly(t *testing.T) {
+	t.Parallel()
+
+	c := &NixConfig{BuildEnv: map[string]string{"NIX_BUILD_CORES": "8"}}
+
+	assertion := assert.New(t)
+	assertion.Equal([]string{"NIX_BUILD_CORES=8"}, c.GetBuildEnv())
+	assertion.Nil(c.GetCopyEnv(), "copy env should be nil when neither global nor copy-specific is set")
+}
+
+// --- Env inheritance ---
+
+func Test_NixConfig_Init_Env_ChildOverridesParent(t *testing.T) {
+	t.Parallel()
+
+	parent := &NixConfig{Env: map[string]string{"NIX_BUILD_CORES": "4", "NIX_SSL_CERT_FILE": "/parent"}}
+	child := &NixConfig{Env: map[string]string{"NIX_BUILD_CORES": "8"}}
+
+	err := child.Init(parent)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.Equal("8", child.Env["NIX_BUILD_CORES"], "child should override parent for same key")
+	assertion.Equal("/parent", child.Env["NIX_SSL_CERT_FILE"], "child should inherit parent keys it doesn't define")
+}
+
+func Test_NixConfig_Init_Env_NilChildInheritsParent(t *testing.T) {
+	t.Parallel()
+
+	parent := &NixConfig{Env: map[string]string{"NIX_BUILD_CORES": "4", "NIX_SSL_CERT_FILE": "/certs"}}
+	child := &NixConfig{}
+
+	err := child.Init(parent)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.Equal("4", child.Env["NIX_BUILD_CORES"], "nil child env should inherit all parent entries")
+	assertion.Equal("/certs", child.Env["NIX_SSL_CERT_FILE"], "nil child env should inherit all parent entries")
+}
+
+func Test_NixConfig_Init_Env_NilParentPreservesChild(t *testing.T) {
+	t.Parallel()
+
+	child := &NixConfig{Env: map[string]string{"NIX_CONFIG": "max-jobs = 4"}}
+
+	err := child.Init(nil)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.Equal("max-jobs = 4", child.Env["NIX_CONFIG"], "nil parent should not modify child env")
+}
+
+// --- Command-specific env inheritance ---
+
+func Test_NixConfig_Init_CommandEnv_ChildOverridesParent(t *testing.T) {
+	t.Parallel()
+
+	parent := &NixConfig{
+		BuildEnv:        map[string]string{"NIX_BUILD_CORES": "4", "TMPDIR": "/parent-tmp"},
+		NixosInstallEnv: map[string]string{"NIX_CONFIG": "max-jobs = 2"},
+	}
+	child := &NixConfig{
+		BuildEnv:        map[string]string{"NIX_BUILD_CORES": "8"},
+		NixosInstallEnv: map[string]string{},
+	}
+
+	err := child.Init(parent)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.Equal("8", child.BuildEnv["NIX_BUILD_CORES"], "child build env should override parent")
+	assertion.Equal("/parent-tmp", child.BuildEnv["TMPDIR"], "child build env should inherit parent keys it doesn't define")
+	// Empty env maps inherit parent entries — unlike default-flag slices where
+	// [] clears built-in defaults, env maps have no built-in defaults to clear.
+	assertion.Equal("max-jobs = 2", child.NixosInstallEnv["NIX_CONFIG"], "empty child map should inherit parent entries")
+}
+
+func Test_NixConfig_Init_CommandEnv_NilChildInheritsParent(t *testing.T) {
+	t.Parallel()
+
+	parent := &NixConfig{
+		BuildEnv:          map[string]string{"NIX_BUILD_CORES": "4"},
+		CopyEnv:           map[string]string{"NIX_CONFIG": "max-jobs = 2"},
+		NixosInstallEnv:   map[string]string{"TMPDIR": "/tmp"},
+		ProfileInstallEnv: map[string]string{"NIX_SSL_CERT_FILE": "/certs"},
+	}
+	child := &NixConfig{}
+
+	err := child.Init(parent)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.Equal("4", child.BuildEnv["NIX_BUILD_CORES"])
+	assertion.Equal("max-jobs = 2", child.CopyEnv["NIX_CONFIG"])
+	assertion.Equal("/tmp", child.NixosInstallEnv["TMPDIR"])
+	assertion.Equal("/certs", child.ProfileInstallEnv["NIX_SSL_CERT_FILE"])
+}
+
+func Test_NixConfig_Init_CommandEnv_GettersMergeInherited(t *testing.T) {
+	t.Parallel()
+
+	// After Init, the getter should merge inherited global env with inherited
+	// command-specific env.
+	parent := &NixConfig{
+		Env:      map[string]string{"NIX_SSL_CERT_FILE": "/certs"},
+		BuildEnv: map[string]string{"NIX_BUILD_CORES": "4"},
+	}
+	child := &NixConfig{BuildEnv: map[string]string{"NIX_BUILD_CORES": "8"}}
+
+	err := child.Init(parent)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	// Global NIX_SSL_CERT_FILE inherited from parent, BuildEnv NIX_BUILD_CORES=8 (child overrides parent)
+	assertion.Equal([]string{"NIX_BUILD_CORES=8", "NIX_SSL_CERT_FILE=/certs"}, child.GetBuildEnv())
+	// Copy env: only global is inherited, no copy-specific
+	assertion.Equal([]string{"NIX_SSL_CERT_FILE=/certs"}, child.GetCopyEnv())
+}

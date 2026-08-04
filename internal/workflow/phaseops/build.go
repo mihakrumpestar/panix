@@ -103,7 +103,9 @@ func nixBuildEnv(installable *installable.Installable, machineI *machine.Machine
 
 	sshOpts := machineI.GetActiveSSH().MaybeNixSSHOpts()
 
-	return slices.Concat(evalCacheEnv, sshOpts), nil
+	// User env first so panix-internal vars (XDG_CACHE_HOME, NIX_SSHOPTS)
+	// take precedence on key conflicts.
+	return slices.Concat(installable.Nix.GetBuildEnv(), evalCacheEnv, sshOpts), nil
 }
 
 // nixEvalCacheEnv isolates the eval cache per configuration to avoid SQLite busy warnings

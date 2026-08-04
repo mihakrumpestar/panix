@@ -92,6 +92,7 @@ func activatePackage(
 	err := exc.Exec(
 		"activate", "installing package", "package installation failed",
 		args,
+		executioner.Env(nixCfg.GetProfileInstallEnv()),
 		executioner.Trim(),
 	)
 

@@ -459,6 +459,11 @@ definitions:
         description: "List of base flags for 'nix build' command (default: [--no-link, --no-update-lock-file, --print-out-paths, --keep-going])"
         items:
           type: string
+      build_env:
+        type: object
+        description: Environment variables for 'nix build' only (merged on top of env)
+        additionalProperties:
+          type: string
       build_flags:
         type: array
         description: List of extra flags for 'nix build' command (e.g. [--max-jobs, 4])
@@ -476,10 +481,20 @@ definitions:
         description: "List of base flags for 'nix copy' command (default: [--no-check-sigs])"
         items:
           type: string
+      copy_env:
+        type: object
+        description: Environment variables for 'nix copy' only (merged on top of env)
+        additionalProperties:
+          type: string
       copy_flags:
         type: array
         description: List of extra flags for 'nix copy' command (e.g. [--compress])
         items:
+          type: string
+      env:
+        type: object
+        description: Environment variables applied to all nix commands (e.g. NIX_USER_CONF_FILES, NIX_STORE_DIR). Command-specific env fields override these.
+        additionalProperties:
           type: string
       experimental_features:
         type: array
@@ -496,6 +511,11 @@ definitions:
         description: "List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"
         items:
           type: string
+      nixos_install_env:
+        type: object
+        description: Environment variables for 'nixos-install' only (merged on top of env)
+        additionalProperties:
+          type: string
       nixos_install_flags:
         type: array
         description: List of extra flags for 'nixos-install' command (e.g. [--no-bootloader])
@@ -505,6 +525,11 @@ definitions:
         type: array
         description: "List of base flags for 'nix profile install' command (default: [])"
         items:
+          type: string
+      profile_install_env:
+        type: object
+        description: Environment variables for 'nix profile install' only (merged on top of env)
+        additionalProperties:
           type: string
     additionalProperties: false
   PlainFileOrDirToTransfer:

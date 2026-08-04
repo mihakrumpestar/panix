@@ -33,13 +33,16 @@ func CopyClosure(
 		toTransfer,
 	)
 
+	// User env first so panix-internal NIX_SSHOPTS takes precedence on conflict.
+	env := slices.Concat(installable.Nix.GetCopyEnv(), sshOpts)
+
 	err := exc.Exec("nix copy",
 		"copying closure",
 		"closure copy failed",
 		commandWithArgs,
 		executioner.SkipIfLocal(),
 		executioner.DisableAutoSSHCommand(),
-		executioner.Env(sshOpts),
+		executioner.Env(env),
 		executioner.Trim(),
 	)
 	if err != nil {

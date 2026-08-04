@@ -87,4 +87,55 @@ These **replace** the built-in defaults when set, and inherit down the hierarchy
 
 **Default flags** use override semantics: if a child sets a value, it is kept as-is; if left unset (`nil`), it inherits the parent's value. This prevents parent defaults from polluting a child's explicit override.
 
+**Env vars** merge through inheritance: parent entries are inherited, and child keys override parent keys with the same name.
+
 `nix` config settings cannot be set at the `machine` level.
+
+## Environment Variables
+
+Some nix settings are only available via environment variables, with no CLI flag or `nix.conf` equivalent (e.g. `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `NIX_DAEMON_SOCKET_PATH`, `NIX_STORE_DIR`). There are two levels:
+
+| Field | Scope | Behavior |
+|-------|-------|----------|
+| `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile install |
+| `build_env` | `nix build` only | Merged on top of `env` — specific keys override global |
+| `copy_env` | `nix copy` only | Merged on top of `env` |
+| `nixos_install_env` | `nixos-install` only | Merged on top of `env` |
+| `profile_install_env` | `nix profile install` only | Merged on top of `env` |
+
+### Example
+
+```yaml
+fleet:
+  nix:
+    env:
+      NIX_USER_CONF_FILES: /etc/nix/deploy-nix.conf  # all nix commands
+      NIX_CONF_DIR: /etc/nix                         # all nix commands
+
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          webserver:
+            nix:
+              env:
+                NIX_STORE_DIR: /mnt/nix/store   # overrides fleet env for ALL commands
+              build_env:
+                NIX_DAEMON_SOCKET_PATH: /tmp/alt-nix-daemon.sock  # nix build only
+              nixos_install_env:
+                TMPDIR: /mnt/tmp               # nixos-install only
+```
+
+With this config, `nix build` receives `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `NIX_STORE_DIR=/mnt/nix/store`, and `NIX_DAEMON_SOCKET_PATH`. `nixos-install` receives `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `NIX_STORE_DIR=/mnt/nix/store`, and `TMPDIR=/mnt/tmp`.
+
+### Inheritance
+
+Env maps inherit down the hierarchy (fleet → flake → installable) with the same semantics as the global `env` field: parent entries are inherited, child keys override parent keys with the same name.
+
+:::note
+Panix-internal env vars (`XDG_CACHE_HOME` for eval cache isolation, `NIX_SSHOPTS` for SSH options) take precedence over user-configured env vars with the same key.
+:::
+
+:::note
+To change SSH options for nix commands (e.g. `NIX_SSHOPTS`), use the SSH `extra_flags` field on the machine's `ssh` config instead of setting `NIX_SSHOPTS` via env. Panix automatically assembles `NIX_SSHOPTS` from the machine's SSH settings, and user-configured env is overridden by panix-internal values. See the [SSH Config guide](../guides/ssh-config.mdx).
+:::
