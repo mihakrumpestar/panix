@@ -77,6 +77,45 @@ func TestWrap_Equivalence(t *testing.T) {
 	}
 }
 
+// TestWrap_BreakpointOverflow verifies that a breakpoint character (like '-')
+// at the end of a line does not cause the wrapped line to exceed the width
+// limit. Before the fix, handleBreakpoint accumulated the breakpoint without
+// triggering a newline, and flushRemaining flushed it into lineBuf, producing
+// a line wider than the limit.
+func TestWrap_BreakpointOverflow(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		input string
+		width int
+	}{
+		// Word fills line to exactly limit, then a '-' follows with no
+		// subsequent word rune to trigger a newline.
+		{"WordAtLimitThenBreakpoint", "foo-", 3},
+		// Word fills line, breakpoint, then a space and more content.
+		{"WordAtLimitBreakpointSpace", "foo- bar", 3},
+		// Simulates the kexec-style line: long path, 3 spaces, then --flag
+		{"PathSpacesThenDoubleDash", "abcdefabc   --kexec", 10},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := wrapStr(tt.input, tt.width)
+
+			for i, line := range strings.Split(got, "\n") {
+				visible := string(StripANSI([]byte(line)))
+				w := CellWidth([]byte(visible))
+				assert.LessOrEqualf(t, w, tt.width,
+					"wrapped line %d width=%d exceeds limit=%d: %q",
+					i, w, tt.width, visible)
+			}
+		})
+	}
+}
+
 func wrapStr(input string, width int) string {
 	lines := strings.Split(input, "\n")
 

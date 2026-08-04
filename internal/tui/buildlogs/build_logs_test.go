@@ -238,7 +238,7 @@ func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
 
 	// The timer should be at the same relative offset from the connector end.
 	// Connector width is 3 (TreeStep). Timer offset = timerIndent - timerLevel.
-	// For timerLevelPhase=3: offset = 4-3 = 1 space after connector.
+	// For timerLevelPhase=4, timerIndent=5: offset = 5-4 = 1 space after connector.
 	// Verify the timer appears at the expected column.
 	timerOffsetCfg := 6 + (timerIndent - timerLevelPhase) // 7
 
@@ -249,10 +249,10 @@ func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
 	assert.Contains(t, strMachine, "(1.00s)",
 		"phase under machine should contain timer")
 
-	// The connector-to-timer gap should be 1 for both (timerLevelPhase=3 → 4-3=1).
+	// The connector-to-timer gap should be 1 for both (timerLevelPhase=4 → 5-4=1).
 	expectedGap := timerIndent - timerLevelPhase
 	assert.Equal(t, expectedGap, 1,
-		"connector-to-timer gap should be 1 for timerLevelPhase=3")
+		"connector-to-timer gap should be 1 for timerLevelPhase=4, timerIndent=5")
 
 	// Verify different timerLevel produces different gap.
 	timerOffsetDiffLevel := 6 + (timerIndent - 2) // level 2 → offset 2

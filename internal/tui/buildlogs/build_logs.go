@@ -28,10 +28,15 @@ import (
 
 const (
 	// TreeStep is the indent width per depth level.
-	TreeStep          = 3
-	timerIndent       = 4
-	timerLevelPhase   = 3
-	timerLevelCommand = 4
+	TreeStep = 3
+	// timerIndent is the gap (in columns) between the deepest entity timer
+	// (flake, level 0) and the right edge. Each deeper entity level reduces
+	// the gap by 1 via timerLevel = indent/TreeStep. Phase uses level 4
+	// (gap 1), and command — rendered via JoinHorizontalBufs; sits at the
+	// right edge (gap 0), giving a clean 1-column staircase.
+	timerIndent       = 5
+	timerLevelPhase   = 4
+	timerLevelCommand = 5
 
 	maxSpaces = 512
 )
