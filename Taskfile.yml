@@ -294,7 +294,7 @@ tasks:
         # Extract this version's section from CHANGELOG.md:
         # from "## [VERSION]" up to (not including) the next "## [" or EOF.
         NOTES=$(awk -v ver="$NEW_VERSION" '
-          $0 ~ "^## \\[" ver "\\]" { found=1; next }
+          $0 ~ "^## \\[" ver "\\]" { found=1; print; next }
           found && /^## \[/ { exit }
           found { print }
         ' CHANGELOG.md)
