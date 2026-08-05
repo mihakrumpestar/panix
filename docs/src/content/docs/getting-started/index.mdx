@@ -8,7 +8,7 @@ sidebar:
 ## Prerequisites
 
 - [Nix](https://nixos.org/download.html) installed on your local machine
-- SSH key authentication to target machine(s) (password auth is not supported)
+- SSH key authentication to target machine(s)
 - A Nix flake with your NixOS configuration(s)
 
 ## 1. Prepare the Remote
@@ -16,7 +16,7 @@ sidebar:
 Boot into a NixOS installer, any Linux live ISO, or an already provisioned NixOS system.
 
 :::note
-Some distibutions live ISOs may be missing packages needed to start kexec. NixOS installer and most mainstream distros should work out of the box.
+Some distributions' live ISOs may be missing packages needed to start kexec. NixOS installer and most mainstream distros should work out of the box.
 :::
 
 ## 2. Create panix.yml
@@ -24,40 +24,31 @@ Some distibutions live ISOs may be missing packages needed to start kexec. NixOS
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
-# Minimal Panix configuration demo.
-#
-# All fields have sensible defaults:
-#   config file: panix.yml          (can be overridden with -c)
-#   flake url:   .                  (current directory, can be omitted)
-#   build_mode:  local              (build locally, then nix copy)
-#   activation:  switch             (switch-to-configuration switch)
-#   SSH:         machine name matched against ~/.ssh/config
-#   flake attr:  nixosConfigurations.<name>
-#   inheritance: fleet → flake → configuration → machine
-#                (tags, secrets, SSH, bootstrap, nix cascade down)
+# Minimal config - see /configuration/ for all options
 
 fleet:
   flakes:
     my-infra:
       # url defaults to ".", can be omitted when flake is in current dir
-      configurations:
-        workstation: # nixosConfigurations.workstation
-          machines:
-            workstation: # matched against ~/.ssh/config
+      installables:
+        nixosConfigurations:
+          workstation: # nixosConfigurations.workstation
+            machines:
+              workstation: # matched against ~/.ssh/config
 
-        servers: # multi-machine, build once, copy to both
-          machines:
-            server-eu: # matched against ~/.ssh/config
-            server-us:
-              ssh: # SSH not in ~/.ssh/config → specify here
-                hostname: server-us.example.com
+          servers: # multi-machine, build once, copy to both
+            machines:
+              server-eu: # matched against ~/.ssh/config
+              server-us:
+                ssh: # SSH not in ~/.ssh/config → specify here
+                  hostname: server-us.example.com
 
-        vps: # another single machine
-          machines:
-            my-vps:
-              ssh:
-                hostname: 10.0.0.100
-                port: 2222
+          vps: # another single machine
+            machines:
+              my-vps:
+                ssh:
+                  hostname: 10.0.0.100
+                  port: 2222
 ```
 
 ## 3. Deploy

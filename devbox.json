@@ -7,6 +7,9 @@
     "go-tools@latest",
     "golangci-lint@latest",
     "govulncheck@latest",
+    "gcc@latest",
+    // Docs
+    "bun@latest",
     // Tasks
     "go-task@latest",
     "pre-commit@latest",
@@ -20,7 +23,6 @@
     // For e2e tests
     "qemu_full@latest",
     "cdrkit@latest", // For genisoimage
-    "bun@latest",
     "harmonia@latest",
     // For benchmark graphing
     "python313",

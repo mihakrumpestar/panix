@@ -97,7 +97,7 @@ func (sC SSHClient) HostPortString() string {
 }
 
 // MaybeSSHCommandArguments returns SSH CLI arguments for use by panix's executioner.
-// These are NOT suitable for NIX_SSHOPTS — use MaybeNixSSHOpts() for that.
+// These are NOT suitable for NIX_SSHOPTS; use MaybeNixSSHOpts() for that.
 func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 	var sshArgs []string
 
@@ -109,6 +109,7 @@ func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 		}
 	}
 
+	sshArgs = append(sshArgs, sC.controlMasterArgs()...)
 	sshArgs = append(sshArgs, sC.hostKeySSHArgs()...)
 	sshArgs = append(sshArgs, sC.ExtraFlags...)
 
@@ -116,7 +117,7 @@ func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 }
 
 // MaybeNixSSHOpts returns NIX_SSHOPTS environment variable entries for nix commands.
-// Only includes host key verification settings and extra flags — identity files, ports,
+// Only includes host key verification settings and extra flags; identity files, ports,
 // and usernames are handled via nix store URL params (NixStoreURL) or SSH config.
 func (sC SSHClient) MaybeNixSSHOpts() []string {
 	var sshArgs []string
@@ -125,6 +126,7 @@ func (sC SSHClient) MaybeNixSSHOpts() []string {
 		sshArgs = append(sshArgs, "-o", "IdentitiesOnly=yes")
 	}
 
+	sshArgs = append(sshArgs, sC.controlMasterArgs()...)
 	sshArgs = append(sshArgs, sC.hostKeySSHArgs()...)
 	sshArgs = append(sshArgs, sC.ExtraFlags...)
 
@@ -228,6 +230,23 @@ func (sC SSHClient) hostKeySSHArgs() []string {
 	}
 
 	return sshArgs
+}
+
+// controlMasterArgs returns SSH arguments for connection multiplexing.
+// Benchmarked: ~150ms without → ~11ms with per command on a QEMU VM.
+func (sC SSHClient) controlMasterArgs() []string {
+	socketPath := sC.controlSocketPath()
+
+	return []string{
+		"-o", "ControlMaster=auto",
+		"-o", "ControlPath=" + socketPath,
+		"-o", "ControlPersist=60",
+	}
+}
+
+// controlSocketPath returns a deterministic temp path for the SSH control socket.
+func (sC SSHClient) controlSocketPath() string {
+	return filepath.Join(os.TempDir(), "panix-ssh-"+sC.Hostname+"-"+sC.PortString())
 }
 
 func resolveIdentityFile(path string) (string, error) {

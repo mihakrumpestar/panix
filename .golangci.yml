@@ -71,6 +71,7 @@ linters:
         - mu # mutex
         - wg # waitGroup
         - ch # channel
+        - tt # table test case
 
     mnd:
       ignored-numbers:

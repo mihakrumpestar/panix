@@ -981,7 +981,7 @@ func (m *Viewport) finalHeight(height int) int {
 }
 
 // line returns the i-th line from the owned linesBuf.
-// Inlined by the compiler — two array lookups + one slice op.
+// Inlined by the compiler: two array lookups + one slice op.
 func (m *Viewport) line(i int) []byte {
 	return m.linesBuf.Line(i)
 }
@@ -1111,7 +1111,7 @@ func (m *Viewport) buildScrollbarCells() {
 
 // setLines stores pre-wrapped lines directly, adopting a new LinesBuf.
 // For main viewports, preserves the padded prefix when the content width
-// is unchanged — padLines starts from paddedLineCount, processing only
+// is unchanged; padLines starts from paddedLineCount, processing only
 // new/changed lines. Avoids the O(n) snapshot copy that setLinesBuf does.
 // Reuses the existing LinesBuf capacity when possible.
 func (m *Viewport) setLines(lines [][]byte) {

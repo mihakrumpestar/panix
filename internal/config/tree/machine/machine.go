@@ -41,6 +41,7 @@ type MetaInspect struct {
 	IsRoot         bool `yaml:"-" json:"is_root,omitempty"`
 	Bootstrapped   bool `yaml:"-" json:"bootstrapped,omitempty"`
 	RequiresKexec  bool `yaml:"-" json:"requires_kexec,omitempty"`
+	NixAvailable   bool `yaml:"-" json:"nix_available,omitempty"`
 
 	Architecture stringbyte.StringByte `yaml:"-" json:"architecture,omitempty"`
 	Generations  *Generations     `yaml:"-" json:"generations,omitempty"`

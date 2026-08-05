@@ -14,19 +14,130 @@ fleet:
   
   flakes:
     my-flake:
-      configurations:
-        webserver:
-          nix:
-            build_flags: ["--max-jobs", "8"]       # nix build only
-            copy_flags: ["--compress"]             # nix copy only
-            extra_flags: []                        # Flags for build and copy
-          
-          machines:
-            web-01:
+      installables:
+        nixosConfigurations:
+          webserver:
+            nix:
+              build_flags: ["--max-jobs", "8"]       # nix build only
+              copy_flags: ["--compress"]             # nix copy only
+              extra_flags: []                        # Flags for build and copy
+            
+            machines:
+              web-01:
 ```
+
+## Default Flags vs Extra Flags
+
+Panix distinguishes two categories of nix command flags:
+
+| Category | Fields | Behavior |
+|----------|--------|----------|
+| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_install_default_flags` | **Replace** the built-in base flags when set. Leave unset to use built-in defaults. Set to `[]` to clear. |
+| **Extra flags** | `extra_flags`, `build_flags`, `copy_flags`, `nixos_install_flags` | **Append** after the default flags. Accumulate through inheritance. |
+
+The final command is assembled as: `default flags` + `extra flags`.
+
+### Built-in defaults
+
+When no `*_default_flags` field is set, these built-in defaults are used:
+
+| Field | Built-in default |
+|-------|-----------------|
+| `experimental_features` | `["--extra-experimental-features", "nix-command flakes"]` |
+| `build_default_flags` | `["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]` |
+| `copy_default_flags` | `["--no-check-sigs"]` |
+| `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy"]` |
+| `profile_install_default_flags` | `[]` (none) |
+
+Setting a `*_default_flags` field to `[]` explicitly **clears** the built-in defaults for that command.
+
+:::caution
+`--print-out-paths` is used to read the output path, without it Panix won't work. 
+:::
+
+### Example
+
+```yaml
+fleet:
+  nix:
+    # Default flags: REPLACE built-in base flags (leave unset for defaults)
+    build_default_flags: ["--no-link", "--print-out-paths"]  # overrides default build flags
+    copy_default_flags: []                                   # clears all copy default flags
+
+    # Extra flags: APPEND after default flags
+    extra_flags: ["--option", "sandbox", "false"]  # applied to both build and copy
+    build_flags: ["--max-jobs", "8"]               # nix build only
+```
+
+With this config, the effective `nix build` flags are:
+`["--no-link", "--print-out-paths"]` (defaults) + `["--option", "sandbox", "false"]` (extra) + `["--max-jobs", "8"]` (build extra)
+
+### Non-nix commands
+
+The same override pattern applies to non-nix commands:
+
+- `rsync_default_flags` (attributes level: fleet/flake/installable/machine), default: `["-rcPEx", "--mkpath"]`
+- `curl_default_flags` (under `bootstrap.kexec`), default: `["--fail", "-#", "-L", "-C", "-"]`
+
+These **replace** the built-in defaults when set, and inherit down the hierarchy with override semantics (same as nix default flags).
 
 ## Inheritance
 
-Flags accumulate through inheritance (fleet → flake → configuration). Slices are appended, not replaced.
+**Extra flags** accumulate through inheritance (fleet, flake, installable). Slices are appended, not replaced.
 
+**Default flags** use override semantics: if a child sets a value, it is kept as-is; if left unset (`nil`), it inherits the parent's value. This prevents parent defaults from polluting a child's explicit override.
+
+**Env vars** merge through inheritance: parent entries are inherited, and child keys override parent keys with the same name.
+
+:::note
 `nix` config settings cannot be set at the `machine` level.
+:::
+
+## Environment Variables
+
+Some nix settings are only available via environment variables, with no CLI flag or `nix.conf` equivalent (e.g. `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `NIX_DAEMON_SOCKET_PATH`, `NIX_STORE_DIR`). There are two levels:
+
+| Field | Scope | Behavior |
+|-------|-------|----------|
+| `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile install |
+| `build_env` | `nix build` only | Merged on top of `env`, specific keys override global |
+| `copy_env` | `nix copy` only | Merged on top of `env` |
+| `nixos_install_env` | `nixos-install` only | Merged on top of `env` |
+| `profile_install_env` | `nix profile install` only | Merged on top of `env` |
+
+### Example
+
+```yaml
+fleet:
+  nix:
+    env:
+      NIX_USER_CONF_FILES: /etc/nix/deploy-nix.conf  # all nix commands
+      NIX_CONF_DIR: /etc/nix                         # all nix commands
+
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          webserver:
+            nix:
+              env:
+                NIX_STORE_DIR: /mnt/nix/store   # overrides fleet env for ALL commands
+              build_env:
+                NIX_DAEMON_SOCKET_PATH: /tmp/alt-nix-daemon.sock  # nix build only
+              nixos_install_env:
+                TMPDIR: /mnt/tmp               # nixos-install only
+```
+
+With this config, `nix build` receives `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `NIX_STORE_DIR=/mnt/nix/store`, and `NIX_DAEMON_SOCKET_PATH`. `nixos-install` receives `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `NIX_STORE_DIR=/mnt/nix/store`, and `TMPDIR=/mnt/tmp`.
+
+### Inheritance
+
+Env vars follow the same [inheritance semantics](#inheritance) as extra flags: parent entries are inherited, child keys override parent keys with the same name.
+
+:::note
+Panix-internal env vars (`XDG_CACHE_HOME` for eval cache isolation, `NIX_SSHOPTS` for SSH options) take precedence over user-configured env vars with the same key.
+:::
+
+:::note
+To change SSH options for nix commands (e.g. `NIX_SSHOPTS`), use the SSH `extra_flags` field on the machine's `ssh` config instead of setting `NIX_SSHOPTS` via env. Panix automatically assembles `NIX_SSHOPTS` from the machine's SSH settings, and user-configured env is overridden by panix-internal values. See the [SSH Config guide](../guides/ssh-config.mdx).
+:::

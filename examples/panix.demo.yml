@@ -8,29 +8,30 @@
 #   build_mode:  local              (build locally, then nix copy)
 #   activation:  switch             (switch-to-configuration switch)
 #   SSH:         machine name matched against ~/.ssh/config
-#   flake attr:  nixosConfigurations.<name>
-#   inheritance: fleet → flake → configuration → machine
+#   installable: <outputType>.<name>  (e.g. nixosConfigurations.workstation)
+#   inheritance: fleet → flake → installable → machine
 #                (tags, secrets, SSH, bootstrap, nix cascade down)
 
 fleet:
   flakes:
     my-infra:
       # url defaults to ".", can be omitted when flake is in current dir
-      configurations:
-        workstation: # nixosConfigurations.workstation
-          machines:
-            workstation: # matched against ~/.ssh/config
+      installables:
+        nixosConfigurations:
+          workstation: # nixosConfigurations.workstation
+            machines:
+              workstation: # matched against ~/.ssh/config
 
-        servers: # multi-machine, build once, copy to both
-          machines:
-            server-eu: # matched against ~/.ssh/config
-            server-us:
-              ssh: # SSH not in ~/.ssh/config → specify here
-                hostname: server-us.example.com
+          servers: # multi-machine, build once, copy to both
+            machines:
+              server-eu: # matched against ~/.ssh/config
+              server-us:
+                ssh: # SSH not in ~/.ssh/config → specify here
+                  hostname: server-us.example.com
 
-        vps: # another single machine
-          machines:
-            my-vps:
-              ssh:
-                hostname: 10.0.0.100
-                port: 2222
+          vps: # another single machine
+            machines:
+              my-vps:
+                ssh:
+                  hostname: 10.0.0.100
+                  port: 2222

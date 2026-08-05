@@ -84,12 +84,12 @@ type ColorScheme struct {
 	Footer       ColorSchemeFooter
 	Notification ColorSchemeNotification
 
-	Flake         ColorSchemeLogEntity
-	Configuration ColorSchemeLogEntity
-	Machine       ColorSchemeLogEntity
-	Phase         ColorSchemeLogEntity
-	Command       ColorSchemeLogEntity
-	Error         ColorSchemeLogEntity
+	Flake       ColorSchemeLogEntity
+	Installable ColorSchemeLogEntity
+	Machine     ColorSchemeLogEntity
+	Phase       ColorSchemeLogEntity
+	Command     ColorSchemeLogEntity
+	Error       ColorSchemeLogEntity
 }
 
 type ColorSchemePhaseStatus struct {
@@ -159,12 +159,12 @@ func DefaultColorScheme() *ColorScheme {
 		Notification: ColorSchemeNotification{
 			DefaultFgColor: style.Color("#B4B4B4"),
 		},
-		Flake:         makeLogEntity("#F1FA8C", '📁', true),
-		Configuration: makeLogEntity("#FFB86C", '📦', false),
-		Machine:       makeLogEntity("#8BE9FD", '💻', false),
-		Phase:         makeLogEntity("#FF79C6", '📋', false),
-		Command:       makeLogEntity("#BD93F9", '⚙', false),
-		Error:         makeLogEntity("#FF5555", '✗', false),
+		Flake:       makeLogEntity("#F1FA8C", '📁', true),
+		Installable: makeLogEntity("#FFB86C", '📦', false),
+		Machine:     makeLogEntity("#8BE9FD", '💻', false),
+		Phase:       makeLogEntity("#FF79C6", '📋', false),
+		Command:     makeLogEntity("#BD93F9", '⚙', false),
+		Error:       makeLogEntity("#FF5555", '✗', false),
 		Spinner: ColorSchemeSpinner{
 			Frames:   [][]byte{[]byte("⣾"), []byte("⣽"), []byte("⣻"), []byte("⢿"), []byte("⡿"), []byte("⣟"), []byte("⣯"), []byte("⣷")},
 			Interval: time.Second / 10, //nolint:mnd

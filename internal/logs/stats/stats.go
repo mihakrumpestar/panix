@@ -53,7 +53,7 @@ func (spp *StatisticsPerPhase) DeepSet(phase phase.Phase, statsState StatsState,
 
 // Reset clears all xpath slices in every StatsPack while preserving the map
 // structure and backing capacity. After Reset, all slices have len==0 but
-// retain their cap — so subsequent DeepSet appends are zero-allocation.
+// retain their cap, so subsequent DeepSet appends are zero-allocation.
 // Must be called from the same goroutine that calls DeepSet (single-writer).
 func (spp *StatisticsPerPhase) Reset() {
 	spp.ForEach(func(_ phase.Phase, statsPack StatsPack) bool {

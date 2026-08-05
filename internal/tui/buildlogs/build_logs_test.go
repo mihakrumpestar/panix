@@ -11,9 +11,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
@@ -23,11 +23,11 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
-	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -238,7 +238,7 @@ func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
 
 	// The timer should be at the same relative offset from the connector end.
 	// Connector width is 3 (TreeStep). Timer offset = timerIndent - timerLevel.
-	// For timerLevelPhase=3: offset = 4-3 = 1 space after connector.
+	// For timerLevelPhase=4, timerIndent=5: offset = 5-4 = 1 space after connector.
 	// Verify the timer appears at the expected column.
 	timerOffsetCfg := 6 + (timerIndent - timerLevelPhase) // 7
 
@@ -249,10 +249,10 @@ func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
 	assert.Contains(t, strMachine, "(1.00s)",
 		"phase under machine should contain timer")
 
-	// The connector-to-timer gap should be 1 for both (timerLevelPhase=3 → 4-3=1).
+	// The connector-to-timer gap should be 1 for both (timerLevelPhase=4 → 5-4=1).
 	expectedGap := timerIndent - timerLevelPhase
 	assert.Equal(t, expectedGap, 1,
-		"connector-to-timer gap should be 1 for timerLevelPhase=3")
+		"connector-to-timer gap should be 1 for timerLevelPhase=4, timerIndent=5")
 
 	// Verify different timerLevel produces different gap.
 	timerOffsetDiffLevel := 6 + (timerIndent - 2) // level 2 → offset 2
@@ -480,15 +480,15 @@ func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(nil)
 
-		cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, nil, 0)
-		cmd1.TimeAndState.StartTimer()
-		cmd1.TimeAndState.EndTimerWithError(nil)
+	cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, nil, 0)
+	cmd1.TimeAndState.StartTimer()
+	cmd1.TimeAndState.EndTimerWithError(nil)
 
-		cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, nil, 0)
-		cmd2.TimeAndState.StartTimer()
-		cmd2.TimeAndState.EndTimerWithError(nil)
+	cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, nil, 0)
+	cmd2.TimeAndState.StartTimer()
+	cmd2.TimeAndState.EndTimerWithError(nil)
 
-		cmd3 := phaseLog.NewCommand(xpath.New("test"), "cmd3", "running", "failed", []string{"cmd3"}, nil, 0)
+	cmd3 := phaseLog.NewCommand(xpath.New("test"), "cmd3", "running", "failed", []string{"cmd3"}, nil, 0)
 	cmd3.TimeAndState.StartTimer()
 	cmd3.TimeAndState.EndTimerWithError(nil)
 
@@ -646,11 +646,11 @@ func TestBuildDefaultTree_ConfigScopedPhases(t *testing.T) {
 	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 	buildLogs.viewports = newTestViewports(conf)
 
-	cfg := getFirstConfig(conf)
+	out := getFirstOutput(conf)
 
 	cfgNode := testRootNode("cfg")
 
-	buildLogs.buildDefaultTree(cfgNode, cfg)
+	buildLogs.buildDefaultTree(cfgNode, out)
 
 	assert.NotZero(t, cfgNode.Len(), "buildDefaultTree should produce children")
 }
@@ -664,13 +664,13 @@ func TestBuildDefaultTree_EmptyMachines(t *testing.T) {
 	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 	buildLogs.viewports = newTestViewports(conf)
 
-	cfg := getFirstConfig(conf)
+	out := getFirstOutput(conf)
 
-	cfg.Logs.PhaseLogs.Set(phase.Build, newFinishedPhaseLog(nil))
+	out.Logs.PhaseLogs.Set(phase.Build, newFinishedPhaseLog(nil))
 
 	cfgNode := testRootNode("cfg")
 
-	buildLogs.buildDefaultTree(cfgNode, cfg)
+	buildLogs.buildDefaultTree(cfgNode, out)
 
 	assert.NotZero(t, cfgNode.Len(),
 		"buildDefaultTree should produce config-scoped phases even with no machines")
@@ -688,21 +688,21 @@ func TestBuildPhaseSelectedTree_ConfigScopedPhase(t *testing.T) {
 	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 	buildLogs.viewports = newTestViewports(conf)
 
-	cfg := getFirstConfig(conf)
+	out := getFirstOutput(conf)
 
-	// Add Build phase log to the config (config-scoped)
-	cfg.Logs.PhaseLogs.Set(phase.Build, newFinishedPhaseLog(nil))
+	// Add Build phase log to the output (output-scoped)
+	out.Logs.PhaseLogs.Set(phase.Build, newFinishedPhaseLog(nil))
 
-	// Select Build (config-scoped)
+	// Select Build (output-scoped)
 	buildLogs.phaseStatus = phaseFlow
 	phaseFlow.Selected = phaseflow.Selected{Phase: phase.Build.String(), Index: 0}
 
 	cfgNode := testRootNode("cfg")
 
-	buildLogs.buildPhaseSelectedTree(cfgNode, cfg)
+	buildLogs.buildPhaseSelectedTree(cfgNode, out)
 
 	assert.NotZero(t, cfgNode.Len(),
-		"buildPhaseSelectedTree for config-scoped phase should add children")
+		"buildPhaseSelectedTree for output-scoped phase should add children")
 }
 
 func TestBuildPhaseSelectedTree_MachineScopedPhase(t *testing.T) {
@@ -715,14 +715,14 @@ func TestBuildPhaseSelectedTree_MachineScopedPhase(t *testing.T) {
 	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
 	buildLogs.viewports = newTestViewports(conf)
 
-	cfg := getFirstConfig(conf)
+	out := getFirstOutput(conf)
 
 	// Select Inspect (machine-scoped)
 	phaseFlow.Selected = phaseflow.Selected{Phase: phase.Inspect.String(), Index: 0}
 
 	cfgNode := testRootNode("cfg")
 
-	buildLogs.buildPhaseSelectedTree(cfgNode, cfg)
+	buildLogs.buildPhaseSelectedTree(cfgNode, out)
 }
 
 // --- renderBuildLogsString helper (for tests) ---
@@ -807,8 +807,8 @@ func TestView_NilMachine(t *testing.T) {
 	buildLogs := New(conf, st, ps)
 
 	// Add a nil machine entry — the tree traversal should skip it
-	cfg := getFirstConfig(conf)
-	cfg.Machines.Set("nil-mach", nil)
+	out := getFirstOutput(conf)
+	out.Machines.Set("nil-mach", nil)
 
 	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
 	vp := newTestViewports(conf)
@@ -970,19 +970,19 @@ func TestPhaseLogsAndXpath_ConfigScope(t *testing.T) {
 	conf := makeTestConfig(0, 0, 0, nil)
 	buildLogs := New(conf, nil, nil)
 
-	cfg := &configuration.Configuration{}
-	cfg.Logs = logs.New()
-	cfg.Xpath = xpath.New("flake0", "cfg0")
-	cfg.PhaseXpaths = testPhaseXpaths(cfg.Xpath.String())
+	out := &installable.Installable{}
+	out.Logs = logs.New()
+	out.Xpath = xpath.New("flake0", "cfg0")
+	out.PhaseXpaths = testPhaseXpaths(out.Xpath.String())
 
-	pm := phase.PhaseMetadata{Phase: phase.Build, Scope: phase.ScopeConfiguration}
+	pm := phase.PhaseMetadata{Phase: phase.Build, Scope: phase.ScopeInstallable}
 
-	logsResult, xpsResult := buildLogs.phaseLogsAndXpath(pm, cfg, nil)
+	logsResult, xpsResult := buildLogs.phaseLogsAndXpath(pm, out, nil)
 
-	assert.Equal(t, cfg.Logs, logsResult,
-		"phaseLogsAndXpath for config scope should return cfg.Logs")
-	assert.Equal(t, cfg.PhaseXpaths, xpsResult,
-		"phaseLogsAndXpath for config scope should return cfg.PhaseXpaths")
+	assert.Equal(t, out.Logs, logsResult,
+		"phaseLogsAndXpath for output scope should return out.Logs")
+	assert.Equal(t, out.PhaseXpaths, xpsResult,
+		"phaseLogsAndXpath for output scope should return out.PhaseXpaths")
 }
 
 func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
@@ -991,8 +991,8 @@ func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
 	conf := makeTestConfig(0, 0, 0, nil)
 	buildLogs := New(conf, nil, nil)
 
-	cfg := &configuration.Configuration{}
-	cfg.Logs = logs.New()
+	out := &installable.Installable{}
+	out.Logs = logs.New()
 
 	mach := &machine.Machine{}
 	mach.Logs = logs.New()
@@ -1001,7 +1001,7 @@ func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
 
 	pm := phase.PhaseMetadata{Phase: phase.Inspect, Scope: phase.ScopeMachine}
 
-	logsResult, xpsResult := buildLogs.phaseLogsAndXpath(pm, cfg, mach)
+	logsResult, xpsResult := buildLogs.phaseLogsAndXpath(pm, out, mach)
 
 	assert.Equal(t, mach.Logs, logsResult,
 		"phaseLogsAndXpath for machine scope should return m.Logs")
@@ -1052,8 +1052,9 @@ func newTestViewports(conf *config.Config) *viewports.Viewports {
 
 func makeTestConfigWithSingleMachine() *config.Config {
 	const (
-		flakeName = "flake0"
-		cfgName   = "cfg0"
+		flakeName  = "flake0"
+		cfgName    = "cfg0"
+		outputType = "nixosConfigurations"
 	)
 
 	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
@@ -1062,20 +1063,23 @@ func makeTestConfigWithSingleMachine() *config.Config {
 	flakeObj.Name = stringbyte.StringByte(flakeName)
 	flakeObj.Xpath = xpath.New(flakeName)
 	flakeObj.Logs = logs.New()
-	flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
+	flakeObj.Installables = atomicorderedmap.New[string, *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]]()
 
-	cfg := &configuration.Configuration{}
-	cfg.Name = stringbyte.StringByte(cfgName)
-	cfg.Xpath = xpath.New(flakeName, cfgName)
-	cfg.Logs = logs.New()
-	cfg.Machines = atomicorderedmap.New[string, *machine.Machine]()
+	out := &installable.Installable{}
+	out.Name = installable.AttributeName(cfgName)
+	out.Type = installable.FlakeOutputType(outputType)
+	out.Xpath = xpath.New(flakeName, cfgName)
+	out.Logs = logs.New()
+	out.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
 	mach := newTestMachine(allPhases, true) // running machine
 	mach.Name = "m0"
 	mach.Xpath = xpath.New(flakeName, cfgName, "m0")
-	cfg.Machines.Set("m0", mach)
+	out.Machines.Set("m0", mach)
 
-	flakeObj.Configurations.Set(cfgName, cfg)
+	attrMap := atomicorderedmap.New[string, *installable.Installable]()
+	attrMap.Set(cfgName, out)
+	flakeObj.Installables.Set(outputType, attrMap)
 	flakesMap.Set(flakeName, flakeObj)
 
 	return &config.Config{
@@ -1085,15 +1089,21 @@ func makeTestConfigWithSingleMachine() *config.Config {
 	}
 }
 
-func getFirstConfig(conf *config.Config) *configuration.Configuration {
+func getFirstOutput(conf *config.Config) *installable.Installable {
 	for _, fp := range conf.Fleet.Flakes.Pairs() {
 		if fp.Value == nil {
 			continue
 		}
 
-		for _, cp := range fp.Value.Configurations.Pairs() {
-			if cp.Value != nil {
-				return cp.Value
+		for _, tp := range fp.Value.Installables.Pairs() {
+			if tp.Value == nil {
+				continue
+			}
+
+			for _, op := range tp.Value.Pairs() {
+				if op.Value != nil {
+					return op.Value
+				}
 			}
 		}
 	}

@@ -8,9 +8,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
@@ -54,7 +54,8 @@ type MachineInfo struct {
 	// StringByte provides zero-copy Bytes() access.
 	MachineName       stringbyte.StringByte
 	FlakeName         stringbyte.StringByte
-	ConfigurationName stringbyte.StringByte
+	OutputType        stringbyte.StringByte
+	OutputName        stringbyte.StringByte
 	Architecture      stringbyte.StringByte
 	Date              stringbyte.StringByte
 	OSVersion         stringbyte.StringByte
@@ -90,17 +91,25 @@ func (f *Fleet) PostUnmarshalInit() {
 			flakeV.Logs.PostUnmarshalInit()
 		}
 
-		flakeV.Configurations.ForEach(func(_ string, cfg *configuration.Configuration) bool {
-			if cfg == nil {
+		flakeV.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]) bool {
+			if attrMap == nil {
 				return true
 			}
 
-			if cfg.Logs != nil {
-				cfg.Logs.PostUnmarshalInit()
-			}
+			attrMap.ForEach(func(_ string, cfg *installable.Installable) bool {
+				if cfg == nil {
+					return true
+				}
 
-			cfg.Machines.ForEach(func(_ string, mach *machine.Machine) bool {
-				postUnmarshalMachine(mach)
+				if cfg.Logs != nil {
+					cfg.Logs.PostUnmarshalInit()
+				}
+
+				cfg.Machines.ForEach(func(_ string, mach *machine.Machine) bool {
+					postUnmarshalMachine(mach)
+
+					return true
+				})
 
 				return true
 			})
@@ -184,14 +193,14 @@ func (f *Fleet) RecalculateFlattenedLogs(workflowPhases []phase.Phase) {
 		}
 
 		// Merge phase logs in-place into the cached Logs entry.
-		// dst.TAS acts as a temp snapshot — synced into the persisted cachedTAS below.
+		// dst.TAS acts as a temp snapshot, synced into the persisted cachedTAS below.
 		logs.MergePhaseLogsInto(f.CacheFlattenedLogs[machineIdx], workflowPhases,
 			treeLeaf.Machine.Logs.PhaseLogs,
-			treeLeaf.Configuration.Logs.PhaseLogs,
+			treeLeaf.Installable.Logs.PhaseLogs,
 			treeLeaf.Flake.Logs.PhaseLogs,
 		)
 
-		// Sync aggregated state into persisted TAS — bumps stateVersion on transitions.
+		// Sync aggregated state into persisted TAS; bumps stateVersion on transitions.
 		f.cachedTAS[machineIdx].SyncFrom(f.CacheFlattenedLogs[machineIdx].TAS)
 	}
 }
@@ -202,49 +211,30 @@ func (f *Fleet) RecalculateDurationAndError() {
 	var largestFlakeDuration time.Duration
 
 	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
-		var largestConfigurationDuration time.Duration
+		var largestOutputDuration time.Duration
 
 		flakeAnyRunning := false
 
-		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
-			var largestMachineDuration time.Duration
-
-			cfgAnyRunning := false
-
-			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
-				machineV.Logs.TAS.SyncFrom(f.cachedTAS[idx])
-
-				machineDur := machineV.Logs.TAS.DurationCache
-				if machineDur > largestMachineDuration {
-					largestMachineDuration = machineDur
-				}
-
-				if !machineV.Logs.TAS.IsFinished() {
-					cfgAnyRunning = true
-				}
-
-				idx++
-
+		flakeV.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]) bool {
+			if attrMap == nil {
 				return true
-			})
-
-			propagateDurationAndState(configurationV.Logs, largestMachineDuration, cfgAnyRunning)
-
-			if largestMachineDuration > largestConfigurationDuration {
-				largestConfigurationDuration = largestMachineDuration
 			}
 
-			if !configurationV.Logs.TAS.IsFinished() {
-				flakeAnyRunning = true
-			}
+			var machineCount int
+
+			largestOutputDuration, flakeAnyRunning, machineCount = f.recalcInstallableDurations(
+				attrMap, idx, largestOutputDuration, flakeAnyRunning,
+			)
+
+			idx += machineCount
 
 			return true
 		})
 
-		propagateDurationAndState(flakeV.Logs, largestConfigurationDuration, flakeAnyRunning)
+		propagateDurationAndState(flakeV.Logs, largestOutputDuration, flakeAnyRunning)
 
-		if largestConfigurationDuration > largestFlakeDuration {
-			largestFlakeDuration = largestConfigurationDuration
+		if largestOutputDuration > largestFlakeDuration {
+			largestFlakeDuration = largestOutputDuration
 		}
 
 		return true
@@ -342,12 +332,20 @@ func (f *Fleet) ResetState() {
 	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
 		flakeV.Logs.Clear()
 
-		flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
-			configurationV.Logs.Clear()
+		flakeV.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]) bool {
+			if attrMap == nil {
+				return true
+			}
 
-			configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
-				machineV.Logs.Clear()
-				machineV.MetaInspect.Clear()
+			attrMap.ForEach(func(_ string, installable *installable.Installable) bool {
+				installable.Logs.Clear()
+
+				installable.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+					machineV.Logs.Clear()
+					machineV.MetaInspect.Clear()
+
+					return true
+				})
 
 				return true
 			})
@@ -362,9 +360,9 @@ func (f *Fleet) ResetState() {
 // Helpers
 
 type FleetLeaf struct {
-	Flake         *flake.Flake
-	Configuration *configuration.Configuration
-	Machine       *machine.Machine
+	Flake       *flake.Flake
+	Installable *installable.Installable
+	Machine     *machine.Machine
 }
 
 func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
@@ -372,15 +370,21 @@ func (f *Fleet) AllMachines() iter.Seq2[int, *FleetLeaf] {
 		idx := 0
 
 		f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
-			return flakeV.Configurations.ForEach(func(_ string, configurationV *configuration.Configuration) bool {
-				return configurationV.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
-					if !yield(idx, &FleetLeaf{flakeV, configurationV, machineV}) {
-						return false
-					}
-
-					idx++
-
+			return flakeV.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]) bool {
+				if attrMap == nil {
 					return true
+				}
+
+				return attrMap.ForEach(func(_ string, installable *installable.Installable) bool {
+					return installable.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+						if !yield(idx, &FleetLeaf{flakeV, installable, machineV}) {
+							return false
+						}
+
+						idx++
+
+						return true
+					})
 				})
 			})
 		})
@@ -404,11 +408,11 @@ func (f *Fleet) RecalculatePhaseStatus(workflowPhases []phase.Phase) *stats.Stat
 		f.cachedStats.Reset()
 	}
 
-	for _, treeLeaf := range f.AllMachines() {
-		mach := treeLeaf.Machine
+	for _, fleetLeaf := range f.AllMachines() {
+		mach := fleetLeaf.Machine
 		machState := mach.State.Load()
 
-		// Skip machines that haven't started any phase yet — their Phase and
+		// Skip machines that haven't started any phase yet; their Phase and
 		// Status are empty strings. Adding them via DeepSet would insert a ""
 		// key into the ordered map, which shifts spp.Last() away from the real
 		// last workflow phase and breaks the PhaseFlow "DONE" column.
@@ -429,7 +433,7 @@ func (f *Fleet) RefreshCaches() {
 
 	for _, treeLeaf := range f.AllMachines() {
 		flake := treeLeaf.Flake
-		cfg := treeLeaf.Configuration
+		out := treeLeaf.Installable
 		mach := treeLeaf.Machine
 
 		meta := mach.MetaInspect.Load()
@@ -446,10 +450,11 @@ func (f *Fleet) RefreshCaches() {
 		mInfo.MetaInspect = *meta
 		mInfo.State = *state
 
-		// Direct StringByte copies — zero conversion, zero allocation.
+		// Direct StringByte copies: zero conversion, zero allocation.
 		mInfo.MachineName = mach.Name
 		mInfo.FlakeName = flake.Name
-		mInfo.ConfigurationName = cfg.Name
+		mInfo.OutputType = stringbyte.StringByte(out.Type)
+		mInfo.OutputName = stringbyte.StringByte(out.Name)
 		mInfo.Architecture = meta.Architecture
 		mInfo.Date = meta.Date
 		mInfo.OSVersion = meta.OSVersion
@@ -461,4 +466,59 @@ func (f *Fleet) RefreshCaches() {
 
 	// Truncate if machine count decreased.
 	f.CacheMachineInfos = f.CacheMachineInfos[:idx]
+}
+
+// recalcInstallableDurations processes all installables in an inner map, computing
+// the largest machine duration and whether any machine is still running.
+// Returns the updated largestOutputDuration, flakeAnyRunning flag, and the
+// total number of machines processed (for advancing the outer index).
+func (f *Fleet) recalcInstallableDurations(
+	attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable],
+	idx int,
+	largestOutputDuration time.Duration,
+	flakeAnyRunning bool,
+) (time.Duration, bool, int) {
+	machineCount := 0
+
+	attrMap.ForEach(func(_ string, installable *installable.Installable) bool {
+		if installable == nil {
+			return true
+		}
+
+		var largestMachineDuration time.Duration
+
+		cfgAnyRunning := false
+
+		installable.Machines.ForEach(func(_ string, machineV *machine.Machine) bool {
+			machineV.Logs.TAS.SyncFrom(f.cachedTAS[idx])
+
+			machineDur := machineV.Logs.TAS.DurationCache
+			if machineDur > largestMachineDuration {
+				largestMachineDuration = machineDur
+			}
+
+			if !machineV.Logs.TAS.IsFinished() {
+				cfgAnyRunning = true
+			}
+
+			idx++
+			machineCount++
+
+			return true
+		})
+
+		propagateDurationAndState(installable.Logs, largestMachineDuration, cfgAnyRunning)
+
+		if largestMachineDuration > largestOutputDuration {
+			largestOutputDuration = largestMachineDuration
+		}
+
+		if !installable.Logs.TAS.IsFinished() {
+			flakeAnyRunning = true
+		}
+
+		return true
+	})
+
+	return largestOutputDuration, flakeAnyRunning, machineCount
 }

@@ -151,7 +151,7 @@ func (m *AtomicOrderedMap[K, V]) Pairs() []Pair[K, V] {
 
 // ForEach iterates all key-value pairs in insertion order, calling fn for
 // each. If fn returns false, iteration stops. Returns true if all pairs
-// were visited (fn never returned false). Zero allocation — prefer this
+// were visited (fn never returned false). Zero allocation, prefer this
 // over Pairs() when you only need iteration.
 // Nil-safe: returns true if the AtomicOrderedMap is nil.
 func (m *AtomicOrderedMap[K, V]) ForEach(yield func(K, V) bool) bool {

@@ -33,7 +33,8 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		colorScheme.Table.Row.Width(indexWidth).Align(style.Right),
 		colorScheme.Table.Row.Width(2),
 		colorScheme.Flake.Color,
-		colorScheme.Configuration.Color,
+		colorScheme.Installable.Color,
+		colorScheme.Installable.Color,
 		colorScheme.Machine.Color,
 		colorScheme.Table.Row,
 		colorScheme.Table.Row,
@@ -45,7 +46,8 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 
 	headers := [][]byte{[]byte(""), []byte(""),
 		joinBytes(colorScheme.Flake.Icon, " FLAKE"),
-		joinBytes(colorScheme.Configuration.Icon, " CONFIGURATION"),
+		joinBytes(colorScheme.Installable.Icon, " OUTPUT"),
+		joinBytes(colorScheme.Installable.Icon, " NAME"),
 		joinBytes(colorScheme.Machine.Icon, " MACHINE"),
 		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("DATE"), []byte("OS VERSION"), []byte("KERNEL")}
 
@@ -112,7 +114,7 @@ func (s *StatsTable) buildRows() [][][]byte {
 	machineInfos := s.fleet.CacheMachineInfos
 	rows := make([][][]byte, len(machineInfos))
 
-	var prevFlakeName, prevConfigurationName []byte
+	var prevFlakeName, prevOutputType, prevOutputName []byte
 
 	marker := s.rowMarker
 
@@ -123,18 +125,27 @@ func (s *StatsTable) buildRows() [][][]byte {
 			prevFlakeName = machineInfo.FlakeName.Bytes()
 		}
 
-		configDisplay := marker
-		if !bytes.Equal(machineInfo.ConfigurationName.Bytes(), prevConfigurationName) ||
+		outputTypeDisplay := marker
+		if !bytes.Equal(machineInfo.OutputType.Bytes(), prevOutputType) ||
 			!bytes.Equal(machineInfo.FlakeName.Bytes(), prevFlakeName) {
-			configDisplay = machineInfo.ConfigurationName.Bytes()
-			prevConfigurationName = machineInfo.ConfigurationName.Bytes()
+			outputTypeDisplay = machineInfo.OutputType.Bytes()
+			prevOutputType = machineInfo.OutputType.Bytes()
+		}
+
+		outputNameDisplay := marker
+		if !bytes.Equal(machineInfo.OutputName.Bytes(), prevOutputName) ||
+			!bytes.Equal(machineInfo.OutputType.Bytes(), prevOutputType) ||
+			!bytes.Equal(machineInfo.FlakeName.Bytes(), prevFlakeName) {
+			outputNameDisplay = machineInfo.OutputName.Bytes()
+			prevOutputName = machineInfo.OutputName.Bytes()
 		}
 
 		rows[idx] = [][]byte{
 			strconv.AppendInt(nil, int64(idx+1), 10), //nolint:mnd // decimal base
 			getStatusIcon(machineInfo.State.Status, s.colorScheme),
 			flakeDisplay,
-			configDisplay,
+			outputTypeDisplay,
+			outputNameDisplay,
 			machineInfo.MachineName.Bytes(),
 			machineInfo.Architecture.Bytes(),
 			getStatusText(machineInfo.State.Status, machineInfo.StatusMsgBytes.Bytes(), s.colorScheme),

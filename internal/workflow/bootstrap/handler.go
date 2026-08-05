@@ -9,6 +9,10 @@ import (
 type Handler struct{}
 
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
+	if !fleetLeaf.Installable.Preset.IsBootstrappable {
+		return true
+	}
+
 	mi := fleetLeaf.Machine.MetaInspect.Load()
 
 	return mi != nil && mi.Bootstrapped && !fleetLeaf.Machine.Bootstrap.ForceBootstrap

@@ -10,14 +10,16 @@ properties:
     description: Flags (CLI and YAML)
     properties:
       activation_mode:
-        type: string
-        description: "Activation mode: check, switch, boot, test, dry-activate (overrides machine specific ones)"
-        enum:
-        - check
-        - switch
-        - boot
-        - test
-        - dry-activate
+        type: object
+        description: "Activation mode override. Bare value (e.g. 'test') applies to all types. Per-type: 'nixosConfigurations=test;homeConfigurations=switch'"
+        properties:
+          alltypes:
+            type: string
+          pertype:
+            type: object
+            additionalProperties:
+              type: string
+        additionalProperties: false
       dry_run:
         type: boolean
         description: Show what would be done without executing
@@ -84,6 +86,30 @@ properties:
         type: integer
         description: "0=current generation, -N=Nth before current, N=specific generation (default: -1)"
         default: -1
+      runtime:
+        type: object
+        properties:
+          disconnect_timeout:
+            type: string
+            description: "Timeout for waiting for a host to disconnect during reboot (e.g. '5s', '10m') (default: 5m)"
+            default: 5m
+          flake_validation_timeout:
+            type: string
+            description: "Timeout for nix flake metadata/eval during validation (default: 60s)"
+            default: 60s
+          max_concurrency:
+            type: integer
+            description: "Maximum concurrent workers in the worker pool (default: 1000)"
+            default: 1000
+          reconnect_timeout:
+            type: string
+            description: "Timeout for waiting for a host to reconnect after reboot (e.g. '10s', '20m') (default: 10m)"
+            default: 10m
+          ssh_reachability_timeout:
+            type: string
+            description: "TCP dial timeout for SSH reachability probe (default: 2s)"
+            default: 2s
+        additionalProperties: false
       skip_phases:
         type: array
         description: Declare phases to skip (not all phases can be skipped)
@@ -105,7 +131,7 @@ properties:
         additionalProperties: false
       tags:
         type: array
-        description: Filter machines by tags (flakes, configurations and machine names are already registered as tags)
+        description: Filter machines by tags (flakes, installables (output type and attribute name) and machine names are already registered as tags)
         items:
           type: string
       timeout:
@@ -149,16 +175,6 @@ properties:
     type: object
     description: Fleet configuration
     properties:
-      activation_mode:
-        type: string
-        description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-        default: switch
-        enum:
-        - check
-        - switch
-        - boot
-        - test
-        - dry-activate
       bootstrap:
         description: Bootstrap configuration for initial provisioning
         $ref: "#/definitions/Bootstrap"
@@ -171,129 +187,144 @@ properties:
         additionalProperties:
           type: object
           properties:
-            activation_mode:
-              type: string
-              description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-              default: switch
-              enum:
-              - check
-              - switch
-              - boot
-              - test
-              - dry-activate
             bootstrap:
               description: Bootstrap configuration for initial provisioning
               $ref: "#/definitions/Bootstrap"
-            configurations:
-              type: object
-              description: Configurations in flake
-              additionalProperties:
-                type: object
-                properties:
-                  activation_mode:
-                    type: string
-                    description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-                    default: switch
-                    enum:
-                    - check
-                    - switch
-                    - boot
-                    - test
-                    - dry-activate
-                  bootstrap:
-                    description: Bootstrap configuration for initial provisioning
-                    $ref: "#/definitions/Bootstrap"
-                  build_path:
-                    type: string
-                    description: "Build path within the flake output (e.g. config.system.build.toplevel) (default: config.system.build.toplevel)"
-                    default: config.system.build.toplevel
-                  disabled:
-                    type: boolean
-                    description: Disable this
-                  flake_output:
-                    type: string
-                    description: "Nix flake output attribute (e.g. nixosConfigurations.<name>) (default: nixosConfigurations.<name>)"
-                    default: nixosConfigurations.<name>
-                  hardware_config_path:
-                    type: string
-                    description: Path to hardware config
-                  machines:
-                    type: object
-                    description: Machines configuration
-                    additionalProperties:
-                      anyOf:
-                      - type: object
-                        properties:
-                          activation_mode:
-                            type: string
-                            description: "Activation mode: check, switch, boot, test, dry-activate (default: switch)"
-                            default: switch
-                            enum:
-                            - check
-                            - switch
-                            - boot
-                            - test
-                            - dry-activate
-                          bootstrap:
-                            description: Bootstrap configuration for initial provisioning
-                            $ref: "#/definitions/Bootstrap"
-                          disabled:
-                            type: boolean
-                            description: Disable this
-                          hardware_config_path:
-                            type: string
-                            description: Path to hardware config
-                          secrets:
-                            type: array
-                            description: Files or directories to transfer to the remote machine
-                            items:
-                              $ref: "#/definitions/PlainFileOrDirToTransfer"
-                          ssh:
-                            description: SSH configuration for remote access
-                            $ref: "#/definitions/SSHClient"
-                          sudo_program:
-                            type: string
-                            description: "Override the sudo program (default: sudo)"
-                            default: sudo
-                          tags:
-                            type: array
-                            description: Tags for filtering (flakes, configs and machines are already registered as tags)
-                            items:
-                              type: string
-                        additionalProperties: false
-                      - type: "null"
-                  nix:
-                    description: Nix build and copy configuration
-                    $ref: "#/definitions/NixConfig"
-                  secrets:
-                    type: array
-                    description: Files or directories to transfer to the remote machine
-                    items:
-                      $ref: "#/definitions/PlainFileOrDirToTransfer"
-                  ssh:
-                    description: SSH configuration for remote access
-                    $ref: "#/definitions/SSHClient"
-                  sudo_program:
-                    type: string
-                    description: "Override the sudo program (default: sudo)"
-                    default: sudo
-                  tags:
-                    type: array
-                    description: Tags for filtering (flakes, configs and machines are already registered as tags)
-                    items:
-                      type: string
-                required:
-                - machines
-                additionalProperties: false
             disabled:
               type: boolean
               description: Disable this
             hardware_config_path:
               type: string
               description: Path to hardware config
+            installables:
+              type: object
+              description: Installables (e.g. nixosConfigurations, homeConfigurations)
+              additionalProperties:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    activation_mode:
+                      type: string
+                      description: Activation mode (overrides preset default)
+                    bootstrap:
+                      description: Bootstrap configuration for initial provisioning
+                      $ref: "#/definitions/Bootstrap"
+                    disabled:
+                      type: boolean
+                      description: Disable this
+                    hardware_config_path:
+                      type: string
+                      description: Path to hardware config
+                    machines:
+                      type: object
+                      description: Machines configuration
+                      additionalProperties:
+                        anyOf:
+                        - type: object
+                          properties:
+                            bootstrap:
+                              description: Bootstrap configuration for initial provisioning
+                              $ref: "#/definitions/Bootstrap"
+                            disabled:
+                              type: boolean
+                              description: Disable this
+                            hardware_config_path:
+                              type: string
+                              description: Path to hardware config
+                            rsync_default_flags:
+                              type: array
+                              description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                              items:
+                                type: string
+                            secrets:
+                              type: array
+                              description: Files or directories to transfer to the remote machine
+                              items:
+                                $ref: "#/definitions/PlainFileOrDirToTransfer"
+                            ssh:
+                              description: SSH configuration for remote access
+                              $ref: "#/definitions/SSHClient"
+                            sudo_program:
+                              type: string
+                              description: "Override the sudo program (default: sudo)"
+                              default: sudo
+                            tags:
+                              type: array
+                              description: Tags for filtering (flakes, configs and machines are already registered as tags)
+                              items:
+                                type: string
+                          additionalProperties: false
+                        - type: "null"
+                    nix:
+                      description: Nix build and copy configuration
+                      $ref: "#/definitions/NixConfig"
+                    preset:
+                      type: object
+                      properties:
+                        activation_default_mode:
+                          type: string
+                          description: Default activation mode
+                        activation_path:
+                          type: string
+                          description: Activation script path in the closure
+                        activation_supported_modes:
+                          type: array
+                          description: Activation modes
+                          items:
+                            type: string
+                        build_path:
+                          type: string
+                          description: Build path within the flake output
+                        is_bootstrappable:
+                          type: boolean
+                          description: Supports bootstrap
+                        is_system_level:
+                          type: boolean
+                          description: System-level (root) vs user-level
+                        profile_path:
+                          type: string
+                          description: Nix profile path
+                        set_profile:
+                          type: boolean
+                          description: Run nix-env --profile --set before activation
+                      additionalProperties: false
+                    rsync_default_flags:
+                      type: array
+                      description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                      items:
+                        type: string
+                    secrets:
+                      type: array
+                      description: Files or directories to transfer to the remote machine
+                      items:
+                        $ref: "#/definitions/PlainFileOrDirToTransfer"
+                    ssh:
+                      description: SSH configuration for remote access
+                      $ref: "#/definitions/SSHClient"
+                    sudo_program:
+                      type: string
+                      description: "Override the sudo program (default: sudo)"
+                      default: sudo
+                    tags:
+                      type: array
+                      description: Tags for filtering (flakes, configs and machines are already registered as tags)
+                      items:
+                        type: string
+                    user:
+                      type: string
+                      description: Target user for activation (user-level types only). When set, activation runs as this user via su -l. If empty, uses the SSH username.
+                  required:
+                  - machines
+                  additionalProperties: false
             nix:
               description: Nix build and copy configuration
               $ref: "#/definitions/NixConfig"
+            rsync_default_flags:
+              type: array
+              description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+              items:
+                type: string
             secrets:
               type: array
               description: Files or directories to transfer to the remote machine
@@ -316,7 +347,7 @@ properties:
               description: "Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax (default: .)"
               default: .
           required:
-          - configurations
+          - installables
           additionalProperties: false
       hardware_config_path:
         type: string
@@ -324,6 +355,11 @@ properties:
       nix:
         description: Nix build and copy configuration
         $ref: "#/definitions/NixConfig"
+      rsync_default_flags:
+        type: array
+        description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+        items:
+          type: string
       secrets:
         type: array
         description: Files or directories to transfer to the remote machine
@@ -396,6 +432,11 @@ definitions:
   KexecConfig:
     type: object
     properties:
+      curl_default_flags:
+        type: array
+        description: "List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L, -C, -])"
+        items:
+          type: string
       extra_flags:
         type: array
         description: Extra flags to pass to kexec (e.g. '--no-sync')
@@ -413,32 +454,82 @@ definitions:
   NixConfig:
     type: object
     properties:
+      build_default_flags:
+        type: array
+        description: "List of base flags for 'nix build' command (default: [--no-link, --no-update-lock-file, --print-out-paths, --keep-going])"
+        items:
+          type: string
+      build_env:
+        type: object
+        description: Environment variables for 'nix build' only (merged on top of env)
+        additionalProperties:
+          type: string
       build_flags:
         type: array
-        description: Extra flags for 'nix build' command (e.g. '--max-jobs', '4')
+        description: List of extra flags for 'nix build' command (e.g. [--max-jobs, 4])
         items:
           type: string
       build_mode:
         type: string
-        description: "Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine configurations, transfer is skipped (closure is already on target). For multi-machine configurations, the closure is copied from the first machine to the rest. (default: local)"
+        description: "Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine installables, transfer is skipped (closure is already on target). For multi-machine installables, the closure is copied from the first machine to the rest. (default: local)"
         default: local
         enum:
         - local
         - remote
+      copy_default_flags:
+        type: array
+        description: "List of base flags for 'nix copy' command (default: [--no-check-sigs])"
+        items:
+          type: string
+      copy_env:
+        type: object
+        description: Environment variables for 'nix copy' only (merged on top of env)
+        additionalProperties:
+          type: string
       copy_flags:
         type: array
-        description: Extra flags for 'nix copy' command (e.g. '--compress')
+        description: List of extra flags for 'nix copy' command (e.g. [--compress])
+        items:
+          type: string
+      env:
+        type: object
+        description: Environment variables applied to all nix commands (e.g. NIX_USER_CONF_FILES, NIX_STORE_DIR). Command-specific env fields override these.
+        additionalProperties:
+          type: string
+      experimental_features:
+        type: array
+        description: "List of flags to enable nix experimental features (default: [--extra-experimental-features, nix-command flakes])"
         items:
           type: string
       extra_flags:
         type: array
-        description: Extra flags applied to both 'nix build' and 'nix copy'
+        description: List of extra flags applied to both 'nix build' and 'nix copy'
         items:
+          type: string
+      nixos_install_default_flags:
+        type: array
+        description: "List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"
+        items:
+          type: string
+      nixos_install_env:
+        type: object
+        description: Environment variables for 'nixos-install' only (merged on top of env)
+        additionalProperties:
           type: string
       nixos_install_flags:
         type: array
-        description: Extra flags for 'nixos-install' command (e.g. '--no-bootloader')
+        description: List of extra flags for 'nixos-install' command (e.g. [--no-bootloader])
         items:
+          type: string
+      profile_install_default_flags:
+        type: array
+        description: "List of base flags for 'nix profile install' command (default: [])"
+        items:
+          type: string
+      profile_install_env:
+        type: object
+        description: Environment variables for 'nix profile install' only (merged on top of env)
+        additionalProperties:
           type: string
     additionalProperties: false
   PlainFileOrDirToTransfer:

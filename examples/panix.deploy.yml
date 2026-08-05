@@ -19,62 +19,63 @@ fleet:
   flakes:
     infrastructure:
       url: ../infrastructure
-      configurations:
-        personal-workstation:
-          machines:
-            personal-workstation:
-              bootstrap:
-                <<: *bootstrap_defaults
-                # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
-                # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
+      installables:
+        nixosConfigurations:
+          personal-workstation:
+            machines:
+              personal-workstation:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
+                  # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
 
-            fake:
-              ssh:
-                hostname: fake
-                username: root
-                port: 22
+              fake:
+                ssh:
+                  hostname: fake
+                  username: root
+                  port: 22
 
-        personal-laptop:
-          machines:
-            personal-laptop:
-              bootstrap:
-                <<: *bootstrap_defaults
-                # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
-                # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
+          personal-laptop:
+            machines:
+              personal-laptop:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
+                  # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
 
-        server-01:
-          machines:
-            server-01:
-              bootstrap:
-                <<: *bootstrap_defaults
-                #ssh:
-                #  hostname: 10.0.200.11
-                #  identity_file: temp_key
-                post_bootstrap_hooks:
-                  - |
-                    {{template "cryptenroll" "/dev/sda2"}}
+          server-01:
+            machines:
+              server-01:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  #ssh:
+                  #  hostname: 10.0.200.11
+                  #  identity_file: temp_key
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/sda2"}}
 
-        server-03:
-          machines:
-            server-03:
-              bootstrap:
-                <<: *bootstrap_defaults
-                post_bootstrap_hooks:
-                  - |
-                    {{template "cryptenroll" "/dev/sda2"}}
+          server-03:
+            machines:
+              server-03:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/sda2"}}
 
-        personal-vps-02:
-          machines:
-            personal-vps-02:
+          personal-vps-02:
+            machines:
+              personal-vps-02:
 
-        kiosk:
-          machines:
-            kiosk:
-              bootstrap:
-                <<: *bootstrap_defaults
-                #ssh:
-                #  hostname: 10.0.200.75
-                #  identity_file: temp_key
-                post_bootstrap_hooks:
-                  - |
-                    {{template "cryptenroll" "/dev/nvme0n1p2"}}
+          kiosk:
+            machines:
+              kiosk:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  #ssh:
+                  #  hostname: 10.0.200.75
+                  #  identity_file: temp_key
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/nvme0n1p2"}}

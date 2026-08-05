@@ -280,30 +280,51 @@ func (s *wrapState) handleSpace(start, end int, runeW int) {
 func (s *wrapState) handleBreakpoint(start, end int, runeW int) {
 	s.flushSpace()
 
+	// Breakpoint doesn't fit on the current line: accumulate it with the
+	// pending word so both move to the next line together.
 	if s.curWidth+s.wordWidth+runeW > s.limit {
-		if !s.hasWord {
-			s.wordStart = start
-			s.hasWord = true
-		}
+		s.accumulateBreakpoint(start, end, runeW)
 
-		s.wordEnd = end
-		s.wordWidth += runeW
-	} else {
-		if s.hasWord {
-			wordS, wordE := s.wordStart, s.wordEnd
-			s.curWidth += s.wordWidth + runeW
-			s.lineBuf = append(s.lineBuf, s.data[s.wordStart:end]...)
-			s.hasWord = false
-			s.wordWidth = 0
-			s.updateLineStyleAfterFlush(wordS, wordE)
+		return
+	}
 
-			// The breakpoint character itself is also in the flush.
-			s.updateLineStyleAfterFlush(wordE-1, end)
-		} else {
-			s.lineBuf = append(s.lineBuf, s.data[start:end]...)
-			s.curWidth += runeW
-			s.updateLineStyleAfterFlush(start, end)
-		}
+	// Breakpoint fits: flush it with the pending word (if any).
+	if s.hasWord {
+		wordS, wordE := s.wordStart, s.wordEnd
+		s.curWidth += s.wordWidth + runeW
+		s.lineBuf = append(s.lineBuf, s.data[s.wordStart:end]...)
+		s.hasWord = false
+		s.wordWidth = 0
+		s.updateLineStyleAfterFlush(wordS, wordE)
+
+		// The breakpoint character itself is also in the flush.
+		s.updateLineStyleAfterFlush(wordE-1, end)
+
+		return
+	}
+
+	s.lineBuf = append(s.lineBuf, s.data[start:end]...)
+	s.curWidth += runeW
+	s.updateLineStyleAfterFlush(start, end)
+}
+
+// accumulateBreakpoint adds a breakpoint rune to the pending word and
+// triggers a newline if the accumulated word would overflow the current
+// line. This mirrors handleWordRune's overflow check — without it, a
+// breakpoint (e.g. '-') that doesn't fit is silently accumulated without
+// triggering a newline, and the eventual flush produces a line wider
+// than limit.
+func (s *wrapState) accumulateBreakpoint(start, end, runeW int) {
+	if !s.hasWord {
+		s.wordStart = start
+		s.hasWord = true
+	}
+
+	s.wordEnd = end
+	s.wordWidth += runeW
+
+	if s.curWidth+s.wordWidth+s.spaceWidth > s.limit {
+		s.newline()
 	}
 }
 
@@ -331,6 +352,18 @@ func (s *wrapState) handleWordRune(start, end int, runeW int) {
 
 func (s *wrapState) flushSpace() {
 	if !s.hasSpace {
+		return
+	}
+
+	// Drop trailing spaces that would overflow the current line rather
+	// than flushing them into lineBuf. This mirrors the guard in
+	// handleNewline and flushRemaining, but at the source: without it,
+	// any caller of flushSpace (handleBreakpoint, flushWord) can push
+	// curWidth past limit, producing a line wider than the viewport.
+	if s.wordWidth == 0 && s.curWidth+s.spaceWidth > s.limit {
+		s.hasSpace = false
+		s.spaceWidth = 0
+
 		return
 	}
 

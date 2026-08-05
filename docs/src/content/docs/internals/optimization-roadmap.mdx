@@ -33,6 +33,18 @@ cpu: AMD Ryzen 9 5900HX with Radeon Graphics
 Benchmarks apply for all the changes accounted in that phase description.
 :::
 
+## Why This Was Necessary: Go's Runtime and GC
+
+The four phases were not arbitrary refactors. They were a sequence of attacks on specific Go runtime behaviors that Bubble Tea's string-heavy design triggered. Go strings are immutable: every concatenation, split, or truncation allocates a new string on the heap. Bubble Tea uses strings as the intermediate representation for all rendering, so every frame produced thousands of short-lived allocations that immediately became garbage. The Phase 1 baseline measured 34.5 million object allocations per e2e run. CPU profiles showed most time in `runtime.mallocgc`, not in application code.
+
+Because Go's GC is non-generational, there is no shortcut for short-lived objects. Every allocation contributes to heap growth, and when the heap doubles, a GC cycle scans the entire live object graph. At 34.5 million objects, cycles fired back to back. Reducing allocations has a compounding effect: fewer allocations means less heap growth, which means fewer GC cycles, which means less CPU spent scanning and prunning. The drop to 273,916 objects in Phase 4 was a 126x reduction that collapsed GC overhead proportionally, not just linearly.
+
+The custom engine attacks this from multiple angles. `sync.Pool` reuses backing arrays across frames so they never become garbage. A contiguous `[]byte` buffer with `[]int` line offsets replaces `[]string`, turning per-line allocations into zero-copy slices. `buf[:0]` resets the length while retaining capacity, so the same backing array survives across frames. Scratch buffers use fixed-size arrays (`var pfxBuf [1024]byte`) to stay stack-allocated via escape analysis. `unsafe.Slice` in the `stringbyte` package shares string backing memory as `[]byte` without copying, eliminating the standard `[]byte(s)` allocation on every read-only access in the hot path. Double-buffered frame diffing via `bytes.Equal` ensures only changed lines produce terminal output, bounding both rendering work and I/O by the delta, not the frame size. See [Custom TUI Engine](/internals/tui-engine/) for the full architecture.
+
+The trade-off is that eliminating allocations shifts the bottleneck. In the final phase, CPU profiles show `runtime.memmove` at ~11% (copying bytes between buffers to assemble terminal output), unicode grapheme width calculation via `rivo/uniseg` at ~11% (determining display width of each character), and `memeqbody` at ~5.5% (the `bytes.Equal` calls for frame diffing). GC overhead dropped to ~8% combined. None of these are realistically optimizable further in Go: the memory copies are the minimum required to assemble terminal output, unicode width is a fundamental requirement for correct layout, and frame diffing is already O(changed lines).
+
+---
+
 ## The beginning (naive approach)
 
 We had a working TUI built on [Bubble Tea](https://github.com/charmbracelet/bubbletea). It was fine at first, but with the introduction of e2e tests it became obvious that Panix's single thread was maxing out and making the TUI unresponsive.
@@ -63,7 +75,7 @@ The major change was building a custom TUI rendering engine from scratch ([PR #2
 
 `zeroterm` was built because Bubble Tea, despite being an excellent framework, re-renders entire views every frame with no built-in support for incremental rendering and using `string`s as an intermediate in all operations. Bubble Tea has to split, combine, append or cut strings at almost every step, making it a heavy burden on the Go garbage collector. For a deployment tool that monitors dozens of machines simultaneously and updates in real time, this meant the renderer was doing O(n) work every frame even when only a single line changed.
 
-The entire `pkg/tui/` and `pkg/buffer/` packages were built from scratch: a contiguous line buffer (`LinesBuf`) for zero-copy line access, double-buffered frame diffing via `bytes.Equal` for zero-allocation change detection, pooled buffers via `sync.Pool`, pre-rendered ANSI prefixes and padding, and retained-mode components with incremental caching. CPU dropped from 11% to 2.6%, and allocations fell from 4.4 GB to 433 MB.
+The entire `pkg/tui/` and `pkg/buffer/` packages were built from scratch (see [Custom TUI Engine](/internals/tui-engine/) for the full architecture). CPU dropped from 11% to 2.6%, and allocations fell from 4.4 GB to 433 MB.
 
 ---
 
@@ -82,5 +94,5 @@ These changes brought allocations from 433 MB down to 44 MB and CPU to 1.6%.
 - **Measure before you optimize.** Without building a benchmark, we would have been guessing. Several times, an "optimization" turned out to make things worse, and the benchmarks caught it immediately.
 - **Caching is the biggest lever.** Most TUI components don't change between frames, and detecting that is cheap.
 - **Allocations compound.** No single allocation was the problem. But when every component allocates on every frame, and you're rendering 60 times per second with dozens of log outputs, it adds up to gigabytes. Eliminating allocations one type at a time: pooled buffers, callback iteration, pre-computed values, eventually brought total allocations from 17.6 GB down to 44 MB.
-- **Sometimes you need to build your own.** Bubble Tea is a good framework (altho is still lacking certain features like other frameworks (like build-in scrollbars)), but it wasn't designed for the kind of high-frequency, incremental rendering that Panix needed. Building a custom engine was a significant investment, but more than 200x performance improvement justified it.
+- **Sometimes you need to build your own.** Bubble Tea is a good framework, although it still lacks certain features found in other frameworks (such as built-in scrollbars), but it wasn't designed for the kind of high-frequency, incremental rendering that Panix needed. Building a custom engine was a significant investment, but more than 200x performance improvement justified it.
 - **Cache invalidation is hard.** One mistake, and cache won't work, or may produce visual artifacts due to being stale or improperly reused.

@@ -16,14 +16,15 @@ anchor_bootstrap: &bootstrap_defaults
 fleet:
   flakes:
     infrastructure:
-      configurations:
-        server:
-          machines:
-            server-01:
-              bootstrap:
-                <<: *bootstrap_defaults
-                post_bootstrap_hooks:
-                  - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+      installables:
+        nixosConfigurations:
+          server:
+            machines:
+              server-01:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  post_bootstrap_hooks:
+                    - systemd-cryptenroll --tpm2-device=auto /dev/sda2
 ```
 
 :::caution

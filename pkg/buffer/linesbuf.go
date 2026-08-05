@@ -13,7 +13,7 @@ const (
 // contiguous byte slice. Line boundaries are recorded as start offsets.
 //
 // Acquire with NewLineBuf, write lines with WriteLine, read with Line.
-// Call Release when done — do not retain references after Release.
+// Call Release when done; do not retain references after Release.
 type LinesBuf struct {
 	buf     []byte
 	indexes []int
@@ -125,7 +125,7 @@ func (b *LinesBuf) Line(i int) []byte {
 	return b.buf[start:end]
 }
 
-// Lines reconstructs [][]byte. Allocates — prefer Line(i).
+// Lines reconstructs [][]byte. Allocates, prefer Line(i).
 func (b *LinesBuf) Lines() [][]byte {
 	length := len(b.indexes)
 	if length == 0 {
@@ -294,7 +294,7 @@ func (b *LinesBuf) WriteLine3(p1, p2, p3 []byte) {
 // data contains all padded lines concatenated (no \n separators).
 // offsets[i] is the byte offset of line i's start; offsets[end] is the
 // exclusive end of the last line. Start and end are the visible line range.
-// One bulk append for data, one slice extension for indexes — zero per-line
+// One bulk append for data, one slice extension for indexes, zero per-line
 // overhead.
 func (b *LinesBuf) WritePaddedView(data []byte, offsets []int, start, end int) {
 	base := len(b.buf)
@@ -343,7 +343,7 @@ func AppendInt(buf []byte, val int) []byte {
 	}
 
 	if val < 10 {
-		//nolint:gosec // G115: safe — val<10, so '0'+val is in ['0','9']
+		//nolint:gosec // G115: safe - val<10, so '0'+val is in ['0','9']
 		return append(buf, byte('0'+val))
 	}
 

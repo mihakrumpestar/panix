@@ -94,28 +94,4 @@ func (f FileMode) String() string {
 	return strconv.FormatUint(uint64(f.Get()), 8)
 }
 
-// ActivationMode
 
-type ActivationModeD ActivationMode
-
-type ActivationMode string
-
-const (
-	ActivationModeCheck       ActivationMode = "check"        // run pre-switch checks and exit
-	ActivationModeSwitch      ActivationMode = "switch"       // make the configuration the boot default and activate now
-	ActivationModeBoot        ActivationMode = "boot"         // make the configuration the boot default
-	ActivationModeTest        ActivationMode = "test"         // activate the configuration, but don't make it the boot default
-	ActivationModeDryActivate ActivationMode = "dry-activate" // show what would be done if this configuration were activated
-)
-
-func (am ActivationModeD) Get() ActivationMode {
-	if am == "" {
-		return ActivationModeSwitch
-	}
-
-	return ActivationMode(am)
-}
-
-func (am ActivationModeD) String() string {
-	return string(am.Get())
-}

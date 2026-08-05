@@ -32,7 +32,7 @@ func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCoun
 	buf = buffer.AppendInt(buf, lineIdx+1)
 	buf = append(buf, ";1H"...)
 
-	// Strip \r from line content inline — avoids strings.ReplaceAll
+	// Strip \r from line content inline; avoids strings.ReplaceAll
 	// allocation. lipgloss and ANSI renderers may emit \r within a
 	// "line" (e.g. for cursor repositioning within a styled region).
 	line := cur.Line(lineIdx)

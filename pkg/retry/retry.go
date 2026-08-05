@@ -26,7 +26,7 @@ func NewTaskRetry() *Retry {
 
 // Wait blocks until Trigger is called or context is cancelled.
 // Returns ctx.Err() if context is cancelled before a trigger.
-// Multiple goroutines may call Wait concurrently — all are woken by a single
+// Multiple goroutines may call Wait concurrently, all are woken by a single
 // Trigger (broadcast via channel close).
 func (r *Retry) Wait(ctx context.Context) error {
 	r.mu.Lock()

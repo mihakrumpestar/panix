@@ -1,14 +1,14 @@
 ---
 title: Configuration Model
-description: Hierarchical configuration inheritance - Fleet → Flake → Configuration → Machine.
+description: Hierarchical configuration inheritance - Fleet → Flake → Installable → Machine.
 sidebar:
   order: 3
 ---
 
-Your infrastructure has natural hierarchies: flakes contain configurations, configurations contain machines. Panix's configuration model reflects this:
+Your infrastructure has natural hierarchies: flakes contain installables, installables contain machines. Panix's configuration model reflects this:
 
 <center>
-**Fleet → Flake → Configuration → Machine**
+**Fleet → Flake → Installable → Machine**
 </center>
 
 Attributes at each level cascade down, **without overriding** child attributes. Slices (tags, secrets, disk encryption keys) **append**. Define once at the fleet, extend at any level:
@@ -27,48 +27,175 @@ fleet:
         - local_path: ./secrets/prod/api.key
           remote_path: /var/secrets/api.key
       
-      configurations:
-        webserver:
-          tags: [web]             # Accumulated: [production, critical, web]
-          
-          machines:
-            web-01:               # Accumulated: [production, critical, web, web-01]
-            web-02:
-              secrets:            # APPENDED to all inherited secrets
-                - local_path: ./secrets/web-02/cert.pem
-                  remote_path: /etc/ssl/cert.pem
+      installables:
+        nixosConfigurations:
+          webserver:
+            tags: [web]           # Accumulated: [production, critical, web]
+            
+            machines:
+              web-01:             # Accumulated: [production, critical, web, web-01]
+              web-02:
+                secrets:          # APPENDED to all inherited secrets
+                  - local_path: ./secrets/web-02/cert.pem
+                    remote_path: /etc/ssl/cert.pem
 ```
 
-## Why Configurations Are Separate From Machines
+## Why Installables Are Separate From Machines
 
-In NixOS, a `nixosConfiguration` defines a system: packages, services, filesystem layout.
+An installable is a flake output: a `nixosConfigurations` entry, a `homeConfigurations` entry, a `packages` entry, etc. with its attribute name. It defines what to build and deploy.
 
-Traditional deployment tools assume a 1:1 mapping: one machine, one `nixosConfiguration`. Deploying 50 identical machines would require 50 `nixosConfiguration` entries and 50 builds, even though the systems are identical.
+Traditional deployment tools assume a 1:1 mapping: one machine, one configuration. Deploying 50 identical machines (with identical configurations) would require 50 entries and 50 builds, even though the systems are identical.
 
-Panix breaks this 1:1 mapping. Many machines can share a single `nixosConfiguration`, each receiving its hostname and network identity from DHCP. This has two compounding effects:
+Panix breaks this 1:1 mapping. Many machines can share a single installable, each receiving its hostname and network identity from DHCP (you configure that on your own). This has two compounding effects:
 
-- **Build deduplication**: One `nixosConfiguration` means one build, regardless of how many machines consume it. Deploying 50 identical machines costs 1 build, not 50.
-- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same configuration, since none of them need machine-specific NixOS config written first.
+- **Build deduplication**: One installable means one build, regardless of how many machines consume it. Deploying 50 identical machines costs 1 build, not 50.
+- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same installable, since none of them need machine-specific configurations. This is not the case for all configurations and situations, but can be very useful in certain applications.
 
-The machine's role in Panix is purely operational: it holds the SSH connection, the target address, and the transfer and activation state. The configuration is the blueprint; the machine is where it lands.
+The machine's role in Panix is purely operational: it holds the SSH connection, the target address, and the transfer and activation state. The installable is the blueprint; the machine is where it lands.
+
+## Multiple Output Types Per Machine
+
+A machine often needs more than just a system configuration. You might want a NixOS system and a home-manager profile on the same box. Panix supports this by letting you define multiple installable types under a single flake:
+
+```yaml
+fleet:
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          server1:
+            machines:
+              server1:            # system-level activation (root)
+        
+        homeConfigurations:
+          alice:
+            machines:
+              server1:            # user-level activation (alice)
+                ssh:
+                  username: alice
+```
+
+:::caution
+Each (installable, machine) pair is independent. There is no activation ordering between them. There is also no gating when bootstrapping.
+
+If the target machine is in NixOS installer, non-nixosConfigurations installable types will also try to run (in this case, it is best to specify `--tags=nixosConfigurations`, to exclude other types from being run on bootstrap).
+:::
+
+Each installable type auto-infers its build path, activation mechanism, profile path, and whether profile setting is needed. You don't need to configure these manually.
+
+For user-level types like `homeConfigurations`, the activation runs as the SSH user by default. If you SSH as root but need to deploy home-manager to a different user, set the `user` field on the installable:
+
+```yaml
+fleet:
+  flakes:
+    infra:
+      url: ./infra
+      installables:
+        nixosConfigurations:
+          server1:
+            machines:
+              server1:
+                ssh:
+                  username: root
+                  hostname: server1.lan
+
+        homeConfigurations:
+          primary:
+            user: alice               # Activation runs as alice via su -l alice
+            machines:
+              server1:
+                ssh:
+                  username: root      # SSH as root, but activate as alice
+                  hostname: server1.lan
+
+          bobs-config:
+            user: bob
+            machines:
+              server1:
+                ssh:
+                  username: root
+                  hostname: server1.lan
+```
+
+The `user` field is only meaningful for user-level types (`homeConfigurations`, `nixOnDroidConfigurations`, `packages`). It is ignored for system-level types (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`).
+
+When set, panix wraps the activation command in `su -l <user> -c` so the activation script runs with the correct user's `$HOME` and profile. Generation listing (`nix-env --list-generations`) also runs as that user.
+
+:::caution
+Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) are a newer feature. NixOS system deployments are well-tested, but other output types may have edge cases. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
+:::
+
+### Supported Installable Types
+
+| Type | Use case | Activation |
+|------|----------|------------|
+| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (supports bootstrap) |
+| `darwinConfigurations` | [nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS) | `activate` script |
+| `systemConfigs` | [system-manager](https://github.com/numtide/system-manager) | `bin/activate` |
+| `homeConfigurations` | [home-manager](https://github.com/nix-community/home-manager) | `activationPackage/activate` |
+| `nixOnDroidConfigurations` | [Nix-on-Droid](https://github.com/nix-community/nix-on-droid) | `activate` script |
+| `packages` | Arbitrary packages | `nix profile install` |
+
+Bootstrap (kexec, disko, nixos-install) only applies to `nixosConfigurations`.
+
+For a detailed guide on deploying packages (including nixvim and nvf), see the [Deploying Packages guide](../guides/packages.mdx).
+
+## Custom Installable Types
+
+The six types above are registered in panix's `presets` map ([`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go)). Validation rejects type names not in this map, so you cannot use an arbitrary output name as an installable type.
+
+Each type's behavior is fully data-driven through its `Preset` fields:
+
+| Field | Purpose |
+|-------|---------|
+| `build_path` | Attrpath suffix appended to `type.name` for `nix build` |
+| `activation_path` | Script path within the closure. Empty triggers `nix profile install` instead |
+| `profile_path` | Nix profile path for generation management. Empty disables rollback |
+| `set_profile` | Whether to run `nix-env --profile --set` before activation |
+| `is_system_level` | `true` uses `sudo` for activation; `false` uses `su -l <user>` |
+| `is_bootstrappable` | Whether the type supports bootstrap (kexec, disko, nixos-install) |
+| `activation_supported_modes` | Activation modes passed to the activation script (e.g. `switch`, `boot`, `test`) |
+| `activation_default_mode` | Default mode when none is specified |
+
+You can override any of these per-installable under the `preset:` key to customize behavior for a specific output. For example, to deploy a `nixosConfigurations` entry with a non-standard build path:
+
+```yaml
+installables:
+  nixosConfigurations:
+    custom-build:
+      preset:
+        build_path: config.system.build.toplevel
+        activation_path: bin/switch-to-configuration
+        profile_path: /nix/var/nix/profiles/system
+        set_profile: true
+      machines:
+        server1:
+```
+
+All preset fields are optional. When omitted, the type default from the `presets` map is used.
+
+To add support for a **new** output type (e.g. a flake output not in the list above), add an entry to the `presets` map in [`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go). The type is then automatically picked up by validation, build, transfer, activation, and rollback with no other code changes needed. If you need a new preset, [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues) to request it.
 
 ## How Inheritance Works
 
-- **Tags**: Every name (flake, configuration, machine) is automatically a tag. Tags accumulate through the hierarchy.
-- **Secrets**: Secrets defined at fleet/flake/configuration levels append down to machines. They are never replaced, only accumulated.
+- **Tags**: Every name (flake, installable type, installable name, machine) is automatically a tag. Tags accumulate through the hierarchy.
+- **Secrets**: Secrets defined at fleet/flake/installable levels append down to machines. They are never replaced, only accumulated.
 - **SSH**: Settings cascade down. A machine can override any SSH parameter.
 - **Bootstrap**: Settings cascade down. Hooks at each level are collected.
 - **Nix flags**: `extra_flags`, `build_flags`, `copy_flags` accumulate through inheritance.
 
 ## Disabling Parts of the Configuration
 
-You can disable flakes, configurations, or machines by setting `disabled: true`:
+You can disable flakes, installables, or machines by setting `disabled: true`:
 
 ```yaml
 fleet:
   flakes:
     my-flake:
-      disabled: true  # This flake and all its children are skipped
+      installables:
+        nixosConfigurations:
+          old-server:
+            disabled: true  # This installable and all its machines are skipped
 ```
 
 Disabled sections are filtered out during evaluation and do not participate in any phase.

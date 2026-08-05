@@ -3,7 +3,7 @@ package buffer
 import "strings"
 
 // LinesBufToStringForTests joins the buffer lines with \n into a string.
-// Intended for test assertions only — not for production hot paths.
+// Intended for test assertions only, not for production hot paths.
 func LinesBufToStringForTests(linesBuf *LinesBuf) string {
 	length := len(linesBuf.indexes)
 	if length == 0 {

@@ -12,28 +12,31 @@ fleet:
   flakes:
     infrastructure:
       url: path:../infra-flake
-      configurations:
-        servers:
-          machines:
-            server-01:
-            server-02:
+      installables:
+        nixosConfigurations:
+          servers:
+            machines:
+              server-01:
+              server-02:
     
     monitoring:
       url: github:myorg/monitoring-flake
-      configurations:
-        prometheus:
-          machines:
-            prom-01:
+      installables:
+        nixosConfigurations:
+          prometheus:
+            machines:
+              prom-01:
     
     secrets-management:
       url: git+ssh://git@github.com/myorg/vault-nixos
-      configurations:
-        vault:
-          machines:
-            vault-01:
+      installables:
+        nixosConfigurations:
+          vault:
+            machines:
+              vault-01:
 ```
 
-With this you get complete visibility across your entire infrastructure. Each flake builds independently, each configuration deduplicates builds across its machines.
+With this you get complete visibility across your entire infrastructure. Each flake builds independently, each installable deduplicates builds across its machines.
 
 ## Flake URL Schemes
 

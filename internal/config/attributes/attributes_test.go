@@ -124,8 +124,7 @@ func TestPassAttributesIntoChildOverridesParent(t *testing.T) {
 	t.Parallel()
 
 	parent := &Attributes{
-		SudoProgram:    SudoProgram("doas"),
-		ActivationMode: ActivationModeD(ActivationModeBoot),
+		SudoProgram: SudoProgram("doas"),
 	}
 
 	child := &Attributes{
@@ -138,8 +137,6 @@ func TestPassAttributesIntoChildOverridesParent(t *testing.T) {
 	assertion := assert.New(t)
 	assertion.Equal(SudoProgram("run0"), child.SudoProgram,
 		"child's explicit sudo program should override parent")
-	assertion.Equal(ActivationModeD(ActivationModeBoot), child.ActivationMode,
-		"child should inherit parent activation mode when not set")
 }
 
 func TestPassAttributesIntoEmptyNameNoNameTag(t *testing.T) {

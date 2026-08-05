@@ -12,7 +12,7 @@ import (
 const HeaderRow = -1
 
 // Config holds immutable table configuration set at construction time.
-// Changing any field after construction has no effect — use Width() for
+// Changing any field after construction has no effect; use Width() for
 // runtime width updates and SetRows() for data updates.
 type Config struct {
 	Width               int
@@ -221,7 +221,7 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 // Render builds the table into the owned content buffer and returns it.
 // On cache hit (no data/width/selection change since last Render), returns
 // the existing buffer immediately with zero allocations.
-// Callers must use AppendFrom or read Line(i) — do not retain the
+// Callers must use AppendFrom or read Line(i); do not retain the
 // pointer across frames.
 //
 
@@ -259,7 +259,7 @@ func (t *Table) Render() *buffer.LinesBuf {
 }
 
 // RenderInto writes the table output into dst, one line per LinesBuf entry.
-// Convenience wrapper — callers needing the table's own buffer can call
+// Convenience wrapper; callers needing the table's own buffer can call
 // Render() directly and use AppendFrom.
 func (t *Table) RenderInto(dst *buffer.LinesBuf) {
 	dst.AppendFrom(t.Render())
@@ -779,7 +779,7 @@ func (t *Table) contentWidths(numCols int, dst []int) {
 
 // distributeWidths calculates column widths that exactly fill the table
 // width. When content is narrower than the table, columns expand. When
-// content is wider, columns shrink — prioritizing shrinking the widest
+// content is wider, columns shrink, prioritizing shrinking the widest
 // columns first (matching lipgloss behavior).
 func (t *Table) distributeWidths(numCols int) []int {
 	if numCols == 0 {

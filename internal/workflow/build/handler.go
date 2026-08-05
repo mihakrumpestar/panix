@@ -3,8 +3,8 @@ package build
 import (
 	"fmt"
 
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/pkg/errors"
@@ -14,13 +14,12 @@ type Handler struct{}
 
 func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	flake := fleetLeaf.Flake
-	configurationI := fleetLeaf.Configuration
 
-	if configurationI.MetaBuild == nil {
-		configurationI.MetaBuild = &configuration.MetaBuild{}
+	if fleetLeaf.Installable.MetaBuild == nil {
+		fleetLeaf.Installable.MetaBuild = &installable.MetaBuild{}
 	}
 
-	flakeOutput := configuration.ResolveFlakeInstallable(configurationI.FlakeOutput, configurationI.BuildPath, configurationI.Name.String())
+	flakeOutput := installable.ResolveFlakeInstallable(fleetLeaf.Installable.Type, fleetLeaf.Installable.Name, fleetLeaf.Installable.Preset.BuildPath)
 	installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
 	storePath, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "system closure")
@@ -28,7 +27,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return errors.Wrap(err, "system closure build failed")
 	}
 
-	configurationI.MetaBuild.SystemClosure = storePath
+	fleetLeaf.Installable.MetaBuild.Closure = storePath
 
 	return nil
 }

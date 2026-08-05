@@ -10,6 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -38,7 +39,10 @@ func TestDecodeConfigFileMinimalValid(t *testing.T) {
 	assertion.True(ok, "expected flake 'my-flake' to exist")
 	assertion.Equal("path:./my-flake", flakePair.URL)
 
-	configPair, ok := flakePair.Configurations.Get("my-config")
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	assertion.True(ok, "expected nixosConfigurations to exist")
+
+	configPair, ok := attrMap.Get("my-config")
 	assertion.True(ok, "expected configuration 'my-config' to exist")
 
 	_, ok = configPair.Machines.Get("my-machine")
@@ -56,7 +60,10 @@ func TestDecodeConfigFileWithSSH(t *testing.T) {
 	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
 	require.True(t, ok, "expected flake 'my-flake' to exist")
 
-	configPair, ok := flakePair.Configurations.Get("my-config")
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	require.True(t, ok, "expected nixosConfigurations to exist")
+
+	configPair, ok := attrMap.Get("my-config")
 	require.True(t, ok, "expected configuration 'my-config' to exist")
 
 	machinePair, ok := configPair.Machines.Get("my-machine")
@@ -76,7 +83,10 @@ func TestDecodeConfigFileWithDisabled(t *testing.T) {
 	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
 	require.True(t, ok)
 
-	configPair, ok := flakePair.Configurations.Get("my-config")
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	require.True(t, ok)
+
+	configPair, ok := attrMap.Get("my-config")
 	require.True(t, ok)
 
 	mach, ok := configPair.Machines.Get("my-machine")
@@ -113,7 +123,10 @@ func TestDecodeConfigFileTemplateProcessing(t *testing.T) {
 	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
 	require.True(t, ok)
 
-	configPair, ok := flakePair.Configurations.Get("my-config")
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	require.True(t, ok)
+
+	configPair, ok := attrMap.Get("my-config")
 	require.True(t, ok)
 
 	machinePair, ok := configPair.Machines.Get("my-machine")
@@ -138,9 +151,12 @@ func TestDecodeConfigFileFullConfig(t *testing.T) {
 	assertion.Equal("path:../infrastructure", flakePair.URL,
 		"flake URL should match")
 
-	assertion.Equal(2, flakePair.Configurations.Len(), "expected 2 configurations")
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	require.True(t, ok, "expected nixosConfigurations to exist")
 
-	serverCfg, ok := flakePair.Configurations.Get("server")
+	assertion.Equal(2, attrMap.Len(), "expected 2 configurations")
+
+	serverCfg, ok := attrMap.Get("server")
 	require.True(t, ok, "expected configuration 'server'")
 
 	serverTags := serverCfg.Tags
@@ -191,14 +207,23 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	assertion.Equal(expectedFlakeXpath.String(), flk.Xpath.String())
 	assertion.Equal("my-flake", flk.Name.String())
 
-	cfg, ok := flk.Configurations.Get("my-config")
+	attrMap, ok := flk.Installables.Get("nixosConfigurations")
 	must.True(ok)
 
-	must.NoError(cfg.Init("my-config", &flk.Attributes, &flk.Nix))
+	cfg, ok := attrMap.Get("my-config")
+	must.True(ok)
 
-	expectedCfgXpath := expectedFlakeXpath.NewXpathWithAppend("my-config")
+	must.NoError(cfg.Init(installable.FlakeOutputType("nixosConfigurations"), "my-config", &flk.Attributes, &flk.Nix))
+
+	expectedCfgXpath := expectedFlakeXpath.NewXpathWithAppend("nixosConfigurations/my-config")
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
 	assertion.Equal("my-config", cfg.Name.String())
+
+	// Verify tags include both output type and attribute name
+	assertion.Contains(cfg.Tags, "nixosConfigurations",
+		"installable type should be registered as a tag")
+	assertion.Contains(cfg.Tags, "my-config",
+		"installable name should be registered as a tag")
 
 	mach, ok := cfg.Machines.Get("my-machine")
 	must.True(ok)
@@ -250,31 +275,6 @@ func TestSudoProgramDefaults(t *testing.T) {
 
 			assertion := assert.New(t)
 			assertion.Equal(tt.want, tt.input.Get().String())
-		})
-	}
-}
-
-func TestActivationModeDefaults(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input attributes.ActivationModeD
-		want  string
-	}{
-		{"empty defaults to switch", attributes.ActivationModeD(""), "switch"},
-		{"check preserved", attributes.ActivationModeD("check"), "check"},
-		{"boot preserved", attributes.ActivationModeD("boot"), "boot"},
-		{"test preserved", attributes.ActivationModeD("test"), "test"},
-		{"dry-activate preserved", attributes.ActivationModeD("dry-activate"), "dry-activate"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assertion := assert.New(t)
-			assertion.Equal(tt.want, tt.input.String())
 		})
 	}
 }

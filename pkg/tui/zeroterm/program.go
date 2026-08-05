@@ -298,7 +298,7 @@ func (p *Program) readInput(done chan<- struct{}) {
 			}
 
 			if consumed < len(data) && canHaveMoreData {
-				// Incomplete sequence at end of buffer — save for next read.
+				// Incomplete sequence at end of buffer; save for next read.
 				leftover = make([]byte, 0, len(data[consumed:])+len(buf))
 				leftover = append(leftover, data[consumed:]...)
 			}

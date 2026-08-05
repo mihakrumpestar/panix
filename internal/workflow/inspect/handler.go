@@ -8,10 +8,45 @@ import (
 
 type Handler struct{}
 
-//nolint:cyclop
 func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	machineI := fleetLeaf.Machine
 
+	err := runCommonChecks(exc, machineI)
+	if err != nil {
+		return err
+	}
+
+	// Bootstrap detection (only for bootstrappable types)
+	if fleetLeaf.Installable.Preset.IsBootstrappable {
+		err = runBootstrapInspect(exc, machineI)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Non-bootstrappable: check nix is available
+		err = checkNixAvailable(exc, machineI)
+		if err != nil {
+			return err
+		}
+	}
+
+	// System info detection (all types)
+	err = detectSystemInfo(exc, machineI)
+	if err != nil {
+		return err
+	}
+
+	// Generation reading (all types with a profile path)
+	if fleetLeaf.Installable.Preset.ProfilePath != "" {
+		return readGenerations(exc, machineI, fleetLeaf.Installable.Preset.ProfilePath, fleetLeaf.Installable.User)
+	}
+
+	return nil
+}
+
+// runCommonChecks runs SSH reachability, architecture, and superuser checks
+// that apply to all output types.
+func runCommonChecks(exc *executioner.Executioner, machineI *machine.Machine) error {
 	if machineI.SSH.IsLocal() {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 			mi.Reachable = true
@@ -34,12 +69,14 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return err
 	}
 
-	err = checkSuperuser(exc, machineI)
-	if err != nil {
-		return err
-	}
+	return checkSuperuser(exc, machineI)
+}
 
-	err = detectBootstrapStatus(exc, machineI)
+// runBootstrapInspect runs bootstrap-specific inspection: detects bootstrap
+// status, validates SSH state and secrets paths, and handles unbootstrapped
+// machines.
+func runBootstrapInspect(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := detectBootstrapStatus(exc, machineI)
 	if err != nil {
 		return err
 	}
@@ -59,5 +96,5 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return handleUnbootstrapped(exc, machineI)
 	}
 
-	return readGenerations(exc, machineI)
+	return nil
 }

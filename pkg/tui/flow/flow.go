@@ -49,7 +49,7 @@ func (pf *PhaseFlow) SetZonePrefix(prefix string) *PhaseFlow {
 }
 
 // SetData replaces the per-phase count data. The slice is copied internally.
-// Does not set outDirty — isCacheValid() detects data changes via comparison.
+// Does not set outDirty; isCacheValid() detects data changes via comparison.
 func (pf *PhaseFlow) SetData(data []PhaseData) {
 	pf.data = append(pf.data[:0], data...)
 }

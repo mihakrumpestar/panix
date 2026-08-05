@@ -1,0 +1,254 @@
+---
+title: Deploying Packages
+description: Deploy arbitrary Nix packages to machines via nix profile install, including nixvim and nvf.
+sidebar:
+  order: 9
+---
+
+The `packages` installable type deploys arbitrary Nix packages to target machines via `nix profile install`. It is user-level, has no rollback, and requires no activation script, making it ideal for standalone tools and editor configurations on machines that already have a system configuration.
+
+## How It Works
+
+The `packages` preset has an empty `BuildPath`, `ActivationPath`, and `ProfilePath`. Panix resolves the installable as `<flake>#packages.<name>`, activates via `nix profile install` instead of an activation script, and skips rollback entirely.
+
+| Phase | System-level types | `packages` |
+|-------|-------------------|------------|
+| **Build** | `<flake>#<type>.<name>.<buildPath>` | `<flake>#packages.<name>` |
+| **Transfer** | `nix copy --to <target>` | Same |
+| **Activate** | `<closure>/<activation_script> <mode>` | `nix profile install <closure>` |
+| **Rollback** | `nix-env --profile --set` + activation | Skipped (no profile path) |
+
+Packages are always user-level. When the `user` field is set, activation runs via `su -l <user> -c`. If `user` is empty, the package installs as the SSH user. See the [configuration model](../concepts/configuration-model.mdx) for details on the `user` field and [phase pipeline](../concepts/phases.mdx) for the full deployment flow.
+
+## Flake Setup
+
+Export derivations under `packages.<system>.<name>`:
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }:
+  let
+    systems = [ "x86_64-linux" "aarch64-linux" ];
+    forAllSystems = nixpkgs.lib.genAttrs systems;
+  in {
+    packages = forAllSystems (system:
+      let pkgs = nixpkgs.legacyPackages.${system}; in {
+        default = pkgs.hello;
+        my-tool = pkgs.callPackage ./my-tool.nix { };
+      }
+    );
+  };
+}
+```
+
+The attribute name in your panix YAML must match `packages.<system>.<name>` in the flake.
+
+:::note
+Panix does not pass `--system` to `nix build`. Ensure your flake exports packages for the correct system(s).
+:::
+
+## Panix Configuration
+
+```yaml
+fleet:
+  flakes:
+    my-tools:
+      url: path:../my-tools-flake
+
+      installables:
+        packages:
+          my-tool:                     # Must match packages.<system>.my-tool
+            user: alice                # Install into alice's nix profile
+            machines:
+              workstation:
+                ssh:
+                  hostname: ws.lan
+                  username: root        # SSH as root, activate as alice
+              laptop:
+                ssh:
+                  hostname: laptop.lan
+                  username: root
+```
+
+### Combining With System Configurations
+
+A common pattern: deploy the system config as root, deploy user tools as the target user:
+
+```yaml
+fleet:
+  flakes:
+    infrastructure:
+      url: path:../infra
+
+      installables:
+        nixosConfigurations:
+          workstation:
+            machines:
+              workstation:
+                ssh:
+                  hostname: ws.lan
+                  username: root
+
+        packages:
+          neovim:
+            user: alice
+            machines:
+              workstation:
+                ssh:
+                  hostname: ws.lan
+                  username: root
+```
+
+See [Configuration Model](../concepts/configuration-model.mdx) for details on how multiple installable types interact.
+
+:::caution
+During bootstrap, `packages` activation will fail on unbootstrapped machines. Use `--tags=nixosConfigurations` to exclude packages during bootstrap.
+:::
+
+## Nix Flags for Packages
+
+```yaml
+fleet:
+  nix:
+    profile_install_default_flags: ["--priority", "5"]  # No built-in defaults to replace
+    profile_install_env:
+      NIX_USER_CONF_FILES: /etc/nix/deploy-nix.conf
+```
+
+These follow the same [inheritance and override semantics](../features/nix-flags.mdx) as other nix flags.
+
+## Deploying nixvim
+
+[nixvim](https://github.com/nix-community/nixvim) configures Neovim declaratively and produces a wrapped derivation. It does not export a pre-built package; you must evaluate your config and export the result from your flake's `packages` output.
+
+Use `nixvim.lib.evalNixvim` (returns a config; access `config.build.package` for the derivation) or `nixvim.lib.buildNixvim` (returns the package directly):
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixvim = {
+      url = "github:nix-community/nixvim";
+      # Do NOT add inputs.nixvim.inputs.nixpkgs.follows = "nixpkgs"
+      # nixvim is tested against a specific nixpkgs revision
+    };
+  };
+
+  outputs = { self, nixpkgs, nixvim, ... }:
+  let
+    systems = [ "x86_64-linux" "aarch64-linux" ];
+    forAllSystems = nixpkgs.lib.genAttrs systems;
+  in {
+    packages = forAllSystems (system:
+      let
+        nvimConfig = nixvim.lib.evalNixvim {
+          inherit system;
+          modules = [ ./nvim-config.nix ];
+        };
+      in {
+        default = nvimConfig.config.build.package;
+      }
+    );
+  };
+}
+```
+
+```nix
+# nvim-config.nix
+{
+  colorschemes.gruvbox.enable = true;
+  plugins = {
+    treesitter.enable = true;
+    lsp = {
+      enable = true;
+      servers = { gopls.enable = true; lua_ls.enable = true; nil_ls.enable = true; };
+    };
+    telescope.enable = true;
+    nvim-cmp.enable = true;
+  };
+  viAlias = true;
+  vimAlias = true;
+}
+```
+
+The panix YAML is the same as any `packages` installable:
+
+```yaml
+fleet:
+  flakes:
+    neovim:
+      url: path:../neovim-config
+      installables:
+        packages:
+          default:
+            user: alice
+            machines:
+              workstation:
+                ssh:
+                  hostname: ws.lan
+                  username: root
+```
+
+For simpler setups, `buildNixvimWith` is equivalent but more concise:
+
+```nix
+packages.${system}.default = nixvim.lib.buildNixvimWith {
+  inherit system;
+  modules = [{ plugins.treesitter.enable = true; }];
+};
+```
+
+For module-based integration with generation rollback and XDG config management, deploy nixvim through a `homeConfigurations` installable using `nixvim.homeModules.nixvim`.
+
+## Deploying nvf
+
+[nvf](https://github.com/NotAShelf/nvf) is the successor to neovim-flake. Evaluate configs via `nvf.lib.neovimConfiguration` and access `.neovim` for the package:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nvf = {
+      url = "github:NotAShelf/nvf";
+      inputs.nixpkgs.follows = "nixpkgs";  # Safe with nvf
+    };
+  };
+
+  outputs = { self, nixpkgs, nvf, ... }:
+  let
+    system = "x86_64-linux";
+    pkgs = nixpkgs.legacyPackages.${system};
+  in {
+    packages.${system}.default =
+      (nvf.lib.neovimConfiguration {
+        inherit pkgs;
+        modules = [ ./nvf-config.nix ];
+      }).neovim;
+  };
+}
+```
+
+```nix
+# nvf-config.nix
+{
+  config.vim = {
+    theme = { enable = true; name = "gruvbox"; style = "dark"; };
+    treesitter.enable = true;
+    lsp.enable = true;
+    telescope.enable = true;
+    viAlias = true;
+    vimAlias = true;
+  };
+}
+```
+
+The panix YAML is identical to the nixvim case.
+
+## Limitations
+
+- **No rollback**: Panix rollback is skipped (no `ProfilePath`). Use `nix profile history` and `nix profile rollback` on the target machine directly.
+- **No activation modes**: Packages always install immediately. No `switch`, `boot`, `test`, or `dry-activate` modes.
+- **No bootstrap support**: `IsBootstrappable` is false. The target must already be running Nix.
+- **Profile conflicts**: `nix profile install` uses the user's default profile. Use `profile_install_default_flags: ["--priority", "N"]` to control priority.

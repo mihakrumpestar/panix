@@ -10,7 +10,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
+	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/validate"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
@@ -64,7 +66,7 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 	}
 
 	// Validate configuration
-	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags)
+	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags, conf.Flags.Runtime.FlakeValidationTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
@@ -150,29 +152,67 @@ func (c *Config) initFleet() error {
 			return errors.Wrap(err, "failed to init flake")
 		}
 
-		for _, configurationPair := range flakeV.Configurations.Pairs() {
-			configurationV := configurationPair.Value
+		err = c.initInstallables(flakeV)
+		if err != nil {
+			return err
+		}
+	}
 
-			err = configurationV.Init(configurationPair.Key, &flakeV.Attributes, &flakeV.Nix)
+	return nil
+}
+
+// initInstallables initializes the two-level installables map (type -> name -> installable)
+// and all machines within each installable.
+func (c *Config) initInstallables(flakeV *flake.Flake) error {
+	for _, typePair := range flakeV.Installables.Pairs() {
+		typeKey := typePair.Key
+
+		attrMap := typePair.Value
+		if attrMap == nil {
+			continue
+		}
+
+		for _, namePair := range attrMap.Pairs() {
+			nameKey := namePair.Key
+			installable := namePair.Value
+
+			// Installable may be nil due to existing only as key (this is intended behavior), so we set it here in that case
+			if installable == nil {
+				installable = &installablepkg.Installable{}
+				attrMap.Set(namePair.Key, installable)
+			}
+
+			err := installable.Init(installablepkg.FlakeOutputType(typeKey), nameKey, &flakeV.Attributes, &flakeV.Nix)
 			if err != nil {
-				return errors.Wrap(err, "failed to init configuration")
+				return errors.Wrap(err, "failed to init installable")
 			}
 
-			for _, machinePair := range configurationV.Machines.Pairs() {
-				machineV := machinePair.Value
-
-				// Machine may be nil due to existing only as key (this is intended behaviour), so we set it here in that case
-				if machineV == nil {
-					machineV = &machine.Machine{}
-
-					configurationV.Machines.Set(machinePair.Key, machineV)
-				}
-
-				err = machineV.Init(machinePair.Key, &configurationV.Attributes)
-				if err != nil {
-					return errors.Wrap(err, "failed to init machine")
-				}
+			err = initMachines(installable)
+			if err != nil {
+				return err
 			}
+		}
+	}
+
+	return nil
+}
+
+// initMachines initializes all machines within an installable, materializing
+// nil machine entries (key-only entries from YAML) into empty Machine structs.
+func initMachines(installable *installablepkg.Installable) error {
+	for _, machinePair := range installable.Machines.Pairs() {
+		machineV := machinePair.Value
+
+		// Machine may be nil due to existing only as key (this is intended behavior), so we set it here in that case
+		if machineV == nil {
+			machineV = &machine.Machine{}
+
+			installable.Machines.Set(machinePair.Key, machineV)
+		}
+
+		err := machineV.Init(machinePair.Key, &installable.Attributes)
+		if err != nil {
+			return errors.Wrap(err, "failed to init machine")
 		}
 	}
 

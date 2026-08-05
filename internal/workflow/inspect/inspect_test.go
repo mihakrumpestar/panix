@@ -8,94 +8,73 @@ import (
 )
 
 //nolint:funlen
-func TestParseGenerationLine(t *testing.T) {
+func TestParseNixEnvGenerations(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		lineNum     int
-		line        string
-		wantGenNum  uint
-		wantDate    string
-		wantNixos   string
-		wantKernel  string
-		wantCurrent bool
-		wantOK      bool
+		name          string
+		input         string
+		wantCurrent   uint
+		wantAvailable []uint
+		wantDate      string
 	}{
 		{
-			"header line skipped",
-			0,
-			"  generation   date        time   nixos     kernel   path",
-			0, "", "", "", false, false,
-		},
-		{"empty line skipped", 1, "", 0, "", "", "", false, false},
-		{"whitespace only skipped", 1, "   ", 0, "", "", "", false, false},
-		{"non-numeric first field", 1, "abc def ghi", 0, "", "", "", false, false},
-		{
-			"current gen with true marker",
-			1,
-			"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/abc-system   True",
-			1, "2025-04-19", "24.11", "6.6.0", true, true,
+			"typical output with current",
+			"1   2026-08-01 15:00:44\n" +
+				"2   2026-08-01 15:10:22   (current)\n",
+			2, []uint{1, 2}, "2026-08-01 15:10:22",
 		},
 		{
-			"non-current gen with false marker",
-			2,
-			"2   2025-04-18   09:00:00   24.11   6.6.0   /nix/store/def-system   False",
-			2, "2025-04-18", "24.11", "6.6.0", false, true,
+			"single generation current",
+			"1   2026-08-01 15:00:44   (current)\n",
+			1, []uint{1}, "2026-08-01 15:00:44",
 		},
 		{
-			"gen without current marker",
-			1,
-			"5   2025-04-17   08:00:00   24.11   6.6.0   /nix/store/xyz-system",
-			5, "2025-04-17", "24.11", "6.6.0", false, true,
-		},
-		{"minimal fields gen num only", 1, "42", 42, "", "", "", false, true},
-		{"two fields gen and date", 1, "10   2025-04-19", 10, "2025-04-19", "", "", false, true},
-		{
-			"four fields gen date time nixos",
-			1,
-			"7   2025-04-19   12:00:00   24.05",
-			7, "2025-04-19", "24.05", "", false, true,
+			"multiple generations last current",
+			"1   2026-08-01 14:00:00\n" +
+				"2   2026-08-01 15:00:00\n" +
+				"3   2026-08-01 16:00:00   (current)\n",
+			3, []uint{1, 2, 3}, "2026-08-01 16:00:00",
 		},
 		{
-			"five fields includes kernel",
-			1,
-			"8   2025-04-19   12:00:00   24.11   6.6.0",
-			8, "2025-04-19", "24.11", "6.6.0", false, true,
+			"no current marker defaults to last",
+			"1   2026-08-01 14:00:00\n" +
+				"2   2026-08-01 15:00:00\n",
+			2, []uint{1, 2}, "",
 		},
 		{
-			"extra whitespace handled",
-			1,
-			"3    2025-04-19    10:00:00    24.05    6.1.0    /nix/store/path    True",
-			3, "2025-04-19", "24.05", "6.1.0", true, true,
+			"empty output",
+			"",
+			0, nil, "",
 		},
 		{
-			"large generation number",
-			1,
-			"999999   2025-04-19   00:00:00   24.11   6.6.0   /path   False",
-			999999, "2025-04-19", "24.11", "6.6.0", false, true,
+			"whitespace only",
+			"   \n   \n   ",
+			0, nil, "",
 		},
 		{
-			"six fields without true not current",
-			1,
-			"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/path",
-			1, "2025-04-19", "24.11", "6.6.0", false, true,
+			"non-numeric first field skipped",
+			"header line\n1   2026-08-01 15:00:00   (current)\n",
+			1, []uint{1}, "2026-08-01 15:00:00",
 		},
 		{
-			"seven fields with true is current",
-			1,
-			"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/path   True",
-			1, "2025-04-19", "24.11", "6.6.0", true, true,
+			"non-sequential generation numbers",
+			"5   2026-08-01 14:00:00\n" +
+				"10   2026-08-01 15:00:00   (current)\n" +
+				"100   2026-08-01 16:00:00\n",
+			10, []uint{5, 10, 100}, "2026-08-01 15:00:00",
 		},
 		{
-			"true not as last field not current",
-			1,
-			"1   True   2025-04-19   12:00:00   24.11   6.6.0   /nix/store/path",
-			1, "True", "12:00:00", "24.11", false, true,
+			"with extra blank lines",
+			"\n\n1   2026-08-01 15:00:00   (current)\n\n",
+			1, []uint{1}, "2026-08-01 15:00:00",
 		},
-		{"line zero with valid data skipped", 0, "5   2025-04-19   10:00:00   24.11   6.6.0   /path   True", 0, "", "", "", false, false},
-		{"negative gen number skipped", 1, "-1   2025-04-19   10:00:00   24.11   6.6.0", 0, "", "", "", false, false},
-		{"zero gen number", 1, "0   2025-04-19   10:00:00   24.11   6.6.0", 0, "2025-04-19", "24.11", "6.6.0", false, true},
+		{
+			"multiple current markers last wins",
+			"1   2026-08-01 14:00:00   (current)\n" +
+				"2   2026-08-01 15:00:00   (current)\n",
+			2, []uint{1, 2}, "2026-08-01 15:00:00",
+		},
 	}
 
 	for _, test := range tests {
@@ -104,128 +83,29 @@ func TestParseGenerationLine(t *testing.T) {
 
 			assertion := assert.New(t)
 
-			genNum, info, isCurrent, ok := parseGenerationLine(test.lineNum, test.line)
+			gen, date := parseNixEnvGenerations(test.input)
 
-			assertion.Equal(test.wantOK, ok)
-
-			if !test.wantOK {
-				assertion.Zero(genNum)
-				assertion.False(isCurrent)
+			if gen == nil {
+				assertion.Nil(test.wantAvailable)
+				assertion.Equal(uint(0), test.wantCurrent)
+				assertion.Equal(test.wantDate, date)
 
 				return
 			}
 
-			require.True(t, ok)
-			assertion.Equal(test.wantGenNum, genNum)
-			assertion.Equal(test.wantCurrent, isCurrent)
-			assertion.Equal(test.wantDate, info.Date)
-			assertion.Equal(test.wantNixos, info.Nixos)
-			assertion.Equal(test.wantKernel, info.Kernel)
+			assertion.Equal(test.wantCurrent, gen.Current)
+			assertion.Equal(test.wantAvailable, gen.Available)
+			assertion.Equal(test.wantDate, date)
 		})
 	}
 }
 
-//nolint:funlen
-func TestParseGenerationsOutput(t *testing.T) {
+func TestParseNixEnvGenerations_EmptyReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	const headerLine = "  generation   date        time      nixos     kernel   path"
+	gen, date := parseNixEnvGenerations("")
 
-	tests := []struct {
-		name            string
-		input           string
-		wantCurrent     uint
-		wantAvailable   []uint
-		wantDate        string
-		wantNixos       string
-		wantKernel      string
-		wantErr         bool
-		wantErrContains string
-	}{
-		{
-			"typical output with current",
-			headerLine + "\n" +
-				"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/abc-system   True\n" +
-				"2   2025-04-18   09:00:00   24.11   6.6.0   /nix/store/def-system   False",
-			1, []uint{1, 2}, "2025-04-19", "24.11", "6.6.0", false, "",
-		},
-		{
-			"single generation",
-			headerLine + "\n" +
-				"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/abc-system   True",
-			1, []uint{1}, "2025-04-19", "24.11", "6.6.0", false, "",
-		},
-		{
-			"multiple generations last current",
-			headerLine + "\n" +
-				"1   2025-04-17   08:00:00   24.11   6.6.0   /nix/store/a-system   False\n" +
-				"2   2025-04-18   09:00:00   24.11   6.6.0   /nix/store/b-system   False\n" +
-				"3   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/c-system   True",
-			3, []uint{1, 2, 3}, "2025-04-19", "24.11", "6.6.0", false, "",
-		},
-		{
-			"no true false marker",
-			headerLine + "\n" +
-				"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/a-system\n" +
-				"2   2025-04-18   09:00:00   24.11   6.6.0   /nix/store/b-system",
-			0, []uint{1, 2}, "", "", "", false, "",
-		},
-		{"empty output", "", 0, nil, "", "", "", true, "no generations found"},
-		{"header only no generations", headerLine + "\n", 0, nil, "", "", "", true, "no generations found"},
-		{"whitespace only", "   \n   \n   ", 0, nil, "", "", "", true, "no generations found"},
-		{
-			"with extra blank lines",
-			headerLine + "\n\n" +
-				"1   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/system   True\n\n",
-			1, []uint{1}, "2025-04-19", "24.11", "6.6.0", false, "",
-		},
-		{
-			"non-sequential generation numbers",
-			headerLine + "\n" +
-				"5   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/e-system   True\n" +
-				"10   2025-04-18   09:00:00   24.11   6.6.0   /nix/store/j-system   False\n" +
-				"100   2025-04-17   08:00:00   24.11   6.6.0   /nix/store/h-system   False",
-			5, []uint{5, 10, 100}, "2025-04-19", "24.11", "6.6.0", false, "",
-		},
-		{
-			"mixed current flags",
-			headerLine + "\n" +
-				"1   2025-04-17   08:00:00   24.11   6.1.0   /nix/store/a   False\n" +
-				"2   2025-04-18   09:00:00   24.05   6.1.0   /nix/store/b   True\n" +
-				"3   2025-04-19   10:00:00   24.11   6.6.0   /nix/store/c   False",
-			2, []uint{1, 2, 3}, "2025-04-18", "24.05", "6.1.0", false, "",
-		},
-		{"all malformed lines", "not a generation line\nalso not valid", 0, nil, "", "", "", true, "no generations found"},
-		{
-			"multiple true markers last wins",
-			headerLine + "\n" +
-				"1   2025-04-17   08:00:00   24.11   6.1.0   /nix/store/a   True\n" +
-				"2   2025-04-18   09:00:00   24.05   6.1.0   /nix/store/b   True",
-			2, []uint{1, 2}, "2025-04-18", "24.05", "6.1.0", false, "",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			assertion := assert.New(t)
-
-			gen, info, err := parseGenerationsOutput(test.input)
-
-			if test.wantErr {
-				require.Error(t, err)
-				assertion.Contains(err.Error(), test.wantErrContains)
-
-				return
-			}
-
-			require.NoError(t, err)
-			assertion.Equal(test.wantCurrent, gen.Current)
-			assertion.Equal(test.wantAvailable, gen.Available)
-			assertion.Equal(test.wantDate, info.Date)
-			assertion.Equal(test.wantNixos, info.Nixos)
-			assertion.Equal(test.wantKernel, info.Kernel)
-		})
-	}
+	require.Nil(t, gen)
+	assertion := assert.New(t)
+	assertion.Empty(date)
 }

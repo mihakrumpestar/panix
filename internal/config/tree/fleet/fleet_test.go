@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/config/logs"
-	"github.com/mihakrumpestar/panix/internal/config/tree/configuration"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
@@ -25,14 +25,17 @@ func buildTestFleet(machines ...*machine.Machine) *fleet.Fleet {
 		machinesMap.Set(fmt.Sprintf("m%d", i), m)
 	}
 
-	cfg := &configuration.Configuration{}
+	cfg := &installable.Installable{}
 	cfg.Logs = logs.New()
 	cfg.Machines = machinesMap
 
 	flakeObj := &flake.Flake{URL: "github:test/test"}
 	flakeObj.Logs = logs.New()
-	flakeObj.Configurations = atomicorderedmap.New[string, *configuration.Configuration]()
-	flakeObj.Configurations.Set("cfg0", cfg)
+	flakeObj.Installables = atomicorderedmap.New[string, *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]]()
+
+	attrMap := atomicorderedmap.New[string, *installable.Installable]()
+	attrMap.Set("cfg0", cfg)
+	flakeObj.Installables.Set("nixosConfigurations", attrMap)
 
 	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
 	flakesMap.Set("flake0", flakeObj)

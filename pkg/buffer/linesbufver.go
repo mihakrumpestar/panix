@@ -153,7 +153,7 @@ func (b *LinesBufVer) Version() uint64 {
 }
 
 // Lines returns the lines as [][]byte.
-// Allocates — prefer Line(i) when possible.
+// Allocates, prefer Line(i) when possible.
 func (b *LinesBufVer) Lines() [][]byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -258,7 +258,7 @@ func (b *LinesBufVer) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Locked helpers — called when mu is already held. Use LinesBuf methods
+// Locked helpers, called when mu is already held. Use LinesBuf methods
 // directly to avoid re-locking.
 
 func (b *LinesBufVer) lenLocked() int {

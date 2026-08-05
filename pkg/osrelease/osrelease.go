@@ -98,7 +98,7 @@ func parseLine(line []byte) (string, string, bool) {
 }
 
 // unescape expands shell escape sequences: \", \$, \\, \`
-// Operates on []byte to minimize allocations — only allocates on the first
+// Operates on []byte to minimize allocations, only allocates on the first
 // escaped character found.
 func unescape(data []byte) string {
 	if bytes.IndexByte(data, '\\') < 0 {

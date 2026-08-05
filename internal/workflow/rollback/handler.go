@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/ccoveille/go-safecast/v2"
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -19,10 +18,17 @@ type Handler struct {
 	TargetGeneration int
 }
 
-func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
-	machine := fleetLeaf.Machine
+// ShouldSkip returns true for installable types that don't have versioned
+// profiles (i.e. packages, which are installed via nix profile install
+// and have no generation concept).
+func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
+	return fleetLeaf.Installable.Preset.ProfilePath == ""
+}
 
-	mi := machine.MetaInspect.Load()
+func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	machineI := fleetLeaf.Machine
+
+	mi := machineI.MetaInspect.Load()
 	if mi == nil || mi.Generations == nil || len(mi.Generations.Available) == 0 {
 		return ErrNoGenerations
 	}
@@ -52,7 +58,7 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		return errors.Wrap(err, "generation validation failed")
 	}
 
-	return executeRollback(exc, machine, targetGenNum)
+	return executeRollback(exc, fleetLeaf, targetGenNum)
 }
 
 var (
@@ -92,29 +98,33 @@ func getSpecificGeneration(availableGenerations []uint, specificGeneration uint)
 	return 0, errors.Wrapf(ErrGenerationOutOfRange, "generation %d not found", specificGeneration)
 }
 
-func executeRollback(exc *executioner.Executioner, machine *machine.Machine, targetGenNum uint) error {
-	closurePath, err := findGenerationClosure(exc, machine, targetGenNum)
+func executeRollback(
+	exc *executioner.Executioner,
+	fleetLeaf *fleet.FleetLeaf,
+	targetGenNum uint,
+) error {
+	preset := fleetLeaf.Installable.Preset
+
+	closurePath, err := findGenerationClosure(exc, fleetLeaf.Machine, preset.ProfilePath, targetGenNum)
 	if err != nil {
 		return errors.Wrap(err, "failed to find generation closure")
 	}
 
-	err = phaseops.SetSystemProfile(exc, machine, closurePath)
-	if err != nil {
-		return errors.Wrap(err, "failed to set profile")
-	}
-
-	err = phaseops.ActivateConfiguration(exc, machine, closurePath, attributes.ActivationModeSwitch)
-	if err != nil {
-		return errors.Wrap(err, "failed to activate")
-	}
-
-	return nil
+	return errors.Wrap(
+		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User, &fleetLeaf.Installable.Nix),
+		"failed to activate rollback generation",
+	)
 }
 
-func findGenerationClosure(exc *executioner.Executioner, machine *machine.Machine, generation uint) (string, error) {
+func findGenerationClosure(
+	exc *executioner.Executioner,
+	machine *machine.Machine,
+	profilePath string,
+	generation uint,
+) (string, error) {
 	var closurePath string
 
-	generationLink := fmt.Sprintf("/nix/var/nix/profiles/system-%d-link", generation)
+	generationLink := fmt.Sprintf("%s-%d-link", profilePath, generation)
 
 	err := exc.Exec(
 		"find generation closure",

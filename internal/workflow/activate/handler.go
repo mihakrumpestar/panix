@@ -3,7 +3,8 @@ package activate
 import (
 	"slices"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -12,13 +13,13 @@ import (
 )
 
 type Handler struct {
-	ActivationModeOverride attributes.ActivationMode
+	ActivationMode flags.ActivationMode
 }
 
 func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	machine := fleetLeaf.Machine
 
-	systemClosure := fleetLeaf.Configuration.MetaBuild.SystemClosure
+	systemClosure := fleetLeaf.Installable.MetaBuild.Closure
 
 	isBootstrapped := false
 
@@ -30,43 +31,47 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 	// Run bootstrap if not bootstrapped, or force bootstrap is set
 	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
-	if shouldBootstrap {
-		return executeBootstrap(exc, machine, fleetLeaf.Configuration.Nix.NixosInstallFlags, systemClosure)
+	if fleetLeaf.Installable.Preset.IsBootstrappable && shouldBootstrap {
+		return executeBootstrap(exc, machine, &fleetLeaf.Installable.Nix, systemClosure)
 	}
 
-	return executeActivation(exc, h.ActivationModeOverride, machine, systemClosure)
+	return executeActivation(exc, h.ActivationMode, fleetLeaf, systemClosure, &fleetLeaf.Installable.Nix)
 }
 
 func executeActivation(
 	exc *executioner.Executioner,
-	activationModeOverride attributes.ActivationMode,
-	machine *machine.Machine,
-	systemClosure string,
+	activationMode flags.ActivationMode,
+	fleetLeaf *fleet.FleetLeaf,
+	closure string,
+	nixCfg *nix.NixConfig,
 ) error {
-	mode := machine.ActivationMode.Get()
-	if activationModeOverride != "" {
-		mode = activationModeOverride
+	preset := &fleetLeaf.Installable.Preset
+
+	mode := preset.ActivationDefaultMode
+	if fleetLeaf.Installable.ActivationMode != "" {
+		mode = fleetLeaf.Installable.ActivationMode
 	}
 
-	if mode != attributes.ActivationModeTest {
-		err := phaseops.SetSystemProfile(exc, machine, systemClosure)
-		if err != nil {
-			return errors.Wrap(err, "failed to set system profile")
-		}
+	override := activationMode.Get(fleetLeaf.Installable.Type.String())
+	if override != "" {
+		mode = override
 	}
 
-	return errors.Wrap(phaseops.ActivateConfiguration(exc, machine, systemClosure, mode), "activation failed")
+	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg), "activation failed")
 }
 
-func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixosInstallFlags []string, systemClosure string) error {
+func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixCfg *nix.NixConfig, systemClosure string) error {
 	err := exc.Exec(
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
 		slices.Concat(
-			[]string{"nixos-install", "--no-root-passwd", "--no-channel-copy", "--system", systemClosure, "--root", "/mnt"},
-			nixosInstallFlags,
+			[]string{"nixos-install"},
+			nixCfg.GetNixosInstallDefaultFlags(),
+			[]string{"--system", systemClosure, "--root", "/mnt"},
+			nixCfg.NixosInstallFlags,
 		),
+		executioner.Env(nixCfg.GetNixosInstallEnv()),
 		executioner.Trim(),
 	)
 	if err != nil {

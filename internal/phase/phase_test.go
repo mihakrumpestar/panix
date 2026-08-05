@@ -45,7 +45,7 @@ func TestGetPhaseMetadata(t *testing.T) {
 		wantValidFirst bool
 	}{
 		{"inspect", Inspect, true, ScopeMachine, true},
-		{"build", Build, true, ScopeConfiguration, true},
+		{"build", Build, true, ScopeInstallable, true},
 		{"bootstrap", Bootstrap, true, ScopeMachine, false},
 		{"transfer", Transfer, true, ScopeMachine, false},
 		{"secrets", Secrets, true, ScopeMachine, false},
@@ -75,7 +75,7 @@ func TestGetPhaseScope(t *testing.T) {
 
 	assertion := assert.New(t)
 	assertion.Equal(ScopeMachine, Inspect.GetPhaseScope())
-	assertion.Equal(ScopeConfiguration, Build.GetPhaseScope())
+	assertion.Equal(ScopeInstallable, Build.GetPhaseScope())
 	assertion.Equal(ScopeMachine, Phase("unknown").GetPhaseScope())
 }
 

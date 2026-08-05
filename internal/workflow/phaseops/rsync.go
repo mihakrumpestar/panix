@@ -2,6 +2,7 @@ package phaseops
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
@@ -17,7 +18,7 @@ func TransferFile(
 	transferOfWhat string,
 	transferOSSecrets bool,
 ) error {
-	commandWithArgs := []string{"rsync", "-rcPEx", "--mkpath"}
+	commandWithArgs := slices.Concat([]string{"rsync"}, machine.GetRsyncDefaultFlags())
 
 	maybeSudo := machine.MaybeSudo()
 	if len(maybeSudo) != 0 {

@@ -2,8 +2,9 @@ fleet:
   flakes:
     my-flake:
       url: path:./my-flake
-      configurations:
-        my-config:
-          machines:
-            my-machine:
-              disabled: true
+      installables:
+        nixosConfigurations:
+          my-config:
+            machines:
+              my-machine:
+                disabled: true

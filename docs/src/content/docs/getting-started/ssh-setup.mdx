@@ -11,8 +11,6 @@ You can follow this guide when you want to create temporary SSH keys for bootstr
 Panix requires SSH key authentication. Password authentication is not supported.
 :::
 
-The following guide is showing how to prepare for bootstrap for a Linux installer that you live booted.
-
 ## From Password to Key Auth
 
 If your target machine only has password access, set up a temporary key:
@@ -42,33 +40,6 @@ Test the connection:
 ssh -i ./temp_key -o IdentitiesOnly=yes root@$REMOTE
 ```
 
-## Getting Hardware Config
-
-Once connected, you can retrieve the hardware configuration for your NixOS config:
-
-```sh
-nixos-generate-config --no-filesystems --show-hardware-config
-```
-
-On non-NixOS systems:
-
-```sh
-nix-shell -p nixos-install-tools --command "nixos-generate-config --no-filesystems --show-hardware-config"
-```
-
-## Encryption Password
-
-If your bootstrap uses disk encryption, create the password file:
-
-```sh
-# `-n` prevents adding newline (problematic for password enrollment)
-echo -n "test" > /tmp/disko-encryption-password.txt
-```
-
-This file, when specified as disk encryption key in config, will be transferred to the target during bootstrap, before disko runs.
-
 ## SSH Config Integration
-
-If your machines are already defined in `~/.ssh/config`, Panix will use those settings automatically. No need to duplicate connection details in `panix.yml`.
 
 See [SSH Config Integration](/guides/ssh-config/) for details.

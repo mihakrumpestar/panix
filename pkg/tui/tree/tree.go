@@ -71,7 +71,7 @@ type Node struct {
 // connector). The entry is invalidated when any of its key fields change.
 type CacheEntry struct {
 	version uint64           // contentVersion when this entry was rendered
-	fullKey uint64           // (prefixKey << 1) | isLastChild — encodes full path
+	fullKey uint64           // (prefixKey << 1) | isLastChild, encodes full path
 	content *buffer.LinesBuf // rendered output: prefix + connector + node content
 }
 
@@ -108,7 +108,7 @@ func NewTree(sty style.Style, step int) *Node {
 // BeginFrame prepares all nodes in the tree for reuse. Each node's current
 // children are saved to prevChildren and the children list is cleared.
 // During the subsequent depth-first rebuild, Child() matches nodes from
-// prevChildren by xpath at the expected position — O(1) for stable structure.
+// prevChildren by xpath at the expected position: O(1) for stable structure.
 func (n *Node) BeginFrame() {
 	n.beginFrameRecursive()
 }
@@ -121,7 +121,7 @@ func (n *Node) BeginFrame() {
 // calculate is called only on cache miss (new node, or version/cacheGen/
 // depthWidth changed) with the parent's depth width (parent.depth * step)
 // and the node's previous content buffer (nil for new nodes). The callback
-// should Reset() and refill old instead of allocating a new buffer — this
+// should Reset() and refill old instead of allocating a new buffer; this
 // preserves capacity across GC cycles, avoiding repeated buffer growth.
 // On cache hit the function is NOT called.
 func (n *Node) Child(childXp xpath.Xpath, version uint64, calculate func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf) *Node {
@@ -160,13 +160,13 @@ func (n *Node) Child(childXp xpath.Xpath, version uint64, calculate func(depthWi
 
 	n.reuseIdx = reuseIdx
 
-	// No reuse — allocate a new node from the pool.
+	// No reuse; allocate a new node from the pool.
 	return n.allocateNode(childXp, childDepth, version, state, depthWidth, calculate)
 }
 
 // Render renders the tree into the internal renderBuf and returns it.
 // Only works on the root node; non-root nodes return their renderBuf as-is.
-// Does NOT drain unreused nodes — they remain cached in prevChildren for
+// Does NOT drain unreused nodes; they remain cached in prevChildren for
 // potential reuse on subsequent frames. Call Reset() on workflow restart
 // to release all nodes.
 func (n *Node) Render() *buffer.LinesBuf {
@@ -196,7 +196,7 @@ func (n *Node) WriteRenderTo(target *buffer.LinesBuf) {
 
 	treeSty := n.treeStyle
 
-	// Stack-allocated prefix buffer — avoids per-render allocation.
+	// Stack-allocated prefix buffer; avoids per-render allocation.
 	// pfxBuf accumulates the indent prefix bytes (│, spaces) at each depth.
 	// pfxEnd tracks the end offset for each depth level.
 	var (
@@ -204,7 +204,7 @@ func (n *Node) WriteRenderTo(target *buffer.LinesBuf) {
 		pfxEnd [32]int
 	)
 
-	// Root children ("flakes") render without prefix — tree starts at their children.
+	// Root children ("flakes") render without prefix; tree starts at their children.
 	for _, flake := range n.children {
 		writeLines(flake.content, target, nil, nil, nil, nil, 0)
 
@@ -225,7 +225,7 @@ func (n *Node) WriteRenderTo(target *buffer.LinesBuf) {
 }
 
 // DrainFreeList explicitly releases all unreused nodes from prevChildren.
-// Normally not needed — nodes remain cached for reuse across frames.
+// Normally not needed; nodes remain cached for reuse across frames.
 // Call only if you want to free memory without a full Reset().
 func (n *Node) DrainFreeList() {
 	drainRoot(n.state)
@@ -304,7 +304,7 @@ func releaseCacheEntry(node *Node) {
 func (n *Node) Len() int { return len(n.children) }
 
 func (n *Node) beginFrameRecursive() {
-	// Swap children and prevChildren — O(1) pointer swap instead of O(k) copy.
+	// Swap children and prevChildren: O(1) pointer swap instead of O(k) copy.
 	// After swap: prevChildren holds the old children for reuse,
 	// children is the old prevChildren buffer (cleared for rebuild).
 	n.prevChildren, n.children = n.children, n.prevChildren
@@ -430,7 +430,7 @@ func (n *Node) renderNode(
 // renderLeaf renders a leaf node using the per-node cache. The cache entry
 // is invalidated when any of these change:
 //   - contentVersion: caller-provided version (content changed)
-//   - fullKey: (prefixKey << 1) | isLastChild — encodes full path from root
+//   - fullKey: (prefixKey << 1) | isLastChild - encodes full path from root
 //
 // On cache hit, the pre-rendered content is appended directly (zero re-render).
 // On cache miss, content is re-rendered with the current prefix and cached.
@@ -471,7 +471,7 @@ func (n *Node) renderLeaf(
 func writeLines(src *buffer.LinesBuf, buf *buffer.LinesBuf, pfx, conn, pfxBuf []byte, pfxEnd []int, depth int) {
 	nLines := src.Len()
 
-	// No prefix (root children) — write content directly.
+	// No prefix (root children); write content directly.
 	if pfx == nil {
 		if nLines == 0 {
 			buf.EmptyLine()
@@ -484,7 +484,7 @@ func writeLines(src *buffer.LinesBuf, buf *buffer.LinesBuf, pfx, conn, pfxBuf []
 		return
 	}
 
-	// Empty content — write just prefix + connector.
+	// Empty content; write just prefix + connector.
 	if nLines == 0 {
 		buf.WriteLine2(pfx, conn)
 

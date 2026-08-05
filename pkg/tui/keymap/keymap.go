@@ -19,7 +19,7 @@ type Styles struct {
 	SelectedDesc style.Style
 }
 
-// CacheKey returns (width, activeMask) — the two values that determine if
+// CacheKey returns (width, activeMask), the two values that determine if
 // the rendered output changed. Callers can compare against a previous
 // cache key to skip re-rendering.
 func (k *Keymap) CacheKey() (int, uint64) {

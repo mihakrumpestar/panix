@@ -8,7 +8,7 @@ import (
 const DefaultLineBufLen = 256
 
 // LineBuf is a pooled single-line buffer. Set copies data in.
-// Width is computed lazily — call CellWidth(Bytes()) only when needed.
+// Width is computed lazily, call CellWidth(Bytes()) only when needed.
 type LineBuf struct {
 	buf []byte
 }

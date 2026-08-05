@@ -1,0 +1,22 @@
+# Test fixture: multiple installable types on the same physical machine
+fleet:
+  flakes:
+    infra:
+      url: ./infra
+      installables:
+        nixosConfigurations:
+          server1:
+            activation_mode: switch
+            machines:
+              server1:
+                ssh:
+                  hostname: server1.lan
+                tags: [server, system]
+        homeConfigurations:
+          alice:
+            machines:
+              server1:
+                ssh:
+                  username: alice
+                  hostname: server1.lan
+                tags: [server, home]

@@ -24,8 +24,8 @@ func (c *Config) FilterOutUnusedPhases() {
 func hasRequiredPhases(f *fleet.Fleet) optionalPhases {
 	var has optionalPhases
 
-	for _, treeLeaf := range f.AllMachines() {
-		m := treeLeaf.Machine
+	for _, fleetLeaf := range f.AllMachines() {
+		m := fleetLeaf.Machine
 		if len(m.Secrets) > 0 {
 			has.Secrets = true
 		}

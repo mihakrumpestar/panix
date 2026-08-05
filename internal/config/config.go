@@ -14,7 +14,7 @@ import (
 type Config struct {
 	Nix *nixver.Info `yaml:"-" json:"nix,omitempty"`
 
-	// Internal - exportable
+	// Internal, exportable
 	Snapshot Snapshot      `yaml:"-" json:"snapshot"`
 	Phases   []phase.Phase `yaml:"-" json:"phases"`
 

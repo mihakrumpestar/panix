@@ -18,10 +18,9 @@ const (
 	vmCPUs       = "4"
 	bakeVMMemory = "2G"
 	bakeVMPort   = 10024
-	bakeTimeout  = 3 * time.Minute
+	bakeTimeout  = 10 * time.Minute
 
 	consoleLogName = "console.log"
-	debianFileName = "debian-12-generic-amd64.qcow2"
 )
 
 var errBakeTimeout = errors.New("bake VM timed out")
@@ -144,7 +143,7 @@ func createDisk(name string, args ...string) (string, error) {
 	return path, nil
 }
 
-func bakeDebianImage(keyPath string) (string, error) {
+func bakeDebianImage() (string, error) {
 	bakedPath := filepath.Join(cacheDirPath, "debian-baked.qcow2")
 	markerPath := bakedPath + ".rsync-ok"
 
@@ -153,21 +152,47 @@ func bakeDebianImage(keyPath string) (string, error) {
 		return bakedPath, nil
 	}
 
-	_ = os.Remove(bakedPath)
-
-	basePath := filepath.Join(cacheDirPath, debianFileName)
-
-	out, err := exec.CommandContext(context.Background(), "cp", "--reflink=auto", basePath, bakedPath).CombinedOutput() //nolint:gosec
-	if err != nil {
-		return "", errors.Wrapf(err, "cp base image: %s", string(out))
-	}
-
-	seedPath, err := createCloudInitISO("bake-seed.iso", "debian-bake", "bake-vm", keyPath+".pub", true)
+	basePath, err := nixBuild("debian-cloud-image")
 	if err != nil {
 		return "", err
 	}
 
-	consolePath := filepath.Join(logDirPath, "bake-vm-console.log")
+	return bakeDebianWithSeed(bakedPath, basePath, "bake-seed-iso", "bake-vm", markerPath)
+}
+
+func bakeDebianNixImage() (string, error) {
+	bakedPath := filepath.Join(cacheDirPath, "debian-baked-nix.qcow2")
+	markerPath := bakedPath + ".nix-ok"
+
+	_, markerErr := os.Stat(markerPath)
+	if markerErr == nil {
+		return bakedPath, nil
+	}
+
+	basePath, err := nixBuild("debian-cloud-image")
+	if err != nil {
+		return "", err
+	}
+
+	return bakeDebianWithSeed(bakedPath, basePath, "bake-seed-nix-iso", "bake-vm-nix", markerPath)
+}
+
+func bakeDebianWithSeed(bakedPath, basePath, seedAttr, hostname, markerPath string) (string, error) {
+	_ = os.Remove(bakedPath)
+
+	cpArgs := []string{"--reflink=auto", "--no-preserve=mode", basePath, bakedPath}
+
+	out, err := exec.CommandContext(context.Background(), "cp", cpArgs...).CombinedOutput() //nolint:gosec
+	if err != nil {
+		return "", errors.Wrapf(err, "cp base image: %s", string(out))
+	}
+
+	seedPath, err := nixBuild(seedAttr)
+	if err != nil {
+		return "", err
+	}
+
+	consolePath := filepath.Join(logDirPath, hostname+"-console.log")
 	cmd := exec.CommandContext(context.Background(), "qemu-system-x86_64", //nolint:gosec
 		"-enable-kvm", "-cpu", "host", "-m", bakeVMMemory,
 		"-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", bakeVMPort),

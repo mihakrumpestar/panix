@@ -198,11 +198,11 @@ func (st *stepTimer) Fail(stepErr error) {
 	}
 }
 
-func printPhasef(format string, args ...any) {
+func printPhasef(format string) {
 	stopSequentialMgr()
 
 	bold := color.New(color.Bold).SprintFunc()
-	fmt.Printf("\n%s\n", bold(fmt.Sprintf(format, args...)))
+	fmt.Printf("\n%s\n", bold(format))
 }
 
 func printFinalf(format string, args ...any) {

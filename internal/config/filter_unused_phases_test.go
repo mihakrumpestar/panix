@@ -25,7 +25,7 @@ func TestHasRequiredPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine(), fk.Machine())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine(), fk.Machine())))
 			},
 			false, false,
 		},
@@ -34,7 +34,7 @@ func TestHasRequiredPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine(), fk.MachineWithSecrets(2))))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine(), fk.MachineWithSecrets(2))))
 			},
 			true, false,
 		},
@@ -43,7 +43,7 @@ func TestHasRequiredPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine(), fk.MachineWithBootstrapSSH())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine(), fk.MachineWithBootstrapSSH())))
 			},
 			false, true,
 		},
@@ -52,7 +52,7 @@ func TestHasRequiredPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithForceBootstrap())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.MachineWithForceBootstrap())))
 			},
 			false, true,
 		},
@@ -61,7 +61,7 @@ func TestHasRequiredPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1), fk.MachineWithBootstrapSSH())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.MachineWithSecrets(1), fk.MachineWithBootstrapSSH())))
 			},
 			true, true,
 		},
@@ -71,8 +71,8 @@ func TestHasRequiredPhases(t *testing.T) {
 				fk := testutil.NewFaker()
 
 				return fk.Fleet(
-					fk.Flake(fk.Configuration(fk.MachineWithSecrets(1))),
-					fk.Flake(fk.Configuration(fk.MachineWithBootstrapSSH())),
+					fk.Flake(fk.Installable(fk.MachineWithSecrets(1))),
+					fk.Flake(fk.Installable(fk.MachineWithBootstrapSSH())),
 				)
 			},
 			true, true,
@@ -82,7 +82,7 @@ func TestHasRequiredPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration()))
+				return fk.Fleet(fk.Flake(fk.Installable()))
 			},
 			false, false,
 		},
@@ -115,7 +115,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
@@ -125,7 +125,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
@@ -135,7 +135,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
@@ -145,7 +145,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1))))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.MachineWithSecrets(1))))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Secrets, phase.Activate},
@@ -155,7 +155,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithBootstrapSSH())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.MachineWithBootstrapSSH())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
@@ -165,7 +165,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.MachineWithSecrets(1), fk.MachineWithBootstrapSSH())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.MachineWithSecrets(1), fk.MachineWithBootstrapSSH())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Secrets, phase.Activate},
@@ -175,7 +175,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 
-				return fk.Fleet(fk.Flake(fk.Configuration(fk.Machine())))
+				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},

@@ -16,7 +16,7 @@ func (f *Fleet) Filter(flags flags.Flags) error {
 
 		flake.Filter(flags)
 
-		return flake.Configurations.Len() == 0
+		return flake.Installables.Len() == 0
 	})
 
 	if f.Flakes.Len() == 0 {
