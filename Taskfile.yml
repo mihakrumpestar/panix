@@ -219,7 +219,10 @@ tasks:
         rm -f /tmp/_panix_yml.txt /tmp/_cli_help.txt /tmp/_deploy_help.txt
 
   release:
-    desc: Create a new GitHub release
+    desc: |
+      Prepare a release: bump version, tag, update changelog.
+      Then to write a release description in CHANGELOG.md
+      (under the new version header), and run 'task release:publish'.
     vars:
       VERSION_FILE: gen/VERSION
     cmds:
@@ -251,6 +254,14 @@ tasks:
         fi
 
         git-cliff --unreleased --tag "v$NEW_VERSION" --prepend CHANGELOG.md
+
+        echo ""
+        echo "=== CHANGELOG.md updated with git-cliff commits ==="
+        echo "Write your release description under the [${NEW_VERSION}] header"
+        echo "(above the commit groups), then press Enter to continue."
+        echo ""
+        read -r
+
         git add -A
         git diff --cached --quiet || git commit -m "chore: bump version to $NEW_VERSION"
 
@@ -258,18 +269,56 @@ tasks:
         git tag "v$NEW_VERSION"
         git push --tags
 
-        NOTES_TMP=$(mktemp)
-        git-cliff --tag "v$NEW_VERSION" --strip header > "$NOTES_TMP"
-        echo "Generated release notes:"
-        cat "$NOTES_TMP"
         echo ""
-        echo "Edit release notes? (y/N)"
-        read -r EDIT_NOTES
-        if [ "$EDIT_NOTES" = "y" ] || [ "$EDIT_NOTES" = "Y" ]; then
-          ${EDITOR:-vi} "$NOTES_TMP"
+        echo "=== Release v$NEW_VERSION prepared ==="
+        echo "Changelog updated, commit pushed, tag v$NEW_VERSION created."
+        echo ""
+        echo "When ready, run: task release:publish"
+
+  release:publish:
+    desc: |
+      Publish GitHub release using the current version's section from CHANGELOG.md.
+      Run 'task release' first, then add your description to CHANGELOG.md.
+    vars:
+      VERSION_FILE: gen/VERSION
+    cmds:
+      - |
+        if [ -z "$GH_TOKEN" ]; then
+          echo "Error: GH_TOKEN is not set"
+          exit 1
         fi
-        gh release create "v$NEW_VERSION" --notes-file "$NOTES_TMP"
-        rm -f "$NOTES_TMP"
+      - |
+        NEW_VERSION=$(cat {{.VERSION_FILE}})
+        TAG="v$NEW_VERSION"
+
+        # Extract this version's section from CHANGELOG.md:
+        # from "## [VERSION]" up to (not including) the next "## [" or EOF.
+        NOTES=$(awk -v ver="$NEW_VERSION" '
+          $0 ~ "^## \\[" ver "\\]" { found=1; next }
+          found && /^## \[/ { exit }
+          found { print }
+        ' CHANGELOG.md)
+
+        if [ -z "$NOTES" ]; then
+          echo "Error: Could not find section for $NEW_VERSION in CHANGELOG.md"
+          exit 1
+        fi
+
+        echo "Publishing release $TAG"
+        echo ""
+        echo "=== Release notes (from CHANGELOG.md) ==="
+        echo "$NOTES"
+        echo "=== End ==="
+        echo ""
+        echo "Publish this release? (y/N)"
+        read -r PUBLISH
+        if [ "$PUBLISH" != "y" ] && [ "$PUBLISH" != "Y" ]; then
+          echo "Aborted. Edit CHANGELOG.md and run 'task release:publish' again."
+          exit 1
+        fi
+
+        printf '%s\n' "$NOTES" | gh release create "$TAG" --notes-file -
+        echo "Release $TAG published."
 
   # Docs
 
