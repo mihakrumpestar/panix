@@ -93,6 +93,7 @@ export default defineConfig({
 						{ slug: 'guides/secrets' },
 						{ slug: 'guides/ssh-config' },
 						{ slug: 'guides/snapshots' },
+						{ slug: 'guides/packages' },
 					],
 				},
 				{

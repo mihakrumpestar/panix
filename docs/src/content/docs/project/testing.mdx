@@ -31,18 +31,18 @@ Adjust per-benchmark duration:
 task go:test:bench -- -benchtime=5s
 ```
 
-**Naming convention**: benchmarks use `Benchmark_<Variant>__<Feature>` — the `__` separator splits variant from feature name. All benchmarks sharing the same feature are grouped for comparison. An unnamed/baseline variant uses `Benchmark__<Feature>`.
+**Naming convention**: benchmarks use `Benchmark_<Variant>__<Feature>`. The `__` separator splits variant from feature name. All benchmarks sharing the same feature are grouped for comparison. An unnamed/baseline variant uses `Benchmark__<Feature>`.
 
 **Output**: one table per package. Each cell shows time, bytes/allocs, and ratio vs the best variant. Columns are sorted by overall cumulative performance (ratio-based scoring). Example:
 
 ```
-BufferWrite/ASCII        668 ns (0 B, 0 allocs)              — best (baseline)
-BufferWrite/ASCII        685 ns (0 B, 0 allocs) +1.03×       — 1.03× slower
+BufferWrite/ASCII        668 ns (0 B, 0 allocs)              | best (baseline)
+BufferWrite/ASCII        685 ns (0 B, 0 allocs) +1.03×       | 1.03x slower
 ```
 
 Cross-package benchmarks live in `tests/bench/`:
-- `tests/bench/buffer/` — 16+ buffer implementation variants compared
-- `tests/bench/tui/` — full TUI pipeline: zeroterm vs Bubbletea vs cview
+- `tests/bench/buffer/`: 16+ buffer implementation variants compared
+- `tests/bench/tui/`: full TUI pipeline, zeroterm vs Bubbletea vs cview
 
 ## E2E Tests
 
@@ -62,19 +62,19 @@ task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
 task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
 ```
 
-The whole test usually takes only ~1.5 min (local only), or ~2 min (both modes).
+The whole test usually takes only ~2 min (local only), or ~2.5 min (both modes).
 
 The tests are a standalone Go program (`go run ./tests/e2e/`), not `go test`. Use `PANIX_BIN=/path/to/panix` to test a pre-built binary instead of `go run`.
 
-**Phase 0 — Setup** (parallel where possible):
+**Phase 0, Setup** (parallel where possible):
 1. Generate SSH keys
 2. Download and bake Debian cloud image (rsync pre-installed via cloud-init)
 3. Build NixOS installer ISO, kexec installer, and NixOS closures
 4. Create cloud-init seed ISOs and disk images (blank target + Debian overlay)
 
-**Phase 1 — Bootstrap**: Runs `panix deploy` against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`.
+**Phase 1, Bootstrap**: Runs `panix deploy` against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`.
 
-**Phase 2 — Redeploy**: Runs `panix deploy` again against the now-installed NixOS systems (switch-to-configuration).
+**Phase 2, Redeploy**: Runs `panix deploy` again against the now-installed NixOS systems (switch-to-configuration).
 
 **Verification**: SSHes into each VM and checks for the `panix-e2e-test-pass` marker file and NixOS identity in `/etc/os-release`.
 

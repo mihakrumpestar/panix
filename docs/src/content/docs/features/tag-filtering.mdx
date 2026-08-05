@@ -5,9 +5,9 @@ sidebar:
   order: 2
 ---
 
-Every name (flake, installable type, installable name, machine) is automatically a tag. Tags accumulate through inheritance. Deploy subsets of your infrastructure:
+Every name (flake, installable type, installable name, machine) is automatically a tag. Tags accumulate through inheritance (see [Configuration Model](/concepts/configuration-model/) for details). Deploy subsets of your infrastructure:
 
-```bash
+```sh
 panix --tags production            # All production-tagged machines
 panix --tags webserver             # All machines under the webserver installable
 panix --tags nixosConfigurations   # All machines under NixOS system installables
@@ -43,15 +43,13 @@ The resolved tags for `web-01` under `nixosConfigurations` are: `[production, cr
 
 The resolved tags for `web-01` under `homeConfigurations` are: `[production, critical, infrastructure, alice, homeConfigurations, web-01]`.
 
-- Fleet-level tags are inherited by all descendants
-- Flake, installable type, installable name, and machine name are automatically registered as tags
 - Tags at each level accumulate (never override)
 
 ## Multiple Tags
 
 Separate multiple tags with commas. Machines matching **any** of the specified tags are included:
 
-```bash
+```sh
 panix --tags web,database       # All machines tagged 'web' OR 'database'
 panix --tags nixosConfigurations,homeConfigurations  # All system and home-manager machines
 ```

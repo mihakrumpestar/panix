@@ -9,7 +9,7 @@ sidebar:
 
 Initialize a new `panix.yml` configuration file:
 
-```bash
+```sh
 panix init
 ```
 
@@ -17,7 +17,7 @@ panix init
 
 Generate YAML schema for configuration files:
 
-```bash
+```sh
 panix schema
 ```
 
@@ -25,31 +25,17 @@ Writes `panix-schema.yaml` to the current directory. See [IDE Support](/configur
 
 ## template
 
-Process templates and anchors, output the result:
-
-```bash
-panix template                    # Output to stdout (colorized)
-panix template -o processed.yaml  # Output to file (plain YAML)
-```
-
-See [panix template](/configuration/template-command/) for details.
+Process templates and anchors, output the result. See [panix template](/configuration/template-command/) for details.
 
 ## eval
 
-Fully evaluate and validate configuration:
-
-```bash
-panix eval                    # Output to stdout (colorized)
-panix eval -o processed.yaml  # Output to file (plain YAML)
-```
-
-See [panix eval](/configuration/eval-command/) for details.
+Fully evaluate and validate configuration. See [panix eval](/configuration/eval-command/) for details.
 
 ## inspect
 
 Inspect machines (reachability, OS, architecture, generations):
 
-```bash
+```sh
 panix inspect
 ```
 
@@ -59,7 +45,7 @@ Runs only the Inspect phase. Useful for verifying SSH connectivity and machine s
 
 Build NixOS closures:
 
-```bash
+```sh
 panix build
 ```
 
@@ -69,7 +55,7 @@ Runs only the Build phase. Useful for pre-building without deploying.
 
 Deploy secrets to machines:
 
-```bash
+```sh
 panix secrets
 ```
 
@@ -79,7 +65,7 @@ Runs only the Secrets phase. Useful for updating secrets without a full deploy.
 
 Rollback to a previous NixOS generation:
 
-```bash
+```sh
 panix rollback            # Rollback to previous generation (-1)
 panix rollback --gen=-2   # Rollback to 2 generations ago
 panix rollback --gen=5    # Rollback to specific generation number
@@ -89,7 +75,7 @@ panix rollback --gen=5    # Rollback to specific generation number
 
 View a snapshot in TUI:
 
-```bash
+```sh
 panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
 ```
 

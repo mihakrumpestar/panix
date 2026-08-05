@@ -7,7 +7,7 @@ sidebar:
 
 The `eval` command fully evaluates and validates the configuration, preparing it for execution.
 
-```bash
+```sh
 panix eval                    # Output to stdout (colorized)
 panix eval -o processed.yaml  # Output to file (plain YAML)
 ```
@@ -25,7 +25,7 @@ Everything [panix template](/configuration/template-command/) does, plus:
 
 ## Validation Flags
 
-```bash
+```sh
 panix eval --validate.flakes              # Validate flake URLs and configuration keys
 panix eval --validate.bootstrap-secrets   # Validate bootstrap disk encryption key local paths exist
 panix eval --validate.flakes --validate.bootstrap-secrets  # Both

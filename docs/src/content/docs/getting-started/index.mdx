@@ -8,7 +8,7 @@ sidebar:
 ## Prerequisites
 
 - [Nix](https://nixos.org/download.html) installed on your local machine
-- SSH key authentication to target machine(s) (password auth is not supported)
+- SSH key authentication to target machine(s)
 - A Nix flake with your NixOS configuration(s)
 
 ## 1. Prepare the Remote
@@ -16,7 +16,7 @@ sidebar:
 Boot into a NixOS installer, any Linux live ISO, or an already provisioned NixOS system.
 
 :::note
-Some distibutions live ISOs may be missing packages needed to start kexec. NixOS installer and most mainstream distros should work out of the box.
+Some distributions' live ISOs may be missing packages needed to start kexec. NixOS installer and most mainstream distros should work out of the box.
 :::
 
 ## 2. Create panix.yml
@@ -24,17 +24,7 @@ Some distibutions live ISOs may be missing packages needed to start kexec. NixOS
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
 
-# Minimal Panix configuration demo.
-#
-# All fields have sensible defaults:
-#   config file: panix.yml          (can be overridden with -c)
-#   flake url:   .                  (current directory, can be omitted)
-#   build_mode:  local              (build locally, then nix copy)
-#   activation:  switch             (switch-to-configuration switch)
-#   SSH:         machine name matched against ~/.ssh/config
-#   installable: <outputType>.<name>  (e.g. nixosConfigurations.workstation)
-#   inheritance: fleet → flake → installable → machine
-#                (tags, secrets, SSH, bootstrap, nix cascade down)
+# Minimal config - see /configuration/ for all options
 
 fleet:
   flakes:

@@ -13,7 +13,7 @@ Panix supports three output modes via the `--output` flag:
 | `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
 | `json` | JSON-structured log output to stdout |
 
-```bash
+```sh
 # Interactive TUI (default)
 panix deploy
 
@@ -33,7 +33,7 @@ When no TTY is present, `--output console` is automatically selected since the T
 
 Enabled with `--log` and writes structured JSON to a file with an epoch timestamp in the name (e.g., `panix.1746565600.log`):
 
-```bash
+```sh
 panix deploy --log                        # Log to panix.<epoch>.log
 panix deploy --log --log-file deploy.log  # Log to deploy.<epoch>.log
 ```
@@ -58,7 +58,7 @@ Example:
 
 ## Failure Modes
 
-```bash
+```sh
 # Fail immediately on first error
 panix deploy --require-all-success
 

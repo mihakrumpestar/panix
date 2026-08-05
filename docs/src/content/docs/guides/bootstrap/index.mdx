@@ -36,14 +36,29 @@ machines:
         - systemd-cryptenroll --tpm2-device=auto /dev/nvme0n1p2
 ```
 
-## Bootstrap Hooks
+See [Bootstrap Hooks](/guides/bootstrap/hooks/) for hook points, [Bootstrap SSH](/guides/bootstrap/ssh/) for SSH configuration, and [Kexec](/guides/bootstrap/kexec/) for custom images and local tarballs.
 
-Panix provides multiple hook points during bootstrap. See [Bootstrap Hooks](/guides/bootstrap/hooks/) for the full reference.
+## Hardware Config
 
-## Bootstrap SSH
+Once connected to the target, retrieve the hardware configuration for your NixOS config:
 
-For machines that need initial provisioning (bootstrap) you **must specify** SSH credentials separately. See [Bootstrap SSH](/guides/bootstrap/ssh/) for details.
+```sh
+nixos-generate-config --no-filesystems --show-hardware-config
+```
 
-## Kexec
+On non-NixOS systems:
 
-For non-NixOS machines, Panix uses kexec to boot into a NixOS installer without physical access. See [Kexec](/guides/bootstrap/kexec/) for custom images and local tarballs.
+```sh
+nix-shell -p nixos-install-tools --command "nixos-generate-config --no-filesystems --show-hardware-config"
+```
+
+## Encryption Password
+
+If your bootstrap uses disk encryption, create the password file:
+
+```sh
+# `-n` prevents adding newline (problematic for password enrollment)
+echo -n "test" > /tmp/disko-encryption-password.txt
+```
+
+This file, when specified as disk encryption key in config, will be transferred to the target during bootstrap, before disko runs.

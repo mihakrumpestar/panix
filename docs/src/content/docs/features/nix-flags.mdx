@@ -60,11 +60,11 @@ Setting a `*_default_flags` field to `[]` explicitly **clears** the built-in def
 ```yaml
 fleet:
   nix:
-    # Default flags — REPLACE built-in base flags (leave unset for defaults)
+    # Default flags: REPLACE built-in base flags (leave unset for defaults)
     build_default_flags: ["--no-link", "--print-out-paths"]  # overrides default build flags
     copy_default_flags: []                                   # clears all copy default flags
 
-    # Extra flags — APPEND after default flags
+    # Extra flags: APPEND after default flags
     extra_flags: ["--option", "sandbox", "false"]  # applied to both build and copy
     build_flags: ["--max-jobs", "8"]               # nix build only
 ```
@@ -76,20 +76,22 @@ With this config, the effective `nix build` flags are:
 
 The same override pattern applies to non-nix commands:
 
-- `rsync_default_flags` (attributes level: fleet/flake/installable/machine) — default: `["-rcPEx", "--mkpath"]`
-- `curl_default_flags` (under `bootstrap.kexec`) — default: `["--fail", "-#", "-L", "-C", "-"]`
+- `rsync_default_flags` (attributes level: fleet/flake/installable/machine), default: `["-rcPEx", "--mkpath"]`
+- `curl_default_flags` (under `bootstrap.kexec`), default: `["--fail", "-#", "-L", "-C", "-"]`
 
 These **replace** the built-in defaults when set, and inherit down the hierarchy with override semantics (same as nix default flags).
 
 ## Inheritance
 
-**Extra flags** accumulate through inheritance (fleet → flake → installable). Slices are appended, not replaced.
+**Extra flags** accumulate through inheritance (fleet, flake, installable). Slices are appended, not replaced.
 
 **Default flags** use override semantics: if a child sets a value, it is kept as-is; if left unset (`nil`), it inherits the parent's value. This prevents parent defaults from polluting a child's explicit override.
 
 **Env vars** merge through inheritance: parent entries are inherited, and child keys override parent keys with the same name.
 
+:::note
 `nix` config settings cannot be set at the `machine` level.
+:::
 
 ## Environment Variables
 
@@ -98,7 +100,7 @@ Some nix settings are only available via environment variables, with no CLI flag
 | Field | Scope | Behavior |
 |-------|-------|----------|
 | `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile install |
-| `build_env` | `nix build` only | Merged on top of `env` — specific keys override global |
+| `build_env` | `nix build` only | Merged on top of `env`, specific keys override global |
 | `copy_env` | `nix copy` only | Merged on top of `env` |
 | `nixos_install_env` | `nixos-install` only | Merged on top of `env` |
 | `profile_install_env` | `nix profile install` only | Merged on top of `env` |
@@ -130,7 +132,7 @@ With this config, `nix build` receives `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`, `N
 
 ### Inheritance
 
-Env maps inherit down the hierarchy (fleet → flake → installable) with the same semantics as the global `env` field: parent entries are inherited, child keys override parent keys with the same name.
+Env vars follow the same [inheritance semantics](#inheritance) as extra flags: parent entries are inherited, child keys override parent keys with the same name.
 
 :::note
 Panix-internal env vars (`XDG_CACHE_HOME` for eval cache isolation, `NIX_SSHOPTS` for SSH options) take precedence over user-configured env vars with the same key.

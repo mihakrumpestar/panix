@@ -12,7 +12,7 @@ When deploying to many machines, maximize visibility with:
 
 ## Minimal Build Logs, Maximum Stats Space
 
-```bash
+```sh
 panix deploy --tui.show-active-only --tui.command-output-max-height=2
 ```
 
@@ -27,8 +27,8 @@ flags:
 
 ## Keybinds for Large Fleets
 
-| Key/Flag | Effect |
-|----------|--------|
-| `a` | Show only running or errored build logs (hides completed) |
-| `h` | Include inspect/secrets phases in build logs |
-| `c` | Switch labels between descriptions and raw commands |
+See [Keybindings](/tui/keybinds/) for the full reference. The most useful key bindings for large fleets are
+
+- `a` (show active only),
+- `h` (show all build logs), and
+- `c` (toggle command labels)

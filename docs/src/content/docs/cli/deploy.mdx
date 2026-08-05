@@ -129,15 +129,3 @@ The `--runtime.*` flags configure operational timeouts and concurrency. They can
 | `--runtime.reconnect-timeout` | `PANIX_RUNTIME_RECONNECT_TIMEOUT` | `10m` | Wait for host to reconnect after reboot |
 | `--runtime.ssh-reachability-timeout` | `PANIX_RUNTIME_SSH_REACHABILITY_TIMEOUT` | `2s` | TCP dial timeout for SSH reachability probe |
 | `--runtime.flake-validation-timeout` | `PANIX_RUNTIME_FLAKE_VALIDATION_TIMEOUT` | `60s` | Timeout for nix flake metadata/eval during validation |
-
-YAML example:
-
-```yaml
-flags:
-  runtime:
-    max_concurrency: 500
-    disconnect_timeout: 5m
-    reconnect_timeout: 10m
-    ssh_reachability_timeout: 2s
-    flake_validation_timeout: 60s
-```

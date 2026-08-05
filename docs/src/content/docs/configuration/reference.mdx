@@ -56,13 +56,13 @@ fleet:
   tags: [production]                   # Inherited by all descendants
   rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override base rsync flags (default shown)
   nix:
-    # Default flags — REPLACE built-in base flags (leave unset for built-in defaults, [] clears)
+    # Default flags: REPLACE built-in base flags (leave unset for built-in defaults, [] clears)
     experimental_features: ["--extra-experimental-features", "nix-command flakes"]
     build_default_flags: ["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]
     copy_default_flags: ["--no-check-sigs"]
     nixos_install_default_flags: ["--no-root-passwd", "--no-channel-copy"]
     profile_install_default_flags: []  # nix profile install has no built-in defaults
-    # Extra flags — APPEND after default flags
+    # Extra flags: APPEND after default flags
     extra_flags: ["--option", "sandbox", "false"]
     # build_flags, copy_flags, nixos_install_flags also available (see nix-flags feature page)
   ssh:

@@ -11,7 +11,7 @@ Panix supports two build modes: **local** (default) and **remote**. This control
 
 Builds run on the machine executing Panix:
 
-```bash
+```sh
 nix build --no-link --print-out-paths <flake-url>#<installable>
 ```
 
@@ -21,7 +21,7 @@ The resulting closure is then transferred to each target machine via `nix copy`.
 
 Builds run on the **first machine** of the installable via the Nix remote store protocol:
 
-```bash
+```sh
 nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths <flake-url>#<installable>
 ```
 
@@ -31,10 +31,12 @@ This is useful when the target machine has more resources (CPU/RAM) than the dep
 For installables with multiple machines, the closure is built on the first machine, then copied from the first machine to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine installables in remote mode skip the transfer phase entirely since the closure is already on the target.
 :::
 
+:::note
 **Requirements:**
 
 - The first machine must be **remote** (not the local machine running Panix)
 - The first machine must have Nix installed and the flake inputs available
+:::
 
 **Configuration:**
 

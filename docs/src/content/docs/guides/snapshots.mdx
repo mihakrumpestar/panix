@@ -157,7 +157,7 @@ Three ways to take a snapshot:
 |--------|-------------|
 | Press `s` in TUI | Manual snapshot at any time |
 | `--snapshot.on-retry` | Automatic snapshot before retrying failed phases |
-| `--snapshot.on-exit` | Automatic snapshot when exiting TUI |
+| `--snapshot.on-exit` | Automatic snapshot on exit |
 
 Snapshot files are written to `--snapshot.dir` (default: current directory) with the naming format:
 
@@ -171,7 +171,7 @@ Where `<reason>` is `manual`, `retry`, or `exit`.
 
 Replay any snapshot in the TUI:
 
-```bash
+```sh
 panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
 ```
 
@@ -193,6 +193,6 @@ flags:
 
 Or via CLI flags:
 
-```bash
+```sh
 panix deploy --snapshot.dir=./snapshots --snapshot.on-retry --snapshot.on-exit
 ```

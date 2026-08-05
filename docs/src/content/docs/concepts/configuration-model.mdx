@@ -49,7 +49,7 @@ Traditional deployment tools assume a 1:1 mapping: one machine, one configuratio
 Panix breaks this 1:1 mapping. Many machines can share a single installable, each receiving its hostname and network identity from DHCP (you configure that on your own). This has two compounding effects:
 
 - **Build deduplication**: One installable means one build, regardless of how many machines consume it. Deploying 50 identical machines costs 1 build, not 50.
-- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same installable, since none of them need machine-specific. This is not the case for all configurations and situations, but can be very useful in certain applications.
+- **Parallel bootstrap**: All 50 machines can be bootstrapped simultaneously from the same installable, since none of them need machine-specific configurations. This is not the case for all configurations and situations, but can be very useful in certain applications.
 
 The machine's role in Panix is purely operational: it holds the SSH connection, the target address, and the transfer and activation state. The installable is the blueprint; the machine is where it lands.
 
@@ -101,7 +101,7 @@ fleet:
 
         homeConfigurations:
           primary:
-            user: alice              # Activation runs as alice via su -l alice
+            user: alice               # Activation runs as alice via su -l alice
             machines:
               server1:
                 ssh:
@@ -121,25 +121,6 @@ The `user` field is only meaningful for user-level types (`homeConfigurations`, 
 
 When set, panix wraps the activation command in `su -l <user> -c` so the activation script runs with the correct user's `$HOME` and profile. Generation listing (`nix-env --list-generations`) also runs as that user.
 
-### Preset Overrides
-
-Each installable type has defaults (build path, activation script, profile path) inferred from the type. You can override any of these per-installable under the `preset:` key:
-
-```yaml
-installables:
-  nixosConfigurations:
-    server1:
-      preset:
-        build_path: config.system.build.toplevel
-        activation_path: bin/switch-to-configuration
-        profile_path: /nix/var/nix/profiles/system
-        set_profile: true
-      machines:
-        server1:
-```
-
-All preset fields are optional. When omitted, the type default is used.
-
 :::caution
 Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) are a newer feature. NixOS system deployments are well-tested, but other output types may have edge cases. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
 :::
@@ -156,6 +137,44 @@ Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) a
 | `packages` | Arbitrary packages | `nix profile install` |
 
 Bootstrap (kexec, disko, nixos-install) only applies to `nixosConfigurations`.
+
+For a detailed guide on deploying packages (including nixvim and nvf), see the [Deploying Packages guide](../guides/packages.mdx).
+
+## Custom Installable Types
+
+The six types above are registered in panix's `presets` map ([`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go)). Validation rejects type names not in this map, so you cannot use an arbitrary output name as an installable type.
+
+Each type's behavior is fully data-driven through its `Preset` fields:
+
+| Field | Purpose |
+|-------|---------|
+| `build_path` | Attrpath suffix appended to `type.name` for `nix build` |
+| `activation_path` | Script path within the closure. Empty triggers `nix profile install` instead |
+| `profile_path` | Nix profile path for generation management. Empty disables rollback |
+| `set_profile` | Whether to run `nix-env --profile --set` before activation |
+| `is_system_level` | `true` uses `sudo` for activation; `false` uses `su -l <user>` |
+| `is_bootstrappable` | Whether the type supports bootstrap (kexec, disko, nixos-install) |
+| `activation_supported_modes` | Activation modes passed to the activation script (e.g. `switch`, `boot`, `test`) |
+| `activation_default_mode` | Default mode when none is specified |
+
+You can override any of these per-installable under the `preset:` key to customize behavior for a specific output. For example, to deploy a `nixosConfigurations` entry with a non-standard build path:
+
+```yaml
+installables:
+  nixosConfigurations:
+    custom-build:
+      preset:
+        build_path: config.system.build.toplevel
+        activation_path: bin/switch-to-configuration
+        profile_path: /nix/var/nix/profiles/system
+        set_profile: true
+      machines:
+        server1:
+```
+
+All preset fields are optional. When omitted, the type default from the `presets` map is used.
+
+To add support for a **new** output type (e.g. a flake output not in the list above), add an entry to the `presets` map in [`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go). The type is then automatically picked up by validation, build, transfer, activation, and rollback with no other code changes needed. If you need a new preset, [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues) to request it.
 
 ## How Inheritance Works
 
