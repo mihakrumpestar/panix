@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.9.0](https://github.com/mihakrumpestar/panix/compare/v0.8.1..v0.9.0) - 2026-08-05
+
+Panix is now a general installable deployment orchestrator. Installables are no longer limited to NixOS profiles; any installable type with an activation mode can be deployed. Default options and flags are overridable, and nix options can be set via environment variables.
+
+**Breaking:** the config schema for installables has changed. Existing configs need to be updated to the new installable-based format.
+
+Migration: rename `configurations` to `installables` and nest your output type (e.g. `nixosConfigurations`) as a key under it:
+
+Before:
+```yaml
+fleet:
+  flakes:
+    my-infra:
+      configurations:
+        workstation:
+          machines:
+            workstation:
+```
+
+After:
+```yaml
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        nixosConfigurations:
+          workstation:
+            machines:
+              workstation:
+```
+
+### Bug Fixes
+
+- Update fullscrean viewport by @mihakrumpestar ([9a209c7](https://github.com/mihakrumpestar/panix/commit/9a209c7cd30715cbfb881e831aa30e4173bde303))
+
+### Features
+
+- Make Panix a general installable deployment orchestrator ([#11](https://github.com/mihakrumpestar/panix/pull/11)) by @mihakrumpestar ([9bc070a](https://github.com/mihakrumpestar/panix/commit/9bc070a152941d332ef6a1512859356c68dde002))
+
+### Miscellaneous
+
+- Small Taskfile and docs reverts by @mihakrumpestar ([cd21519](https://github.com/mihakrumpestar/panix/commit/cd21519fd97a8e3072097d551623d9ffdedf0966))
+
 ## [0.8.1](https://github.com/mihakrumpestar/panix/compare/v0.8.0..v0.8.1) - 2026-07-08
 
 ### Bug Fixes
