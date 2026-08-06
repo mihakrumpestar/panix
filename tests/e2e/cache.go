@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	cacheDirName = ".cache"
-	logDirName   = "log"
-	dirPerm      = 0o750
-	filePerm     = 0o600
-	pubFilePerm  = 0o644
+	cacheDirName       = ".cache"
+	logDirName         = "log"
+	dirPerm            = 0o750
+	filePerm           = 0o600
+	pubFilePerm        = 0o644
+	requiredSSHKeyPerm = 0o600
 )
 
 var errKVM = errors.New("KVM not available (/dev/kvm missing)")
@@ -87,9 +88,17 @@ func closeWithoutErrCheck(closer io.Closer) {
 func ensureSSHKeys() (string, error) {
 	keyPath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", "ssh.key")
 
-	_, err := os.Stat(keyPath)
+	info, err := os.Stat(keyPath)
 	if err != nil {
 		return "", errors.Wrap(err, "test SSH key not found in testflakes/ssh.key — ensure the key pair is committed")
+	}
+
+	// SSH refuses to use private keys that are readable by others (exit status 255,
+	// "bad permissions"). The Go SSH library (used by waitForSSH) doesn't enforce
+	// this, so the reachability check passes but panix's SSH command fails.
+	// Enforce 0600 here so the failure is caught early with a clear message.
+	if info.Mode().Perm() != requiredSSHKeyPerm {
+		return "", errors.Errorf("test SSH key %s has permissions %o, expected 0600 — run: chmod 600 %s", keyPath, info.Mode().Perm(), keyPath)
 	}
 
 	return keyPath, nil

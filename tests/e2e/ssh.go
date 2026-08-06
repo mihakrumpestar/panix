@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	sshWaitTimeout      = 2 * time.Minute
-	sshPollInterval     = 500 * time.Millisecond
-	sshHandshakeTimeout = 5 * time.Second
-	sshRunTimeout       = 30 * time.Second
-	splitParts          = 2
-	markerContent       = "panix-e2e-test-pass"
+	sshWaitTimeout           = 2 * time.Minute
+	sshPollInterval          = 500 * time.Millisecond
+	sshHandshakeTimeout      = 5 * time.Second
+	sshRunTimeout            = 30 * time.Second
+	splitParts               = 2
+	systemManagerVerifyParts = 3
+	markerContent            = "panix-e2e-test-pass"
 )
 
 var errSSHTimeout = errors.New("SSH wait timed out")
@@ -182,4 +183,87 @@ func verifyHomeManagerMarkerAsUser(port int, keyPath string, user string) error 
 	}
 
 	return nil
+}
+
+func verifyPackage(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	// Use a login shell so that /etc/profile.d/nix.sh is sourced on Debian
+	// (non-interactive SSH sessions don't source it, so nix-profile binaries
+	// aren't in PATH). On NixOS PAM handles this for all sessions, but the
+	// login shell works there too.
+	output, err := sshRun(port, keyPath, "su -l root -c 'panix-package-marker'")
+	if err != nil {
+		return errors.Wrapf(err, "verify package on %s", addr)
+	}
+
+	marker := strings.TrimSpace(output)
+	if !strings.Contains(marker, markerContent) {
+		return errors.Errorf("package marker not found on %s: %s", addr, marker)
+	}
+
+	return nil
+}
+
+func verifyPackages(keyPath string) error {
+	parGroup := newParallelGroup()
+
+	if testScopeFlag.local() {
+		parGroup.Go("Verify package on NixOS ISO VM", func() error {
+			return verifyPackage(nixosISOPort, keyPath)
+		})
+		parGroup.Go("Verify package on Debian-nix VM", func() error {
+			return verifyPackage(debianNixVMPort, keyPath)
+		})
+	}
+
+	return parGroup.Wait()
+}
+
+func verifySystemManager(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	// Use || true after hello so that a non-zero exit (e.g. hello not installed)
+	// doesn't cause sshRun to return an error that masks which check failed.
+	output, err := sshRun(port, keyPath,
+		"cat /etc/panix-test-marker; echo '---'; "+
+			"cat /etc/os-release; echo '---'; "+
+			"/run/system-manager/sw/bin/hello --version || true")
+	if err != nil {
+		return errors.Wrapf(err, "verify system-manager on %s", addr)
+	}
+
+	parts := strings.SplitN(output, "---", systemManagerVerifyParts)
+	if len(parts) < systemManagerVerifyParts {
+		return errors.Errorf("unexpected verify output on %s: expected 3 sections, got %d", addr, len(parts))
+	}
+
+	marker := strings.TrimSpace(parts[0])
+	if !strings.Contains(marker, markerContent) {
+		return errors.Errorf("system-manager marker not found on %s: %s", addr, marker)
+	}
+
+	osRelease := parts[1]
+	if !strings.Contains(osRelease, "ID=debian") {
+		return errors.Errorf("expected Debian on %s, got: %s", addr, osRelease)
+	}
+
+	helloVersion := strings.TrimSpace(parts[2])
+	if !strings.Contains(helloVersion, "hello") {
+		return errors.Errorf("hello package not found via system-manager on %s: %s", addr, helloVersion)
+	}
+
+	return nil
+}
+
+func verifySystemManagers(keyPath string) error {
+	parGroup := newParallelGroup()
+
+	if testScopeFlag.local() {
+		parGroup.Go("Verify system-manager on Debian-nix VM", func() error {
+			return verifySystemManager(debianNixVMPort, keyPath)
+		})
+	}
+
+	return parGroup.Wait()
 }

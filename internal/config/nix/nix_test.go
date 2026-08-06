@@ -163,9 +163,9 @@ func Test_GetNixosInstallDefaultFlags(t *testing.T) {
 	}
 }
 
-// --- GetProfileInstallDefaultFlags ---
+// --- GetProfileAddDefaultFlags ---
 
-func Test_GetProfileInstallDefaultFlags(t *testing.T) {
+func Test_GetProfileAddDefaultFlags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -194,10 +194,10 @@ func Test_GetProfileInstallDefaultFlags(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			c := &NixConfig{ProfileInstallDefaultFlags: tt.in}
+			c := &NixConfig{ProfileAddDefaultFlags: tt.in}
 
 			assertion := assert.New(t)
-			assertion.Equal(tt.want, c.GetProfileInstallDefaultFlags())
+			assertion.Equal(tt.want, c.GetProfileAddDefaultFlags())
 		})
 	}
 }
@@ -247,11 +247,11 @@ func Test_NixConfig_Init_DefaultFlags_ChildOverridesParent(t *testing.T) {
 			check:    func(cfg *NixConfig) []string { return cfg.NixosInstallDefaultFlags },
 		},
 		{
-			name:     "ProfileInstallDefaultFlags",
-			child:    &NixConfig{ProfileInstallDefaultFlags: []string{"--child-profile"}},
-			parent:   &NixConfig{ProfileInstallDefaultFlags: []string{"--parent-profile"}},
+			name:     "ProfileAddDefaultFlags",
+			child:    &NixConfig{ProfileAddDefaultFlags: []string{"--child-profile"}},
+			parent:   &NixConfig{ProfileAddDefaultFlags: []string{"--parent-profile"}},
 			expected: []string{"--child-profile"},
-			check:    func(cfg *NixConfig) []string { return cfg.ProfileInstallDefaultFlags },
+			check:    func(cfg *NixConfig) []string { return cfg.ProfileAddDefaultFlags },
 		},
 	}
 
@@ -303,10 +303,10 @@ func Test_NixConfig_Init_DefaultFlags_NilChildInheritsParent(t *testing.T) {
 			check:    func(cfg *NixConfig) []string { return cfg.NixosInstallDefaultFlags },
 		},
 		{
-			name:     "ProfileInstallDefaultFlags",
-			parent:   &NixConfig{ProfileInstallDefaultFlags: []string{"--parent"}},
+			name:     "ProfileAddDefaultFlags",
+			parent:   &NixConfig{ProfileAddDefaultFlags: []string{"--parent"}},
 			expected: []string{"--parent"},
-			check:    func(cfg *NixConfig) []string { return cfg.ProfileInstallDefaultFlags },
+			check:    func(cfg *NixConfig) []string { return cfg.ProfileAddDefaultFlags },
 		},
 	}
 
@@ -358,7 +358,7 @@ func Test_CommandEnvGetters_GlobalAndSpecificMerged(t *testing.T) {
 			"NIX_CONFIG": "max-jobs = 2", // copy-only
 		},
 		NixosInstallEnv:   map[string]string{"NIX_CONFIG": "max-jobs = 1"},
-		ProfileInstallEnv: map[string]string{},
+		ProfileAddEnv: map[string]string{},
 	}
 
 	tests := []struct {
@@ -382,8 +382,8 @@ func Test_CommandEnvGetters_GlobalAndSpecificMerged(t *testing.T) {
 			want: []string{"NIX_BUILD_CORES=4", "NIX_CONFIG=max-jobs = 1", "NIX_SSL_CERT_FILE=/global"},
 		},
 		{
-			name: "GetProfileInstallEnv: global only (specific is empty map)",
-			got:  nixC.GetProfileInstallEnv(),
+			name: "GetProfileAddEnv: global only (specific is empty map)",
+			got:  nixC.GetProfileAddEnv(),
 			want: []string{"NIX_BUILD_CORES=4", "NIX_SSL_CERT_FILE=/global"},
 		},
 	}
@@ -407,7 +407,7 @@ func Test_CommandEnvGetters_BothNilReturnsNil(t *testing.T) {
 	assertion.Nil(nixC.GetBuildEnv())
 	assertion.Nil(nixC.GetCopyEnv())
 	assertion.Nil(nixC.GetNixosInstallEnv())
-	assertion.Nil(nixC.GetProfileInstallEnv())
+	assertion.Nil(nixC.GetProfileAddEnv())
 }
 
 func Test_CommandEnvGetters_GlobalOnly(t *testing.T) {
@@ -421,7 +421,7 @@ func Test_CommandEnvGetters_GlobalOnly(t *testing.T) {
 	assertion.Equal(want, nixC.GetBuildEnv())
 	assertion.Equal(want, nixC.GetCopyEnv())
 	assertion.Equal(want, nixC.GetNixosInstallEnv())
-	assertion.Equal(want, nixC.GetProfileInstallEnv())
+	assertion.Equal(want, nixC.GetProfileAddEnv())
 }
 
 func Test_CommandEnvGetters_SpecificOnly(t *testing.T) {
@@ -508,7 +508,7 @@ func Test_NixConfig_Init_CommandEnv_NilChildInheritsParent(t *testing.T) {
 		BuildEnv:          map[string]string{"NIX_BUILD_CORES": "4"},
 		CopyEnv:           map[string]string{"NIX_CONFIG": "max-jobs = 2"},
 		NixosInstallEnv:   map[string]string{"TMPDIR": "/tmp"},
-		ProfileInstallEnv: map[string]string{"NIX_SSL_CERT_FILE": "/certs"},
+		ProfileAddEnv: map[string]string{"NIX_SSL_CERT_FILE": "/certs"},
 	}
 	child := &NixConfig{}
 
@@ -519,7 +519,7 @@ func Test_NixConfig_Init_CommandEnv_NilChildInheritsParent(t *testing.T) {
 	assertion.Equal("4", child.BuildEnv["NIX_BUILD_CORES"])
 	assertion.Equal("max-jobs = 2", child.CopyEnv["NIX_CONFIG"])
 	assertion.Equal("/tmp", child.NixosInstallEnv["TMPDIR"])
-	assertion.Equal("/certs", child.ProfileInstallEnv["NIX_SSL_CERT_FILE"])
+	assertion.Equal("/certs", child.ProfileAddEnv["NIX_SSL_CERT_FILE"])
 }
 
 func Test_NixConfig_Init_CommandEnv_GettersMergeInherited(t *testing.T) {

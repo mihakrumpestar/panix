@@ -134,7 +134,7 @@ Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) a
 | `systemConfigs` | [system-manager](https://github.com/numtide/system-manager) | `bin/activate` |
 | `homeConfigurations` | [home-manager](https://github.com/nix-community/home-manager) | `activationPackage/activate` |
 | `nixOnDroidConfigurations` | [Nix-on-Droid](https://github.com/nix-community/nix-on-droid) | `activate` script |
-| `packages` | Arbitrary packages | `nix profile install` |
+| `packages` | Arbitrary packages | `nix profile add` |
 
 Bootstrap (kexec, disko, nixos-install) only applies to `nixosConfigurations`.
 
@@ -144,20 +144,28 @@ For a detailed guide on deploying packages (including nixvim and nvf), see the [
 
 The six types above are registered in panix's `presets` map ([`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go)). Validation rejects type names not in this map, so you cannot use an arbitrary output name as an installable type.
 
-Each type's behavior is fully data-driven through its `Preset` fields:
+Each type's behavior is fully data-driven through its `Preset` fields. Some fields are **user-overridable** (customizable per-installable); others are **type-level** (intrinsic to the output type, always use the type default).
+
+**User-overridable fields:**
 
 | Field | Purpose |
 |-------|---------|
 | `build_path` | Attrpath suffix appended to `type.name` for `nix build` |
-| `activation_path` | Script path within the closure. Empty triggers `nix profile install` instead |
+| `activation_path` | Script path within the closure. Empty triggers `nix profile add` instead |
 | `profile_path` | Nix profile path for generation management. Empty disables rollback |
 | `set_profile` | Whether to run `nix-env --profile --set` before activation |
-| `is_system_level` | `true` uses `sudo` for activation; `false` uses `su -l <user>` |
-| `is_bootstrappable` | Whether the type supports bootstrap (kexec, disko, nixos-install) |
 | `activation_supported_modes` | Activation modes passed to the activation script (e.g. `switch`, `boot`, `test`) |
 | `activation_default_mode` | Default mode when none is specified |
 
-You can override any of these per-installable under the `preset:` key to customize behavior for a specific output. For example, to deploy a `nixosConfigurations` entry with a non-standard build path:
+**Type-level fields** (not user-configurable):
+
+| Field | Purpose |
+|-------|---------|
+| `omit_type_from_attr_path` | Omits the output type from the attrpath. Used by `packages` where nix auto-resolves bare names under `packages.<system>.<name>` |
+| `is_system_level` | `true` uses `sudo` for activation if not root already; `false` uses `su -l <user>` |
+| `is_bootstrappable` | Whether the type supports bootstrap (kexec, disko, nixos-install) |
+
+You can override any **user-overridable** field per-installable under the `preset:` key to customize behavior for a specific output. For example, to deploy a `nixosConfigurations` entry with a non-standard build path:
 
 ```yaml
 installables:

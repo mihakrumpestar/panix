@@ -25,25 +25,27 @@ type deployPhase string
 const (
 	phaseAll       deployPhase = "all"
 	phaseBootstrap deployPhase = "bootstrap"
-	phaseRedeploy  deployPhase = "redeploy"
+	phaseDeploy  deployPhase = "deploy"
 )
 
-type redeployType string
+type deployType string
 
 const (
-	redeployAll   redeployType = "all"
-	redeployNixos redeployType = "nixos"
-	redeployHome  redeployType = "home"
+	deployAll           deployType = "all"
+	deployNixos         deployType = "nixos"
+	deployHome          deployType = "home"
+	deployPackages      deployType = "packages"
+	deploySystemConfigs deployType = "systemConfigs"
 )
 
 var errInvalidTestScope = errors.New("invalid test scope, must be local, remote, or both")
-var errInvalidPhase = errors.New("invalid phase, must be: all, bootstrap, or redeploy")
-var errInvalidRedeployType = errors.New("invalid redeploy-type, must be: all, nixos, or home")
+var errInvalidPhase = errors.New("invalid phase, must be: all, bootstrap, or deploy")
+var errInvalidDeployType = errors.New("invalid deploy-type, must be: all, nixos, home, packages, or systemConfigs")
 
 var (
 	testScopeFlag    testScope
 	phaseFlag        deployPhase
-	redeployTypeFlag redeployType
+	deployTypeFlag deployType
 )
 
 func parseFlags() {
@@ -58,9 +60,9 @@ func parseFlags() {
 		}
 	})
 
-	flag.Func("phase", "deploy phase to run: all, bootstrap, redeploy (default: all)", func(val string) error {
+	flag.Func("phase", "deploy phase to run: all, bootstrap, deploy (default: all)", func(val string) error {
 		switch deployPhase(val) {
-		case phaseAll, phaseBootstrap, phaseRedeploy:
+		case phaseAll, phaseBootstrap, phaseDeploy:
 			phaseFlag = deployPhase(val)
 
 			return nil
@@ -69,14 +71,14 @@ func parseFlags() {
 		}
 	})
 
-	flag.Func("redeploy-type", "which output types to redeploy: all, nixos, home (default: all)", func(val string) error {
-		switch redeployType(val) {
-		case redeployAll, redeployNixos, redeployHome:
-			redeployTypeFlag = redeployType(val)
+	flag.Func("deploy-type", "which output types to deploy: all, nixos, home, packages, systemConfigs (default: all)", func(val string) error {
+		switch deployType(val) {
+		case deployAll, deployNixos, deployHome, deployPackages, deploySystemConfigs:
+			deployTypeFlag = deployType(val)
 
 			return nil
 		default:
-			return fmt.Errorf("%w: %q", errInvalidRedeployType, val)
+			return fmt.Errorf("%w: %q", errInvalidDeployType, val)
 		}
 	})
 
@@ -90,8 +92,8 @@ func parseFlags() {
 		phaseFlag = phaseAll
 	}
 
-	if redeployTypeFlag == "" {
-		redeployTypeFlag = redeployAll
+	if deployTypeFlag == "" {
+		deployTypeFlag = deployAll
 	}
 }
 
@@ -192,8 +194,8 @@ func runDeployPhases(configPath string, res *testResources) error {
 		}
 	}
 
-	if phaseFlag == phaseRedeploy || phaseFlag == phaseAll {
-		err := runRedeployPhase(configPath, res)
+	if phaseFlag == phaseDeploy || phaseFlag == phaseAll {
+		err := runDeployPhase(configPath, res)
 		if err != nil {
 			return err
 		}
@@ -217,30 +219,35 @@ func runBootstrapPhase(configPath string, res *testResources) error {
 	return verifyAll(res.keyPath)
 }
 
-func runRedeployPhase(configPath string, res *testResources) error {
-	if redeployTypeFlag == redeployAll || redeployTypeFlag == redeployNixos {
-		err := runRedeployNixOS(configPath, res)
-		if err != nil {
-			return err
-		}
+func runDeployPhase(configPath string, res *testResources) error {
+	deploys := []struct {
+		typ deployType
+		fn  func(string, *testResources) error
+	}{
+		{deployNixos, runDeployNixOS},
+		{deployHome, runDeployHome},
+		{deployPackages, runDeployPackages},
+		{deploySystemConfigs, runDeploySystemManager},
 	}
 
-	if redeployTypeFlag == redeployAll || redeployTypeFlag == redeployHome {
-		err := runRedeployHome(configPath, res)
-		if err != nil {
-			return err
+	for _, r := range deploys {
+		if deployTypeFlag == deployAll || deployTypeFlag == r.typ {
+			err := r.fn(configPath, res)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func runRedeployNixOS(configPath string, res *testResources) error {
-	printPhasef("Phase: Redeploy NixOS")
+func runDeployNixOS(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy NixOS")
 
 	err := runPanixDeployStepWithArgs("Run panix deploy (nixos)", configPath,
 		[]string{"--tags", "nixosConfigurations"},
-		"PANIX_TEST_MODE=redeploy",
+		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
 	)
@@ -251,12 +258,12 @@ func runRedeployNixOS(configPath string, res *testResources) error {
 	return verifyAll(res.keyPath)
 }
 
-func runRedeployHome(configPath string, res *testResources) error {
-	printPhasef("Phase: Redeploy home-manager")
+func runDeployHome(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy home-manager")
 
 	err := runPanixDeployStepWithArgs("Run panix deploy (home-manager)", configPath,
 		[]string{"--tags", "homeConfigurations"},
-		"PANIX_TEST_MODE=redeploy",
+		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
 	)
@@ -266,6 +273,46 @@ func runRedeployHome(configPath string, res *testResources) error {
 
 	if testScopeFlag.local() {
 		return verifyHomeManager(res.keyPath)
+	}
+
+	return nil
+}
+
+func runDeployPackages(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy packages")
+
+	err := runPanixDeployStepWithArgs("Run panix deploy (packages)", configPath,
+		[]string{"--tags", "packages"},
+		"PANIX_TEST_MODE=deploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	if testScopeFlag.local() {
+		return verifyPackages(res.keyPath)
+	}
+
+	return nil
+}
+
+func runDeploySystemManager(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy system-manager")
+
+	err := runPanixDeployStepWithArgs("Run panix deploy (system-manager)", configPath,
+		[]string{"--tags", "systemConfigs"},
+		"PANIX_TEST_MODE=deploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	if testScopeFlag.local() {
+		return verifySystemManagers(res.keyPath)
 	}
 
 	return nil
@@ -377,6 +424,12 @@ func buildNixArtifacts(res *testResources) error {
 		})
 		parGroup.Go("Pre-build home-manager (alice) closure", func() error {
 			return preBuildClosure("home-manager-alice", "homeConfigurations.test-home-alice.activationPackage")
+		})
+		parGroup.Go("Pre-build test-package closure", func() error {
+			return preBuildClosure("test-package", "test-package")
+		})
+		parGroup.Go("Pre-build system-manager closure", func() error {
+			return preBuildClosure("system-manager", "systemConfigs.test-system-manager")
 		})
 	}
 

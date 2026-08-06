@@ -120,7 +120,7 @@ flowchart LR
 | **Build** | Per-installable | Build the installable closure via `nix build` (local or remote mode) |
 | **Transfer** | Per-machine | `nix copy` closure to target |
 | **Secrets** | Per-machine | Transfer files/directories with proper ownership via rsync |
-| **Activate** | Per-machine | Dispatches based on installable type: `switch-to-configuration` (nixos), `activate` (darwin/home/droid), or `nix profile install` (packages) |
+| **Activate** | Per-machine | Dispatches based on installable type: `switch-to-configuration` (nixos), `activate` (darwin/home/droid), or `nix profile add` (packages) |
 
 ## Standalone Phases
 

@@ -276,12 +276,6 @@ properties:
                         build_path:
                           type: string
                           description: Build path within the flake output
-                        is_bootstrappable:
-                          type: boolean
-                          description: Supports bootstrap
-                        is_system_level:
-                          type: boolean
-                          description: System-level (root) vs user-level
                         profile_path:
                           type: string
                           description: Nix profile path
@@ -521,14 +515,14 @@ definitions:
         description: List of extra flags for 'nixos-install' command (e.g. [--no-bootloader])
         items:
           type: string
-      profile_install_default_flags:
+      profile_add_default_flags:
         type: array
-        description: "List of base flags for 'nix profile install' command (default: [])"
+        description: "List of base flags for 'nix profile add' command (default: [])"
         items:
           type: string
-      profile_install_env:
+      profile_add_env:
         type: object
-        description: Environment variables for 'nix profile install' only (merged on top of env)
+        description: Environment variables for 'nix profile add' only (merged on top of env)
         additionalProperties:
           type: string
     additionalProperties: false

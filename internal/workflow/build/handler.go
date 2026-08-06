@@ -19,7 +19,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		fleetLeaf.Installable.MetaBuild = &installable.MetaBuild{}
 	}
 
-	flakeOutput := installable.ResolveFlakeInstallable(fleetLeaf.Installable.Type, fleetLeaf.Installable.Name, fleetLeaf.Installable.Preset.BuildPath)
+	flakeOutput := installable.ResolveFlakeInstallable(fleetLeaf.Installable.Type, fleetLeaf.Installable.Name, fleetLeaf.Installable.Preset)
 	installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
 	storePath, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "system closure")

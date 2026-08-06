@@ -19,7 +19,7 @@ type Handler struct {
 }
 
 // ShouldSkip returns true for installable types that don't have versioned
-// profiles (i.e. packages, which are installed via nix profile install
+// profiles (i.e. packages, which are installed via nix profile add
 // and have no generation concept).
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 	return fleetLeaf.Installable.Preset.ProfilePath == ""

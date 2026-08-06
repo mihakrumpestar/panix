@@ -1,21 +1,21 @@
 ---
 title: Deploying Packages
-description: Deploy arbitrary Nix packages to machines via nix profile install, including nixvim and nvf.
+description: Deploy arbitrary Nix packages to machines via nix profile add, including nixvim and nvf.
 sidebar:
   order: 9
 ---
 
-The `packages` installable type deploys arbitrary Nix packages to target machines via `nix profile install`. It is user-level, has no rollback, and requires no activation script, making it ideal for standalone tools and editor configurations on machines that already have a system configuration.
+The `packages` installable type deploys arbitrary Nix packages to target machines via `nix profile add`. It is user-level, has no rollback, and requires no activation script, making it ideal for standalone tools and editor configurations on machines that already have a system configuration.
 
 ## How It Works
 
-The `packages` preset has an empty `BuildPath`, `ActivationPath`, and `ProfilePath`. Panix resolves the installable as `<flake>#packages.<name>`, activates via `nix profile install` instead of an activation script, and skips rollback entirely.
+The `packages` preset has an empty `BuildPath`, `ActivationPath`, and `ProfilePath`, and sets `OmitTypeFromAttrPath: true`. Nix auto-resolves bare attribute names under `packages.<system>.<name>`, so panix resolves the installable as `<flake>#<name>` (not `<flake>#packages.<name>`, which would cause nix to search for `packages.<system>.packages.<name>`). Panix activates via `nix profile add` instead of an activation script, and skips rollback entirely.
 
 | Phase | System-level types | `packages` |
 |-------|-------------------|------------|
-| **Build** | `<flake>#<type>.<name>.<buildPath>` | `<flake>#packages.<name>` |
+| **Build** | `<flake>#<type>.<name>.<buildPath>` | `<flake>#<name>` |
 | **Transfer** | `nix copy --to <target>` | Same |
-| **Activate** | `<closure>/<activation_script> <mode>` | `nix profile install <closure>` |
+| **Activate** | `<closure>/<activation_script> <mode>` | `nix profile add <closure>` |
 | **Rollback** | `nix-env --profile --set` + activation | Skipped (no profile path) |
 
 Packages are always user-level. When the `user` field is set, activation runs via `su -l <user> -c`. If `user` is empty, the package installs as the SSH user. See the [configuration model](../concepts/configuration-model.mdx) for details on the `user` field and [phase pipeline](../concepts/phases.mdx) for the full deployment flow.
@@ -112,8 +112,8 @@ During bootstrap, `packages` activation will fail on unbootstrapped machines. Us
 ```yaml
 fleet:
   nix:
-    profile_install_default_flags: ["--priority", "5"]  # No built-in defaults to replace
-    profile_install_env:
+    profile_add_default_flags: ["--priority", "5"]  # No built-in defaults to replace
+    profile_add_env:
       NIX_USER_CONF_FILES: /etc/nix/deploy-nix.conf
 ```
 
@@ -251,4 +251,4 @@ The panix YAML is identical to the nixvim case.
 - **No rollback**: Panix rollback is skipped (no `ProfilePath`). Use `nix profile history` and `nix profile rollback` on the target machine directly.
 - **No activation modes**: Packages always install immediately. No `switch`, `boot`, `test`, or `dry-activate` modes.
 - **No bootstrap support**: `IsBootstrappable` is false. The target must already be running Nix.
-- **Profile conflicts**: `nix profile install` uses the user's default profile. Use `profile_install_default_flags: ["--priority", "N"]` to control priority.
+- **Profile conflicts**: `nix profile add` uses the user's default profile. Use `profile_add_default_flags: ["--priority", "N"]` to control priority.

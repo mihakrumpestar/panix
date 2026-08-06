@@ -16,6 +16,11 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    system-manager = {
+      url = "github:numtide/system-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -25,6 +30,7 @@
       disko,
       nixos-images,
       home-manager,
+      system-manager,
     }:
     let
       system = "x86_64-linux";
@@ -183,6 +189,15 @@
         ];
       };
 
+      # system-manager config for non-NixOS Linux (Debian-nix VM).
+      # Manages system-level packages and /etc files via systemd.
+      # NOTE: Do NOT include nix.settings here — the Debian-nix VM already has
+      # /etc/nix/nix.conf from the nix-installer, and system-manager will log a
+      # non-fatal (but confusing) warning if it tries to manage it.
+      systemConfigs.test-system-manager = system-manager.lib.makeSystemConfig {
+        modules = [ ./system-manager-config.nix ];
+      };
+
       packages.${system} = {
         installer-iso =
           (nixpkgs.lib.nixosSystem {
@@ -279,6 +294,19 @@
           shutdown = true;
           createUser = true;
         };
+
+        # Simple test package for E2E verification of `packages` deploy type.
+        # When installed via `nix profile add`, places `panix-package-marker`
+        # in the user's PATH. The E2E test verifies by running it and checking
+        # the output.
+        test-package = pkgs.runCommand "panix-test-package" { } ''
+          mkdir -p $out/bin
+          cat > $out/bin/panix-package-marker << 'EOF'
+          #!/bin/sh
+          echo "panix-e2e-test-pass"
+          EOF
+          chmod +x $out/bin/panix-package-marker
+        '';
       };
     };
 }

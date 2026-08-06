@@ -16,7 +16,7 @@ var (
 	DefaultBuildFlags           = []string{"--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"}
 	DefaultCopyFlags            = []string{"--no-check-sigs"}
 	DefaultNixosInstallFlags    = []string{"--no-root-passwd", "--no-channel-copy"}
-	// nix profile install has no built-in default flags.
+	// nix profile add has no built-in default flags.
 )
 
 //nolint:lll
@@ -29,7 +29,7 @@ type NixConfig struct {
 	BuildDefaultFlags          []string `yaml:"build_default_flags" json:"build_default_flags,omitempty" desc:"List of base flags for 'nix build' command (default: [--no-link, --no-update-lock-file, --print-out-paths, --keep-going])"`
 	CopyDefaultFlags           []string `yaml:"copy_default_flags" json:"copy_default_flags,omitempty" desc:"List of base flags for 'nix copy' command (default: [--no-check-sigs])"`
 	NixosInstallDefaultFlags   []string `yaml:"nixos_install_default_flags" json:"nixos_install_default_flags,omitempty" desc:"List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"`
-	ProfileInstallDefaultFlags []string `yaml:"profile_install_default_flags" json:"profile_install_default_flags,omitempty" desc:"List of base flags for 'nix profile install' command (default: [])"`
+	ProfileAddDefaultFlags []string `yaml:"profile_add_default_flags" json:"profile_add_default_flags,omitempty" desc:"List of base flags for 'nix profile add' command (default: [])"`
 
 	// Extra flags are appended after the default flags for each command.
 	ExtraFlags        []string `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"List of extra flags applied to both 'nix build' and 'nix copy'"`
@@ -40,7 +40,7 @@ type NixConfig struct {
 	// Env sets environment variables for all nix commands. Some nix settings
 	// are only available via env vars (e.g. NIX_USER_CONF_FILES, NIX_CONF_DIR,
 	// NIX_DAEMON_SOCKET_PATH, NIX_STORE_DIR). Command-specific env fields
-	// (build_env, copy_env, nixos_install_env, profile_install_env) are merged
+	// (build_env, copy_env, nixos_install_env, profile_add_env) are merged
 	// on top of these, with specific keys overriding global ones.
 	// Inheritance: parent env entries are inherited; child keys override
 	// parent keys with the same name.
@@ -53,7 +53,7 @@ type NixConfig struct {
 	BuildEnv          map[string]string `yaml:"build_env" json:"build_env,omitempty" desc:"Environment variables for 'nix build' only (merged on top of env)"`
 	CopyEnv           map[string]string `yaml:"copy_env" json:"copy_env,omitempty" desc:"Environment variables for 'nix copy' only (merged on top of env)"`
 	NixosInstallEnv   map[string]string `yaml:"nixos_install_env" json:"nixos_install_env,omitempty" desc:"Environment variables for 'nixos-install' only (merged on top of env)"`
-	ProfileInstallEnv map[string]string `yaml:"profile_install_env" json:"profile_install_env,omitempty" desc:"Environment variables for 'nix profile install' only (merged on top of env)"`
+	ProfileAddEnv map[string]string `yaml:"profile_add_env" json:"profile_add_env,omitempty" desc:"Environment variables for 'nix profile add' only (merged on top of env)"`
 }
 
 // GetExperimentalFeatures returns the configured experimental features flags,
@@ -96,11 +96,11 @@ func (c *NixConfig) GetNixosInstallDefaultFlags() []string {
 	return DefaultNixosInstallFlags
 }
 
-// GetProfileInstallDefaultFlags returns the configured nix profile install
-// default flags. Returns nil if not set — nix profile install has no built-in
+// GetProfileAddDefaultFlags returns the configured nix profile add
+// default flags. Returns nil if not set — nix profile add has no built-in
 // default flags.
-func (c *NixConfig) GetProfileInstallDefaultFlags() []string {
-	return c.ProfileInstallDefaultFlags
+func (c *NixConfig) GetProfileAddDefaultFlags() []string {
+	return c.ProfileAddDefaultFlags
 }
 
 // GetBuildEnv returns env vars for `nix build`: the global env merged with
@@ -124,11 +124,11 @@ func (c *NixConfig) GetNixosInstallEnv() []string {
 	return mergeEnvToSlice(c.Env, c.NixosInstallEnv)
 }
 
-// GetProfileInstallEnv returns env vars for `nix profile install`: the global
+// GetProfileAddEnv returns env vars for `nix profile add`: the global
 // env merged with profile-install-specific env (specific keys override
 // global). Returns KEY=VALUE strings sorted by key, or nil if neither is set.
-func (c *NixConfig) GetProfileInstallEnv() []string {
-	return mergeEnvToSlice(c.Env, c.ProfileInstallEnv)
+func (c *NixConfig) GetProfileAddEnv() []string {
+	return mergeEnvToSlice(c.Env, c.ProfileAddEnv)
 }
 
 // mergeEnvToSlice merges a global env map with a specific env map (specific
@@ -167,7 +167,7 @@ func mergeEnvToSlice(global, specific map[string]string) []string {
 // down the hierarchy.
 //
 // "Default" flag fields (ExperimentalFeatures, BuildDefaultFlags, CopyDefaultFlags,
-// NixosInstallDefaultFlags, ProfileInstallDefaultFlags) use override semantics: if
+// NixosInstallDefaultFlags, ProfileAddDefaultFlags) use override semantics: if
 // the child has a value, it is kept as-is; if the child is nil, it inherits the
 // parent's value. This prevents parent defaults from polluting a child's explicit
 // override.
@@ -218,7 +218,7 @@ type nixDefaultFlagsSnapshot struct {
 	buildDefaultFlags          []string
 	copyDefaultFlags           []string
 	nixosInstallDefaultFlags   []string
-	profileInstallDefaultFlags []string
+	profileAddDefaultFlags []string
 }
 
 func newNixDefaultFlagsSnapshot(cfg *NixConfig) nixDefaultFlagsSnapshot {
@@ -227,7 +227,7 @@ func newNixDefaultFlagsSnapshot(cfg *NixConfig) nixDefaultFlagsSnapshot {
 		buildDefaultFlags:          cfg.BuildDefaultFlags,
 		copyDefaultFlags:           cfg.CopyDefaultFlags,
 		nixosInstallDefaultFlags:   cfg.NixosInstallDefaultFlags,
-		profileInstallDefaultFlags: cfg.ProfileInstallDefaultFlags,
+		profileAddDefaultFlags: cfg.ProfileAddDefaultFlags,
 	}
 }
 
@@ -249,8 +249,8 @@ func (s nixDefaultFlagsSnapshot) restore(cfg *NixConfig) {
 		cfg.NixosInstallDefaultFlags = s.nixosInstallDefaultFlags
 	}
 
-	if s.profileInstallDefaultFlags != nil {
-		cfg.ProfileInstallDefaultFlags = s.profileInstallDefaultFlags
+	if s.profileAddDefaultFlags != nil {
+		cfg.ProfileAddDefaultFlags = s.profileAddDefaultFlags
 	}
 }
 
@@ -264,7 +264,7 @@ type nixEnvSnapshot struct {
 	buildEnv          map[string]string
 	copyEnv           map[string]string
 	nixosInstallEnv   map[string]string
-	profileInstallEnv map[string]string
+	profileAddEnv map[string]string
 }
 
 func newNixEnvSnapshot(cfg *NixConfig) nixEnvSnapshot {
@@ -273,7 +273,7 @@ func newNixEnvSnapshot(cfg *NixConfig) nixEnvSnapshot {
 		buildEnv:          cfg.BuildEnv,
 		copyEnv:           cfg.CopyEnv,
 		nixosInstallEnv:   cfg.NixosInstallEnv,
-		profileInstallEnv: cfg.ProfileInstallEnv,
+		profileAddEnv: cfg.ProfileAddEnv,
 	}
 }
 
@@ -284,7 +284,7 @@ func (s nixEnvSnapshot) restore(cfg *NixConfig) {
 	cfg.BuildEnv = s.buildEnv
 	cfg.CopyEnv = s.copyEnv
 	cfg.NixosInstallEnv = s.nixosInstallEnv
-	cfg.ProfileInstallEnv = s.profileInstallEnv
+	cfg.ProfileAddEnv = s.profileAddEnv
 }
 
 // mergeEnvMaps inherits all env maps (global + command-specific) from parent
@@ -297,7 +297,7 @@ func mergeEnvMaps(child, parent *NixConfig) {
 	mergeEnvMap(&child.BuildEnv, parent.BuildEnv)
 	mergeEnvMap(&child.CopyEnv, parent.CopyEnv)
 	mergeEnvMap(&child.NixosInstallEnv, parent.NixosInstallEnv)
-	mergeEnvMap(&child.ProfileInstallEnv, parent.ProfileInstallEnv)
+	mergeEnvMap(&child.ProfileAddEnv, parent.ProfileAddEnv)
 }
 
 // mergeEnvMap inherits entries from parent into child. If both define the

@@ -32,7 +32,7 @@ Panix distinguishes two categories of nix command flags:
 
 | Category | Fields | Behavior |
 |----------|--------|----------|
-| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_install_default_flags` | **Replace** the built-in base flags when set. Leave unset to use built-in defaults. Set to `[]` to clear. |
+| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_add_default_flags` | **Replace** the built-in base flags when set. Leave unset to use built-in defaults. Set to `[]` to clear. |
 | **Extra flags** | `extra_flags`, `build_flags`, `copy_flags`, `nixos_install_flags` | **Append** after the default flags. Accumulate through inheritance. |
 
 The final command is assembled as: `default flags` + `extra flags`.
@@ -47,7 +47,7 @@ When no `*_default_flags` field is set, these built-in defaults are used:
 | `build_default_flags` | `["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]` |
 | `copy_default_flags` | `["--no-check-sigs"]` |
 | `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy"]` |
-| `profile_install_default_flags` | `[]` (none) |
+| `profile_add_default_flags` | `[]` (none) |
 
 Setting a `*_default_flags` field to `[]` explicitly **clears** the built-in defaults for that command.
 
@@ -99,11 +99,11 @@ Some nix settings are only available via environment variables, with no CLI flag
 
 | Field | Scope | Behavior |
 |-------|-------|----------|
-| `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile install |
+| `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile add |
 | `build_env` | `nix build` only | Merged on top of `env`, specific keys override global |
 | `copy_env` | `nix copy` only | Merged on top of `env` |
 | `nixos_install_env` | `nixos-install` only | Merged on top of `env` |
-| `profile_install_env` | `nix profile install` only | Merged on top of `env` |
+| `profile_add_env` | `nix profile add` only | Merged on top of `env` |
 
 ### Example
 

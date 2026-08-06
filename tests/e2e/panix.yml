@@ -129,4 +129,20 @@ fleet:
                 ssh: *ssh_nixos_iso
               debian-nix-vm:
                 ssh: *ssh_debian_nix
+        packages:
+          test-package:
+            # user: root ensures activation runs via `su -l root -c`, which creates
+            # a login shell that sources /etc/profile.d/nix.sh on Debian. Without
+            # this, nix wouldn't be in PATH for non-interactive SSH on non-NixOS.
+            user: root
+            machines:
+              nixos-iso-vm:
+                ssh: *ssh_nixos_iso
+              debian-nix-vm:
+                ssh: *ssh_debian_nix
+        systemConfigs:
+          test-system-manager:
+            machines:
+              debian-nix-vm:
+                ssh: *ssh_debian_nix
 {{ end }}

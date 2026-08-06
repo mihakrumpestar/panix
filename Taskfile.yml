@@ -112,12 +112,13 @@ tasks:
       Run e2e tests (requires KVM, QEMU, Nix)
       Flags (pass after --):
         --test=local|remote|both    Test scope (default: both)
-        --phase=all|bootstrap|redeploy  Deploy phase (default: all)
-        --redeploy-type=all|nixos|home  Which types to redeploy (default: all)
+        --phase=all|bootstrap|deploy  Deploy phase (default: all)
+        --deploy-type=all|nixos|home|packages|systemConfigs  Which types to deploy (default: all)
       Examples:
         task go:test:e2e -- --test=local
-        task go:test:e2e -- --phase=redeploy --redeploy-type=home
+        task go:test:e2e -- --phase=deploy --deploy-type=home
     cmds:
+      - chmod 600 tests/e2e/testflakes/ssh.key
       - go run ./tests/e2e/ {{.CLI_ARGS}}
 
   go:test:e2e:build:
@@ -141,7 +142,10 @@ tasks:
           "$FLAKE#nixosConfigurations.test-vm.config.system.build.toplevel" \
           "$FLAKE#nixosConfigurations.test-vm-remote.config.system.build.toplevel" \
           "$FLAKE#nixosConfigurations.test-vm-remote.config.system.build.diskoScript" \
-          "$FLAKE#homeConfigurations.test-home.activationPackage"
+          "$FLAKE#homeConfigurations.test-home.activationPackage" \
+          "$FLAKE#homeConfigurations.test-home-alice.activationPackage" \
+          "$FLAKE#test-package" \
+          "$FLAKE#systemConfigs.test-system-manager"
         echo "All e2e test artifacts built."
 
   # Nix

@@ -20,17 +20,28 @@ func (n AttributeName) String() string {
 }
 
 // ResolveFlakeInstallable constructs the full nix installable attrpath
-// from the output type, attribute name, and build path.
-// For root-level types (empty build path), returns just "type.name".
-// For others, returns "type.name.buildPath".
-func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName, buildPath string) string {
-	base := outputType.String() + "." + attrName.String()
+// from the output type, attribute name, and preset.
+//
+// For most types, returns "type.name[.buildPath]" (e.g. "nixosConfigurations.server1.config.system.build.toplevel").
+//
+// For types where OmitTypeFromAttrPath is true (e.g. "packages"), nix
+// auto-resolves bare attribute names under "packages.<system>.<name>",
+// so the type prefix must be omitted. In that case returns just
+// "name[.buildPath]".
+func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName, preset Preset) string {
+	var base string
 
-	if buildPath == "" {
+	if preset.OmitTypeFromAttrPath {
+		base = attrName.String()
+	} else {
+		base = outputType.String() + "." + attrName.String()
+	}
+
+	if preset.BuildPath == "" {
 		return base
 	}
 
-	return base + "." + buildPath
+	return base + "." + preset.BuildPath
 }
 
 // CompositeKey creates a flat map key from output type and attribute name.

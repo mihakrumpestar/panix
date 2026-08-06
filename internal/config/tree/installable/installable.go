@@ -77,7 +77,15 @@ func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttrib
 	return nil
 }
 
-// applyPresetDefaults fills zero-value Preset fields with type defaults.
+// applyPresetDefaults merges type defaults into the Preset.
+//
+// User-overridable fields (BuildPath, ProfilePath, ActivationPath, SetProfile,
+// ActivationModes, ActivationDefaultMode) use the user value if non-zero,
+// otherwise fall back to the type default.
+//
+// Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath)
+// are intrinsic to the output type and always taken from the defaults,
+// ignoring any user-provided value.
 func (i *Installable) applyPresetDefaults(defaults Preset) {
 	if i.Preset.BuildPath == "" {
 		i.Preset.BuildPath = defaults.BuildPath
@@ -95,14 +103,6 @@ func (i *Installable) applyPresetDefaults(defaults Preset) {
 		i.Preset.SetProfile = defaults.SetProfile
 	}
 
-	if !i.Preset.IsSystemLevel {
-		i.Preset.IsSystemLevel = defaults.IsSystemLevel
-	}
-
-	if !i.Preset.IsBootstrappable {
-		i.Preset.IsBootstrappable = defaults.IsBootstrappable
-	}
-
 	if len(i.Preset.ActivationModes) == 0 {
 		i.Preset.ActivationModes = defaults.ActivationModes
 	}
@@ -110,4 +110,9 @@ func (i *Installable) applyPresetDefaults(defaults Preset) {
 	if i.Preset.ActivationDefaultMode == "" {
 		i.Preset.ActivationDefaultMode = defaults.ActivationDefaultMode
 	}
+
+	// Type-level fields — always from defaults, not user-configurable.
+	i.Preset.IsSystemLevel = defaults.IsSystemLevel
+	i.Preset.IsBootstrappable = defaults.IsBootstrappable
+	i.Preset.OmitTypeFromAttrPath = defaults.OmitTypeFromAttrPath
 }
