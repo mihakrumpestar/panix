@@ -14,11 +14,11 @@ const dirPermissions os.FileMode = 0750
 
 //nolint:lll
 type Profile struct {
-	CPU       string `yaml:"cpu" json:"cpu,omitempty" type:"path" help:"Path for CPU profile output (enables CPU profiling)" validate:"omitempty,filepath"`
-	Mem       string `yaml:"mem" json:"mem,omitempty" type:"path" help:"Path for memory profile output (enables memory profiling)" validate:"omitempty,filepath"`
-	Block     string `yaml:"block" json:"block,omitempty" type:"path" help:"Path for block profile output (enables block profiling)" validate:"omitempty,filepath"`
-	Mutex     string `yaml:"mutex" json:"mutex,omitempty" type:"path" help:"Path for mutex profile output (enables mutex profiling)" validate:"omitempty,filepath"`
-	Goroutine string `yaml:"goroutine" json:"goroutine,omitempty" type:"path" help:"Path for goroutine profile output (enables goroutine profiling)" validate:"omitempty,filepath"`
+	CPU       string `yaml:"cpu" json:"cpu,omitempty" type:"path" help:"Path for CPU profile output (enables CPU profiling)" validate:"omitempty,filepath" completion-predictor:"file"`
+	Mem       string `yaml:"mem" json:"mem,omitempty" type:"path" help:"Path for memory profile output (enables memory profiling)" validate:"omitempty,filepath" completion-predictor:"file"`
+	Block     string `yaml:"block" json:"block,omitempty" type:"path" help:"Path for block profile output (enables block profiling)" validate:"omitempty,filepath" completion-predictor:"file"`
+	Mutex     string `yaml:"mutex" json:"mutex,omitempty" type:"path" help:"Path for mutex profile output (enables mutex profiling)" validate:"omitempty,filepath" completion-predictor:"file"`
+	Goroutine string `yaml:"goroutine" json:"goroutine,omitempty" type:"path" help:"Path for goroutine profile output (enables goroutine profiling)" validate:"omitempty,filepath" completion-predictor:"file"`
 }
 
 type StopFunc func()

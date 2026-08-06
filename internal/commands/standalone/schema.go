@@ -11,7 +11,7 @@ import (
 )
 
 type SchemaCmd struct {
-	Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"panix-schema.yaml"`
+	Output string `name:"output" short:"o" help:"Output file path, use '-' for stdout" default:"panix-schema.yaml" completion-predictor:"yaml-file"`
 }
 
 func (c *SchemaCmd) Run() error {

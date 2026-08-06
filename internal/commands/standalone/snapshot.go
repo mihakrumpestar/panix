@@ -9,7 +9,7 @@ import (
 )
 
 type SnapshotCmd struct {
-	Path string `name:"path" short:"p" help:"Snapshot file path" required:""`
+	Path string `name:"path" short:"p" help:"Snapshot file path" required:"" completion-predictor:"json-file"`
 }
 
 func (c *SnapshotCmd) Run() error {

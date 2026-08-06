@@ -20,6 +20,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/gookit/goutil v0.7.6
 	github.com/jaswdr/faker v1.19.1
+	github.com/jotaen/kong-completion v0.0.14
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/lrstanley/bubblezone/v2 v2.0.0 // only for benchmarks
 	github.com/lucasb-eyer/go-colorful v1.4.0
@@ -27,6 +28,7 @@ require (
 	github.com/mattn/go-isatty v0.0.22
 	github.com/narqo/go-badge v0.0.0-20230821190521-c9a75c019a59
 	github.com/pkg/errors v0.9.1
+	github.com/posener/complete v1.2.3
 	github.com/rivo/uniseg v0.4.7
 	github.com/rs/zerolog v1.35.1
 	github.com/stoewer/go-strcase v1.3.1
@@ -58,6 +60,8 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
@@ -67,6 +71,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/riywo/loginshell v0.0.0-20200815045211-7d26008be1ab // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect

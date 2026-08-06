@@ -98,3 +98,8 @@ func IsBootstrappableType(t FlakeOutputType) bool {
 
 	return p.IsBootstrappable
 }
+
+// ActivationModes returns the activation modes supported by nixosConfigurations.
+func ActivationModes() []string {
+	return presets[FlakeOutputType("nixosConfigurations")].ActivationModes
+}

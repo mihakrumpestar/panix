@@ -1,0 +1,67 @@
+---
+title: Shell Completion
+description: Enable tab completion for panix in bash, zsh, and fish.
+sidebar:
+  order: 4
+---
+
+Panix supports tab completion for commands, flags, and flag values in **bash**, **zsh**, and **fish**.
+
+## Install
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+<Tabs>
+<TabItem label="bash">
+
+```sh
+echo 'source <(panix completion -c bash)' >> ~/.bashrc
+```
+
+</TabItem>
+<TabItem label="zsh">
+
+```sh
+echo 'source <(panix completion -c zsh)' >> ~/.zshrc
+```
+
+</TabItem>
+<TabItem label="fish">
+
+```sh
+echo 'panix completion -c fish | source' >> ~/.config/fish/config.fish
+```
+
+</TabItem>
+</Tabs>
+
+Run `panix completion` with no shell argument to auto-detect. Use `-c` to print raw shell code for piping.
+
+## Nix / Home Manager
+
+```nix
+programs.bash.initExtra = ''
+  source <(panix completion -c bash)
+''; # or programs.zsh.initExtra / programs.fish.shellInit
+```
+
+For NixOS, use `environment.interactiveShellInit` instead.
+
+:::note
+`panix` must be on `$PATH` at shell init time.
+:::
+
+## Troubleshooting
+
+**Completion doesn't work:**
+  
+Ensure `panix` is on `$PATH` and the init line is in the correct file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`). Restart your terminal or `source` the file.
+
+**zsh: `compdef: command not found`:**
+  
+Load `compinit` before the panix line:
+
+```zsh
+autoload -Uz compinit && compinit
+source <(panix completion -c zsh)
+```

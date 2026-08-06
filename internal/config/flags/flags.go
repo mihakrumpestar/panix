@@ -20,7 +20,7 @@ const (
 )
 
 type ConfigFlags struct {
-	Config string `yaml:"-" json:"config" short:"c" help:"Config file" validate:"required,filepath" default:"panix.yml"`
+	Config string `yaml:"-" json:"config" short:"c" help:"Config file" validate:"required,filepath" default:"panix.yml" completion-predictor:"yaml-file"`
 }
 
 //nolint:lll
@@ -28,7 +28,7 @@ type WorkflowFlags struct {
 	ConfigFlags `yaml:",inline"`
 	EvalFlags   `yaml:",inline"`
 
-	Output OutputMode `yaml:"output" json:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json"`
+	Output OutputMode `yaml:"output" json:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json" completion-predictor:"output-mode"`
 
 	RequireAllSuccess bool `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD"`
 	ExitOnComplete    bool `yaml:"exit_on_complete" json:"exit_on_complete,omitempty" help:"Exit TUI on completion ('retry' and 'restart' are disabled in this mode)"`
@@ -49,9 +49,9 @@ type EvalFlags struct {
 	ValidateFlags `yaml:",inline"`
 
 	Tags           []string       `yaml:"tags" json:"tags,omitempty" short:"t" help:"Filter machines by tags (flakes, installables (output type and attribute name) and machine names are already registered as tags)"`
-	SkipPhases     []phase.Phase  `yaml:"skip_phases" json:"skip_phases,omitempty" short:"s" help:"Declare phases to skip (not all phases can be skipped)"`
+	SkipPhases     []phase.Phase  `yaml:"skip_phases" json:"skip_phases,omitempty" short:"s" help:"Declare phases to skip (not all phases can be skipped)" completion-predictor:"phase"`
 	Timeout        time.Duration  `yaml:"timeout" json:"timeout,omitempty" help:"Timeout per command (eg. '1h', '1m15s')" default:"2h"`
-	ActivationMode ActivationMode `yaml:"activation_mode" json:"activation_mode" help:"Activation mode override. Bare value (e.g. 'test') applies to all types. Per-type: 'nixosConfigurations=test;homeConfigurations=switch'"`
+	ActivationMode ActivationMode `yaml:"activation_mode" json:"activation_mode" help:"Activation mode override. Bare value (e.g. 'test') applies to all types. Per-type: 'nixosConfigurations=test;homeConfigurations=switch'" completion-predictor:"activation-mode"`
 }
 
 //nolint:lll
@@ -84,7 +84,7 @@ type Tui struct {
 }
 
 type Snapshot struct {
-	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"omitempty,dir,dir_exists" default:"."`
+	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"omitempty,dir,dir_exists" default:"." completion-predictor:"dir"`
 	OnRetry bool   `yaml:"on_retry" json:"on_retry,omitempty" help:"Take snapshot before retry"`
 	OnExit  bool   `yaml:"on_exit" json:"on_exit,omitempty" help:"Take snapshot on exit"`
 }
@@ -92,7 +92,7 @@ type Snapshot struct {
 //nolint:lll
 type Logging struct {
 	Log     bool   `yaml:"log" json:"log,omitempty" short:"l" help:"Enable logging to file"`
-	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"omitempty,filepath" default:"panix.log"`
+	LogFile string `yaml:"log_file" json:"log_file,omitempty" help:"Log file path (epoch timestamp appended before .log)" validate:"omitempty,filepath" default:"panix.log" completion-predictor:"log-file"`
 	Debug   bool   `yaml:"debug" json:"debug,omitempty" short:"d" help:"Debug mode (enables logging)"`
 }
 

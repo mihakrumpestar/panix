@@ -50,6 +50,9 @@ Commands:
     Rollback to a previous generation, use optional --gen=NUMBER flag (default
     is -1)
 
+  completion [<shell>] [flags]
+    Print shell code for initializing tab completion (bash, zsh, fish)
+
 Run "panix <command> --help" for more information on a command.
 ```
 {/* CLI_HELP_END */}
@@ -68,5 +71,6 @@ Run "panix <command> --help" for more information on a command.
 | `deploy` | Full workflow: inspect → bootstrap → build → transfer → secrets → activate |
 | `secrets` | Deploy secrets to machines |
 | `rollback` | Rollback to a previous generation |
+| `completion` | Print shell code for initializing tab completion (bash, zsh, fish) |
 
-See [Deploy Flags](/cli/deploy/) for the full `panix deploy` flag reference.
+See [Deploy Flags](/cli/deploy/) for the full `panix deploy` flag reference, or [Shell Completion](/cli/shell-completion/) to enable tab completion in your shell.

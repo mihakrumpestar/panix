@@ -9,7 +9,7 @@ import (
 )
 
 type InitCmd struct {
-	Output string `name:"output" short:"o" help:"Output file path" default:"panix.yml"`
+	Output string `name:"output" short:"o" help:"Output file path" default:"panix.yml" completion-predictor:"yaml-file"`
 	Force  bool   `name:"force" short:"f" help:"Overwrite existing file"`
 }
 
