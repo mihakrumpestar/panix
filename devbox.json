@@ -21,7 +21,7 @@
     // CI
     "act@latest",
     // For e2e tests
-    "qemu_full@latest",
+    "qemu_kvm@latest",
     "cdrkit@latest", // For genisoimage
     "harmonia@latest",
     // For benchmark graphing

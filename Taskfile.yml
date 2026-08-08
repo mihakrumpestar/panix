@@ -179,6 +179,7 @@ tasks:
       - nix flake update
       - nix flake update --flake ./tests/e2e/testflakes
       - task: nix:vendor
+      - task: docs:update
 
   ci:
     desc: Run all CI checks
@@ -331,6 +332,12 @@ tasks:
     dir: ./docs
     cmds:
       - bun install
+
+  docs:update:
+    desc: Update docs deps
+    dir: ./docs
+    cmds:
+      - bun update
 
   # Note: to update astro, run: npx @astrojs/upgrade
   docs:dev:
