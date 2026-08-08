@@ -168,9 +168,10 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 }
 
 // HandleMouseClick checks if a mouse click landed on a data row and
-// updates the selection accordingly. Clicking outside any row zone
-// deselects the current selection. Returns true if the selection state
-// was changed.
+// updates the selection accordingly. Clicking the already-selected row
+// toggles (deselects) it. Clicking outside any row zone does NOT
+// deselect, only an explicit re-click of the selected row deselects.
+// Returns true if the selection state was changed.
 
 func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if t.zonePrefix == "" || len(t.rows) == 0 || msg.Lines == nil {
@@ -178,26 +179,30 @@ func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	}
 
 	if msg.Y < 0 || msg.Y >= msg.Lines.Len() {
-		return t.deselectIfSelected()
+		return false
 	}
 
 	clickedID, ok := zeroterm.ZoneIDAtCol(msg.Lines.Line(msg.Y), msg.X)
 	if !ok {
-		return t.deselectIfSelected()
+		return false
 	}
 
 	if idx := t.findClickedRow(clickedID); idx >= 0 {
-		if t.selectedIndex != idx {
-			t.selectedIndex = idx
+		if t.selectedIndex == idx {
+			// Toggle: clicking the already-selected row deselects it.
+			t.selectedIndex = -1
 			t.outDirty = true
 
 			return true
 		}
 
-		return false
+		t.selectedIndex = idx
+		t.outDirty = true
+
+		return true
 	}
 
-	return t.deselectIfSelected()
+	return false
 }
 
 // HandleNavigation processes left/right key navigation. Returns true if
@@ -263,17 +268,6 @@ func (t *Table) Render() *buffer.LinesBuf {
 // Render() directly and use AppendFrom.
 func (t *Table) RenderInto(dst *buffer.LinesBuf) {
 	dst.AppendFrom(t.Render())
-}
-
-func (t *Table) deselectIfSelected() bool {
-	if t.selectedIndex < 0 {
-		return false
-	}
-
-	t.selectedIndex = -1
-	t.outDirty = true
-
-	return true
 }
 
 func (t *Table) findClickedRow(clickedID zeroterm.ZoneID) int {

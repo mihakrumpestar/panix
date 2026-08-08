@@ -119,42 +119,40 @@ func (pf *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) b
 	return true
 }
 
+// HandleMouseClick checks if a mouse click landed on a phase cell and
+// updates the selection accordingly. Clicking the already-selected phase
+// toggles (deselects) it. Clicking outside any phase zone does NOT
+// deselect, only an explicit re-click of the selected phase deselects.
+// Returns true if the selection state was changed.
 func (pf *PhaseFlow) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if len(pf.phases) == 0 {
 		return false
 	}
 
 	if msg.Lines == nil || msg.Y < 0 || msg.Y >= msg.Lines.Len() {
-		return pf.deselectIfSelected()
+		return false
 	}
 
 	clickedID, ok := zeroterm.ZoneIDAtCol(msg.Lines.Line(msg.Y), msg.X)
 	if !ok {
-		return pf.deselectIfSelected()
+		return false
 	}
 
 	for idx := range pf.phases {
 		if idx < len(pf.zoneIDs) && pf.zoneIDs[idx].Equal(clickedID) {
-			if pf.selectedIndex != idx {
-				pf.selectedIndex = idx
+			if pf.selectedIndex == idx {
+				// Toggle: clicking the already-selected phase deselects it.
+				pf.selectedIndex = -1
 				pf.outDirty = true
 
 				return true
 			}
 
-			return false
+			pf.selectedIndex = idx
+			pf.outDirty = true
+
+			return true
 		}
-	}
-
-	return pf.deselectIfSelected()
-}
-
-func (pf *PhaseFlow) deselectIfSelected() bool {
-	if pf.selectedIndex >= 0 {
-		pf.selectedIndex = -1
-		pf.outDirty = true
-
-		return true
 	}
 
 	return false

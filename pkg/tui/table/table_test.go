@@ -484,7 +484,7 @@ func TestTable_SelectionBackgroundCoversInnerSeparators(t *testing.T) {
 	}
 }
 
-func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
+func TestTable_HandleMouseClick_OutsideClickDoesNotDeselect(t *testing.T) {
 	t.Parallel()
 
 	tbl := New(Config{}).SetZonePrefix("test")
@@ -497,8 +497,38 @@ func TestTable_HandleMouseClick_DeselectOutsideReturnsTrue(t *testing.T) {
 
 	changed := tbl.HandleMouseClick(zeroterm.MouseClickMsg{X: 0, Y: 0, Lines: buf})
 
-	assert.True(t, changed, "HandleMouseClick should return true when deselecting via outside click")
-	assert.Equal(t, -1, tbl.SelectedIndex(), "SelectedIndex after outside click")
+	assert.False(t, changed, "HandleMouseClick should return false when clicking outside rows")
+	assert.Equal(t, 0, tbl.SelectedIndex(), "SelectedIndex should remain unchanged after outside click")
+}
+
+func TestTable_HandleMouseClick_ToggleSelectedRow(t *testing.T) {
+	t.Parallel()
+
+	tbl := New(Config{
+		Border:       style.NormalBorder(),
+		BorderStyle:  style.NewStyle(),
+		ColumnStyles: []style.Style{style.NewStyle()},
+	}).SetZonePrefix("test")
+	tbl.SetRows(strRows([]string{"a"}, []string{"b"}))
+
+	// Render to populate zone markers, then copy into a LinesBufDiff
+	// (the type MouseClickMsg.Lines expects).
+	rendered := tbl.Render()
+	require.NotZero(t, rendered.Len())
+
+	buf := buffer.NewLinesBufDiff()
+	buf.AppendFrom(rendered)
+
+	// Click the first data row (Y=1: top border is Y=0, no headers).
+	clickMsg := zeroterm.MouseClickMsg{X: 1, Y: 1, Lines: buf}
+	changed := tbl.HandleMouseClick(clickMsg)
+	assert.True(t, changed, "first click should select the row")
+	assert.Equal(t, 0, tbl.SelectedIndex(), "row 0 should be selected")
+
+	// Click the same row again to toggle it off.
+	changed = tbl.HandleMouseClick(clickMsg)
+	assert.True(t, changed, "second click on selected row should deselect it")
+	assert.Equal(t, -1, tbl.SelectedIndex(), "row should be deselected after toggle click")
 }
 
 func TestTable_HandleNavigation_UpDownIgnored(t *testing.T) {

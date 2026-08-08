@@ -42,24 +42,50 @@ func (m *model) keyDefs() []footer.KeyDef {
 	return kds
 }
 
+// navigable is the contract for components that respond to left/right
+// navigation and can be deselected. Both *statstable.StatsTable and
+// *phaseflow.PhaseFlow satisfy it.
+type navigable interface {
+	HandleNavigation(key string, hasActiveInnerViewport bool) bool
+	Reset()
+}
+
 func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
-	if msg.String() == "esc" {
+	key := msg.String()
+
+	if key == "esc" {
 		return m.handleEsc()
 	}
 
 	hasActiveInner := m.viewports.HasActiveInner()
 
-	key := msg.String()
+	// Try the active component first. When nothing is active, the stats
+	// table gets priority for initial selection. If the active component
+	// is at a boundary it can't consume, the key spills over to the other.
+	primary, secondary := navigable(m.statsTable), navigable(m.phaseFlow)
 
-	if m.statsTable.HandleNavigation(key, hasActiveInner) {
-		m.phaseFlow.Reset()
+	primaryComp, secondaryComp := compStatsTable, compPhaseFlow
+	if m.active == compPhaseFlow {
+		primary, secondary = secondary, primary
+		primaryComp, secondaryComp = secondaryComp, primaryComp
+	}
+
+	if primary.HandleNavigation(key, hasActiveInner) {
+		if m.active != primaryComp {
+			secondary.Reset()
+
+			m.active = primaryComp
+		}
+
 		m.cachedTree.InvalidateCache()
 
 		return nil
 	}
 
-	if m.phaseFlow.HandleNavigation(key, hasActiveInner) {
-		m.statsTable.Reset()
+	if secondary.HandleNavigation(key, hasActiveInner) {
+		primary.Reset()
+
+		m.active = secondaryComp
 		m.cachedTree.InvalidateCache()
 
 		return nil
@@ -208,12 +234,6 @@ func (m *model) handleEsc() zeroterm.Cmd {
 		m.viewports.ExitFullscreen()
 	case m.viewports.HasActiveInner():
 		m.viewports.DeselectAll()
-	case m.statsTable.SelectedIndex() >= 0:
-		m.statsTable.Reset()
-		m.cachedTree.InvalidateCache()
-	case m.phaseFlow.Selected.Index >= 0:
-		m.phaseFlow.Reset()
-		m.cachedTree.InvalidateCache()
 	}
 
 	return nil

@@ -76,6 +76,7 @@ func (m *model) workflowRestartCmd() zeroterm.Cmd {
 	m.conf.Fleet.ResetState()
 	m.statsTable.Reset()
 	m.phaseFlow.Reset()
+	m.active = compNone
 	m.spinners.Reset()
 	m.viewports.Reset()
 	m.cachedTree.Reset()
@@ -150,9 +151,21 @@ func (m *model) handleErrMsgCmd(msg errMsg) zeroterm.Cmd {
 func (m *model) handleMouseClick(msg zeroterm.MouseClickMsg) {
 	if m.statsTable.HandleMouseClick(msg) {
 		m.phaseFlow.Reset()
+
+		if m.statsTable.SelectedIndex() >= 0 {
+			m.active = compStatsTable
+		} else {
+			m.active = compNone // toggle-deselect
+		}
 	}
 
 	if m.phaseFlow.HandleMouseClick(msg) {
 		m.statsTable.Reset()
+
+		if m.phaseFlow.Selected.Index >= 0 {
+			m.active = compPhaseFlow
+		} else {
+			m.active = compNone // toggle-deselect
+		}
 	}
 }

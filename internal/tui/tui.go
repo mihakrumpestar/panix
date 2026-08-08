@@ -28,6 +28,19 @@ import (
 
 var ErrTypeAssertionFinalModel = errors.New("internal error: type assertion failed for finalModel")
 
+// activeComponent tracks which navigable component currently receives
+// left/right key presses. This avoids inferring the active component
+// from selection state, which caused a bug where the stats table would
+// steal key presses from the phase flow (both treat selectedIndex < 0
+// as "select first item on right").
+type activeComponent int
+
+const (
+	compNone activeComponent = iota // nothing selected — stats table gets priority
+	compStatsTable
+	compPhaseFlow
+)
+
 type model struct {
 	ctx                context.Context
 	conf               *config.Config
@@ -38,6 +51,7 @@ type model struct {
 	lastWorkflowUpdate time.Time
 	err                error
 
+	active     activeComponent
 	header     *header.Header
 	buildLogs  *buildlogs.BuildLogs
 	footer     *footer.Footer
