@@ -5,14 +5,14 @@
     "": {
       "name": "panix-docs",
       "dependencies": {
-        "@astrojs/mdx": "^6.0.1",
+        "@astrojs/mdx": "^6.0.3",
         "@astrojs/starlight": "0.40.0",
         "@lorenzo_lewis/starlight-utils": "^0.3.2",
-        "@tailwindcss/vite": "^4.3.0",
+        "@tailwindcss/vite": "^4.3.3",
         "astro": "^6.4.8",
         "astro-mermaid": "^2.1.0",
         "sharp": "^0.34.5",
-        "tailwindcss": "^4.3.0",
+        "tailwindcss": "^4.3.3",
       },
     },
   },
