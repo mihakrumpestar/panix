@@ -46,3 +46,16 @@ This can be overridden (if you want to prevent this, or if hostname detection do
 flags:
   local_machine_hostname: my-local-machine
 ```
+
+### Forcing SSH to Localhost
+
+If you haven't set up passwordless sudo on your local machine (and don't want to, it's a security risk on desktops), you can force Panix to always SSH into the local machine instead of executing commands directly via local shell.
+
+Set `local_machine_hostname` to a value that will never match any real hostname:
+
+```yaml
+flags:
+  local_machine_hostname: never-match-anything
+```
+
+Since the sentinel value won't match any machine name in your fleet, Panix will never detect any machine as local and will always connect via SSH, even when deploying to the machine you're running from. This lets you rely on SSH key authentication instead of local sudo.
