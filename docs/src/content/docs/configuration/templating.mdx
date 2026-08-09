@@ -1,56 +1,154 @@
 ---
 title: Template Engine
-description: Dynamic YAML configuration with Go template syntax, conditionals, and built-in functions.
+description: Dynamic YAML configuration with Go templates, Sprout functions, and YAML anchors for reusable and conditional fleet definitions.
 sidebar:
   order: 3
 ---
 
-Panix includes a powerful template engine for dynamic YAML configuration. Templates use standard Go template syntax with `{{` and `}}` delimiters and support 100+ built-in functions from the [Sprout](https://github.com/go-sprout/sprout) library.
+Panix configuration files are plain YAML, but they pass through a template engine before being parsed. YAML anchors give you another layer of reuse on top. Together these let you parametrize values, include or exclude whole sections conditionally, and share blocks between machines, flakes, and installables without duplicating configuration.
+
+This page is the complete guide: how the pipeline works, template syntax, the available functions, YAML anchors and merge keys, common pitfalls, and real-world patterns.
+
+## Processing Pipeline
+
+A config file is processed in four steps:
+
+1. **Read** the raw file.
+2. **Template engine:** Go `text/template` with 100+ Sprout functions runs over the raw text.
+3. **YAML parse:** the resulting text is parsed as YAML, resolving anchors (`&name` / `*alias`) and merge keys (`<<:`).
+4. **Validation:** the parsed document is checked against the strict schema; unknown fields are rejected (with one exception, see [The `anchor_` prefix rule](#the-anchor_-prefix-rule)).
+
+This order has three practical consequences:
+
+- Template output must be **valid YAML**: the template engine does not know about YAML structure.
+- Templates run *before* anchors are resolved, so the two compose freely (see [Combining templates and anchors](#combining-templates-and-anchors)).
+- Schema errors surface only after templates have run. A template error and a schema error are different failure modes with different messages (see [Troubleshooting](#troubleshooting)).
+
+## When to Use What
+
+Three tools cover reuse and parametrization. Pick the narrowest one that fits:
+
+| Need | Tool |
+| ---- | ---- |
+| Environment-dependent values | `{{ env "X" }}` |
+| Same block copied in several places | YAML anchor or `{{define}}` |
+| Parameterized snippet (different args per use) | `{{define}}` / `{{template}}` |
+| Conditionally include/exclude a section | `{{ if }}` / `{{ else }}` |
+| Plain aliasing, no logic | YAML anchor (`&name` / `*name`) |
+
+Rule of thumb: anchors for pure reuse of static blocks, `{{define}}` when the snippet takes arguments, `{{ if }}` when the difference comes from the environment.
 
 ## Basic Syntax
 
-Environment variables and dynamic values:
+Templates use Go's `text/template` syntax with `{{` and `}}` delimiters:
+
+| Construct | Example | Purpose |
+| --------- | ------- | ------- |
+| Action | `{{ env "MY_URL" }}` | Outputs a value (here: the `MY_URL` env var) |
+| Pipeline | `{{ env "PORT" \| default "22" }}` | Passes the result through functions left to right |
+| Variable | `{{ $tag := "prod" }}` | Assigns an in-template variable |
+| Comment | `{{/* this does nothing */}}` | Template comment, removed from output |
+| Trim | `{{- value -}}` | Removes surrounding whitespace/newlines from output |
+
+Pipelines are the core idiom: nearly everything is `{{ <value> | <func> | <func> }}`.
+
+## Functions
+
+Two sets of functions are available.
+
+### Built-in Go template functions
+
+These come with `text/template` itself and are always available:
+
+| Category | Functions |
+| -------- | --------- |
+| Comparison | `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
+| Logic | `and`, `or`, `not` |
+| Formatting | `printf`, `print`, `println` |
+| Collection | `len`, `index`, `slice` |
+| Misc | `call` |
+
+### Sprout functions
+
+Panix bundles the [Sprout](https://github.com/go-sprout/sprout) library, which provides 100+ functions in groups covering environment, strings, conversion, math, time, regexp, and more. The canonical (and complete) function list lives in the [Sprout registry documentation](https://docs.atom.codes/sprout/registries/list-of-all-registries). If a function exists there, it works inside panix configs.
+
+### Sprout cheat-sheet
+
+The idioms you will actually use, in panix configs:
+
+| Need | Idiom |
+| ---- | ----- |
+| Env var with fallback | `{{ env "X" \| default "y" }}` |
+| Expand `$VAR` inside a string | `{{ expandEnv "$HOME/.ssh/id_ed25519" }}` |
+| Conditional value | `{{ if eq (env "ENV") "prod" }}...{{ end }}` |
+| Ternary (choose between two values) | `{{ ternary "yes" "no" (eq (env "ENV") "prod") }}` |
+| String building | `{{ printf "%s/%s" (env "DIR") "config.nix" }}` |
+| Prefix check | `{{ if hasPrefix "prod" (env "ENV") }}` |
+| Contains check | `{{ if contains "eu" (env "REGION") }}` |
+| Join a list | `{{ join "," (list "a" "b") }}` |
+| Number coercion | `{{ toInt (env "SSH_PORT" \| default "22") }}` |
+
+:::note
+`env` never fails: an unset variable yields the empty string, which is exactly why `default` composes. React to missing variables with `default` or an explicit `if` check.
+:::
+
+## Control Flow
+
+`if`/`else`/`end` can wrap whole YAML sections, so sections appear or disappear based on evaluated conditions:
 
 ```yaml
 fleet:
   flakes:
-    my-flake:
-      url: |
-        {{ env "MY_FLAKE_URL" }}
+    {{ if eq (env "ENV") "production" }}
+    prod-flake:
+      url: github:myorg/prod-config
+    {{ else }}
+    dev-flake:
+      url: github:myorg/dev-config
+    {{ end }}
+```
+
+Because the template engine operates on raw text, the block above renders to one of the two flake definitions, never both. The [e2e test config](https://github.com/mihakrumpestar/panix/blob/main/tests/e2e/panix.yml) uses the same pattern with pre-computed booleans, toggling bootstrap vs. deploy and local vs. remote sections from environment variables:
+
+```yaml
+{{- $scope := env "PANIX_TEST_SCOPE" | default "both" -}}
+{{- $isLocal := or (eq $scope "local") (eq $scope "both") -}}
+
+{{ if $isLocal }}
+# only local machines
+{{ end }}
+```
+
+Other control structures from Go templates work too: `with` scopes the dot, and `range` iterates lists (see [Indentation & Whitespace Pitfalls](#indentation--whitespace-pitfalls) for generating list items).
+
+## Variables & Reusable Templates
+
+### In-template variables
+
+For values used several times in one file, assign them with `:=`:
+
+```yaml
+{{ $ssh_port := env "SSH_PORT" | default "22" }}
+fleet:
+  flakes:
+    infra:
       installables:
         nixosConfigurations:
           server:
             machines:
               server-01:
                 ssh:
-                  hostname: |
-                    {{ env "SERVER_HOST" | default "192.168.1.100" }}
-                  port: |
-                    {{ env "SSH_PORT" | default "22" }}
+                  port: {{ $ssh_port }}
+              server-02:
+                ssh:
+                  port: {{ $ssh_port }}
 ```
 
-## Conditional Logic
+### Reusable snippets: `define` / `template`
 
-Use conditionals for environment-specific configurations:
-
-```yaml
-fleet:
-  flakes:
-    {{if eq (env "ENV") "production"}}
-    prod-flake:
-      url: github:myorg/prod-config
-    {{else}}
-    dev-flake:
-      url: github:myorg/dev-config
-    {{end}}
-```
-
-## Template Definitions
-
-Define reusable templates with `{{define}}` and invoke them with `{{template}}`:
+For larger snippets, define a named template once and invoke it with parameters. **Definitions must be placed inside YAML comments** so the YAML parser never sees them:
 
 ```yaml
-# Define template (in YAML comment to avoid LSP errors)
 # {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
 
 fleet:
@@ -65,7 +163,7 @@ fleet:
                   post_bootstrap_hooks:
                     - |
                       {{template "cryptenroll" "/dev/sda2"}}
-              
+
               server-02:
                 bootstrap:
                   post_bootstrap_hooks:
@@ -73,17 +171,275 @@ fleet:
                       {{template "cryptenroll" "/dev/nvme0n1p2"}}
 ```
 
-## Built-in Functions
+This works because templates are processed **before** YAML parsing: the comment line is still part of the raw text when the template engine registers `cryptenroll`, and by the time YAML is parsed the directive is gone. Inside the definition, `{{.}}` is the argument passed by `{{template "name" arg}}`.
 
-Panix provides 100+ functions from Sprout. Documentation is available in [Sprout docs](https://docs.atom.codes/sprout/registries/list-of-all-registries).
+:::tip
+The comment trick is the sanctioned place for definitions. `{{define}}` renders nothing itself, but any text around it in real YAML would be parsed as configuration, so keep definitions in comments.
+:::
 
-## Notes
+## YAML Anchors & Merge Keys
 
-- Template definitions (`{{define}}`) work inside YAML comments
-- Standard Go template syntax with `{{` and `}}` delimiters
-- YAML LSP may complain about template syntax, this is cosmetic
-- For complex multiline templates, use block scalars (`|`)
+YAML itself provides reuse through anchors and aliases, and panix fully supports them. This is the same feature set you get from any YAML parser, with one panix-specific rule.
 
-## Previewing Templates
+### Anchors and aliases
 
-Use the [panix template](/configuration/template-command/) command to preview processed YAML with templates evaluated and anchors resolved.
+`&name` marks a value, `*name` references it:
+
+```yaml
+anchor_common_ssh: &common_ssh
+  hostname: 10.0.200.10
+  username: root
+  port: 22
+
+fleet:
+  flakes:
+    infra:
+      installables:
+        nixosConfigurations:
+          server:
+            machines:
+              server-01:
+                ssh: *common_ssh
+              server-02:
+                ssh: *common_ssh
+```
+
+### Merge keys
+
+`<<: *alias` merges the aliased mapping's top-level keys into the current mapping, letting you inherit a block and then override or extend it:
+
+```yaml
+anchor_bootstrap: &bootstrap_defaults
+  kexec:
+    image: ./kexec-<arch>.tar.gz
+  disk_encryption_keys:
+    - local_path: /tmp/disko-encryption-password.txt
+      remote_path: /tmp/disko-encryption-password.txt
+
+fleet:
+  flakes:
+    infrastructure:
+      installables:
+        nixosConfigurations:
+          server:
+            machines:
+              server-01:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  post_bootstrap_hooks:
+                    - systemd-cryptenroll --tpm2-device=auto /dev/sda2
+```
+
+Explicit keys override the merged values regardless of position, so you can inherit defaults and specialize per machine (the convention is to merge first, then override):
+
+```yaml
+server-01:
+  bootstrap:
+    <<: *bootstrap_defaults
+    kexec:
+      image: ./kexec-x86_64.tar.gz   # overrides the anchor's image
+```
+
+Anchors work with lists too. This is useful for `secrets` and `disk_encryption_keys` that repeat across machines:
+
+```yaml
+anchor_disks: &disks
+  - local_path: /tmp/disko-encryption-password.txt
+    remote_path: /tmp/disko-encryption-password.txt
+
+fleet:
+  flakes:
+    infra:
+      installables:
+        nixosConfigurations:
+          server:
+            machines:
+              server-01:
+                bootstrap:
+                  disk_encryption_keys: *disks
+```
+
+### The `anchor_` prefix rule
+
+:::caution
+Any key used **only** to define an anchor must be prefixed with `anchor_`. Otherwise the strict parser rejects it as an unknown field.
+:::
+
+Panix decodes YAML in strict mode, in which unknown fields are errors. To allow anchor definitions, keys starting with `anchor_` are exempt (at any nesting level, not only the top). By convention, anchor definitions live at the top level of the file, named like `anchor_bootstrap`, `anchor_common_ssh`, `anchor_disks`, and are never part of the schema.
+
+### Combining templates and anchors
+
+Templates and anchors compose freely because templates run first: a template can generate anchor definitions, and an anchored block can contain template invocations. The [deploy example](https://github.com/mihakrumpestar/panix/blob/main/examples/panix.deploy.yml) does both: a `{{define}}`d hook command combined with an anchored bootstrap block:
+
+```yaml
+# {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --tpm2-pcrs="" --wipe-slot=all {{.}}{{end}}
+
+anchor_bootstrap: &bootstrap_defaults
+  kexec:
+    image: ./kexec-<arch>.tar.gz
+  disk_encryption_keys:
+    - local_path: /tmp/disko-encryption-password.txt
+      remote_path: /tmp/disko-encryption-password.txt
+
+fleet:
+  flakes:
+    infrastructure:
+      installables:
+        nixosConfigurations:
+          server-01:
+            machines:
+              server-01:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/sda2"}}
+```
+
+### Merge-key caveats
+
+- The merge key merges **top-level mapping entries only**. The aliased values are inserted as-is; if you need a nested merge (e.g. `kexec` inside a merged `bootstrap`), merge at each level explicitly.
+- An alias is a reference to the anchored value. Anchors themselves are inert for validation: the `anchor_`-prefixed keys are allowed through but carry no meaning to the schema.
+
+## Indentation & Whitespace Pitfalls
+
+Templates emit text, and the rendered result must remain structurally valid YAML. These are the failure modes that actually bite:
+
+- **Keep control flow at a consistent column.** The `{{ if }}` / `{{ end }}` lines render to empty lines, which are harmless in YAML. What breaks is when the wrapped content is indented differently from the control-flow lines. Put the `{{ if }}` at the same indentation as the YAML it wraps, and keep the wrapped block consistently indented.
+
+- **Do not put control flow inside block scalars.** A `{{ if }}` inside a `|` block scalar removes a line from the scalar's content, silently changing the command or script you are templating. Keep hooks and scripts free of control flow; move the condition outside the scalar.
+
+- **Trim when generating list items.** A `range` loop leaves blank lines between items. Use `{{-` and `-}}` to control them:
+
+```yaml
+tags:
+{{- range $t := list "web" "prod" }}
+  - {{ $t }}
+{{- end }}
+```
+
+- **Watch out for empty render results.** A template that renders to an empty string leaves `key:` with no value, which parses as YAML `null`. If the field expects a string, validation fails. Use `default` to guarantee a value.
+
+- **Malformed or missing values fail at load time, with the line number.** See [Troubleshooting](#troubleshooting) for how to read the errors.
+
+## Types & Quoting
+
+Templates always emit **text**. The final YAML value is whatever the emitted text parses as, so keep the target field's type in mind:
+
+```yaml
+ssh:
+  hostname: "{{ env "HOSTNAME" }}"   # string field, quotes are fine
+  port: {{ env "SSH_PORT" | default "22" }}  # integer field, keep unquoted
+```
+
+- **String fields:** quotes are harmless and often clearer.
+- **Number / boolean fields:** leave the output unquoted so YAML parses it as a number/boolean; use `toInt`/`toBool` when you need to coerce within the template.
+- **Multiline strings** (hook commands, scripts): use YAML block scalars (`|`) so the template output stays on one logical value:
+
+  ```yaml
+  post_bootstrap_hooks:
+    - |
+      {{template "cryptenroll" "/dev/sda2"}}
+  ```
+
+- **Lists of strings:** produce one line per element, or build a joined string with `join` where the schema expects a single value.
+
+## IDE Support
+
+Template syntax is not YAML, so `yaml-language-server` may complain about `{{`/`}}` inside blocks, and about the comment-based `{{define}}` lines. This is cosmetic: panix processes templates before the YAML parser ever sees them. If the noise bothers you:
+
+- Keep definitions in comments (as shown above) and structure conditionals so the LSP still sees plausible YAML on the unprocessed file.
+- Add the schema comment to get autocompletion for the rest of the file:
+
+```yaml
+# yaml-language-server: $schema=../gen/panix-schema.yaml
+```
+
+See [IDE Support](/configuration/ide-support/) for the full setup.
+
+## Debugging
+
+Two commands help you inspect what your config becomes:
+
+- **[`panix template`](/configuration/template-command/):** processes templates and resolves anchors, outputs the resulting YAML. No validation. Use this to see exactly what the template engine produced.
+
+```bash
+panix template -c panix.yml -o processed.yml
+```
+
+Note: the output contains only the `flags` and `fleet` top-level keys, so `anchor_` definition keys are resolved and absent from it.
+
+- **[`panix eval`](/configuration/eval-command/):** runs the full pipeline: templates, anchors, defaults, inheritance, and validation. Use this to see the final evaluated configuration panix will act on.
+
+```bash
+panix eval -c panix.yml -o evaluated.yml
+```
+
+## Troubleshooting
+
+Template errors are wrapped with the config path (`failed to process templates in config "panix.yml"`); the table lists the distinguishing inner message. Struct-tag validation failures (bad flake URL, missing required field) surface as `invalid configuration`.
+
+| Symptom | Meaning |
+| ------- | ------- |
+| `failed to parse template` | Template syntax error (missing `{{`, broken `define`, unknown function name) |
+| `failed to execute template` | A function failed at runtime (bad argument) |
+| `failed to decode config` | The processed text is not valid YAML, or violates the strict schema (unknown field) |
+| `unknown field "my_anchor"` | Missing the `anchor_` prefix on an anchor definition key |
+| Empty value where a string was expected | The template rendered nothing; add `\| default "..."` |
+
+## Real-World Patterns
+
+A production-style config putting it all together: anchored defaults, merged per-machine overrides, and template-defined hooks:
+
+```yaml
+# yaml-language-server: $schema=../gen/panix-schema.yaml
+
+# {{define "cryptenroll"}}systemd-cryptenroll --unlock-key-file=/tmp/disko-encryption-password.txt --tpm2-device=auto --tpm2-with-pin=no --wipe-slot=all {{.}}{{end}}
+
+anchor_bootstrap: &bootstrap_defaults
+  kexec:
+    image: ./kexec-<arch>.tar.gz
+  disk_encryption_keys:
+    - local_path: /tmp/disko-encryption-password.txt
+      remote_path: /tmp/disko-encryption-password.txt
+
+flags:
+  timeout: 5500s
+
+fleet:
+  flakes:
+    infrastructure:
+      url: ../infrastructure
+      installables:
+        nixosConfigurations:
+          server-01:
+            machines:
+              server-01:
+                ssh:
+                  hostname: "{{ env "SERVER_HOST" | default "server-01.internal" }}"
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  post_bootstrap_hooks:
+                    - |
+                      {{template "cryptenroll" "/dev/sda2"}}
+          {{ if eq (env "DEPLOY_LAPTOP") "true" }}
+          personal-laptop:
+            machines:
+              personal-laptop:
+                bootstrap:
+                  <<: *bootstrap_defaults
+          {{ end }}
+```
+
+This single file gives you: one definition of the bootstrap block reused across machines, per-machine specialization via merge keys, reusable hook commands via templates, and an environment variable that decides whether the laptop is part of this deployment run at all.
+
+### How the e2e suite uses templates
+
+The [e2e test config](https://github.com/mihakrumpestar/panix/blob/main/tests/e2e/panix.yml) is the most complete template usage in the repo and is worth studying. It exercises every feature at once:
+
+- `{{ env "PANIX_E2E_DIR" }}` for paths that only exist on the CI machine (flake URLs, log dirs, SSH keys), with `default` fallbacks where sensible.
+- Pre-computed booleans from `env` with `default`s (e.g. `{{- $isBootstrap := eq $mode "bootstrap" -}}`) that switch between bootstrap and deploy sections, plus independent `{{ if $isLocal }}` / `{{ if $isRemote }}` blocks that select local, remote, or both scopes.
+- YAML anchors (`&ssh_nixos_iso`, `*ssh_nixos_iso`) to share the ISO-installer SSH settings across the four installable types (`nixosConfigurations`, `homeConfigurations`, `packages`, `systemConfigs`).
+- `user: alice` and `user: root` installable-level overrides for user-level installables (the `user` field lives on the installable, not the machine).
+
+If you are unsure how to combine templates and anchors, that file shows all of it working against real machines.
