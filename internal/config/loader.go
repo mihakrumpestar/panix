@@ -11,8 +11,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/validate"
 	"github.com/mihakrumpestar/panix/internal/logger"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
@@ -57,7 +57,7 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 		return nil, errors.Wrap(err, "failed to detect nix implementation")
 	}
 
-	log.Info().Str("nix", conf.Nix.Raw).Msg("detected nix implementation")
+	log.Info().Str("nix", conf.Nix.GetRaw()).Msg("detected nix implementation")
 
 	// Initialize SSH for remaining machines after filtering.
 	err = conf.initFleetSSH()

@@ -15,15 +15,21 @@ sidebar:
 
 ## Lix Support
 
-[Lix](https://lix.systems) is a fork of Nix that Panix detects and supports automatically. When Lix is detected on the local machine, Panix adjusts:
+[Lix](https://lix.systems) is a fork of Nix that Panix detects and supports automatically. When Lix is detected on the local machine (remotes are not checked), Panix adjusts:
 
 - nix store URL format (Lix uses `?port=N` query params instead of `:port` in the host).
 
-:::caution
-If your local machine runs Lix, but the remote machine runs Nix (or vice versa), remote build mode (`build_mode: remote`) may encounter store URL format mismatches. This has not been tested. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
-:::
+  :::caution
+  If your local machine runs Lix, but the remote machine runs Nix (or vice versa), remote build mode (`build_mode: remote`) may encounter store URL format mismatches. This has not been tested. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
+  :::
 
-Local build mode works without issues in mixed environments.
+  Local build mode works without issues in mixed environments.
+
+- `nix profile add` on Lix
+
+  Nix 2.30 renamed `nix profile install` to `nix profile add` (keeping `install` as an alias). Lix never adopted this rename and only supports `nix profile install`.
+
+  When Panix detects Lix on a target machine (during the inspect phase), it automatically uses `nix profile install` instead of `nix profile add` for package activation.
 
 ## Caveats
 

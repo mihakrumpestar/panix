@@ -8,6 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/pkg/errors"
 )
 
@@ -38,6 +39,7 @@ func Activate(
 	mode string,
 	targetUser string,
 	nixCfg *nix.NixConfig,
+	nixFlavor nixver.Flavor,
 ) error {
 	err := maybeSetProfile(exc, mach, preset, closure, mode)
 	if err != nil {
@@ -45,7 +47,7 @@ func Activate(
 	}
 
 	if preset.ActivationPath == "" {
-		return activatePackage(exc, mach, preset, closure, targetUser, nixCfg)
+		return activatePackage(exc, preset, closure, targetUser, nixCfg, nixFlavor)
 	}
 
 	return activateScript(exc, mach, preset, closure, mode, targetUser)
@@ -71,16 +73,21 @@ func maybeSetProfile(
 
 func activatePackage(
 	exc *executioner.Executioner,
-	_ *machine.Machine,
 	preset installable.Preset,
 	closure string,
 	targetUser string,
 	nixCfg *nix.NixConfig,
+	nixFlavor nixver.Flavor,
 ) error {
+	// Lix doesn't support `nix profile add` (Nix 2.30 renamed install to add,
+	// but Lix never adopted the rename). Use `install` when Lix is detected;
+	// keep `add` as default for Nix.
+	profileSubcmd := profileSubcmdForFlavor(nixFlavor)
+
 	args := slices.Concat(
 		[]string{"nix"},
 		nixCfg.GetExperimentalFeatures(),
-		[]string{"profile", "add"},
+		[]string{"profile", profileSubcmd},
 		nixCfg.GetProfileAddDefaultFlags(),
 		[]string{closure},
 	)
@@ -230,4 +237,15 @@ func asUser(user string, command []string) []string {
 // supportsMode checks if the given mode is in the supported modes list.
 func supportsMode(supported []string, mode string) bool {
 	return slices.Contains(supported, mode)
+}
+
+// profileSubcmdForFlavor returns the `nix profile` subcommand for the given
+// nix implementation. Lix never adopted the Nix 2.30 rename of `install` to
+// `add`, so it needs `install`. Nix supports both; `add` is the modern default.
+func profileSubcmdForFlavor(flavor nixver.Flavor) string {
+	if flavor == nixver.FlavorLix {
+		return "install"
+	}
+
+	return "add"
 }

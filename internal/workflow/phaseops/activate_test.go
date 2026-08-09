@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -226,6 +227,43 @@ func TestShellQuote(t *testing.T) {
 
 			result := shellQuote(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestProfileSubcmdForFlavor verifies that Lix detection results in
+// "install" being used instead of "add". This is a regression test for
+// issue #12 where Lix doesn't support `nix profile add`.
+func TestProfileSubcmdForFlavor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		flavor nixver.Flavor
+		want   string
+	}{
+		{
+			name:   "Nix uses add",
+			flavor: nixver.FlavorNix,
+			want:   "add",
+		},
+		{
+			name:   "Lix uses install",
+			flavor: nixver.FlavorLix,
+			want:   "install",
+		},
+		{
+			name:   "empty flavor defaults to add",
+			flavor: "",
+			want:   "add",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, profileSubcmdForFlavor(tt.flavor))
 		})
 	}
 }

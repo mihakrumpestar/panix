@@ -150,7 +150,7 @@ func (sC SSHClient) NixStoreURL() string {
 
 	url := "ssh-ng://" + sC.Username + "@" + sC.Hostname
 
-	if sC.nixInfo.Flavor == nixver.FlavorLix {
+	if sC.nixInfo.GetFlavor() == nixver.FlavorLix {
 		url += "?port=" + sC.PortString()
 	} else {
 		url += ":" + sC.PortString()
@@ -158,7 +158,7 @@ func (sC SSHClient) NixStoreURL() string {
 
 	if sC.IdentityFile != "" {
 		sep := "?"
-		if sC.nixInfo.Flavor == nixver.FlavorLix {
+		if sC.nixInfo.GetFlavor() == nixver.FlavorLix {
 			sep = "&"
 		}
 

@@ -9,11 +9,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/pkg/errors"
 )
 
 type Handler struct {
 	ActivationMode flags.ActivationMode
+	NixFlavor      nixver.Flavor
 }
 
 func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
@@ -35,12 +37,13 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		return executeBootstrap(exc, machine, &fleetLeaf.Installable.Nix, systemClosure)
 	}
 
-	return executeActivation(exc, h.ActivationMode, fleetLeaf, systemClosure, &fleetLeaf.Installable.Nix)
+	return executeActivation(exc, h.ActivationMode, h.NixFlavor, fleetLeaf, systemClosure, &fleetLeaf.Installable.Nix)
 }
 
 func executeActivation(
 	exc *executioner.Executioner,
 	activationMode flags.ActivationMode,
+	nixFlavor nixver.Flavor,
 	fleetLeaf *fleet.FleetLeaf,
 	closure string,
 	nixCfg *nix.NixConfig,
@@ -57,7 +60,10 @@ func executeActivation(
 		mode = override
 	}
 
-	return errors.Wrap(phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg), "activation failed")
+	return errors.Wrap(
+		phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg, nixFlavor),
+		"activation failed",
+	)
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixCfg *nix.NixConfig, systemClosure string) error {

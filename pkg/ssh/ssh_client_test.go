@@ -376,13 +376,7 @@ func TestNixStoreURLWithParams_NonAliasWithIdentityFile(t *testing.T) {
 	assertion.Equal("ssh-ng://root@192.168.1.50:22?ssh-key=/home/user/.ssh/id_ed25519&remote-store=local?root=/mnt", client.NixStoreURLWithParams("remote-store=local?root=/mnt")) //nolint:lll
 }
 
-var lixInfo = nixver.Info{
-	Raw:    "nix (Lix, like Nix) 2.94.0",
-	Flavor: nixver.FlavorLix,
-	Major:  2,
-	Minor:  94,
-	Patch:  0,
-}
+var lixInfo = nixver.ParseNixVersion("nix (Lix, like Nix) 2.94.0")
 
 func TestNixStoreURL_NonAlias_LixDefaults(t *testing.T) {
 	t.Parallel()
@@ -392,7 +386,7 @@ func TestNixStoreURL_NonAlias_LixDefaults(t *testing.T) {
 		Username:        SSHDefaultUsername,
 		Port:            SSHDefaultPort,
 		hostnameIsAlias: false,
-		nixInfo:         lixInfo,
+		nixInfo:         *lixInfo,
 	}
 
 	assertion := assert.New(t)
@@ -407,7 +401,7 @@ func TestNixStoreURL_NonAlias_LixCustomPort(t *testing.T) {
 		Port:            2222,
 		Username:        "root",
 		hostnameIsAlias: false,
-		nixInfo:         lixInfo,
+		nixInfo:         *lixInfo,
 	}
 
 	assertion := assert.New(t)
@@ -423,7 +417,7 @@ func TestNixStoreURL_NonAlias_LixIdentityFile(t *testing.T) {
 		Port:            SSHDefaultPort,
 		IdentityFile:    "/home/user/.ssh/id_ed25519",
 		hostnameIsAlias: false,
-		nixInfo:         lixInfo,
+		nixInfo:         *lixInfo,
 	}
 
 	assertion := assert.New(t)
@@ -439,7 +433,7 @@ func TestNixStoreURL_NonAlias_LixAllCustom(t *testing.T) {
 		Username:        "builder",
 		IdentityFile:    "/home/user/.ssh/builder_key",
 		hostnameIsAlias: false,
-		nixInfo:         lixInfo,
+		nixInfo:         *lixInfo,
 	}
 
 	assertion := assert.New(t)
@@ -455,7 +449,7 @@ func TestNixStoreURLWithParams_NonAlias_LixWithIdentityFile(t *testing.T) {
 		Port:            SSHDefaultPort,
 		IdentityFile:    "/home/user/.ssh/id_ed25519",
 		hostnameIsAlias: false,
-		nixInfo:         lixInfo,
+		nixInfo:         *lixInfo,
 	}
 
 	assertion := assert.New(t)

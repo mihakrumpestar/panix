@@ -11,11 +11,13 @@ import (
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/pkg/errors"
 )
 
 type Handler struct {
 	TargetGeneration int
+	NixFlavor        nixver.Flavor
 }
 
 // ShouldSkip returns true for installable types that don't have versioned
@@ -58,7 +60,7 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		return errors.Wrap(err, "generation validation failed")
 	}
 
-	return executeRollback(exc, fleetLeaf, targetGenNum)
+	return executeRollback(exc, fleetLeaf, targetGenNum, h.NixFlavor)
 }
 
 var (
@@ -102,6 +104,7 @@ func executeRollback(
 	exc *executioner.Executioner,
 	fleetLeaf *fleet.FleetLeaf,
 	targetGenNum uint,
+	nixFlavor nixver.Flavor,
 ) error {
 	preset := fleetLeaf.Installable.Preset
 
@@ -111,7 +114,7 @@ func executeRollback(
 	}
 
 	return errors.Wrap(
-		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User, &fleetLeaf.Installable.Nix),
+		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User, &fleetLeaf.Installable.Nix, nixFlavor),
 		"failed to activate rollback generation",
 	)
 }

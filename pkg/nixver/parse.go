@@ -5,23 +5,23 @@ import (
 	"strings"
 )
 
-// parseNixVersion parses the output of "nix --version" into Info.
+// ParseNixVersion parses the output of "nix --version" into Info.
 //
 // Expected formats:
 //
 //	nix (Nix) 2.34.0              -> Nix, 2.34.0
 //	nix (Lix, like Nix) 2.94.0    -> Lix, 2.94.0
 //	nix (Lix, like Nix) 2.90-beta.0 -> Lix, 2.90.0
-func parseNixVersion(input string) *Info {
+func ParseNixVersion(input string) *Info {
 	input = strings.TrimSpace(input)
 	major, minor, patch := parseSemver(input)
 
 	return &Info{
-		Raw:    input,
-		Flavor: detectFlavor(input),
-		Major:  major,
-		Minor:  minor,
-		Patch:  patch,
+		raw:    input,
+		flavor: detectFlavor(input),
+		major:  major,
+		minor:  minor,
+		patch:  patch,
 	}
 }
 
