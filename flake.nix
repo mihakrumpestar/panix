@@ -36,6 +36,8 @@
 
             env.CGO_ENABLED = 0; # Disable CGO
 
+            doCheck = false; # Tests run in CI with race detection and coverage
+
             vendorHash = "sha256-q9pUwV9JGYNIDTemgu28eG2SBH2mNQ2BQO/u73f42xM=";
 
             meta = with pkgs.lib; {

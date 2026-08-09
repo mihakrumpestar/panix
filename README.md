@@ -12,7 +12,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/mihakrumpestar/panix/pkg.svg)](https://pkg.go.dev/github.com/mihakrumpestar/panix/pkg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/mihakrumpestar/panix)](https://goreportcard.com/report/github.com/mihakrumpestar/panix)
+[![golangci-lint](https://img.shields.io/github/actions/workflow/status/mihakrumpestar/panix/ci.yml?label=golangci-lint&branch=main)](https://github.com/mihakrumpestar/panix/actions/workflows/ci.yml)
 [![Zero CGO](https://img.shields.io/badge/CGO-none-success)](https://github.com/mihakrumpestar/panix)
 ![GitHub last commit](https://img.shields.io/github/last-commit/mihakrumpestar/panix)
 [![Code lines](./gen/loc.svg)](https://github.com/boyter/scc/)
