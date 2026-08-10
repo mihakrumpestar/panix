@@ -40,6 +40,22 @@
 
             vendorHash = "sha256-q9pUwV9JGYNIDTemgu28eG2SBH2mNQ2BQO/u73f42xM=";
 
+            # Install shell completions so that NixOS / Home Manager users get
+            # tab completion automatically via programs.{bash,zsh,fish}.enable
+            # instead of having to manually source completion scripts.
+            nativeBuildInputs =
+              pkgs.lib.optionals (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform)
+                [
+                  pkgs.installShellFiles
+                ];
+
+            postInstall = pkgs.lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+              installShellCompletion --cmd panix \
+                --bash <($out/bin/panix completion -c bash) \
+                --fish <($out/bin/panix completion -c fish) \
+                --zsh <($out/bin/panix completion -c zsh)
+            '';
+
             meta = with pkgs.lib; {
               description = "Universal NixOS Deployment Tool";
               homepage = "https://github.com/mihakrumpestar/panix";
