@@ -65,6 +65,9 @@ fleet:
                       {{template "cryptenroll" "/dev/sda2"}}
 
           personal-vps-02:
+            nix:
+              copy_flags:
+                - --substitute-on-destination # Make transfers faster on public instances
             machines:
               personal-vps-02:
 
