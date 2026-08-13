@@ -19,7 +19,7 @@ func (c *SchemaCmd) Run() error {
 		RootType:    reflect.TypeFor[config.Config](),
 		SchemaID:    "https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml",
 		Title:       "Panix Configuration Schema",
-		Description: "Schema for Panix NixOS deployment configuration files",
+		Description: "Schema for Panix deployment configuration file",
 		Version:     gen.Version(),
 	})
 

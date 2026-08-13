@@ -25,7 +25,7 @@ type cliCmd struct {
 	Snapshot commands_standalone.SnapshotCmd `cmd:"" help:"View snapshot in TUI"`
 
 	Inspect  commands_workflow.InspectCmd  `cmd:"" help:"Inspect machines"`
-	Build    commands_workflow.BuildCmd    `cmd:"" help:"Build NixOS closures"`
+	Build    commands_workflow.BuildCmd    `cmd:"" help:"Build closures"`
 	Deploy   commands_workflow.DeployCmd   `cmd:"" help:"Do full workflow (inspect -> bootstrap -> build -> transfer -> secrets -> activate)"`
 	Secrets  commands_workflow.SecretsCmd  `cmd:"" help:"Deploy secrets to machines"`
 	Rollback commands_workflow.RollbackCmd `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag (default is -1)"`
@@ -42,7 +42,7 @@ func main() {
 
 	parser := kong.Must(&cli,
 		kong.Name("panix"),
-		kong.Description("Universal NixOS Deployment Tool"),
+		kong.Description("Universal Nix Deployment Orchestrator"),
 		kong.Vars{"version": gen.Version()},
 		kong.DefaultEnvars("PANIX"),
 	)

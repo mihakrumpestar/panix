@@ -4,9 +4,9 @@
 
 # Panix
 
-**Universal NixOS Deployment Tool**
+**Universal Nix Deployment Orchestrator**
 
-*Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets*
+*Stateless, phase-oriented deployment of Nix installables with real-time visibility across multi-flake fleets*
 
 [![Version](https://img.shields.io/github/v/release/mihakrumpestar/panix?label=version&color=5277C3)](https://github.com/mihakrumpestar/panix/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
@@ -42,15 +42,15 @@ Screenshot:
 
 ## The Problem
 
-Deploying NixOS as a single machine or at scale is a fragmented mess. You bootstrap bare metal with `nixos-anywhere`, then use `nixos-rebuild` for one machine at a time or orchestrate fleets with `Colmena`, `deploy-rs`, etc. Each tool is excellent, in isolation, the moment you try to compose them, you're on your own.
+Deploying Nix installables, whether to a single machine or across a whole fleet, is a fragmented mess. For NixOS, you bootstrap bare metal with `nixos-anywhere`, then use `nixos-rebuild` for one machine at a time or orchestrate fleets with `Colmena`, `deploy-rs`, etc. Each tool is excellent, in isolation, the moment you try to compose them, you're on your own.
 
-There's no unified pipeline. Bootstrap and deploy are separate workflows with separate configs. A failed phase means restarting from scratch, and partial progress is lost. Failures hide in scrollback logs or are non existent, discovered only after the damage is done. Most tools require modifying your flake to include their module or output, preventing you from bootstrapping as the tool is only build for deploy.
+There's no unified pipeline. Bootstrap and deploy are separate workflows with separate configs. A failed phase means restarting from scratch, and partial progress is lost. Failures hide in scrollback logs or are nonexistent, discovered only after the damage is done. Most tools require modifying your flake to include their module or output, making them unusable for bootstrapping since they assume the target system is already running.
 
-Panix eliminates all of this: one binary, one config file, full lifecycle. From bare metal to running NixOS, in a single orchestrated pipeline.
+Panix eliminates all of this: one binary, one config file, full lifecycle. From bare metal to running installables, in a single orchestrated pipeline.
 
 ## What Panix Does
 
-Panix is a stateless deployment orchestrator for NixOS flakes. It manages the entire lifecycle of deploying NixOS systems to machines, from provisioning bare metal to ongoing updates, as a single, observable, recoverable pipeline.
+Panix is a stateless deployment orchestrator for Nix flake installables. It manages the entire lifecycle of deploying systems, home environments, and packages to machines, from provisioning bare metal to ongoing updates, as a single, observable, recoverable pipeline.
 
 **Six phases, one execution:**
 

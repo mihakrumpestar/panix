@@ -1,5 +1,5 @@
 {
-  description = "Panix - Universal NixOS Deployment Tool";
+  description = "Panix - Universal Nix Deployment Orchestrator";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -57,7 +57,7 @@
             '';
 
             meta = with pkgs.lib; {
-              description = "Universal NixOS Deployment Tool";
+              description = "Universal Nix Deployment Orchestrator";
               homepage = "https://github.com/mihakrumpestar/panix";
               changelog = "https://github.com/mihakrumpestar/panix/releases/tag/v${version}";
               license = licenses.agpl3Only;

@@ -19,7 +19,7 @@ export default defineConfig({
 			logo: {
 				src: './public/icon.svg',
 			},
-			description: 'Universal NixOS Deployment Tool - documentation and wiki',
+			description: 'Universal Nix Deployment Orchestrator - documentation and wiki',
 			customCss: ['./src/styles/panix-theme.css'],
 			components: {
 				ThemeProvider: './src/components/ForceDarkTheme.astro',

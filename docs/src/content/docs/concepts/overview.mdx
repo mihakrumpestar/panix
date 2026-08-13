@@ -1,13 +1,13 @@
 ---
 title: What is Panix?
-description: Universal NixOS Deployment Tool - the problem it solves and what it provides.
+description: Universal Nix Deployment Orchestrator - the problem it solves and what it provides.
 sidebar:
   order: 1
 ---
 
 ## The Problem
 
-Deploying NixOS at scale introduces operational challenges that existing tools address partially but not holistically:
+Deploying Nix flake installables at scale introduces operational challenges that existing tools address partially but not holistically:
 
 - **Fragmented tooling**: `nixos-anywhere` handles bootstrapping bare-metal machines, while `deploy-rs`, `Colmena` and others manage deployment orchestration. Each tool excels within its domain, but integration between bootstrap and ongoing deployment cycles remains manual.
 - **Missing visibility**: Deployment failures require parsing scrollback logs after execution completes. There's no unified view of what phase failed, which machine is affected, or the current state across a heterogeneous fleet.
@@ -16,7 +16,7 @@ Deploying NixOS at scale introduces operational challenges that existing tools a
 
 ## What Panix Provides
 
-Panix is a deployment orchestrator for NixOS flakes.
+Panix is a deployment orchestrator for Nix flake installables.
 
 - **Stateless operation**: No persistent state is maintained between runs. All information is derived from your flake, configuration file, and runtime machine inspection.
 - **Phase-oriented execution**: Six sequential deployment phases (Inspect, Bootstrap, Build, Transfer, Secrets, Activate) execute with defined scopes. See the [phase pipeline](/concepts/phases/) for details. The Build phase runs once per installable, deduplicating work across machines sharing the same installable.
