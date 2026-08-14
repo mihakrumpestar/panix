@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.9.1](https://github.com/mihakrumpestar/panix/compare/v0.9.0..v0.9.1) - 2026-08-14
+
+Panix now supports **custom output types**: declare any flake output under the top-level `output_types` section with custom build and activation semantics. `output_type_attr` overrides the flake attribute used in the attrpath (per type or per installable), and a built-in `maidPackages` preset handles nix-maid bundles out of the box. This release also adds shell completions that activate automatically in Nix environments, fixes Lix profile installs (#12), improves TUI navigation and quit behavior, and repositions Panix as a Universal Nix Deployment Orchestrator.
+
+**Note:** `--no-update-lock-file` is no longer included in default build flags; builds will now update the lock file by default.
+
+### Bug Fixes
+
+- Include header in Github release by @mihakrumpestar ([a49893c](https://github.com/mihakrumpestar/panix/commit/a49893cedf01b19374798c04c8ccfd4a44f4c8be))
+- Packages installables with E2E tests by @mihakrumpestar ([c50512b](https://github.com/mihakrumpestar/panix/commit/c50512b25589bcc30a8682f543d688a75e1bc556))
+- Toggle selection on re-click and fix navigation bounce between stats table and phase flow by @mihakrumpestar ([693dfc8](https://github.com/mihakrumpestar/panix/commit/693dfc8b4a157230f4968b98265d8b933df6d310))
+- Replace goreportcard badge by @mihakrumpestar ([d43d557](https://github.com/mihakrumpestar/panix/commit/d43d557b28a5d1f078f474ed1029cb4c751895c5))
+- Lix workaround for profile install, fixes #12 by @mihakrumpestar ([a1bd393](https://github.com/mihakrumpestar/panix/commit/a1bd3937dbd86b88f6228cf22680191906836661))
+
+### Documentation
+
+- Reposition as Universal Nix Deployment Orchestrator by @mihakrumpestar ([a402222](https://github.com/mihakrumpestar/panix/commit/a402222da01f833f2bacf2dd436cdd2314512561))
+
+### Features
+
+- Add shell completion by @mihakrumpestar ([1b97e84](https://github.com/mihakrumpestar/panix/commit/1b97e840cc9955e1903a08db69ad2ec68a0aac75))
+- Update docs for explaining local_machine_hostname flag by @mihakrumpestar ([855515c](https://github.com/mihakrumpestar/panix/commit/855515c595629c2c3fc1aabfc2d1ecdb2fe2abc4))
+- Improve Template Engine docs by @mihakrumpestar ([323a8f8](https://github.com/mihakrumpestar/panix/commit/323a8f82a58c1347afc4cc45a4bd54ac2f2d9509))
+- Improve shell completions, now they work automatically in Nix environments by @mihakrumpestar ([89ad2bb](https://github.com/mihakrumpestar/panix/commit/89ad2bb45b66259451632e863a48a9fc52efc656))
+- Remove --no-update-lock-file from default build flags by @mihakrumpestar ([5bc7d4a](https://github.com/mihakrumpestar/panix/commit/5bc7d4ad3e7decd24088a8179e26436b5eb9d758))
+- Custom output types by @mihakrumpestar ([61aa8eb](https://github.com/mihakrumpestar/panix/commit/61aa8eb0a3899a14a1cabb1b5c6e8ac69a8fb887))
+- Improve quit-ing TUI experiance, new color for output type in TUI by @mihakrumpestar ([888c3dc](https://github.com/mihakrumpestar/panix/commit/888c3dc8f2918b1fe7d35be0a6c9fed1b7314fd3))
+
+### Miscellaneous
+
+- Update deps by @mihakrumpestar ([57b0ae5](https://github.com/mihakrumpestar/panix/commit/57b0ae5f7b82cfd3bd2eb127eb4630f35eb6d6ab))
+- Update Go to 1.26.5 by @mihakrumpestar ([d12f39f](https://github.com/mihakrumpestar/panix/commit/d12f39fde2365079473e026a73b8fbbf2b77e347))
+- Add ctrl+q to docs by @mihakrumpestar ([eee00db](https://github.com/mihakrumpestar/panix/commit/eee00db0116641d633249bd5e34c4a35a1479dac))
+
 ## [0.9.0](https://github.com/mihakrumpestar/panix/compare/v0.8.1..v0.9.0) - 2026-08-05
 
 Panix is now a general installable deployment orchestrator. Installables are no longer limited to NixOS profiles; any installable type with an activation mode can be deployed. Default options and flags are overridable, and nix options can be set via environment variables.
