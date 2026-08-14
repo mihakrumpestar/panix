@@ -213,7 +213,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	cfg, ok := attrMap.Get("my-config")
 	must.True(ok)
 
-	must.NoError(cfg.Init(installable.FlakeOutputType("nixosConfigurations"), "my-config", &flk.Attributes, &flk.Nix))
+	must.NoError(cfg.Init(installable.FlakeOutputType("nixosConfigurations"), "my-config", &flk.Attributes, &flk.Nix, nil))
 
 	expectedCfgXpath := expectedFlakeXpath.NewXpathWithAppend("nixosConfigurations/my-config")
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
@@ -357,4 +357,125 @@ func TestKexecImageArchSupport(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCustomOutputTypesLoadAndInit verifies that a config declaring a custom
+// output type under output_types loads, and that fleet init merges the
+// declared preset as defaults for installables of that type (installable-level
+// YAML overrides win, same merge semantics as built-in presets).
+func TestCustomOutputTypesLoadAndInit(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "custom_output_types.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NotNil(conf.OutputTypes, "output_types section should decode into the ordered map")
+
+	assertion := assert.New(t)
+	assertion.Equal(2, conf.OutputTypes.Len(), "expected 2 declared output types")
+
+	// Fleet init wires the custom preset into installable Init. SSH init is
+	// separate (see initFleetSSH), so no network is touched here.
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
+	must.True(ok)
+
+	attrMap, ok := flakePair.Installables.Get("colmenaConfigurations")
+	must.True(ok, "custom type installable should be loaded")
+
+	// Installable with no per-installable preset: custom defaults are merged in
+	// (build_path, activation_path, modes, profile, system_level).
+	defaultCfg, ok := attrMap.Get("default-config")
+	must.True(ok)
+
+	assertion.Equal("config.system.build.toplevel", defaultCfg.Preset.BuildPath)
+	assertion.Equal("/nix/var/nix/profiles/system", defaultCfg.Preset.ProfilePath)
+	assertion.Equal("bin/switch-to-configuration", defaultCfg.Preset.ActivationPath)
+	assertion.Equal([]string{"switch", "boot"}, defaultCfg.Preset.ActivationModes)
+	assertion.Equal("switch", defaultCfg.Preset.ActivationDefaultMode)
+	must.NotNil(defaultCfg.Preset.SetProfile)
+	assertion.True(*defaultCfg.Preset.SetProfile)
+	must.NotNil(defaultCfg.Preset.IsSystemLevel)
+	assertion.True(*defaultCfg.Preset.IsSystemLevel)
+
+	// Installable-level YAML overrides win over the custom defaults.
+	overrideCfg, ok := attrMap.Get("overridden-config")
+	must.True(ok)
+
+	assertion.Equal("boot", overrideCfg.Preset.ActivationDefaultMode,
+		"installable-level activation_default_mode should override the custom default")
+	assertion.Equal("config.system.build.toplevel", overrideCfg.Preset.BuildPath,
+		"unset installable-level fields should fall back to the custom default")
+}
+
+// TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath verifies that an
+// output_type_attr declared in the output_types preset is merged as a type
+// default into installables of that custom type and drives the resolved flake
+// attrpath (same merge semantics as built-in presets).
+func TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "custom_output_types.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
+	must.True(ok)
+
+	attrMap, ok := flakePair.Installables.Get("customConfigurations")
+	must.True(ok, "custom type installable should be loaded")
+
+	inst, ok := attrMap.Get("my-custom")
+	must.True(ok)
+
+	assertion := assert.New(t)
+	assertion.Equal("custom", inst.Preset.OutputTypeAttr,
+		"declared output_type_attr should be merged as a type default")
+
+	assertion.Equal(
+		"custom.my-custom",
+		installable.ResolveFlakeInstallable(inst.Type, inst.Name, inst.Preset),
+		"resolved attrpath should use the declared output_type_attr",
+	)
+}
+
+// TestOutputTypeAttrOverrideResolvesAttrpath verifies that a per-installable
+// preset.output_type_attr overrides the top-level flake output attribute used in
+// the build/eval attrpath, while the installables type key (and with it all
+// built-in preset behavior keyed on it) stays unchanged.
+func TestOutputTypeAttrOverrideResolvesAttrpath(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "output_type_attr.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
+	must.True(ok)
+
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	must.True(ok, "installable should stay keyed under the type key")
+
+	inst, ok := attrMap.Get("my-config")
+	must.True(ok)
+
+	assertion := assert.New(t)
+	assertion.Equal("nixosConfigurations", inst.Type.String(),
+		"type key should stay the config key (nixosConfigurations)")
+	assertion.Equal("nixosConf", inst.Preset.OutputTypeAttr,
+		"per-installable output_type_attr should be set")
+
+	// This mirrors exactly how the build handler and flake validation resolve
+	// the installable attrpath (Type, Name, Preset).
+	assertion.Equal(
+		"nixosConf.my-config.config.system.build.toplevel",
+		installable.ResolveFlakeInstallable(inst.Type, inst.Name, inst.Preset),
+		"resolved attrpath should use output_type_attr instead of the type key",
+	)
 }

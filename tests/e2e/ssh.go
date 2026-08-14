@@ -220,6 +220,42 @@ func verifyPackages(keyPath string) error {
 	return parGroup.Wait()
 }
 
+// verifyMaidPackage checks that the maid activation script ran on the given
+// VM. The real nix-maid bundle's activate script (run as root, via
+// `su -l root -c`) creates ~/.panix-maid-test-marker as a symlink into the
+// nix store via systemd-tmpfiles; `cat` follows the symlink, so verification
+// reads it back and checks the marker text.
+func verifyMaidPackage(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	output, err := sshRun(port, keyPath, "cat /root/.panix-maid-test-marker")
+	if err != nil {
+		return errors.Wrapf(err, "verify maid package on %s", addr)
+	}
+
+	marker := strings.TrimSpace(output)
+	if !strings.Contains(marker, markerContent) {
+		return errors.Errorf("maid package marker not found on %s: %s", addr, marker)
+	}
+
+	return nil
+}
+
+func verifyMaidPackages(keyPath string) error {
+	parGroup := newParallelGroup()
+
+	if testScopeFlag.local() {
+		parGroup.Go("Verify maid package on NixOS ISO VM", func() error {
+			return verifyMaidPackage(nixosISOPort, keyPath)
+		})
+		parGroup.Go("Verify maid package on Debian-nix VM", func() error {
+			return verifyMaidPackage(debianNixVMPort, keyPath)
+		})
+	}
+
+	return parGroup.Wait()
+}
+
 func verifySystemManager(port int, keyPath string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 

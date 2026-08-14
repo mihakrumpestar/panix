@@ -41,7 +41,18 @@ type MetaBuild struct {
 // After setting the type, preset defaults for this output type are merged into
 // the Preset's zero-value user-configurable fields. Type-level fields (not
 // user-configurable) are always taken from the defaults.
-func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttributes *attributes.Attributes, parentNix *nix.NixConfig) error {
+//
+// The defaults source is the built-in presets table for known types, or the
+// custom preset declared under output_types (customPresets) for custom types.
+// Both use the same merge semantics: installable-level YAML overrides win for
+// user-overridable fields, type-level fields are always forced from defaults.
+func (i *Installable) Init(
+	typeKey FlakeOutputType,
+	nameKey string,
+	parentAttributes *attributes.Attributes,
+	parentNix *nix.NixConfig,
+	customPresets CustomOutputTypes,
+) error {
 	i.Type = typeKey
 	i.Name = AttributeName(nameKey)
 
@@ -66,8 +77,14 @@ func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttrib
 		return errors.Wrap(err, "failed to initialize installable nix config")
 	}
 
-	// Apply type defaults to zero-value preset fields.
+	// Apply type defaults to zero-value preset fields. Built-in types take
+	// their defaults from the presets table; custom types declared under
+	// output_types use the same merge semantics with their declared preset.
 	defaults, ok := presets[typeKey]
+	if !ok && customPresets != nil {
+		defaults, ok = customPresets.Get(typeKey.String())
+	}
+
 	if ok {
 		i.applyPresetDefaults(defaults)
 	}
@@ -79,14 +96,18 @@ func (i *Installable) Init(typeKey FlakeOutputType, nameKey string, parentAttrib
 
 // applyPresetDefaults merges type defaults into the Preset.
 //
-// User-overridable fields (BuildPath, ProfilePath, ActivationPath, SetProfile,
-// ActivationModes, ActivationDefaultMode) use the user value if non-zero,
-// otherwise fall back to the type default.
+// User-overridable fields (OutputTypeAttr, BuildPath, ProfilePath, ActivationPath,
+// SetProfile, ActivationModes, ActivationDefaultMode) use the user value if
+// non-zero, otherwise fall back to the type default.
 //
 // Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath)
 // are intrinsic to the output type and always taken from the defaults,
 // ignoring any user-provided value.
 func (i *Installable) applyPresetDefaults(defaults Preset) {
+	if i.Preset.OutputTypeAttr == "" {
+		i.Preset.OutputTypeAttr = defaults.OutputTypeAttr
+	}
+
 	if i.Preset.BuildPath == "" {
 		i.Preset.BuildPath = defaults.BuildPath
 	}

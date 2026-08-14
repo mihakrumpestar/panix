@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 )
 
@@ -126,4 +128,64 @@ func TestGetSpecificGenerationErrorMessage(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrGenerationOutOfRange)
 	assert.Contains(t, err.Error(), "generation 7 not found")
+}
+
+// TestHandlerShouldSkip verifies that rollback is skipped for installable
+// types without a versioned profile and runs for types with one. maidConfigurations
+// and packages resolve to an empty ProfilePath, while nixosConfigurations-like
+// types resolve to a profile path.
+func TestHandlerShouldSkip(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		preset         installable.Preset
+		wantShouldSkip bool
+	}{
+		{"maidConfigurations has no profile path, skipped", installable.Preset{}, true},
+		{"packages has no profile path, skipped", installable.Preset{}, true},
+		{"nixosConfigurations-like has profile path, not skipped",
+			installable.Preset{ProfilePath: "/nix/var/nix/profiles/system"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := Handler{}
+
+			leaf := &fleet.FleetLeaf{
+				Installable: &installable.Installable{Preset: tt.preset},
+			}
+
+			assert.Equal(t, tt.wantShouldSkip, handler.ShouldSkip(leaf))
+		})
+	}
+}
+
+// TestRollbackActivationMode verifies that rollback uses the preset's default
+// activation mode so custom output types roll back with their own mode, while
+// built-in types (whose default mode is switch) keep their previous behavior.
+// An unset default mode yields an empty string, so no mode argument is passed
+// to modeless activation scripts.
+func TestRollbackActivationMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		preset installable.Preset
+		want   string
+	}{
+		{"custom preset default mode is used", installable.Preset{ActivationDefaultMode: "boot"}, "boot"},
+		{"built-in switch default stays switch", installable.Preset{ActivationDefaultMode: "switch"}, "switch"},
+		{"unset default mode yields no mode", installable.Preset{}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, rollbackActivationMode(tt.preset))
+		})
+	}
 }

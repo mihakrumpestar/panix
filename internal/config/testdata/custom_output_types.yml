@@ -1,0 +1,31 @@
+output_types:
+  colmenaConfigurations:
+    system_level: true
+    build_path: config.system.build.toplevel
+    profile_path: /nix/var/nix/profiles/system
+    set_profile: true
+    activation_path: bin/switch-to-configuration
+    activation_supported_modes: [switch, boot]
+    activation_default_mode: switch
+  customConfigurations:
+    system_level: false
+    output_type_attr: custom
+
+fleet:
+  flakes:
+    my-flake:
+      url: path:./my-flake
+      installables:
+        colmenaConfigurations:
+          default-config:
+            machines:
+              my-machine:
+          overridden-config:
+            preset:
+              activation_default_mode: boot
+            machines:
+              my-machine:
+        customConfigurations:
+          my-custom:
+            machines:
+              my-machine:

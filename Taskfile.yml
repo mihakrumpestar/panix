@@ -113,7 +113,7 @@ tasks:
       Flags (pass after --):
         --test=local|remote|both    Test scope (default: both)
         --phase=all|bootstrap|deploy  Deploy phase (default: all)
-        --deploy-type=all|nixos|home|packages|systemConfigs  Which types to deploy (default: all)
+        --deploy-type=all|nixos|home|packages|maidConfigurations|systemConfigs  Which types to deploy (default: all)
       Examples:
         task go:test:e2e -- --test=local
         task go:test:e2e -- --phase=deploy --deploy-type=home

@@ -140,6 +140,17 @@ fleet:
                 ssh: *ssh_nixos_iso
               debian-nix-vm:
                 ssh: *ssh_debian_nix
+        maidConfigurations:
+          test-maid:
+            # user: root ensures activation runs via `su -l root -c`, writing
+            # the marker to /root/.panix-maid-test-marker where verification
+            # reads it back.
+            user: root
+            machines:
+              nixos-iso-vm:
+                ssh: *ssh_nixos_iso
+              debian-nix-vm:
+                ssh: *ssh_debian_nix
         systemConfigs:
           test-system-manager:
             machines:

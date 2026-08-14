@@ -92,7 +92,7 @@ func activatePackage(
 		[]string{closure},
 	)
 
-	if !preset.IsSystemLevel && targetUser != "" {
+	if !preset.IsSystemLevelValue() && targetUser != "" {
 		args = asUser(targetUser, args)
 	}
 
@@ -115,7 +115,7 @@ func activateScript(
 	targetUser string,
 ) error {
 	args := []string{}
-	if preset.IsSystemLevel {
+	if preset.IsSystemLevelValue() {
 		args = append(args, mach.MaybeSudo()...)
 	}
 
@@ -124,7 +124,7 @@ func activateScript(
 		args = append(args, mode)
 	}
 
-	if !preset.IsSystemLevel && targetUser != "" {
+	if !preset.IsSystemLevelValue() && targetUser != "" {
 		args = asUser(targetUser, args)
 	}
 
@@ -149,9 +149,11 @@ func activateScript(
 //     it. Arguments containing spaces (e.g. "nix-command flakes") must stay
 //     together, and tilde (~) must remain unquoted for home directory expansion.
 //
-// Quoting is applied minimally: only args containing shell-unsafe characters
-// are single-quoted, and the outer double-quote wrapper is only added when the
-// joined string contains whitespace (i.e. multi-word commands).
+// Quoting is applied minimally to the command itself: only args containing
+// shell-unsafe characters are single-quoted. The command is then prefixed with
+// an XDG_RUNTIME_DIR assignment (su -l does not set it) and always wrapped in
+// an outer double-quote pair, since the prefix introduces whitespace and the
+// -c argument must be a single shell word for SSH transport.
 //
 // Note: This function is designed for the SSH execution path. When panix
 // dispatches commands via SSH, the remote shell consumes the outer double
@@ -172,18 +174,23 @@ func AsUser(user string, command []string) []string {
 		quoted[i] = shellQuote(arg)
 	}
 
-	inner := strings.Join(quoted, " ")
+	// Step 2: su -l does not set XDG_RUNTIME_DIR (pam_systemd only sets it
+	// for real login sessions). User-level tools such as systemd-tmpfiles
+	// --user and sd-switch need it to locate the user D-Bus socket at
+	// /run/user/<uid>/bus. Prepend the assignment; $(id -u) is expanded by
+	// the login shell spawned by su, yielding the target user's UID.
+	inner := xdgRuntimeDirPrefix + strings.Join(quoted, " ")
 
-	// Step 2: wrap in double quotes if the string contains whitespace, so
-	// SSH's space-joining treats it as a single argument to `su -c`.
-	// Characters special inside double quotes are escaped to survive the
-	// remote shell's double-quote processing. Tilde expansion does not
-	// happen inside double quotes, so ~ passes through to the login shell
-	// where it IS expanded (because it's unquoted within the command string).
-	if strings.ContainsAny(inner, " \t\n") {
-		inner = escapeDoubleQuoteSpecials(inner)
-		inner = `"` + inner + `"`
-	}
+	// Step 3: wrap in double quotes so SSH's space-joining treats it as a
+	// single argument to `su -c`. Characters special inside double quotes are
+	// escaped to survive the remote shell's double-quote processing; this
+	// turns the prefix's $ into \$ so the remote shell passes a literal
+	// $(id -u) through to the login shell, which then expands it. Tilde
+	// expansion does not happen inside double quotes, so ~ passes through to
+	// the login shell where it IS expanded (because it's unquoted within the
+	// command string).
+	inner = escapeDoubleQuoteSpecials(inner)
+	inner = `"` + inner + `"`
 
 	return []string{"su", "-l", user, "-c", inner}
 }
@@ -193,6 +200,11 @@ func AsUser(user string, command []string) []string {
 // allowing the login shell to expand ~ to the target user's home.
 // Equals (=) is included for --flag=value style arguments.
 const shellSafeChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./,:@+~="
+
+// xdgRuntimeDirPrefix is prepended to user-level activation commands so the
+// login shell sets XDG_RUNTIME_DIR, which su -l does not. $(id -u) resolves
+// to the target user's UID inside that login shell.
+const xdgRuntimeDirPrefix = `XDG_RUNTIME_DIR=/run/user/$(id -u) `
 
 // shellQuote wraps a string in single quotes if it contains any character
 // that is not shell-safe. Empty strings are also quoted.

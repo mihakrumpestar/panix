@@ -260,29 +260,7 @@ properties:
                       description: Nix build and copy configuration
                       $ref: "#/definitions/NixConfig"
                     preset:
-                      type: object
-                      properties:
-                        activation_default_mode:
-                          type: string
-                          description: Default activation mode
-                        activation_path:
-                          type: string
-                          description: Activation script path in the closure
-                        activation_supported_modes:
-                          type: array
-                          description: Activation modes
-                          items:
-                            type: string
-                        build_path:
-                          type: string
-                          description: Build path within the flake output
-                        profile_path:
-                          type: string
-                          description: Nix profile path
-                        set_profile:
-                          type: boolean
-                          description: Run nix-env --profile --set before activation
-                      additionalProperties: false
+                      $ref: "#/definitions/Preset"
                     rsync_default_flags:
                       type: array
                       description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
@@ -374,6 +352,11 @@ properties:
     required:
     - flakes
     additionalProperties: false
+  output_types:
+    type: object
+    description: Custom output type presets, applied as defaults to installables of that type
+    additionalProperties:
+      $ref: "#/definitions/Preset"
 required:
 - fleet
 additionalProperties: true
@@ -556,6 +539,39 @@ definitions:
       - uid
       uid:
       - gid
+    additionalProperties: false
+  Preset:
+    type: object
+    properties:
+      activation_default_mode:
+        type: string
+        description: Default activation mode
+      activation_path:
+        type: string
+        description: Activation script path in the closure
+      activation_supported_modes:
+        type: array
+        description: Activation modes
+        items:
+          type: string
+      build_path:
+        type: string
+        description: Build path within the flake output
+      omit_type_from_attr_path:
+        type: boolean
+        description: "Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"
+      output_type_attr:
+        type: string
+        description: Top-level flake output attribute used in the attrpath (defaults to the output type key)
+      profile_path:
+        type: string
+        description: Nix profile path
+      set_profile:
+        type: boolean
+        description: Run nix-env --profile --set before activation
+      system_level:
+        type: boolean
+        description: "System-level (root) vs user-level. Type-level field: set only under output_types declarations"
     additionalProperties: false
   SSHClient:
     type: object

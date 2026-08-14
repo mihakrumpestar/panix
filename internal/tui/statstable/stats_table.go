@@ -33,7 +33,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		colorScheme.Table.Row.Width(indexWidth).Align(style.Right),
 		colorScheme.Table.Row.Width(2),
 		colorScheme.Flake.Color,
-		colorScheme.Installable.Color,
+		colorScheme.OutputType.Color,
 		colorScheme.Installable.Color,
 		colorScheme.Machine.Color,
 		colorScheme.Table.Row,
@@ -46,7 +46,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 
 	headers := [][]byte{[]byte(""), []byte(""),
 		joinBytes(colorScheme.Flake.Icon, " FLAKE"),
-		joinBytes(colorScheme.Installable.Icon, " OUTPUT"),
+		joinBytes(colorScheme.OutputType.Icon, " OUTPUT TYPE"),
 		joinBytes(colorScheme.Installable.Icon, " NAME"),
 		joinBytes(colorScheme.Machine.Icon, " MACHINE"),
 		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("DATE"), []byte("OS VERSION"), []byte("KERNEL")}

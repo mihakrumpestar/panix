@@ -7,6 +7,7 @@ import (
 
 	"github.com/ccoveille/go-safecast/v2"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
@@ -114,9 +115,26 @@ func executeRollback(
 	}
 
 	return errors.Wrap(
-		phaseops.Activate(exc, fleetLeaf.Machine, preset, closurePath, "switch", fleetLeaf.Installable.User, &fleetLeaf.Installable.Nix, nixFlavor),
+		phaseops.Activate(
+			exc,
+			fleetLeaf.Machine,
+			preset,
+			closurePath,
+			rollbackActivationMode(preset),
+			fleetLeaf.Installable.User,
+			&fleetLeaf.Installable.Nix,
+			nixFlavor,
+		),
 		"failed to activate rollback generation",
 	)
+}
+
+// rollbackActivationMode returns the activation mode used when rolling back to
+// a previous generation. It uses the preset's declared default activation
+// mode. When unset it returns an empty string, meaning no mode argument is
+// passed to the activation script.
+func rollbackActivationMode(preset installable.Preset) string {
+	return preset.ActivationDefaultMode
 }
 
 func findGenerationClosure(

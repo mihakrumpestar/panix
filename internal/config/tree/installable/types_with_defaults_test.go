@@ -60,6 +60,36 @@ var resolveFlakeInstallableTests = []resolveFlakeInstallableTest{
 		want: "my-tool.some.subpath",
 	},
 	{
+		name:       "nixosConfigurations key with output_type_attr override uses override",
+		outputType: FlakeOutputType("nixosConfigurations"),
+		attrName:   AttributeName("server1"),
+		preset: Preset{
+			OutputTypeAttr: "nixosConf",
+			BuildPath:      "config.system.build.toplevel",
+		},
+		want: "nixosConf.server1.config.system.build.toplevel",
+	},
+	{
+		name:       "output_type_attr with empty build path",
+		outputType: FlakeOutputType("homeConfigurations"),
+		attrName:   AttributeName("alice"),
+		preset: Preset{
+			OutputTypeAttr: "homeConf",
+		},
+		want: "homeConf.alice",
+	},
+	{
+		name:       "output_type_attr takes precedence over omit_type_from_attr_path",
+		outputType: FlakeOutputType("packages"),
+		attrName:   AttributeName("nixvim"),
+		preset: Preset{
+			OutputTypeAttr:       "packagesCustom",
+			OmitTypeFromAttrPath: true,
+			BuildPath:            "some.subpath",
+		},
+		want: "packagesCustom.nixvim.some.subpath",
+	},
+	{
 		name:       "packages preset from defaults map produces bare name",
 		outputType: FlakeOutputType("packages"),
 		attrName:   AttributeName("default"),
@@ -119,6 +149,38 @@ var resolveFlakeInstallableTests = []resolveFlakeInstallableTest{
 		preset:     presets[FlakeOutputType("nixOnDroidConfigurations")],
 		want:       "nixOnDroidConfigurations.myphone.build.activationPackage",
 	},
+	{
+		name:       "maidConfigurations preset from defaults map keeps type key",
+		outputType: FlakeOutputType("maidConfigurations"),
+		attrName:   AttributeName("my-maid"),
+		preset:     presets[FlakeOutputType("maidConfigurations")],
+		want:       "maidConfigurations.my-maid",
+	},
+	// Custom-type preset (as declared under output_types) with
+	// OmitTypeFromAttrPath set and no OutputTypeAttr: produces a bare name,
+	// mirroring how a custom type can opt into the packages-style resolution.
+	{
+		name:       "custom type with omit_type_from_attr_path produces bare name",
+		outputType: FlakeOutputType("colmenaConfigurations"),
+		attrName:   AttributeName("server1"),
+		preset: Preset{
+			OmitTypeFromAttrPath: true,
+		},
+		want: "server1",
+	},
+	// Same custom-type preset combined with an OutputTypeAttr: the explicit
+	// output_type_attr wins over omit_type_from_attr_path (same precedence as
+	// the built-in packages row above).
+	{
+		name:       "custom type output_type_attr wins over omit_type_from_attr_path",
+		outputType: FlakeOutputType("colmenaConfigurations"),
+		attrName:   AttributeName("server1"),
+		preset: Preset{
+			OutputTypeAttr:       "colmena",
+			OmitTypeFromAttrPath: true,
+		},
+		want: "colmena.server1",
+	},
 }
 
 func TestResolveFlakeInstallable(t *testing.T) {
@@ -148,7 +210,7 @@ func TestPackagesPresetOmitsType(t *testing.T) {
 }
 
 // TestCompositeKey verifies that CompositeKey produces the "type/name" format
-// for all 6 known output types. The composite key is used as the flat map key
+// for all known output types. The composite key is used as the flat map key
 // in the AtomicOrderedMap so that installables with the same attribute name
 // but different types (e.g. nixosConfigurations/server1 vs
 // homeConfigurations/server1) don't collide.
@@ -167,6 +229,7 @@ func TestCompositeKey(t *testing.T) {
 		{"homeConfigurations", FlakeOutputType("homeConfigurations"), AttributeName("alice"), "homeConfigurations/alice"},
 		{"nixOnDroidConfigurations", FlakeOutputType("nixOnDroidConfigurations"), AttributeName("myphone"), "nixOnDroidConfigurations/myphone"},
 		{"packages", FlakeOutputType("packages"), AttributeName("nixvim"), "packages/nixvim"},
+		{"maidConfigurations", FlakeOutputType("maidConfigurations"), AttributeName("my-maid"), "maidConfigurations/my-maid"},
 	}
 
 	for _, tt := range tests {

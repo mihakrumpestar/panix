@@ -25,7 +25,7 @@ type deployPhase string
 const (
 	phaseAll       deployPhase = "all"
 	phaseBootstrap deployPhase = "bootstrap"
-	phaseDeploy  deployPhase = "deploy"
+	phaseDeploy    deployPhase = "deploy"
 )
 
 type deployType string
@@ -35,16 +35,17 @@ const (
 	deployNixos         deployType = "nixos"
 	deployHome          deployType = "home"
 	deployPackages      deployType = "packages"
+	deployMaid          deployType = "maidConfigurations"
 	deploySystemConfigs deployType = "systemConfigs"
 )
 
 var errInvalidTestScope = errors.New("invalid test scope, must be local, remote, or both")
 var errInvalidPhase = errors.New("invalid phase, must be: all, bootstrap, or deploy")
-var errInvalidDeployType = errors.New("invalid deploy-type, must be: all, nixos, home, packages, or systemConfigs")
+var errInvalidDeployType = errors.New("invalid deploy-type, must be: all, nixos, home, packages, maidConfigurations, or systemConfigs")
 
 var (
-	testScopeFlag    testScope
-	phaseFlag        deployPhase
+	testScopeFlag  testScope
+	phaseFlag      deployPhase
 	deployTypeFlag deployType
 )
 
@@ -71,16 +72,17 @@ func parseFlags() {
 		}
 	})
 
-	flag.Func("deploy-type", "which output types to deploy: all, nixos, home, packages, systemConfigs (default: all)", func(val string) error {
-		switch deployType(val) {
-		case deployAll, deployNixos, deployHome, deployPackages, deploySystemConfigs:
-			deployTypeFlag = deployType(val)
+	flag.Func("deploy-type", "which output types to deploy: all, nixos, home, packages, maidConfigurations, systemConfigs (default: all)",
+		func(val string) error {
+			switch deployType(val) {
+			case deployAll, deployNixos, deployHome, deployPackages, deployMaid, deploySystemConfigs:
+				deployTypeFlag = deployType(val)
 
-			return nil
-		default:
-			return fmt.Errorf("%w: %q", errInvalidDeployType, val)
-		}
-	})
+				return nil
+			default:
+				return fmt.Errorf("%w: %q", errInvalidDeployType, val)
+			}
+		})
 
 	flag.Parse()
 
@@ -227,6 +229,7 @@ func runDeployPhase(configPath string, res *testResources) error {
 		{deployNixos, runDeployNixOS},
 		{deployHome, runDeployHome},
 		{deployPackages, runDeployPackages},
+		{deployMaid, runDeployMaid},
 		{deploySystemConfigs, runDeploySystemManager},
 	}
 
@@ -293,6 +296,26 @@ func runDeployPackages(configPath string, res *testResources) error {
 
 	if testScopeFlag.local() {
 		return verifyPackages(res.keyPath)
+	}
+
+	return nil
+}
+
+func runDeployMaid(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy maid")
+
+	err := runPanixDeployStepWithArgs("Run panix deploy (maid)", configPath,
+		[]string{"--tags", "maidConfigurations"},
+		"PANIX_TEST_MODE=deploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	if testScopeFlag.local() {
+		return verifyMaidPackages(res.keyPath)
 	}
 
 	return nil
@@ -427,6 +450,9 @@ func buildNixArtifacts(res *testResources) error {
 		})
 		parGroup.Go("Pre-build test-package closure", func() error {
 			return preBuildClosure("test-package", "test-package")
+		})
+		parGroup.Go("Pre-build maid closure", func() error {
+			return preBuildClosure("maid", "maidConfigurations.test-maid")
 		})
 		parGroup.Go("Pre-build system-manager closure", func() error {
 			return preBuildClosure("system-manager", "systemConfigs.test-system-manager")

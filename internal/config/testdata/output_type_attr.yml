@@ -1,0 +1,11 @@
+fleet:
+  flakes:
+    my-flake:
+      url: path:./my-flake
+      installables:
+        nixosConfigurations:
+          my-config:
+            preset:
+              output_type_attr: nixosConf
+            machines:
+              my-machine:

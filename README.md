@@ -81,6 +81,7 @@ And an additional phase for **rollbacks**.
 - **Hooks system**: `post_bootstrap_hooks`, `post_bootstrap_install_hooks`, `post_bootstrap_provisioned_hooks`. Special commands: `waitForOnline`, `waitForOffline`.
 - **Dry-run modes**: preview without connections (`--dry-run`), or with real machine inspection (`--dry-run-with-inspect`).
 - **Snapshot & replay**: capture workflow state to JSON. Replay in TUI for debugging or sharing.
+- **Extensible output types**: declare custom types under `output_types` to deploy any flake output with custom build and activation semantics.
 - **Flake-agnostic**: zero modifications to your flake. Configuration lives in `panix.yml`.
 
 ---
@@ -99,11 +100,13 @@ And an additional phase for **rollbacks**.
 #   config file: panix.yml          (can be overridden with -c)
 #   flake url:   .                  (current directory, can be omitted)
 #   build_mode:  local              (build locally, then nix copy)
-#   activation:  switch             (switch-to-configuration switch)
+#   activation:  switch             (default per output type, overridable per installable)
 #   SSH:         machine name matched against ~/.ssh/config
 #   installable: <outputType>.<name>  (e.g. nixosConfigurations.workstation)
 #   inheritance: fleet → flake → installable → machine
 #                (tags, secrets, SSH, bootstrap, nix cascade down)
+#
+# Custom flake output types can be declared under a top-level output_types: section (see docs).
 
 fleet:
   flakes:
@@ -128,6 +131,11 @@ fleet:
                 ssh:
                   hostname: 10.0.0.100
                   port: 2222
+
+        homeConfigurations:
+          dev: # homeConfigurations.dev
+            machines:
+              workstation: # same machine, different installable type
 ```
 <!-- PANIX_YML_END -->
 

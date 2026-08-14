@@ -17,14 +17,17 @@ func TestAsUser_EmptyUserReturnsCommandUnchanged(t *testing.T) {
 	assert.Equal(t, cmd, result)
 }
 
-func TestAsUser_SingleSafeArgNoQuoting(t *testing.T) {
+func TestAsUser_SingleSafeArg(t *testing.T) {
 	t.Parallel()
 
-	// A single safe arg with no spaces: no quoting at all needed
+	// A single safe arg: no per-arg quoting needed, but the command is still
+	// prefixed with the XDG_RUNTIME_DIR assignment and wrapped in outer double
+	// quotes (the prefix introduces whitespace, and the -c argument must be a
+	// single shell word for SSH transport).
 	cmd := []string{"reboot"}
 	result := AsUser("root", cmd)
 
-	assert.Equal(t, []string{"su", "-l", "root", "-c", "reboot"}, result)
+	assert.Equal(t, []string{"su", "-l", "root", "-c", `"XDG_RUNTIME_DIR=/run/user/\$(id -u) reboot"`}, result)
 }
 
 func TestAsUser_MultiWordCommandGetsDoubleQuotes(t *testing.T) {
@@ -35,7 +38,7 @@ func TestAsUser_MultiWordCommandGetsDoubleQuotes(t *testing.T) {
 	cmd := []string{"echo", "hello"}
 	result := AsUser("alice", cmd)
 
-	assert.Equal(t, []string{"su", "-l", "alice", "-c", `"echo hello"`}, result)
+	assert.Equal(t, []string{"su", "-l", "alice", "-c", `"XDG_RUNTIME_DIR=/run/user/\$(id -u) echo hello"`}, result)
 }
 
 // TestAsUser_PreservesSpaceContainingArgs verifies that arguments containing
@@ -79,7 +82,7 @@ func TestAsUser_PreservesSpaceContainingArgs(t *testing.T) {
 		"safe path arg should not be single-quoted")
 
 	// Verify expected output
-	assert.Equal(t, `nix --extra-experimental-features 'nix-command flakes' profile add /nix/store/abc`, inner)
+	assert.Equal(t, `XDG_RUNTIME_DIR=/run/user/\$(id -u) nix --extra-experimental-features 'nix-command flakes' profile add /nix/store/abc`, inner)
 }
 
 // TestAsUser_TildeInPathStaysUnquoted verifies that ~ in paths is NOT
@@ -120,7 +123,7 @@ func TestAsUser_EscapesSingleQuotesInArgs(t *testing.T) {
 
 	// "it's working" has space and single quote → single-quoted with escaped quote
 	// 'it'\''s working' → after backslash escaping for double quotes: 'it'\\''s working'
-	assert.Equal(t, `echo 'it'\\''s working'`, inner)
+	assert.Equal(t, `XDG_RUNTIME_DIR=/run/user/\$(id -u) echo 'it'\\''s working'`, inner)
 }
 
 func TestAsUser_EscapesDoubleQuotesInArgs(t *testing.T) {
@@ -155,32 +158,32 @@ func TestAsUser_NoUnnecessaryQuoting(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
-		expected string // expected -c argument (including outer quotes if applicable)
+		expected string // expected -c argument (always wrapped in outer quotes)
 	}{
 		{
 			name:     "all safe args",
 			args:     []string{"nix", "profile", "add", "/nix/store/abc"},
-			expected: `"nix profile add /nix/store/abc"`,
+			expected: `"XDG_RUNTIME_DIR=/run/user/\$(id -u) nix profile add /nix/store/abc"`,
 		},
 		{
 			name:     "flags with dashes",
 			args:     []string{"nix-env", "--profile", "/nix/var/nix/profiles/system", "--list-generations"},
-			expected: `"nix-env --profile /nix/var/nix/profiles/system --list-generations"`,
+			expected: `"XDG_RUNTIME_DIR=/run/user/\$(id -u) nix-env --profile /nix/var/nix/profiles/system --list-generations"`,
 		},
 		{
-			name:     "single safe arg no outer quotes",
+			name:     "single safe arg still wrapped in outer quotes",
 			args:     []string{"reboot"},
-			expected: "reboot",
+			expected: `"XDG_RUNTIME_DIR=/run/user/\$(id -u) reboot"`,
 		},
 		{
 			name:     "arg with space gets single-quoted",
 			args:     []string{"nix", "--extra-experimental-features", "nix-command flakes", "build"},
-			expected: `"nix --extra-experimental-features 'nix-command flakes' build"`,
+			expected: `"XDG_RUNTIME_DIR=/run/user/\$(id -u) nix --extra-experimental-features 'nix-command flakes' build"`,
 		},
 		{
 			name:     "tilde path stays unquoted for expansion",
 			args:     []string{"cat", "~/.bashrc"},
-			expected: `"cat ~/.bashrc"`,
+			expected: `"XDG_RUNTIME_DIR=/run/user/\$(id -u) cat ~/.bashrc"`,
 		},
 	}
 
@@ -213,7 +216,7 @@ func TestShellQuote(t *testing.T) {
 		{"/nix/store/abc", "/nix/store/abc"},
 		{"--extra-experimental-features", "--extra-experimental-features"},
 		{"nix-command flakes", "'nix-command flakes'"},
-		{"~/.bashrc", "~/.bashrc"}, // ~ is safe (login shell expands it)
+		{"~/.bashrc", "~/.bashrc"},       // ~ is safe (login shell expands it)
 		{"--flag=value", "--flag=value"}, // = is safe
 		{"$HOME", "'$HOME'"},
 		{`say "hi"`, `'say "hi"'`},

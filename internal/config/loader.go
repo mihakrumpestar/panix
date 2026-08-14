@@ -66,7 +66,7 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 	}
 
 	// Validate configuration
-	err = validate.ValidateStructTags(conf, conf.Fleet, conf.Flags.ValidateFlags, conf.Flags.Runtime.FlakeValidationTimeout)
+	err = validate.ValidateStructTags(conf, conf.Fleet, conf.OutputTypes, conf.Flags.ValidateFlags, conf.Flags.Runtime.FlakeValidationTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
@@ -182,7 +182,7 @@ func (c *Config) initInstallables(flakeV *flake.Flake) error {
 				attrMap.Set(namePair.Key, installable)
 			}
 
-			err := installable.Init(installablepkg.FlakeOutputType(typeKey), nameKey, &flakeV.Attributes, &flakeV.Nix)
+			err := installable.Init(installablepkg.FlakeOutputType(typeKey), nameKey, &flakeV.Attributes, &flakeV.Nix, c.OutputTypes)
 			if err != nil {
 				return errors.Wrap(err, "failed to init installable")
 			}

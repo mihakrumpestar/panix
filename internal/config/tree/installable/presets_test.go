@@ -29,7 +29,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			BuildPath:             "config.system.build.toplevel",
 			ProfilePath:           "/nix/var/nix/profiles/system",
 			SetProfile:            new(true),
-			IsSystemLevel:         true,
+			IsSystemLevel:         new(true),
 			IsBootstrappable:      true,
 			ActivationPath:        "bin/switch-to-configuration",
 			ActivationModes:       []string{"switch", "boot", "test", "dry-activate"},
@@ -44,7 +44,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			BuildPath:             "system",
 			ProfilePath:           "/nix/var/nix/profiles/system",
 			SetProfile:            new(true),
-			IsSystemLevel:         true,
+			IsSystemLevel:         new(true),
 			IsBootstrappable:      false,
 			ActivationPath:        "activate",
 			ActivationModes:       nil,
@@ -59,7 +59,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			BuildPath:             "",
 			ProfilePath:           "/nix/var/nix/profiles/system-manager-profiles",
 			SetProfile:            new(true),
-			IsSystemLevel:         true,
+			IsSystemLevel:         new(true),
 			IsBootstrappable:      false,
 			ActivationPath:        "bin/activate",
 			ActivationModes:       nil,
@@ -74,7 +74,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			BuildPath:             "activationPackage",
 			ProfilePath:           "~/.local/state/nix/profiles/home-manager",
 			SetProfile:            nil,
-			IsSystemLevel:         false,
+			IsSystemLevel:         new(false),
 			IsBootstrappable:      false,
 			ActivationPath:        "activate",
 			ActivationModes:       nil,
@@ -89,7 +89,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			BuildPath:             "build.activationPackage",
 			ProfilePath:           "~/.local/state/nix/profiles/nix-on-droid",
 			SetProfile:            nil,
-			IsSystemLevel:         false,
+			IsSystemLevel:         new(false),
 			IsBootstrappable:      false,
 			ActivationPath:        "activate",
 			ActivationModes:       nil,
@@ -104,7 +104,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			BuildPath:             "",
 			ProfilePath:           "",
 			SetProfile:            nil,
-			IsSystemLevel:         false,
+			IsSystemLevel:         new(false),
 			IsBootstrappable:      false,
 			ActivationPath:        "",
 			ActivationModes:       nil,
@@ -112,10 +112,26 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			OmitTypeFromAttrPath:  true,
 		},
 	},
+	{
+		name: "maidConfigurations",
+		typ:  FlakeOutputType("maidConfigurations"),
+		want: Preset{
+			BuildPath:             "",
+			ProfilePath:           "",
+			SetProfile:            nil,
+			IsSystemLevel:         new(false),
+			IsBootstrappable:      false,
+			ActivationPath:        "bin/activate",
+			ActivationModes:       nil,
+			ActivationDefaultMode: "",
+			OmitTypeFromAttrPath:  false,
+		},
+	},
 }
 
 func assertPresetFields(t *testing.T, typ FlakeOutputType, got, want Preset) {
 	t.Helper()
+	assert.Equal(t, want.OutputTypeAttr, got.OutputTypeAttr, "%s OutputTypeAttr", typ)
 	assert.Equal(t, want.BuildPath, got.BuildPath, "%s BuildPath", typ)
 	assert.Equal(t, want.ProfilePath, got.ProfilePath, "%s ProfilePath", typ)
 	assert.Equal(t, want.ActivationPath, got.ActivationPath, "%s ActivationPath", typ)
@@ -151,7 +167,7 @@ func TestAllPresetsExpectedValues(t *testing.T) {
 	}
 }
 
-// TestKnownOutputTypes verifies that KnownOutputTypes returns exactly the 6
+// TestKnownOutputTypes verifies that KnownOutputTypes returns exactly the 7
 // supported output types, that IsKnown returns true for each, and that an
 // unknown type is rejected.
 func TestKnownOutputTypes(t *testing.T) {
@@ -159,7 +175,7 @@ func TestKnownOutputTypes(t *testing.T) {
 
 	known := KnownOutputTypes()
 
-	assert.Len(t, known, 6, "exactly 6 output types should be known")
+	assert.Len(t, known, 7, "exactly 7 output types should be known")
 
 	expected := []FlakeOutputType{
 		FlakeOutputType("nixosConfigurations"),
@@ -168,6 +184,7 @@ func TestKnownOutputTypes(t *testing.T) {
 		FlakeOutputType("homeConfigurations"),
 		FlakeOutputType("nixOnDroidConfigurations"),
 		FlakeOutputType("packages"),
+		FlakeOutputType("maidConfigurations"),
 	}
 
 	// Order isn't guaranteed (map iteration), so compare as sets.
@@ -199,6 +216,7 @@ func TestIsBootstrappableType(t *testing.T) {
 		{"homeConfigurations is not bootstrappable", FlakeOutputType("homeConfigurations"), false},
 		{"nixOnDroidConfigurations is not bootstrappable", FlakeOutputType("nixOnDroidConfigurations"), false},
 		{"packages is not bootstrappable", FlakeOutputType("packages"), false},
+		{"maidConfigurations is not bootstrappable", FlakeOutputType("maidConfigurations"), false},
 		{"unknown type is not bootstrappable", FlakeOutputType("nope"), false},
 		{"empty type is not bootstrappable", FlakeOutputType(""), false},
 	}
@@ -247,7 +265,7 @@ func TestPresetConsistency(t *testing.T) {
 			}
 
 			// Only system-level types can bootstrap.
-			if !preset.IsSystemLevel {
+			if !preset.IsSystemLevelValue() {
 				assert.False(t, preset.IsBootstrappable,
 					"%s: non-system-level types cannot be bootstrappable (bootstrap needs root)", typ)
 			}

@@ -22,18 +22,26 @@ func (n AttributeName) String() string {
 // ResolveFlakeInstallable constructs the full nix installable attrpath
 // from the output type, attribute name, and preset.
 //
-// For most types, returns "type.name[.buildPath]" (e.g. "nixosConfigurations.server1.config.system.build.toplevel").
+// The top-level attribute has this precedence:
+//  1. preset.OutputTypeAttr when set, producing "outputTypeAttr.name[.buildPath]".
+//     This lets the user point the config key (e.g. nixosConfigurations) at a
+//     differently-named flake output attribute (e.g. nixosConf).
+//  2. For types where OmitTypeFromAttrPath is true (e.g. "packages"), nix
+//     auto-resolves bare attribute names under "packages.<system>.<name>",
+//     so the type prefix must be omitted. In that case returns just
+//     "name[.buildPath]".
+//  3. Otherwise "type.name[.buildPath]" (e.g. "nixosConfigurations.server1.config.system.build.toplevel").
 //
-// For types where OmitTypeFromAttrPath is true (e.g. "packages"), nix
-// auto-resolves bare attribute names under "packages.<system>.<name>",
-// so the type prefix must be omitted. In that case returns just
-// "name[.buildPath]".
+// An explicit output_type_attr takes precedence over omit_type_from_attr_path.
 func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName, preset Preset) string {
 	var base string
 
-	if preset.OmitTypeFromAttrPath {
+	switch {
+	case preset.OutputTypeAttr != "":
+		base = preset.OutputTypeAttr + "." + attrName.String()
+	case preset.OmitTypeFromAttrPath:
 		base = attrName.String()
-	} else {
+	default:
 		base = outputType.String() + "." + attrName.String()
 	}
 
@@ -49,5 +57,3 @@ func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName,
 func CompositeKey(outputType FlakeOutputType, attrName AttributeName) string {
 	return outputType.String() + "/" + attrName.String()
 }
-
-

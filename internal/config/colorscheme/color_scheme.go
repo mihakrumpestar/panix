@@ -86,6 +86,7 @@ type ColorScheme struct {
 
 	Flake       ColorSchemeLogEntity
 	Installable ColorSchemeLogEntity
+	OutputType  ColorSchemeLogEntity
 	Machine     ColorSchemeLogEntity
 	Phase       ColorSchemeLogEntity
 	Command     ColorSchemeLogEntity
@@ -161,6 +162,7 @@ func DefaultColorScheme() *ColorScheme {
 		},
 		Flake:       makeLogEntity("#F1FA8C", '📁', true),
 		Installable: makeLogEntity("#FFB86C", '📦', false),
+		OutputType:  makeLogEntity("#FFB86C", '🧬', false),
 		Machine:     makeLogEntity("#8BE9FD", '💻', false),
 		Phase:       makeLogEntity("#FF79C6", '📋', false),
 		Command:     makeLogEntity("#BD93F9", '⚙', false),

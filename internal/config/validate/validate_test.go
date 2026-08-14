@@ -42,7 +42,16 @@ func buildFleetWithTypes(t *testing.T, types ...string) *fleet.Fleet {
 	return &fleet.Fleet{Flakes: flakesMap}
 }
 
-// TestValidateOutputTypes_AllKnownTypesPass verifies that all 6 known output
+// buildDeclaredPresets builds a CustomOutputTypes ordered map with a single
+// declared custom type, mirroring how the output_types section decodes.
+func buildDeclaredPresets(typ string, preset installablepkg.Preset) installablepkg.CustomOutputTypes {
+	declared := atomicorderedmap.New[string, installablepkg.Preset]()
+	declared.Set(typ, preset)
+
+	return declared
+}
+
+// TestValidateOutputTypes_AllKnownTypesPass verifies that all 7 known output
 // types pass validation without error. This is a pure-function test — no nix
 // invocations.
 func TestValidateOutputTypes_AllKnownTypesPass(t *testing.T) {
@@ -55,13 +64,14 @@ func TestValidateOutputTypes_AllKnownTypesPass(t *testing.T) {
 		"homeConfigurations",
 		"nixOnDroidConfigurations",
 		"packages",
+		"maidConfigurations",
 	}
 
-	// One flake with all 6 types.
+	// One flake with all 7 types.
 	f := buildFleetWithTypes(t, knownTypes...)
 
-	err := validateOutputTypes(f)
-	assert.NoError(t, err, "all 6 known output types should pass validation")
+	err := validateOutputTypes(f, nil)
+	assert.NoError(t, err, "all 7 known output types should pass validation")
 }
 
 // TestValidateOutputTypes_UnknownTypeRejected verifies that an unknown output
@@ -71,7 +81,7 @@ func TestValidateOutputTypes_UnknownTypeRejected(t *testing.T) {
 
 	f := buildFleetWithTypes(t, "unknownConfigurations")
 
-	err := validateOutputTypes(f)
+	err := validateOutputTypes(f, nil)
 	require.Error(t, err, "unknown output type should be rejected")
 
 	msg := err.Error()
@@ -80,6 +90,9 @@ func TestValidateOutputTypes_UnknownTypeRejected(t *testing.T) {
 	// The error should also list the known types so users can fix it.
 	assert.Contains(t, msg, "nixosConfigurations",
 		"error should list known types")
+	// And point users at declaring custom types under output_types.
+	assert.Contains(t, msg, "output_types",
+		"error should mention custom types can be declared under output_types")
 }
 
 // TestValidateOutputTypes_MixedKnownAndUnknown verifies that when known and
@@ -89,7 +102,7 @@ func TestValidateOutputTypes_MixedKnownAndUnknown(t *testing.T) {
 
 	f := buildFleetWithTypes(t, "nixosConfigurations", "bogusType", "packages")
 
-	err := validateOutputTypes(f)
+	err := validateOutputTypes(f, nil)
 	require.Error(t, err, "presence of an unknown type should fail validation")
 	assert.Contains(t, err.Error(), "bogusType")
 }
@@ -103,7 +116,7 @@ func TestValidateOutputTypes_EmptyFleet(t *testing.T) {
 		Flakes: atomicorderedmap.New[string, *flake.Flake](),
 	}
 
-	err := validateOutputTypes(f)
+	err := validateOutputTypes(f, nil)
 	assert.NoError(t, err, "empty fleet should pass validation")
 }
 
@@ -127,7 +140,7 @@ func TestValidateOutputTypes_NilInstallableSkipped(t *testing.T) {
 	f := &fleet.Fleet{Flakes: flakesMap}
 
 	assert.NotPanics(t, func() {
-		_ = validateOutputTypes(f)
+		_ = validateOutputTypes(f, nil)
 	}, "nil installable should be skipped, not panic")
 }
 
@@ -148,7 +161,7 @@ func TestValidateOutputTypes_NilAttrMapSkipped(t *testing.T) {
 	f := &fleet.Fleet{Flakes: flakesMap}
 
 	assert.NotPanics(t, func() {
-		err := validateOutputTypes(f)
+		err := validateOutputTypes(f, nil)
 		assert.NoError(t, err, "nil attr map should be skipped, not error")
 	}, "nil attr map should be skipped, not panic")
 }
@@ -161,12 +174,322 @@ func TestValidateOutputTypes_ErrorListsAllKnownTypes(t *testing.T) {
 
 	f := buildFleetWithTypes(t, "nope")
 
-	err := validateOutputTypes(f)
+	err := validateOutputTypes(f, nil)
 	require.Error(t, err)
 
 	msg := err.Error()
 	for _, known := range installablepkg.KnownOutputTypes() {
 		assert.Contains(t, msg, known.String(),
 			"error message should list known type %s, got: %s", known, msg)
+	}
+}
+
+// TestValidateOutputTypes_DeclaredCustomTypePasses verifies that an output
+// type declared under output_types passes validation even though it is not a
+// built-in type.
+func TestValidateOutputTypes_DeclaredCustomTypePasses(t *testing.T) {
+	t.Parallel()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", installablepkg.Preset{
+		IsSystemLevel: new(true),
+	})
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations")
+
+	err := validateOutputTypes(f, declared)
+	assert.NoError(t, err, "declared custom output type should pass validation")
+}
+
+// TestValidateOutputTypes_CustomTypeMissingSystemLevel verifies that a custom
+// output type declaration without system_level is rejected.
+func TestValidateOutputTypes_CustomTypeMissingSystemLevel(t *testing.T) {
+	t.Parallel()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", installablepkg.Preset{})
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations")
+
+	err := validateOutputTypes(f, declared)
+	require.Error(t, err, "custom type without system_level should be rejected")
+
+	msg := err.Error()
+	assert.Contains(t, msg, "colmenaConfigurations", "error should name the offending type")
+	assert.Contains(t, msg, "system_level", "error should say system_level is required")
+}
+
+// TestValidateOutputTypes_CustomTypeCollidesWithBuiltin verifies that a custom
+// type declaration whose name shadows a built-in type is rejected. Both the
+// common case (nixosConfigurations) and the less obvious one (maidConfigurations,
+// where a user might declare their own nix-maid type) are covered.
+func TestValidateOutputTypes_CustomTypeCollidesWithBuiltin(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		typ  string
+	}{
+		{"nixosConfigurations collides with a built-in", "nixosConfigurations"},
+		{"maidConfigurations collides with a built-in", "maidConfigurations"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			declared := buildDeclaredPresets(testCase.typ, installablepkg.Preset{
+				IsSystemLevel: new(true),
+			})
+
+			f := buildFleetWithTypes(t, testCase.typ)
+
+			err := validateOutputTypes(f, declared)
+			require.Error(t, err, "custom type colliding with a built-in should be rejected")
+
+			msg := err.Error()
+			assert.Contains(t, msg, testCase.typ, "error should name the colliding type")
+			assert.Contains(t, msg, "collides", "error should say the type collides with a built-in")
+		})
+	}
+}
+
+// TestValidateOutputTypes_DeclaredCustomTypeUnknownTypeError verifies that an
+// undeclared type still errors when other custom types are declared (the
+// declared set does not silently accept arbitrary type keys).
+func TestValidateOutputTypes_DeclaredCustomTypeUnknownTypeError(t *testing.T) {
+	t.Parallel()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", installablepkg.Preset{
+		IsSystemLevel: new(true),
+	})
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations", "notDeclaredType")
+
+	err := validateOutputTypes(f, declared)
+	require.Error(t, err, "undeclared unknown type should still be rejected")
+	assert.Contains(t, err.Error(), "notDeclaredType")
+}
+
+// TestValidateOutputTypes_SupportedModesRequireDefaultMode verifies that a
+// custom output type declaring activation_supported_modes must also declare
+// activation_default_mode (the default mode drives rollback activation for the
+// type), while declaring either field on its own is allowed.
+func TestValidateOutputTypes_SupportedModesRequireDefaultMode(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		preset        installablepkg.Preset
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "supported modes without default mode rejected",
+			preset: installablepkg.Preset{
+				IsSystemLevel:   new(true),
+				ActivationModes: []string{"switch", "boot"},
+			},
+			wantErr:       true,
+			wantErrSubstr: "declares activation_supported_modes but not activation_default_mode",
+		},
+		{
+			name: "supported modes with default mode accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel:         new(true),
+				ActivationModes:       []string{"switch", "boot"},
+				ActivationDefaultMode: "switch",
+			},
+			wantErr: false,
+		},
+		{
+			name: "default mode without supported modes accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel:         new(true),
+				ActivationDefaultMode: "switch",
+			},
+			wantErr: false,
+		},
+		{
+			name: "neither field declared accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runSupportedModesRequireDefaultModeCase(t, testCase.preset, testCase.wantErr, testCase.wantErrSubstr)
+		})
+	}
+}
+
+// runSupportedModesRequireDefaultModeCase asserts the outcome of validating a
+// declared "colmenaConfigurations" preset against the rule that supported
+// activation modes require a declared default mode.
+func runSupportedModesRequireDefaultModeCase(t *testing.T, preset installablepkg.Preset, wantErr bool, wantErrSubstr string) {
+	t.Helper()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", preset)
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations")
+
+	err := validateOutputTypes(f, declared)
+	if wantErr {
+		require.Error(t, err, "custom type with supported modes but no default mode should be rejected")
+
+		msg := err.Error()
+		assert.Contains(t, msg, "colmenaConfigurations", "error should name the offending type")
+		assert.Contains(t, msg, wantErrSubstr, "error should explain the missing activation_default_mode")
+		assert.Contains(t, msg, "set activation_default_mode to one of the supported modes",
+			"error should tell the user how to fix it")
+	} else {
+		assert.NoError(t, err, "custom type declaration should pass validation")
+	}
+}
+
+// TestValidateOutputTypes_DefaultModeMustBeSupported verifies that a custom
+// output type whose activation_default_mode is not one of the declared
+// activation_supported_modes is rejected, while a default that is a member of
+// the supported modes passes.
+func TestValidateOutputTypes_DefaultModeMustBeSupported(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		preset        installablepkg.Preset
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "default mode not in supported modes rejected",
+			preset: installablepkg.Preset{
+				IsSystemLevel:         new(true),
+				ActivationModes:       []string{"switch", "boot"},
+				ActivationDefaultMode: "test",
+			},
+			wantErr:       true,
+			wantErrSubstr: "activation_default_mode 'test' is not in activation_supported_modes",
+		},
+		{
+			name: "default mode in supported modes accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel:         new(true),
+				ActivationModes:       []string{"switch", "boot"},
+				ActivationDefaultMode: "boot",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runDefaultModeMustBeSupportedCase(t, testCase.preset, testCase.wantErr, testCase.wantErrSubstr)
+		})
+	}
+}
+
+// runDefaultModeMustBeSupportedCase asserts the outcome of validating a
+// declared "colmenaConfigurations" preset against the rule that the default
+// activation mode must be one of the supported modes.
+func runDefaultModeMustBeSupportedCase(t *testing.T, preset installablepkg.Preset, wantErr bool, wantErrSubstr string) {
+	t.Helper()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", preset)
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations")
+
+	err := validateOutputTypes(f, declared)
+	if wantErr {
+		require.Error(t, err, "default mode outside supported modes should be rejected")
+
+		msg := err.Error()
+		assert.Contains(t, msg, "colmenaConfigurations", "error should name the offending type")
+		assert.Contains(t, msg, wantErrSubstr, "error should name the offending default mode")
+	} else {
+		assert.NoError(t, err, "custom type declaration should pass validation")
+	}
+}
+
+// TestValidateOutputTypes_SetProfileRequiresProfilePath verifies that a custom
+// output type declaring set_profile: true without a profile_path is rejected,
+// while set_profile: true with a profile_path (and set_profile unset/absent)
+// passes.
+func TestValidateOutputTypes_SetProfileRequiresProfilePath(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		preset        installablepkg.Preset
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "set_profile true without profile_path rejected",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				SetProfile:    new(true),
+			},
+			wantErr:       true,
+			wantErrSubstr: "declares set_profile: true but has no profile_path",
+		},
+		{
+			name: "set_profile true with profile_path accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				SetProfile:    new(true),
+				ProfilePath:   "/nix/var/nix/profiles/system",
+			},
+			wantErr: false,
+		},
+		{
+			name: "set_profile false without profile_path accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				SetProfile:    new(false),
+			},
+			wantErr: false,
+		},
+		{
+			name: "set_profile unset without profile_path accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runSetProfileRequiresProfilePathCase(t, testCase.preset, testCase.wantErr, testCase.wantErrSubstr)
+		})
+	}
+}
+
+// runSetProfileRequiresProfilePathCase asserts the outcome of validating a
+// declared "colmenaConfigurations" preset against the rule that
+// set_profile: true requires a profile_path.
+func runSetProfileRequiresProfilePathCase(t *testing.T, preset installablepkg.Preset, wantErr bool, wantErrSubstr string) {
+	t.Helper()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", preset)
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations")
+
+	err := validateOutputTypes(f, declared)
+	if wantErr {
+		require.Error(t, err, "set_profile: true without profile_path should be rejected")
+
+		msg := err.Error()
+		assert.Contains(t, msg, "colmenaConfigurations", "error should name the offending type")
+		assert.Contains(t, msg, wantErrSubstr, "error should explain the missing profile_path")
+	} else {
+		assert.NoError(t, err, "custom type declaration should pass validation")
 	}
 }

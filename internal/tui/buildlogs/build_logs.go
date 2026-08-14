@@ -200,7 +200,7 @@ func (b *BuildLogs) buildInstallablesTree(flakeNode *tree.Node, flake *flake.Fla
 		}
 
 		typeNode := flakeNode.Child(outputTypeXpath, typeVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-			return b.entityNodeContentWithDuration(depthWidth, b.conf.ColorScheme.Installable, typeKey, maxTypeDuration, old)
+			return b.entityNodeContentWithDuration(depthWidth, b.conf.ColorScheme.OutputType, typeKey, maxTypeDuration, old)
 		})
 
 		attrMap.ForEach(func(nameKey string, installable *installable.Installable) bool {

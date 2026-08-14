@@ -17,6 +17,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # nix-maid has no flake inputs of its own; it receives nixpkgs via its
+    # functor argument (nix-maid pkgs { ... }), so no "follows" override.
+    nix-maid.url = "github:viperML/nix-maid";
+
     system-manager = {
       url = "github:numtide/system-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -30,6 +34,7 @@
       disko,
       nixos-images,
       home-manager,
+      nix-maid,
       system-manager,
     }:
     let
@@ -83,6 +88,10 @@
           ++ lib.optionals withNix [
             "curl"
             "ca-certificates"
+            # Needed so the D-Bus user session bus is available for user-level
+            # activations (e.g. nix-maid's sd-switch) on the Debian-nix VM.
+            # Without it there is no /run/user/<uid>/bus socket to connect to.
+            "dbus-user-session"
           ];
           pkgLines = lib.concatMapStrings (p: "  - ${p}\n") packages;
 
@@ -92,14 +101,16 @@
           # (hostname/instance-id) with a minimal user-data.
           nixInstallCmd = lib.optionalString withNix "  - curl -sSfL https://install.determinate.systems/nix | sh -s -- install --no-confirm\n";
           shutdownCmd = lib.optionalString shutdown "  - shutdown -h now\n";
-          createUserCmd = lib.optionalString createUser (lib.concatStrings [
-            "  - useradd -m -s /bin/bash alice\n"
-            "  - mkdir -p /home/alice/.ssh\n"
-            "  - cp /root/.ssh/authorized_keys /home/alice/.ssh/authorized_keys\n"
-            "  - chown -R alice:alice /home/alice/.ssh\n"
-            "  - chmod 700 /home/alice/.ssh\n"
-            "  - chmod 600 /home/alice/.ssh/authorized_keys\n"
-          ]);
+          createUserCmd = lib.optionalString createUser (
+            lib.concatStrings [
+              "  - useradd -m -s /bin/bash alice\n"
+              "  - mkdir -p /home/alice/.ssh\n"
+              "  - cp /root/.ssh/authorized_keys /home/alice/.ssh/authorized_keys\n"
+              "  - chown -R alice:alice /home/alice/.ssh\n"
+              "  - chmod 700 /home/alice/.ssh\n"
+              "  - chmod 600 /home/alice/.ssh/authorized_keys\n"
+            ]
+          );
 
           userData = pkgs.writeText "user-data" (
             if shutdown then
@@ -121,6 +132,11 @@
                 "  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config\n"
                 "  - mkdir -p /etc/ssh/sshd_config.d && echo 'PermitRootLogin yes' > /etc/ssh/sshd_config.d/root-login.conf\n"
                 "  - systemctl restart sshd\n"
+                # Keep root's systemd user manager (user@0.service) running at
+                # boot in the baked image, so user-level activations (e.g.
+                # nix-maid's systemd-tmpfiles --user and sd-switch) have a
+                # D-Bus session and XDG_RUNTIME_DIR available.
+                "  - loginctl enable-linger root\n"
                 nixInstallCmd
                 createUserCmd
                 shutdownCmd
@@ -254,7 +270,7 @@
         # the hash will change and this will need updating.
         debian-cloud-image = pkgs.fetchurl {
           url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2";
-          hash = "sha256-fPs1a4hfE64IM4HBrpHpunCWVRkUXUXTT8MLtFtFwKg=";
+          hash = "sha256-3T29I6OWUxjMmq4yWS3P3kq8uPkKUMp2Cpyp6PO6YlU=";
         };
 
         # Cloud-init NoCloud seed ISOs — built via genisoimage (pkgs.cdrkit).
@@ -307,6 +323,14 @@
           EOF
           chmod +x $out/bin/panix-package-marker
         '';
+      };
+
+      # Real nix-maid fixture for E2E verification of the `maidConfigurations` deploy
+      # type. Uses the actual nix-maid module system to produce a bundle with
+      # bin/activate. After activation, the declared file exists as a symlink
+      # at ~/.panix-maid-test-marker pointing into the nix store.
+      maidConfigurations.test-maid = nix-maid pkgs {
+        file.home.".panix-maid-test-marker".text = "panix-e2e-test-pass";
       };
     };
 }

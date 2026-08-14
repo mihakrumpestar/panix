@@ -117,7 +117,7 @@ fleet:
                   hostname: server1.lan
 ```
 
-The `user` field is only meaningful for user-level types (`homeConfigurations`, `nixOnDroidConfigurations`, `packages`). It is ignored for system-level types (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`).
+The `user` field is only meaningful for user-level types (`homeConfigurations`, `nixOnDroidConfigurations`, `packages`, `maidConfigurations`). It is ignored for system-level types (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`).
 
 When set, panix wraps the activation command in `su -l <user> -c` so the activation script runs with the correct user's `$HOME` and profile. Generation listing (`nix-env --list-generations`) also runs as that user.
 
@@ -126,6 +126,8 @@ Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) a
 :::
 
 ### Supported Installable Types
+
+Native:
 
 | Type | Use case | Activation |
 |------|----------|------------|
@@ -136,13 +138,18 @@ Multi-output-type deployments (home-manager, nix-darwin, system-manager, etc.) a
 | `nixOnDroidConfigurations` | [Nix-on-Droid](https://github.com/nix-community/nix-on-droid) | `activate` script |
 | `packages` | Arbitrary packages | `nix profile add` |
 
+Custom built-in:
+
+| Type | Use case | Activation |
+| `maidConfigurations` | [nix-maid](https://github.com/viperML/nix-maid) | `bin/activate` |
+
 Bootstrap (kexec, disko, nixos-install) only applies to `nixosConfigurations`.
 
 For a detailed guide on deploying packages (including nixvim and nvf), see the [Deploying Packages guide](../guides/packages.mdx).
 
 ## Custom Installable Types
 
-The six types above are registered in panix's `presets` map ([`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go)). Validation rejects type names not in this map, so you cannot use an arbitrary output name as an installable type.
+The types above are registered in panix's built-in presets table ([`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go)). You can also declare **custom output types** under the top-level `output_types` section, enabling deployment of any flake output with user-defined build and activation semantics. See [Custom Output Types](/configuration/output-types/) for the full guide.
 
 Each type's behavior is fully data-driven through its `Preset` fields. Some fields are **user-overridable** (customizable per-installable); others are **type-level** (intrinsic to the output type, always use the type default).
 
@@ -150,6 +157,7 @@ Each type's behavior is fully data-driven through its `Preset` fields. Some fiel
 
 | Field | Purpose |
 |-------|---------|
+| `output_type_attr` | Overrides the top-level flake output attribute used in the attrpath (defaults to the output type key) |
 | `build_path` | Attrpath suffix appended to `type.name` for `nix build` |
 | `activation_path` | Script path within the closure. Empty triggers `nix profile add` instead |
 | `profile_path` | Nix profile path for generation management. Empty disables rollback |
@@ -157,32 +165,30 @@ Each type's behavior is fully data-driven through its `Preset` fields. Some fiel
 | `activation_supported_modes` | Activation modes passed to the activation script (e.g. `switch`, `boot`, `test`) |
 | `activation_default_mode` | Default mode when none is specified |
 
-**Type-level fields** (not user-configurable):
+**Type-level fields** (set in `output_types` declarations for custom types; forced from the built-in preset for built-in types):
 
 | Field | Purpose |
 |-------|---------|
+| `system_level` | `true` uses `sudo` for activation if not root already; `false` uses `su -l <user>`. Required for custom types |
 | `omit_type_from_attr_path` | Omits the output type from the attrpath. Used by `packages` where nix auto-resolves bare names under `packages.<system>.<name>` |
-| `is_system_level` | `true` uses `sudo` for activation if not root already; `false` uses `su -l <user>` |
-| `is_bootstrappable` | Whether the type supports bootstrap (kexec, disko, nixos-install) |
 
-You can override any **user-overridable** field per-installable under the `preset:` key to customize behavior for a specific output. For example, to deploy a `nixosConfigurations` entry with a non-standard build path:
+:::note
+`is_bootstrappable` is intrinsic and always derived: only `nixosConfigurations` supports bootstrap. Custom types are never bootstrappable.
+:::
+
+You can override any **user-overridable** field per-installable under the `preset:` key to customize behavior for a specific output. For example, to deploy a `nixosConfigurations` entry whose flake uses a non-standard output attribute:
 
 ```yaml
 installables:
   nixosConfigurations:
     custom-build:
       preset:
-        build_path: config.system.build.toplevel
-        activation_path: bin/switch-to-configuration
-        profile_path: /nix/var/nix/profiles/system
-        set_profile: true
+        output_type_attr: nixosConf  # flake exposes systems under nixosConf.custom-build
       machines:
         server1:
 ```
 
-All preset fields are optional. When omitted, the type default from the `presets` map is used.
-
-To add support for a **new** output type (e.g. a flake output not in the list above), add an entry to the `presets` map in [`internal/config/tree/installable/presets.go`](https://github.com/mihakrumpestar/panix/blob/main/internal/config/tree/installable/presets.go). The type is then automatically picked up by validation, build, transfer, activation, and rollback with no other code changes needed. If you need a new preset, [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues) to request it.
+All preset fields are optional. When omitted, the type default (from the built-in preset or `output_types` declaration) is used.
 
 ## How Inheritance Works
 

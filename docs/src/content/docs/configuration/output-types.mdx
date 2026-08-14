@@ -1,0 +1,157 @@
+---
+title: Custom Output Types
+description: Declare custom flake output types with their own build, activation, and profile settings.
+sidebar:
+  order: 3
+---
+
+Panix ships with built-in presets for common flake output types (`nixosConfigurations`, `homeConfigurations`, `packages`, etc.). If your flake exposes outputs under a non-standard (e.g. not yet known) attribute name, or you need custom activation semantics, declare them under the top-level `output_types` section.
+
+:::note
+If you want a new output type to be added as built-in in Panix, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues). Panix strives to have comprehensive support for all Nix ecosystem.
+:::
+
+## Declaring a Custom Type
+
+```yaml
+output_types:
+  myApps:
+    system_level: false            # required: true (root/sudo) or false (user-level)
+    activation_path: bin/activate  # script path in the closure; empty means nix profile add
+    activation_supported_modes: ["apply"]
+    activation_default_mode: apply
+
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        myApps:
+          editor:
+            machines:
+              workstation:
+```
+
+The flake must expose the matching output under `myApps.<system>.editor`:
+
+```nix
+{
+  outputs = { self, nixpkgs }: let system = "x86_64-linux"; in {
+    myApps.${system}.editor = nixpkgs.legacyPackages.${system}.stdenv.mkDerivation {
+      name = "my-editor";
+      installPhase = "mkdir -p $out/bin && cp ${./activate} $out/bin/activate";
+    };
+  };
+}
+```
+
+Every installable under `myApps` inherits the declared preset as defaults. User-overridable fields can be fine-tuned per-installable under `preset:`, but type-level fields (`system_level`, `omit_type_from_attr_path`) are always taken from the declaration.
+
+## Available Fields
+
+| Field | Required | Scope | Purpose |
+|-------|----------|-------|---------|
+| `system_level` | **yes** | type-level | `true`: activation runs with sudo (system-level). `false`: activation runs as the SSH user (user-level) |
+| `output_type_attr` | no | user-overridable | Override the flake output attribute used in the attrpath. Defaults to the type key name |
+| `build_path` | no | user-overridable | Attrpath suffix for `nix build` (e.g. `config.system.build.toplevel`) |
+| `activation_path` | no | user-overridable | Script path within the closure to run during activation. Empty means `nix profile add` |
+| `profile_path` | no | user-overridable | Nix profile path for generation tracking. Enables rollback when set |
+| `set_profile` | no | user-overridable | Run `nix-env --profile --set` before activation |
+| `activation_supported_modes` | no | user-overridable | List of valid modes (e.g. `["switch", "boot"]`). If set, `activation_default_mode` is required |
+| `activation_default_mode` | no | user-overridable | Default mode used when none is specified per-installable or via CLI |
+| `omit_type_from_attr_path` | no | type-level | Omit the type key from the attrpath (bare name resolution, like `packages`) |
+
+User-overridable fields can be overridden per-installable under `preset:`. Type-level fields (`system_level`, `omit_type_from_attr_path`) are intrinsic to the output type and always taken from the declaration.
+
+## Validation Rules
+
+- Custom type names must not collide with built-in type names.
+- `system_level` must be set (validation error if missing).
+- If `activation_supported_modes` is declared, `activation_default_mode` must also be set.
+- Custom types are never bootstrappable (bootstrap only applies to `nixosConfigurations`).
+
+## output_type_attr
+
+The `output_type_attr` field overrides which flake output attribute is used in the build attrpath. By default the type key is used, but when your flake exposes outputs under a different attribute name, set `output_type_attr` to point at the real one:
+
+```yaml
+output_types:
+  mySystems:
+    system_level: true
+    output_type_attr: nixosConf  # flake exposes systems under nixosConf.*, not mySystems.*
+    build_path: config.system.build.toplevel
+    activation_path: bin/switch-to-configuration
+    activation_supported_modes: ["switch", "boot", "test", "dry-activate"]
+    activation_default_mode: switch
+    profile_path: /nix/var/nix/profiles/system
+    set_profile: true
+
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        mySystems:
+          workstation:   # builds flake#nixosConf.workstation.config.system.build.toplevel
+            machines:
+              workstation:
+```
+
+You can also set `output_type_attr` per-installable via `preset:` to override just one entry while keeping the built-in type key:
+
+```yaml
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        nixosConfigurations:
+          workstation:
+            preset:
+              output_type_attr: nixosConf  # this one builds from nixosConf.workstation
+            machines:
+              workstation:
+```
+
+The top-level attribute of the build attrpath is picked by the first matching rule:
+
+1. `output_type_attr` set: use it. `workstation` with `output_type_attr: nixosConf` builds `#nixosConf.workstation`.
+2. Else `omit_type_from_attr_path: true`: bare name only. `hello` builds `#hello` (nix resolves it under `packages.<system>.<name>`). This is how built-in `packages` works.
+3. Else (default): type key + name. `alice` under `homeConfigurations` builds `#homeConfigurations.alice`.
+
+`build_path`, if set, is appended: `#nixosConf.workstation.config.system.build.toplevel`.
+
+## Common Patterns
+
+### Package-like outputs (nix profile add)
+
+Leave `activation_path` empty. Panix installs the closure via `nix profile add`:
+
+```yaml
+output_types:
+  neovimBuilds:
+    system_level: false
+
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        neovimBuilds:
+          my-editor:
+            machines:
+              workstation:
+```
+
+### Activation-script outputs
+
+Set `activation_path` to the script inside the closure:
+
+```yaml
+output_types:
+  myBundles:
+    system_level: false
+    activation_path: bin/activate
+```
+
+nix-maid users get this exact behavior from the built-in `maidConfigurations` type without declaring anything.
+
+### Aliasing a built-in type under a different flake attribute
+
+If your flake exposes NixOS systems under `nixosConf.*` instead of `nixosConfigurations.*`, declare a custom type that replicates the NixOS preset, or use `output_type_attr` per-installable (see above).

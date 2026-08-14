@@ -1,6 +1,6 @@
 ---
 title: Deploying Packages
-description: Deploy arbitrary Nix packages to machines via nix profile add, including nixvim and nvf.
+description: Deploy arbitrary Nix packages and maid bundles to machines, including nixvim, nvf, and nix-maid.
 sidebar:
   order: 9
 ---
@@ -246,9 +246,51 @@ For module-based integration with generation rollback and XDG config management,
 
 The panix YAML is identical to the nixvim case.
 
+## Deploying nix-maid
+
+[nix-maid](https://github.com/viperML/nix-maid) manages declarative dotfiles and systemd user units through a bundle activated via `bin/activate` (systemd-tmpfiles + sd-switch), rather than `nix profile add`.
+
+nix-maid exposes a callable flake (functor API). Build a bundle under a `maidConfigurations` output:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nix-maid.url = "github:viperML/nix-maid";  # declares no inputs of its own
+  };
+
+  outputs = { self, nixpkgs, nix-maid, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages."x86_64-linux";
+    in {
+      maidConfigurations.my-config = nix-maid pkgs {
+        file.home.".gitconfig".text = "[user]\n  name = Example";
+        packages = [ pkgs.hello ];
+      };
+    };
+}
+```
+
+```yaml
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        maidConfigurations:
+          my-config:
+            user: myuser
+            machines:
+              workstation:
+```
+
+:::caution
+Activation requires a running systemd user session and D-Bus user bus on the target. NixOS targets need linger enabled for the target user. Non-NixOS systemd targets additionally need the `dbus-user-session` package installed. Non-systemd targets are not supported.
+:::
+
 ## Limitations
 
-- **No rollback**: Panix rollback is skipped (no `ProfilePath`). Use `nix profile history` and `nix profile rollback` on the target machine directly.
-- **No activation modes**: Packages always install immediately. No `switch`, `boot`, `test`, or `dry-activate` modes.
-- **No bootstrap support**: `IsBootstrappable` is false. The target must already be running Nix.
-- **Profile conflicts**: `nix profile add` uses the user's default profile. Use `profile_add_default_flags: ["--priority", "N"]` to control priority.
+- **No rollback for `packages` and `maidConfigurations`**: Panix rollback is skipped (no `ProfilePath`). For `packages`, use `nix profile history` and `nix profile rollback` on the target machine directly.
+- **No activation modes**: `packages` installs immediately via `nix profile add`. `maidConfigurations` activates immediately via its script. No `switch`, `boot`, `test`, or `dry-activate` modes for either.
+- **No bootstrap support**: Neither type supports bootstrap. The target must already be running Nix.
+- **Profile conflicts** (`packages` only): `nix profile add` uses the user's default profile. Use `profile_add_default_flags: ["--priority", "N"]` to control priority.
+- **systemd requirement** (`maidConfigurations` only): activation needs a running systemd user session and D-Bus user bus on the target.
