@@ -3,7 +3,6 @@ package tui
 import (
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/workflow"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/rs/zerolog/log"
@@ -111,14 +110,18 @@ func (m *model) workflowDoneMsgCmd(msg workflowDoneMsg) zeroterm.Cmd {
 	m.conf.Fleet.Recalculate(m.conf.Phases)
 	logFinalState(m.conf)
 
-	if m.conf.Flags.Snapshot.OnExit {
-		m.captureSnapshot(config.SnaphsotReasonExit)
+	// Graceful quit (q key): the workflow has now truly finished, so this is
+	// where the TUI exits. ExitOnComplete below still quits on its own.
+	if m.quitting {
+		m.setFailedMachinesErrorIfNil()
+
+		return m.quitCmd()
 	}
 
 	if m.conf.Flags.ExitOnComplete {
 		m.quitting = true
 
-		return zeroterm.QuitCmd
+		return m.quitCmd()
 	}
 
 	return nil
@@ -145,7 +148,7 @@ func (m *model) handleErrMsgCmd(msg errMsg) zeroterm.Cmd {
 
 	m.quitting = true
 
-	return zeroterm.QuitCmd
+	return m.quitCmd()
 }
 
 func (m *model) handleMouseClick(msg zeroterm.MouseClickMsg) {

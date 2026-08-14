@@ -211,7 +211,7 @@ func (m *model) Render(buf *buffer.LinesBufDiff, renderCounter uint64) {
 	header := m.header.Render(m.dimensions.Width)
 	buf.AppendFrom(header)
 
-	footer := m.footer.Render(m.quitting, m.dimensions.Width)
+	footer := m.footer.Render(m.dimensions.Width)
 
 	headerFooterHeight := header.Len() + footer.Len()
 

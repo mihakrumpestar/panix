@@ -3,6 +3,7 @@ package notification
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/stretchr/testify/assert"
@@ -106,4 +107,24 @@ func TestViewContentHasHorizontalPadding(t *testing.T) {
 	clean := string(style.StripANSI([]byte(content)))
 	assert.True(t, strings.HasPrefix(clean, "│ "), "content line should have padding: %q", clean)
 	assert.True(t, strings.HasSuffix(clean, " │"), "content line should have padding: %q", clean)
+}
+
+func TestSetPersistent_NeverExpiresAndDoesNotKeepTicking(t *testing.T) {
+	t.Parallel()
+
+	notif := New(style.Color("#B4B4B4"))
+	notif.SetBaseStyle(style.NewStyle())
+	_ = notif.SetPersistent("keep me", style.Color("#50FA7B"))
+
+	assert.NotEmpty(t, viewString(notif), "persistent notification should render")
+
+	// Force the start time far in the past: a persistent notification must
+	// still be visible and unfaded.
+	notif.started = time.Now().Add(-time.Hour)
+
+	assert.NotEmpty(t, viewString(notif), "persistent notification should not expire")
+	assert.Contains(t, viewString(notif), "keep me", "persistent notification content should stay visible")
+
+	// After the initial tick no further ticking is needed.
+	assert.Nil(t, notif.Update(notificationTickMsg{}))
 }

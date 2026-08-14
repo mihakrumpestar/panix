@@ -10,10 +10,13 @@ import (
 )
 
 type KeyDef struct {
-	Keys    []string
-	Help    string
-	Active  func() bool
-	Handler func() zeroterm.Cmd
+	Keys   []string
+	Help   string
+	Active func() bool
+	// Disabled makes the key unusable (dispatch skips it) and hides it from
+	// the rendered keymap. Mirrors the Active toggle pattern.
+	Disabled func() bool
+	Handler  func() zeroterm.Cmd
 }
 
 const minFooterHeight = 3
@@ -62,17 +65,13 @@ func (f *Footer) Notification() *notification.Notification { return f.notificati
 func (f *Footer) Len() int { return f.cachedRender.Len() }
 
 // Render builds the footer (keymap + notification), horizontally joined.
-// Returns nil when quitting. Skips re-rendering when nothing changed.
+// Skips re-rendering when nothing changed.
 //
 // Buffer flow (2 persistent buffers, no allocations on cache hit):
 //
 //	helpBuf:       raw keymap → (reused as join output) → swap → disposable
 //	cachedRender:  styled help  → (reused as join input) → swap → final result
-func (f *Footer) Render(quitting bool, width int) *buffer.LinesBuf {
-	if quitting {
-		return nil
-	}
-
+func (f *Footer) Render(width int) *buffer.LinesBuf {
 	notifBuf := f.notification.Render()
 	notifVer := notifBuf.Version()
 	keymapWidth, keymask := f.keymap.CacheKey()
@@ -137,9 +136,10 @@ func pairsFromKeyDefs(keyDefs []KeyDef) []keymap.Pair {
 	pairs := make([]keymap.Pair, len(keyDefs))
 	for i := range keyDefs {
 		pairs[i] = keymap.Pair{
-			Key:    keyDefs[i].Keys[0],
-			Desc:   keyDefs[i].Help,
-			Active: keyDefs[i].Active,
+			Key:      keyDefs[i].Keys[0],
+			Desc:     keyDefs[i].Help,
+			Active:   keyDefs[i].Active,
+			Disabled: keyDefs[i].Disabled,
 		}
 	}
 

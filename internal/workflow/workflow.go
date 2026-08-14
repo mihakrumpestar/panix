@@ -92,6 +92,20 @@ func (w *Workflow) Cancel() error {
 	return errors.Wrap(w.ctx.Err(), "context error")
 }
 
+// CancelAsync cancels the workflow context without blocking on workflow
+// completion. The workflow finishes asynchronously; StartWorkflow's deferred
+// cleanup closes the update hook and the done channel once it does, so callers
+// that need to know when cancellation finished should wait on Done().
+func (w *Workflow) CancelAsync() {
+	w.cancel()
+}
+
+// Done returns a channel that is closed once the workflow has fully finished
+// (StartWorkflow returned).
+func (w *Workflow) Done() <-chan struct{} {
+	return w.done
+}
+
 func (w *Workflow) MachineCount() int {
 	count := 0
 

@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	duration     = 3 * time.Second
-	fadeStart    = 1 * time.Second
-	tickInterval = 150 * time.Millisecond
+	defaultDuration  = 3 * time.Second
+	defaultFadeStart = 1 * time.Second
+	tickInterval     = 150 * time.Millisecond
 
 	fadeFactor = 0.4
 )
@@ -26,12 +26,19 @@ type Notification struct {
 	started      time.Time
 	baseStyle    style.Style
 
+	// A duration of 0 means the notification never expires (persistent) and
+	// does not fade.
+	duration  time.Duration
+	fadeStart time.Duration
+
 	buf *buffer.LinesBufVer
 }
 
 func New(defaultColor style.Color) *Notification {
 	return &Notification{
 		defaultColor: defaultColor,
+		duration:     defaultDuration,
+		fadeStart:    defaultFadeStart,
 		buf:          buffer.NewLinesBufVer(),
 	}
 }
@@ -41,16 +48,14 @@ func (n *Notification) SetBaseStyle(s style.Style) {
 }
 
 func (n *Notification) Set(text string, c style.Color) zeroterm.Cmd {
-	n.text, n.started = text, time.Now()
-	n.currentColor = n.defaultColor
+	return n.set(text, c, defaultDuration, defaultFadeStart)
+}
 
-	if c != "" {
-		n.currentColor = c
-	}
-
-	n.render()
-
-	return zeroterm.TickCmd(tickInterval, func(time.Time) zeroterm.Msg { return notificationTickMsg{} })
+// SetPersistent shows the notification until Clear is called: it never
+// expires and does not fade. The returned tick renders the new content once;
+// no further ticking is needed for a persistent notification.
+func (n *Notification) SetPersistent(text string, c style.Color) zeroterm.Cmd {
+	return n.set(text, c, 0, 0)
 }
 
 func (n *Notification) Update(msg zeroterm.Msg) zeroterm.Cmd {
@@ -63,7 +68,13 @@ func (n *Notification) Update(msg zeroterm.Msg) zeroterm.Cmd {
 		return nil
 	}
 
-	if time.Since(n.started) >= duration {
+	// Persistent notifications never expire; the initial tick already rendered
+	// the content, so no further ticking is needed.
+	if n.duration == 0 {
+		return nil
+	}
+
+	if time.Since(n.started) >= n.duration {
 		n.Clear()
 
 		return nil
@@ -94,6 +105,20 @@ func (n *Notification) Version() uint64 {
 	return n.buf.Version()
 }
 
+func (n *Notification) set(text string, color style.Color, duration, fadeStart time.Duration) zeroterm.Cmd {
+	n.text, n.started = text, time.Now()
+	n.duration, n.fadeStart = duration, fadeStart
+	n.currentColor = n.defaultColor
+
+	if color != "" {
+		n.currentColor = color
+	}
+
+	n.render()
+
+	return zeroterm.TickCmd(tickInterval, func(time.Time) zeroterm.Msg { return notificationTickMsg{} })
+}
+
 func (n *Notification) render() {
 	if n.isExpired() {
 		n.buf.Reset()
@@ -116,18 +141,22 @@ func (n *Notification) render() {
 }
 
 func (n *Notification) isExpired() bool {
-	return n.text == "" || time.Since(n.started) >= duration
+	return n.text == "" || (n.duration > 0 && time.Since(n.started) >= n.duration)
 }
 
 func (n *Notification) fadedColor() style.Color {
+	if n.duration == 0 {
+		return n.currentColor
+	}
+
 	elapsed := time.Since(n.started)
 	red, green, blue := style.ColorToRGB8(n.currentColor)
 
-	if elapsed < fadeStart {
+	if elapsed < n.fadeStart {
 		return style.Color(fmt.Sprintf("#%02x%02x%02x", red, green, blue))
 	}
 
-	progress := min(float64(elapsed-fadeStart)/float64(duration-fadeStart), 1.0)
+	progress := min(float64(elapsed-n.fadeStart)/float64(n.duration-n.fadeStart), 1.0)
 	factor := 1.0 - (progress * fadeFactor)
 
 	return style.Color(fmt.Sprintf("#%02x%02x%02x",

@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
@@ -55,6 +56,55 @@ func TestStartWorkflow_CancelledDuringRun(t *testing.T) {
 	if err != nil {
 		assert.NotContains(t, err.Error(), "machine(s) failed",
 			"cancelled workflow should not report failed machine count")
+	}
+}
+
+func TestCancelAsync_DoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	conf := makeWorkflowTestConfig()
+	conf.Flags.DryRun = true
+
+	workflowInst, err := NewWorkflow(context.Background(), conf)
+	require.NoError(t, err)
+
+	// CancelAsync on a not-yet-started workflow must return immediately,
+	// unlike Cancel() which would block forever on <-w.done.
+	done := make(chan struct{})
+
+	go func() {
+		workflowInst.CancelAsync()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("CancelAsync blocked")
+	}
+}
+
+func TestDone_ClosedAfterStartWorkflowReturns(t *testing.T) {
+	t.Parallel()
+
+	conf := makeWorkflowTestConfig()
+	conf.Flags.DryRun = true
+
+	workflowInst, err := NewWorkflow(context.Background(), conf)
+	require.NoError(t, err)
+
+	select {
+	case <-workflowInst.Done():
+		t.Fatal("Done closed before StartWorkflow returned")
+	default:
+	}
+
+	go func() { _ = workflowInst.StartWorkflow() }()
+
+	select {
+	case <-workflowInst.Done():
+	case <-time.After(time.Second):
+		t.Fatal("Done not closed after StartWorkflow returned")
 	}
 }
 

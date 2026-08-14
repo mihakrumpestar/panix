@@ -162,7 +162,7 @@ func DefaultColorScheme() *ColorScheme {
 		},
 		Flake:       makeLogEntity("#F1FA8C", '📁', true),
 		Installable: makeLogEntity("#FFB86C", '📦', false),
-		OutputType:  makeLogEntity("#FFB86C", '🧬', false),
+		OutputType:  makeLogEntity("#F8D97C", '🧬', false),
 		Machine:     makeLogEntity("#8BE9FD", '💻', false),
 		Phase:       makeLogEntity("#FF79C6", '📋', false),
 		Command:     makeLogEntity("#BD93F9", '⚙', false),

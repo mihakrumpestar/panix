@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
+	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -191,6 +193,151 @@ func TestHandleQuit_NoErrorWhenAllSucceeded(t *testing.T) {
 
 	assert.True(t, mdl.quitting)
 	assert.NoError(t, mdl.err, "handleQuit should not set m.err when all machines succeeded")
+}
+
+func TestHandleQuit_RunningWorkflow_ShowsHintAndWaits(t *testing.T) {
+	t.Parallel()
+
+	mdl := newTestModel(t)
+
+	workflow, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	mdl.workflow = workflow
+
+	cmd := mdl.handleQuit()
+
+	// Graceful quit: the notification cmd is returned, not a quit command.
+	require.NotNil(t, cmd, "graceful quit should show the quitting notification")
+
+	msg := cmd()
+	_, isQuit := msg.(zeroterm.QuitMsg)
+	assert.False(t, isQuit, "graceful quit should not return a quit command")
+	assert.True(t, mdl.quitting)
+
+	// The persistent quitting hint is rendered in the footer.
+	rendered := mdl.footer.Render(mdl.dimensions.Width)
+	require.NotNil(t, rendered)
+
+	hintVisible := false
+
+	for i := range rendered.Len() {
+		if bytes.Contains(rendered.Line(i), []byte("Quitting, waiting for running commands to finish")) {
+			hintVisible = true
+
+			break
+		}
+	}
+
+	assert.True(t, hintVisible, "quit hint should be visible in the rendered footer")
+
+	// Once the workflow finishes, the done message completes the quit and
+	// resolves the failed-machines error.
+	for _, fleetLeaf := range mdl.conf.Fleet.AllMachines() {
+		fleetLeaf.Machine.State.Store(&machine.State{
+			Status: stats.Failed,
+		})
+
+		break
+	}
+
+	doneCmd := mdl.Update(workflowDoneMsg{workflow: workflow})
+	require.NotNil(t, doneCmd)
+
+	doneMsg := doneCmd()
+	_, isQuit = doneMsg.(zeroterm.QuitMsg)
+	assert.True(t, isQuit, "workflowDoneMsg while quitting should return QuitCmd")
+	assert.ErrorIs(t, mdl.err, errMachinesFailed)
+}
+
+func TestHandleForceQuit_ReturnsQuitCmdAndSetsFailedMachinesError(t *testing.T) {
+	t.Parallel()
+
+	mdl := newTestModel(t)
+
+	workflow, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	mdl.workflow = workflow
+
+	for _, fleetLeaf := range mdl.conf.Fleet.AllMachines() {
+		fleetLeaf.Machine.State.Store(&machine.State{
+			Status: stats.Failed,
+		})
+
+		break
+	}
+
+	cmd := mdl.handleForceQuit()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, ok := msg.(zeroterm.QuitMsg)
+	assert.True(t, ok, "force quit should return QuitCmd")
+
+	assert.True(t, mdl.quitting)
+	assert.ErrorIs(t, mdl.err, errMachinesFailed, "force quit should set m.err from fleet state when machines are failed")
+}
+
+func TestWorkflowDoneMsg_Quitting_ReturnsQuitCmd(t *testing.T) {
+	t.Parallel()
+
+	mdl := newTestModel(t)
+
+	workflow, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	mdl.workflow = workflow
+	mdl.quitting = true
+
+	cmd := mdl.Update(workflowDoneMsg{workflow: workflow})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, ok := msg.(zeroterm.QuitMsg)
+	assert.True(t, ok, "workflowDoneMsg while quitting should return QuitCmd")
+}
+
+func TestKeys_DisabledWhileQuitting(t *testing.T) {
+	t.Parallel()
+
+	mdl := newTestModel(t)
+
+	workflow, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
+	require.NoError(t, err)
+
+	mdl.workflow = workflow
+	mdl.quitting = true
+
+	// While quitting, all keys except ctrl+q (force quit) are dead at the
+	// dispatch level, including q itself.
+	for _, key := range []string{"q", "r", "ctrl+r", "s", "h", "a", "c", "ctrl+c", "m"} {
+		assert.Nil(t, mdl.HandleKeyInput(zeroterm.KeyPressMsg{Key: key}), "key %q should be disabled while quitting", key)
+	}
+
+	// ctrl+q force quit still works while quitting.
+	cmd := mdl.HandleKeyInput(zeroterm.KeyPressMsg{Key: "ctrl+q"})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, ok := msg.(zeroterm.QuitMsg)
+	assert.True(t, ok, "ctrl+q should force quit even while quitting")
+
+	// The rendered keymap reflects what actually works: disabled keys are
+	// hidden, only the quit keys remain visible.
+	rendered := mdl.footer.Render(mdl.dimensions.Width)
+	require.NotNil(t, rendered)
+
+	footerText := &bytes.Buffer{}
+	for i := range rendered.Len() {
+		footerText.Write(rendered.Line(i))
+	}
+
+	assert.Contains(t, footerText.String(), "force quit")
+	assert.NotContains(t, footerText.String(), "retry")
+	assert.NotContains(t, footerText.String(), "restart")
+	assert.NotContains(t, footerText.String(), "snapshot")
+	assert.NotContains(t, footerText.String(), "copy")
 }
 
 func newTestModel(t *testing.T) *model {

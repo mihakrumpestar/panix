@@ -9,6 +9,9 @@ type Pair struct {
 	Key    string
 	Desc   string
 	Active func() bool
+	// Disabled hides the pair from the rendered keymap and (via the caller's
+	// dispatch loop) makes it unusable.
+	Disabled func() bool
 }
 
 type Styles struct {
@@ -19,20 +22,20 @@ type Styles struct {
 	SelectedDesc style.Style
 }
 
-// CacheKey returns (width, activeMask), the two values that determine if
+// CacheKey returns (width, stateMask), the two values that determine if
 // the rendered output changed. Callers can compare against a previous
 // cache key to skip re-rendering.
 func (k *Keymap) CacheKey() (int, uint64) {
-	return k.cacheWidth, k.activeMask()
+	return k.cacheWidth, k.stateMask()
 }
 
 type Keymap struct {
 	pairs  []Pair
 	styles Styles
 
-	cacheWidth  int
-	cacheActive uint64 // bitmask of active states for cache invalidation
-	cacheBuf    *buffer.LinesBuf
+	cacheWidth int
+	cacheState uint64 // bitmask of active/disabled states for cache invalidation
+	cacheBuf   *buffer.LinesBuf
 }
 
 func New(pairs []Pair, styles Styles) *Keymap {
@@ -50,15 +53,15 @@ func (k *Keymap) SetPairs(pairs []Pair) {
 }
 
 // Render writes the keymap into the provided LinesBuf. Results are cached
-// by maxWidth and active state. On cache hit, a single AppendFrom copies
-// all lines with zero allocation.
+// by maxWidth and pair state (active/disabled). On cache hit, a single
+// AppendFrom copies all lines with zero allocation.
 func (k *Keymap) Render(buf *buffer.LinesBuf, maxWidth int) {
 	if len(k.pairs) == 0 {
 		return
 	}
 
-	mask := k.activeMask()
-	if k.cacheBuf.Len() > 0 && k.cacheWidth == maxWidth && k.cacheActive == mask {
+	mask := k.stateMask()
+	if k.isCached(maxWidth, mask) {
 		buf.AppendFrom(k.cacheBuf)
 
 		return
@@ -75,6 +78,12 @@ func (k *Keymap) Render(buf *buffer.LinesBuf, maxWidth int) {
 	)
 
 	for _, pair := range k.pairs {
+		// Disabled pairs are hidden entirely: they are unusable, so showing
+		// them would misrepresent what actually works.
+		if pair.Disabled != nil && pair.Disabled() {
+			continue
+		}
+
 		item, itemWidth := k.renderPair(pair)
 
 		if currentWidth > 0 && currentWidth+sepWidth+itemWidth > maxWidth {
@@ -101,9 +110,15 @@ func (k *Keymap) Render(buf *buffer.LinesBuf, maxWidth int) {
 	}
 
 	k.cacheWidth = maxWidth
-	k.cacheActive = mask
+	k.cacheState = mask
 
 	buf.AppendFrom(k.cacheBuf)
+}
+
+// isCached reports whether the rendered buffer still matches the given width
+// and pair state (active/disabled).
+func (k *Keymap) isCached(maxWidth int, mask uint64) bool {
+	return k.cacheBuf.Len() > 0 && k.cacheWidth == maxWidth && k.cacheState == mask
 }
 
 // renderPair returns the rendered key+desc bytes and its cell width.
@@ -127,13 +142,18 @@ func (k *Keymap) renderPair(pair Pair) ([]byte, int) {
 	return item, style.CellWidth(item)
 }
 
-// activeMask computes a bitmask of current active states for cache comparison.
-func (k *Keymap) activeMask() uint64 {
+// stateMask computes a bitmask of current active/disabled states (two bits
+// per pair) for cache comparison.
+func (k *Keymap) stateMask() uint64 {
 	var mask uint64
 
-	for i, pair := range k.pairs {
+	for idx, pair := range k.pairs {
 		if pair.Active != nil && pair.Active() {
-			mask |= 1 << i
+			mask |= 1 << (2 * idx)
+		}
+
+		if pair.Disabled != nil && pair.Disabled() {
+			mask |= 1 << (2*idx + 1)
 		}
 	}
 

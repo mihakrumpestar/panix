@@ -2,7 +2,6 @@ package tui
 
 import (
 	"bytes"
-	"context"
 	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/config"
@@ -11,7 +10,6 @@ import (
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/pkg/clipboard"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
@@ -19,6 +17,7 @@ import (
 func (m *model) keyDefs() []footer.KeyDef {
 	kds := []footer.KeyDef{
 		{Keys: []string{"q"}, Help: "quit", Handler: m.handleQuit},
+		{Keys: []string{"ctrl+q"}, Help: "force quit", Handler: m.handleForceQuit},
 		{Keys: []string{"h"}, Help: "toggle inspect/secrets logs", Active: func() bool { return m.conf.Flags.Tui.ShowAllBuildLogs }, Handler: m.handleToggle},
 		{Keys: []string{"a"}, Help: "toggle active only", Active: func() bool { return m.conf.Flags.Tui.ShowActiveOnly }, Handler: m.handleToggleActiveOnly},
 		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Active: func() bool { return m.conf.Flags.Tui.ShowCommandsInLabels }, Handler: m.handleToggleCommands},
@@ -37,6 +36,20 @@ func (m *model) keyDefs() []footer.KeyDef {
 				footer.KeyDef{Keys: []string{"ctrl+r"}, Help: "restart", Handler: m.handleRestart},
 			)
 		}
+	}
+
+	// While quitting, only ctrl+q (force quit) remains usable; every other
+	// key is disabled and hidden from the keymap. Centralized here instead
+	// of per-handler guards: e.g. ctrl+r while quitting would call the
+	// blocking workflow.Cancel() inside the event loop (re-freezing the TUI)
+	// and the leftover quitting flag would kill the restarted run on its
+	// first done message.
+	for i := range kds {
+		if slices.Contains(kds[i].Keys, "ctrl+q") {
+			continue
+		}
+
+		kds[i].Disabled = func() bool { return m.quitting }
 	}
 
 	return kds
@@ -91,9 +104,13 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 		return nil
 	}
 
-	for _, kd := range m.footer.KeyDefs() {
-		if slices.Contains(kd.Keys, key) {
-			cmd := kd.Handler()
+	for _, keyDef := range m.footer.KeyDefs() {
+		if slices.Contains(keyDef.Keys, key) {
+			if m.isKeyDisabled(keyDef) {
+				return nil
+			}
+
+			cmd := keyDef.Handler()
 			if cmd != nil {
 				return cmd
 			}
@@ -103,6 +120,11 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 	}
 
 	return nil
+}
+
+// isKeyDisabled reports whether the key binding is currently unusable.
+func (m *model) isKeyDisabled(keyDef footer.KeyDef) bool {
+	return keyDef.Disabled != nil && keyDef.Disabled()
 }
 
 func (m *model) handleCopy() zeroterm.Cmd {
@@ -127,27 +149,66 @@ func (m *model) handleCopy() zeroterm.Cmd {
 	return m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
-func (m *model) handleQuit() zeroterm.Cmd {
-	m.quitting = true
-
-	if m.workflow != nil {
-		if m.conf.Flags.Snapshot.OnExit {
-			m.captureSnapshot(config.SnaphsotReasonExit)
-		}
-
-		err := m.workflow.Cancel()
-		if m.err != nil && err != nil && !errors.Is(err, context.Canceled) {
-			m.err = errors.Wrap(m.err, err.Error())
-		} else if err != nil && !errors.Is(err, context.Canceled) {
-			m.err = err
-		}
+// quitCmd centralizes TUI exit: captures the exit snapshot when enabled, logs,
+// and returns the quit command. Every exit site routes through here so the
+// snapshot is taken exactly once per exit.
+func (m *model) quitCmd() zeroterm.Cmd {
+	if m.conf.Flags.Snapshot.OnExit {
+		m.captureSnapshot(config.SnaphsotReasonExit)
 	}
-
-	m.setFailedMachinesErrorIfNil()
 
 	log.Debug().Msg("Context done, exiting TUI")
 
 	return zeroterm.QuitCmd
+}
+
+func (m *model) handleQuit() zeroterm.Cmd {
+	if m.quitting {
+		return nil
+	}
+
+	m.quitting = true
+
+	// Nothing to wait for without a workflow (or when it already finished,
+	// since no workflowDoneMsg will arrive again): quit immediately.
+	if m.workflow == nil {
+		m.setFailedMachinesErrorIfNil()
+
+		return m.quitCmd()
+	}
+
+	select {
+	case <-m.workflow.Done():
+		m.setFailedMachinesErrorIfNil()
+
+		return m.quitCmd()
+	default:
+	}
+
+	// Cancel asynchronously: Cancel() blocks until every command finishes,
+	// which would freeze the zeroterm event loop. CancelAsync is a plain
+	// context cancel (non-blocking, idempotent, goroutine-safe). The TUI keeps
+	// rendering and exits from workflowDoneMsgCmd once the workflow completes.
+	m.workflow.CancelAsync()
+
+	return m.footer.Notification().SetPersistent(
+		"Quitting, waiting for running commands to finish... (ctrl+q to force quit)",
+		m.conf.ColorScheme.Status.Warning.GetForeground(),
+	)
+}
+
+func (m *model) handleForceQuit() zeroterm.Cmd {
+	m.quitting = true
+
+	// Cancel synchronously so pond tasks stop writing fleet state before the
+	// final stdout render reads it.
+	if m.workflow != nil {
+		m.workflow.CancelAsync()
+	}
+
+	m.setFailedMachinesErrorIfNil()
+
+	return m.quitCmd()
 }
 
 func (m *model) setFailedMachinesErrorIfNil() {
