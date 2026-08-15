@@ -2,33 +2,30 @@ package style
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
-	"github.com/rivo/uniseg"
 )
 
 // CellWidth returns the maximum terminal cell width across all lines in a
-// byte slice, accounting for ANSI escape sequences (zero width) and grapheme
-// clusters with proper width (emoji ZWJ sequences, skin tone modifiers, CJK
-// wide chars, etc.). For single-line input this is equivalent to the total
-// visible width. For multi-line input it returns the widest line, matching
-// lipgloss.Width behavior.
+// byte slice, accounting for ANSI escape sequences (zero width) and runes with
+// proper width (CJK wide chars, emoji, etc.). For single-line input this is
+// equivalent to the total visible width. For multi-line input it returns the
+// widest line, matching lipgloss.Width behavior.
 //
 // Fast paths:
-//   - ASCII printable chars (0x20-0x7E): counted as width 1 without uniseg
+//   - ASCII printable chars (0x20-0x7E): counted as width 1 without runeWidth
 func CellWidth(data []byte) int {
 	width := 0
 	maxWidth := 0
 	pos := 0
-	graphemeState := -1
 
 	for pos < len(data) {
 		char := data[pos]
 
 		// Fast ASCII path for printable characters (0x20-0x7E).
-		// Handles >90% of terminal content without calling uniseg.
+		// Handles >90% of terminal content without decoding runes.
 		if char >= 0x20 && char < 0x7F {
-			graphemeState = -1
 			width++
 			pos++
 
@@ -37,11 +34,8 @@ func CellWidth(data []byte) int {
 
 		switch char {
 		case '\x1b':
-			graphemeState = -1
 			pos = SkipANSI(data, pos)
 		case '\n', '\r':
-			graphemeState = -1
-
 			if width > maxWidth {
 				maxWidth = width
 			}
@@ -49,11 +43,9 @@ func CellWidth(data []byte) int {
 			width = 0
 			pos++
 		default:
-			cluster, rest, charWidth, newState := uniseg.FirstGraphemeCluster(data[pos:], graphemeState)
-			graphemeState = newState
-			pos = len(data) - len(rest)
-			width += charWidth
-			_ = cluster
+			r, size := utf8.DecodeRune(data[pos:])
+			pos += size
+			width += runeWidth(r)
 		}
 	}
 

@@ -5,11 +5,11 @@
 package pty
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"syscall"
 	"unsafe"
+
+	"github.com/pkg/errors"
 )
 
 func open() (master, slave *os.File, err error) {
@@ -17,7 +17,7 @@ func open() (master, slave *os.File, err error) {
 	// between open and fork/exec in the parent.
 	pFD, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_CLOEXEC, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pty: open /dev/ptmx: %w", err)
+		return nil, nil, errors.Wrap(err, "pty: open /dev/ptmx")
 	}
 	master = os.NewFile(uintptr(pFD), "/dev/ptmx")
 	// In case of error after this point, close the master fd.
@@ -42,7 +42,7 @@ func open() (master, slave *os.File, err error) {
 
 	slave, err = os.OpenFile(sname, os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pty: open slave %s: %w", sname, err)
+		return nil, nil, errors.Wrapf(err, "pty: open slave %s", sname)
 	}
 
 	return master, slave, nil
@@ -53,7 +53,7 @@ func open() (master, slave *os.File, err error) {
 func ptsname(f *os.File) (string, error) {
 	n := make([]byte, _iocParmLen(syscall.TIOCPTYGNAME))
 	if err := ioctl(f, syscall.TIOCPTYGNAME, uintptr(unsafe.Pointer(&n[0]))); err != nil { //nolint:gosec // Expected unsafe pointer for ioctl syscall.
-		return "", fmt.Errorf("pty: get ptsname: %w", err)
+		return "", errors.Wrap(err, "pty: get ptsname")
 	}
 
 	for i, c := range n {

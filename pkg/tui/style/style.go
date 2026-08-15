@@ -3,9 +3,9 @@ package style
 import (
 	"bytes"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
-	"github.com/rivo/uniseg"
 )
 
 // Style defines terminal styling properties: colors, bold, width, padding,
@@ -1038,8 +1038,8 @@ func (s Style) buildHorizontalBorder(left, mid, right, borderFg, reset []byte) [
 // truncated, ".." replaces the last 2 cells so overflowing content is visually
 // distinguishable.
 //
-// Uses uniseg for grapheme cluster width (consistent with CellWidth) so emoji
-// and other wide characters are measured correctly.
+// Uses runeWidth (rune-based terminal cell width, consistent with CellWidth)
+// so emoji and other wide characters are measured correctly.
 func truncateToWidth(line []byte, maxW int, ellipsis bool) []byte {
 	if maxW <= 0 {
 		return nil
@@ -1069,21 +1069,17 @@ func truncateToWidth(line []byte, maxW int, ellipsis bool) []byte {
 func scanTruncationPoint(line []byte, maxW int) (int, bool) {
 	width := 0
 	pos := 0
-	graphemeState := -1
 
 	for pos < len(line) {
 		char := line[pos]
 
 		if char == '\x1b' {
-			graphemeState = -1
 			pos = SkipANSI(line, pos)
 
 			continue
 		}
 
 		if char >= 0x20 && char < 0x7F {
-			graphemeState = -1
-
 			if width+1 > maxW {
 				return pos, true
 			}
@@ -1096,22 +1092,19 @@ func scanTruncationPoint(line []byte, maxW int) (int, bool) {
 
 		if char < 0x80 { //nolint:mnd
 			pos++
-			graphemeState = -1
 
 			continue
 		}
 
-		// Non-ASCII: use uniseg for proper grapheme cluster width
-		// (emoji ZWJ, skin tone modifiers, CJK wide chars, etc.)
-		_, rest, clusterWidth, newState := uniseg.FirstGraphemeCluster(line[pos:], graphemeState)
-		graphemeState = newState
+		// Non-ASCII: measure per-rune width.
+		runeValue, size := utf8.DecodeRune(line[pos:])
 
-		if width+clusterWidth > maxW {
+		if width+runeWidth(runeValue) > maxW {
 			return pos, true
 		}
 
-		width += clusterWidth
-		pos = len(line) - len(rest)
+		width += runeWidth(runeValue)
+		pos += size
 	}
 
 	return pos, false

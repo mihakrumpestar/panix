@@ -11,7 +11,6 @@ linters:
     - ireturn # A lot of bubbletea is based on interfaces
     - goconst # Just some same strings across codebase
     - gochecknoglobals # Constants are ok
-    - forbidigo # We don't use print statements for debugging
     - exhaustruct # Structs are generally initialized empty
     - exhaustive # Not necessery as we use default
     - containedctx # We use ctx to check if it is done
@@ -58,6 +57,11 @@ linters:
               desc: "benchmark reference only and testing, not for production code"
             - pkg: "github.com/lrstanley/bubblezone/v2"
               desc: "benchmark reference only and testing, not for production code"
+
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Errorf$
+          msg: use errors.Wrap or errors.Wrapf instead
 
     lll:
       line-length: 150

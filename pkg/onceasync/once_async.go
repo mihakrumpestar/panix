@@ -1,7 +1,6 @@
 package onceasync
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -41,7 +40,7 @@ func (oa *OnceAsync) Do(task func() error) error {
 	oa.once.Do(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				oa.result = fmt.Errorf("%w: %v", errPanic, r)
+				oa.result = errors.Wrapf(errPanic, "%v", r)
 			}
 
 			close(oa.done)

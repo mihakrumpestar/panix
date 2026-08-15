@@ -2,10 +2,10 @@ package buffer
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/mihakrumpestar/panix/pkg/no"
+	"github.com/pkg/errors"
 )
 
 // LinesBufVer is a versioned, thread-safe wrapper around LinesBuf.
@@ -246,7 +246,7 @@ func (b *LinesBufVer) UnmarshalJSON(data []byte) error {
 
 	err := json.Unmarshal(data, &lines)
 	if err != nil {
-		return fmt.Errorf("unmarshal lines: %w", err)
+		return errors.Wrap(err, "unmarshal lines")
 	}
 
 	b.inner = NewLinesBuf()

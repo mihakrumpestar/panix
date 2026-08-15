@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 
-	"github.com/alitto/pond/v2"
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/workflow/activate"
@@ -17,6 +16,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/hook"
 	"github.com/mihakrumpestar/panix/pkg/onceasync"
+	"github.com/mihakrumpestar/panix/pkg/pool"
 	"github.com/mihakrumpestar/panix/pkg/retry"
 	"github.com/pkg/errors"
 )
@@ -37,7 +37,7 @@ type Workflow struct {
 }
 
 type WorkflowState struct {
-	Pool  pond.Pool
+	Pool  *pool.Pool
 	Retry *retry.Retry
 }
 
@@ -51,7 +51,7 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		cancel: cancel,
 		conf:   conf,
 		state: &WorkflowState{
-			Pool:  pond.NewPool(conf.Flags.Runtime.MaxConcurrency, pond.WithContext(ctxWithCancel)),
+			Pool:  pool.New(conf.Flags.Runtime.MaxConcurrency, ctxWithCancel),
 			Retry: retry.NewTaskRetry(),
 		},
 		updateHook: hook.NewHook(),

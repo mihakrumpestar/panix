@@ -53,6 +53,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 var benchLineRe = regexp.MustCompile(`^Benchmark(\S+?)-\d+\s+\d+\s+([\d.]+)\s+ns/op(?:\s+([\d.]+)\s+B/op\s+(\d+)\s+allocs/op)?`)
@@ -523,7 +525,7 @@ func resolvePkgs(ctx context.Context, patterns []string) ([]string, error) {
 
 	out, err := exec.CommandContext(ctx, "go", args...).Output() //nolint:gosec
 	if err != nil {
-		return nil, fmt.Errorf("go list: %w", err)
+		return nil, errors.Wrap(err, "go list")
 	}
 
 	var pkgs []string
@@ -566,14 +568,14 @@ func run() error {
 		//nolint:gosec,mnd // G301: standard directory permissions
 		mkdirErr := os.MkdirAll(strings.TrimSuffix(*outFile, "/"+filepath.Base(*outFile)), 0o755)
 		if mkdirErr != nil {
-			return fmt.Errorf("create output dir: %w", mkdirErr)
+			return errors.Wrap(mkdirErr, "create output dir")
 		}
 
 		var file *os.File
 
 		file, err = os.Create(*outFile)
 		if err != nil {
-			return fmt.Errorf("create output file: %w", err)
+			return errors.Wrap(err, "create output file")
 		}
 
 		defer func() { _ = file.Close() }()

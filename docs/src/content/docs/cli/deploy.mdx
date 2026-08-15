@@ -95,8 +95,9 @@ Flags:
                                    Path for goroutine profile output
                                    (enables goroutine profiling)
                                    ($PANIX_PROFILE_GOROUTINE)
-      --runtime.max-concurrency=1000
-                                   Maximum concurrent workers in the worker pool
+      --runtime.max-concurrency=0
+                                   Maximum concurrent workers in
+                                   the worker pool (0 = unlimited)
                                    ($PANIX_RUNTIME_MAX_CONCURRENCY)
       --runtime.disconnect-timeout=5m
                                    Timeout for waiting for a host to

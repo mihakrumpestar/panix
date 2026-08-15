@@ -8,7 +8,6 @@ require (
 	codeberg.org/tslocum/cview v1.6.4 // only for benchmarks
 	dario.cat/mergo v1.0.2
 	github.com/alecthomas/kong v1.16.0
-	github.com/alitto/pond/v2 v2.7.1
 	github.com/boyter/scc/v3 v3.7.0
 	github.com/ccoveille/go-safecast/v2 v2.0.1
 	github.com/charmbracelet/ultraviolet v0.0.0-20260803092147-8b693049ce2a // only for benchmarks
@@ -29,7 +28,6 @@ require (
 	github.com/narqo/go-badge v0.0.0-20230821190521-c9a75c019a59
 	github.com/pkg/errors v0.9.1
 	github.com/posener/complete v1.2.3
-	github.com/rivo/uniseg v0.4.7
 	github.com/rs/zerolog v1.35.1
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/stretchr/testify v1.11.1
@@ -71,6 +69,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/riywo/loginshell v0.0.0-20200815045211-7d26008be1ab // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect

@@ -98,7 +98,7 @@ type Logging struct {
 
 //nolint:lll
 type Runtime struct {
-	MaxConcurrency         int           `yaml:"max_concurrency" json:"max_concurrency" help:"Maximum concurrent workers in the worker pool" default:"1000" validate:"min=1"`
+	MaxConcurrency         uint          `yaml:"max_concurrency" json:"max_concurrency" help:"Maximum concurrent workers in the worker pool (0 = unlimited)" default:"0"`
 	DisconnectTimeout      time.Duration `yaml:"disconnect_timeout" json:"disconnect_timeout,omitempty" help:"Timeout for waiting for a host to disconnect during reboot (e.g. '5s', '10m')" default:"5m" validate:"ne=0"`
 	ReconnectTimeout       time.Duration `yaml:"reconnect_timeout" json:"reconnect_timeout,omitempty" help:"Timeout for waiting for a host to reconnect after reboot (e.g. '10s', '20m')" default:"10m" validate:"ne=0"`
 	SSHReachabilityTimeout time.Duration `yaml:"ssh_reachability_timeout" json:"ssh_reachability_timeout,omitempty" help:"TCP dial timeout for SSH reachability probe" default:"2s" validate:"ne=0"`

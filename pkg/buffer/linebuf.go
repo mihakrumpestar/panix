@@ -2,7 +2,8 @@ package buffer
 
 import (
 	"encoding/json"
-	"fmt"
+
+	"github.com/pkg/errors"
 )
 
 const DefaultLineBufLen = 256
@@ -74,7 +75,7 @@ func (r *LineBuf) UnmarshalJSON(data []byte) error {
 
 	err := json.Unmarshal(data, &str)
 	if err != nil {
-		return fmt.Errorf("unmarshal LineBuf: %w", err)
+		return errors.Wrap(err, "unmarshal LineBuf")
 	}
 
 	r.Set([]byte(str))

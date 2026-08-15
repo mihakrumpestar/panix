@@ -57,7 +57,7 @@ func parseFlags() {
 
 			return nil
 		default:
-			return fmt.Errorf("%w: %q", errInvalidTestScope, val)
+			return errors.Wrapf(errInvalidTestScope, "%q", val)
 		}
 	})
 
@@ -68,7 +68,7 @@ func parseFlags() {
 
 			return nil
 		default:
-			return fmt.Errorf("%w: %q", errInvalidPhase, val)
+			return errors.Wrapf(errInvalidPhase, "%q", val)
 		}
 	})
 
@@ -80,7 +80,7 @@ func parseFlags() {
 
 				return nil
 			default:
-				return fmt.Errorf("%w: %q", errInvalidDeployType, val)
+				return errors.Wrapf(errInvalidDeployType, "%q", val)
 			}
 		})
 

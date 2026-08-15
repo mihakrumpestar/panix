@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
-	"github.com/alitto/pond/v2"
 	"github.com/chelnak/ysmrr"
 	"github.com/chelnak/ysmrr/pkg/colors"
 	"github.com/fatih/color"
+	"github.com/mihakrumpestar/panix/pkg/pool"
 	"github.com/pkg/errors"
 )
 
@@ -64,8 +65,8 @@ func startElapsedTicker(spinner *ysmrr.Spinner, startTime time.Time, msg string,
 }
 
 type parallelGroup struct {
-	group   pond.TaskGroup
-	pool    pond.Pool
+	group   *pool.Group
+	pool    *pool.Pool
 	manager ysmrr.SpinnerManager
 	entries []pgEntry
 	started bool
@@ -81,11 +82,11 @@ type pgEntry struct {
 func newParallelGroup() *parallelGroup {
 	stopSequentialMgr()
 
-	pool := pond.NewPool(0)
+	p := pool.New(0, context.Background())
 
 	return &parallelGroup{
-		group:   pool.NewGroup(),
-		pool:    pool,
+		group:   p.NewGroup(),
+		pool:    p,
 		manager: newSpinnerManager(noTTY),
 	}
 }

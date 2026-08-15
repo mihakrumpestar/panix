@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mihakrumpestar/panix/gen"
+	"github.com/mihakrumpestar/panix/gen/badge"
 )
 
 func main() {
-	if err := gen.LocBadge(); err != nil {
+	if err := badge.LocBadge(); err != nil {
 		fmt.Fprintf(os.Stderr, "badge: %v\n", err)
 		os.Exit(1)
 	}

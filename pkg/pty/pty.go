@@ -6,7 +6,6 @@
 package pty
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 
@@ -57,7 +56,7 @@ func Start(cmd *exec.Cmd) (*Pty, error) {
 func (p *Pty) Write(b []byte) (int, error) {
 	n, err := p.master.Write(b)
 	if err != nil {
-		return n, fmt.Errorf("pty: write: %w", err)
+		return n, errors.Wrap(err, "pty: write")
 	}
 
 	return n, nil
@@ -76,16 +75,16 @@ func (p *Pty) Close() error {
 
 	err := p.master.Close()
 	if err != nil {
-		closeErr = fmt.Errorf("pty: close master: %w", err)
+		closeErr = errors.Wrap(err, "pty: close master")
 	}
 
 	if p.slave != nil {
 		err = p.slave.Close()
 		if err != nil {
 			if closeErr != nil {
-				closeErr = fmt.Errorf("%w; pty: close slave: %w", closeErr, err)
+				closeErr = errors.Wrapf(closeErr, "pty: close slave: %v", err)
 			} else {
-				closeErr = fmt.Errorf("pty: close slave: %w", err)
+				closeErr = errors.Wrap(err, "pty: close slave")
 			}
 		}
 	}

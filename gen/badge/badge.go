@@ -1,4 +1,4 @@
-package gen
+package badge
 
 import (
 	"encoding/json"

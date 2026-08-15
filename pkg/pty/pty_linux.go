@@ -5,17 +5,18 @@
 package pty
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"syscall"
 	"unsafe"
+
+	"github.com/pkg/errors"
 )
 
 func open() (*os.File, *os.File, error) {
 	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pty: open /dev/ptmx: %w", err)
+		return nil, nil, errors.Wrap(err, "pty: open /dev/ptmx")
 	}
 
 	// In case of error after this point, close the master fd.
@@ -39,7 +40,7 @@ func open() (*os.File, *os.File, error) {
 
 	slave, err := os.OpenFile(sname, os.O_RDWR|syscall.O_NOCTTY, 0) //nolint:gosec // G304: PTY slave path from kernel ioctl is trusted
 	if err != nil {
-		return nil, nil, fmt.Errorf("pty: open slave %s: %w", sname, err)
+		return nil, nil, errors.Wrapf(err, "pty: open slave %s", sname)
 	}
 
 	cleanup = false
@@ -54,7 +55,7 @@ func ptsname(f *os.File) (string, error) {
 
 	err := ioctl(f, syscall.TIOCGPTN, uintptr(unsafe.Pointer(&ptyNum))) //nolint:gosec // G103: unsafe.Pointer required for ioctl syscall
 	if err != nil {
-		return "", fmt.Errorf("pty: get ptsname: %w", err)
+		return "", errors.Wrap(err, "pty: get ptsname")
 	}
 
 	return "/dev/pts/" + strconv.Itoa(int(ptyNum)), nil

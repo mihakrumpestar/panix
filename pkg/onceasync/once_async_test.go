@@ -169,7 +169,7 @@ func TestDoPanic(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, errPanic)
-	assert.Equal(t, "onceasync: fn panicked: boom", err.Error())
+	assert.Equal(t, "boom: onceasync: fn panicked", err.Error())
 }
 
 func TestDoPanicDoesNotBlockOtherCallers(t *testing.T) {

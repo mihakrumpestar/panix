@@ -49,7 +49,7 @@ func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
 		joinBytes(colorScheme.OutputType.Icon, " OUTPUT TYPE"),
 		joinBytes(colorScheme.Installable.Icon, " NAME"),
 		joinBytes(colorScheme.Machine.Icon, " MACHINE"),
-		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("DATE"), []byte("OS VERSION"), []byte("KERNEL")}
+		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("GEN DATE"), []byte("OS VERSION"), []byte("KERNEL")}
 
 	tbl := table.New(table.Config{
 		Border:              style.NormalBorder(),

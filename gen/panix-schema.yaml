@@ -99,8 +99,8 @@ properties:
             default: 60s
           max_concurrency:
             type: integer
-            description: "Maximum concurrent workers in the worker pool (default: 1000)"
-            default: 1000
+            description: "Maximum concurrent workers in the worker pool (0 = unlimited) (default: 0)"
+            default: 0
           reconnect_timeout:
             type: string
             description: "Timeout for waiting for a host to reconnect after reboot (e.g. '10s', '20m') (default: 10m)"
