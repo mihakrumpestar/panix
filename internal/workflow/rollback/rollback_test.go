@@ -9,6 +9,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 )
 
 func TestValidateAndGetTargetGen(t *testing.T) {
@@ -185,7 +186,7 @@ func TestRollbackActivationMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, rollbackActivationMode(tt.preset))
+			assert.Equal(t, tt.want, phaseops.RollbackActivationMode(tt.preset))
 		})
 	}
 }

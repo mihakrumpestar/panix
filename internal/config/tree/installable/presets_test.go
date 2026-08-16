@@ -33,6 +33,8 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			IsBootstrappable:      true,
 			ActivationPath:        "bin/switch-to-configuration",
 			ActivationModes:       []string{"switch", "boot", "test", "dry-activate"},
+			ProfileSkipModes:      []string{"test", "dry-activate"},
+			NonMutatingModes:      []string{"dry-activate"},
 			ActivationDefaultMode: "switch",
 			OmitTypeFromAttrPath:  false,
 		},
@@ -137,6 +139,8 @@ func assertPresetFields(t *testing.T, typ FlakeOutputType, got, want Preset) {
 	assert.Equal(t, want.ActivationPath, got.ActivationPath, "%s ActivationPath", typ)
 	assert.Equal(t, want.ActivationDefaultMode, got.ActivationDefaultMode, "%s ActivationDefaultMode", typ)
 	assert.Equal(t, want.ActivationModes, got.ActivationModes, "%s ActivationModes", typ)
+	assert.Equal(t, want.NonMutatingModes, got.NonMutatingModes, "%s NonMutatingModes", typ)
+	assert.Equal(t, want.ProfileSkipModes, got.ProfileSkipModes, "%s ProfileSkipModes", typ)
 	assert.Equal(t, want.IsSystemLevel, got.IsSystemLevel, "%s IsSystemLevel", typ)
 	assert.Equal(t, want.IsBootstrappable, got.IsBootstrappable, "%s IsBootstrappable", typ)
 	assert.Equal(t, want.OmitTypeFromAttrPath, got.OmitTypeFromAttrPath, "%s OmitTypeFromAttrPath", typ)
@@ -287,6 +291,18 @@ func TestPresetConsistency(t *testing.T) {
 			if preset.ProfilePath == "" {
 				assert.Nil(t, preset.SetProfile,
 					"%s: ProfilePath is empty so SetProfile must be nil (no profile to set)", typ)
+			}
+
+			// Mode lists reference modes the activation script understands,
+			// so every entry must be a declared activation mode.
+			for _, mode := range preset.NonMutatingModes {
+				assert.Contains(t, preset.ActivationModes, mode,
+					"%s: NonMutatingModes entry %q must be in ActivationModes", typ, mode)
+			}
+
+			for _, mode := range preset.ProfileSkipModes {
+				assert.Contains(t, preset.ActivationModes, mode,
+					"%s: ProfileSkipModes entry %q must be in ActivationModes", typ, mode)
 			}
 		})
 	}

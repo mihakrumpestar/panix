@@ -177,6 +177,19 @@
         ];
       };
 
+      # Dedicated NixOS config whose activation ALWAYS fails (after the profile
+      # switch). Used by the e2e auto-rollback test to deterministically
+      # trigger an activation failure without a runtime flag file or a fresh
+      # re-evaluation of configuration.nix.
+      nixosConfigurations.test-vm-failing = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-failing.nix
+          authorizedKeysModule
+        ];
+      };
+
       homeConfigurations.test-home = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
         modules = [

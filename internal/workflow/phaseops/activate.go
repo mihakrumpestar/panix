@@ -9,21 +9,18 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
-	"github.com/pkg/errors"
 )
 
 // SetProfile runs `nix-env --profile <profilePath> --set <closure>`.
 // Uses sudo if the machine's SSH user is not root.
 func SetProfile(exc *executioner.Executioner, mach *machine.Machine, profilePath, closure string) error {
-	err := exc.Exec(
+	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"set profile",
 		"setting profile: "+profilePath,
 		"failed to set profile",
 		append(mach.MaybeSudo(), "nix-env", "--profile", profilePath, "--set", closure),
 		executioner.Trim(),
 	)
-
-	return errors.Wrap(err, "failed to set profile")
 }
 
 // Activate runs the activation for the given preset's output type.
@@ -64,11 +61,15 @@ func maybeSetProfile(
 		return nil
 	}
 
-	if supportsMode(preset.ActivationModes, mode) && (mode == "test" || mode == "dry-activate") {
+	// Modes declared as profile-skipping by the preset (for NixOS: test and
+	// dry-activate) evaluate the closure without committing to it, so the
+	// profile keeps pointing at the current generation.
+	if slices.Contains(preset.ProfileSkipModes, mode) {
 		return nil
 	}
 
-	return errors.Wrap(SetProfile(exc, mach, preset.ProfilePath, closure), "failed to set profile")
+	// No wrap: the executioner already prefixes errors with the command's statusIfFailed ("failed to set profile").
+	return SetProfile(exc, mach, preset.ProfilePath, closure)
 }
 
 func activatePackage(
@@ -96,14 +97,12 @@ func activatePackage(
 		args = asUser(targetUser, args)
 	}
 
-	err := exc.Exec(
+	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"activate", "installing package", "package installation failed",
 		args,
 		executioner.Env(nixCfg.GetProfileAddEnv()),
 		executioner.Trim(),
 	)
-
-	return errors.Wrap(err, "failed to install package")
 }
 
 func activateScript(
@@ -128,13 +127,11 @@ func activateScript(
 		args = asUser(targetUser, args)
 	}
 
-	err := exc.Exec(
+	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"activate", "activating", "activation failed",
 		args,
 		executioner.Trim(),
 	)
-
-	return errors.Wrap(err, "failed to activate")
 }
 
 // AsUser wraps a command to run as a different user via `su -l <user> -c "<command>"`.
@@ -244,11 +241,6 @@ func escapeDoubleQuoteSpecials(str string) string {
 
 func asUser(user string, command []string) []string {
 	return AsUser(user, command)
-}
-
-// supportsMode checks if the given mode is in the supported modes list.
-func supportsMode(supported []string, mode string) bool {
-	return slices.Contains(supported, mode)
 }
 
 // profileSubcmdForFlavor returns the `nix profile` subcommand for the given

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,6 +97,58 @@ func sshRun(port int, keyPath string, command string) (string, error) {
 	err = session.Run(command)
 
 	return stdout.String(), errors.Wrap(err, "SSH run")
+}
+
+// readSystemProfileClosure returns the store path the NixOS system profile
+// currently points to, resolved via readlink -f.
+func readSystemProfileClosure(keyPath string) (string, error) {
+	output, err := sshRun(nixosISOPort, keyPath, "readlink -f /nix/var/nix/profiles/system")
+	if err != nil {
+		return "", errors.Wrap(err, "read system profile closure")
+	}
+
+	return strings.TrimSpace(output), nil
+}
+
+// readSystemProfileGeneration reads the current NixOS system profile
+// generation number from the VM.
+func readSystemProfileGeneration(keyPath string) (uint, error) {
+	output, err := sshRun(nixosISOPort, keyPath,
+		"nix-env --profile /nix/var/nix/profiles/system --list-generations")
+	if err != nil {
+		return 0, errors.Wrap(err, "list system generations")
+	}
+
+	generation, err := parseCurrentGeneration(output)
+	if err != nil {
+		return 0, err
+	}
+
+	return generation, nil
+}
+
+// parseCurrentGeneration extracts the generation number from the line marked
+// with "(current)" in `nix-env --list-generations` output.
+func parseCurrentGeneration(output string) (uint, error) {
+	for line := range strings.SplitSeq(output, "\n") {
+		if !strings.Contains(line, "(current)") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			break
+		}
+
+		generation, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil {
+			return 0, errors.Wrapf(err, "parse generation number %q", fields[0])
+		}
+
+		return uint(generation), nil
+	}
+
+	return 0, errors.New("no current generation found")
 }
 
 func verifyNixOSInstallation(port int, keyPath string) error {

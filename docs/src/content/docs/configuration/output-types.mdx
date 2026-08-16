@@ -57,6 +57,8 @@ Every installable under `myApps` inherits the declared preset as defaults. User-
 | `profile_path` | no | user-overridable | Nix profile path for generation tracking. Enables rollback when set |
 | `set_profile` | no | user-overridable | Run `nix-env --profile --set` before activation |
 | `activation_supported_modes` | no | user-overridable | List of valid modes (e.g. `["switch", "boot"]`). If set, `activation_default_mode` is required |
+| `activation_non_mutating_modes` | no | user-overridable | Modes that do not mutate the target system; auto rollback is skipped for these (built-in NixOS preset: `["dry-activate"]`) |
+| `activation_profile_skip_modes` | no | user-overridable | Modes that skip `nix-env --profile --set`, so the profile keeps pointing at the current generation (built-in NixOS preset: `["test", "dry-activate"]`) |
 | `activation_default_mode` | no | user-overridable | Default mode used when none is specified per-installable or via CLI |
 | `omit_type_from_attr_path` | no | type-level | Omit the type key from the attrpath (bare name resolution, like `packages`) |
 
@@ -67,6 +69,7 @@ User-overridable fields can be overridden per-installable under `preset:`. Type-
 - Custom type names must not collide with built-in type names.
 - `system_level` must be set (validation error if missing).
 - If `activation_supported_modes` is declared, `activation_default_mode` must also be set.
+- Entries in `activation_non_mutating_modes` and `activation_profile_skip_modes` must be declared in `activation_supported_modes`.
 - Custom types are never bootstrappable (bootstrap only applies to `nixosConfigurations`).
 
 ## output_type_attr

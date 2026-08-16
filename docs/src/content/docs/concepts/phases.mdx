@@ -128,6 +128,8 @@ flowchart LR
 |-------|-------|---------|
 | **Rollback** | Per-machine | Switch to a previous NixOS generation via `switch-to-configuration` |
 
+The rollback steps can also run automatically during Activate phase: when activation fails and the machine has `auto_rollback: true`, Panix reverts the machine to its pre-deploy generation. See [Auto Rollback](../features/auto-rollback.mdx).
+
 ## Scope-Aware Execution
 
 The Build phase runs once per installable, not per machine. If three machines share the same installable, you build once. The closure is then transferred to all three machines independently in parallel.

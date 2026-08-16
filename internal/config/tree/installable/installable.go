@@ -97,8 +97,9 @@ func (i *Installable) Init(
 // applyPresetDefaults merges type defaults into the Preset.
 //
 // User-overridable fields (OutputTypeAttr, BuildPath, ProfilePath, ActivationPath,
-// SetProfile, ActivationModes, ActivationDefaultMode) use the user value if
-// non-zero, otherwise fall back to the type default.
+// SetProfile, ActivationModes, NonMutatingModes, ProfileSkipModes,
+// ActivationDefaultMode) use the user value if non-zero, otherwise fall back
+// to the type default.
 //
 // Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath)
 // are intrinsic to the output type and always taken from the defaults,
@@ -126,6 +127,14 @@ func (i *Installable) applyPresetDefaults(defaults Preset) {
 
 	if len(i.Preset.ActivationModes) == 0 {
 		i.Preset.ActivationModes = defaults.ActivationModes
+	}
+
+	if len(i.Preset.NonMutatingModes) == 0 {
+		i.Preset.NonMutatingModes = defaults.NonMutatingModes
+	}
+
+	if len(i.Preset.ProfileSkipModes) == 0 {
+		i.Preset.ProfileSkipModes = defaults.ProfileSkipModes
 	}
 
 	if i.Preset.ActivationDefaultMode == "" {

@@ -1,13 +1,17 @@
 package activate
 
 import (
+	"context"
+	"fmt"
 	"slices"
 
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/pkg/errors"
@@ -60,10 +64,85 @@ func executeActivation(
 		mode = override
 	}
 
-	return errors.Wrap(
-		phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg, nixFlavor),
-		"activation failed",
+	activationErr := phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg, nixFlavor)
+	if activationErr == nil {
+		return nil
+	}
+
+	// No wrap here: the underlying command already prefixes its error with
+	// statusIfFailed ("activation failed"); the rollback outcome below is the
+	// only additional context this layer has to add.
+	originalErr := activationErr
+
+	// Skip auto-rollback for non-mutating modes (nothing to restore), types
+	// without a profile, and cancellations: a cancelled context would make
+	// the rollback commands fail instantly, burying the real error under
+	// "auto-rollback failed: context canceled" noise.
+	if !fleetLeaf.Machine.AutoRollback ||
+		slices.Contains(preset.NonMutatingModes, mode) ||
+		preset.ProfilePath == "" ||
+		errors.Is(activationErr, context.Canceled) {
+		return originalErr
+	}
+
+	return autoRollbackToPreviousGeneration(exc, fleetLeaf, *preset, nixCfg, nixFlavor, originalErr)
+}
+
+func autoRollbackToPreviousGeneration(
+	exc *executioner.Executioner,
+	fleetLeaf *fleet.FleetLeaf,
+	preset installable.Preset,
+	nixCfg *nix.NixConfig,
+	nixFlavor nixver.Flavor,
+	originalErr error,
+) error {
+	metaInspect := fleetLeaf.Machine.MetaInspect.Load()
+	if metaInspect == nil || metaInspect.Generations == nil || len(metaInspect.Generations.Available) == 0 {
+		return originalErr
+	}
+
+	// metaInspect.Generations.Current is the pre-activation generation captured
+	// during Inspect. It must NOT be refreshed after the failed activation,
+	// otherwise the rollback would target the broken generation just activated.
+	targetGen := metaInspect.Generations.Current
+
+	// Announce the rollback in the command log so it is visible (TUI build
+	// logs, console/JSON output) that the steps following the failed
+	// activation are a rollback to the pre-deploy generation.
+	logErr := exc.ExecFn(
+		"auto rollback",
+		"activation failed, rolling back to previous generation",
+		"auto rollback failed",
+		func(log *command.CommandLog) error {
+			log.Output.Write(fmt.Appendf(nil, "activation failed: rolling back to generation %d", targetGen))
+
+			return nil
+		},
 	)
+	if logErr != nil {
+		return errors.Wrapf(originalErr, "auto-rollback failed: %v", logErr)
+	}
+
+	closurePath, closureErr := phaseops.FindGenerationClosure(exc, fleetLeaf.Machine, preset.ProfilePath, targetGen)
+	if closureErr != nil {
+		return errors.Wrapf(originalErr, "auto-rollback failed to resolve generation: %v", closureErr)
+	}
+
+	rollbackErr := phaseops.Activate(
+		exc,
+		fleetLeaf.Machine,
+		preset,
+		closurePath,
+		phaseops.RollbackActivationMode(preset),
+		fleetLeaf.Installable.User,
+		nixCfg,
+		nixFlavor,
+	)
+	if rollbackErr != nil {
+		return errors.Wrapf(originalErr, "auto-rollback failed: %v", rollbackErr)
+	}
+
+	return errors.Wrap(originalErr, "auto-rollback succeeded")
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixCfg *nix.NixConfig, systemClosure string) error {

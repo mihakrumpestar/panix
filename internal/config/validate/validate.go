@@ -251,7 +251,9 @@ func validateOutputTypes(fleetConfig *fleet.Fleet, declaredPresets installablepk
 // declared type must not collide with a built-in name, must set 'system_level',
 // and must declare 'activation_default_mode' when it declares supported
 // activation modes (the default must be one of the supported modes).
-// set_profile: true requires a profile_path.
+// set_profile: true requires a profile_path. Entries in
+// activation_non_mutating_modes and activation_profile_skip_modes must be
+// declared in activation_supported_modes.
 func validateDeclaredPresets(declaredPresets installablepkg.CustomOutputTypes) []string {
 	var errs []string
 
@@ -291,8 +293,32 @@ func validateDeclaredPresets(declaredPresets installablepkg.CustomOutputTypes) [
 			errs = append(errs, fmt.Sprintf("output_types: '%s' declares set_profile: true but has no profile_path", typ))
 		}
 
+		// The mode semantic lists reference modes the activation script
+		// understands; entries outside activation_supported_modes would
+		// silently never match at runtime.
+		errs = append(errs, validateModeSubset(typ, preset.NonMutatingModes, preset.ActivationModes, "activation_non_mutating_modes")...)
+		errs = append(errs, validateModeSubset(typ, preset.ProfileSkipModes, preset.ActivationModes, "activation_profile_skip_modes")...)
+
 		return true
 	})
+
+	return errs
+}
+
+// validateModeSubset checks that every entry of a mode semantic list
+// (e.g. activation_non_mutating_modes) is declared in the type's supported
+// activation modes, returning an error message per offending entry.
+func validateModeSubset(typ installablepkg.FlakeOutputType, modes, supportedModes []string, listName string) []string {
+	var errs []string
+
+	for _, mode := range modes {
+		if !slices.Contains(supportedModes, mode) {
+			errs = append(errs, fmt.Sprintf(
+				"output_types: '%s' %s entry '%s' is not in activation_supported_modes",
+				typ, listName, mode,
+			))
+		}
+	}
 
 	return errs
 }

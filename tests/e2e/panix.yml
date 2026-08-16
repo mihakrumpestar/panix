@@ -110,6 +110,13 @@ fleet:
 {{ end }}
 {{ end }}
 {{ if and $isLocal (not $isBootstrap) }}
+          test-vm-failing:
+            auto_rollback: true
+            machines:
+              nixos-iso-vm-failing:
+                ssh: *ssh_nixos_iso
+{{ end }}
+{{ if and $isLocal (not $isBootstrap) }}
         homeConfigurations:
           test-home:
             machines:

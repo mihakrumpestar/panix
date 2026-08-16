@@ -55,6 +55,7 @@ flags: # Listed are default values, all also overridable using CLI arguments
 fleet:
   tags: [production]                   # Inherited by all descendants
   rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override base rsync flags (default shown)
+  auto_rollback: false                 # Roll back to pre-deploy generation on activation failure (see auto-rollback feature page)
   nix:
     # Default flags: REPLACE built-in base flags (leave unset for built-in defaults, [] clears)
     experimental_features: ["--extra-experimental-features", "nix-command flakes"]

@@ -63,8 +63,14 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 			phase.Bootstrap: bootstrap.Handler{},
 			phase.Transfer:  transfer.Handler{},
 			phase.Secrets:   secrets.Handler{},
-			phase.Activate:  activate.Handler{ActivationMode: conf.Flags.ActivationMode, NixFlavor: conf.Nix.GetFlavor()},
-			phase.Rollback:  rollback.Handler{TargetGeneration: conf.Flags.Generation, NixFlavor: conf.Nix.GetFlavor()},
+			phase.Activate: activate.Handler{
+				ActivationMode: conf.Flags.ActivationMode,
+				NixFlavor:      conf.Nix.GetFlavor(),
+			},
+			phase.Rollback: rollback.Handler{
+				TargetGeneration: conf.Flags.Generation,
+				NixFlavor:        conf.Nix.GetFlavor(),
+			},
 		},
 		onceRegistry: atomicorderedmap.New[string, *onceasync.OnceAsync](),
 	}

@@ -17,7 +17,8 @@ type CustomOutputTypes = *atomicorderedmap.AtomicOrderedMap[string, Preset]
 // Fields are split into two categories:
 //   - User-overridable: settable per-installable via YAML. Zero values fall
 //     back to the type default. (OutputTypeAttr, BuildPath, ProfilePath,
-//     ActivationPath, SetProfile, ActivationModes, ActivationDefaultMode)
+//     ActivationPath, SetProfile, ActivationModes, ActivationDefaultMode,
+//     NonMutatingModes, ProfileSkipModes)
 //   - Type-level: intrinsic to the output type, not user-configurable
 //     per-installable. Always taken from the type default. For built-ins the
 //     default comes from the presets table; for custom types declared under
@@ -33,6 +34,8 @@ type Preset struct {
 	ActivationPath        string   `yaml:"activation_path,omitempty" json:"activation_path,omitempty" desc:"Activation script path in the closure"`
 	SetProfile            *bool    `yaml:"set_profile,omitempty" json:"set_profile,omitempty" desc:"Run nix-env --profile --set before activation"`
 	ActivationModes       []string `yaml:"activation_supported_modes,omitempty" json:"activation_supported_modes,omitempty" desc:"Activation modes"`
+	NonMutatingModes      []string `yaml:"activation_non_mutating_modes,omitempty" json:"activation_non_mutating_modes,omitempty" desc:"Activation modes that do not mutate the target system (auto rollback is skipped for these modes)"`
+	ProfileSkipModes      []string `yaml:"activation_profile_skip_modes,omitempty" json:"activation_profile_skip_modes,omitempty" desc:"Activation modes that skip setting the profile before activation (the activation runs against the passed closure without switching the profile to it)"`
 	ActivationDefaultMode string   `yaml:"activation_default_mode,omitempty" json:"activation_default_mode,omitempty" desc:"Default activation mode"`
 
 	// Type-level fields. For built-in types these are not user-configurable
@@ -58,6 +61,8 @@ var presets = map[FlakeOutputType]Preset{
 		IsSystemLevel:         new(true),
 		ActivationPath:        "bin/switch-to-configuration",
 		ActivationModes:       []string{"switch", "boot", "test", "dry-activate"},
+		ProfileSkipModes:      []string{"test", "dry-activate"},
+		NonMutatingModes:      []string{"dry-activate"},
 		ActivationDefaultMode: "switch",
 		IsBootstrappable:      true,
 	},

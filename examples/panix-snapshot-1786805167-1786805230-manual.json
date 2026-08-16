@@ -1,0 +1,584 @@
+{
+  "nix": "nix (Nix) 2.35.1",
+  "snapshot": {
+    "panix_version": "0.9.1",
+    "start_time": "2026-08-15T16:46:07.799909311+02:00",
+    "reason": "manual",
+    "snapshot_time": "2026-08-15T16:47:10.796833231+02:00"
+  },
+  "phases": [
+    "inspect",
+    "build",
+    "transfer",
+    "activate"
+  ],
+  "flags": {
+    "config": "examples/panix.deploy.yml",
+    "validate": {},
+    "tags": [
+      "personal-workstation"
+    ],
+    "timeout": 5500000000000,
+    "activation_mode": {
+      "AllTypes": "",
+      "PerType": null
+    },
+    "output": "tui",
+    "local_machine_hostname": "tmp",
+    "logging": {
+      "log_file": "panix.log"
+    },
+    "snapshot": {
+      "dir": "."
+    },
+    "tui": {
+      "command_output_max_height": 8,
+      "command_output_max_lines": 10000
+    },
+    "profile": {},
+    "runtime": {
+      "max_concurrency": 0,
+      "disconnect_timeout": 300000000000,
+      "reconnect_timeout": 600000000000,
+      "ssh_reachability_timeout": 2000000000,
+      "flake_validation_timeout": 60000000000
+    }
+  },
+  "fleet": {
+    "ssh": {},
+    "bootstrap": {
+      "ssh": {},
+      "kexec": {}
+    },
+    "nix": {
+      "build_mode": "local"
+    },
+    "flakes": [
+      {
+        "key": "infrastructure",
+        "value": {
+          "ssh": {},
+          "tags": [
+            "infrastructure"
+          ],
+          "bootstrap": {
+            "ssh": {},
+            "kexec": {}
+          },
+          "name": "infrastructure",
+          "xpath": "infrastructure",
+          "nix": {
+            "build_mode": "local"
+          },
+          "url": "../infrastructure",
+          "installables": [
+            {
+              "key": "nixosConfigurations",
+              "value": [
+                {
+                  "key": "personal-workstation",
+                  "value": {
+                    "ssh": {},
+                    "tags": [
+                      "infrastructure",
+                      "personal-workstation",
+                      "nixosConfigurations"
+                    ],
+                    "bootstrap": {
+                      "ssh": {},
+                      "kexec": {}
+                    },
+                    "xpath": "infrastructure/nixosConfigurations/personal-workstation",
+                    "nix": {
+                      "build_mode": "local"
+                    },
+                    "preset": {
+                      "build_path": "config.system.build.toplevel",
+                      "profile_path": "/nix/var/nix/profiles/system",
+                      "activation_path": "bin/switch-to-configuration",
+                      "set_profile": true,
+                      "activation_supported_modes": [
+                        "switch",
+                        "boot",
+                        "test",
+                        "dry-activate"
+                      ],
+                      "activation_default_mode": "switch",
+                      "system_level": true
+                    },
+                    "machines": [
+                      {
+                        "key": "personal-workstation",
+                        "value": {
+                          "ssh": {
+                            "hostname": "10.0.200.48",
+                            "port": 22222,
+                            "username": "root"
+                          },
+                          "tags": [
+                            "infrastructure",
+                            "personal-workstation",
+                            "nixosConfigurations",
+                            "personal-workstation"
+                          ],
+                          "bootstrap": {
+                            "ssh": {},
+                            "disk_encryption_keys": [
+                              {
+                                "local_path": "/tmp/disko-encryption-password.txt",
+                                "remote_path": "/tmp/disko-encryption-password.txt"
+                              }
+                            ],
+                            "kexec": {
+                              "image": "./kexec-\u003carch\u003e.tar.gz"
+                            }
+                          },
+                          "name": "personal-workstation",
+                          "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation",
+                          "meta_inspect": {
+                            "reachable": true,
+                            "ssh_connectable": true,
+                            "is_root": true,
+                            "bootstrapped": true,
+                            "architecture": "x86_64",
+                            "generations": {
+                              "current": 205,
+                              "available": [
+                                178,
+                                179,
+                                180,
+                                181,
+                                182,
+                                183,
+                                184,
+                                185,
+                                186,
+                                187,
+                                188,
+                                189,
+                                190,
+                                191,
+                                192,
+                                193,
+                                194,
+                                195,
+                                196,
+                                197,
+                                198,
+                                199,
+                                200,
+                                201,
+                                202,
+                                203,
+                                204,
+                                205
+                              ]
+                            },
+                            "date": "2026-08-15 14:35:41",
+                            "nixos": "26.11 (Zokor)",
+                            "kernel": "7.1.5"
+                          },
+                          "logs": {
+                            "phase_logs": [
+                              {
+                                "key": "inspect",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "SSH reachability check",
+                                      "command": "",
+                                      "output": [],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:07.800192166+02:00",
+                                        "end_time": "2026-08-15T16:46:07.809027591+02:00",
+                                        "duration": 8835355
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/SSH reachability check"
+                                    },
+                                    {
+                                      "description": "SSH connect",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation echo OK",
+                                      "output": [
+                                        "OK"
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:07.80908088+02:00",
+                                        "end_time": "2026-08-15T16:46:08.221207885+02:00",
+                                        "duration": 412127564
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/SSH connect"
+                                    },
+                                    {
+                                      "description": "architecture",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation uname -m",
+                                      "output": [
+                                        "x86_64"
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.221232119+02:00",
+                                        "end_time": "2026-08-15T16:46:08.232808168+02:00",
+                                        "duration": 11575979
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/architecture"
+                                    },
+                                    {
+                                      "description": "superuser check",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation id -u",
+                                      "output": [
+                                        "0"
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.232852797+02:00",
+                                        "end_time": "2026-08-15T16:46:08.243985216+02:00",
+                                        "duration": 11132420
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/superuser check"
+                                    },
+                                    {
+                                      "description": "bootstrap detection",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation cat /etc/os-release",
+                                      "output": [
+                                        "ANSI_COLOR=\"0;38;2;126;186;228\"",
+                                        "BUG_REPORT_URL=\"https://github.com/NixOS/nixpkgs/issues\"",
+                                        "BUILD_ID=\"26.11.20260802.6438090\"",
+                                        "CPE_NAME=\"cpe:/o:nixos:nixos:26.11\"",
+                                        "DEFAULT_HOSTNAME=nixos",
+                                        "DOCUMENTATION_URL=\"https://nixos.org/learn.html\"",
+                                        "HOME_URL=\"https://nixos.org/\"",
+                                        "ID=nixos",
+                                        "LOGO=\"nix-snowflake\"",
+                                        "NAME=NixOS",
+                                        "PRETTY_NAME=\"NixOS 26.11 (Zokor)\"",
+                                        "SUPPORT_URL=\"https://nixos.org/community.html\"",
+                                        "VENDOR_NAME=NixOS",
+                                        "VENDOR_URL=\"https://nixos.org/\"",
+                                        "VERSION=\"26.11 (Zokor)\"",
+                                        "VERSION_CODENAME=zokor",
+                                        "VERSION_ID=\"26.11\""
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.244025235+02:00",
+                                        "end_time": "2026-08-15T16:46:08.255677411+02:00",
+                                        "duration": 11652245
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/bootstrap detection"
+                                    },
+                                    {
+                                      "description": "validate SSH config upon detected machine state",
+                                      "command": "",
+                                      "output": [],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.255684674+02:00",
+                                        "end_time": "2026-08-15T16:46:08.255693195+02:00",
+                                        "duration": 8520
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/validate SSH config upon detected machine state"
+                                    },
+                                    {
+                                      "description": "system info",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation cat /etc/os-release",
+                                      "output": [
+                                        "ANSI_COLOR=\"0;38;2;126;186;228\"",
+                                        "BUG_REPORT_URL=\"https://github.com/NixOS/nixpkgs/issues\"",
+                                        "BUILD_ID=\"26.11.20260802.6438090\"",
+                                        "CPE_NAME=\"cpe:/o:nixos:nixos:26.11\"",
+                                        "DEFAULT_HOSTNAME=nixos",
+                                        "DOCUMENTATION_URL=\"https://nixos.org/learn.html\"",
+                                        "HOME_URL=\"https://nixos.org/\"",
+                                        "ID=nixos",
+                                        "LOGO=\"nix-snowflake\"",
+                                        "NAME=NixOS",
+                                        "PRETTY_NAME=\"NixOS 26.11 (Zokor)\"",
+                                        "SUPPORT_URL=\"https://nixos.org/community.html\"",
+                                        "VENDOR_NAME=NixOS",
+                                        "VENDOR_URL=\"https://nixos.org/\"",
+                                        "VERSION=\"26.11 (Zokor)\"",
+                                        "VERSION_CODENAME=zokor",
+                                        "VERSION_ID=\"26.11\""
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.255703112+02:00",
+                                        "end_time": "2026-08-15T16:46:08.267009575+02:00",
+                                        "duration": 11306952
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/system info"
+                                    },
+                                    {
+                                      "description": "kernel version",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation uname -r",
+                                      "output": [
+                                        "7.1.5"
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.267047289+02:00",
+                                        "end_time": "2026-08-15T16:46:08.27972822+02:00",
+                                        "duration": 12680931
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/kernel version"
+                                    },
+                                    {
+                                      "description": "list generations",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation nix-env --profile /nix/var/nix/profiles/system --list-generations",
+                                      "output": [
+                                        " 178   2026-07-26 09:43:07   ",
+                                        " 179   2026-08-04 22:13:23   ",
+                                        " 180   2026-08-09 11:31:09   ",
+                                        " 181   2026-08-09 13:22:55   ",
+                                        " 182   2026-08-11 11:19:31   ",
+                                        " 183   2026-08-11 11:23:48   ",
+                                        " 184   2026-08-11 12:19:29   ",
+                                        " 185   2026-08-11 14:44:17   ",
+                                        " 186   2026-08-11 15:48:33   ",
+                                        " 187   2026-08-11 15:59:25   ",
+                                        " 188   2026-08-11 17:16:42   ",
+                                        " 189   2026-08-12 08:02:15   ",
+                                        " 190   2026-08-12 08:06:47   ",
+                                        " 191   2026-08-12 08:43:58   ",
+                                        " 192   2026-08-12 10:44:30   ",
+                                        " 193   2026-08-12 10:50:17   ",
+                                        " 194   2026-08-12 11:18:35   ",
+                                        " 195   2026-08-12 11:22:18   ",
+                                        " 196   2026-08-12 11:39:27   ",
+                                        " 197   2026-08-12 12:03:15   ",
+                                        " 198   2026-08-12 15:09:31   ",
+                                        " 199   2026-08-12 23:05:05   ",
+                                        " 200   2026-08-13 16:18:54   ",
+                                        " 201   2026-08-14 11:59:04   ",
+                                        " 202   2026-08-14 14:59:37   ",
+                                        " 203   2026-08-15 09:45:56   ",
+                                        " 204   2026-08-15 10:30:30   ",
+                                        " 205   2026-08-15 14:35:41   (current)"
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:08.279749731+02:00",
+                                        "end_time": "2026-08-15T16:46:08.317174083+02:00",
+                                        "duration": 37424771
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/inspect/list generations"
+                                    }
+                                  ],
+                                  "time_and_state": {
+                                    "start_time": "2026-08-15T16:46:07.800174287+02:00",
+                                    "end_time": "2026-08-15T16:46:08.317180788+02:00",
+                                    "duration": 517006501
+                                  }
+                                }
+                              },
+                              {
+                                "key": "transfer",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "nix copy",
+                                      "command": "NIX_SSHOPTS='-o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new' nix --extra-experimental-features 'nix-command flakes' copy --to ssh-ng://personal-workstation --no-check-sigs /nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090",
+                                      "output": [],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:47:00.042137806+02:00",
+                                        "end_time": "2026-08-15T16:47:00.709234429+02:00",
+                                        "duration": 667096552
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/transfer/nix copy"
+                                    }
+                                  ],
+                                  "time_and_state": {
+                                    "start_time": "2026-08-15T16:47:00.042115527+02:00",
+                                    "end_time": "2026-08-15T16:47:00.709244556+02:00",
+                                    "duration": 667128609
+                                  }
+                                }
+                              },
+                              {
+                                "key": "activate",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "set profile",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation nix-env --profile /nix/var/nix/profiles/system --set /nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090",
+                                      "output": [],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:47:00.709285971+02:00",
+                                        "end_time": "2026-08-15T16:47:00.747632013+02:00",
+                                        "duration": 38346111
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/activate/set profile"
+                                    },
+                                    {
+                                      "description": "activate",
+                                      "command": "ssh -q -o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new personal-workstation /nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090/bin/switch-to-configuration switch",
+                                      "output": [
+                                        "Checking switch inhibitors... done",
+                                        "Installing Lanzaboote to \"/boot\"...",
+                                        "Collecting garbage...",
+                                        "Successfully installed Lanzaboote.",
+                                        "activating the configuration...",
+                                        "setting up /etc...",
+                                        "reloading user units for krumpy-miha...",
+                                        "restarting the following user units: nixos-activation.service",
+                                        "reloading user units for root...",
+                                        "restarting the following user units: nixos-activation.service",
+                                        "restarting sysinit-reactivation.target",
+                                        "restarting the following units: home-manager-krumpy\\x2dmiha.service",
+                                        "the following new units were started: NetworkManager-dispatcher.service"
+                                      ],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:47:00.747661066+02:00",
+                                        "end_time": "2026-08-15T16:47:08.486387733+02:00",
+                                        "duration": 7738726666
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/personal-workstation/activate/activate"
+                                    }
+                                  ],
+                                  "time_and_state": {
+                                    "start_time": "2026-08-15T16:47:00.709266346+02:00",
+                                    "end_time": "2026-08-15T16:47:08.486400513+02:00",
+                                    "duration": 7777134097
+                                  }
+                                }
+                              }
+                            ],
+                            "tas": {
+                              "start_time": "2026-08-15T16:46:07.809174955+02:00",
+                              "end_time": "2026-08-15T16:47:08.502647308+02:00",
+                              "duration": 60686154778
+                            }
+                          },
+                          "machine_state": {
+                            "status": "done",
+                            "status_msg": "done",
+                            "phase": "activate",
+                            "active_ssh": "regular"
+                          }
+                        }
+                      },
+                      {
+                        "key": "fake",
+                        "value": {
+                          "ssh": {
+                            "hostname": "fake",
+                            "port": 22,
+                            "username": "root"
+                          },
+                          "tags": [
+                            "infrastructure",
+                            "personal-workstation",
+                            "nixosConfigurations",
+                            "fake"
+                          ],
+                          "bootstrap": {
+                            "ssh": {},
+                            "kexec": {}
+                          },
+                          "name": "fake",
+                          "xpath": "infrastructure/nixosConfigurations/personal-workstation/fake",
+                          "meta_inspect": {},
+                          "logs": {
+                            "phase_logs": [
+                              {
+                                "key": "inspect",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "SSH reachability check",
+                                      "command": "",
+                                      "output": [],
+                                      "time_and_state": {
+                                        "start_time": "2026-08-15T16:46:07.800147189+02:00",
+                                        "end_time": "2026-08-15T16:46:07.867038926+02:00",
+                                        "duration": 66892226,
+                                        "end_error": "regular SSH is unreachable"
+                                      },
+                                      "xpath": "infrastructure/nixosConfigurations/personal-workstation/fake/inspect/SSH reachability check"
+                                    }
+                                  ],
+                                  "time_and_state": {
+                                    "start_time": "2026-08-15T16:46:07.800124351+02:00",
+                                    "end_time": "2026-08-15T16:46:07.867055618+02:00",
+                                    "duration": 66931756,
+                                    "end_error": "reachability check failed: regular SSH is unreachable"
+                                  }
+                                }
+                              }
+                            ],
+                            "tas": {
+                              "start_time": "2026-08-15T16:46:07.809177819+02:00",
+                              "end_time": "2026-08-15T16:46:07.867114354+02:00",
+                              "duration": 66931756,
+                              "end_error": "reachability check failed: regular SSH is unreachable"
+                            }
+                          },
+                          "machine_state": {
+                            "status": "failed",
+                            "status_msg": "SSH unreachable",
+                            "phase": "inspect",
+                            "error": "reachability check failed: regular SSH is unreachable"
+                          }
+                        }
+                      }
+                    ],
+                    "type": "nixosConfigurations",
+                    "name": "personal-workstation",
+                    "meta_build": {
+                      "closure": "/nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090"
+                    },
+                    "logs": {
+                      "phase_logs": [
+                        {
+                          "key": "build",
+                          "value": {
+                            "command_logs": [
+                              {
+                                "description": "build system closure",
+                                "command": "XDG_CACHE_HOME=/home/krumpy-miha/.cache/panix/infrastructure/nixosConfigurations/personal-workstation NIX_SSHOPTS='-o ControlMaster=auto -o ControlPath=/tmp/panix-ssh-10.0.200.48-22222 -o ControlPersist=60 -o StrictHostKeyChecking=accept-new' nix --extra-experimental-features 'nix-command flakes' build --no-link --print-out-paths --keep-going ../infrastructure#nixosConfigurations.personal-workstation.config.system.build.toplevel",
+                                "output": [
+                                  "\u001b[35;1mwarning:\u001b[0m Git tree '/home/krumpy-miha/repos/personal/infrastructure' is dirty\u001b[0m",
+                                  "\u001b[35;1mevaluation warning:\u001b[0m krumpy-miha profile: stylix: qt: `config.stylix.targets.qt.platform` other than 'qtct' are currently unsupported: kde. Support may be added in the future.\u001b[0m",
+                                  "/nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090"
+                                ],
+                                "time_and_state": {
+                                  "start_time": "2026-08-15T16:46:08.317994853+02:00",
+                                  "end_time": "2026-08-15T16:47:00.042050645+02:00",
+                                  "duration": 51724055792
+                                },
+                                "xpath": "infrastructure/nixosConfigurations/personal-workstation/build/build system closure"
+                              }
+                            ],
+                            "time_and_state": {
+                              "start_time": "2026-08-15T16:46:08.317199854+02:00",
+                              "end_time": "2026-08-15T16:47:00.042085425+02:00",
+                              "duration": 51724885571
+                            }
+                          }
+                        }
+                      ],
+                      "tas": {
+                        "start_time": "2026-08-15T16:46:07.800114783+02:00",
+                        "end_time": "2026-08-15T16:47:08.502650101+02:00",
+                        "duration": 60686154778
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "logs": {
+            "phase_logs": [],
+            "tas": {
+              "start_time": "2026-08-15T16:46:07.800117646+02:00",
+              "end_time": "2026-08-15T16:47:08.502652965+02:00",
+              "duration": 60686154778
+            }
+          }
+        }
+      }
+    ],
+    "logs": {
+      "phase_logs": [],
+      "tas": {
+        "start_time": "0001-01-01T00:00:00Z",
+        "end_time": "0001-01-01T00:00:00Z",
+        "duration": 60686154778
+      }
+    }
+  }
+}

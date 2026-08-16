@@ -233,11 +233,21 @@ func runDeployPhase(configPath string, res *testResources) error {
 		{deploySystemConfigs, runDeploySystemManager},
 	}
 
-	for _, r := range deploys {
-		if deployTypeFlag == deployAll || deployTypeFlag == r.typ {
-			err := r.fn(configPath, res)
+	for _, deploy := range deploys {
+		if deployTypeFlag == deployAll || deployTypeFlag == deploy.typ {
+			err := deploy.fn(configPath, res)
 			if err != nil {
 				return err
+			}
+
+			// Run the auto-rollback test immediately after the NixOS deploy,
+			// since it depends on the machine having a fresh known-good
+			// generation to roll back to.
+			if deploy.typ == deployNixos && testScopeFlag.local() {
+				err = runDeployAutoRollback(configPath, res)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -249,7 +259,11 @@ func runDeployNixOS(configPath string, res *testResources) error {
 	printPhasef("Phase: Deploy NixOS")
 
 	err := runPanixDeployStepWithArgs("Run panix deploy (nixos)", configPath,
-		[]string{"--tags", "nixosConfigurations"},
+		// Use explicit attribute-name tags rather than the broad
+		// "nixosConfigurations" type tag so the always-failing
+		// test-vm-failing fixture (also under nixosConfigurations) is NOT
+		// deployed here; it is only deployed by the auto-rollback test.
+		[]string{"--tags", "test-vm,test-vm-remote"},
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
@@ -259,6 +273,66 @@ func runDeployNixOS(configPath string, res *testResources) error {
 	}
 
 	return verifyAll(res.keyPath)
+}
+
+// runDeployAutoRollback verifies the auto_rollback attribute. It runs right
+// after the regular NixOS deploy (runDeployNixOS), which leaves the local VM
+// on a known-good generation. It then deploys a dedicated always-failing
+// config (test-vm-failing, which sets auto_rollback: true), expecting
+// activation to fail and the previous generation's closure to be restored.
+func runDeployAutoRollback(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy NixOS with auto-rollback")
+
+	keyPath := res.keyPath
+
+	closureBefore, err := readSystemProfileClosure(keyPath)
+	if err != nil {
+		return errors.Wrap(err, "read system closure before failing deploy")
+	}
+
+	genBefore, err := readSystemProfileGeneration(keyPath)
+	if err != nil {
+		return errors.Wrap(err, "read system generation before failing deploy")
+	}
+
+	fmt.Printf("  before: closure=%s generation=%d\n", closureBefore, genBefore)
+
+	err = runPanixDeployWithArgs(configPath,
+		[]string{"--tags", "test-vm-failing"},
+		"PANIX_TEST_MODE=deploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err == nil {
+		return errors.New("expected auto-rollback deploy to fail")
+	}
+
+	fmt.Printf("  forced-failure deploy failed as expected: %v\n", err)
+
+	closureAfter, err := readSystemProfileClosure(keyPath)
+	if err != nil {
+		return errors.Wrap(err, "read system closure after rollback")
+	}
+
+	genAfter, err := readSystemProfileGeneration(keyPath)
+	if err != nil {
+		return errors.Wrap(err, "read system generation after rollback")
+	}
+
+	fmt.Printf("  after: closure=%s generation=%d\n", closureAfter, genAfter)
+
+	// The profile must point at the same closure as before (rollback restored
+	// it), but at a higher generation number (proving activation actually ran
+	// and mutated the profile before failing, rather than failing at build).
+	if closureAfter != closureBefore {
+		return errors.Errorf("expected rollback to restore closure %s, got %s", closureBefore, closureAfter)
+	}
+
+	if genAfter <= genBefore {
+		return errors.Errorf("expected generation to advance (activation ran), before=%d after=%d", genBefore, genAfter)
+	}
+
+	return nil
 }
 
 func runDeployHome(configPath string, res *testResources) error {
@@ -442,6 +516,9 @@ func buildNixArtifacts(res *testResources) error {
 	})
 
 	if testScopeFlag.local() {
+		parGroup.Go("Pre-build test-vm-failing closure", func() error {
+			return preBuildClosure("test-vm-failing", "nixosConfigurations.test-vm-failing.config.system.build.toplevel")
+		})
 		parGroup.Go("Pre-build home-manager closure", func() error {
 			return preBuildClosure("home-manager", "homeConfigurations.test-home.activationPackage")
 		})

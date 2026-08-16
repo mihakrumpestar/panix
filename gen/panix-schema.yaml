@@ -175,6 +175,9 @@ properties:
     type: object
     description: Fleet configuration
     properties:
+      auto_rollback:
+        type: boolean
+        description: Automatically roll back to the pre-deploy generation when activation fails
       bootstrap:
         description: Bootstrap configuration for initial provisioning
         $ref: "#/definitions/Bootstrap"
@@ -187,6 +190,9 @@ properties:
         additionalProperties:
           type: object
           properties:
+            auto_rollback:
+              type: boolean
+              description: Automatically roll back to the pre-deploy generation when activation fails
             bootstrap:
               description: Bootstrap configuration for initial provisioning
               $ref: "#/definitions/Bootstrap"
@@ -207,6 +213,9 @@ properties:
                     activation_mode:
                       type: string
                       description: Activation mode (overrides preset default)
+                    auto_rollback:
+                      type: boolean
+                      description: Automatically roll back to the pre-deploy generation when activation fails
                     bootstrap:
                       description: Bootstrap configuration for initial provisioning
                       $ref: "#/definitions/Bootstrap"
@@ -223,6 +232,9 @@ properties:
                         anyOf:
                         - type: object
                           properties:
+                            auto_rollback:
+                              type: boolean
+                              description: Automatically roll back to the pre-deploy generation when activation fails
                             bootstrap:
                               description: Bootstrap configuration for initial provisioning
                               $ref: "#/definitions/Bootstrap"
@@ -546,9 +558,19 @@ definitions:
       activation_default_mode:
         type: string
         description: Default activation mode
+      activation_non_mutating_modes:
+        type: array
+        description: Activation modes that do not mutate the target system (auto rollback is skipped for these modes)
+        items:
+          type: string
       activation_path:
         type: string
         description: Activation script path in the closure
+      activation_profile_skip_modes:
+        type: array
+        description: Activation modes that skip setting the profile before activation (the activation runs against the passed closure without switching the profile to it)
+        items:
+          type: string
       activation_supported_modes:
         type: array
         description: Activation modes

@@ -187,13 +187,15 @@ func TestApplyPresetDefaults_AllKnownTypes(t *testing.T) {
 
 			expected := presets[tt.typ]
 
-			// User-overridable fields — all should come from defaults since
-			// the input Preset was empty.
-			assert.Equal(t, expected.BuildPath, inst.Preset.BuildPath, "BuildPath")
-			assert.Equal(t, expected.ProfilePath, inst.Preset.ProfilePath, "ProfilePath")
-			assert.Equal(t, expected.ActivationPath, inst.Preset.ActivationPath, "ActivationPath")
-			assert.Equal(t, expected.ActivationModes, inst.Preset.ActivationModes, "ActivationModes")
-			assert.Equal(t, expected.ActivationDefaultMode, inst.Preset.ActivationDefaultMode, "ActivationDefaultMode")
+		// User-overridable fields — all should come from defaults since
+		// the input Preset was empty.
+		assert.Equal(t, expected.BuildPath, inst.Preset.BuildPath, "BuildPath")
+		assert.Equal(t, expected.ProfilePath, inst.Preset.ProfilePath, "ProfilePath")
+		assert.Equal(t, expected.ActivationPath, inst.Preset.ActivationPath, "ActivationPath")
+		assert.Equal(t, expected.ActivationModes, inst.Preset.ActivationModes, "ActivationModes")
+		assert.Equal(t, expected.NonMutatingModes, inst.Preset.NonMutatingModes, "NonMutatingModes")
+		assert.Equal(t, expected.ProfileSkipModes, inst.Preset.ProfileSkipModes, "ProfileSkipModes")
+		assert.Equal(t, expected.ActivationDefaultMode, inst.Preset.ActivationDefaultMode, "ActivationDefaultMode")
 
 			// SetProfile is *bool; compare via dereference, handling nil.
 			if expected.SetProfile == nil {
@@ -244,6 +246,8 @@ func TestInitCustomPresets(t *testing.T) {
 		IsSystemLevel:         new(true),
 		ActivationPath:        "bin/switch-to-configuration",
 		ActivationModes:       []string{"switch", "boot"},
+		NonMutatingModes:      []string{"boot"},
+		ProfileSkipModes:      []string{"boot"},
 		ActivationDefaultMode: "switch",
 	})
 
@@ -302,6 +306,8 @@ func assertCustomPresetDefaultsMerged(t *testing.T, customPresets CustomOutputTy
 	assert.Equal(t, "/nix/var/nix/profiles/system", inst.Preset.ProfilePath)
 	assert.Equal(t, "bin/switch-to-configuration", inst.Preset.ActivationPath)
 	assert.Equal(t, []string{"switch", "boot"}, inst.Preset.ActivationModes)
+	assert.Equal(t, []string{"boot"}, inst.Preset.NonMutatingModes)
+	assert.Equal(t, []string{"boot"}, inst.Preset.ProfileSkipModes)
 	assert.Equal(t, "switch", inst.Preset.ActivationDefaultMode)
 	require.NotNil(t, inst.Preset.SetProfile)
 	assert.True(t, *inst.Preset.SetProfile)
