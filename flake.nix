@@ -17,7 +17,7 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        version = builtins.readFile ./gen/VERSION;
+        version = pkgs.lib.fileContents ./gen/VERSION;
       in
       {
         packages = {
