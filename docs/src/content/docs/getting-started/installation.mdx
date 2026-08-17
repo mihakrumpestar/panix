@@ -41,6 +41,15 @@ Add Panix as a flake input and include it in your system packages:
 }
 ```
 
-:::tip[Shell Completion]
-After installing Panix, enable tab completion for your shell: see the [Shell Completion guide](/cli/shell-completion/).
+:::note[Binary cache]
+CI pushes build results to a Cachix cache, so prebuilt binaries are available instead of compiling from source (which takes about 10s to build on mid-range hardware). To use it, add the cache to your own flake:
+
+```nix
+{
+  nixConfig = {
+    extra-substituters = [ "https://mihakrumpestar.cachix.org" ];
+    extra-trusted-public-keys = [ "mihakrumpestar.cachix.org-1:7mKgpsk+9+iJcaT5DwvUtMxlJS+1GH/dlYhzoFkefJg=" ];
+  };
+}
+```
 :::

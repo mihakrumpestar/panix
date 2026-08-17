@@ -19,6 +19,10 @@ task
 
 Code has to pass `task ci` checks, if larger or critical sections were changed, then also `task go:test:e2e`.
 
+## Binary cache
+
+CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cachix.org/cache/mihakrumpestar). Pushing requires the `CACHIX_AUTH_TOKEN` secret to be set on the repository; without it the workflow skips pushing and only builds.
+
 ## Testing Conventions
 
 - **Table-driven tests**: use `[]struct{ name string; ... }` with `t.Run(tt.name, func(t *testing.T) { ... })`. See existing tests for examples.
@@ -43,18 +47,24 @@ Future potential/to-do list (by priority):
 
 The following packages were inadequate for use for Panix:
 
-- [bubbletea](https://github.com/charmbracelet/bubbletea): too slow, it is severly unoptimized
+- [bubbletea](https://github.com/charmbracelet/bubbletea): too slow, it is severely unoptimized
 - [Koanf link to issue](https://github.com/knadh/koanf/issues/221)
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
-- [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: speed is about the same, and it does not seem to provide a meaningfull benefit over `nix build`
+- [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: speed is about the same, and it does not seem to provide a meaningful benefit over `nix build`
 
 ## Demo video
 
 Record using OBS with [these settings](assets/obs), and show keys on screen:
 
 ```sh
-nix-shell -p showmethekey --command showmethekey-gtk
+nix-shell -p showmethekey --command "sudo showmethekey-gtk"
+```
+
+Trim later if needed with:
+
+```sh
+nix run nixpkgs#losslesscut
 ```
 
 ### GIF
@@ -62,7 +72,7 @@ nix-shell -p showmethekey --command showmethekey-gtk
 Convert using ([article](https://www.ffmpeg.media/articles/working-with-gifs-convert-optimize)):
 
 ```sh
-ffmpeg -i demo.mp4 -vf "fps=10,scale=iw*0.8:-1:flags=lanczos,format=rgba,eq=saturation=1:contrast=1.3,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0 demo.gif
+nix run nixpkgs#ffmpeg -- -i demo.mp4 -vf "fps=10,scale=iw*0.8:-1:flags=lanczos,format=rgba,eq=saturation=1:contrast=1.3,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0 demo.gif
 ```
 
 ### MP4

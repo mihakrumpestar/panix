@@ -32,7 +32,7 @@
 
 ## Demo
 
-![Demo](https://github.com/user-attachments/assets/55b2a31c-cd79-419b-9f10-63fc9d5130a6)
+![Demo](https://github.com/user-attachments/assets/eb1a5539-65f0-4a75-b5de-5a7988e89036)
 
 Screenshot:
 
@@ -144,6 +144,8 @@ And run it with:
 ```sh
 nix run github:mihakrumpestar/panix -- deploy
 ```
+
+Prebuilt binaries are available from a Cachix cache; see the [installation docs](https://panix.xyz/getting-started/installation/) to opt in.
 
 For the complete schema, see [panix-schema.yaml](gen/panix-schema.yaml).
 
