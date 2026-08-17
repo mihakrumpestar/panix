@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.9.2](https://github.com/mihakrumpestar/panix/compare/v0.9.1..v0.9.2) - 2026-08-17
+
+Panix can now automatically recover failed deploys: the new `auto_rollback` attribute (opt-in, settable at fleet, flake, installable, or machine level and inherited downward) reverts machines to the pre-deploy generation captured during the Inspect phase when activation fails.
+
+The rollback is shown in build logs as an explicit step, and the deploy still reports the original activation failure so a rolled-back deploy never looks successful.
+
+This release also drops the pond and uniseg dependencies for a smaller binary, improves SSH error handling, and adds an optional Cachix cache.
+
+The nix build path is fixed as well (version parsing and linking).
+
+### Bug Fixes
+
+- Strip trailing newline from version in nix build by @mihakrumpestar ([1b069aa](https://github.com/mihakrumpestar/panix/commit/1b069aa34069616c323f4c4542fed6d352d7bab8))
+- Add back linking for nix build by @mihakrumpestar ([ab643e9](https://github.com/mihakrumpestar/panix/commit/ab643e92734a4a354ec50db35e0b8fa409b889c3))
+
+### Features
+
+- Add auto-rollback by @mihakrumpestar ([78c7567](https://github.com/mihakrumpestar/panix/commit/78c75670f5c6d0decafaf5f17be73676570a792a))
+
+### Refactor
+
+- Drop pond and uniseg deps (decrease binary size), forbid fmt.Errorf by @mihakrumpestar ([2a45b8f](https://github.com/mihakrumpestar/panix/commit/2a45b8f60b3ff215dc9d4ad3dd3dfa38a47c4724))
+
+### Misc
+
+- Update assets and docs, improve SSH error handling, add optional cachix cache by @mihakrumpestar ([efcefc0](https://github.com/mihakrumpestar/panix/commit/efcefc0b808b9d9dc9872cfafb98a3d8a33bd469))
+
 ## [0.9.1](https://github.com/mihakrumpestar/panix/compare/v0.9.0..v0.9.1) - 2026-08-14
 
 Panix now supports **custom output types**: declare any flake output under the top-level `output_types` section with custom build and activation semantics. `output_type_attr` overrides the flake attribute used in the attrpath (per type or per installable), and a built-in `maidPackages` preset handles nix-maid bundles out of the box. This release also adds shell completions that activate automatically in Nix environments, fixes Lix profile installs (#12), improves TUI navigation and quit behavior, and repositions Panix as a Universal Nix Deployment Orchestrator.
