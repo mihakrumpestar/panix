@@ -159,7 +159,7 @@ tasks:
   nix:build:
     desc: Build the package using nix
     cmds:
-      - nix build .#default --extra-experimental-features "nix-command flakes" --no-link --print-out-paths
+      - nix build .#default --extra-experimental-features "nix-command flakes" --print-out-paths
       - ls -sh result/bin/panix
 
   nix:vendor:
