@@ -27,8 +27,9 @@ func (c *TemplateCmd) Run() error {
 	}
 
 	var decoded struct {
-		Flags any
-		Fleet any
+		Flags       any `yaml:"flags"`
+		OutputTypes any `yaml:"output_types"`
+		Fleet       any `yaml:"fleet"`
 	}
 
 	err = yamlx.Decode(processedYAML, &decoded)

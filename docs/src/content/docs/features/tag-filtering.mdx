@@ -8,12 +8,12 @@ sidebar:
 Every name (flake, installable type, installable name, machine) is automatically a tag. Tags accumulate through inheritance (see [Configuration Model](/concepts/configuration-model/) for details). Deploy subsets of your infrastructure:
 
 ```sh
-panix --tags production            # All production-tagged machines
-panix --tags webserver             # All machines under the webserver installable
-panix --tags nixosConfigurations   # All machines under NixOS system installables
-panix --tags homeConfigurations    # All machines under home-manager installables
-panix --tags server-01             # Single machine
-panix --tags server-01,web         # Machines matching either tag
+panix deploy --tags production            # All production-tagged machines
+panix deploy --tags webserver             # All machines under the webserver installable
+panix deploy --tags nixosConfigurations   # All machines under NixOS system installables
+panix deploy --tags homeConfigurations    # All machines under home-manager installables
+panix deploy --tags server-01             # Single machine
+panix deploy --tags server-01,web         # Machines matching either tag
 ```
 
 ## How Tags Work
@@ -39,17 +39,18 @@ fleet:
               web-01:
 ```
 
-The resolved tags for `web-01` under `nixosConfigurations` are: `[production, critical, web, infrastructure, webserver, nixosConfigurations, web-01]`.
+The resolved tags for `web-01` under `nixosConfigurations` are: `production`, `critical`, `web`, `infrastructure`, `webserver`, `nixosConfigurations`, `web-01`.
 
-The resolved tags for `web-01` under `homeConfigurations` are: `[production, critical, infrastructure, alice, homeConfigurations, web-01]`.
+The resolved tags for `web-01` under `homeConfigurations` are: `production`, `critical`, `infrastructure`, `alice`, `homeConfigurations`, `web-01`.
 
 - Tags at each level accumulate (never override)
+- Tags are matched by membership, so the order of the resolved tags does not matter
 
 ## Multiple Tags
 
 Separate multiple tags with commas. Machines matching **any** of the specified tags are included:
 
 ```sh
-panix --tags web,database       # All machines tagged 'web' OR 'database'
-panix --tags nixosConfigurations,homeConfigurations  # All system and home-manager machines
+panix deploy --tags web,database       # All machines tagged 'web' OR 'database'
+panix deploy --tags nixosConfigurations,homeConfigurations  # All system and home-manager machines
 ```

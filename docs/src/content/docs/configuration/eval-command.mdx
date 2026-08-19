@@ -17,19 +17,23 @@ panix eval -o processed.yaml  # Output to file (plain YAML)
 Everything [panix template](/configuration/template-command/) does, plus:
 
 - Loads and validates the full configuration
-- Validates flake URLs and configuration keys (`--validate.flakes`)
-- Validates bootstrap disk encryption key local paths (`--validate.bootstrap-secrets`)
+- Validates flake URLs and configuration keys (`--validate.flakes`, always on)
+- Validates bootstrap disk encryption key local paths (`--validate.bootstrap-secrets`, always on)
 - Resolves inherited attributes, tags, and secrets
 - Filters out disabled and untagged parts of the configuration
 - Outputs the fully resolved configuration
 
 ## Validation Flags
 
+The `--validate.*` flags are opt-in for the workflow commands, where they enable extra checks before anything runs:
+
 ```sh
-panix eval --validate.flakes              # Validate flake URLs and configuration keys
-panix eval --validate.bootstrap-secrets   # Validate bootstrap disk encryption key local paths exist
-panix eval --validate.flakes --validate.bootstrap-secrets  # Both
+panix deploy --validate.flakes              # Validate flake URLs and configuration keys
+panix deploy --validate.bootstrap-secrets   # Validate that bootstrap disk encryption key local paths exist
+panix deploy --validate.flakes --validate.bootstrap-secrets  # Both
 ```
+
+`panix eval` forces both validations on unconditionally.
 
 ## Use Cases
 

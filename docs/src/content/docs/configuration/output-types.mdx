@@ -69,6 +69,8 @@ User-overridable fields can be overridden per-installable under `preset:`. Type-
 - Custom type names must not collide with built-in type names.
 - `system_level` must be set (validation error if missing).
 - If `activation_supported_modes` is declared, `activation_default_mode` must also be set.
+- `activation_default_mode` must be one of `activation_supported_modes`.
+- `set_profile: true` requires `profile_path` to be set.
 - Entries in `activation_non_mutating_modes` and `activation_profile_skip_modes` must be declared in `activation_supported_modes`.
 - Custom types are never bootstrappable (bootstrap only applies to `nixosConfigurations`).
 

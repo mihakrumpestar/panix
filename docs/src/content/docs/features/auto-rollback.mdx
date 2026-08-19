@@ -44,9 +44,10 @@ auto-rollback succeeded: activation failed: exit status 2
 ## When it does not run
 
 - `auto_rollback` is not set (or resolves to false) for the machine.
-- The activation mode is declared non-mutating by the installable's preset — for NixOS that is only `dry-activate`, which just prints what would happen. Custom output types can declare their own non-mutating modes via `activation_non_mutating_modes`.
+- The activation mode is declared non-mutating by the installable's preset. For NixOS that is only `dry-activate`, which just prints what would happen. Custom output types can declare their own non-mutating modes via `activation_non_mutating_modes`.
 - The installable has no profile path (e.g. `packages`, which install via `nix profile add` and have no generation concept).
 - No previous generation was found during Inspect (e.g. a fresh machine).
+- The workflow was cancelled (a cancelled context would make the rollback commands fail instantly, burying the real activation error under rollback noise).
 
 The `test` mode does trigger auto rollback on failure: it skips the profile switch but still activates the configuration (restarts services, sets up `/etc`), so a failed test can leave the machine running the broken config.
 

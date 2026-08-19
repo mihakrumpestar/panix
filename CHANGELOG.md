@@ -29,7 +29,7 @@ The nix build path is fixed as well (version parsing and linking).
 
 ## [0.9.1](https://github.com/mihakrumpestar/panix/compare/v0.9.0..v0.9.1) - 2026-08-14
 
-Panix now supports **custom output types**: declare any flake output under the top-level `output_types` section with custom build and activation semantics. `output_type_attr` overrides the flake attribute used in the attrpath (per type or per installable), and a built-in `maidPackages` preset handles nix-maid bundles out of the box. This release also adds shell completions that activate automatically in Nix environments, fixes Lix profile installs (#12), improves TUI navigation and quit behavior, and repositions Panix as a Universal Nix Deployment Orchestrator.
+Panix now supports **custom output types**: declare any flake output under the top-level `output_types` section with custom build and activation semantics. `output_type_attr` overrides the flake attribute used in the attrpath (per type or per installable), and a built-in `maidConfigurations` preset handles nix-maid bundles out of the box. This release also adds shell completions that activate automatically in Nix environments, fixes Lix profile installs (#12), improves TUI navigation and quit behavior, and repositions Panix as a Universal Nix Deployment Orchestrator.
 
 **Note:** `--no-update-lock-file` is no longer included in default build flags; builds will now update the lock file by default.
 

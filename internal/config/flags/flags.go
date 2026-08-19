@@ -30,8 +30,8 @@ type WorkflowFlags struct {
 
 	Output OutputMode `yaml:"output" json:"output" help:"Output mode: tui, console, json" default:"tui" validate:"omitempty,oneof=tui console json" completion-predictor:"output-mode"`
 
-	RequireAllSuccess bool `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD"`
-	ExitOnComplete    bool `yaml:"exit_on_complete" json:"exit_on_complete,omitempty" help:"Exit TUI on completion ('retry' and 'restart' are disabled in this mode)"`
+	RequireAllSuccess bool `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD ('retry' and 'restart' keybinds are disabled in this mode)"`
+	ExitOnComplete    bool `yaml:"exit_on_complete" json:"exit_on_complete,omitempty" help:"Exit TUI on completion"`
 
 	LocalMachineHostname string `yaml:"local_machine_hostname" json:"local_machine_hostname,omitempty" help:"Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"`
 	DryRun               bool   `yaml:"dry_run" json:"dry_run,omitempty" help:"Show what would be done without executing"`

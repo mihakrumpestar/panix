@@ -28,7 +28,7 @@ properties:
         description: Show what would be done without executing, but with real inspect query
       exit_on_complete:
         type: boolean
-        description: Exit TUI on completion ('retry' and 'restart' are disabled in this mode)
+        description: Exit TUI on completion
       local_machine_hostname:
         type: string
         description: "Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"
@@ -81,7 +81,7 @@ properties:
         additionalProperties: false
       require_all_success:
         type: boolean
-        description: Abort if any task fails, primarily for CI/CD
+        description: Abort if any task fails, primarily for CI/CD ('retry' and 'restart' keybinds are disabled in this mode)
       rollback_generation:
         type: integer
         description: "0=current generation, -N=Nth before current, N=specific generation (default: -1)"
@@ -445,7 +445,7 @@ definitions:
     properties:
       build_default_flags:
         type: array
-        description: "List of base flags for 'nix build' command (default: [--no-link, --no-update-lock-file, --print-out-paths, --keep-going])"
+        description: "List of base flags for 'nix build' command (default: [--no-link, --print-out-paths, --keep-going])"
         items:
           type: string
       build_env:

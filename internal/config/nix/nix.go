@@ -26,7 +26,7 @@ type NixConfig struct {
 	// DefaultFlags replace the built-in base flags for each command when set.
 	// Leave empty to use the built-in defaults.
 	ExperimentalFeatures     []string `yaml:"experimental_features" json:"experimental_features,omitempty" desc:"List of flags to enable nix experimental features (default: [--extra-experimental-features, nix-command flakes])"`
-	BuildDefaultFlags        []string `yaml:"build_default_flags" json:"build_default_flags,omitempty" desc:"List of base flags for 'nix build' command (default: [--no-link, --no-update-lock-file, --print-out-paths, --keep-going])"`
+	BuildDefaultFlags        []string `yaml:"build_default_flags" json:"build_default_flags,omitempty" desc:"List of base flags for 'nix build' command (default: [--no-link, --print-out-paths, --keep-going])"`
 	CopyDefaultFlags         []string `yaml:"copy_default_flags" json:"copy_default_flags,omitempty" desc:"List of base flags for 'nix copy' command (default: [--no-check-sigs])"`
 	NixosInstallDefaultFlags []string `yaml:"nixos_install_default_flags" json:"nixos_install_default_flags,omitempty" desc:"List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"`
 	ProfileAddDefaultFlags   []string `yaml:"profile_add_default_flags" json:"profile_add_default_flags,omitempty" desc:"List of base flags for 'nix profile add' command (default: [])"`

@@ -9,14 +9,18 @@ sidebar:
 
 Panix reads `~/.ssh/config`. If your machine name matches a host alias:
 
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
+
 ```yaml
 machines:
-  production-server-01:     # Uses SSH config: Host, Port, User, IdentityFile
+  production-server-01:     # Uses SSH config: HostName, Port, User (identity file etc. resolved by ssh via the alias)
 ```
 
 No duplication. Your SSH config is the source of truth for connection parameters.
 
 If you don't use SSH config or need to add/change something temporarily you can specify SSH options directly:
+
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
 ```yaml
 machines:
@@ -33,6 +37,8 @@ machines:
 ## Local Machine Detection
 
 Deploying to the machine you're on? If the machine name matches the system hostname, Panix skips SSH entirely, executing commands directly via local shell:
+
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
 ```yaml
 # On a machine with hostname "workstation"

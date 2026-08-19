@@ -1,13 +1,18 @@
 package validate
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
+	"github.com/mihakrumpestar/panix/pkg/nixver"
+	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -492,4 +497,80 @@ func runSetProfileRequiresProfilePathCase(t *testing.T, preset installablepkg.Pr
 	} else {
 		assert.NoError(t, err, "custom type declaration should pass validation")
 	}
+}
+
+// newBuildModeMachine returns a machine whose SSH client is initialized with
+// the given hostname. The machine is local iff hostname matches the local
+// host "local-host". An explicit hostname avoids the SSH config alias lookup.
+func newBuildModeMachine(t *testing.T, hostname string) *machine.Machine {
+	t.Helper()
+
+	machineI := &machine.Machine{}
+	machineI.SSH.Hostname = hostname
+	require.NoError(t, machineI.SSH.Init(hostname, "local-host", nixver.Info{}))
+
+	return machineI
+}
+
+// newBuildModeInstallable returns an installable in the given build mode
+// owning the machines in declaration order.
+func newBuildModeInstallable(buildMode nix.BuildMode, machines ...*machine.Machine) *installablepkg.Installable {
+	inst := &installablepkg.Installable{Nix: nix.NixConfig{BuildMode: buildMode}}
+	inst.Machines = atomicorderedmap.New[string, *machine.Machine]()
+
+	for i, m := range machines {
+		inst.Machines.Set(fmt.Sprintf("machine-%d", i), m)
+	}
+
+	inst.Xpath = xpath.New("fleet", "test")
+
+	return inst
+}
+
+// TestValidateBuildMode_LocalModeExempt verifies local mode never checks
+// machines: it passes with none declared.
+func TestValidateBuildMode_LocalModeExempt(t *testing.T) {
+	t.Parallel()
+
+	inst := newBuildModeInstallable(nix.BuildModeLocal)
+
+	assert.Empty(t, validateBuildMode(inst, "test.xpath", nil))
+}
+
+// TestValidateBuildMode_RemoteNoMachinesRejected verifies remote mode
+// requires at least 1 machine.
+func TestValidateBuildMode_RemoteNoMachinesRejected(t *testing.T) {
+	t.Parallel()
+
+	inst := newBuildModeInstallable(nix.BuildModeRemote)
+
+	assert.Equal(t,
+		[]string{"test.xpath: remote mode requires at least 1 machine"},
+		validateBuildMode(inst, "test.xpath", nil))
+}
+
+// TestValidateBuildMode_RemoteFirstMachineRemote verifies remote mode passes
+// when the pinned builder (first declared machine) is remote.
+func TestValidateBuildMode_RemoteFirstMachineRemote(t *testing.T) {
+	t.Parallel()
+
+	inst := newBuildModeInstallable(nix.BuildModeRemote,
+		newBuildModeMachine(t, "10.0.0.1"),
+		newBuildModeMachine(t, "10.0.0.2"))
+
+	assert.Empty(t, validateBuildMode(inst, "test.xpath", nil))
+}
+
+// TestValidateBuildMode_RemoteFirstMachineLocalRejected verifies the pinned
+// builder must not be the local machine.
+func TestValidateBuildMode_RemoteFirstMachineLocalRejected(t *testing.T) {
+	t.Parallel()
+
+	inst := newBuildModeInstallable(nix.BuildModeRemote,
+		newBuildModeMachine(t, "local-host"),
+		newBuildModeMachine(t, "10.0.0.2"))
+
+	assert.Equal(t,
+		[]string{"test.xpath: remote mode requires the first machine to be remote (not local)"},
+		validateBuildMode(inst, "test.xpath", nil))
 }

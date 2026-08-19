@@ -42,18 +42,18 @@ panix deploy --log --log-file deploy.log  # Log to deploy.<epoch>.log
 
 Console/JSON output includes:
 
-- Structured fields: xpath, phase, description, command, duration, status, output
+- Structured fields: xpath, phase, description, command, duration, status, status_running, output
 - `command_start` / `command_end` events per command with duration in seconds
 - `phase_start` / `phase_end` events per phase
-- `workflow_end` with final state of all machines (status, phase, total duration, error)
+- `workflow_end` with final state of all machines (xpath, status, phase, total duration, error)
 - Failed events are logged at `ERROR` level, successful ones at `INFO`
 
 Example:
 
 ```json
-{"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh ...","event":"command_start","time":"2026-04-08T23:58:59+02:00","message":"command started"}
+{"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh ...","event":"command_start","status_running":"activating","time":"2026-04-08T23:58:59+02:00","message":"command started"}
 {"level":"info","xpath":"fleet/infrastructure/personal-workstation/personal-workstation","phase":"activate","description":"activate","command":"ssh ...","event":"command_end","duration":1.94,"output":"...","status":"success","time":"2026-04-08T23:59:01+02:00","message":"command finished"}
-{"level":"error","event":"workflow_end","machines":{"...":{"status":"failed","phase":"inspect","duration":0.06,"error":"reachability check failed: regular SSH is unreachable"}},"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
+{"level":"error","event":"workflow_end","machines":[{"xpath":"fleet/...","status":"failed","phase":"inspect","duration":0.06,"error":"reachability check failed: regular SSH is unreachable"}],"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
 ```
 
 ## Failure Modes
@@ -62,7 +62,7 @@ Example:
 # Fail immediately on first error
 panix deploy --require-all-success
 
-# In TUI mode (console mode does this automatically), force exit when workflow finishes
+# In TUI mode (console and JSON modes do this automatically), force exit when workflow finishes
 # (by default TUI stays open)
 panix deploy --exit-on-complete
 ```

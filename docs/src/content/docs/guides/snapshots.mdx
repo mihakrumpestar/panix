@@ -18,12 +18,12 @@ Here's what a snapshot contains (trimmed for brevity):
 
 ```json
 {
-  "nix": "nix (Nix) 2.34.7",
+  "nix": "nix (Nix) 2.35.1",
   "snapshot": {
-    "panix_version": "0.8.0",
-    "start_time": "2026-06-24T14:33:26+02:00",
+    "panix_version": "0.9.1",
+    "start_time": "2026-08-15T16:46:07.799909311+02:00",
     "reason": "manual",
-    "snapshot_time": "2026-06-24T14:33:34+02:00"
+    "snapshot_time": "2026-08-15T16:47:10.796833231+02:00"
   },
   "phases": ["inspect", "build", "transfer", "activate"],
   "flags": {
@@ -36,112 +36,124 @@ Here's what a snapshot contains (trimmed for brevity):
     "flakes": [
       {
         "key": "infrastructure",
-        "url": "../infrastructure",
-        "configurations": [
-          {
-            "key": "personal-workstation",
-            "machines": [
-              {
-                "key": "personal-workstation",
-                "ssh": { "hostname": "10.0.200.48", "port": 22222, "username": "root" },
-                "meta_inspect": {
-                  "reachable": true,
-                  "is_root": true,
-                  "bootstrapped": true,
-                  "architecture": "x86_64",
-                  "generations": { "current": 143 },
-                  "nixos": "26.11.20260608.8c3cede",
-                  "kernel": "7.0.11"
-                },
-                "logs": {
-                  "phase_logs": [
-                    {
-                      "key": "inspect",
-                      "value": {
-                        "command_logs": [
-                          {
-                            "description": "bootstrap detection",
-                            "command": "ssh ... personal-workstation cat /etc/os-release",
-                            "output": ["ID=nixos", "PRETTY_NAME=\"NixOS 26.11 (Zokor)\"", "VERSION=\"26.11\""],
-                            "time_and_state": { "duration": 148303250 }
-                          }
-                        ]
-                      }
-                    },
-                    {
-                      "key": "activate",
-                      "value": {
-                        "command_logs": [
-                          {
-                            "description": "activate",
-                            "command": "ssh ... personal-workstation /nix/store/.../bin/switch-to-configuration switch",
-                            "output": [
-                              "activating the configuration...",
-                              "setting up /etc...",
-                              "restarting the following user units: nixos-activation.service",
-                              "the following new units were started: NetworkManager-dispatcher.service"
-                            ],
-                            "time_and_state": { "duration": 3629695817 }
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "machine_state": { "status": "done", "phase": "activate", "active_ssh": "regular" }
-              },
-              {
-                "key": "fake",
-                "ssh": { "hostname": "fake", "port": 22, "username": "root" },
-                "meta_inspect": {},
-                "logs": {
-                  "phase_logs": [
-                    {
-                      "key": "inspect",
-                      "value": {
-                        "command_logs": [
-                          {
-                            "description": "SSH reachability check",
-                            "command": "",
-                            "output": [],
-                            "time_and_state": { "duration": 2260866, "end_error": "regular SSH is unreachable" }
-                          }
-                        ],
-                        "time_and_state": { "end_error": "reachability check failed: regular SSH is unreachable" }
-                      }
-                    }
-                  ]
-                },
-                "machine_state": {
-                  "status": "failed",
-                  "status_msg": "SSH unreachable",
-                  "phase": "inspect",
-                  "error": "reachability check failed: regular SSH is unreachable"
-                }
-              }
-            ],
-            "meta_build": {
-              "system_closure": "/nix/store/13m660i2jgygal13liim04xmjjii9q3v-nixos-system-personal-workstation-26.11.20260608.8c3cede"
-            },
-            "logs": {
-              "phase_logs": [
+        "value": {
+          "url": "../infrastructure",
+          "installables": [
+            {
+              "key": "nixosConfigurations",
+              "value": [
                 {
-                  "key": "build",
+                  "key": "personal-workstation",
                   "value": {
-                    "command_logs": [
+                    "machines": [
                       {
-                        "description": "build system closure",
-                        "command": "nix ... build --no-link --print-out-paths ../infrastructure#nixosConfigurations.personal-workstation.config.system.build.toplevel",
-                        "output": ["/nix/store/...-nixos-system-personal-workstation-..."],
-                        "time_and_state": { "duration": 1268887044 }
+                        "key": "personal-workstation",
+                        "value": {
+                          "ssh": { "hostname": "10.0.200.48", "port": 22222, "username": "root" },
+                          "meta_inspect": {
+                            "reachable": true,
+                            "is_root": true,
+                            "bootstrapped": true,
+                            "architecture": "x86_64",
+                            "generations": { "current": 205 },
+                            "nixos": "26.11 (Zokor)",
+                            "kernel": "7.1.5"
+                          },
+                          "logs": {
+                            "phase_logs": [
+                              {
+                                "key": "inspect",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "bootstrap detection",
+                                      "command": "ssh ... personal-workstation cat /etc/os-release",
+                                      "output": ["ID=nixos", "PRETTY_NAME=\"NixOS 26.11 (Zokor)\"", "VERSION=\"26.11 (Zokor)\""],
+                                      "time_and_state": { "duration": 11652245 }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "key": "activate",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "activate",
+                                      "command": "ssh ... personal-workstation /nix/store/.../bin/switch-to-configuration switch",
+                                      "output": [
+                                        "activating the configuration...",
+                                        "setting up /etc...",
+                                        "restarting the following user units: nixos-activation.service",
+                                        "the following new units were started: NetworkManager-dispatcher.service"
+                                      ],
+                                      "time_and_state": { "duration": 7738726666 }
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          },
+                          "machine_state": { "status": "done", "phase": "activate", "active_ssh": "regular" }
+                        }
+                      },
+                      {
+                        "key": "fake",
+                        "value": {
+                          "ssh": { "hostname": "fake", "port": 22, "username": "root" },
+                          "meta_inspect": {},
+                          "logs": {
+                            "phase_logs": [
+                              {
+                                "key": "inspect",
+                                "value": {
+                                  "command_logs": [
+                                    {
+                                      "description": "SSH reachability check",
+                                      "command": "",
+                                      "output": [],
+                                      "time_and_state": { "duration": 66892226, "end_error": "regular SSH is unreachable" }
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          },
+                          "machine_state": {
+                            "status": "failed",
+                            "status_msg": "SSH unreachable",
+                            "phase": "inspect",
+                            "error": "reachability check failed: regular SSH is unreachable"
+                          }
+                        }
                       }
-                    ]
+                    ],
+                    "meta_build": {
+                      "closure": "/nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090"
+                    },
+                    "logs": {
+                      "phase_logs": [
+                        {
+                          "key": "build",
+                          "value": {
+                            "command_logs": [
+                              {
+                                "description": "build system closure",
+                                "command": "nix ... build --no-link --print-out-paths ../infrastructure#nixosConfigurations.personal-workstation.config.system.build.toplevel",
+                                "output": ["/nix/store/...-nixos-system-personal-workstation-..."],
+                                "time_and_state": { "duration": 51724055792 }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
                   }
                 }
               ]
             }
-          }
-        ]
+          ]
+        }
       }
     ]
   }

@@ -51,11 +51,12 @@ fleet:
 
 ## Top-Level Structure
 
-The configuration has two top-level keys:
+The configuration has three top-level keys:
 
 | Key | Purpose |
 |-----|---------|
 | `flags` | Global flags (activation mode, output mode, TUI settings, logging, snapshots, profiling) |
+| `output_types` | Custom output type presets, applied as defaults to installables of that type (see [custom output types](/configuration/output-types/)) |
 | `fleet` | Fleet definition (flakes, installables, machines, SSH, secrets, nix options) |
 
 Values of `flags` are all overridable via CLI arguments. See the [full YAML reference](/configuration/reference/) for every available option.

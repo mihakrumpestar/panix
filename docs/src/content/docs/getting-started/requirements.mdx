@@ -29,7 +29,7 @@ sidebar:
 
   Nix 2.30 renamed `nix profile install` to `nix profile add` (keeping `install` as an alias). Lix never adopted this rename and only supports `nix profile install`.
 
-  When Panix detects Lix on a target machine (during the inspect phase), it automatically uses `nix profile install` instead of `nix profile add` for package activation.
+  When Panix detects Lix on the local machine, it automatically uses `nix profile install` instead of `nix profile add` for package activation on all targets (targets are not checked individually; the local nix flavor is used).
 
 ## Caveats
 

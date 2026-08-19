@@ -1,11 +1,11 @@
 ---
 title: Nix Command Flags
-description: Pass additional flags to nix build, nix copy, and nixos-install.
+description: Pass additional flags to nix build, nix copy, nix profile add, and nixos-install.
 sidebar:
   order: 4
 ---
 
-Pass additional flags to nix commands (`nix build`, `nix copy`, `nixos-install`) through configuration:
+Pass additional flags to nix commands (`nix build`, `nix copy`, `nix profile add`, `nixos-install`) through configuration:
 
 ```yaml
 fleet:
@@ -44,7 +44,7 @@ When no `*_default_flags` field is set, these built-in defaults are used:
 | Field | Built-in default |
 |-------|-----------------|
 | `experimental_features` | `["--extra-experimental-features", "nix-command flakes"]` |
-| `build_default_flags` | `["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]` |
+| `build_default_flags` | `["--no-link", "--print-out-paths", "--keep-going"]` |
 | `copy_default_flags` | `["--no-check-sigs"]` |
 | `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy"]` |
 | `profile_add_default_flags` | `[]` (none) |

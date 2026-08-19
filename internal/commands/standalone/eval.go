@@ -12,6 +12,7 @@ type EvalCmd struct {
 
 	flags.ConfigFlags
 	flags.EvalFlags
+	flags.Runtime `embed:"" prefix:"runtime."`
 }
 
 func (c *EvalCmd) Run() error {
@@ -19,6 +20,7 @@ func (c *EvalCmd) Run() error {
 		WorkflowFlags: flags.WorkflowFlags{
 			ConfigFlags: c.ConfigFlags,
 			EvalFlags:   c.EvalFlags,
+			Runtime:     c.Runtime,
 		},
 	}
 

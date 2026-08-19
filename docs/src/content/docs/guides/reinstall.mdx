@@ -7,6 +7,8 @@ sidebar:
 
 Panix can force a reinstall of an already running NixOS system. This is useful when you want to completely wipe and reinstall a machine from scratch.
 
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
+
 ```yaml
 machines:
   existing-nixos:

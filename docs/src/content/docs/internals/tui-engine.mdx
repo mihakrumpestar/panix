@@ -46,12 +46,12 @@ sequenceDiagram
   loop per machine goroutine
     W->>W: run phase sequence
     W->>F: update machine state + phase logs
-    W-->>T: notifyUpdate (sync.Cond)
+    W-->>T: Signal update (buffered channel)
   end
 
   Note over W,U: RENDER
   loop
-    T-->>T: WaitForUpdate (block)
+    T-->>T: WaitForUpdate (block on channel)
     T->>F: Recalculate (caches + stats)
     T->>T: render header + table + flow + logs + footer
   end
@@ -67,6 +67,6 @@ sequenceDiagram
   T->>F: capture full state to JSON
 
   U-x T: q (quit)
-  T->>F: snapshot on exit
+  T->>F: snapshot on exit (if enabled)
   T->>T: render final + quit
 ```

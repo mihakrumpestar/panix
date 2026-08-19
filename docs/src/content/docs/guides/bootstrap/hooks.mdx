@@ -9,9 +9,9 @@ Panix provides multiple hook points during bootstrap:
 
 | Hook | When it runs | SSH used |
 |------|--------------|----------|
-| `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH |
-| `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH |
-| `post_bootstrap_provisioned_hooks` | After reboot into new system | Regular SSH |
+| `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
+| `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
+| `post_bootstrap_provisioned_hooks` | After reboot into new system (immediately in the installer when automatic reboot is disabled) | Regular SSH |
 
 ## Special Hook Commands
 
@@ -19,6 +19,8 @@ Panix provides multiple hook points during bootstrap:
 - `waitForOffline`: Wait for machine to become unreachable (useful during reboot)
 
 ## Example
+
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
 ```yaml
 machines:
@@ -39,9 +41,13 @@ machines:
 
 To prevent automatic reboot after `nixos-install` (useful for manual inspection or custom reboot handling):
 
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
+
 ```yaml
 machines:
   server:
     bootstrap:
       disable_automatic_reboot: true
 ```
+
+When automatic reboot is disabled, `post_bootstrap_provisioned_hooks` still runs immediately after `nixos-install`, inside the installer environment over bootstrap SSH, before any reboot.

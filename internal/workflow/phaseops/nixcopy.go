@@ -5,8 +5,8 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
@@ -77,19 +77,11 @@ func nixCopyBaseArgs(installable *installable.Installable, toURL string) []strin
 	baseArgs = append(baseArgs, "copy")
 
 	if installable.Nix.BuildMode == nix.BuildModeRemote {
-		var fromSSH ssh.SSHClient
-
-		for i, pair := range installable.Machines.Pairs() {
-			if i == 0 && pair.Value != nil {
-				fromSSH = pair.Value.GetActiveSSH()
-
-				break
-			}
-		}
-
-		if fromSSH.IsInitialized() {
-			baseArgs = append(baseArgs, "--from", fromSSH.NixStoreURL())
-		}
+		// Copy from the pinned builder machine: the same first declared
+		// machine the build phase built on (see remoteBuilderSSH in build.go).
+		// GetActiveSSH panics on uninitialized clients, so no fallback exists:
+		// remote transfer without a valid builder is a hard failure.
+		baseArgs = append(baseArgs, "--from", remoteBuilderSSH(installable).NixStoreURL())
 	}
 
 	baseArgs = append(baseArgs, "--to", toURL)

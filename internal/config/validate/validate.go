@@ -163,22 +163,15 @@ func validateBuildMode(out *installablepkg.Installable, outPath string, errs []s
 		return errs
 	}
 
-	machineCount := 0
-	firstMachineIsLocal := false
+	// The builder is the first declared machine (Installable.RemoteBuilder);
+	// build (--store) and transfer (--from) both pin to it.
+	builder := out.RemoteBuilder()
 
-	for i, machinePair := range out.Machines.Pairs() {
-		machineCount++
-
-		if i == 0 && machinePair.Value != nil && machinePair.Value.SSH.IsLocal() {
-			firstMachineIsLocal = true
-		}
-	}
-
-	if machineCount == 0 {
+	if builder == nil {
 		errs = append(errs, outPath+": remote mode requires at least 1 machine")
 	}
 
-	if firstMachineIsLocal {
+	if builder != nil && builder.SSH.IsLocal() {
 		errs = append(errs, outPath+": remote mode requires the first machine to be remote (not local)")
 	}
 

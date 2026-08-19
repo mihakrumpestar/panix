@@ -27,6 +27,8 @@ The bootstrap flow is where Panix distinguishes itself most clearly:
 4. **nixos-install** lays down the system
 5. **Reboot** into your new NixOS system
 
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
+
 ```yaml
 machines:
   bare-metal:

@@ -76,10 +76,11 @@ And an additional phase for **rollbacks**.
 - **Scope-aware deduplication**: three machines sharing the same installable trigger one build, not three.
 - **Remote builds**: build on a target machine when it has more resources or a different architecture. The closure copies directly between machines.
 - **Multi-flake deployments**: span multiple repositories in a single run. Each flake is independently buildable.
-- **Tag-based filtering**: every name is a tag. Deploy subsets: `panix --tags production`, `panix --tags webserver`.
+- **Tag-based filtering**: every name is a tag. Deploy subsets: `panix deploy --tags production`, `panix deploy --tags webserver`.
 - **Secret management**: files transferred with configurable uid, gid, permissions. Never stored in `/nix/store`. Bootstrap-aware path prefixing.
 - **Hooks system**: `post_bootstrap_hooks`, `post_bootstrap_install_hooks`, `post_bootstrap_provisioned_hooks`. Special commands: `waitForOnline`, `waitForOffline`.
 - **Dry-run modes**: preview without connections (`--dry-run`), or with real machine inspection (`--dry-run-with-inspect`).
+- **Auto rollback**: opt-in `auto_rollback` reverts machines to their pre-deploy generation when activation fails. The rollback shows as extra steps in the build logs.
 - **Snapshot & replay**: capture workflow state to JSON. Replay in TUI for debugging or sharing.
 - **Extensible output types**: declare custom types under `output_types` to deploy any flake output with custom build and activation semantics.
 - **Flake-agnostic**: zero modifications to your flake. Configuration lives in `panix.yml`.

@@ -46,52 +46,23 @@ Cross-package benchmarks live in `tests/bench/`:
 
 ## E2E Tests
 
-End-to-end tests verify the full deployment pipeline against real QEMU VMs, covering both the NixOS ISO boot and the kexec boot, for both local and remote build modes, followed by a re-deploy to the installed systems.
+End-to-end tests run the full deployment pipeline against real QEMU VMs:
 
-**Prerequisites**: KVM (`/dev/kvm`), QEMU, Nix, `cdrtools`
+- **Bootstrap**: NixOS installed from the ISO installer, and Debian converted via kexec, in both local and remote build modes
+- **Redeploy**: a second deploy against the installed systems, covering all installable types (NixOS, home-manager, packages, maid, system-manager) plus an auto-rollback test
+- **Verification**: each VM is checked for the `panix-e2e-test-pass` marker file and NixOS identity in `/etc/os-release`
 
-```sh
-task go:test:e2e
-```
-
-**Test scope selection**:
+**Prerequisites**: KVM (`/dev/kvm`), QEMU, Nix, harmonia
 
 ```sh
-task go:test:e2e -- --test=local    # Only local build mode (2 VMs)
-task go:test:e2e -- --test=remote   # Only remote build mode (2 VMs)
-task go:test:e2e -- --test=both     # Both modes (4 VMs, default)
+task go:test:e2e                          # Both build modes (5 VMs, default)
+task go:test:e2e -- --test=local          # Only local build mode (3 VMs)
+task go:test:e2e -- --test=remote         # Only remote build mode (2 VMs)
 ```
 
-The whole test usually takes only ~2 min (local only), or ~2.5 min (both modes).
+A full run takes ~3 minutes. The suite is a standalone Go program (`go run ./tests/e2e/`), not `go test`; set `PANIX_BIN=/path/to/panix` to test a pre-built binary.
 
-The tests are a standalone Go program (`go run ./tests/e2e/`), not `go test`. Use `PANIX_BIN=/path/to/panix` to test a pre-built binary instead of `go run`.
-
-**Phase 0, Setup** (parallel where possible):
-1. Generate SSH keys
-2. Download and bake Debian cloud image (rsync pre-installed via cloud-init)
-3. Build NixOS installer ISO, kexec installer, and NixOS closures
-4. Create cloud-init seed ISOs and disk images (blank target + Debian overlay)
-
-**Phase 1, Bootstrap**: Runs `panix deploy` against all VMs (disko, nixos-install, reboot). Remote mode builds on the first machine via `--store ssh-ng://`.
-
-**Phase 2, Redeploy**: Runs `panix deploy` again against the now-installed NixOS systems (switch-to-configuration).
-
-**Verification**: SSHes into each VM and checks for the `panix-e2e-test-pass` marker file and NixOS identity in `/etc/os-release`.
-
-**VM ports** (localhost SSH forwarding):
-
-| VM | Port |
-|---|---|
-| NixOS ISO (local) | 10022 |
-| Kexec/Debian (local) | 10023 |
-| NixOS ISO (remote) | 10025 |
-| Kexec/Debian (remote) | 10026 |
-
-**Nix cache server**: A harmonia instance starts automatically before tests run to serve as a local Nix cache, speeding up repeated builds and making them semi-reproducable (by not relying on Nix binary cache (and network speed) for deploy builds and time vise consistency).
-
-**What gets cached** (`tests/e2e/.cache/`): SSH keys, kexec tarball, Debian image (with rsync pre-baked), NixOS installer ISO, disk images. Reuse across runs avoids redundant downloads/builds.
-
-**Logs** (`tests/e2e/log/`): Recreated each run. Per-VM console logs with timestamps, panix logs per deploy, snapshot JSONs.
+Expensive setup (baked Debian images, disk images, installer ISO, kexec tarball) is cached across runs, and a local harmonia cache server starts automatically so deploy builds do not hit the network. Logs are recreated each run in `tests/e2e/log/` (per-VM console logs, panix logs, snapshot JSONs).
 
 ### E2E Profiling
 
@@ -110,12 +81,16 @@ Panix supports CPU, memory, block, mutex, and goroutine profiling via the `profi
 Cross-commit performance benchmarking. Builds panix at specific commits, runs E2E, and compares profiles.
 
 ```sh
-task bench:e2e                          # Run for default commits + HEAD, then show results
+task bench:e2e                          # Run all default phase commits (RUNS=1 by default), then generate graphs and summary table
 task bench:e2e COMMITS="sha1 sha2"      # Custom commit list
 task bench:e2e:run COMMIT=sha           # Build & run E2E for a single commit
-task bench:e2e:result                   # Show comparison table from saved profiles
+task bench:e2e:graph                    # Generate comparison graphs and summary table from saved profiles
 ```
 
-`bench:e2e:run` creates a git worktree, builds panix via `nix build`, runs the full E2E suite, and saves CPU/memory profiles to `tests/e2e/bench-results/<commit>/`.
+`bench:e2e:run` creates a git worktree, builds panix via `nix build`, runs the full E2E suite, and saves CPU/memory profiles to `tests/e2e/bench-results/run-<N>/<full-sha>/`.
 
-`bench:e2e:result` extracts duration, CPU utilization, and memory allocation from each commit's profiles, prints a comparison table with diffs from the reference commit, and outputs `go tool pprof` diff commands for interactive analysis.
+`bench:e2e:graph` extracts duration, CPU utilization, and memory allocation from each commit's profiles, prints a comparison table with diffs from the reference commit, and generates comparison graphs.
+
+:::note
+Benchmarks were not updated since the last mayor Panix optimizations, and will probably not be updated to accommodate the breaking changes (nixosConfigurations -> installables).
+:::

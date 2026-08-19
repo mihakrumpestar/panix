@@ -28,6 +28,12 @@ func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 }
 
 func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	// MetaBuild is produced by the Build phase; transfer without build
+	// (e.g. --skip-phases=build) has no closure to copy.
+	if fleetLeaf.Installable.MetaBuild == nil {
+		return errors.New("transfer requires the build phase to have produced a closure")
+	}
+
 	systemClosure := fleetLeaf.Installable.MetaBuild.Closure
 
 	return errors.Wrap(phaseops.CopyClosure(exc, fleetLeaf, []string{systemClosure}, true), "transfer failed")

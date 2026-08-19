@@ -12,23 +12,25 @@ Panix supports two build modes: **local** (default) and **remote**. This control
 Builds run on the machine executing Panix:
 
 ```sh
-nix build --no-link --print-out-paths <flake-url>#<installable>
+nix build --no-link --print-out-paths --keep-going <flake-url>#<installable>
 ```
+
+This command is abbreviated: Panix also passes the experimental features flags (`--extra-experimental-features nix-command flakes`) and any configured default and extra build flags (see [Nix Command Flags](./nix-flags.mdx)). The same applies to the remote build command below.
 
 The resulting closure is then transferred to each target machine via `nix copy`.
 
 ## Remote Mode
 
-Builds run on the **first machine** of the installable via the Nix remote store protocol:
+Builds run on the installable's first machine via the Nix remote store protocol:
 
 ```sh
-nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths <flake-url>#<installable>
+nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths --keep-going <flake-url>#<installable>
 ```
 
 This is useful when the target machine has more resources (CPU/RAM) than the deployment machine, or when deployment and target machine are not the same architecture.
 
 :::note
-For installables with multiple machines, the closure is built on the first machine, then copied from the first machine to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine installables in remote mode skip the transfer phase entirely since the closure is already on the target.
+For installables with multiple machines, the closure is built on the first machine, then copied from it to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine installables in remote mode skip the transfer phase entirely since the closure is already on the target.
 :::
 
 :::note
@@ -36,6 +38,7 @@ For installables with multiple machines, the closure is built on the first machi
 
 - The first machine must be **remote** (not the local machine running Panix)
 - The first machine must have Nix installed and the flake inputs available
+- If the first machine is bootstrapped in the same run, remote builds may target its temporary installer environment, whose store is discarded on reboot; builds or copies racing that reboot can fail and need a retry (or a restart, for non-installed artifacts like the disko script). Prefer an already-provisioned first machine, or bootstrap it in a separate run.
 :::
 
 **Configuration:**
@@ -49,12 +52,12 @@ fleet:
         nixosConfigurations:
           my-server:
             nix:
-              build_mode: remote          # Build on the first machine instead of locally
+              build_mode: remote          # Build remotely instead of locally
             machines:
-              builder-and-target:         # First machine = remote builder and target
+              builder-and-target:         # First machine: remote builder and target
                 ssh:
                   hostname: 192.168.1.100
-              target-2:                   # Closure copied from builder to target-2
+              target-2:                   # Closure copied from builder-and-target to target-2
                 ssh:
                   hostname: 192.168.1.101
 ```

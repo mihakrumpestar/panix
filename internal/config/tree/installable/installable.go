@@ -31,6 +31,22 @@ type MetaBuild struct {
 	Closure string `yaml:"-" json:"closure,omitempty"`
 }
 
+// RemoteBuilder returns the machine remote builds are pinned to: the
+// installable's first declared machine (in declaration order, post-filter).
+// Config validation (validate.validateBuildMode) requires remote-mode
+// installables to declare at least one machine and requires this machine to
+// be remote; build and transfer both target it (--store and --from). Returns
+// nil when no machines are declared.
+func (i *Installable) RemoteBuilder() *machine.Machine {
+	for _, pair := range i.Machines.Pairs() {
+		if pair.Value != nil {
+			return pair.Value
+		}
+	}
+
+	return nil
+}
+
 // Init initializes the Installable, merging parent attributes and nix config.
 // The type and name are set from the YAML keys (the two-level map key).
 // The xpath uses the composite key (type/name) to avoid collisions between

@@ -10,10 +10,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -31,7 +32,7 @@ func BuildInstallable(
 	installable := fleetLeaf.Installable
 	machine := fleetLeaf.Machine
 
-	commandWithArgs := nixBuildCommand(installable, machine, installables)
+	commandWithArgs := nixBuildCommand(installable, installables)
 
 	var storePath string
 
@@ -75,13 +76,29 @@ func BuildInstallable(
 	return storePath, nil
 }
 
-func nixBuildCommand(installable *installable.Installable, machineI *machine.Machine, installables []string) []string {
+// remoteBuilderSSH returns the SSH endpoint remote-mode commands target:
+// the installable's pinned builder (first declared machine, see
+// Installable.RemoteBuilder). Panics on the validation-excluded no-machines
+// case, mirroring Machine.GetActiveSSH's internal-error panic; onceasync and
+// the worker pool recover panics into phase errors.
+func remoteBuilderSSH(installable *installable.Installable) ssh.SSHClient {
+	builder := installable.RemoteBuilder()
+	if builder == nil {
+		panic("internal error: remote-mode installable has no machines (validation should have rejected it)")
+	}
+
+	return builder.GetActiveSSH()
+}
+
+func nixBuildCommand(installable *installable.Installable, installables []string) []string {
 	baseArgs := []string{"nix"}
 	baseArgs = append(baseArgs, installable.Nix.GetExperimentalFeatures()...)
 	baseArgs = append(baseArgs, "build")
 
 	if installable.Nix.BuildMode == nix.BuildModeRemote {
-		storeURL := machineI.SSH.NixStoreURL()
+		// The builder is pinned to the first declared machine, so the command
+		// is identical regardless of which machine's goroutine executes it.
+		storeURL := remoteBuilderSSH(installable).NixStoreURL()
 		baseArgs = append(baseArgs,
 			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
 	}
@@ -101,7 +118,15 @@ func nixBuildEnv(installable *installable.Installable, machineI *machine.Machine
 		return nil, err
 	}
 
-	sshOpts := machineI.GetActiveSSH().MaybeNixSSHOpts()
+	// In remote mode, NIX_SSHOPTS must target the pinned builder machine
+	// (the same machine as the --store URL), not whichever machine's
+	// goroutine executed the build.
+	builderSSH := machineI.GetActiveSSH()
+	if installable.Nix.BuildMode == nix.BuildModeRemote {
+		builderSSH = remoteBuilderSSH(installable)
+	}
+
+	sshOpts := builderSSH.MaybeNixSSHOpts()
 
 	// User env first so panix-internal vars (XDG_CACHE_HOME, NIX_SSHOPTS)
 	// take precedence on key conflicts.

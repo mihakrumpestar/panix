@@ -5,6 +5,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -313,4 +314,35 @@ func assertCustomPresetDefaultsMerged(t *testing.T, customPresets CustomOutputTy
 	assert.True(t, *inst.Preset.SetProfile)
 	require.NotNil(t, inst.Preset.IsSystemLevel)
 	assert.True(t, *inst.Preset.IsSystemLevel)
+}
+
+// TestRemoteBuilder_ReturnsFirstDeclaredMachine verifies the builder pin:
+// always the first declared machine, post-filter declaration order. Build
+// (--store) and transfer (--from) both target it so that once-per-installable
+// phases are deterministic regardless of which machine's goroutine executes.
+func TestRemoteBuilder_ReturnsFirstDeclaredMachine(t *testing.T) {
+	t.Parallel()
+
+	first := &machine.Machine{}
+	second := &machine.Machine{}
+	inst := &Installable{
+		Machines: atomicorderedmap.New[string, *machine.Machine](),
+	}
+	inst.Machines.Set("first", first)
+	inst.Machines.Set("second", second)
+
+	assert.Same(t, first, inst.RemoteBuilder())
+}
+
+// TestRemoteBuilder_NilWhenNoMachines documents the accessor contract: nil
+// means validation should have rejected the config (remote mode requires at
+// least 1 machine); remote-mode callers treat nil as an invariant violation.
+func TestRemoteBuilder_NilWhenNoMachines(t *testing.T) {
+	t.Parallel()
+
+	inst := &Installable{
+		Machines: atomicorderedmap.New[string, *machine.Machine](),
+	}
+
+	assert.Nil(t, inst.RemoteBuilder())
 }

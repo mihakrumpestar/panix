@@ -367,7 +367,7 @@ Two commands help you inspect what your config becomes:
 panix template -c panix.yml -o processed.yml
 ```
 
-Note: the output contains only the `flags` and `fleet` top-level keys, so `anchor_` definition keys are resolved and absent from it.
+Note: the output contains only the `flags`, `fleet`, and `output_types` (when defined) top-level keys, so `anchor_` definition keys are resolved and absent from it.
 
 - **[`panix eval`](/configuration/eval-command/):** runs the full pipeline: templates, anchors, defaults, inheritance, and validation. Use this to see the final evaluated configuration panix will act on.
 
@@ -377,7 +377,7 @@ panix eval -c panix.yml -o evaluated.yml
 
 ## Troubleshooting
 
-Template errors are wrapped with the config path (`failed to process templates in config "panix.yml"`); the table lists the distinguishing inner message. Struct-tag validation failures (bad flake URL, missing required field) surface as `invalid configuration`.
+Template errors are wrapped (`failed to process templates in config`); the table lists the distinguishing inner message. Struct-tag validation failures (bad flake URL, missing required field) surface as `invalid configuration`.
 
 | Symptom | Meaning |
 | ------- | ------- |

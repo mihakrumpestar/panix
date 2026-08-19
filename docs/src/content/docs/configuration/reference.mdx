@@ -12,10 +12,13 @@ For the YAML schema, see [gen/panix-schema.yaml](https://github.com/mihakrumpest
 
 # All options
 flags: # Listed are default values, all also overridable using CLI arguments
-  activation_mode: test                # Activation mode override. Bare value (e.g. 'test') applies to all types.
-                                        # Per-type: 'nixosConfigurations=test;homeConfigurations=switch'
+  activation_mode:                     # Activation mode override (YAML requires object form; CLI accepts bare value)
+    alltypes: test                     # Applies to all installable types
+    # pertype:                         # Or per type:
+    #   nixosConfigurations: test
+    #   homeConfigurations: switch
   tags: []                             # Filter machines by tags (flakes, installables, machine names are auto-registered as tags)
-  timeout: 2h                          # Workflow timeout (e.g. '1h', '1m15s')
+  timeout: 2h                          # Timeout per command (e.g. '1h', '1m15s')
   exit_on_complete: false              # Exit TUI on completion (disables retry/restart)
   require_all_success: false           # Abort if any task fails (for CI/CD)
   skip_phases: []                      # Phases to skip (not all phases can be skipped)
@@ -25,11 +28,16 @@ flags: # Listed are default values, all also overridable using CLI arguments
   output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
   rollback_generation: -1              # 0=current generation, -N=Nth before current, N=specific generation
 
+  validate:                            # Validation settings (both forced on for 'panix eval')
+    flakes: false                      # Validate flake URLs and configuration keys
+    bootstrap_secrets: false           # Validate that bootstrap disk encryption key local paths exist
+
   tui:
     show_all_build_logs: false         # Show inspect/secrets phases in build logs (keybind h)
     show_active_only: false            # Show only running/errored logs (keybind a)
     show_commands_in_labels: false     # Show raw commands instead of descriptions (keybind c)
     command_output_max_height: 8       # Max height for command output viewports
+    command_output_max_lines: 10000    # Max output lines kept per command (older trimmed from the front)
   logging:
     log: false                         # Enable logging to file (epoch timestamp appended before .log)
     log_file: panix.log                # Log file path
@@ -45,7 +53,7 @@ flags: # Listed are default values, all also overridable using CLI arguments
     mutex: ""                          # Path for mutex profile output (enables mutex profiling)
     goroutine: ""                      # Path for goroutine profile output (enables goroutine profiling)
   runtime:                             # Operational timeouts and concurrency
-    max_concurrency: 1000              # Max parallel workers in the worker pool
+    max_concurrency: 0                 # Max parallel workers in the worker pool (0 = unlimited)
     disconnect_timeout: 5m             # Wait for host to disconnect during reboot
     reconnect_timeout: 10m             # Wait for host to reconnect after reboot
     ssh_reachability_timeout: 2s       # TCP dial timeout for SSH probe
@@ -59,7 +67,7 @@ fleet:
   nix:
     # Default flags: REPLACE built-in base flags (leave unset for built-in defaults, [] clears)
     experimental_features: ["--extra-experimental-features", "nix-command flakes"]
-    build_default_flags: ["--no-link", "--no-update-lock-file", "--print-out-paths", "--keep-going"]
+    build_default_flags: ["--no-link", "--print-out-paths", "--keep-going"]
     copy_default_flags: ["--no-check-sigs"]
     nixos_install_default_flags: ["--no-root-passwd", "--no-channel-copy"]
     profile_add_default_flags: []  # nix profile add has no built-in defaults

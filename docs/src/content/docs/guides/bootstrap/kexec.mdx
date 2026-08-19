@@ -51,6 +51,8 @@ curl -L -o ./kexec-$ARCH.tar.gz \
 
 **Configure in `panix.yml`:**
 
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
+
 ```yaml
 machines:
   my-machine:
