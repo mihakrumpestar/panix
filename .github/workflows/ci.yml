@@ -3,8 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "assets/**"
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,31 +22,36 @@ jobs:
   ci:
     name: Lint & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
 
-      - uses: golangci/golangci-lint-action@v9
+      - uses: golangci/golangci-lint-action@v9.3.0
         with:
-          version: v2.12
+          version: v2.12.2
           install-only: true
 
-      - run: go install github.com/mfridman/tparse@latest
+      - run: go install github.com/mfridman/tparse@v0.18.0
 
-      - uses: go-task/setup-task@v2
+      - uses: go-task/setup-task@v2.2.0
 
       - run: task ci
+
+      # Fail if the CI tasks modified or created anything in the repo
+      - uses: numtide/clean-git-action@v2
 
   nix-build:
     name: Nix Build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@v31.11.1
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -58,6 +68,6 @@ jobs:
           skipPush: ${{ secrets.CACHIX_AUTH_TOKEN == '' }}
           pushFilter: "(-source$|\\.drv$)"
 
-      - uses: go-task/setup-task@v2
+      - uses: go-task/setup-task@v2.2.0
 
       - run: task nix:build

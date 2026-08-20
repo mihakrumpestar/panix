@@ -61,7 +61,7 @@ tasks:
           exit 1
         fi
         echo "0 issues"
-      #- govulncheck ./... # Disabled until we can upgrade go to 1.26.4
+      #- govulncheck ./... # Disabled since Nix never gets version updates soon enough
 
   go:test:
     desc: Run tests with coverage check and summary (race flag requires CGO_ENABLED=1)
@@ -71,8 +71,8 @@ tasks:
         -coverprofile={{.COVER_PROFILE}} -covermode=atomic -coverpkg=./internal/...,./pkg/... -json
         | tee {{.TEST_DIR}}/test.json | tparse -trimpath
         "github.com/mihakrumpestar/panix"
-      - go run github.com/vladopajic/go-test-coverage/v2@latest
-        --profile={{.COVER_PROFILE}} --badge-file-name=gen/coverage.svg
+      - go run github.com/vladopajic/go-test-coverage/v2@v2.19.0
+        --profile={{.COVER_PROFILE}} --threshold-total=60 --badge-file-name=gen/coverage.svg
 
   go:test:bench:
     desc: |

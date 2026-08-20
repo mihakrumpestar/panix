@@ -32,7 +32,8 @@ CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cac
 - **Test data**: use `testdata/` directories for fixture files (e.g. `internal/config/testdata/`).
 - **Test factories**: use `internal/testutil/faker.go` for generating fake domain objects (SSH clients, machines, configs, flakes, fleets).
 - **Linting**: `testifylint` is enforced via golangci-lint with all checks enabled.
-- **Coverage**: `task go:test` runs with `-race -shuffle=on`, generates a coverage profile at `test/cover.out` and a badge at `gen/coverage.svg`.
+- **Coverage**: `task go:test` runs with `-race -shuffle=on`, generates a coverage profile at `test/cover.out` and a badge at `gen/coverage.svg`. CI enforces a minimum total coverage of 60%.
+- **Clean tree**: CI tasks must leave the repository unchanged. At the end of the job, [numtide/clean-git-action](https://github.com/numtide/clean-git-action) fails the build on any uncommitted change.
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
