@@ -16,12 +16,17 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        inherit (pkgs) lib;
 
-        version = pkgs.lib.fileContents ./gen/VERSION;
+        version = lib.fileContents ./gen/VERSION;
+
+        # Completion generation runs the built binary, which only works when
+        # the build platform can execute binaries for the host platform.
+        canRunOnHost = pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform;
       in
       {
         packages = {
-          default = pkgs.buildGoLatestModule {
+          default = pkgs.buildGoModule {
             pname = "panix";
             inherit version;
 
@@ -43,20 +48,16 @@
             # Install shell completions so that NixOS / Home Manager users get
             # tab completion automatically via programs.{bash,zsh,fish}.enable
             # instead of having to manually source completion scripts.
-            nativeBuildInputs =
-              pkgs.lib.optionals (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform)
-                [
-                  pkgs.installShellFiles
-                ];
+            nativeBuildInputs = lib.optionals canRunOnHost [ pkgs.installShellFiles ];
 
-            postInstall = pkgs.lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+            postInstall = lib.optionalString canRunOnHost ''
               installShellCompletion --cmd panix \
                 --bash <($out/bin/panix completion -c bash) \
                 --fish <($out/bin/panix completion -c fish) \
                 --zsh <($out/bin/panix completion -c zsh)
             '';
 
-            meta = with pkgs.lib; {
+            meta = with lib; {
               description = "Universal Nix Deployment Orchestrator";
               homepage = "https://github.com/mihakrumpestar/panix";
               changelog = "https://github.com/mihakrumpestar/panix/releases/tag/v${version}";

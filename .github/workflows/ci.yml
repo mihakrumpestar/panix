@@ -41,8 +41,15 @@ jobs:
 
       - run: task ci
 
-      # Fail if the CI tasks modified or created anything in the repo
-      - uses: numtide/clean-git-action@v2
+      # Fail if the CI tasks modified or created anything in the repo:
+      # run 'task ci' locally and commit the results.
+      - name: Verify clean working tree
+        run: |
+          if [ -n "$(git status --porcelain -unormal)" ]; then
+            echo "Error: repository changes detected:"
+            git status -unormal
+            exit 1
+          fi
 
   nix-build:
     name: Nix Build
