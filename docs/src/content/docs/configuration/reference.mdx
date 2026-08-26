@@ -25,6 +25,8 @@ flags: # Listed are default values, all also overridable using CLI arguments
   local_machine_hostname: my-laptop    # Override which machine is considered local based on machine name (no SSH)
   dry_run: false                       # Show what would happen without executing
   dry_run_with_inspect: false          # Dry run but with real inspect queries
+  out_links: false                     # Create GC root outlinks for built installables (see Nix Command Flags)
+  out_links_dir: .panix                # Directory for build outlinks
   output: tui                          # Output mode: tui (interactive), console (human-readable), json (machine-readable)
   rollback_generation: -1              # 0=current generation, -N=Nth before current, N=specific generation
 

@@ -3,10 +3,13 @@ package bootstrap
 import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/pkg/errors"
 )
 
-type Handler struct{}
+type Handler struct {
+	OutLinks phaseops.OutLinks
+}
 
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 	if !fleetLeaf.Installable.Preset.IsBootstrappable {
@@ -18,7 +21,7 @@ func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 	return mi != nil && mi.Bootstrapped && !fleetLeaf.Machine.Bootstrap.ForceBootstrap
 }
 
-func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	machine := fleetLeaf.Machine
 
 	mi := machine.MetaInspect.Load()
@@ -30,7 +33,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	}
 
 	if !machine.Bootstrap.DisableDisko {
-		err := disko(exc, fleetLeaf)
+		err := disko(exc, fleetLeaf, h.OutLinks.DiskoPath(fleetLeaf.Installable))
 		if err != nil {
 			return err
 		}

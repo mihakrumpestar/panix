@@ -75,6 +75,7 @@ And an additional phase for **rollbacks**.
 - **Real-time TUI**: per-machine, per-phase visibility. Watch every phase unfold. Press `r` to retry only failed phases. Press `ctrl+r` to restart the entire workflow. No scrollback parsing.
 - **Scope-aware deduplication**: three machines sharing the same installable trigger one build, not three.
 - **Remote builds**: build on a target machine when it has more resources or a different architecture. The closure copies directly between machines.
+- **Build outlinks**: opt-in `--out-links` leaves GC-rooted symlinks per installable (`<flake>/<type>/<name>` layout), so built closures survive garbage collection and are easy to inspect.
 - **Multi-flake deployments**: span multiple repositories in a single run. Each flake is independently buildable.
 - **Tag-based filtering**: every name is a tag. Deploy subsets: `panix deploy --tags production`, `panix deploy --tags webserver`.
 - **Secret management**: files transferred with configurable uid, gid, permissions. Never stored in `/nix/store`. Bootstrap-aware path prefixing.

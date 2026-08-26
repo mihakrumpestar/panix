@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -183,4 +184,14 @@ func TestSkipPhasesInWorkflowFlags(t *testing.T) {
 	assertion.Len(flags.SkipPhases, 2)
 	assertion.Equal(phase.Inspect, flags.SkipPhases[0])
 	assertion.Equal(phase.Build, flags.SkipPhases[1])
+}
+
+// TestOutLinksDirDefaultTag guards the kong default tag on out_links_dir.
+func TestOutLinksDirDefaultTag(t *testing.T) {
+	t.Parallel()
+
+	field, ok := reflect.TypeFor[WorkflowFlags]().FieldByName("OutLinksDir")
+	require.True(t, ok, "WorkflowFlags.OutLinksDir field must exist")
+
+	assert.Equal(t, ".panix", field.Tag.Get("default"))
 }

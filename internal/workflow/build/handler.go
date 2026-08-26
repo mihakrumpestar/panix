@@ -10,9 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Handler struct{}
+type Handler struct {
+	OutLinks phaseops.OutLinks
+}
 
-func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	flake := fleetLeaf.Flake
 
 	if fleetLeaf.Installable.MetaBuild == nil {
@@ -22,7 +24,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	flakeOutput := installable.ResolveFlakeInstallable(fleetLeaf.Installable.Type, fleetLeaf.Installable.Name, fleetLeaf.Installable.Preset)
 	installables := []string{fmt.Sprintf("%s#%s", flake.URL, flakeOutput)}
 
-	storePath, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "system closure")
+	storePath, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "system closure", h.OutLinks.ClosurePath(fleetLeaf.Installable))
 	if err != nil {
 		return errors.Wrap(err, "system closure build failed")
 	}

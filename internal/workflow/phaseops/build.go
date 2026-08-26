@@ -23,16 +23,20 @@ import (
 
 var ErrNoBuildOutputs = errors.New("invalid build output: no outputs")
 
+// BuildInstallable builds the installables with 'nix build' and returns the
+// printed store path. A non-empty outLink is passed as '--out-link <path>',
+// so nix also creates the symlink and registers it as a GC root.
 func BuildInstallable(
 	exc *executioner.Executioner,
 	fleetLeaf *fleet.FleetLeaf,
 	installables []string,
 	whatIsBuilding string,
+	outLink string,
 ) (string, error) {
 	installable := fleetLeaf.Installable
 	machine := fleetLeaf.Machine
 
-	commandWithArgs := nixBuildCommand(installable, installables)
+	commandWithArgs := nixBuildCommand(installable, installables, outLink)
 
 	var storePath string
 
@@ -90,7 +94,7 @@ func remoteBuilderSSH(installable *installable.Installable) ssh.SSHClient {
 	return builder.GetActiveSSH()
 }
 
-func nixBuildCommand(installable *installable.Installable, installables []string) []string {
+func nixBuildCommand(installable *installable.Installable, installables []string, outLink string) []string {
 	baseArgs := []string{"nix"}
 	baseArgs = append(baseArgs, installable.Nix.GetExperimentalFeatures()...)
 	baseArgs = append(baseArgs, "build")
@@ -103,13 +107,35 @@ func nixBuildCommand(installable *installable.Installable, installables []string
 			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
 	}
 
-	baseArgs = append(baseArgs, installable.Nix.GetBuildDefaultFlags()...)
+	baseArgs = append(baseArgs, combineBuildFlags(&installable.Nix, outLink)...)
 
 	return slices.Concat(
 		baseArgs,
 		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.BuildFlags),
 		installables,
 	)
+}
+
+// combineBuildFlags returns the 'nix build' base flags, swapping --no-link for
+// '--out-link <path>' when an outlink is requested.
+func combineBuildFlags(cfg *nix.NixConfig, outLink string) []string {
+	flags := cfg.GetBuildDefaultFlags()
+
+	if outLink == "" {
+		return flags
+	}
+
+	filtered := make([]string, 0, len(flags)+2)
+
+	for _, flag := range flags {
+		if flag == "--no-link" {
+			continue
+		}
+
+		filtered = append(filtered, flag)
+	}
+
+	return append(filtered, "--out-link", outLink)
 }
 
 func nixBuildEnv(installable *installable.Installable, machineI *machine.Machine) ([]string, error) {

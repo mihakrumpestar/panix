@@ -51,6 +51,8 @@ panix build
 
 Runs only the Build phase. Useful for pre-building without deploying.
 
+Pass `--out-links` (or set `flags.out_links` in `panix.yml`) to also leave GC-rooted outlinks for the built installables, so they survive garbage collection and are easy to inspect on disk. See [Build Outlinks](/features/nix-flags/#build-outlinks) for details.
+
 ## secrets
 
 Deploy secrets to machines:

@@ -14,14 +14,14 @@ var ErrDiskoNoOutputPaths = errors.New("disko build output did not contain any o
 
 // Upload disk encryption keys BEFORE running disko.
 // Keys must be available for LUKS unlocking during partitioning.
-func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink string) error {
 	flake := fleetLeaf.Flake
 	installable := fleetLeaf.Installable
 	machine := fleetLeaf.Machine
 
 	installables := []string{fmt.Sprintf("%s#%s.%s.config.system.build.diskoScript", flake.URL, installable.Type, installable.Name)}
 
-	diskoScript, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "disko")
+	diskoScript, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "disko", outLink)
 	if err != nil {
 		return errors.Wrap(err, "disko build failed")
 	}

@@ -55,6 +55,14 @@ Flags:
       --dry-run-with-inspect       Show what would be done without
                                    executing, but with real inspect query
                                    ($PANIX_DRY_RUN_WITH_INSPECT)
+      --out-links                  Create GC root outlinks for built
+                                   installables (like 'nix build --out-link')
+                                   in out_links_dir, structured as
+                                   <flake>/<output_type>/<name>. Nix skips
+                                   outlinks for remote (non-local) build stores
+                                   ($PANIX_OUT_LINKS)
+      --out-links-dir=".panix"     Directory for build outlinks
+                                   ($PANIX_OUT_LINKS_DIR)
   -l, --log                        Enable logging to file ($PANIX_LOG)
       --log-file="panix.log"       Log file path (epoch timestamp appended
                                    before .log) ($PANIX_LOG_FILE)

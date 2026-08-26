@@ -10,6 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/build"
 	"github.com/mihakrumpestar/panix/internal/workflow/inspect"
 	"github.com/mihakrumpestar/panix/internal/workflow/phasehandler"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/internal/workflow/rollback"
 	"github.com/mihakrumpestar/panix/internal/workflow/secrets"
 	"github.com/mihakrumpestar/panix/internal/workflow/transfer"
@@ -44,6 +45,11 @@ type WorkflowState struct {
 func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 
+	outLinks := phaseops.OutLinks{
+		Enabled: conf.Flags.OutLinks,
+		Dir:     conf.Flags.OutLinksDir,
+	}
+
 	workflow := &Workflow{
 		parentCtx: ctx,
 		ctx:       ctxWithCancel,
@@ -59,8 +65,8 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 
 		handlers: map[phase.Phase]phasehandler.Handler{
 			phase.Inspect:   inspect.Handler{},
-			phase.Build:     build.Handler{},
-			phase.Bootstrap: bootstrap.Handler{},
+			phase.Build:     build.Handler{OutLinks: outLinks},
+			phase.Bootstrap: bootstrap.Handler{OutLinks: outLinks},
 			phase.Transfer:  transfer.Handler{},
 			phase.Secrets:   secrets.Handler{},
 			phase.Activate: activate.Handler{

@@ -36,6 +36,8 @@ type WorkflowFlags struct {
 	LocalMachineHostname string `yaml:"local_machine_hostname" json:"local_machine_hostname,omitempty" help:"Hostname of the machine that is local (won't use ssh to connect to it) (default: your deployment machine hostname)"`
 	DryRun               bool   `yaml:"dry_run" json:"dry_run,omitempty" help:"Show what would be done without executing"`
 	DryRunWithInspect    bool   `yaml:"dry_run_with_inspect" json:"dry_run_with_inspect,omitempty" help:"Show what would be done without executing, but with real inspect query"`
+	OutLinks             bool   `yaml:"out_links" json:"out_links,omitempty" help:"Create GC root outlinks for built installables (like 'nix build --out-link') in out_links_dir, structured as <flake>/<output_type>/<name>. Nix skips outlinks for remote (non-local) build stores"`
+	OutLinksDir          string `yaml:"out_links_dir" json:"out_links_dir,omitempty" help:"Directory for build outlinks" default:".panix" completion-predictor:"dir"`
 
 	Logging         `yaml:"logging" json:"logging"` //nolint:embeddedstructfieldcheck
 	Snapshot        `yaml:"snapshot" json:"snapshot" embed:"" prefix:"snapshot."`

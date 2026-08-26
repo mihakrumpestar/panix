@@ -56,7 +56,7 @@ func TestNixBuildCommand_RemoteModePinnedToFirstMachine(t *testing.T) {
 	second := newRemoteMachine(t, "10.0.0.2")
 	inst := newRemoteInstallable(first, second)
 
-	cmd := nixBuildCommand(inst, []string{"flake#attr"})
+	cmd := nixBuildCommand(inst, []string{"flake#attr"}, "")
 
 	storeIdx := slices.Index(cmd, "--store")
 	require.NotEqual(t, -1, storeIdx, "remote build command must contain --store: %v", cmd)
@@ -86,7 +86,7 @@ func TestNixBuildCommand_LocalModeHasNoStoreFlag(t *testing.T) {
 	inst := newRemoteInstallable(m)
 	inst.Nix.BuildMode = nix.BuildModeLocal
 
-	cmd := nixBuildCommand(inst, []string{"flake#attr"})
+	cmd := nixBuildCommand(inst, []string{"flake#attr"}, "")
 
 	assert.Equal(t, -1, slices.Index(cmd, "--store"))
 }
@@ -123,4 +123,74 @@ func TestNixBuildEnv_RemoteModeUsesBuilderSSHOptions(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, strings.Join(env, " "), "IdentitiesOnly=yes")
+}
+
+// newLocalInstallable returns a local-mode installable with default nix config.
+func newLocalInstallable() *installable.Installable {
+	inst := &installable.Installable{}
+	inst.Nix.BuildMode = nix.BuildModeLocal
+	inst.Machines = atomicorderedmap.New[string, *machine.Machine]()
+
+	return inst
+}
+
+// TestNixBuildCommand_OutLinkReplacesNoLink swaps --no-link for
+// --out-link while keeping the other default flags.
+func TestNixBuildCommand_OutLinkReplacesNoLink(t *testing.T) {
+	t.Parallel()
+
+	inst := newLocalInstallable()
+
+	cmd := nixBuildCommand(inst, []string{"flake#attr"}, ".panix/my-flake/nixosConfigurations/server1")
+
+	assert.Equal(t, -1, slices.Index(cmd, "--no-link"), "--no-link must be dropped: %v", cmd)
+
+	outLinkIdx := slices.Index(cmd, "--out-link")
+	require.NotEqual(t, -1, outLinkIdx, "command must contain --out-link: %v", cmd)
+	assert.Equal(t, ".panix/my-flake/nixosConfigurations/server1", cmd[outLinkIdx+1])
+
+	assert.Contains(t, cmd, "--print-out-paths")
+	assert.Contains(t, cmd, "--keep-going")
+}
+
+// TestNixBuildCommand_NoOutLinkKeepsNoLink keeps the default flags
+// unchanged when no outlink is requested.
+func TestNixBuildCommand_NoOutLinkKeepsNoLink(t *testing.T) {
+	t.Parallel()
+
+	inst := newLocalInstallable()
+
+	cmd := nixBuildCommand(inst, []string{"flake#attr"}, "")
+
+	assert.Contains(t, cmd, "--no-link")
+	assert.Equal(t, -1, slices.Index(cmd, "--out-link"))
+}
+
+// TestCombineBuildFlags_CustomDefaultsWithoutNoLink handles custom default
+// flags that contain no --no-link.
+func TestCombineBuildFlags_CustomDefaultsWithoutNoLink(t *testing.T) {
+	t.Parallel()
+
+	inst := newLocalInstallable()
+	inst.Nix.BuildDefaultFlags = []string{"--print-out-paths"}
+
+	cmd := nixBuildCommand(inst, []string{"flake#attr"}, "out/link")
+
+	assert.Equal(t, []string{
+		"nix", "--extra-experimental-features", "nix-command flakes", "build",
+		"--print-out-paths", "--out-link", "out/link", "flake#attr",
+	}, cmd)
+}
+
+// TestCombineBuildFlags_DoesNotMutateBuiltInDefaults guards the shared default
+// flag slice against mutation.
+func TestCombineBuildFlags_DoesNotMutateBuiltInDefaults(t *testing.T) {
+	t.Parallel()
+
+	before := slices.Clone(nix.DefaultBuildFlags)
+
+	combineBuildFlags(&nix.NixConfig{}, ".panix/link")
+
+	assert.Equal(t, before, nix.DefaultBuildFlags)
+	assert.Contains(t, nix.DefaultBuildFlags, "--no-link")
 }

@@ -81,6 +81,59 @@ The same override pattern applies to non-nix commands:
 
 These **replace** the built-in defaults when set, and inherit down the hierarchy with override semantics (same as nix default flags).
 
+## Build Outlinks
+
+Enable `out_links` to make each built installable leave a GC-rooted symlink, so built closures survive garbage collection and are easy to inspect:
+
+```sh
+panix build --out-links
+```
+
+or:
+
+```yaml
+flags:
+  out_links: true
+  out_links_dir: .panix  # default
+```
+
+Each outlink is `<out_links_dir>/<flake>/<output_type>/<name>`, following the installable xpath, so every symlink identifies what it points at:
+
+```sh
+$ tree .panix
+.panix
+└── mainFlake
+    ├── homeConfigurations
+    │   └── test-home -> /nix/store/8gzxiv0vp46bm2yp6dml6g041v698dkx-home-manager-generation
+    ├── nixosConfigurations
+    │   └── test-vm -> /nix/store/l02j6c0rgl2ywvmvwmly2qrfm1ar9i24-nixos-system-nixos-26.11.20260726.624af66
+    └── packages
+        └── test-package -> /nix/store/41s29ssl0f5c878l3fqahhihrs21mrgv-panix-test-package
+```
+
+Bootstrapped installables also get a `-disko` outlink for their disko script (`.panix/mainFlake/nixosConfigurations/test-vm-disko`), so it can't collide with the closure outlink.
+
+With outlinks enabled, the Build phase drops `--no-link` from the built-in build defaults and passes `--out-link <path>` instead:
+
+```sh
+nix build --print-out-paths --keep-going --out-link .panix/mainFlake/nixosConfigurations/test-vm <flake-url>#nixosConfigurations.test-vm.config.system.build.toplevel
+```
+
+`--print-out-paths` is kept, so the store-path handling of later phases is unchanged. `nix build` creates the symlink (including parent directories) and registers it as an indirect GC root under `/nix/var/nix/gcroots/auto/`.
+
+A literal `--no-link` in user-configured default flags is dropped (it would contradict the outlink request); a `--no-link` in extra flags (`build_flags`/`extra_flags`) is never touched and, since nix evaluates repeated flags last-wins, still disables outlink creation.
+
+:::note
+In [remote build mode](./build-modes.mdx) the closure is built into the remote machine's store; `nix build` only creates outlinks for local stores, so remote-mode installables get no outlink.
+:::
+
+To release a built closure again, remove its outlink and run the garbage collector:
+
+```sh
+rm -rf .panix
+nix store gc
+```
+
 ## Inheritance
 
 **Extra flags** accumulate through inheritance (fleet, flake, installable). Slices are appended, not replaced.

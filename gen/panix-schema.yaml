@@ -47,6 +47,13 @@ properties:
             default: panix.log
             format: file-path
         additionalProperties: false
+      out_links:
+        type: boolean
+        description: Create GC root outlinks for built installables (like 'nix build --out-link') in out_links_dir, structured as <flake>/<output_type>/<name>. Nix skips outlinks for remote (non-local) build stores
+      out_links_dir:
+        type: string
+        description: "Directory for build outlinks (default: .panix)"
+        default: .panix
       output:
         type: string
         description: "Output mode: tui, console, json (default: tui)"

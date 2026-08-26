@@ -21,7 +21,6 @@
 .env
 
 .task
-.opencode
 /build
 /dist
 /debug*
@@ -38,6 +37,7 @@ temp_key.pub
 panix.log
 panix.*.log
 /panix-snapshot-*
+.panix/
 
 # E2E test cache and generated files
 /e2e
