@@ -39,6 +39,11 @@ jobs:
 
       - uses: go-task/setup-task@v2.2.0
 
+      # Nix is required by the PTY pager test
+      - uses: cachix/install-nix-action@v31.11.1
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
       - run: task ci
 
       # Fail if the CI tasks modified or created anything in the repo:
