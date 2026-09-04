@@ -25,14 +25,14 @@ type CommandLog struct {
 	ErrorXpath  xpath.Xpath `yaml:"-" json:"-"`
 }
 
-func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusIfFailed string, command, env []string) *CommandLog {
+func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusIfFailed string, command []string) *CommandLog {
 	cmdXpath := phaseXpath.NewXpathWithAppend(description)
 
 	commandLog := &CommandLog{
 		Description:     description,
 		StatusIfRunning: statusIfRunning,
 		StatusIfFailed:  statusIfFailed,
-		Command:         joinCommand(env, command),
+		Command:         joinCommand(command),
 
 		Output:       buffer.NewLinesBufVer(),
 		TimeAndState: atomictimeandstate.New(),
@@ -57,30 +57,14 @@ func (cl *CommandLog) initDerivedXpaths() {
 	cl.ErrorXpath = cl.Xpath.NewXpathWithAppend("error")
 }
 
-// joinCommand joins env vars and command args into a shell-like LineBuf.
-// Env vars are rendered as KEY='VALUE' (value quoted only if needed), command args
-// are quoted as a whole if they contain spaces or special characters.
-func joinCommand(env []string, cmd []string) *buffer.LineBuf {
+// joinCommand joins command args into a shell-like LineBuf, quoting args
+// as a whole if they contain spaces or special characters. Env vars ride
+// the argv (env KEY=VAL cmd), so they need no special rendering.
+func joinCommand(cmd []string) *buffer.LineBuf {
 	lineBuf := buffer.NewLineBuf()
 
-	for i, envI := range env {
-		if i > 0 {
-			lineBuf.WriteByte(' ')
-		}
-
-		eqIdx := strings.IndexByte(envI, '=')
-		if eqIdx < 0 {
-			writeQuoted(lineBuf, envI)
-
-			continue
-		}
-
-		lineBuf.WriteString(envI[:eqIdx+1]) // KEY=
-		writeQuoted(lineBuf, envI[eqIdx+1:])
-	}
-
 	for i, arg := range cmd {
-		if i > 0 || len(env) > 0 {
+		if i > 0 {
 			lineBuf.WriteByte(' ')
 		}
 

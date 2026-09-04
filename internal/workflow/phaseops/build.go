@@ -36,14 +36,14 @@ func BuildInstallable(
 	installable := fleetLeaf.Installable
 	machine := fleetLeaf.Machine
 
-	commandWithArgs := nixBuildCommand(installable, installables, outLink)
-
-	var storePath string
-
 	env, err := nixBuildEnv(installable, machine)
 	if err != nil {
 		return "", err
 	}
+
+	var storePath string
+
+	commandWithArgs := WithEnv(env, nixBuildCommand(installable, installables, outLink))
 
 	err = exc.Exec(
 		"build "+whatIsBuilding,
@@ -51,7 +51,6 @@ func BuildInstallable(
 		whatIsBuilding+" build failed",
 		commandWithArgs,
 		executioner.DisableAutoSSHCommand(),
-		executioner.Env(env),
 		executioner.Trim(),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			storePath = string(style.StripANSI(log.Output.LastLine()))

@@ -86,7 +86,7 @@ func activatePackage(
 	profileSubcmd := profileSubcmdForFlavor(nixFlavor)
 
 	args := slices.Concat(
-		[]string{"nix"},
+		WithEnv(nixCfg.GetProfileAddEnv(), []string{"nix"}),
 		nixCfg.GetExperimentalFeatures(),
 		[]string{"profile", profileSubcmd},
 		nixCfg.GetProfileAddDefaultFlags(),
@@ -100,7 +100,6 @@ func activatePackage(
 	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"activate", "installing package", "package installation failed",
 		args,
-		executioner.Env(nixCfg.GetProfileAddEnv()),
 		executioner.Trim(),
 	)
 }

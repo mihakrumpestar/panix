@@ -356,8 +356,9 @@ func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machin
 // readGenerations reads profile generations via nix-env --list-generations.
 // Works for any profile path (system, home-manager, system-manager, etc.).
 // When targetUser is set, the command runs as that user via su -l.
+// NIX_PAGER=cat: panix runs on a PTY and nix's pager would block forever (#14).
 func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, profilePath string, targetUser string) error {
-	args := []string{"nix-env", "--profile", profilePath, "--list-generations"}
+	args := []string{"env", "NIX_PAGER=cat", "nix-env", "--profile", profilePath, "--list-generations"}
 
 	if targetUser != "" {
 		args = phaseops.AsUser(targetUser, args)

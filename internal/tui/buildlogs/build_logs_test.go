@@ -455,7 +455,7 @@ func TestAddCommands_WithCommandError(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(os.ErrNotExist)
 
-	cmd := phaseLog.NewCommand(xpath.New("test"), "test cmd", "running", "failed", []string{"echo", "test"}, nil, 0)
+	cmd := phaseLog.NewCommand(xpath.New("test"), "test cmd", "running", "failed", []string{"echo", "test"}, 0)
 	cmd.TimeAndState.StartTimer()
 	cmd.TimeAndState.EndTimerWithError(os.ErrNotExist)
 	cmd.Output.Write([]byte("error output"))
@@ -480,15 +480,15 @@ func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
 
 	phaseLog := newFinishedPhaseLog(nil)
 
-	cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, nil, 0)
+	cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, 0)
 	cmd1.TimeAndState.StartTimer()
 	cmd1.TimeAndState.EndTimerWithError(nil)
 
-	cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, nil, 0)
+	cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, 0)
 	cmd2.TimeAndState.StartTimer()
 	cmd2.TimeAndState.EndTimerWithError(nil)
 
-	cmd3 := phaseLog.NewCommand(xpath.New("test"), "cmd3", "running", "failed", []string{"cmd3"}, nil, 0)
+	cmd3 := phaseLog.NewCommand(xpath.New("test"), "cmd3", "running", "failed", []string{"cmd3"}, 0)
 	cmd3.TimeAndState.StartTimer()
 	cmd3.TimeAndState.EndTimerWithError(nil)
 
@@ -527,11 +527,11 @@ func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
 
 			phaseLog := newFinishedPhaseLog(nil)
 
-			cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, nil, 0)
+			cmd1 := phaseLog.NewCommand(xpath.New("test"), "cmd1", "running", "failed", []string{"cmd1"}, 0)
 			cmd1.TimeAndState.StartTimer()
 			cmd1.TimeAndState.EndTimerWithError(nil)
 
-			cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, nil, 0)
+			cmd2 := phaseLog.NewCommand(xpath.New("test"), "cmd2", "running", "failed", []string{"cmd2"}, 0)
 			cmd2.TimeAndState.StartTimer()
 			cmd2.TimeAndState.EndTimerWithError(nil)
 
@@ -1031,7 +1031,7 @@ func newNotStartedPhaseLog() *phaselogs.PhaseLog {
 }
 
 func newFinishedCommandLog(description string, err error) *command.CommandLog {
-	cmd := command.NewCommandLog(xpath.New("test"), description, "running", "failed", []string{"echo", "test"}, nil)
+	cmd := command.NewCommandLog(xpath.New("test"), description, "running", "failed", []string{"echo", "test"})
 	cmd.TimeAndState.StartTimer()
 	cmd.TimeAndState.EndTimerWithError(err)
 

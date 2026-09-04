@@ -63,7 +63,6 @@ type ExecOptions struct {
 	onFailure             func(*logs_command.CommandLog, error) error
 	onSuccess             func(*logs_command.CommandLog) error
 	onDryRun              func()
-	env                   []string
 }
 
 type ExecOption func(*ExecOptions)
@@ -96,13 +95,6 @@ func OnSuccess(f func(*logs_command.CommandLog) error) ExecOption {
 func OnDryRun(f func()) ExecOption {
 	return func(excOpt *ExecOptions) {
 		excOpt.onDryRun = f
-	}
-}
-
-// Env takes a slice of "key=value" entrys.
-func Env(env []string) ExecOption {
-	return func(excOpt *ExecOptions) {
-		excOpt.env = env
 	}
 }
 
@@ -141,7 +133,7 @@ func (ex *Executioner) Exec(description, statusIfRunning, statusIfFailed string,
 }
 
 func (ex *Executioner) ExecFn(description, statusIfRunning, statusIfFailed string, execFunc func(*logs_command.CommandLog) error) error {
-	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, nil, nil, 0)
+	commandLog := ex.conf.PhaseLog.NewCommand(ex.phaseXpath, description, statusIfRunning, statusIfFailed, nil, 0)
 
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, nil)
 

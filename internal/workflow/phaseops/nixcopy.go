@@ -27,14 +27,13 @@ func CopyClosure(
 	sshOpts := activeSSH.MaybeNixSSHOpts()
 
 	baseArgs := nixCopyBaseArgs(installable, toURL)
-	commandWithArgs := slices.Concat(
+	// User env first so panix-internal NIX_SSHOPTS takes precedence on conflict.
+	env := slices.Concat(installable.Nix.GetCopyEnv(), sshOpts)
+	commandWithArgs := WithEnv(env, slices.Concat(
 		baseArgs,
 		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.CopyFlags),
 		toTransfer,
-	)
-
-	// User env first so panix-internal NIX_SSHOPTS takes precedence on conflict.
-	env := slices.Concat(installable.Nix.GetCopyEnv(), sshOpts)
+	))
 
 	err := exc.Exec("nix copy",
 		"copying closure",
@@ -42,7 +41,6 @@ func CopyClosure(
 		commandWithArgs,
 		executioner.SkipIfLocal(),
 		executioner.DisableAutoSSHCommand(),
-		executioner.Env(env),
 		executioner.Trim(),
 	)
 	if err != nil {

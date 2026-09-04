@@ -150,13 +150,12 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
-		slices.Concat(
+		phaseops.WithEnv(nixCfg.GetNixosInstallEnv(), slices.Concat(
 			[]string{"nixos-install"},
 			nixCfg.GetNixosInstallDefaultFlags(),
 			[]string{"--system", systemClosure, "--root", "/mnt"},
 			nixCfg.NixosInstallFlags,
-		),
-		executioner.Env(nixCfg.GetNixosInstallEnv()),
+		)),
 		executioner.Trim(),
 	)
 	if err != nil {

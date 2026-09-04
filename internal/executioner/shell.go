@@ -29,7 +29,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 
 	commandLog := ex.conf.PhaseLog.NewCommand(
 		ex.phaseXpath, description, statusIfRunning, statusIfFailed,
-		commandWithArgs, excOpt.env, maxOutputLines,
+		commandWithArgs, maxOutputLines,
 	)
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
 
@@ -42,7 +42,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	cmdCtx, cancel := context.WithTimeout(ex.conf.Ctx, ex.conf.Timeout)
 	defer cancel()
 
-	cmd := ex.prepareCommandWithEnv(cmdCtx, commandWithArgs, excOpt)
+	cmd := ex.prepareCommand(cmdCtx, commandWithArgs)
 	ex.conf.OnUpdateHook()
 
 	if ex.conf.DryRun {
@@ -67,11 +67,10 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 	return nil
 }
 
-func (ex *Executioner) prepareCommandWithEnv(ctx context.Context, commandWithArgs []string, excOpt *ExecOptions) *exec.Cmd {
+func (ex *Executioner) prepareCommand(ctx context.Context, commandWithArgs []string) *exec.Cmd {
 	// #nosec G204 -- commandWithArgs comes from internal configuration, not user input
 	cmd := exec.CommandContext(ctx, commandWithArgs[0], commandWithArgs[1:]...)
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, excOpt.env...)
 
 	return cmd
 }
