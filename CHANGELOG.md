@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.9.3](https://github.com/mihakrumpestar/panix/compare/v0.9.2..v0.9.3) - 2026-09-07
+
+Panix can now leave GC roots for built closures: the new `--out-links` flag (or `out_links`/`out_links_dir` in the flags section) creates a symlink per built installable, laid out along the installable xpath as `<out_links_dir>/<flake>/<output_type>/<name>`, so built closures survive garbage collection and are easy to inspect. Bootstrapped installables also get a `-disko` outlink for their disko script. Remote build mode gets no outlinks, since the closure lives on the builder machine's store (#13).
+
+Remote builds are pinned to the installable's first declared machine: build and transfer both target that builder, and the closure is copied from it to the remaining machines. A guard fails the Transfer phase early when no closure was built, e.g. with `--skip-phases=build`.
+
+Environment variables that must reach the final command are now delivered through the command argv (`env KEY=VAL ...`) instead of the process environment, so they survive sudo `env_reset`, `su -l` login resets, and remote SSH shells. The nix pager is also disabled on the PTY, so `nix-env --list-generations` no longer hangs during Inspect (#14).
+
+This release also fixes the eval and template commands (runtime tunables, yaml output, validation), adds unit tests, and cleans up CI and flake.nix.
+
+### Bug Fixes
+
+- Pin remote builds to first machine, fix eval/template bugs, add transfer guard, tests, docs by @mihakrumpestar ([ef14fde](https://github.com/mihakrumpestar/panix/commit/ef14fdeb5465011b5c8f1e2a006b4668aeced244))
+- Disable nix pager on PTY and deliver env through argv, fixes #14 by @mihakrumpestar ([bbcef7e](https://github.com/mihakrumpestar/panix/commit/bbcef7eafd05bb144e3eb3061717b5adbac66728))
+- Unit test coverage by @mihakrumpestar ([18ae371](https://github.com/mihakrumpestar/panix/commit/18ae371a98abf2e7bbed8db0da2bf0082de9fc5b))
+
+### Features
+
+- Add build out-links, solves #13 by @mihakrumpestar ([3c4374f](https://github.com/mihakrumpestar/panix/commit/3c4374f7dcc945ad6da82e21f885eea65ce1a849))
+
+### Miscellaneous
+
+- Update CI by @mihakrumpestar ([e0eef92](https://github.com/mihakrumpestar/panix/commit/e0eef92c67c49954bd1083c37a139650fd0f74f0))
+- Clean flake.nix, remove outdated numtide/clean-git-action by @mihakrumpestar ([9261eb1](https://github.com/mihakrumpestar/panix/commit/9261eb125914d17726ae15f9d0a7bd4acc49bcd5))
+- Remove PTY regression test and revert CI nix install by @mihakrumpestar ([95c6c49](https://github.com/mihakrumpestar/panix/commit/95c6c49d1d39ecfee9d428636510170b93a64be0))
+
 ## [0.9.2](https://github.com/mihakrumpestar/panix/compare/v0.9.1..v0.9.2) - 2026-08-17
 
 Panix can now automatically recover failed deploys: the new `auto_rollback` attribute (opt-in, settable at fleet, flake, installable, or machine level and inherited downward) reverts machines to the pre-deploy generation captured during the Inspect phase when activation fails.
