@@ -128,7 +128,7 @@ func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
 		conf.Flags.LocalMachineHostname = hostname
 	}
 
-	conf.Flags.DefautlIfNoTTY()
+	conf.Flags.DefaultIfNoTTY()
 
 	err = logger.InitLogging(conf.Flags.Logging, conf.Flags.Output)
 	if err != nil {
@@ -176,7 +176,7 @@ func (c *Config) initInstallables(flakeV *flake.Flake) error {
 			nameKey := namePair.Key
 			installable := namePair.Value
 
-			// Installable may be nil due to existing only as key (this is intended behavior), so we set it here in that case
+			// Key-only YAML entries decode to nil (intended), so materialize them.
 			if installable == nil {
 				installable = &installablepkg.Installable{}
 				attrMap.Set(namePair.Key, installable)
@@ -197,8 +197,8 @@ func (c *Config) initInstallables(flakeV *flake.Flake) error {
 	return nil
 }
 
-// initMachines initializes all machines within an installable, materializing
-// nil machine entries (key-only entries from YAML) into empty Machine structs.
+// initMachines materializes key-only machine entries (nil in YAML, intended)
+// into empty Machine structs.
 func initMachines(installable *installablepkg.Installable) error {
 	for _, machinePair := range installable.Machines.Pairs() {
 		machineV := machinePair.Value
@@ -219,8 +219,8 @@ func initMachines(installable *installablepkg.Installable) error {
 	return nil
 }
 
-// initFleetSSH initializes SSH configuration for all remaining machines after filtering.
-// This is separated from initFleet so that filtered-out machines never trigger SSH config loading.
+// initFleetSSH resolves SSH for machines surviving filtering; kept separate
+// from initFleet so filtered-out machines never trigger SSH config loading.
 func (c *Config) initFleetSSH() error {
 	for _, leaf := range c.Fleet.AllMachines() {
 		err := leaf.Machine.InitSSH(c.Flags.LocalMachineHostname, *c.Nix)

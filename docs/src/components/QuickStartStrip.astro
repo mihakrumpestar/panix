@@ -1,0 +1,133 @@
+---
+import LandingSection from "./LandingSection.astro";
+import { Code } from "astro-expressive-code/components";
+
+const steps = [
+  {
+    n: "01",
+    label: "Describe your fleet",
+    desc: "One YAML file. No changes to your flake.",
+    lang: "yaml",
+    meta: 'title="panix.yml" frame="terminal"',
+    code: `fleet:
+  flakes:
+    my-infra:           # a flake from your repo
+      installables:
+        nixosConfigurations:    # what to deploy
+          web:
+            machines:
+              web01:            # an SSH host
+`,
+  },
+  {
+    n: "02",
+    label: "Deploy",
+    desc: "Runs straight from the flake, no install step.",
+    lang: "sh",
+    meta: 'title="sh" frame="terminal"',
+    code: "nix run github:mihakrumpestar/panix -- deploy",
+  },
+];
+---
+
+<LandingSection
+  kicker="quickstart"
+  title="Deploy in two steps"
+  band
+  id="quickstart"
+>
+  <ol class="steps">
+    {
+      steps.map((step) => (
+        <li class="step">
+          <div class="step-head">
+            <span class="step-n">{step.n}</span>
+            <span class="step-label">{step.label}</span>
+          </div>
+          <p class="step-desc">{step.desc}</p>
+          {/* Expressive Code renders the highlighted code with a framed
+              terminal look, the same engine as every docs code block. */}
+          <div class="qs-code">
+            <Code code={step.code} lang={step.lang} meta={step.meta} />
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+</LandingSection>
+
+<style>
+  .steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 50rem) {
+    .steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.5rem;
+    }
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.25rem;
+    background: var(--sl-color-black);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+  }
+
+  .step-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .step-n {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.25rem 0.45rem;
+    border: 1px solid var(--sl-color-accent-low);
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent-high);
+    border-radius: 0.375rem;
+  }
+
+  .step-label {
+    font-weight: 600;
+    font-size: var(--sl-text-body);
+    color: var(--sl-color-white);
+  }
+
+  .step-desc {
+    margin: 0;
+    font-size: var(--sl-text-sm);
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+  }
+
+  /* EC renders its own DOM inside .qs-code, so its inner elements need
+     :global() to be styled from this scoped stylesheet. The blocks use
+     EC's native terminal frame (meta frame="terminal"), which draws the
+     traffic-light dots and titlebar itself. */
+  .qs-code {
+    margin-top: 0.25rem;
+  }
+
+  .qs-code :global(.expressive-code) {
+    font-size: 0.8125rem;
+  }
+
+  .qs-code :global(.expressive-code .frame) {
+    border-color: var(--sl-color-gray-5);
+    box-shadow: none;
+  }
+</style>

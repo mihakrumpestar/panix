@@ -116,6 +116,15 @@ const (
 	debianNixVMPort     = 10027
 )
 
+// e2eHardwareConfigPath mirrors the ISO VM machine's hardware_config_path in
+// panix.yml: a path on the machine running panix, not on the target.
+const e2eHardwareConfigPath = "/tmp/e2e-hardware-config.nix"
+
+// e2eKexecHardwareConfigPath mirrors the kexec machine's hardware_config_path
+// in panix.yml and lives inside the testflakes source tree: the flake imports
+// it, and flakes cannot import absolute paths outside their source. Set by initDirs.
+var e2eKexecHardwareConfigPath string
+
 func main() {
 	parseFlags()
 
@@ -209,6 +218,11 @@ func runDeployPhases(configPath string, res *testResources) error {
 func runBootstrapPhase(configPath string, res *testResources) error {
 	printPhasef("Phase: Bootstrap deploy")
 
+	// Hardware configs are written LOCALLY during this phase: drop stale files
+	// so an earlier run cannot satisfy the kexec flake import or verification.
+	_ = os.Remove(e2eHardwareConfigPath)
+	_ = os.Remove(e2eKexecHardwareConfigPath)
+
 	err := runPanixDeployStep("Run panix deploy", configPath,
 		"PANIX_TEST_MODE=bootstrap",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
@@ -240,9 +254,8 @@ func runDeployPhase(configPath string, res *testResources) error {
 				return err
 			}
 
-			// Run the auto-rollback test immediately after the NixOS deploy,
-			// since it depends on the machine having a fresh known-good
-			// generation to roll back to.
+			// Auto-rollback needs the fresh known-good generation from the
+			// NixOS deploy, so run it immediately after.
 			if deploy.typ == deployNixos && testScopeFlag.local() {
 				err = runDeployAutoRollback(configPath, res)
 				if err != nil {
@@ -259,11 +272,9 @@ func runDeployNixOS(configPath string, res *testResources) error {
 	printPhasef("Phase: Deploy NixOS")
 
 	err := runPanixDeployStepWithArgs("Run panix deploy (nixos)", configPath,
-		// Use explicit attribute-name tags rather than the broad
-		// "nixosConfigurations" type tag so the always-failing
-		// test-vm-failing fixture (also under nixosConfigurations) is NOT
-		// deployed here; it is only deployed by the auto-rollback test.
-		[]string{"--tags", "test-vm,test-vm-remote"},
+		// Explicit attribute tags instead of the broad "nixosConfigurations"
+		// type tag: test-vm-failing is deployed only by the auto-rollback test.
+		[]string{"--tags", "test-vm,test-vm-kexec,test-vm-remote"},
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
@@ -275,11 +286,9 @@ func runDeployNixOS(configPath string, res *testResources) error {
 	return verifyAll(res.keyPath)
 }
 
-// runDeployAutoRollback verifies the auto_rollback attribute. It runs right
-// after the regular NixOS deploy (runDeployNixOS), which leaves the local VM
-// on a known-good generation. It then deploys a dedicated always-failing
-// config (test-vm-failing, which sets auto_rollback: true), expecting
-// activation to fail and the previous generation's closure to be restored.
+// runDeployAutoRollback deploys the always-failing test-vm-failing config
+// (auto_rollback: true) after the regular NixOS deploy has left a known-good
+// generation, expecting activation to fail and the previous closure restored.
 func runDeployAutoRollback(configPath string, res *testResources) error {
 	printPhasef("Phase: Deploy NixOS with auto-rollback")
 
@@ -321,9 +330,9 @@ func runDeployAutoRollback(configPath string, res *testResources) error {
 
 	fmt.Printf("  after: closure=%s generation=%d\n", closureAfter, genAfter)
 
-	// The profile must point at the same closure as before (rollback restored
-	// it), but at a higher generation number (proving activation actually ran
-	// and mutated the profile before failing, rather than failing at build).
+	// Same closure as before (rollback restored it) but a higher generation
+	// (activation ran and mutated the profile before failing, rather than
+	// failing at build).
 	if closureAfter != closureBefore {
 		return errors.Errorf("expected rollback to restore closure %s, got %s", closureBefore, closureAfter)
 	}
@@ -514,6 +523,8 @@ func buildNixArtifacts(res *testResources) error {
 	parGroup.Go("Pre-build test-vm closure", func() error {
 		return preBuildClosure("test-vm", "nixosConfigurations.test-vm.config.system.build.toplevel")
 	})
+	// test-vm-kexec is intentionally NOT pre-built: it imports the hardware
+	// config generated during Bootstrap, which does not exist yet.
 
 	if testScopeFlag.local() {
 		parGroup.Go("Pre-build test-vm-failing closure", func() error {
@@ -587,7 +598,7 @@ func createLocalDisks(parGroup *parallelGroup, res *testResources) {
 	parGroup.Go("Create Debian-nix cloud-init seed", func() error {
 		var seedErr error
 
-		// Simple SSH-only seed — nix is already baked into the image.
+		// Simple SSH-only seed: nix is already baked into the image.
 		res.cloudInitSeedNix, seedErr = nixBuild("seed-nix-iso")
 
 		return seedErr
@@ -778,6 +789,12 @@ func verifyAll(keyPath string) error {
 		})
 		parGroup.Go("Verify NixOS on kexec VM", func() error {
 			return verifyNixOSInstallation(kexecVMPort, keyPath)
+		})
+		// The kexec bootstrap path carries a shell-string hook and its own
+		// hardware_config_path; test-vm-kexec imports the generated file, so
+		// generation must run right after kexec or the disko build fails.
+		parGroup.Go("Verify bootstrap hook and hardware config on kexec VM", func() error {
+			return verifyKexecBootstrapArtifacts(kexecVMPort, nixosISOPort, keyPath)
 		})
 	}
 

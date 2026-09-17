@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
+	"github.com/mihakrumpestar/panix/pkg/shellquote"
 	"github.com/pkg/errors"
 )
 
@@ -35,7 +37,7 @@ func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error
 		return err
 	}
 
-	err = extractKexecTarball(exc, machineI, kexecURL)
+	err = extractKexecTarball(exc, kexecURL)
 	if err != nil {
 		return err
 	}
@@ -50,6 +52,14 @@ func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error
 		return err
 	}
 
+	// The active connection switched to the kexec installer: re-probe
+	// rootness so later elevation matches the installer's user. A stale
+	// non-root IsRoot would fail with "sudo: not found" (no sudo there).
+	err = phaseops.RefreshSuperuser(exc, machineI)
+	if err != nil {
+		return err //nolint:wrapcheck // error is pre-annotated with its own context
+	}
+
 	machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
 		mi.RequiresKexec = false
 	})
@@ -57,13 +67,24 @@ func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error
 	return nil
 }
 
-// createKexecDirectory creates the temporary directory for kexec files.
+// createKexecDirectory resets and creates the staging dir in ONE elevated
+// command (rm + install -d -m 700 -o <sshuser>): SSH-user ownership keeps
+// un-elevated curl/rsync/tar working and closes the rm→mkdir TOCTOU window.
 func createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine) error {
+	// The machine is driven over the ACTIVE connection during kexec staging
+	// (bootstrap/kexec SSH), so that connection's user must own the staging
+	// dir, not the regular SSH user, which may differ.
+	sshUser := machine.GetActiveSSH().Username
+	script := fmt.Sprintf(
+		"rm -rf %s && install -d -m 700 -o %s %s",
+		shellquote.Quote("/tmp/kexec"), shellquote.Quote(sshUser), shellquote.Quote("/tmp/kexec"),
+	)
+
 	err := exc.Exec(
 		"create kexec directory",
 		"creating kexec directory",
 		"failed to create kexec directory",
-		append(machine.MaybeSudo(), "mkdir", "-p", "/tmp/kexec"),
+		append(machine.MaybeSudo(), "sh", "-c", script),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create kexec directory")
@@ -72,7 +93,6 @@ func createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine
 	return nil
 }
 
-// downloadOrTransferKexec downloads the kexec tarball from URL or transfers it from local path.
 func downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
 	var err error
 	if isURL(kexecURL) {
@@ -93,7 +113,7 @@ func downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Mach
 }
 
 // extractKexecTarball extracts the kexec tarball to the temporary directory.
-func extractKexecTarball(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
+func extractKexecTarball(exc *executioner.Executioner, kexecURL string) error {
 	tarArgs := getTarArgs(kexecURL)
 	tarArgs = append(tarArgs, "-C", "/tmp/kexec")
 
@@ -101,7 +121,7 @@ func extractKexecTarball(exc *executioner.Executioner, machine *machine.Machine,
 		"extract kexec tarball",
 		"extracting kexec tarball",
 		"failed to extract kexec tarball",
-		append(append(machine.MaybeSudo(), "tar"), tarArgs...),
+		append([]string{"tar"}, tarArgs...),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to extract kexec tarball")

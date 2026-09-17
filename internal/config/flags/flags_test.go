@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/mihakrumpestar/panix/internal/phase"
 )
 
-func TestDefautlIfNoTTY(t *testing.T) {
+func TestDefaultIfNoTTY(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -33,7 +34,7 @@ func TestDefautlIfNoTTY(t *testing.T) {
 			flags := &Flags{}
 			flags.Output = test.output
 
-			flags.DefautlIfNoTTY()
+			flags.DefaultIfNoTTY()
 
 			assertion := assert.New(t)
 			assertion.Equal(test.wantOutput, flags.Output)
@@ -186,7 +187,7 @@ func TestSkipPhasesInWorkflowFlags(t *testing.T) {
 	assertion.Equal(phase.Build, flags.SkipPhases[1])
 }
 
-// TestOutLinksDirDefaultTag guards the kong default tag on out_links_dir.
+// Guards the kong default tag OutLinksDir relies on.
 func TestOutLinksDirDefaultTag(t *testing.T) {
 	t.Parallel()
 
@@ -194,4 +195,23 @@ func TestOutLinksDirDefaultTag(t *testing.T) {
 	require.True(t, ok, "WorkflowFlags.OutLinksDir field must exist")
 
 	assert.Equal(t, ".panix", field.Tag.Get("default"))
+}
+
+// TestKongOutputEmptyWithoutFlag guards against reintroducing a kong default
+// tag on Output: DefaultIfNoTTY relies on an empty Output to auto-select
+// console mode when no TTY is present.
+func TestKongOutputEmptyWithoutFlag(t *testing.T) {
+	t.Parallel()
+
+	var cli struct {
+		WorkflowFlags
+	}
+
+	parser := kong.Must(&cli)
+
+	_, err := parser.Parse(nil)
+	require.NoError(t, err)
+
+	assertion := assert.New(t)
+	assertion.Empty(cli.Output, "kong must not default Output when --output is not passed")
 }

@@ -14,6 +14,7 @@
     "@astrojs/starlight": "0.40.0",
     "@lorenzo_lewis/starlight-utils": "^0.3.2",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/table-core": "^9.2.4",
     "astro": "^6.4.8",
     "astro-mermaid": "^2.1.0",
     "sharp": "^0.34.5",

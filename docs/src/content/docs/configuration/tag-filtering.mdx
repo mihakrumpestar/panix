@@ -1,0 +1,47 @@
+---
+title: Tag-Based Filtering
+description: Deploy subsets of your fleet by selecting machines with tags.
+sidebar:
+  order: 6
+---
+
+## Automatic Tags
+
+Every name in the configuration is automatically registered as a tag:
+
+- Flake names (e.g. `infrastructure`)
+- Output types (e.g. `nixosConfigurations`, `homeConfigurations`)
+- Installable attribute names (e.g. `webserver`)
+- Machine names (e.g. `web-01`)
+
+## Tag Inheritance
+
+Set `tags` at fleet, flake, installable, or machine level. Tags accumulate through inheritance, never override: a machine's resolved tags are the union of the `tags` fields of all levels above it plus the automatic tags.
+
+```yaml
+fleet:
+  tags: [production]
+  flakes:
+    infrastructure:
+      tags: [critical]
+      installables:
+        nixosConfigurations:
+          webserver:
+            tags: [web]
+            machines:
+              web-01:
+              web-02:
+```
+
+The resolved tags for `web-01` are `production`, `critical`, `web`, `infrastructure`, `webserver`, `nixosConfigurations`, and `web-01`. Tags are matched by membership, so the order of the resolved tags does not matter.
+
+## Filtering
+
+Pass `--tags` to `panix deploy` to select the machines matching any of the given tags. Multiple tags are comma-separated and match with OR semantics:
+
+```sh
+panix deploy --tags production               # all production-tagged machines
+panix deploy --tags web,nixosConfigurations  # machines matching either tag
+```
+
+See the [`panix deploy` reference](/cli/deploy/) for details.

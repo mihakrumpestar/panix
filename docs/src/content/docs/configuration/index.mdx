@@ -1,62 +1,43 @@
 ---
 title: Overview
-description: How to structure your panix.yml configuration file.
+description: Overview of the panix.yml configuration file and the pages that document every option.
 sidebar:
   order: 1
 ---
 
-Panix is configured through a single YAML file (default: `panix.yml`). The configuration defines your fleet structure, SSH connections, build options, and deployment targets.
+Panix is configured through a single YAML file (default: `panix.yml`) that defines your fleet structure, SSH connections, build options, and deployment targets.
 
-## Minimal Example
+## Fleet Tree
+
+The core of the file is the fleet tree: flakes contain installables, installables contain machines, and settings cascade down each level.
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-schema.yaml
-
-# Minimal Panix configuration demo.
-#
-# All fields have sensible defaults:
-#   config file: panix.yml          (can be overridden with -c)
-#   flake url:   .                  (current directory, can be omitted)
-#   build_mode:  local              (build locally, then nix copy)
-#   activation:  switch             (switch-to-configuration switch)
-#   SSH:         machine name matched against ~/.ssh/config
-#   installable: <outputType>.<name>  (e.g. nixosConfigurations.workstation)
-#   inheritance: fleet → flake → installable → machine
-#                (tags, secrets, SSH, bootstrap, nix cascade down)
-
 fleet:
   flakes:
-    my-infra:
-      # url defaults to ".", can be omitted when flake is in current dir
+    my-flake:
       installables:
         nixosConfigurations:
-          workstation: # nixosConfigurations.workstation
-            machines:
-              workstation: # matched against ~/.ssh/config
-
-          servers: # multi-machine, build once, copy to both
-            machines:
-              server-eu: # matched against ~/.ssh/config
-              server-us:
-                ssh: # SSH not in ~/.ssh/config → specify here
-                  hostname: server-us.example.com
-
-          vps: # another single machine
-            machines:
-              my-vps:
-                ssh:
-                  hostname: 10.0.0.100
-                  port: 2222
+          webserver: { machines: { web-01: } }
 ```
 
-## Top-Level Structure
+See the [Quick Start](/getting-started/) for a full minimal configuration, and the [configuration model](/concepts/configuration-model/) for how inheritance works across the tree.
 
-The configuration has three top-level keys:
+## Top-Level Keys
 
 | Key | Purpose |
 |-----|---------|
-| `flags` | Global flags (activation mode, output mode, TUI settings, logging, snapshots, profiling) |
-| `output_types` | Custom output type presets, applied as defaults to installables of that type (see [custom output types](/configuration/output-types/)) |
-| `fleet` | Fleet definition (flakes, installables, machines, SSH, secrets, nix options) |
+| `flags` | Global flags: activation mode, output mode, TUI settings, logging, snapshots, profiling. All overridable via CLI arguments |
+| `output_types` | Custom output type presets, applied as defaults to installables of that type |
+| `fleet` | Fleet definition: flakes, installables, machines, SSH, secrets, nix options |
 
-Values of `flags` are all overridable via CLI arguments. See the [full YAML reference](/configuration/reference/) for every available option.
+## In This Section
+
+| Page | Contents |
+|------|----------|
+| [Full YAML Reference](/configuration/reference/) | Annotated fleet tree example and the complete auto-generated YAML schema |
+| [Output Types](/configuration/output-types/) | Built-in output types, preset fields, custom output types, attrpath resolution |
+| [Templating](/configuration/templating/) | Go template syntax, Sprout functions, YAML anchors and merge keys |
+| [Nix Command Flags](/configuration/nix-flags/) | Nix base flags, extra flags, and per-level overrides |
+| [Tag-Based Filtering](/configuration/tag-filtering/) | Tag inheritance and deploying subsets of the fleet |
+| [Build Modes](/configuration/build-modes/) | Local vs remote builds |
+| [IDE Support](/configuration/ide-support/) | YAML schema for editor validation and autocompletion |

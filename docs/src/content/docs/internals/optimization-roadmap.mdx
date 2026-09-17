@@ -1,11 +1,11 @@
 ---
-title: Optimization Roadmap
-description: "The journey from 17.6 GB allocations to 44 MB: how Panix achieved 97% CPU reduction and 99% memory reduction across four optimization phases."
+title: Performance Optimization
+description: "The journey from 17.6 GB allocations to 44 MB: how Panix achieved 97% CPU reduction and 99.7% memory reduction across four optimization phases."
 sidebar:
   order: 2
 ---
 
-This article walks through the performance optimization journey of Panix. What started as investigating slow TUI rendering turned into a four-month deep dive that reduced CPU usage by 97% and memory allocations by 99%.
+What started as an investigation into slow TUI rendering became a four-month rewrite of the rendering stack: CPU usage down 97%, memory allocations down 99.7%.
 
 ## Final Results
 
@@ -19,12 +19,13 @@ Benchmarks run 5 times per commit, values are mean ± std.
 | **Total Alloc** | 17,649.10 ± 969.73 MB | 4,388.47 ± 76.51 MB | 432.80 ± 17.84 MB | 44.23 ± 4.87 MB | **-99.7%** |
 | **Total Alloc (objects)** | 34,584,210 ± 1,660,990 | 4,072,698 ± 523,252 | 2,829,148 ± 168,550 | 273,916 ± 49,438 | **-99.2%** |
 
-*Benchmarks run on e2e deploy test with real Nix builds (see [testing page](/project/testing)). Parentheses contain commit hashes, commits may be referenced only in a PR.*
+*Benchmarks run on the e2e deploy test with real Nix builds. Commit hashes in parentheses mark each phase's endpoint.*
 
 ```
 goos: linux
 goarch: amd64
 cpu: AMD Ryzen 9 5900HX with Radeon Graphics
+ran: 2026-06-23
 ```
 
 ---
@@ -41,11 +42,11 @@ Because Go's GC is non-generational, there is no shortcut for short-lived object
 
 The custom engine attacks this from multiple angles. `sync.Pool` reuses backing arrays across frames so they never become garbage. A contiguous `[]byte` buffer with `[]int` line offsets replaces `[]string`, turning per-line allocations into zero-copy slices. `buf[:0]` resets the length while retaining capacity, so the same backing array survives across frames. Scratch buffers use fixed-size arrays (`var pfxBuf [1024]byte`) to stay stack-allocated via escape analysis. `unsafe.Slice` in the `stringbyte` package shares string backing memory as `[]byte` without copying, eliminating the standard `[]byte(s)` allocation on every read-only access in the hot path. Double-buffered frame diffing via `bytes.Equal` ensures only changed lines produce terminal output, bounding both rendering work and I/O by the delta, not the frame size. See [Custom TUI Engine](/internals/tui-engine/) for the full architecture.
 
-The trade-off is that eliminating allocations shifts the bottleneck. In the final phase, CPU profiles show `runtime.memmove` at ~11% (copying bytes between buffers to assemble terminal output), unicode grapheme width calculation via `rivo/uniseg` at ~11% (determining display width of each character; since replaced by a custom rune-width implementation), and `memeqbody` at ~5.5% (the `bytes.Equal` calls for frame diffing). GC overhead dropped to ~8% combined. None of these are realistically optimizable further in Go: the memory copies are the minimum required to assemble terminal output, unicode width is a fundamental requirement for correct layout, and frame diffing is already O(changed lines).
+The trade-off is that eliminating allocations shifts the bottleneck. In the final phase, CPU profiles show `runtime.memmove` as the largest non-syscall node (10-26% of samples depending on the run; copying bytes between buffers to assemble terminal output), with unicode grapheme width calculation via `rivo/uniseg` (since replaced by a custom rune-width implementation), `memeqbody` (the `bytes.Equal` calls for frame diffing), and GC overhead each in the low single digits. None of these are realistically optimizable further in Go: the memory copies are the minimum required to assemble terminal output, unicode width is a fundamental requirement for correct layout, and frame diffing is already O(changed lines).
 
-### But why really?
+### Why a custom engine
 
-A fair question. Plenty of TUIs for LLMs and other tools never had this problem, so why build a custom engine? Their output is append-only. Panix renders a **tree of nested viewports that can shrink**.
+Plenty of TUIs never had this problem: their output is append-only, while Panix renders a **tree of nested viewports that can shrink**.
 
 Append-only output keeps rendering simple. Lines already on screen never move, so layout is just appending at the bottom, and a frame diff only ever touches the end of the screen. Naive string rendering is good enough for that.
 
@@ -59,7 +60,7 @@ Other deployment tools avoid the problem by showing only the last line of Nix ou
 
 We had a working TUI built on [Bubble Tea](https://github.com/charmbracelet/bubbletea). It was fine at first, but with the introduction of e2e tests it became obvious that Panix's single thread was maxing out and making the TUI unresponsive.
 
-It was obvious, that the renderer was doing far too much work. Every frame, every component: stats table, footer, viewports, phase status, build logs, was re-rendered from scratch, even when nothing had changed.
+The renderer was doing far too much work. Every frame re-rendered every component from scratch, even when nothing had changed: stats table, footer, viewports, phase status, build logs.
 
 ---
 
@@ -104,5 +105,5 @@ These changes brought allocations from 433 MB down to 44 MB and CPU to 1.6%.
 - **Measure before you optimize.** Without building a benchmark, we would have been guessing. Several times, an "optimization" turned out to make things worse, and the benchmarks caught it immediately.
 - **Caching is the biggest lever.** Most TUI components don't change between frames, and detecting that is cheap.
 - **Allocations compound.** No single allocation was the problem. But when every component allocates on every frame, and you're rendering 60 times per second with dozens of log outputs, it adds up to gigabytes. Eliminating allocations one type at a time: pooled buffers, callback iteration, pre-computed values, eventually brought total allocations from 17.6 GB down to 44 MB.
-- **Sometimes you need to build your own.** Bubble Tea is a good framework, although it still lacks certain features found in other frameworks (such as built-in scrollbars), but it wasn't designed for the kind of high-frequency, incremental rendering that Panix needed. Building a custom engine was a significant investment, but more than 200x performance improvement justified it.
+- **Sometimes you need to build your own.** Bubble Tea is a good framework, but it wasn't designed for the kind of high-frequency, incremental rendering that Panix needed. Building a custom engine was a significant investment, but more than 200x performance improvement justified it.
 - **Cache invalidation is hard.** One mistake, and cache won't work, or may produce visual artifacts due to being stale or improperly reused.

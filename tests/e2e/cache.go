@@ -37,6 +37,7 @@ func initDirs() error {
 	root := findProjectRoot()
 	cacheDirPath = filepath.Join(root, "tests", "e2e", cacheDirName)
 	logDirPath = filepath.Join(root, "tests", "e2e", logDirName)
+	e2eKexecHardwareConfigPath = filepath.Join(root, "tests", "e2e", "testflakes", "hardware-configuration.nix")
 
 	err := os.MkdirAll(cacheDirPath, dirPerm)
 	if err != nil {
@@ -82,23 +83,21 @@ func closeWithoutErrCheck(closer io.Closer) {
 }
 
 // ensureSSHKeys returns the path to the committed test-only SSH key pair in
-// testflakes/ssh.key. The key pair is static and committed to the repo so that
-// nix builds (which read ssh.pub via builtins.readFile) work without a
-// prior test run.
+// testflakes/ssh.key. It is static and committed so nix builds (which read
+// ssh.pub via builtins.readFile) work without a prior test run.
 func ensureSSHKeys() (string, error) {
 	keyPath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", "ssh.key")
 
 	info, err := os.Stat(keyPath)
 	if err != nil {
-		return "", errors.Wrap(err, "test SSH key not found in testflakes/ssh.key — ensure the key pair is committed")
+		return "", errors.Wrap(err, "test SSH key not found in testflakes/ssh.key: ensure the key pair is committed")
 	}
 
-	// SSH refuses to use private keys that are readable by others (exit status 255,
-	// "bad permissions"). The Go SSH library (used by waitForSSH) doesn't enforce
-	// this, so the reachability check passes but panix's SSH command fails.
-	// Enforce 0600 here so the failure is caught early with a clear message.
+	// SSH refuses private keys readable by others, so panix's ssh command would
+	// fail even though waitForSSH (Go SSH library) passes. Enforce 0600 here so
+	// that failure is caught early with a clear message.
 	if info.Mode().Perm() != requiredSSHKeyPerm {
-		return "", errors.Errorf("test SSH key %s has permissions %o, expected 0600 — run: chmod 600 %s", keyPath, info.Mode().Perm(), keyPath)
+		return "", errors.Errorf("test SSH key %s has permissions %o, expected 0600, run: chmod 600 %s", keyPath, info.Mode().Perm(), keyPath)
 	}
 
 	return keyPath, nil

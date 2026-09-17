@@ -56,8 +56,7 @@ properties:
         default: .panix
       output:
         type: string
-        description: "Output mode: tui, console, json (default: tui)"
-        default: tui
+        description: "Output mode: tui, console, json"
         enum:
         - tui
         - console
@@ -208,7 +207,7 @@ properties:
               description: Disable this
             hardware_config_path:
               type: string
-              description: Path to hardware config
+              description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
             installables:
               type: object
               description: Installables (e.g. nixosConfigurations, homeConfigurations)
@@ -231,7 +230,7 @@ properties:
                       description: Disable this
                     hardware_config_path:
                       type: string
-                      description: Path to hardware config
+                      description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
                     machines:
                       type: object
                       description: Machines configuration
@@ -250,7 +249,7 @@ properties:
                               description: Disable this
                             hardware_config_path:
                               type: string
-                              description: Path to hardware config
+                              description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
                             rsync_default_flags:
                               type: array
                               description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
@@ -266,7 +265,7 @@ properties:
                               $ref: "#/definitions/SSHClient"
                             sudo_program:
                               type: string
-                              description: "Override the sudo program (default: sudo)"
+                              description: "Override the elevation program used when the executing user (SSH or target user) is not root (default: sudo)"
                               default: sudo
                             tags:
                               type: array
@@ -295,7 +294,7 @@ properties:
                       $ref: "#/definitions/SSHClient"
                     sudo_program:
                       type: string
-                      description: "Override the sudo program (default: sudo)"
+                      description: "Override the elevation program used when the executing user (SSH or target user) is not root (default: sudo)"
                       default: sudo
                     tags:
                       type: array
@@ -304,7 +303,7 @@ properties:
                         type: string
                     user:
                       type: string
-                      description: Target user for activation (user-level types only). When set, activation runs as this user via su -l. If empty, uses the SSH username.
+                      description: Target user for activation. When set, commands run as this user via su -l, which requires SSHing as root (su -l would prompt for a password otherwise; system-level types elevate each command with the sudo program unless the target user is root, which is the default; a non-root target user needs passwordless sudo). If empty, uses the SSH username.
                   required:
                   - machines
                   additionalProperties: false
@@ -326,7 +325,7 @@ properties:
               $ref: "#/definitions/SSHClient"
             sudo_program:
               type: string
-              description: "Override the sudo program (default: sudo)"
+              description: "Override the elevation program used when the executing user (SSH or target user) is not root (default: sudo)"
               default: sudo
             tags:
               type: array
@@ -342,7 +341,7 @@ properties:
           additionalProperties: false
       hardware_config_path:
         type: string
-        description: Path to hardware config
+        description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
       nix:
         description: Nix build and copy configuration
         $ref: "#/definitions/NixConfig"
@@ -361,7 +360,7 @@ properties:
         $ref: "#/definitions/SSHClient"
       sudo_program:
         type: string
-        description: "Override the sudo program (default: sudo)"
+        description: "Override the elevation program used when the executing user (SSH or target user) is not root (default: sudo)"
         default: sudo
       tags:
         type: array

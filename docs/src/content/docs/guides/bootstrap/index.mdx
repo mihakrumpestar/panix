@@ -5,27 +5,27 @@ sidebar:
   order: 1
 ---
 
-## Showcase
+Bootstrap converts a bare-metal or existing system into a freshly installed NixOS machine without physical access or installation media.
 
-Full demo of the bootstrap process with kexec over Arch:
+## Demo
 
 <iframe title="Panix bootstrap with kexec" style="aspect-ratio: 16/9; width: 100%; height: auto; border: 0px;" src="https://spectra.video/videos/embed/t2j1bDbQGS2TgLGm1RqfPH?warningTitle=0" allow="fullscreen" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
 
 :::note
-It auto-enrolls Lanzaboote and TPM2 disk encryption bound to Secure Boot. Note that video does not show the steps to enable Audit/Setup mode of Secure Boot in BIOS.
+The demo bootstraps with kexec over an existing Arch install and auto-enrolls Lanzaboote with TPM2 disk encryption bound to Secure Boot. It does not show enabling Secure Boot Audit/Setup mode in BIOS, do that before following along.
 
 Note that it was made with an older version of TUI, and therefore looks different from the current one.
 :::
 
-## Overview
+## The Bootstrap Flow
 
-The bootstrap flow is where Panix distinguishes itself most clearly:
-
-1. **Inspect phase** detects the target OS; if not NixOS, **kexec** boots into a NixOS installer image
+1. **Inspect** phase detects the target OS; if not NixOS, **kexec** boots into a NixOS installer image
 2. **Disko** partitions disks according to your configuration
-3. **Transfer** system closure
+3. **Transfer** the system closure
 4. **nixos-install** lays down the system
 5. **Reboot** into your new NixOS system
+
+Disk encryption keys are transferred before disko runs, and hooks can run at several points in between:
 
 Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
@@ -42,7 +42,7 @@ machines:
         - systemd-cryptenroll --tpm2-device=auto /dev/nvme0n1p2
 ```
 
-See [Bootstrap Hooks](/guides/bootstrap/hooks/) for hook points, [Bootstrap SSH](/guides/bootstrap/ssh/) for SSH configuration, and [Kexec](/guides/bootstrap/kexec/) for custom images and local tarballs.
+See [Bootstrap SSH](/guides/bootstrap/ssh/) for SSH configuration, [Kexec](/guides/bootstrap/kexec/) for custom images and local tarballs, [Bootstrap Hooks](/guides/bootstrap/hooks/) for hook points, and [Force Reinstall](/guides/reinstall/) for redoing already running systems.
 
 ## Hardware Config
 
@@ -58,6 +58,10 @@ On non-NixOS systems:
 nix-shell -p nixos-install-tools --command "nixos-generate-config --no-filesystems --show-hardware-config"
 ```
 
+Panix can automate this: set `hardware_config_path` on the machine and Panix runs the same `nixos-generate-config --show-hardware-config --no-filesystems` command when it finds the machine in the NixOS installer, reads the config it prints, and writes it to the local path on the machine running Panix. On a non-NixOS machine that still needs kexec, the command cannot run before kexec (`nixos-generate-config` does not exist on the original OS), so Bootstrap generates the config right after kexec into the installer and before disko, which evaluates the configuration and may import the file. A single bootstrap therefore produces the file before it is needed (see [Configuration Reference](/configuration/reference/)). Keep the path inside your flake, at the path your configuration imports: the flake is evaluated in pure mode, so it cannot read a file outside its own source.
+
+After writing the file, Panix marks it for addition (`git add -N`, forced when gitignored) so the build that follows already has it: Nix snapshots a git-backed flake from the git tree, so an untracked file would be missing.
+
 ## Encryption Password
 
 If your bootstrap uses disk encryption, create the password file:
@@ -67,4 +71,4 @@ If your bootstrap uses disk encryption, create the password file:
 echo -n "test" > /tmp/disko-encryption-password.txt
 ```
 
-This file, when specified as disk encryption key in config, will be transferred to the target during bootstrap, before disko runs.
+When specified as a disk encryption key in config, this file is transferred to the target during bootstrap, before disko runs.

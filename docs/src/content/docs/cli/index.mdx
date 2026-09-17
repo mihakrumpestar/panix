@@ -1,9 +1,11 @@
 ---
 title: CLI Reference
-description: Panix command-line interface overview and commands.
+description: Panix command overview with links to each command's reference page.
 sidebar:
   order: 1
 ---
+
+Every panix invocation follows `panix <command> [flags]`. The generated help below lists all commands; each reference page covers one command in depth.
 
 {/* CLI_HELP_START */}
 ```sh
@@ -57,20 +59,9 @@ Run "panix <command> --help" for more information on a command.
 ```
 {/* CLI_HELP_END */}
 
-## Commands
+## Command Pages
 
-| Command | Description |
-|---------|-------------|
-| `init` | Initialize a new `panix.yml` configuration file |
-| `schema` | Generate YAML schema for configuration files |
-| `template` | Process templates and anchors, output the result |
-| `eval` | Fully evaluate and validate configuration for execution |
-| `snapshot` | View a snapshot in TUI |
-| `inspect` | Inspect machines (reachability, OS, architecture, generations) |
-| `build` | Build NixOS closures |
-| `deploy` | Full workflow: inspect → bootstrap → build → transfer → secrets → activate |
-| `secrets` | Deploy secrets to machines |
-| `rollback` | Rollback to a previous generation |
-| `completion` | Print shell code for initializing tab completion (bash, zsh, fish) |
-
-See [Deploy Flags](/cli/deploy/) for the full `panix deploy` flag reference, or [Shell Completion](/cli/shell-completion/) to enable tab completion in your shell.
+- [Deploy Flags](/cli/deploy/): full `panix deploy` flag reference, including dry run
+- [Output Modes](/cli/output-modes/): `--output tui/console/json`, file logging, and CI flags
+- [Other Commands](/cli/other-commands/): init, schema, template, eval, inspect, build, secrets, rollback, snapshot
+- [Shell Completion](/cli/shell-completion/): tab completion for bash, zsh, and fish

@@ -1,7 +1,6 @@
 package phaseops
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,11 +67,9 @@ func TestWithEnv_AsUserComposition(t *testing.T) {
 	t.Parallel()
 
 	cmd := WithEnv([]string{"NIX_CONFIG=a b"}, []string{"nix-env", "--list-generations"})
-	result := AsUser("alice", cmd)
+	result := asUser("alice", cmd)
 
 	require.Len(t, result, 5)
 
-	inner := strings.Trim(result[4], `"`)
-
-	assert.Contains(t, inner, `env 'NIX_CONFIG=a b' nix-env`)
+	assert.Equal(t, `XDG_RUNTIME_DIR=/run/user/$(id -u) 'env' 'NIX_CONFIG=a b' 'nix-env' '--list-generations'`, result[4])
 }

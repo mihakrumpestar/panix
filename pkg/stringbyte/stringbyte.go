@@ -1,3 +1,4 @@
+//nolint:recvcheck // UnmarshalJSON needs a pointer, the other methods are value receivers
 package stringbyte
 
 import (
@@ -7,16 +8,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// StringByte is a string that provides zero-copy []byte access.
-// It is comparable (can be used as map key, supports ==/!=) because it is
-// a named string type. Bytes() returns a read-only view of the string's
-// backing memory via unsafe; do NOT modify the returned slice.
-//
-//nolint:recvcheck // intentional: MarshalJSON on value, UnmarshalJSON on pointer
+// StringByte is a named string with zero-copy []byte access; comparability
+// makes it usable as a map key.
 type StringByte string
 
-// Bytes returns the underlying byte slice without allocation.
-// The returned slice shares the string's backing memory; do NOT modify it.
+// Bytes returns the string's backing memory without allocating; the result is
+// read-only, and modifying it corrupts the string.
 //
 //nolint:gosec // G103: intentional use of unsafe for zero-copy string→[]byte
 func (sb StringByte) Bytes() []byte {

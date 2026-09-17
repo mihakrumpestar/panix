@@ -25,8 +25,8 @@ type Attributes struct {
 	Secrets []PlainFileOrDirToTransfer `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine" validate:"dive"`
 
 	Disabled           bool        `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
-	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the sudo program" default:"sudo"`
-	HardwareConfigPath string      `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Path to hardware config"`
+	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the elevation program used when the executing user (SSH or target user) is not root" default:"sudo"`
+	HardwareConfigPath string      `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake"`
 	RsyncDefaultFlags  []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync command (default: [-rcPEx, --mkpath])"`
 	AutoRollback       bool        `yaml:"auto_rollback" json:"auto_rollback,omitempty" desc:"Automatically roll back to the pre-deploy generation when activation fails"`
 
@@ -35,9 +35,8 @@ type Attributes struct {
 	Name  stringbyte.StringByte `yaml:"-" json:"name,omitempty"`
 	Xpath xpath.Xpath           `yaml:"-" json:"xpath,omitzero"`
 
-	// PhaseXpaths maps each phase to its full xpath (entityXpath + "/" + phaseName).
-	// Pre-computed once during Init. Eliminates per-frame string concatenation
-	// in the TUI render loop.
+	// PhaseXpaths is pre-computed once during Init so the TUI render loop
+	// avoids per-frame string concatenation.
 	PhaseXpaths map[phase.Phase]xpath.Xpath `yaml:"-" json:"-"`
 }
 
@@ -81,9 +80,8 @@ func New() *Attributes {
 	return &Attributes{}
 }
 
-// GetRsyncDefaultFlags returns the configured rsync default flags,
-// or the built-in defaults if not set (nil). An explicitly empty slice ([])
-// clears the defaults.
+// GetRsyncDefaultFlags falls back to DefaultRsyncFlags when unset (nil); an
+// explicitly empty slice clears them.
 func (a *Attributes) GetRsyncDefaultFlags() []string {
 	if a.RsyncDefaultFlags != nil {
 		return a.RsyncDefaultFlags
@@ -92,9 +90,8 @@ func (a *Attributes) GetRsyncDefaultFlags() []string {
 	return DefaultRsyncFlags
 }
 
-// GetCurlDefaultFlags returns the configured curl default flags,
-// or the built-in defaults if not set (nil). An explicitly empty slice ([])
-// clears the defaults.
+// GetCurlDefaultFlags falls back to DefaultCurlFlags when unset (nil); an
+// explicitly empty slice clears them.
 func (k *KexecConfig) GetCurlDefaultFlags() []string {
 	if k.CurlDefaultFlags != nil {
 		return k.CurlDefaultFlags
@@ -112,9 +109,9 @@ func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 	return nil
 }
 
-// InitSSH initializes SSH configuration for this machine.
-// SSH config resolution errors (e.g., missing ~/.ssh/config) are logged as warnings
-// and do not prevent initialization; the SSH client retains alias hostname with defaults.
+// InitSSH resolves SSH configuration; resolution errors such as a missing
+// ~/.ssh/config are logged as warnings and leave the alias hostname with
+// defaults rather than failing initialization.
 func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) error {
 	err := a.SSH.Init(a.Name.String(), localMachineHostname, nixInfo)
 	if err != nil {
@@ -131,16 +128,13 @@ func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) e
 	return nil
 }
 
-// passAttributesInto merges parent attributes into child ones, without overriding.
-// For this to work poperly all attributes have to be non-pointers (except leafs,
-// as mergo does not merge individual fields of pointer types, just whole pointer)
-// Has to be run before rest of the Init.
+// passAttributesInto merges parent attributes into the child without overriding.
+// All attributes must be non-pointers (mergo replaces whole pointers, never
+// their fields); must run before the rest of Init.
 //
-// "Default" flag fields (RsyncDefaultFlags) use override semantics: if the child
-// has a value, it is kept; nil inherits from parent. This prevents parent defaults
-// from polluting a child's explicit override.
+// RsyncDefaultFlags-style fields override instead: a child value is kept, nil
+// inherits from the parent, so parent defaults never pollute an explicit override.
 func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) error {
-	// Save child's default-flag slices before merge so we can restore them.
 	childRsyncDefault := a.RsyncDefaultFlags
 	childCurlDefault := a.Bootstrap.Kexec.CurlDefaultFlags
 

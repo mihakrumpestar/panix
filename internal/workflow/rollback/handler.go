@@ -19,9 +19,7 @@ type Handler struct {
 	NixFlavor        nixver.Flavor
 }
 
-// ShouldSkip returns true for installable types that don't have versioned
-// profiles (i.e. packages, which are installed via nix profile add
-// and have no generation concept).
+// ShouldSkip with no profile path means no generations to roll back, e.g. packages.
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 	return fleetLeaf.Installable.Preset.ProfilePath == ""
 }
@@ -107,7 +105,14 @@ func executeRollback(
 ) error {
 	preset := fleetLeaf.Installable.Preset
 
-	closurePath, err := phaseops.FindGenerationClosure(exc, fleetLeaf.Machine, preset.ProfilePath, targetGenNum)
+	closurePath, err := phaseops.FindGenerationClosure(
+		exc,
+		fleetLeaf.Machine,
+		preset,
+		fleetLeaf.Installable.User,
+		preset.ProfilePath,
+		targetGenNum,
+	)
 	if err != nil {
 		return err //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 	}

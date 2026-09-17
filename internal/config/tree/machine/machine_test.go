@@ -17,8 +17,7 @@ import (
 
 // --- Helpers ---
 
-// newTestMachine creates a Machine with State and MetaInspect initialized to
-// zero values. Callers set specific fields (SSH, Bootstrap, etc.) per test.
+// newTestMachine seeds State and MetaInspect; callers set the fields under test.
 func newTestMachine() *Machine {
 	return &Machine{
 		State:       atomicpointer.New[State](),
@@ -54,7 +53,7 @@ func TestGetActiveSSH_EmptyActiveSSH_DefaultsToRegular(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.SSH = ssh.SSHClient{Hostname: "10.0.0.1", Port: 22, Username: "root"}
-	// ActiveSSH is "" (zero value of SSHType) — should default to SSHTypeRegular
+	// ActiveSSH is "" (zero value of SSHType) and should default to SSHTypeRegular
 	mach.State.Store(&State{})
 
 	result := mach.GetActiveSSH()
@@ -87,17 +86,14 @@ func TestGetActiveSSH_Bootstrap(t *testing.T) {
 
 // --- GetActiveSSH: SSHTypeKexec ---
 //
-// These tests cover the critical kexec reconnect path where the SSH port is
-// derived from KexecConfig.SSHPort via Get(). The default (zero) value must
-// resolve to ssh.SSHDefaultPort (22), not 0 — this was the root cause of
-// panix failing to reconnect after kexec boot.
+// The kexec reconnect path derives its port from KexecConfig.SSHPort; the zero
+// value must resolve to ssh.SSHDefaultPort (22), or panix cannot reconnect
+// after kexec boot.
 
 func TestGetActiveSSH_Kexec_DefaultSSHPort(t *testing.T) {
 	t.Parallel()
 
-	// Regression test: SSHPort=0 (not set in YAML) must resolve to port 22.
-	// Before the fix, the raw uint16 zero value was used directly, causing
-	// ReachabilityCheck to dial hostname:0 — which always fails.
+	// Raw zero would dial hostname:0, which always fails.
 	mach := newTestMachine()
 	mach.SSH = ssh.SSHClient{Hostname: "10.0.0.3", Port: 22222, Username: "root"}
 	mach.Bootstrap.SSH = ssh.SSHClient{
@@ -144,8 +140,6 @@ func TestGetActiveSSH_Kexec_CustomSSHPort(t *testing.T) {
 func TestGetActiveSSH_Kexec_BootstrapSSHNotInitialized_DefaultPort(t *testing.T) {
 	t.Parallel()
 
-	// When bootstrap SSH is not initialized, the kexec SSH falls back to
-	// the regular SSH config (mach.SSH) with the SSHPort override applied.
 	mach := newTestMachine()
 	mach.SSH = ssh.SSHClient{
 		Hostname:     "10.0.0.4",
@@ -190,7 +184,7 @@ func TestGetActiveSSH_Kexec_BootstrapSSHNotInitialized_CustomPort(t *testing.T) 
 func TestGetActiveSSH_Kexec_BootstrapSSHTakesPrecedenceOverRegular(t *testing.T) {
 	t.Parallel()
 
-	// Both SSH and Bootstrap.SSH are initialized — Bootstrap.SSH should win.
+	// Both SSH configs are initialized; Bootstrap.SSH wins.
 	mach := newTestMachine()
 	mach.SSH = ssh.SSHClient{
 		Hostname: "regular-host",
@@ -257,8 +251,7 @@ func TestGetActiveSSH_Kexec_SSHPortScenarios(t *testing.T) {
 func TestGetActiveSSH_Kexec_DoesNotMutateOriginalSSHClient(t *testing.T) {
 	t.Parallel()
 
-	// GetActiveSSH must return a copy — modifying the returned Port must not
-	// affect the original mach.Bootstrap.SSH or mach.SSH.
+	// GetActiveSSH must return a copy: mutating it must not affect the originals.
 	mach := newTestMachine()
 	mach.Bootstrap.SSH = ssh.SSHClient{
 		Hostname:     "10.0.0.6",
@@ -305,7 +298,6 @@ func TestGetActiveSSH_PanicsWhenKexecAndNoSSHInitialized(t *testing.T) {
 	t.Parallel()
 
 	mach := newTestMachine()
-	// Neither SSH nor Bootstrap.SSH has hostname set
 	mach.Bootstrap.Kexec.SSHPort = 22
 	mach.State.Store(&State{ActiveSSH: SSHTypeKexec})
 
@@ -360,6 +352,71 @@ func TestMaybeSudo_IsRootIgnoresSudoProgram(t *testing.T) {
 	result := mach.MaybeSudo()
 
 	assert.Empty(t, result, "when IsRoot, sudo program is not needed")
+}
+
+// --- MaybeSudoFor ---
+
+func TestMaybeSudoFor_EmptyUserDelegatesToMaybeSudo(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.MetaInspect.Store(&MetaInspect{IsRoot: false})
+
+	assert.Equal(t, mach.MaybeSudo(), mach.MaybeSudoFor(""))
+
+	mach.MetaInspect.Store(&MetaInspect{IsRoot: true})
+	assert.Equal(t, mach.MaybeSudo(), mach.MaybeSudoFor(""))
+}
+
+func TestMaybeSudoFor_NonRootUser(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.MetaInspect.Store(&MetaInspect{IsRoot: false})
+
+	// Named target users need elevation even when the SSH user is root:
+	// su -l drops privileges to run as that user.
+	result := mach.MaybeSudoFor("alice")
+
+	assert.Equal(t, []string{"sudo"}, result)
+}
+
+// Named-user elevation ignores IsRoot: su -l always drops privileges, so the
+// sudo program is required regardless.
+func TestMaybeSudoFor_NamedUserIsIndependentOfSSHRootness(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.MetaInspect.Store(&MetaInspect{IsRoot: true})
+
+	result := mach.MaybeSudoFor("bob")
+
+	assert.Equal(t, []string{"sudo"}, result)
+}
+
+// Unknown rootness (nothing stored in MetaInspect, e.g. before Machine.Init
+// seeds it) must assume elevation is needed.
+func TestMaybeSudo_NilMetaInspectFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	mach := &Machine{MetaInspect: &atomicpointer.AtomicPointer[MetaInspect]{}}
+	require.Nil(t, mach.MetaInspect.Load(), "precondition: nothing stored in the atomic")
+
+	result := mach.MaybeSudo()
+
+	assert.Equal(t, []string{"sudo"}, result)
+}
+
+func TestMaybeSudoFor_RootUserNeedsNoElevation(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.SudoProgram = attributes.SudoProgram("doas")
+	mach.MetaInspect.Store(&MetaInspect{IsRoot: false})
+
+	result := mach.MaybeSudoFor("root")
+
+	assert.Empty(t, result, "root needs no elevation regardless of SSH user or sudo program")
 }
 
 // --- MaybeBootstrappingPath ---
@@ -727,8 +784,7 @@ func TestInit_SetsXpath(t *testing.T) {
 func TestInit_OverwritesExistingInternalState(t *testing.T) {
 	t.Parallel()
 
-	// Init should always create fresh internal state, even if some fields
-	// were already set (e.g. from a previous partial init or YAML unmarshal).
+	// Internal state is always recreated, even if already set (e.g. YAML unmarshal).
 	oldState := atomicpointer.New[State]()
 	oldState.Store(&State{ActiveSSH: SSHTypeBootstrap})
 

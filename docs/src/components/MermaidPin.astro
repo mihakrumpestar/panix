@@ -1,0 +1,87 @@
+---
+// Mermaid renders client-side into pre.mermaid. Wide diagrams shrink to the
+// content column, so the svg fits the column as an overview and click or
+// Enter opens a full-viewport lightbox where it uses the whole screen.
+---
+
+<style is:global>
+	.sl-markdown-content pre.mermaid svg {
+		width: 100% !important;
+		max-width: 100% !important;
+		height: auto !important;
+		cursor: zoom-in;
+	}
+
+	.mermaid-lightbox {
+		position: fixed;
+		inset: 0;
+		z-index: 999;
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		padding: 1.5rem;
+		overflow: auto;
+		background: color-mix(in oklab, var(--sl-color-black) 88%, transparent);
+		cursor: zoom-out;
+	}
+
+	.mermaid-lightbox svg {
+		width: min(100vw - 3rem, 100%) !important;
+		max-width: none !important;
+		height: auto !important;
+		cursor: default;
+	}
+</style>
+
+<script>
+	// Bind the lightbox to each rendered mermaid svg. scan() reruns on every
+	// relevant DOM change, so late renders, node replacement, or re-renders
+	// by astro-mermaid are all covered.
+	function enhance(pre: Element) {
+		const svg = pre.querySelector("svg");
+		if (!svg || svg.dataset.zoomBound) return;
+		svg.dataset.zoomBound = "1";
+		svg.setAttribute("role", "button");
+		svg.setAttribute("tabindex", "0");
+		svg.setAttribute("aria-label", "Open diagram fullscreen");
+
+		const open = (e: Event) => {
+			e.stopPropagation();
+			const box = document.createElement("div");
+			box.className = "mermaid-lightbox";
+			// Width comes from the .mermaid-lightbox svg rule: viewport-fit,
+			// upscaling beyond natural size on wide screens.
+			const clone = svg.cloneNode(true) as SVGSVGElement;
+			clone.style.width = "";
+			clone.style.maxWidth = "none";
+			clone.style.height = "auto";
+			clone.removeAttribute("role");
+			clone.removeAttribute("tabindex");
+			clone.setAttribute("aria-label", "Diagram, fullscreen view");
+			box.appendChild(clone);
+			box.addEventListener("click", () => box.remove());
+			document.addEventListener("keydown", (e) => {
+				if (e.key === "Escape") box.remove();
+			});
+			document.body.appendChild(box);
+		};
+		svg.addEventListener("click", open);
+		svg.addEventListener("keydown", (e: KeyboardEvent) => {
+			if (e.key === "Enter" || e.key === " ") open(e);
+		});
+	}
+
+	function scan() {
+		document.querySelectorAll("pre.mermaid").forEach(enhance);
+	}
+
+	scan();
+	window.addEventListener("load", scan);
+	// Document-level: survives pre replacement and svg re-renders.
+	new MutationObserver(scan).observe(document.body, {
+		childList: true,
+		subtree: true,
+		attributes: true,
+		attributeFilter: ["style"],
+	});
+</script>

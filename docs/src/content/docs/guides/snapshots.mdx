@@ -5,16 +5,9 @@ sidebar:
   order: 8
 ---
 
-Snapshots capture the full state of a deployment workflow at a point in time and save it to a JSON file. They include machine states, phase results, command outputs, inspect metadata, and timing information.
+Capture the full state of a deployment workflow at a point in time, then replay it later in the TUI for inspection, debugging, or sharing (for example, as context for an LLM).
 
-**Why snapshots?** When a deployment fails, a snapshot preserves the exact state for later inspection, debugging, sharing with others or to give them as context to LLMs. Instead of scrolling through TUI logs or parsing terminal scrollback, you get a structured record of everything that happened.
-
-:::tip[Use snapshots as LLM context]
-A snapshot is a self-contained JSON record of an entire deployment run, including machine states, phase results, command outputs, inspect metadata, and timing. When a deployment fails, paste the snapshot into an LLM prompt instead of scrolling through TUI logs or terminal scrollback.
-
-See real snapshot examples in the [`examples`](https://github.com/mihakrumpestar/panix/tree/main/examples) directory.
-
-Here's what a snapshot contains (trimmed for brevity):
+A snapshot is a self-contained JSON file containing machine states, phase results, command outputs, inspect metadata, and timing information. Real snapshot examples live in the [`examples`](https://github.com/mihakrumpestar/panix/tree/main/examples) directory. Here is what one contains (trimmed for brevity):
 
 ```json
 {
@@ -29,7 +22,6 @@ Here's what a snapshot contains (trimmed for brevity):
   "flags": {
     "config": "examples/panix.deploy.yml",
     "tags": ["personal-workstation"],
-    "timeout": 5500000000000,
     "output": "tui"
   },
   "fleet": {
@@ -67,7 +59,7 @@ Here's what a snapshot contains (trimmed for brevity):
                                   "command_logs": [
                                     {
                                       "description": "bootstrap detection",
-                                      "command": "ssh ... personal-workstation cat /etc/os-release",
+                                      "command": "ssh ... personal-workstation 'cat' '/etc/os-release'",
                                       "output": ["ID=nixos", "PRETTY_NAME=\"NixOS 26.11 (Zokor)\"", "VERSION=\"26.11 (Zokor)\""],
                                       "time_and_state": { "duration": 11652245 }
                                     }
@@ -80,7 +72,7 @@ Here's what a snapshot contains (trimmed for brevity):
                                   "command_logs": [
                                     {
                                       "description": "activate",
-                                      "command": "ssh ... personal-workstation /nix/store/.../bin/switch-to-configuration switch",
+                                      "command": "ssh ... personal-workstation '/nix/store/.../bin/switch-to-configuration' 'switch'",
                                       "output": [
                                         "activating the configuration...",
                                         "setting up /etc...",
@@ -159,7 +151,8 @@ Here's what a snapshot contains (trimmed for brevity):
   }
 }
 ```
-:::
+
+Each machine carries `meta_inspect` (reachability, OS, architecture, generations), `machine_state` (status, phase, error), and `logs.phase_logs` with full command outputs; the flake level adds `meta_build.closure` with the built store path.
 
 ## Taking Snapshots
 
@@ -179,19 +172,15 @@ panix-snapshot-<start_epoch>-<snapshot_epoch>-<reason>.json
 
 Where `<reason>` is `manual`, `retry`, or `exit`.
 
-## Viewing Snapshots
-
-Replay any snapshot in the TUI:
+## Replaying a Snapshot
 
 ```sh
 panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
 ```
 
-This opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at the time of capture will also appear as running (loading spinners) in TUI replay.
+Replay opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at capture time also appear as running (loading spinners). The `r` (retry) and `ctrl+r` (restart) keybinds are disabled since the workflow is not running.
 
-:::note
-`r` (retry) and `ctrl+r` (restart) keybinds are disabled in snapshot view since the workflow is not running.
-:::
+For the `panix snapshot` command, see [Other Commands](/cli/other-commands/); for the `--snapshot.*` capture flags, see [Deploy Flags](/cli/deploy/).
 
 ## Configuration
 
@@ -201,10 +190,4 @@ flags:
     dir: .                    # Directory to save snapshots
     on_retry: true            # Take snapshot before retry
     on_exit: true             # Take snapshot on exit
-```
-
-Or via CLI flags:
-
-```sh
-panix deploy --snapshot.dir=./snapshots --snapshot.on-retry --snapshot.on-exit
 ```

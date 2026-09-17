@@ -1,50 +1,48 @@
 ---
 title: Output Modes
-description: TUI, console, and JSON output modes with file logging.
+description: TUI, console, and JSON output modes with file logging and CI flags.
 sidebar:
   order: 3
 ---
 
-Panix supports three output modes via the `--output` flag:
+Choose how panix reports progress with `--output`, and pair non-interactive modes with file logging and CI flags.
+
+## Modes
 
 | Mode | Description |
 |------|-------------|
-| `tui` | Interactive TUI with real-time visibility (default, requires TTY) |
-| `console` | Human-readable log output to stdout (auto-selected when no TTY present) |
+| `tui` | Interactive TUI with real-time visibility (default, requires a TTY) |
+| `console` | Human-readable log output to stdout |
 | `json` | JSON-structured log output to stdout |
 
 ```sh
-# Interactive TUI (default)
-panix deploy
-
-# Human-readable output (no TUI)
-panix deploy --output console
-
-# JSON output (for piping to tools)
-panix deploy --output json
-
-# JSON output with file logging
+panix deploy --output console   # Human-readable output
+panix deploy --output json      # JSON output for piping to tools
 panix deploy --output json --log
 ```
 
-When no TTY is present, `--output console` is automatically selected since the TUI cannot render without a terminal.
+When no TTY is present, `console` is selected automatically since the TUI cannot render without a terminal. For interactive behavior in TUI mode (keybinds and view options), see [TUI Keybinds](/tui/keybinds/).
 
 ## File Logging
 
-Enabled with `--log` and writes structured JSON to a file with an epoch timestamp in the name (e.g., `panix.1746565600.log`):
+`--log` writes structured JSON to a file with an epoch timestamp in the name (e.g., `panix.1746565600.log`):
 
 ```sh
 panix deploy --log                        # Log to panix.<epoch>.log
 panix deploy --log --log-file deploy.log  # Log to deploy.<epoch>.log
+panix deploy --debug                      # Debug mode (enables logging)
 ```
+
+In `panix.yml` these live under `flags.logging`: `log`, `log_file`, `debug`.
 
 ## JSON Structure
 
 Console/JSON output includes:
 
-- Structured fields: xpath, phase, description, command, duration, status, status_running, output
+- Structured fields: xpath, phase, description, command, duration (end events only), status, status_running, output
 - `command_start` / `command_end` events per command with duration in seconds
 - `phase_start` / `phase_end` events per phase
+- `workflow_start` (emitted first, includes the machine count)
 - `workflow_end` with final state of all machines (xpath, status, phase, total duration, error)
 - Failed events are logged at `ERROR` level, successful ones at `INFO`
 
@@ -56,13 +54,12 @@ Example:
 {"level":"error","event":"workflow_end","machines":[{"xpath":"fleet/...","status":"failed","phase":"inspect","duration":0.06,"error":"reachability check failed: regular SSH is unreachable"}],"status":"failed","error":"one or more machines failed","time":"2026-04-08T23:59:43+02:00","message":"workflow completed"}
 ```
 
-## Failure Modes
+## CI Flags
 
 ```sh
-# Fail immediately on first error
-panix deploy --require-all-success
-
-# In TUI mode (console and JSON modes do this automatically), force exit when workflow finishes
-# (by default TUI stays open)
-panix deploy --exit-on-complete
+panix deploy --require-all-success   # Abort if any task fails
+panix deploy --exit-on-complete      # Exit when the workflow finishes
 ```
+
+- `--require-all-success` aborts the run if any task fails, primarily for CI/CD. The retry and restart keybinds are disabled in this mode.
+- `--exit-on-complete` forces the TUI to exit when the workflow finishes. Console and JSON modes exit automatically.

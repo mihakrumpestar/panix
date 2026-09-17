@@ -1,13 +1,48 @@
 ---
-title: SSH Config Integration
-description: Using ~/.ssh/config and local machine detection.
+title: SSH Setup
+description: Set up SSH key authentication and reuse your ~/.ssh/config host aliases in Panix.
 sidebar:
   order: 7
 ---
 
+Give Panix SSH key access to your machines and reuse your existing `~/.ssh/config` host aliases.
+
+:::caution
+Panix requires SSH key authentication. Password authentication is not supported.
+:::
+
+## From Password to Key Auth
+
+If your target machine only has password access, set up a temporary key:
+
+```sh
+# On remote: set a password for root
+sudo passwd
+```
+
+```sh
+export REMOTE=<host>
+
+# Generate key pair (no passphrase)
+ssh-keygen -t ed25519 -f ./temp_key -C "temporary_deployment_key" -N ""
+
+# Copy key to remote
+# SSH_AUTH_SOCK="" prevents trying keys from the agent
+SSH_AUTH_SOCK="" ssh-copy-id -i ./temp_key.pub \
+  -o UserKnownHostsFile=/dev/null \
+  -o StrictHostKeyChecking=no \
+  root@$REMOTE
+```
+
+Test the connection:
+
+```sh
+ssh -i ./temp_key -o IdentitiesOnly=yes root@$REMOTE
+```
+
 ## SSH Config Integration
 
-Panix reads `~/.ssh/config`. If your machine name matches a host alias:
+Panix reads `~/.ssh/config`. If your machine name matches a host alias, no connection parameters are needed:
 
 Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
@@ -16,9 +51,9 @@ machines:
   production-server-01:     # Uses SSH config: HostName, Port, User (identity file etc. resolved by ssh via the alias)
 ```
 
-No duplication. Your SSH config is the source of truth for connection parameters.
+Your SSH config is the source of truth for connection parameters, no duplication.
 
-If you don't use SSH config or need to add/change something temporarily you can specify SSH options directly:
+If you don't use SSH config or need to override something temporarily, specify SSH options directly:
 
 Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
@@ -36,7 +71,7 @@ machines:
 
 ## Local Machine Detection
 
-Deploying to the machine you're on? If the machine name matches the system hostname, Panix skips SSH entirely, executing commands directly via local shell:
+If the machine name matches the system hostname, Panix skips SSH entirely and executes commands via local shell:
 
 Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
@@ -46,7 +81,7 @@ machines:
   workstation:              # Detected as local, no SSH
 ```
 
-This can be overridden (if you want to prevent this, or if hostname detection does not work for you):
+To prevent this (or when hostname detection does not work for you), override it:
 
 ```yaml
 flags:
@@ -55,13 +90,11 @@ flags:
 
 ### Forcing SSH to Localhost
 
-If you haven't set up passwordless sudo on your local machine (and don't want to, it's a security risk on desktops), you can force Panix to always SSH into the local machine instead of executing commands directly via local shell.
-
-Set `local_machine_hostname` to a value that will never match any real hostname:
+To avoid passwordless sudo on your local machine (a security risk on desktops), force Panix to always SSH into it. Set `local_machine_hostname` to a value that will never match any real hostname:
 
 ```yaml
 flags:
   local_machine_hostname: never-match-anything
 ```
 
-Since the sentinel value won't match any machine name in your fleet, Panix will never detect any machine as local and will always connect via SSH, even when deploying to the machine you're running from. This lets you rely on SSH key authentication instead of local sudo.
+The sentinel matches no real hostname, so Panix always connects via SSH, even when deploying from the machine itself, relying on key authentication instead of local sudo.

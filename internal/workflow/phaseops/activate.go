@@ -9,25 +9,31 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
+	"github.com/mihakrumpestar/panix/pkg/shellquote"
 )
 
-// SetProfile runs `nix-env --profile <profilePath> --set <closure>`.
-// Uses sudo if the machine's SSH user is not root.
-func SetProfile(exc *executioner.Executioner, mach *machine.Machine, profilePath, closure string) error {
+// SetProfile sets the profile to closure, wrapped as the installable's target
+// user via WrapAsTargetUser.
+func SetProfile(
+	exc *executioner.Executioner,
+	mach *machine.Machine,
+	preset installable.Preset,
+	profilePath string,
+	closure string,
+	targetUser string,
+) error {
 	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"set profile",
 		"setting profile: "+profilePath,
 		"failed to set profile",
-		append(mach.MaybeSudo(), "nix-env", "--profile", profilePath, "--set", closure),
+		WrapAsTargetUser(mach, preset, targetUser, []string{"nix-env", "--profile", profilePath, "--set", closure}),
 		executioner.Trim(),
 	)
 }
 
-// Activate runs the activation for the given preset's output type.
-// For system-level types: uses MaybeSudo() (sudo if SSH user isn't root).
-// For user-level types with a target user: wraps activation in `su -l <user> -c`.
-// For user-level types without a target user: runs as the SSH user directly.
-// For packages: runs nix profile add.
+// Activate runs the activation for the given preset's output type, wrapping
+// every command it issues as the installable's target user via
+// WrapAsTargetUser.
 func Activate(
 	exc *executioner.Executioner,
 	mach *machine.Machine,
@@ -38,13 +44,13 @@ func Activate(
 	nixCfg *nix.NixConfig,
 	nixFlavor nixver.Flavor,
 ) error {
-	err := maybeSetProfile(exc, mach, preset, closure, mode)
+	err := maybeSetProfile(exc, mach, preset, closure, mode, targetUser)
 	if err != nil {
 		return err
 	}
 
 	if preset.ActivationPath == "" {
-		return activatePackage(exc, preset, closure, targetUser, nixCfg, nixFlavor)
+		return activatePackage(exc, mach, preset, closure, targetUser, nixCfg, nixFlavor)
 	}
 
 	return activateScript(exc, mach, preset, closure, mode, targetUser)
@@ -56,6 +62,7 @@ func maybeSetProfile(
 	preset installable.Preset,
 	closure string,
 	mode string,
+	targetUser string,
 ) error {
 	if preset.ProfilePath == "" || preset.SetProfile == nil || !*preset.SetProfile {
 		return nil
@@ -68,21 +75,19 @@ func maybeSetProfile(
 		return nil
 	}
 
-	// No wrap: the executioner already prefixes errors with the command's statusIfFailed ("failed to set profile").
-	return SetProfile(exc, mach, preset.ProfilePath, closure)
+	// No wrap: the executioner prefixes errors with the command's statusIfFailed.
+	return SetProfile(exc, mach, preset, preset.ProfilePath, closure, targetUser)
 }
 
 func activatePackage(
 	exc *executioner.Executioner,
+	mach *machine.Machine,
 	preset installable.Preset,
 	closure string,
 	targetUser string,
 	nixCfg *nix.NixConfig,
 	nixFlavor nixver.Flavor,
 ) error {
-	// Lix doesn't support `nix profile add` (Nix 2.30 renamed install to add,
-	// but Lix never adopted the rename). Use `install` when Lix is detected;
-	// keep `add` as default for Nix.
 	profileSubcmd := profileSubcmdForFlavor(nixFlavor)
 
 	args := slices.Concat(
@@ -93,9 +98,9 @@ func activatePackage(
 		[]string{closure},
 	)
 
-	if !preset.IsSystemLevelValue() && targetUser != "" {
-		args = asUser(targetUser, args)
-	}
+	// Wrap the full argv: system-level package types (custom presets) own
+	// root-owned profiles, so MaybeSudo applies with no target user.
+	args = WrapAsTargetUser(mach, preset, targetUser, args)
 
 	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"activate", "installing package", "package installation failed",
@@ -112,19 +117,12 @@ func activateScript(
 	mode string,
 	targetUser string,
 ) error {
-	args := []string{}
-	if preset.IsSystemLevelValue() {
-		args = append(args, mach.MaybeSudo()...)
-	}
-
-	args = append(args, closure+"/"+preset.ActivationPath)
+	args := []string{closure + "/" + preset.ActivationPath}
 	if len(preset.ActivationModes) > 0 {
 		args = append(args, mode)
 	}
 
-	if !preset.IsSystemLevelValue() && targetUser != "" {
-		args = asUser(targetUser, args)
-	}
+	args = WrapAsTargetUser(mach, preset, targetUser, args)
 
 	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"activate", "activating", "activation failed",
@@ -133,118 +131,78 @@ func activateScript(
 	)
 }
 
-// AsUser wraps a command to run as a different user via `su -l <user> -c "<command>"`.
-// Uses su instead of sudo because sudo may not be in PATH on NixOS
-// (it's at /run/wrappers/bin/sudo). su is universally available.
+// asUser is the quoting core of WrapAsTargetUser: it wraps a command as
+// `su -l <user> -c "<command>"`. su instead of sudo because sudo may not be in
+// PATH on NixOS (it is at /run/wrappers/bin/sudo); su is universally available.
 //
-// The command must survive two layers of shell parsing:
-//  1. SSH joins all args after the hostname with spaces and sends them to the
-//     remote shell. The -c argument must be a single shell word so it isn't
-//     split by the remote shell.
-//  2. `su -c` runs the command string through a login shell, which re-parses
-//     it. Arguments containing spaces (e.g. "nix-command flakes") must stay
-//     together, and tilde (~) must remain unquoted for home directory expansion.
+// The -c string is a shell program: each argument is single-quoted
+// (pkg/shellquote) to parse as one literal word, except ~, which stays bare for
+// the login shell to expand to the target user's home. XDG_RUNTIME_DIR is
+// prepended because su -l does not set it (pam_systemd does only for real login
+// sessions) and tools such as systemd-tmpfiles --user and sd-switch need it for
+// the user D-Bus socket at /run/user/<uid>/bus.
 //
-// Quoting is applied minimally to the command itself: only args containing
-// shell-unsafe characters are single-quoted. The command is then prefixed with
-// an XDG_RUNTIME_DIR assignment (su -l does not set it) and always wrapped in
-// an outer double-quote pair, since the prefix introduces whitespace and the
-// -c argument must be a single shell word for SSH transport.
-//
-// Note: This function is designed for the SSH execution path. When panix
-// dispatches commands via SSH, the remote shell consumes the outer double
-// quotes before `su -c` runs. For local (non-SSH) execution, the quoting
-// would need to be different since exec.Command uses argv directly.
-func AsUser(user string, command []string) []string {
+// The string is a single argv element, so su -c parses the identical string on
+// local and remote machines.
+func asUser(user string, command []string) []string {
 	if user == "" {
 		return command
 	}
 
-	// Step 1: shell-quote each arg individually. Only args with unsafe
-	// characters (spaces, quotes, $, etc.) get single-quoted; safe args
-	// (alphanumerics, paths, flags, ~) pass through unquoted.
-	// Tilde (~) is left unquoted so the login shell can expand it to the
-	// target user's home directory (e.g. ~/.local/state/nix/profiles/...).
 	quoted := make([]string, len(command))
 	for i, arg := range command {
-		quoted[i] = shellQuote(arg)
+		quoted[i] = shellquote.QuoteWord(arg)
 	}
 
-	// Step 2: su -l does not set XDG_RUNTIME_DIR (pam_systemd only sets it
-	// for real login sessions). User-level tools such as systemd-tmpfiles
-	// --user and sd-switch need it to locate the user D-Bus socket at
-	// /run/user/<uid>/bus. Prepend the assignment; $(id -u) is expanded by
-	// the login shell spawned by su, yielding the target user's UID.
 	inner := xdgRuntimeDirPrefix + strings.Join(quoted, " ")
-
-	// Step 3: wrap in double quotes so SSH's space-joining treats it as a
-	// single argument to `su -c`. Characters special inside double quotes are
-	// escaped to survive the remote shell's double-quote processing; this
-	// turns the prefix's $ into \$ so the remote shell passes a literal
-	// $(id -u) through to the login shell, which then expands it. Tilde
-	// expansion does not happen inside double quotes, so ~ passes through to
-	// the login shell where it IS expanded (because it's unquoted within the
-	// command string).
-	inner = escapeDoubleQuoteSpecials(inner)
-	inner = `"` + inner + `"`
 
 	return []string{"su", "-l", user, "-c", inner}
 }
 
-// shellSafeChars are characters that don't need shell quoting.
-// Tilde (~) is included so paths like ~/.local/... are left unquoted,
-// allowing the login shell to expand ~ to the target user's home.
-// Equals (=) is included for --flag=value style arguments.
-const shellSafeChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./,:@+~="
+// NormalizedTargetUser maps a configured target user to the user the command
+// runs as: system-level "root" becomes the no-user sudo path (sudo is how panix
+// reaches root, and su -l root would prompt), user-level "root" stays a
+// legitimate login-shell target.
+func NormalizedTargetUser(preset installable.Preset, targetUser string) string {
+	if preset.IsSystemLevelValue() && targetUser == "root" {
+		return ""
+	}
 
-// xdgRuntimeDirPrefix is prepended to user-level activation commands so the
-// login shell sets XDG_RUNTIME_DIR, which su -l does not. $(id -u) resolves
-// to the target user's UID inside that login shell.
+	return targetUser
+}
+
+// WrapAsTargetUser is the single public wrap for commands that run on a target
+// machine: it applies the preset's privilege model and returns the argv to run.
+//
+//   - user-level: the SSH user, or the target user via `su -l <user> -c "<cmd>"`;
+//     never elevated.
+//   - system-level: elevated for whoever ends up running the command. The SSH
+//     user gets MaybeSudo prefixed directly; a target user gets MaybeSudoFor
+//     inside the su shell (su -l needs a root SSH user; a non-root target user
+//     needs passwordless sudo; a root target user needs no inner elevation). The
+//     XDG_RUNTIME_DIR prefix applies to the su login shell and may not survive
+//     sudo's env_reset.
+//
+// Inspect validates the su -l precondition before any deploy phase runs.
+func WrapAsTargetUser(mach *machine.Machine, preset installable.Preset, targetUser string, cmd []string) []string {
+	targetUser = NormalizedTargetUser(preset, targetUser)
+
+	switch {
+	case !preset.IsSystemLevelValue():
+		return asUser(targetUser, cmd)
+	case targetUser == "":
+		return append(mach.MaybeSudo(), cmd...)
+	default:
+		return asUser(targetUser, append(mach.MaybeSudoFor(targetUser), cmd...))
+	}
+}
+
+// xdgRuntimeDirPrefix is the XDG_RUNTIME_DIR assignment asUser prepends;
+// $(id -u) expands in the su login shell.
 const xdgRuntimeDirPrefix = `XDG_RUNTIME_DIR=/run/user/$(id -u) `
 
-// shellQuote wraps a string in single quotes if it contains any character
-// that is not shell-safe. Empty strings are also quoted.
-func shellQuote(str string) string {
-	if str == "" {
-		return "''"
-	}
-
-	if isShellSafe(str) {
-		return str
-	}
-
-	return "'" + strings.ReplaceAll(str, "'", `'\''`) + "'"
-}
-
-func isShellSafe(str string) bool {
-	for i := range len(str) {
-		if !strings.ContainsRune(shellSafeChars, rune(str[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// escapeDoubleQuoteSpecials escapes characters that are special inside double
-// quotes: backslash, double-quote, dollar, and backtick. Backslash is escaped
-// first so we don't double-escape backslashes added by subsequent replacements.
-func escapeDoubleQuoteSpecials(str string) string {
-	str = strings.ReplaceAll(str, `\`, `\\`)
-	str = strings.ReplaceAll(str, `"`, `\"`)
-	str = strings.ReplaceAll(str, `$`, `\$`)
-	str = strings.ReplaceAll(str, "`", "\\`")
-
-	return str
-}
-
-func asUser(user string, command []string) []string {
-	return AsUser(user, command)
-}
-
-// profileSubcmdForFlavor returns the `nix profile` subcommand for the given
-// nix implementation. Lix never adopted the Nix 2.30 rename of `install` to
-// `add`, so it needs `install`. Nix supports both; `add` is the modern default.
+// profileSubcmdForFlavor returns "install" for Lix, which never adopted the Nix
+// 2.30 rename of `install` to `add`, and "add" for Nix (the modern default).
 func profileSubcmdForFlavor(flavor nixver.Flavor) string {
 	if flavor == nixver.FlavorLix {
 		return "install"

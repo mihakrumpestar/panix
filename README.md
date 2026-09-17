@@ -12,7 +12,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue)](https://github.com/mihakrumpestar/panix/blob/main/LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mihakrumpestar/panix)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/mihakrumpestar/panix/pkg.svg)](https://pkg.go.dev/github.com/mihakrumpestar/panix/pkg)
-[![golangci-lint](https://img.shields.io/github/actions/workflow/status/mihakrumpestar/panix/ci.yml?label=golangci-lint&branch=main)](https://github.com/mihakrumpestar/panix/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/mihakrumpestar/panix/ci.yml?label=CI&branch=main)](https://github.com/mihakrumpestar/panix/actions/workflows/ci.yml)
 [![Zero CGO](https://img.shields.io/badge/CGO-none-success)](https://github.com/mihakrumpestar/panix)
 ![GitHub last commit](https://img.shields.io/github/last-commit/mihakrumpestar/panix)
 [![Code lines](./gen/loc.svg)](https://github.com/boyter/scc/)
@@ -42,53 +42,38 @@ Screenshot:
 
 ## The Problem
 
-Deploying Nix installables, whether to a single machine or across a whole fleet, is a fragmented mess. For NixOS, you bootstrap bare metal with `nixos-anywhere`, then use `nixos-rebuild` for one machine at a time or orchestrate fleets with `Colmena`, `deploy-rs`, etc. Each tool is excellent, in isolation, the moment you try to compose them, you're on your own.
-
-There's no unified pipeline. Bootstrap and deploy are separate workflows with separate configs. A failed phase means restarting from scratch, and partial progress is lost. Failures hide in scrollback logs or are nonexistent, discovered only after the damage is done. Most tools require modifying your flake to include their module or output, making them unusable for bootstrapping since they assume the target system is already running.
-
-Panix eliminates all of this: one binary, one config file, full lifecycle. From bare metal to running installables, in a single orchestrated pipeline.
+Deploying Nix installables today means stitching together separate tools: one for bootstrapping bare metal, another for rebuilding single machines, a third for orchestrating fleets. Panix replaces that mix with one binary, one config file, and a single observable pipeline from bare metal to running systems. See the [overview](https://panix.xyz/concepts/overview/) for the full picture.
 
 ## What Panix Does
 
-Panix is a stateless deployment orchestrator for Nix flake installables. It manages the entire lifecycle of deploying systems, home environments, and packages to machines, from provisioning bare metal to ongoing updates, as a single, observable, recoverable pipeline.
+Panix is a stateless deployment orchestrator for Nix flake installables. A deploy runs one ordered pipeline, Inspect → Bootstrap → Build → Transfer → Secrets → Activate: bootstrap and secrets only run for machines that need them, and rollback is available as a standalone command. Each phase is detailed in the [phases reference](https://panix.xyz/concepts/phases/).
 
-**Six phases, one execution:**
+- **[Real-time TUI](https://panix.xyz/tui/keybinds/)**: per-machine, per-phase progress, single-key retry of failed phases, snapshot and replay.
+- **[Build once, deploy many](https://panix.xyz/concepts/configuration-model/)**: one build per installable shared by every machine using it, optional [remote builds](https://panix.xyz/configuration/build-modes/) and [GC-rooted outlinks](https://panix.xyz/configuration/nix-flags/).
+- **[Multi-flake](https://panix.xyz/concepts/multi-flake/) fleets with [tag filtering](https://panix.xyz/configuration/tag-filtering/)**: deploy across repositories and subsets like `panix deploy --tags production`.
+- **[Secrets](https://panix.xyz/guides/secrets/) and [bootstrap hooks](https://panix.xyz/guides/bootstrap/hooks/)**: files stay outside the Nix store with configurable ownership, hooks including `waitForOnline`/`waitForOffline`.
+- **Safety nets**: opt-in [auto rollback](https://panix.xyz/guides/auto-rollback/) and [dry-run modes](https://panix.xyz/cli/deploy/).
+- **[Custom output types](https://panix.xyz/configuration/output-types/)**: deploy any flake output with your own build and activation semantics, no flake modifications required.
 
-<div align="center">
-Inspect → Bootstrap → Build → Transfer → Secrets → Activate
-</div>
-<br>
+## Output Types
 
-Each phase has a defined scope and purpose:
+Panix ships a preset for each built-in output type, covering build path, activation, and profile handling; see the [output types reference](https://panix.xyz/configuration/output-types/) for details and custom types.
 
-- **Inspect** detects OS, architecture, SSH reachability, and existing generations.
-- **Bootstrap** kexecs into a NixOS installer, partitions disks with disko, and optionally encrypts.
-- **Build** compiles the system closure once per installable, deduplicated across machines sharing the same installable.
-- **Transfer** copies closures to targets in parallel via `nix copy`.
-- **Secrets** rsyncs files with ownership and permissions, never entering the Nix store.
-- **Activate** switches to the new configuration, or installs from scratch on fresh machines.
-
-And an additional phase for **rollbacks**.
-
-**What makes it different:**
-
-- **Real-time TUI**: per-machine, per-phase visibility. Watch every phase unfold. Press `r` to retry only failed phases. Press `ctrl+r` to restart the entire workflow. No scrollback parsing.
-- **Scope-aware deduplication**: three machines sharing the same installable trigger one build, not three.
-- **Remote builds**: build on a target machine when it has more resources or a different architecture. The closure copies directly between machines.
-- **Build outlinks**: opt-in `--out-links` leaves GC-rooted symlinks per installable (`<flake>/<type>/<name>` layout), so built closures survive garbage collection and are easy to inspect.
-- **Multi-flake deployments**: span multiple repositories in a single run. Each flake is independently buildable.
-- **Tag-based filtering**: every name is a tag. Deploy subsets: `panix deploy --tags production`, `panix deploy --tags webserver`.
-- **Secret management**: files transferred with configurable uid, gid, permissions. Never stored in `/nix/store`. Bootstrap-aware path prefixing.
-- **Hooks system**: `post_bootstrap_hooks`, `post_bootstrap_install_hooks`, `post_bootstrap_provisioned_hooks`. Special commands: `waitForOnline`, `waitForOffline`.
-- **Dry-run modes**: preview without connections (`--dry-run`), or with real machine inspection (`--dry-run-with-inspect`).
-- **Auto rollback**: opt-in `auto_rollback` reverts machines to their pre-deploy generation when activation fails. The rollback shows as extra steps in the build logs.
-- **Snapshot & replay**: capture workflow state to JSON. Replay in TUI for debugging or sharing.
-- **Extensible output types**: declare custom types under `output_types` to deploy any flake output with custom build and activation semantics.
-- **Flake-agnostic**: zero modifications to your flake. Configuration lives in `panix.yml`.
+<!-- OUTPUT_TYPES_START -->
+| Type | Deploys | Activation |
+|------|---------|------------|
+| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (only type that supports bootstrap) |
+| `darwinConfigurations` | [nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS) | `activate` script |
+| `systemConfigs` | [system-manager](https://github.com/numtide/system-manager) | `bin/activate` |
+| `homeConfigurations` | [home-manager](https://github.com/nix-community/home-manager) | `activationPackage/activate` |
+| `nixOnDroidConfigurations` | [Nix-on-Droid](https://github.com/nix-community/nix-on-droid) | `activate` script |
+| `packages` | [Arbitrary packages](/guides/packages/) | `nix profile add` (nix profile install under Lix) |
+| `maidConfigurations` | [nix-maid](https://github.com/viperML/nix-maid) | `bin/activate` |
+<!-- OUTPUT_TYPES_END -->
 
 ---
 
-### At glance
+## At a Glance
 
 `panix.yml`:
 
@@ -155,13 +140,13 @@ For the complete schema, see [panix-schema.yaml](gen/panix-schema.yaml).
 
 ## Documentation
 
-Available on [panix.xyz](https://panix.xyz) or locally in [docs dir](docs/src/content/docs).
+Available at [panix.xyz](https://panix.xyz) or locally in the [docs directory](docs/src/content/docs).
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Whether it's bug reports, feature requests, constructive criticism, or pull requests - all feedback is appreciated. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

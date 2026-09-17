@@ -1,8 +1,6 @@
 package command
 
 import (
-	"strings"
-
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -45,8 +43,8 @@ func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusI
 	return commandLog
 }
 
-// PostUnmarshalInit recomputes derived xpaths that are not serialized (json:"-").
-// Must be called after JSON deserialization.
+// PostUnmarshalInit recomputes the derived xpaths that json:"-" omits; call it
+// after JSON deserialization.
 func (cl *CommandLog) PostUnmarshalInit() {
 	cl.initDerivedXpaths()
 }
@@ -57,9 +55,9 @@ func (cl *CommandLog) initDerivedXpaths() {
 	cl.ErrorXpath = cl.Xpath.NewXpathWithAppend("error")
 }
 
-// joinCommand joins command args into a shell-like LineBuf, quoting args
-// as a whole if they contain spaces or special characters. Env vars ride
-// the argv (env KEY=VAL cmd), so they need no special rendering.
+// joinCommand renders argv as a space-joined line. The SSH transport
+// pre-quotes its elements (pkg/shellquote), so the log adds no quotes of its
+// own: re-quoting would double them and render ssh lines unparseable.
 func joinCommand(cmd []string) *buffer.LineBuf {
 	lineBuf := buffer.NewLineBuf()
 
@@ -68,20 +66,8 @@ func joinCommand(cmd []string) *buffer.LineBuf {
 			lineBuf.WriteByte(' ')
 		}
 
-		writeQuoted(lineBuf, arg)
+		lineBuf.WriteString(arg)
 	}
 
 	return lineBuf
-}
-
-// writeQuoted writes s to lb, wrapping in single quotes if it contains
-// spaces, tabs, or quote characters.
-func writeQuoted(lineBuf *buffer.LineBuf, str string) {
-	if strings.ContainsAny(str, " \t'\"") {
-		lineBuf.WriteByte('\'')
-		lineBuf.WriteString(str)
-		lineBuf.WriteByte('\'')
-	} else {
-		lineBuf.WriteString(str)
-	}
 }

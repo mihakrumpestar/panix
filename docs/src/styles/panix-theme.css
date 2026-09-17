@@ -9,6 +9,14 @@
  */
 
 /* ── Preserve list styles in markdown content ────────────────── */
+
+/* Readability: comfortable line height for body copy. */
+.sl-markdown-content p,
+.sl-markdown-content li,
+.sl-markdown-content dd {
+	line-height: 1.7;
+}
+
 .sl-markdown-content ul {
 	list-style-type: disc;
 	padding-left: 1.5rem;
@@ -30,17 +38,17 @@
 
 :root {
 	/* ── Layout ────────────────────────────────────────────────── */
-	--sl-content-width: 55rem;
+	--sl-content-width: 50rem;
 
-	/* ── Grays — deep, muted, never bright ───────────────────── */
-	--sl-color-white: #c8cad8;
-	/* headings — muted, not white       */
-	--sl-color-gray-1: #9ca0b0;
-	/* body text — subdued               */
-	--sl-color-gray-2: #7a7e8e;
-	/* secondary text, TOC, sidebar text */
-	--sl-color-gray-3: #565a6e;
-	/* borders, comments, disabled       */
+	/* ── Grays — muted terminal ramp, lifted for readability ─── */
+	--sl-color-white: #e2e4ee;
+	/* headings (14.5:1 on page bg)      */
+	--sl-color-gray-1: #bfc4d0;
+	/* body text (10.6:1)                */
+	--sl-color-gray-2: #979db0;
+	/* secondary text (6.8:1)            */
+	--sl-color-gray-3: #7b8194;
+	/* notes, comments, disabled (4.8:1) */
 	--sl-color-gray-4: #3e4256;
 	/* subtle separators                 */
 	--sl-color-gray-5: #2a2d3e;
@@ -122,14 +130,14 @@
 
 /* ── Code syntax — muted Dracula ─────────────────────────────── */
 :root {
-	--astro-code-foreground: #c8cad8;
+	--astro-code-foreground: #e2e4ee;
 	--astro-code-background: #1a1c2b;
 	--astro-code-token-constant: #9a7ad4;
 	/* muted purple                      */
 	--astro-code-token-string: #d4c67a;
 	/* muted yellow                      */
-	--astro-code-token-comment: #565a6e;
-	/* muted comment                     */
+	--astro-code-token-comment: #7b8194;
+	/* readable comment                  */
 	--astro-code-token-keyword: #d47a9e;
 	/* muted pink                        */
 	--astro-code-token-parameter: #d94444;
@@ -138,8 +146,8 @@
 	/* muted green                       */
 	--astro-code-token-string-expression: #d4c67a;
 	/* muted yellow                      */
-	--astro-code-token-punctuation: #565a6e;
-	/* muted punctuation                 */
+	--astro-code-token-punctuation: #7b8194;
+	/* readable punctuation              */
 	--astro-code-token-link: #6ec7d8;
 	/* muted cyan                        */
 }
@@ -186,4 +194,33 @@
 .title-wrapper ul li a {
 	font-size: 1rem;
 	padding: 0.4rem 0.85rem;
+}
+
+/* ── Landing page shared utilities ──────────────────────────── */
+/* Full-bleed: escape the content column while keeping the gutter. */
+.landing-bleed {
+	margin-inline: calc(-50vw + 50%);
+	padding-inline: var(--sl-content-pad-x);
+}
+
+.landing-inner {
+	max-width: var(--sl-content-width);
+	margin-inline: auto;
+}
+
+/* Mono section label, shared by Hero eyebrow and section kickers. */
+.landing-kicker {
+	margin: 0;
+	font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+	font-size: 0.75rem;
+	font-weight: 500;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: var(--sl-color-accent);
+}
+
+/* ── Selection tint, accent on text selection ────────────────── */
+::selection {
+	background-color: var(--sl-color-accent-low);
+	color: var(--sl-color-white);
 }

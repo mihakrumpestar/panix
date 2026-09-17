@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -99,8 +100,7 @@ func sshRun(port int, keyPath string, command string) (string, error) {
 	return stdout.String(), errors.Wrap(err, "SSH run")
 }
 
-// readSystemProfileClosure returns the store path the NixOS system profile
-// currently points to, resolved via readlink -f.
+// readSystemProfileClosure resolves the store path the system profile points to.
 func readSystemProfileClosure(keyPath string) (string, error) {
 	output, err := sshRun(nixosISOPort, keyPath, "readlink -f /nix/var/nix/profiles/system")
 	if err != nil {
@@ -110,8 +110,6 @@ func readSystemProfileClosure(keyPath string) (string, error) {
 	return strings.TrimSpace(output), nil
 }
 
-// readSystemProfileGeneration reads the current NixOS system profile
-// generation number from the VM.
 func readSystemProfileGeneration(keyPath string) (uint, error) {
 	output, err := sshRun(nixosISOPort, keyPath,
 		"nix-env --profile /nix/var/nix/profiles/system --list-generations")
@@ -127,8 +125,7 @@ func readSystemProfileGeneration(keyPath string) (uint, error) {
 	return generation, nil
 }
 
-// parseCurrentGeneration extracts the generation number from the line marked
-// with "(current)" in `nix-env --list-generations` output.
+// parseCurrentGeneration reads the number from the "(current)" line.
 func parseCurrentGeneration(output string) (uint, error) {
 	for line := range strings.SplitSeq(output, "\n") {
 		if !strings.Contains(line, "(current)") {
@@ -197,6 +194,12 @@ func verifyHomeManager(keyPath string) error {
 		parGroup.Go("Verify home-manager (alice) on Debian-nix VM", func() error {
 			return verifyHomeManagerMarkerAsUser(debianNixVMPort, keyPath, "alice")
 		})
+		// First deploy legitimately lists no generations; by this phase the
+		// deploy has run twice (bootstrap + deploy), so the listing must not be
+		// empty.
+		parGroup.Go("Verify home-manager generations listed (root, NixOS ISO VM)", func() error {
+			return verifyHomeManagerGenerations(nixosISOPort, keyPath, "root")
+		})
 	}
 
 	return parGroup.Wait()
@@ -219,8 +222,8 @@ func verifyHomeManagerMarker(port int, keyPath string, user string) error {
 	return nil
 }
 
-// verifyHomeManagerMarkerAsUser checks the marker file exists in the user's
-// home directory by running `cat` as that user via sudo.
+// verifyHomeManagerMarkerAsUser checks the marker in the user's home by
+// running cat as that user.
 func verifyHomeManagerMarkerAsUser(port int, keyPath string, user string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	cmd := fmt.Sprintf("su -l %s -c 'cat ~/.panix-home-test-marker'", user)
@@ -238,13 +241,161 @@ func verifyHomeManagerMarkerAsUser(port int, keyPath string, user string) error 
 	return nil
 }
 
+// verifyHomeManagerGenerations reproduces panix's own profile listing over
+// SSH (reading panix's deployment log would be circular): the tilde must
+// expand, and on this fixture nix-env's lock error names the expanded path,
+// so a quoted tilde would surface as /root/~/... instead.
+func verifyHomeManagerGenerations(port int, keyPath string, user string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	cmd := fmt.Sprintf(
+		"su -l %s -c 'env NIX_PAGER=cat nix-env --profile ~/.local/state/nix/profiles/home-manager --list-generations 2>&1' || true",
+		user,
+	)
+
+	output, err := sshRun(port, keyPath, cmd)
+	if err != nil {
+		return errors.Wrapf(err, "verify home-manager profile path on %s", addr)
+	}
+
+	if strings.TrimSpace(output) == "" {
+		return errors.Errorf("empty output from tilde profile listing on %s (vacuous pass guard): %q", addr, output)
+	}
+
+	if strings.Contains(output, "/~/") || strings.Contains(output, `"~/`) {
+		return errors.Errorf("tilde profile path not expanded on %s (quoted tilde regression): %q", addr, output)
+	}
+
+	return nil
+}
+
+// verifyKexecBootstrapArtifacts pins the bootstrap fixtures: the kexec hook
+// marker and both hardware configs written locally, not on the targets. The
+// test-vm-kexec import is the ordering proof: without the post-kexec
+// generation the bootstrap disko build fails before this verification runs.
+func verifyKexecBootstrapArtifacts(kexecPort, isoPort int, keyPath string) error {
+	parGroup := newParallelGroup()
+
+	parGroup.Go("Verify shell-string bootstrap hook on kexec VM", func() error {
+		return verifyBootstrapHook(kexecPort, keyPath)
+	})
+
+	parGroup.Go("Verify hardware config generation ran on both VMs", verifyHardwareConfigGenerationLog)
+
+	parGroup.Go("Verify ISO hardware config written locally, not on the target", func() error {
+		return verifyHardwareConfigLocalWrite(isoPort, keyPath)
+	})
+
+	parGroup.Go("Verify kexec hardware config written locally, not on the target", func() error {
+		return verifyKexecHardwareConfigLocalWrite(kexecPort, keyPath)
+	})
+
+	return parGroup.Wait()
+}
+
+func verifyBootstrapHook(kexecPort int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", kexecPort)
+
+	output, err := sshRun(kexecPort, keyPath, "test -e /tmp/e2e-hook-ran && echo hook-ok || echo hook-missing")
+	if err != nil {
+		return errors.Wrapf(err, "verify bootstrap hook on %s", addr)
+	}
+
+	if !strings.Contains(output, "hook-ok") {
+		return errors.Errorf("shell-string bootstrap hook did not run on %s: %q", addr, output)
+	}
+
+	return nil
+}
+
+// verifyHardwareConfigGenerationLog reads the bootstrap log as the execution
+// evidence on the targets: the generated configs themselves are local files.
+func verifyHardwareConfigGenerationLog() error {
+	matches, _ := filepath.Glob(filepath.Join(logDirPath, "panix-bootstrap.*.log"))
+	if len(matches) == 0 {
+		return errors.Errorf("no bootstrap log found in %s", logDirPath)
+	}
+
+	logPath := matches[len(matches)-1]
+
+	content, err := os.ReadFile(logPath) //nolint:gosec // repo-local test log
+	if err != nil {
+		return errors.Wrapf(err, "read bootstrap log %s", logPath)
+	}
+
+	log := string(content)
+
+	count := strings.Count(log, `"description":"generate config"`)
+	if count < 2 {
+		return errors.Errorf("expected hardware config generation for the ISO and kexec VMs in %s, found %d", logPath, count)
+	}
+
+	if !strings.Contains(log, "nixos-generate-config --show-hardware-config --no-filesystems") {
+		return errors.Errorf("nixos-generate-config command not found in %s", logPath)
+	}
+
+	return nil
+}
+
+// verifyHardwareConfigLocalWrite checks the ISO config is written locally, not
+// on the target.
+func verifyHardwareConfigLocalWrite(isoPort int, keyPath string) error {
+	err := verifyGeneratedHardwareConfig(e2eHardwareConfigPath)
+	if err != nil {
+		return err
+	}
+
+	return verifyHardwareConfigAbsentOnTarget(isoPort, keyPath, e2eHardwareConfigPath)
+}
+
+// verifyKexecHardwareConfigLocalWrite checks the kexec config landed inside the
+// testflakes tree (the path test-vm-kexec imports), not on the target.
+func verifyKexecHardwareConfigLocalWrite(kexecPort int, keyPath string) error {
+	err := verifyGeneratedHardwareConfig(e2eKexecHardwareConfigPath)
+	if err != nil {
+		return err
+	}
+
+	return verifyHardwareConfigAbsentOnTarget(kexecPort, keyPath, e2eKexecHardwareConfigPath)
+}
+
+// verifyGeneratedHardwareConfig asserts the locally written file looks like
+// nixos-generate-config output.
+func verifyGeneratedHardwareConfig(path string) error {
+	content, err := os.ReadFile(path) //nolint:gosec // repo-local test path
+	if err != nil {
+		return errors.Wrapf(err, "hardware config must be written locally to %s", path)
+	}
+
+	trimmed := strings.TrimSpace(string(content))
+	if !strings.Contains(trimmed, "modulesPath") || !strings.Contains(trimmed, "config,") ||
+		!strings.HasSuffix(trimmed, "}") {
+		return errors.Errorf("local hardware config %s is not plausible nixos-generate-config output: %q", path, trimmed)
+	}
+
+	return nil
+}
+
+func verifyHardwareConfigAbsentOnTarget(port int, keyPath, path string) error {
+	targetAddr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	output, err := sshRun(port, keyPath, "test -e '"+path+"' && echo target-has-config || echo target-clean")
+	if err != nil {
+		return errors.Wrapf(err, "verify hardware config absence on %s", targetAddr)
+	}
+
+	if !strings.Contains(output, "target-clean") {
+		return errors.Errorf("hardware config must not be written on the target %s: %q", targetAddr, output)
+	}
+
+	return nil
+}
+
 func verifyPackage(port int, keyPath string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	// Use a login shell so that /etc/profile.d/nix.sh is sourced on Debian
-	// (non-interactive SSH sessions don't source it, so nix-profile binaries
-	// aren't in PATH). On NixOS PAM handles this for all sessions, but the
-	// login shell works there too.
+	// Login shell so /etc/profile.d/nix.sh is sourced on Debian (plain SSH
+	// sessions do not source it, so nix-profile binaries are not in PATH);
+	// NixOS handles this via PAM, the login shell works there too.
 	output, err := sshRun(port, keyPath, "su -l root -c 'panix-package-marker'")
 	if err != nil {
 		return errors.Wrapf(err, "verify package on %s", addr)
@@ -273,11 +424,9 @@ func verifyPackages(keyPath string) error {
 	return parGroup.Wait()
 }
 
-// verifyMaidPackage checks that the maid activation script ran on the given
-// VM. The real nix-maid bundle's activate script (run as root, via
-// `su -l root -c`) creates ~/.panix-maid-test-marker as a symlink into the
-// nix store via systemd-tmpfiles; `cat` follows the symlink, so verification
-// reads it back and checks the marker text.
+// verifyMaidPackage checks the maid activation script ran on the given VM: it
+// creates ~/.panix-maid-test-marker as a symlink into the nix store, and cat
+// follows the symlink to the marker text.
 func verifyMaidPackage(port int, keyPath string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
@@ -312,8 +461,8 @@ func verifyMaidPackages(keyPath string) error {
 func verifySystemManager(port int, keyPath string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	// Use || true after hello so that a non-zero exit (e.g. hello not installed)
-	// doesn't cause sshRun to return an error that masks which check failed.
+	// || true after hello: a non-zero exit (hello not installed) would make
+	// sshRun fail and mask which check actually failed.
 	output, err := sshRun(port, keyPath,
 		"cat /etc/panix-test-marker; echo '---'; "+
 			"cat /etc/os-release; echo '---'; "+

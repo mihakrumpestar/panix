@@ -2,36 +2,29 @@
 title: Requirements & Caveats
 description: System requirements and known limitations.
 sidebar:
-  order: 4
+  order: 3
 ---
 
 ## Requirements
 
-- **Nix**: Panix uses `nix` found in PATH. It also uses common utilities: `uname`, `id`, `echo`, `cat`, `readlink`, `curl`, `tar`
-- **rsync**: Required on both local and remote for file transfers (included in kexec images)
-- **kexec memory**: Minimum 1GB RAM without swap for kexec bootstrap
-- **SSH key auth**: Only SSH key authentication is supported, no password auth
-- **Flake-only**: Only Nix flakes are supported
+- **Nix**: `nix` on PATH, plus common utilities (`uname`, `id`, `echo`, `cat`, `readlink`, `curl`, `tar`) that run on the target machines during Inspect, Bootstrap, and Rollback
+- **rsync**: on local and remote machines for file transfers (included in kexec images)
+- **kexec memory**: 1GB RAM minimum without swap for kexec bootstrap
+- **SSH key auth**: password authentication is not supported
+- **Flakes**: only Nix flakes are supported
 
 ## Lix Support
 
-[Lix](https://lix.systems) is a fork of Nix that Panix detects and supports automatically. When Lix is detected on the local machine (remotes are not checked), Panix adjusts:
+[Lix](https://lix.systems) is a Nix fork that Panix detects and supports automatically. Detection runs on the local machine only; the local nix flavor decides behavior for all targets. Panix adjusts:
 
-- nix store URL format (Lix uses `?port=N` query params instead of `:port` in the host).
+- **Store URL format**: Lix uses `?port=N` query params instead of `:port` in the host.
+- **`nix profile` command**: Nix 2.30 renamed `nix profile install` to `nix profile add` (keeping `install` as an alias), but Lix only supports `install`. With Lix detected locally, Panix uses `nix profile install` for package activation on all targets.
 
-  :::caution
-  If your local machine runs Lix, but the remote machine runs Nix (or vice versa), remote build mode (`build_mode: remote`) may encounter store URL format mismatches. This has not been tested. If you run into issues, please [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
-  :::
-
-  Local build mode works without issues in mixed environments.
-
-- `nix profile add` on Lix
-
-  Nix 2.30 renamed `nix profile install` to `nix profile add` (keeping `install` as an alias). Lix never adopted this rename and only supports `nix profile install`.
-
-  When Panix detects Lix on the local machine, it automatically uses `nix profile install` instead of `nix profile add` for package activation on all targets (targets are not checked individually; the local nix flavor is used).
+:::caution
+In mixed environments (local Lix with remote Nix, or the reverse), remote build mode (`build_mode: remote`, see [Build Modes](/configuration/build-modes/)) can hit store URL format mismatches. Local build mode works without issues.
+:::
 
 ## Caveats
 
-- **Nix store location**: Panix expects the Nix store to be in the standard location (`/nix/store`). If it is not, you will have to specify it using `nix` CLI args in Panix config.
-- **Nix store locking**: concurrent building of exact same packages is not allowed in store, so some builds may show a `waiting for store lock` warning briefly until the lock is released.
+- **Nix store location**: Panix expects the store at `/nix/store`; build outputs are validated against that prefix, so non-standard store roots are not supported.
+- **Nix store locking**: concurrent builds of identical packages serialize on the store lock, so some builds briefly show a `waiting for store lock` warning.

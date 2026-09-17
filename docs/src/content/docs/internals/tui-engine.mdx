@@ -5,7 +5,25 @@ sidebar:
   order: 1
 ---
 
-Panix uses a custom-built terminal rendering engine `zeroterm` (the `pkg/tui` and `pkg/buffer` packages) instead of existing TUI frameworks. The engine is designed for speed and near zero-allocation rendering.
+Panix uses a custom-built terminal rendering engine, `zeroterm` (the `pkg/tui` and `pkg/buffer` packages), instead of existing TUI frameworks. The engine is designed for speed and near zero-allocation rendering.
+
+The four-phase journey that produced it: [Performance Optimization](/internals/optimization-roadmap/).
+
+## Why a Custom Engine
+
+[Bubble Tea](https://github.com/charmbracelet/bubbletea) re-renders entire views every frame through string intermediates, producing thousands of short-lived allocations per frame and heavy GC pressure. Panix renders a tree of nested viewports that shrink when commands finish, with dozens of machines updating at once, so full-frame re-rendering is wasted work at fleet scale. zeroterm bounds rendering work and terminal output by the changed lines, not the frame size.
+
+## How It Works
+
+- **Contiguous line buffer** (`LinesBuf`): one `[]byte` with `[]int` line offsets; `Line(i)` is zero-copy and bulk ops (`AppendFrom`, `WritePaddedView`) copy visible regions in a single append. Pooled via `sync.Pool`, reset with `buf[:0]` retaining capacity.
+- **Versioned buffer** (`LinesBufVer`): thread-safe `LinesBuf` wrapper with a version counter for cache invalidation; `Snapshot()` provides consistent copies.
+- **In-place styling** (`AppendStyledLine`/`AppendStyledPad`): writes prefix + content + reset directly into the caller's buffer using pre-rendered ANSI prefixes and a padding pool.
+- **Double-buffered frame diffing**: two `LinesBufDiff` buffers alternate as current/previous; `Diff(prev)` returns changed line indices via `bytes.Equal`, unchanged lines produce zero output.
+- **Incremental caching**: tables re-render only dirty rows, viewports append when only new lines arrive, and components cache output keyed on content/version/width/selection.
+- **Pre-rendered everything**: border bytes, connector chars, scrollbar cells, zone markers (`\x1b[<id>z`), and ANSI prefixes, computed once as package-level vars.
+- **Stack-allocated scratch**: tree prefixes use `var pfxBuf [1024]byte`, the table a single partitioned `widthsBuf []int`; no heap scratch allocations.
+- **Zero-copy string and byte conversion** (`stringbyte.StringByte`): a named `string` type with `Bytes()` via `unsafe.Slice`; comparable, JSON-serializable, no `[]byte(s)` copies in the hot path.
+- **Zero-CGO**: pure Go, no C dependencies.
 
 ## Benchmarks
 
@@ -20,53 +38,3 @@ Full-pipeline benchmarks (render + diff, composite layout with viewports, tree, 
 *goos: linux goarch: amd64 cpu: AMD Ryzen 9 5900HX with Radeon Graphics, benchtime: 1s, ran: 2026-06-24*
 
 [Benchmark source code](https://github.com/mihakrumpestar/panix/tree/main/tests/bench/tui)
-
-## How It Works
-
-- **Contiguous line buffer** (`LinesBuf`): all lines stored in one `[]byte` with `[]int` offsets. `Line(i)` is zero-copy. Bulk ops (`AppendFrom`, `WritePaddedView`) copy visible regions in a single append. Pooled via `sync.Pool`, reset with `buf[:0]` retaining capacity.
-- **Versioned buffer** (`LinesBufVer`): thread-safe wrapper around `LinesBuf` with a version counter for cache invalidation. Inner buffer is unexported to prevent unsynchronized access; `Snapshot()` provides consistent copies.
-- **In-place styling** (`AppendStyledLine`/`AppendStyledPad`): writes prefix + content + reset directly into the caller's buffer, no intermediate slices or per-cell allocations. Pre-rendered ANSI prefixes and padding pool.
-- **Double-buffered frame diffing**: two `LinesBufDiff` buffers alternate as current/previous. `Diff(prev)` returns indices of changed lines via `bytes.Equal`. Only changed lines get terminal output (`\x1b[y;1H` + content + clear-to-EOL). Unchanged lines: zero output.
-- **Incremental caching**: Table re-renders only dirty rows (changed content or selection change). Viewport appends to its contiguous padded buffer when only new lines are added, avoiding O(n) rebuild. All components cache rendered output keyed on content/version/width/selection.
-- **Pre-rendered everything**: border bytes, connector chars, scrollbar cells, zone markers (`\x1b[<id>z`), ANSI prefixes. Computed once as package-level vars, reused every frame.
-- **Stack-allocated scratch**: Tree prefixes use `var pfxBuf [1024]byte`. Table uses a single partitioned `widthsBuf []int`. No heap scratch allocations.
-- **Zero-copy string↔bytes** (`stringbyte.StringByte`): a named `string` type with `Bytes()` via `unsafe.Slice`, eliminating the standard Go string→`[]byte` copy throughout the hot path. Comparable (usable as map key) and JSON-serializable.
-- **Zero-CGO**: Pure Go, no C dependencies.
-
-## Signal and Rendering Architecture
-
-```mermaid
-sequenceDiagram
-  participant W as Workflow
-  participant F as Fleet
-  participant T as TUI
-  participant U as User
-
-  Note over W,U: EXECUTION
-  loop per machine goroutine
-    W->>W: run phase sequence
-    W->>F: update machine state + phase logs
-    W-->>T: Signal update (buffered channel)
-  end
-
-  Note over W,U: RENDER
-  loop
-    T-->>T: WaitForUpdate (block on channel)
-    T->>F: Recalculate (caches + stats)
-    T->>T: render header + table + flow + logs + footer
-  end
-
-  Note over W,U: INTERRUPT
-  U-x T: r (retry)
-  T->>W: re-execute failed phases
-
-  U-x T: ctrl+r (restart)
-  T->>W: cancel + new workflow
-
-  U-x T: s (snapshot)
-  T->>F: capture full state to JSON
-
-  U-x T: q (quit)
-  T->>F: snapshot on exit (if enabled)
-  T->>T: render final + quit
-```

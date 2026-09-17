@@ -8,8 +8,10 @@ sidebar:
 ## Prerequisites
 
 - [Nix](https://nixos.org/download.html) installed on your local machine
-- SSH key authentication to target machine(s)
+- [SSH key authentication](/guides/ssh-config/) to target machine(s)
 - A Nix flake with your NixOS configuration(s)
+
+Panix itself needs no installation: step 3 runs it with `nix run`. To add it to a flake or use the binary cache, see [Installation](/getting-started/installation/).
 
 ## 1. Prepare the Remote
 
@@ -54,7 +56,7 @@ fleet:
 ## 3. Deploy
 
 ```sh
-panix deploy
+nix run github:mihakrumpestar/panix -- deploy
 ```
 
 This runs the full pipeline:
@@ -62,5 +64,7 @@ This runs the full pipeline:
 <center>
 Inspect → Bootstrap → Build → Transfer → Secrets → Activate
 </center>
+
+See [concepts/phases](/concepts/phases/) for what each phase does.
 
 The interactive TUI shows real-time progress for each machine and phase. If a phase fails, press `r` to retry just the failed phases without restarting.

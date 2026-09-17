@@ -1,0 +1,2237 @@
+---
+import LandingSection from "./LandingSection.astro";
+import IconNote from "./IconNote.astro";
+import type { Capability, ToolColumn } from "../lib/comparison";
+import { TONE_RANK, cellTexts } from "../lib/comparison";
+
+// Tone: good = capability present, warn = limited or a cost, off = absent,
+// neutral = a model difference, not a quality. Fact set verified 2026-09-15
+// against each tool's official repo/docs. Every cell links to the page that
+// proves it: the feature's doc section where present, the closest matching
+// section (where the capability would live) when it is absent.
+//
+// Row rules, kept here so future cell edits stay consistent:
+// - Visibility gradient: good = purpose-built interactive surface (TUI,
+//   Web UI); warn = polled or aggregate surface (status report, exporter);
+//   off = nothing beyond the command's own output.
+// - Health means service-level checks after activation. Activation failure
+//   and SSH liveness don't count; a rollback trigger is not a health check.
+// - Config changes asks what must change in your flake or configs. Fleet
+//   descriptor files beside your configs (panix.yml, krops.nix, nixops.nix)
+//   don't count; required dependencies like disko don't either.
+// - TONE_RANK linearizes the 2-axis tone system as good < warn < neutral <
+//   off: neutral below warn is deliberate (matches the legend order), so
+//   dropdowns list limited values above equally-valid models.
+
+// nixos-rebuild / nixos-install / system.autoUpgrade
+const NIXOS_REBUILD_MANUAL =
+  "https://nixos.org/manual/nixos/stable/#sec-changing-config";
+const NIXOS_REBUILD_ROLLBACK =
+  "https://nixos.org/manual/nixos/stable/#sec-rollback";
+const NIXOS_INSTALL_MANUAL =
+  "https://nixos.org/manual/nixos/stable/#sec-installation";
+const NIXOS_INSTALL_MANUAL_ROOT =
+  "https://nixos.org/manual/nixos/stable/#sec-installation-manual-installing";
+const NIXOS_AUTO_UPGRADE =
+  "https://nixos.org/manual/nixos/stable/#sec-upgrading-automatic";
+const NIXOS_AUTO_UPGRADE_OPTIONS =
+  "https://search.nixos.org/options?query=system.autoUpgrade";
+const NIXOS_AUTO_UPGRADE_MODULE =
+  "https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/tasks/auto-upgrade.nix";
+// Lustration deprecation lives in the NixOS manual (NIXOS_LUSTRATE removal
+// scheduled for 26.11); the section also names nixos-infect.
+const NIXOS_LUSTRATION =
+  "https://nixos.org/manual/nixos/stable/#sec-installing-from-other-distro";
+
+// nixos-infect
+const NIXOS_INFECT_REPO = "https://github.com/elitak/nixos-infect";
+const NIXOS_INFECT_USAGE = `${NIXOS_INFECT_REPO}#how-do-i-use-it`;
+
+// nixos-anywhere
+const NIXOS_ANYWHERE_REPO = "https://github.com/nix-community/nixos-anywhere";
+const NIXOS_ANYWHERE_QUICKSTART =
+  "https://nix-community.github.io/nixos-anywhere/quickstart.html";
+const NIXOS_ANYWHERE_FINISHED = `${NIXOS_ANYWHERE_QUICKSTART}#finished`;
+const NIXOS_ANYWHERE_FLAKE = `${NIXOS_ANYWHERE_QUICKSTART}#2-initialize-a-flake`;
+const NIXOS_ANYWHERE_SECRETS =
+  "https://nix-community.github.io/nixos-anywhere/howtos/secrets.html";
+const NIXOS_ANYWHERE_USAGE = `${NIXOS_ANYWHERE_REPO}#how-to-use-nixos-anywhere`;
+const NIXOS_ANYWHERE_RUN = `${NIXOS_ANYWHERE_QUICKSTART}#9-run-it`;
+const NIXOS_ANYWHERE_REFERENCE =
+  "https://nix-community.github.io/nixos-anywhere/reference.html";
+const NIXOS_ANYWHERE_TEST = `${NIXOS_ANYWHERE_QUICKSTART}#7-optional-test-your-nixos-and-disko-configuration`;
+
+// NixOps
+const NIXOPS_DEPLOY_COMMAND =
+  "https://nixops.readthedocs.io/en/latest/manual/nixops.html#command-nixops-deploy";
+const NIXOPS_CHECK_COMMAND =
+  "https://nixops.readthedocs.io/en/latest/manual/nixops.html#command-nixops-check";
+const NIXOPS_COMMON_OPTIONS =
+  "https://nixops.readthedocs.io/en/latest/manual/nixops.html#common-options";
+const NIXOPS_DOCS = "https://nixops.readthedocs.io/en/latest/";
+const NIXOPS_OVERVIEW = "https://nixops.readthedocs.io/en/latest/overview.html";
+const NIXOPS_MIGRATION = `${NIXOPS_DOCS}manual/migrating.html#code-layout-changes`;
+
+// Colmena
+const COLMENA_REPO = "https://github.com/nix-community/colmena";
+const COLMENA_DOCS = "https://colmena.cli.rs/unstable";
+const COLMENA_MIGRATION = `${COLMENA_DOCS}/tutorial/migration.html#colmena-deploys-to-existing-nixos-hosts`;
+
+// deploy-rs
+const DEPLOY_RS_REPO = "https://github.com/serokell/deploy-rs";
+
+// morph
+const MORPH_REPO = "https://github.com/DBCDK/morph";
+
+// Nixus
+const NIXUS_REPO = "https://github.com/Infinisil/nixus";
+
+// krops
+const KROPS_REPO = "https://github.com/krebs/krops";
+
+// lollypops
+const LOLLYPOPS_REPO = "https://github.com/pinpox/lollypops";
+
+// nixinate
+const NIXINATE_REPO = "https://github.com/MatthewCroughan/nixinate";
+
+// bento
+const BENTO_REPO = "https://github.com/rapenne-s/bento";
+const BENTO_HOWTO_DOC = `${BENTO_REPO}/blob/main/doc/how-to.md`;
+const BENTO_REFERENCE_DOC = `${BENTO_REPO}/blob/main/doc/reference.md`;
+
+// comin
+const COMIN_REPO = "https://github.com/nlewo/comin";
+const COMIN_HOWTO_DOC = `${COMIN_REPO}/blob/main/docs/howtos.md`;
+
+// Thymis
+const THYMIS_DOCS = "https://thymis.io/en/docs";
+
+// Clan
+const CLAN_DOCS = "https://clan.lol/docs/26.05";
+const CLAN_MACHINES_CLI = `${CLAN_DOCS}/reference/cli/machines`;
+const CLAN_REPO = "https://github.com/clan-lol/clan-core";
+
+// Source files that enumerate a tool's complete capability surface. Absence
+// cells link these: a documentation page cannot state that something is
+// missing, but the file defining every command or option can.
+const NIXPKGS_AUTO_UPGRADE_SOURCE =
+  "https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/tasks/auto-upgrade.nix";
+const NIXPKGS_NIXOS_REBUILD_SOURCE =
+  "https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/ni/nixos-rebuild-ng/nixos-rebuild.8.scd";
+const NIXPKGS_NIXOS_INSTALL_SOURCE =
+  "https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/ni/nixos-install/nixos-install.8";
+const NIXOS_INFECT_SCRIPT = `${NIXOS_INFECT_REPO}/blob/master/nixos-infect`;
+const NIXOS_ANYWHERE_SCRIPT = `${NIXOS_ANYWHERE_REPO}/blob/main/src/nixos-anywhere.sh`;
+const COLMENA_CLI_SOURCE = `${COLMENA_REPO}/blob/main/src/cli.rs`;
+const DEPLOY_RS_CLI_SOURCE = `${DEPLOY_RS_REPO}/blob/master/src/cli.rs`;
+const MORPH_SOURCE = `${MORPH_REPO}/blob/master/morph.go`;
+const LOLLYPOPS_TASKFILE = `${LOLLYPOPS_REPO}/blob/main/packages/taskfile.nix`;
+const NIXINATE_SCRIPT = `${NIXINATE_REPO}/blob/master/flake.nix`;
+const COMIN_MAIN_SOURCE = `${COMIN_REPO}/blob/main/main.go`;
+const CLAN_CLI_SOURCE = `${CLAN_REPO}/blob/main/pkgs/clan-cli/clan_cli/cli.py`;
+const CLAN_FLAKE_TEMPLATE = `${CLAN_REPO}/blob/main/templates/clan/minimal/flake.nix`;
+const NIXUS_NOTES = `${NIXUS_REPO}/blob/master/notes.md`;
+const NIXUS_SWITCH_SCRIPT = `${NIXUS_REPO}/blob/master/scripts/switch`;
+const NIXUS_DEPLOY_EXAMPLE = `${NIXUS_REPO}/blob/master/example/deploy.nix`;
+const KROPS_POPULATE_SOURCE = `${KROPS_REPO}/blob/master/pkgs/populate/default.nix`;
+const BENTO_SCRIPT = `${BENTO_REPO}/blob/main/bento`;
+
+// Panix code anchors: facts link to the exact code or docs section.
+const PANIX_REPO = "https://github.com/mihakrumpestar/panix";
+const CODE_ROLLBACK_HANDLER = `${PANIX_REPO}/blob/7f8d2c94c6084031a8b78ece4f2f5bbe2d14fe12/internal/workflow/activate/handler.go#L81`;
+
+// GitHub repos for live stars/age in the header; tools absent here are
+// native primitives or docs-only, no repo meta.
+const GITHUB_REPOS: Record<string, string> = {
+  Panix: "mihakrumpestar/panix",
+  "nixos-infect": "elitak/nixos-infect",
+  "nixos-anywhere": "nix-community/nixos-anywhere",
+  NixOps: "NixOS/nixops",
+  Colmena: "nix-community/colmena",
+  "deploy-rs": "serokell/deploy-rs",
+  morph: "DBCDK/morph",
+  Nixus: "Infinisil/nixus",
+  krops: "krebs/krops",
+  lollypops: "pinpox/lollypops",
+  nixinate: "MatthewCroughan/nixinate",
+  bento: "rapenne-s/bento",
+  comin: "nlewo/comin",
+  Thymis: "Thymis-io/thymis",
+  Clan: "clan-lol/clan-core",
+};
+
+// Cell model: every cell is either a single value or a list of items
+// (multi-feature cells render each item as its own filterable link).
+// Tool columns: Panix first (pinned baseline), then native primitives,
+// then third-party tools. Cells with several features carry an item list
+// (each item its own link, filterable on its own); `note` renders as a
+// hover tooltip instead of an asterisk suffix.
+const tools: ToolColumn[] = [
+  {
+    name: "Panix",
+    href: null,
+    highlight: true,
+    cells: {
+      bootstrap: { text: "Yes", tone: "good", href: "/guides/bootstrap/" },
+      update: { text: "Yes", tone: "good", href: "/cli/deploy/" },
+      scope: {
+        text: "Multi-flake",
+        tone: "good",
+        href: "/concepts/multi-flake/",
+      },
+      visibility: {
+        text: "TUI",
+        tone: "good",
+        note: "TUI is the default only on a TTY; a non-interactive run falls back to console output",
+        href: "/tui/keybinds/",
+      },
+      health: { text: "No", tone: "off", href: "/concepts/phases/" },
+      rollback: {
+        items: [
+          { text: "Manual", tone: "warn", href: "/cli/other-commands/" },
+          {
+            text: "Auto",
+            tone: "good",
+            note: "Opt-in via auto_rollback",
+            href: CODE_ROLLBACK_HANDLER,
+          },
+        ],
+      },
+      execution: { text: "Push", tone: "neutral", href: "/concepts/phases/" },
+      state: { text: "Stateless", tone: "good", href: "/concepts/overview/" },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        note: "Updates consume unmodified configs; bootstrap targets need a disko module",
+        href: "/concepts/overview/",
+      },
+      secrets: { text: "Bypass", tone: "neutral", href: "/guides/secrets/" },
+    },
+  },
+  {
+    name: "nixos-rebuild",
+    href: NIXOS_REBUILD_MANUAL,
+    cells: {
+      bootstrap: {
+        text: "No",
+        tone: "off",
+        href: NIXPKGS_NIXOS_REBUILD_SOURCE,
+      },
+      update: { text: "Yes", tone: "good", href: NIXOS_REBUILD_MANUAL },
+      scope: { text: "Single", tone: "warn", href: NIXOS_REBUILD_MANUAL },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: NIXPKGS_NIXOS_REBUILD_SOURCE,
+      },
+      health: { text: "No", tone: "off", href: NIXPKGS_NIXOS_REBUILD_SOURCE },
+      rollback: { text: "Manual", tone: "warn", href: NIXOS_REBUILD_ROLLBACK },
+      execution: {
+        text: "On-target",
+        tone: "neutral",
+        note: "Runs on the machine being changed; --target-host pushes over SSH",
+        href: NIXPKGS_NIXOS_REBUILD_SOURCE,
+      },
+      state: { text: "Stateless", tone: "good", href: NIXOS_REBUILD_MANUAL },
+      flake: { text: "Unchanged", tone: "good", href: NIXOS_REBUILD_MANUAL },
+      secrets: {
+        text: "None",
+        tone: "off",
+        href: NIXPKGS_NIXOS_REBUILD_SOURCE,
+      },
+    },
+  },
+  {
+    name: "nixos-install",
+    href: NIXOS_INSTALL_MANUAL,
+    cells: {
+      bootstrap: { text: "Yes", tone: "good", href: NIXOS_INSTALL_MANUAL },
+      update: { text: "No", tone: "off", href: NIXPKGS_NIXOS_INSTALL_SOURCE },
+      scope: { text: "Single", tone: "warn", href: NIXOS_INSTALL_MANUAL },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: NIXPKGS_NIXOS_INSTALL_SOURCE,
+      },
+      health: { text: "No", tone: "off", href: NIXPKGS_NIXOS_INSTALL_SOURCE },
+      rollback: {
+        text: "None",
+        tone: "off",
+        href: NIXPKGS_NIXOS_INSTALL_SOURCE,
+      },
+      execution: {
+        text: "On-target",
+        tone: "neutral",
+        note: "Runs in the installer environment on the target",
+        href: NIXOS_INSTALL_MANUAL,
+      },
+      state: { text: "Stateless", tone: "good", href: NIXOS_INSTALL_MANUAL },
+      flake: { text: "Unchanged", tone: "good", href: NIXOS_INSTALL_MANUAL },
+      secrets: {
+        text: "None",
+        tone: "off",
+        note: "Only an interactive root-password prompt; no secret delivery",
+        href: NIXOS_INSTALL_MANUAL_ROOT,
+      },
+    },
+  },
+  {
+    name: "system.autoUpgrade",
+    href: NIXOS_AUTO_UPGRADE,
+    cells: {
+      bootstrap: {
+        text: "No",
+        tone: "off",
+        href: NIXPKGS_AUTO_UPGRADE_SOURCE,
+      },
+      update: { text: "Yes", tone: "good", href: NIXOS_AUTO_UPGRADE },
+      scope: {
+        text: "Single",
+        tone: "warn",
+        note: "A per-machine module; no fleet view across hosts",
+        href: NIXOS_AUTO_UPGRADE,
+      },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: NIXOS_AUTO_UPGRADE_MODULE,
+      },
+      health: { text: "No", tone: "off", href: NIXPKGS_AUTO_UPGRADE_SOURCE },
+      rollback: {
+        text: "None",
+        tone: "off",
+        note: "No automatic rollback; the boot menu still lists earlier generations",
+        href: NIXOS_AUTO_UPGRADE_MODULE,
+      },
+      execution: {
+        text: "Pull",
+        tone: "neutral",
+        href: NIXOS_AUTO_UPGRADE_MODULE,
+      },
+      state: {
+        text: "Stateless",
+        tone: "good",
+        href: NIXOS_AUTO_UPGRADE_MODULE,
+      },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        href: NIXOS_AUTO_UPGRADE_MODULE,
+      },
+      secrets: {
+        text: "None",
+        tone: "off",
+        href: NIXPKGS_AUTO_UPGRADE_SOURCE,
+      },
+    },
+  },
+  {
+    name: "nixos-infect",
+    href: NIXOS_INFECT_REPO,
+    notice: "Third-party and deprecated: NIXOS_LUSTRATE removal is scheduled for 26.11, and on 26.05 the script leaves the host unreachable",
+    cells: {
+      bootstrap: {
+        text: "Yes",
+        tone: "good",
+        note: "Wipes and converts an existing Linux host via lustration, installing from the NIX_CHANNEL it sets (default nixos-25.11); NIXOS_LUSTRATE removal is scheduled for 26.11 and on 26.05 the script exits 0 but leaves the system unreachable",
+        href: NIXOS_LUSTRATION,
+      },
+      update: { text: "No", tone: "off", href: NIXOS_INFECT_SCRIPT },
+      scope: { text: "Single", tone: "warn", href: NIXOS_INFECT_USAGE },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: NIXOS_INFECT_USAGE,
+      },
+      health: { text: "No", tone: "off", href: NIXOS_INFECT_SCRIPT },
+      rollback: { text: "None", tone: "off", href: NIXOS_INFECT_SCRIPT },
+      execution: {
+        text: "On-target",
+        tone: "neutral",
+        note: "Triggered by you via SSH or cloud-init; the script fetches everything itself",
+        href: NIXOS_INFECT_USAGE,
+      },
+      state: { text: "Stateless", tone: "good", href: NIXOS_INFECT_SCRIPT },
+      flake: { text: "Unchanged", tone: "good", href: NIXOS_INFECT_SCRIPT },
+      secrets: {
+        text: "None",
+        tone: "off",
+        note: "No secret delivery; only public SSH keys are picked up and host keys preserved",
+        href: NIXOS_INFECT_USAGE,
+      },
+    },
+  },
+  {
+    name: "nixos-anywhere",
+    href: NIXOS_ANYWHERE_REPO,
+    cells: {
+      bootstrap: { text: "Yes", tone: "good", href: NIXOS_ANYWHERE_QUICKSTART },
+      update: { text: "No", tone: "off", href: NIXOS_ANYWHERE_FINISHED },
+      scope: {
+        text: "Single",
+        tone: "warn",
+        note: "One --target-host per invocation",
+        href: `${NIXOS_ANYWHERE_REFERENCE}#command-line-usage`,
+      },
+      visibility: { text: "CLI output", tone: "off", href: NIXOS_ANYWHERE_RUN },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "Only an optional pre-install VM test (--vm-test); no post-deploy checks",
+        href: NIXOS_ANYWHERE_SCRIPT,
+      },
+      rollback: { text: "None", tone: "off", href: NIXOS_ANYWHERE_SCRIPT },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${NIXOS_ANYWHERE_REPO}#overview`,
+      },
+      state: { text: "Stateless", tone: "good", href: NIXOS_ANYWHERE_SCRIPT },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        note: "Never imported itself; the standard flow needs the disko module in the target's config",
+        href: NIXOS_ANYWHERE_FLAKE,
+      },
+      secrets: {
+        text: "Install-phase",
+        tone: "warn",
+        note: "Covers the bootstrap phase only",
+        href: NIXOS_ANYWHERE_SECRETS,
+      },
+    },
+  },
+  {
+    name: "NixOps",
+    href: "https://github.com/NixOS/nixops",
+    notice: "NixOps 2 is in low-maintenance mode upstream; an experimental rewrite exists as nixops4",
+    cells: {
+      bootstrap: {
+        text: "Cloud",
+        tone: "warn",
+        note: "Cloud provisioning needs a backend plugin; the core ships only the none backend",
+        href: NIXOPS_DEPLOY_COMMAND,
+      },
+      update: { text: "Yes", tone: "good", href: NIXOPS_DEPLOY_COMMAND },
+      scope: { text: "Fleet", tone: "good", href: NIXOPS_DEPLOY_COMMAND },
+      visibility: {
+        text: "Status",
+        tone: "warn",
+        note: "nixops info and nixops check give a per-host status table beyond the deploy output",
+        href: `${NIXOPS_OVERVIEW}#checking-machine-status`,
+      },
+      health: {
+        text: "On-demand",
+        tone: "warn",
+        note: "nixops check: failed units, SSH, disks; not run automatically after deploy",
+        href: `${NIXOPS_OVERVIEW}#checking-machine-status`,
+      },
+      rollback: {
+        text: "Manual",
+        tone: "warn",
+        note: "nixops rollback; requires network.enableRollback = true (default false)",
+        href: `${NIXOPS_OVERVIEW}#network-special-attributes`,
+      },
+      execution: { text: "Push", tone: "neutral", href: NIXOPS_DEPLOY_COMMAND },
+      state: { text: "Stateful", tone: "warn", href: NIXOPS_COMMON_OPTIONS },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        note: "nixops.nix network expression consumes unmodified configs; the optional flake path needs a nixopsConfigurations.default output",
+        href: NIXOPS_MIGRATION,
+      },
+      secrets: {
+        text: "Keys",
+        tone: "neutral",
+        href: `${NIXOPS_OVERVIEW}#managing-keys`,
+      },
+    },
+  },
+  {
+    name: "Colmena",
+    href: COLMENA_REPO,
+    notice: "Links point at the 0.5 (unstable) docs; the latest release is 0.4, whose flake interface differs",
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: COLMENA_MIGRATION },
+      update: {
+        text: "Yes",
+        tone: "good",
+        href: `${COLMENA_DOCS}/tutorial/index.html`,
+      },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        href: `${COLMENA_DOCS}/tutorial/index.html`,
+      },
+      visibility: {
+        text: "Progress",
+        tone: "good",
+        note: "Live per-node progress by default; -v for plain output",
+        href: `${COLMENA_DOCS}/reference/cli.html#colmena-apply`,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        href: COLMENA_CLI_SOURCE,
+      },
+      rollback: {
+        text: "None",
+        tone: "off",
+        href: COLMENA_CLI_SOURCE,
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${COLMENA_DOCS}/introduction.html`,
+      },
+      state: {
+        text: "Stateless",
+        tone: "good",
+        href: `${COLMENA_DOCS}/introduction.html`,
+      },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "0.4 uses outputs.colmena; upstream main (0.5) instead requires a colmenaHive output built with colmena.lib.makeHive",
+        href: `${COLMENA_DOCS}/tutorial/flakes.html`,
+      },
+      secrets: {
+        text: "Keys",
+        tone: "neutral",
+        note: "Default /run/keys is in-memory; destDir can target arbitrary, even persistent paths",
+        href: `${COLMENA_DOCS}/features/keys.html`,
+      },
+    },
+  },
+  {
+    name: "deploy-rs",
+    href: DEPLOY_RS_REPO,
+    notice: "No releases or tags exist; every claim here is audited against master",
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: DEPLOY_RS_CLI_SOURCE },
+      update: { text: "Yes", tone: "good", href: `${DEPLOY_RS_REPO}#usage` },
+      scope: { text: "Fleet", tone: "good", href: `${DEPLOY_RS_REPO}#usage` },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        note: "Built-in progress spinners exist but require a remote build, more than one remote host, a TTY and no --no-progress; a default run prints info lines only",
+        href: DEPLOY_RS_CLI_SOURCE,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "Magic rollback only confirms SSH liveness, no service checks",
+        href: `${DEPLOY_RS_REPO}#magic-rollback`,
+      },
+      rollback: {
+        items: [
+          {
+            text: "Auto",
+            tone: "good",
+            note: "autoRollback, on by default",
+            href: `${DEPLOY_RS_REPO}#generic-options`,
+          },
+          {
+            text: "Magic",
+            tone: "good",
+            note: "Confirms SSH liveness after activation",
+            href: `${DEPLOY_RS_REPO}#magic-rollback`,
+          },
+        ],
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${DEPLOY_RS_REPO}#usage`,
+      },
+      state: { text: "Stateless", tone: "good", href: DEPLOY_RS_CLI_SOURCE },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Requires a deploy.nodes output and deploy-rs.lib activation wiring",
+        href: `${DEPLOY_RS_REPO}#overall-usage`,
+      },
+      secrets: { text: "None", tone: "off", href: DEPLOY_RS_CLI_SOURCE },
+    },
+  },
+  {
+    name: "morph",
+    href: MORPH_REPO,
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: MORPH_REPO },
+      update: { text: "Yes", tone: "good", href: `${MORPH_REPO}#using-morph` },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        href: `${MORPH_REPO}#notable-features`,
+      },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: `${MORPH_REPO}#using-morph`,
+      },
+      health: {
+        text: "Yes",
+        tone: "good",
+        href: `${MORPH_REPO}#health-checks`,
+      },
+      rollback: { text: "None", tone: "off", href: MORPH_SOURCE },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${MORPH_REPO}#using-morph`,
+      },
+      state: {
+        text: "Stateless",
+        tone: "good",
+        href: `${MORPH_REPO}#notable-features`,
+      },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        note: "Deployment file is passed on the command line; configs are consumed as-is",
+        href: `${MORPH_REPO}#using-morph`,
+      },
+      secrets: {
+        text: "Bypass",
+        tone: "neutral",
+        href: `${MORPH_REPO}#secrets`,
+      },
+    },
+  },
+  {
+    name: "Nixus",
+    href: NIXUS_REPO,
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: NIXUS_NOTES },
+      update: {
+        text: "Yes",
+        tone: "good",
+        href: `${NIXUS_REPO}#how-to-use-it`,
+      },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        href: `${NIXUS_REPO}#multi-host-modules`,
+      },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: `${NIXUS_REPO}#how-to-use-it`,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "Rollback triggers on SSH-unreachability too, not on service health",
+        href: NIXUS_NOTES,
+      },
+      rollback: {
+        items: [
+          { text: "Auto", tone: "good", href: `${NIXUS_REPO}#auto-rollback` },
+          {
+            text: "Magic",
+            tone: "good",
+            note: "The target self-rolls-back if no confirmation arrives in time",
+            href: `${NIXUS_REPO}#auto-rollback`,
+          },
+        ],
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${NIXUS_REPO}#how-to-use-it`,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        note: "scripts/switch keeps /var/lib/system-switcher (next, current, system-N); a later run reads next and refuses while current exists",
+        href: NIXUS_SWITCH_SCRIPT,
+      },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        note: "Deployment expression passes your config as a plain module path",
+        href: NIXUS_DEPLOY_EXAMPLE,
+      },
+      secrets: {
+        text: "Bypass",
+        tone: "neutral",
+        href: `${NIXUS_REPO}#secret-management`,
+      },
+    },
+  },
+  {
+    name: "krops",
+    href: KROPS_REPO,
+    cells: {
+      bootstrap: {
+        text: "No",
+        tone: "off",
+        href: `${KROPS_REPO}#writedeploy`,
+      },
+      update: { text: "Yes", tone: "good", href: `${KROPS_REPO}#writedeploy` },
+      scope: { text: "Single", tone: "warn", href: `${KROPS_REPO}#target` },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: `${KROPS_REPO}#usenixoutputmonitor-optional-defaults-to-opportunistic`,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "writeTest only builds on the target; never activates or checks the running system",
+        href: `${KROPS_REPO}#writetest`,
+      },
+      rollback: {
+        text: "None",
+        tone: "off",
+        href: `${KROPS_REPO}#operation-optional-defaults-to-switch`,
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${KROPS_REPO}#target`,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        note: "A .populate sentinel on the target gates deploys and .pass_info caches the password hash; both persist between runs",
+        href: KROPS_POPULATE_SOURCE,
+      },
+      flake: {
+        text: "Unchanged",
+        tone: "good",
+        note: "krops.nix consumes your unmodified NixOS config; nothing is imported",
+        href: `${KROPS_REPO}#minimal-example`,
+      },
+      secrets: {
+        text: "Bypass",
+        tone: "neutral",
+        href: `${KROPS_REPO}#source-types`,
+      },
+    },
+  },
+  {
+    name: "lollypops",
+    href: LOLLYPOPS_REPO,
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: LOLLYPOPS_TASKFILE },
+      update: { text: "Yes", tone: "good", href: `${LOLLYPOPS_REPO}#usage` },
+      scope: { text: "Fleet", tone: "good", href: `${LOLLYPOPS_REPO}#groups` },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: `${LOLLYPOPS_REPO}#debugging`,
+      },
+      health: { text: "No", tone: "off", href: LOLLYPOPS_TASKFILE },
+      rollback: { text: "None", tone: "off", href: LOLLYPOPS_TASKFILE },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${LOLLYPOPS_REPO}#deployment`,
+      },
+      state: {
+        text: "Stateless",
+        tone: "good",
+        href: `${LOLLYPOPS_REPO}#features`,
+      },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Imports the lollypops module in every host plus flake output wiring",
+        href: `${LOLLYPOPS_REPO}#configuration`,
+      },
+      secrets: {
+        text: "Bypass",
+        tone: "neutral",
+        href: `${LOLLYPOPS_REPO}#secrets`,
+      },
+    },
+  },
+  {
+    name: "nixinate",
+    href: NIXINATE_REPO,
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: NIXINATE_SCRIPT },
+      update: { text: "Yes", tone: "good", href: `${NIXINATE_REPO}#usage` },
+      scope: {
+        text: "Single",
+        tone: "warn",
+        note: "One generated script per nixosConfiguration",
+        href: `${NIXINATE_REPO}#usage`,
+      },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: `${NIXINATE_REPO}#example-run`,
+      },
+      health: { text: "No", tone: "off", href: NIXINATE_SCRIPT },
+      rollback: { text: "None", tone: "off", href: NIXINATE_SCRIPT },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${NIXINATE_REPO}#available-arguments-via-_moduleargsnixinate`,
+      },
+      state: { text: "Stateless", tone: "good", href: NIXINATE_SCRIPT },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Requires the apps output plus _module.args.nixinate in every deployed host config",
+        href: `${NIXINATE_REPO}#usage`,
+      },
+      secrets: { text: "None", tone: "off", href: NIXINATE_SCRIPT },
+    },
+  },
+  {
+    name: "bento",
+    href: BENTO_REPO,
+    cells: {
+      bootstrap: {
+        text: "No",
+        tone: "off",
+        href: `${BENTO_HOWTO_DOC}#adding-a-new-host`,
+      },
+      update: {
+        text: "Yes",
+        tone: "good",
+        href: `${BENTO_HOWTO_DOC}#deploying-changes`,
+      },
+      scope: {
+        text: "Per-host",
+        tone: "neutral",
+        note: "Each host fetches and applies its own config; the controller tracks the fleet",
+        href: `${BENTO_REPO}#explanation`,
+      },
+      visibility: {
+        text: "Status",
+        tone: "warn",
+        href: `${BENTO_HOWTO_DOC}#track-each-host-state`,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "No service check; a failed switch is only surfaced in the log and status table",
+        href: `${BENTO_REFERENCE_DOC}#status-report-of-the-fleet`,
+      },
+      rollback: {
+        text: "Magic",
+        tone: "good",
+        note: "Triggers when the host can't reach the config server after an update; a failed switch alone only logs",
+        href: BENTO_SCRIPT,
+      },
+      execution: {
+        text: "Pull",
+        tone: "neutral",
+        href: `${BENTO_REPO}#how-it-works`,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        note: "states.txt and last_change_date on the server plus /var/bento/.state on each host; a later update reads them to decide whether to rebuild",
+        href: BENTO_SCRIPT,
+      },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Each host must import utils/bento.nix",
+        href: `${BENTO_HOWTO_DOC}#adding-a-new-host`,
+      },
+      secrets: {
+        text: "None",
+        tone: "off",
+        note: "Planned per README ('soon')",
+        href: `${BENTO_REPO}#explanation`,
+      },
+    },
+  },
+  {
+    name: "comin",
+    href: COMIN_REPO,
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: COMIN_MAIN_SOURCE },
+      update: { text: "Yes", tone: "good", href: `${COMIN_REPO}#quick-start` },
+      scope: {
+        text: "Per-host",
+        tone: "neutral",
+        note: "Each host fetches and applies its own config; the repo is the shared source",
+        href: COMIN_REPO,
+      },
+      visibility: {
+        items: [
+          {
+            text: "TUI",
+            tone: "good",
+            note: "comin watch: interactive TUI over the local agent's gRPC socket; needs comin >= v0.13.0, a TTY and a running agent (--test runs a demo scenario without one)",
+            href: `${COMIN_REPO}/blob/main/cmd/watch.go`,
+          },
+          {
+            text: "Status",
+            tone: "warn",
+            note: "comin status reads the local agent over /var/lib/comin/grpc.sock; needs a running agent and reports that host only",
+            href: `${COMIN_REPO}/blob/main/cmd/status.go`,
+          },
+          {
+            text: "Metrics",
+            tone: "warn",
+            href: `${COMIN_REPO}/blob/main/docs/generated-module-options.md#servicescominexporter`,
+          },
+        ],
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "postDeploymentCommand hook exists; its exit status is only logged",
+        href: `${COMIN_REPO}/blob/main/internal/deployer/deployer.go`,
+      },
+      rollback: {
+        text: "None",
+        tone: "off",
+        href: `${COMIN_HOWTO_DOC}#deployments-and-profiles-retention-policy`,
+      },
+      execution: {
+        text: "Pull",
+        tone: "neutral",
+        href: `${COMIN_REPO}#main-features`,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        href: `${COMIN_REPO}/blob/main/docs/design.md#the-store`,
+      },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Each machine imports comin.nixosModules.comin; flake optional",
+        href: `${COMIN_REPO}#quick-start`,
+      },
+      secrets: { text: "None", tone: "off", href: COMIN_MAIN_SOURCE },
+    },
+  },
+  {
+    name: "Thymis",
+    href: "https://github.com/Thymis-io/thymis",
+    cells: {
+      bootstrap: {
+        text: "Yes",
+        tone: "good",
+        href: `${THYMIS_DOCS}/device-lifecycle/getting-started`,
+      },
+      update: {
+        text: "Yes",
+        tone: "good",
+        href: `${THYMIS_DOCS}/device-lifecycle/update`,
+      },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        href: `${THYMIS_DOCS}/reference/ui/deploy#selecting-targets`,
+      },
+      visibility: {
+        text: "Web UI",
+        tone: "good",
+        href: `${THYMIS_DOCS}/reference/ui`,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "Only switch-to-configuration's result is read; no service-level verification",
+        href: `${THYMIS_DOCS}/reference/ui/deploy#current-limitations`,
+      },
+      rollback: {
+        text: "Magic",
+        tone: "good",
+        note: "Rolls back when the device can't reconnect to the controller after a switch",
+        href: `${THYMIS_DOCS}/reference/ui/deploy#reliability-and-recovery`,
+      },
+      execution: {
+        text: "Controller",
+        tone: "neutral",
+        href: `${THYMIS_DOCS}/reference/ui/deploy`,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        href: `${THYMIS_DOCS}/reference/concepts/project-repository`,
+      },
+      flake: {
+        text: "Rewrite",
+        tone: "warn",
+        note: "Thymis generates its own flake; device configs must be authored as Thymis modules in the controller's project repository",
+        href: `${THYMIS_DOCS}/reference/concepts/project-repository#structure-of-the-project-repository`,
+      },
+      secrets: {
+        text: "Encrypted",
+        tone: "neutral",
+        note: "age-encrypted at rest in the controller's database; the agent decrypts to a caller-configured path (docs suggest /run)",
+        href: `${THYMIS_DOCS}/reference/concepts/secrets`,
+      },
+    },
+  },
+  {
+    name: "Clan",
+    href: CLAN_REPO,
+    cells: {
+      bootstrap: {
+        text: "Yes",
+        tone: "good",
+        href: `${CLAN_DOCS}/reference/cli/machines#machines-install`,
+      },
+      update: {
+        text: "Yes",
+        tone: "good",
+        href: `${CLAN_DOCS}/reference/cli/machines#machines-update`,
+      },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        href: `${CLAN_MACHINES_CLI}#machines`,
+      },
+      visibility: {
+        text: "CLI output",
+        tone: "off",
+        href: CLAN_CLI_SOURCE,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "Pre-switch safety checks plus closure and activation validation; no service-level checks after activation",
+        href: CLAN_CLI_SOURCE,
+      },
+      rollback: {
+        text: "None",
+        tone: "off",
+        href: CLAN_CLI_SOURCE,
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        href: `${CLAN_MACHINES_CLI}#machines-update`,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        href: `${CLAN_DOCS}/guides/vars/intro-to-vars`,
+      },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Flake must wire clan-core as an input plus a clan/clanInternals output; fleet and services live in clan.nix inventory",
+        href: CLAN_FLAKE_TEMPLATE,
+      },
+      secrets: {
+        text: "Encrypted",
+        tone: "neutral",
+        note: "Encrypted in the store and decrypted at activation by sops-nix; activation-scoped vars and the machine age key are additionally uploaded to a persistent path outside the store",
+        href: `${CLAN_DOCS}/guides/vars/sops/secrets`,
+      },
+    },
+  },
+];
+
+// Capability rows, with the distinct filterable values per row. Cells with
+// item lists contribute every item, so each is filterable on its own.
+const capabilityKeys = [
+  { key: "bootstrap", label: "Bootstrap" },
+  { key: "update", label: "Ongoing updates" },
+  { key: "scope", label: "Scope" },
+  { key: "visibility", label: "Visibility" },
+  { key: "health", label: "Health checks" },
+  { key: "rollback", label: "Rollback" },
+  { key: "execution", label: "Execution" },
+  { key: "state", label: "State" },
+  { key: "flake", label: "Config changes" },
+  { key: "secrets", label: "Secrets" },
+];
+const capabilities: Capability[] = capabilityKeys.map(({ key, label }) => {
+  const bestRankByValue = new Map<string, number>();
+  for (const tool of tools) {
+    const cell = tool.cells[key];
+    if (!cell) continue;
+    const rank =
+      "items" in cell
+        ? Math.min(...cell.items.map((item) => TONE_RANK[item.tone]))
+        : TONE_RANK[cell.tone];
+    for (const text of cellTexts(cell)) {
+      bestRankByValue.set(
+        text,
+        Math.min(bestRankByValue.get(text) ?? rank, rank),
+      );
+    }
+  }
+  const filterableValues = [...bestRankByValue.entries()]
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .map(([value]) => value);
+  return { key, label, values: filterableValues };
+});
+
+const toolsDataJson = JSON.stringify(
+  tools.map((tool) => ({
+    name: tool.name,
+    href: tool.href,
+    highlight: !!tool.highlight,
+    cells: tool.cells,
+  })),
+);
+const toolNamesJson = JSON.stringify(tools.map((tool) => tool.name));
+
+// Plain-language definitions for every table term: shown as the cell-link
+// hover tooltip and repeated in the glossary below the table.
+const TERM_NOTES: Record<string, string> = {
+  Yes: "Supported by the tool itself",
+  No: "Not supported by the tool itself",
+  Cloud: "Bootstraps by provisioning cloud instances (EC2, GCE, VirtualBox)",
+  Fleet: "Deploys multiple machines from one config in one run",
+  "Multi-flake": "A fleet can span multiple flakes and repos in one run",
+  Single: "One machine per invocation",
+  "Per-host":
+    "Each host fetches and applies its own config from a shared source",
+  TUI: "Interactive terminal UI with live per-machine, per-phase progress",
+  "Web UI": "Browser dashboard for managing devices",
+  Progress: "Live per-node progress display while deploying",
+  Status: "Per-host status table (e.g. bento status)",
+  Metrics: "Prometheus exporter and desktop notifiers",
+  "CLI output": "The deployment command's own output; nothing else",
+  None: "No built-in support in the tool itself",
+  "On-target": "You run it on the machine being changed",
+  "On-demand":
+    "A check command exists, but it is not run automatically after deploy",
+  Auto: "Rolls back automatically on activation failure",
+  Magic:
+    "Rolls back when the target loses contact with the deployment source after switching",
+  Manual: "Explicit rollback command only",
+  Push: "Deploys from your machine to targets over SSH",
+  Pull: "Targets fetch updates themselves on a schedule",
+  Controller:
+    "A central server actively orchestrates the devices, which connect to it",
+  Stateless: "No state kept between runs; everything is re-derived",
+  Stateful: "Keeps a state database or vars that later deploys depend on",
+  Unchanged: "Your existing configs are consumed as-is; nothing is wired in",
+  Adapter:
+    "The tool needs a module, output, or import wired into your flake or configs",
+  Rewrite: "Your configs must be rebuilt around the tool's own format",
+  Bypass: "Secrets are transferred outside the Nix store to arbitrary paths",
+  Keys: "Materialized as key files via a keys API (default /run/keys, in-memory; destDir can target persistent paths)",
+  Encrypted: "Encrypted in the store, decrypted at activation",
+  "Install-phase": "Secrets are only handled during the install phase",
+};
+
+// What each capability row measures.
+const CAP_NOTES: Record<string, string> = {
+  bootstrap: "Can it install NixOS onto a fresh or non-NixOS machine?",
+  update: "Does it support repeated, ongoing deployments?",
+  scope: "What does one deployment action cover?",
+  visibility:
+    "Beyond the command's own output, how do you watch deployment progress?",
+  health:
+    "Are services verified after activation? Activation failure and SSH liveness don't count.",
+  rollback:
+    "How can the tool itself revert a failed deploy? (NixOS-native rollback, e.g. the boot menu, still exists where a NixOS system does.)",
+  execution:
+    "Who drives the deployment: your machine, the targets, or a server?",
+  state: "What does the tool remember between runs?",
+  flake:
+    "Must the tool itself be wired into your flake or config (module, output, import)? Fleet descriptor files beside your configs (panix.yml, krops.nix, nixops.nix) don't count; required dependencies like disko don't either",
+  secrets: "How are secrets delivered to machines?",
+};
+
+// Build-time guard: every cell text must have a TERM_NOTES definition and
+// every TERM_NOTES entry must be used by some cell. Keeps the tooltips,
+// glossary, and filter dropdowns from drifting apart; a throw here fails
+// the docs build instead of shipping a termless cell.
+{
+  const termKeys = new Set(Object.keys(TERM_NOTES));
+  const used = new Set<string>();
+  for (const tool of tools) {
+    for (const cell of Object.values(tool.cells)) {
+      if ("items" in cell) {
+        for (const item of cell.items) used.add(item.text);
+      } else if (cell.text) {
+        used.add(cell.text);
+      }
+    }
+  }
+  const missing = [...used].filter((term) => !termKeys.has(term));
+  const orphan = [...termKeys].filter((term) => !used.has(term));
+  if (missing.length || orphan.length) {
+    throw new Error(
+      `TERM_NOTES out of sync: missing [${missing.join(", ")}]; orphan [${orphan.join(", ")}]`,
+    );
+  }
+}
+---
+
+<LandingSection
+  kicker="comparison"
+  title="How Panix compares"
+  id="comparison"
+>
+  <div
+    class="filters"
+    data-compare-filters
+    data-tools={toolsDataJson}
+    data-tool-names={toolNamesJson}
+  >
+    <div class="filter-group" role="group" aria-label="Toggle tool columns">
+      {
+        tools.map((tool) =>
+          tool.highlight ? (
+            <span class="chip pin" title="Comparison baseline, always shown">
+              {tool.name}
+            </span>
+          ) : (
+            <button
+              type="button"
+              class="chip"
+              data-tool-btn={tool.name}
+              aria-pressed="true"
+            >
+              {tool.name}
+            </button>
+          ),
+        )
+      }
+      <button type="button" class="chip reset" data-reset>Reset</button>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span class="legend-item"><i class="sw sw-good"></i>present</span>
+      <span class="legend-item"
+        ><i class="sw sw-warn"></i>limited or a cost</span
+      >
+      <span class="legend-item"
+        ><i class="sw sw-neutral"></i>different model</span
+      >
+      <span class="legend-item"><i class="sw sw-off"></i>absent</span>
+    </div>
+  </div>
+  <div class="scroll" data-compare-scroll>
+    <table data-compare-table>
+      <thead>
+        <tr>
+          <th scope="col" class="rowhead">Capability</th>
+          {
+            tools.map((tool) => (
+              <th
+                scope="col"
+                class:list={[{ hl: tool.highlight }]}
+                data-tool={tool.name}
+                title={
+                  tool.highlight ? undefined : "Click to compare beside Panix"
+                }
+              >
+                <span class="head-with-note">
+                  {tool.href ? (
+                    <a
+                      class="tool-link"
+                      href={tool.href}
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      {tool.name}
+                    </a>
+                  ) : (
+                    tool.name
+                  )}
+                  {tool.notice && <IconNote title={tool.notice} />}
+                </span>
+                {GITHUB_REPOS[tool.name] && (
+                  <span
+                    class="repo-meta pending"
+                    data-repo={GITHUB_REPOS[tool.name]}
+                    aria-label="GitHub stars and age"
+                  />
+                )}
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody>
+        {
+          capabilities.map((capability) => (
+            <tr data-cap={capability.key}>
+              <th
+                scope="row"
+                class="rowhead"
+                title="Click to sort tools by this capability"
+              >
+                <span class="row-head-inner">
+                  <span class="row-label">{capability.label}</span>
+                  <IconNote
+                    title={CAP_NOTES[capability.key] ?? capability.label}
+                  />
+                  <select
+                    class="row-filter"
+                    data-row-filter={capability.key}
+                    aria-label={`Filter by ${capability.label}`}
+                  >
+                    <option value="">All</option>
+                    {capability.values.map((value) => (
+                      <option value={value} title={TERM_NOTES[value]}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              </th>
+              {tools.map((tool) => {
+                const cell = tool.cells[capability.key];
+                // Items carry their own tone classes (on the links);
+                // single-value cells use the td tone as before.
+                const cellTone = "items" in cell ? undefined : cell.tone;
+                const cellClassName = [
+                  tool.highlight ? "hl" : null,
+                  cellTone ? `tone-${cellTone}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <td data-tool={tool.name} class={cellClassName}>
+                    {"items" in cell ? (
+                      <span class="items">
+                        {cell.items.map((item) => (
+                          <span class="cell-with-note">
+                            <a
+                              class={`cell-link item tone-${item.tone}`}
+                              href={item.href}
+                              target="_blank"
+                              rel="noopener"
+                              title={TERM_NOTES[item.text]}
+                            >
+                              {item.text}
+                            </a>
+                            {item.note && <IconNote title={item.note} />}
+                          </span>
+                        ))}
+                      </span>
+                    ) : cell.href ? (
+                      <span class="cell-with-note">
+                        <a
+                          class="cell-link"
+                          href={cell.href}
+                          target="_blank"
+                          rel="noopener"
+                          title={TERM_NOTES[cell.text]}
+                        >
+                          {cell.text}
+                        </a>
+                        {cell.note && <IconNote title={cell.note} />}
+                      </span>
+                    ) : (
+                      cell.text
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    Every cell links to what verifies it: the feature's own doc section where
+    one exists, otherwise the source file that enumerates the tool's commands
+    or options, since a documentation page cannot state that something is
+    missing. Hover a cell or term for its plain-language meaning. Verified
+    2026-09-15.
+  </p>
+  <p class="note">
+    Filter with the row dropdowns (multiple rows combine), toggle tools with the
+    chips, click a tool header to move it beside Panix, click a capability name
+    to sort tools by it. The filter state is shareable via the URL.
+  </p>
+  <details class="glossary">
+    <summary>Term glossary</summary>
+    <dl>
+      {
+        Object.entries(TERM_NOTES).map(([term, note]) => (
+          <div class="gl">
+            <dt>{term}</dt>
+            <dd>{note}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </details>
+</LandingSection>
+
+<script>
+  import {
+    constructTable,
+    tableFeatures,
+    createCoreRowModel,
+    columnVisibilityFeature,
+    columnOrderingFeature,
+  } from "@tanstack/table-core";
+  import { storeReactivityBindings } from "@tanstack/table-core/store-reactivity-bindings";
+  import type { ToolColumn } from "../lib/comparison";
+  import { TONE_RANK, cellTexts, parseJson } from "../lib/comparison";
+
+  // Stable wire shape for filter state shared through URLs and localStorage.
+  interface SerializedFilterState {
+    hide?: string[];
+    f?: Record<string, string>;
+    order?: string[];
+  }
+
+  // Fields read from the GitHub repository endpoint.
+  interface GitHubRepositoryResponse {
+    stargazers_count: number;
+    created_at: string;
+  }
+
+  const filtersRoot = document.querySelector<HTMLElement>(
+    "[data-compare-filters]",
+  );
+  const tableElement = document.querySelector<HTMLTableElement>(
+    "[data-compare-table]",
+  );
+  const scrollElement = document.querySelector<HTMLElement>(
+    "[data-compare-scroll]",
+  );
+
+  if (filtersRoot && tableElement && scrollElement) {
+    // Cell model parsed from the server-rendered data: a single value or
+    // a list of items (each its own filterable link).
+    const tools = parseJson<ToolColumn[]>(filtersRoot.dataset.tools, "tools");
+    const toolNames = parseJson<string[]>(
+      filtersRoot.dataset.toolNames,
+      "tool names",
+    );
+    const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
+
+    const FILTER_STORAGE_KEY = "panix-compare-filters-v4";
+
+    // Default-hidden baseline cluster: the raw NixOS primitives plus
+    // nixos-infect (third-party, lustration-based, removal scheduled in
+    // NixOS 26.11). nixos-anywhere stays visible as the maintained
+    // representative of the bootstrap primitives. One chip click away.
+    const DEFAULT_HIDDEN_TOOL_NAMES = [
+      "nixos-rebuild",
+      "nixos-install",
+      "system.autoUpgrade",
+      "nixos-infect",
+    ];
+
+    // URL state wins over localStorage so shared links are exact.
+    function readInitialFilterState(): {
+      hiddenToolNames: string[];
+      filters: Record<string, string>;
+      columnOrder: string[];
+    } {
+      const urlParams = new URLSearchParams(location.search);
+      const hasUrlFilterState = urlParams.has("hide") || urlParams.has("f");
+      try {
+        if (hasUrlFilterState) {
+          return {
+            hiddenToolNames: (urlParams.get("hide") ?? "")
+              .split(",")
+              .filter(Boolean),
+            filters: Object.fromEntries(
+              (urlParams.get("f") ?? "")
+                .split(",")
+                .filter(Boolean)
+                .map((pair) => pair.split("=", 2) as [string, string]),
+            ),
+            columnOrder: [] as string[],
+          };
+        }
+        const parsedState: unknown = JSON.parse(
+          localStorage.getItem(FILTER_STORAGE_KEY) || "null",
+        );
+        const savedFilterState = parsedState as SerializedFilterState | null;
+        if (savedFilterState) {
+          return {
+            hiddenToolNames: Array.isArray(savedFilterState.hide)
+              ? savedFilterState.hide
+              : DEFAULT_HIDDEN_TOOL_NAMES,
+            filters:
+              savedFilterState.f && typeof savedFilterState.f === "object"
+                ? savedFilterState.f
+                : {},
+            columnOrder: Array.isArray(savedFilterState.order)
+              ? savedFilterState.order
+              : [],
+          };
+        }
+      } catch {
+        /* corrupted entry, fall back to defaults */
+      }
+      return {
+        hiddenToolNames: DEFAULT_HIDDEN_TOOL_NAMES,
+        filters: {},
+        columnOrder: [],
+      };
+    }
+    const initialFilterState = readInitialFilterState();
+
+    const features = tableFeatures({
+      coreReactivityFeature: storeReactivityBindings(),
+      columnVisibilityFeature,
+      columnOrderingFeature,
+      coreRowModel: createCoreRowModel(),
+    });
+
+    // One column per tool; TanStack owns visibility (chips) and order
+    // (sorting). Row filters are composed below and applied in render().
+    const table = constructTable({
+      features,
+      data: tools,
+      columns: toolNames.map((toolName) => ({
+        id: toolName,
+        header: toolName,
+        accessorFn: () => toolName,
+      })),
+      getRowId: (row) => row.name,
+      initialState: {
+        columnVisibility: Object.fromEntries(
+          initialFilterState.hiddenToolNames.map((toolName) => [
+            toolName,
+            false,
+          ]),
+        ),
+        columnOrder: initialFilterState.columnOrder.filter((toolName) =>
+          toolNames.includes(toolName),
+        ),
+      },
+    });
+
+    // Active per-capability value filters: { capabilityKey: value }.
+    let rowFilters: Record<string, string> = initialFilterState.filters;
+
+    function passesFilters(tool: ToolColumn) {
+      for (const [capabilityKey, value] of Object.entries(rowFilters)) {
+        if (!value) continue;
+        const cell = tool.cells[capabilityKey];
+        if (!cell || !cellTexts(cell).includes(value)) return false;
+      }
+      return true;
+    }
+
+    function visibleTools(): string[] {
+      const columnVisibility = table.atoms.columnVisibility.get();
+      const columnOrder = table.atoms.columnOrder.get();
+      const orderedToolNames = columnOrder.length ? columnOrder : toolNames;
+      return orderedToolNames.filter(
+        (toolName) =>
+          toolName === "Panix" ||
+          (columnVisibility[toolName] !== false &&
+            passesFilters(toolsByName.get(toolName)!)),
+      );
+    }
+
+    function persistFilterState() {
+      const columnVisibility = table.atoms.columnVisibility.get();
+      const hiddenToolNames = toolNames.filter(
+        (toolName) => columnVisibility[toolName] === false,
+      );
+      const filterEntries = Object.entries(rowFilters).filter(
+        ([, value]) => value,
+      );
+      const columnOrder = table.atoms.columnOrder.get();
+      const urlParams = new URLSearchParams();
+      if (hiddenToolNames.length)
+        urlParams.set("hide", hiddenToolNames.join(","));
+      if (filterEntries.length)
+        urlParams.set(
+          "f",
+          filterEntries
+            .map(([filterKey, value]) => `${filterKey}=${value}`)
+            .join(","),
+        );
+      history.replaceState(
+        null,
+        "",
+        `${location.pathname}${urlParams.size ? `?${urlParams}` : ""}`,
+      );
+      try {
+        localStorage.setItem(
+          FILTER_STORAGE_KEY,
+          JSON.stringify({
+            hide: hiddenToolNames,
+            f: Object.fromEntries(filterEntries),
+            order: columnOrder,
+          }),
+        );
+      } catch {
+        /* storage unavailable, URL still carries state */
+      }
+    }
+
+    const tableHeadRow = tableElement.tHead!.rows[0];
+    const tableBodyRows = [...tableElement.tBodies[0].rows];
+
+    function render() {
+      const visibleToolNames = visibleTools();
+      const visibleToolNameSet = new Set(visibleToolNames);
+
+      // Physically reorder and hide tool columns, header first.
+      for (const toolName of visibleToolNames) {
+        const headerCell = tableHeadRow.querySelector<HTMLElement>(
+          `th[data-tool="${CSS.escape(toolName)}"]`,
+        );
+        if (headerCell) tableHeadRow.appendChild(headerCell);
+      }
+      tableHeadRow
+        .querySelectorAll<HTMLElement>("th[data-tool]")
+        .forEach((headerCell) => {
+          if (headerCell.dataset.tool !== "Panix")
+            headerCell.hidden = !visibleToolNameSet.has(headerCell.dataset.tool!);
+        });
+
+      for (const tableRow of tableBodyRows) {
+        for (const toolName of visibleToolNames) {
+          const bodyCell = tableRow.querySelector<HTMLElement>(
+            `td[data-tool="${CSS.escape(toolName)}"]`,
+          );
+          if (bodyCell) tableRow.appendChild(bodyCell);
+        }
+        tableRow
+          .querySelectorAll<HTMLElement>("td[data-tool]")
+          .forEach((bodyCell) => {
+            if (bodyCell.dataset.tool !== "Panix")
+              bodyCell.hidden = !visibleToolNameSet.has(bodyCell.dataset.tool!);
+          });
+      }
+
+      filtersRoot
+        .querySelectorAll<HTMLButtonElement>("[data-tool-btn]")
+        .forEach((toolButton) => {
+          toolButton.setAttribute(
+            "aria-pressed",
+            String(
+              table.atoms.columnVisibility.get()[
+                toolButton.dataset.toolBtn!
+              ] !== false,
+            ),
+          );
+        });
+    }
+
+    function onStateChange() {
+      render();
+      persistFilterState();
+    }
+
+    table.atoms.columnVisibility.subscribe(onStateChange);
+    table.atoms.columnOrder.subscribe(onStateChange);
+
+    // Tool chips toggle columns.
+    filtersRoot.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement;
+      if (target.hasAttribute("data-reset")) {
+        rowFilters = {};
+        tableElement
+          .querySelectorAll<HTMLSelectElement>("[data-row-filter]")
+          .forEach((rowFilterSelect) => {
+            rowFilterSelect.value = "";
+          });
+        // Reset restores the default view (primitives hidden).
+        table.setColumnVisibility(
+          Object.fromEntries(
+            toolNames
+              .filter((toolName) =>
+                DEFAULT_HIDDEN_TOOL_NAMES.includes(toolName),
+              )
+              .map((toolName) => [toolName, false]),
+          ),
+        );
+        table.setColumnOrder(toolNames);
+        // Atoms may already hold these defaults, in which case no
+        // subscription fires: repaint directly.
+        render();
+        persistFilterState();
+        return;
+      }
+      const toolButton = target.closest<HTMLElement>("[data-tool-btn]");
+      if (toolButton) {
+        table.getColumn(toolButton.dataset.toolBtn!)!.toggleVisibility();
+      }
+    });
+
+    // Row filter dropdowns (AND-composed across rows). The selects live
+    // inside the table, so the listener goes on the table.
+    tableElement.addEventListener("change", (event) => {
+      const rowFilterSelect = event.target as HTMLSelectElement;
+      if (rowFilterSelect.hasAttribute("data-row-filter")) {
+        const capabilityKey = rowFilterSelect.dataset.rowFilter!;
+        if (rowFilterSelect.value)
+          rowFilters[capabilityKey] = rowFilterSelect.value;
+        else delete rowFilters[capabilityKey];
+        render();
+        persistFilterState();
+      }
+    });
+
+    // Click a tool header to move the column right after Panix.
+    tableElement.tHead!.addEventListener("click", (event) => {
+      const headerCell = (event.target as HTMLElement).closest<HTMLElement>(
+        "th[data-tool]",
+      );
+      if (!headerCell || headerCell.dataset.tool === "Panix") return;
+      if ((event.target as HTMLElement).closest("a")) return;
+      const clickedToolName = headerCell.dataset.tool!;
+      const remainingToolNames = visibleTools().filter(
+        (toolName) => toolName !== clickedToolName && toolName !== "Panix",
+      );
+      table.setColumnOrder([
+        "Panix",
+        clickedToolName,
+        ...remainingToolNames,
+        ...hiddenToolNames(),
+      ]);
+    });
+
+    // Click a capability row header to sort tools by that row's values.
+    tableElement.tBodies[0].addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).closest("select, a")) return;
+      const tableRow = (event.target as HTMLElement).closest<HTMLElement>(
+        "tr[data-cap]",
+      );
+      if (!tableRow) return;
+      const capabilityKey = tableRow.dataset.cap!;
+      const rankedToolNames = toolNames
+        .filter((toolName) => toolName !== "Panix")
+        .map((toolName) => {
+          const cell = toolsByName.get(toolName)?.cells[capabilityKey];
+          return {
+            toolName,
+            rank: cell
+              ? "items" in cell
+                ? Math.min(...cell.items.map((item) => TONE_RANK[item.tone]))
+                : TONE_RANK[cell.tone]
+              : 3,
+            text: cell
+              ? "items" in cell
+                ? (cell.items[0]?.text ?? "")
+                : cell.text
+              : "",
+          };
+        })
+        .sort(
+          (a, b) =>
+            a.rank - b.rank ||
+            a.text.localeCompare(b.text) ||
+            a.toolName.localeCompare(b.toolName),
+        )
+        .map((rankedTool) => rankedTool.toolName);
+      table.setColumnOrder(["Panix", ...rankedToolNames]);
+    });
+
+    function hiddenToolNames() {
+      const columnVisibility = table.atoms.columnVisibility.get();
+      return toolNames.filter(
+        (toolName) =>
+          toolName !== "Panix" && columnVisibility[toolName] === false,
+      );
+    }
+
+    // Reflect loaded row filters in the dropdowns.
+    tableElement
+      .querySelectorAll<HTMLSelectElement>("[data-row-filter]")
+      .forEach((rowFilterSelect) => {
+        rowFilterSelect.value =
+          rowFilters[rowFilterSelect.dataset.rowFilter!] ?? "";
+      });
+
+    // Reserve vertical space from the full (unfiltered) SSR table so
+    // filtering never changes the page layout.
+    scrollElement.style.minHeight = `${Math.ceil(
+      tableElement.getBoundingClientRect().height,
+    )}px`;
+
+    // Live GitHub stars + repo age in tool headers, cached 24h in
+    // localStorage (stale-while-revalidate). Isolated: a failure here
+    // must never break the table logic.
+    function loadRepositoryMeta() {
+      try {
+        const repositoryMetaElements = [
+          ...tableElement.querySelectorAll<HTMLSpanElement>("[data-repo]"),
+        ];
+        const repositoryMetaCache: Record<
+          string,
+          { stars: number; created: string; cachedAt: number }
+        > = JSON.parse(localStorage.getItem("panix-compare-stars-v1") || "{}");
+        const formatStarCount = (starCount: number) =>
+          starCount >= 10000
+            ? `${Math.round(starCount / 1000)}k`
+            : starCount >= 1000
+              ? `${(starCount / 1000).toFixed(1)}k`
+              : `${starCount}`;
+        const formatRepositoryAge = (createdAt: string) => {
+          const repositoryAgeDays = Math.floor(
+            (Date.now() - new Date(createdAt).getTime()) / 86400000,
+          );
+          if (repositoryAgeDays >= 365)
+            return `${Math.floor(repositoryAgeDays / 365)}y`;
+          if (repositoryAgeDays >= 30)
+            return `${Math.floor(repositoryAgeDays / 30)}mo`;
+          return `${repositoryAgeDays}d`;
+        };
+        const paintRepositoryMeta = (
+          repositoryMetaElement: HTMLSpanElement,
+          cacheEntry: { stars: number; created: string },
+        ) => {
+          repositoryMetaElement.textContent = `★ ${formatStarCount(cacheEntry.stars)} · ${formatRepositoryAge(cacheEntry.created)}`;
+          repositoryMetaElement.classList.remove("pending");
+        };
+        const saveRepositoryMetaCache = () => {
+          try {
+            localStorage.setItem(
+              "panix-compare-stars-v1",
+              JSON.stringify(repositoryMetaCache),
+            );
+          } catch {
+            /* storage unavailable, keep in-memory values */
+          }
+        };
+        const fetchRepositoryMeta = (
+          repositorySlug: string,
+          repositoryMetaElement: HTMLSpanElement,
+        ) =>
+          fetch(`https://api.github.com/repos/${repositorySlug}`)
+            .then((response) =>
+              response.ok ? response.json() : Promise.reject(response),
+            )
+            .then((payload: unknown) => {
+              const repositoryJson = payload as GitHubRepositoryResponse;
+              repositoryMetaCache[repositorySlug] = {
+                stars: repositoryJson.stargazers_count,
+                created: repositoryJson.created_at,
+                cachedAt: Date.now(),
+              };
+              saveRepositoryMetaCache();
+              paintRepositoryMeta(
+                repositoryMetaElement,
+                repositoryMetaCache[repositorySlug],
+              );
+            })
+            .catch(() => repositoryMetaElement.classList.remove("pending"));
+        for (const repositoryMetaElement of repositoryMetaElements) {
+          const repositorySlug = repositoryMetaElement.dataset.repo!;
+          const cacheEntry = repositoryMetaCache[repositorySlug];
+          if (cacheEntry && Date.now() - cacheEntry.cachedAt < 86400000)
+            paintRepositoryMeta(repositoryMetaElement, cacheEntry);
+          else {
+            if (cacheEntry)
+              paintRepositoryMeta(repositoryMetaElement, cacheEntry);
+            fetchRepositoryMeta(repositorySlug, repositoryMetaElement);
+          }
+        }
+      } catch {
+        /* dead meta, table still works */
+      }
+    }
+    loadRepositoryMeta();
+
+    render();
+  }
+</script>
+
+<style>
+  /* Chip rows + legend. */
+  .filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .chip {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      border-color 0.15s,
+      background-color 0.15s;
+  }
+
+  .chip:hover {
+    color: var(--sl-color-white);
+    border-color: var(--sl-color-gray-3);
+  }
+
+  .chip[aria-pressed="true"] {
+    color: var(--sl-color-accent-high);
+    border-color: var(--sl-color-accent-low);
+    background: color-mix(
+      in oklab,
+      var(--sl-color-accent-low) 45%,
+      transparent
+    );
+  }
+
+  .chip[aria-pressed="false"] {
+    opacity: 0.55;
+  }
+
+  .chip.pin {
+    cursor: default;
+    color: var(--sl-color-white);
+    border-color: var(--sl-color-accent);
+    background: color-mix(
+      in oklab,
+      var(--sl-color-accent-low) 60%,
+      transparent
+    );
+  }
+
+  .chip.reset {
+    color: var(--sl-color-gray-2);
+    border-style: dashed;
+  }
+
+  /* Color legend. */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+  }
+
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+
+  .sw {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 0.2rem;
+    display: inline-block;
+  }
+
+  .sw-good {
+    background: var(--sl-color-green);
+  }
+
+  .sw-warn {
+    background: var(--sl-color-orange);
+  }
+
+  .sw-neutral {
+    background: var(--sl-color-text);
+  }
+
+  /* Filled like every other swatch so the legend shows the exact colour its
+     cells use: "absent" is the recessive grey, not an empty slot. */
+  .sw-off {
+    background: var(--sl-color-gray-3);
+  }
+
+  /* Full-bleed: the table escapes the content column to the viewport
+	   edges so 18 columns fit without scrolling on desktop. */
+  .scroll {
+    margin-inline: calc(-50vw + 50%);
+    padding-inline: 0.75rem;
+    overflow-x: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    /* Auto width: columns shrink-wrap to their content instead of
+		   stretching to fill a fixed width. Centered in the bleed band. */
+    width: auto;
+    max-width: 100%;
+    margin-inline: auto;
+  }
+
+  th,
+  td {
+    padding: 0.4rem 0.35rem;
+  }
+
+  thead th {
+    border-bottom: 1px solid var(--sl-color-gray-4);
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    font-weight: 600;
+    text-align: center;
+    color: var(--sl-color-gray-1);
+    /* Headers wrap to two lines so long tool names stop forcing
+		   column width. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  thead th.hl {
+    cursor: default;
+  }
+
+  .rowhead {
+    text-align: start;
+    font-weight: 400;
+    color: var(--sl-color-gray-2);
+    white-space: nowrap;
+  }
+
+  tbody .rowhead {
+    position: sticky;
+    left: 0;
+    background: var(--sl-color-bg);
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    cursor: pointer;
+    padding: 0.2rem 0.35rem 0.2rem 0.25rem;
+  }
+
+  .row-head-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .row-label {
+    font-size: 0.8125rem;
+  }
+
+  .row-filter {
+    appearance: none;
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    padding: 0.1rem 1.1rem 0.1rem 0.4rem;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 9999px;
+    background: var(--sl-color-black)
+      url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23979db0' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E")
+      no-repeat right 0.35rem center;
+    color: var(--sl-color-gray-1);
+    max-width: 7.5rem;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+
+  .row-filter:hover {
+    border-color: var(--sl-color-gray-3);
+  }
+
+  .row-filter:focus {
+    outline: 1px solid var(--sl-color-accent);
+    border-color: var(--sl-color-accent);
+  }
+
+  tbody td {
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    text-align: center;
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    white-space: nowrap;
+    /* Safety valve: only wraps when a column physically cannot fit,
+		   so the widest word never forces the table to scroll. */
+    overflow-wrap: anywhere;
+  }
+
+  /* Multi-feature cells: inline items, styled exactly like plain cell
+	   links (dotted underline from .cell-link, tone color per item). */
+  .items {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.45rem;
+  }
+
+  /* Text + info-icon pairs inside a cell. */
+  .cell-with-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  /* Tool name + notice marker in a column header: one atomic inline box, so
+     the marker cannot break away from the name, while the name still wraps
+     inside it and each line stays centered by the header's text-align. */
+  .head-with-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  /* IconNote is another component, so a scoped .note-icon rule can never
+     reach its span (the span carries no scope class of this file); go through
+     the wrapper instead. Cell and row-header icons stay as they are: they keep
+     inheriting the tone of the cell they sit in. */
+  .head-with-note :global(.note-icon) {
+    display: inline-flex;
+    align-items: center;
+    color: var(--sl-color-gray-3);
+    cursor: help;
+  }
+
+  .head-with-note :global(.note-icon:hover),
+  .head-with-note :global(.note-icon:focus-visible) {
+    color: var(--sl-color-accent);
+  }
+
+  tbody tr:hover .rowhead {
+    background: var(--sl-color-gray-6);
+  }
+
+  /* Row hover tints EVERY cell in the row uniformly (including
+	   tone-neutral ones). The Panix column blends its accent into the
+	   tint so the highlight stays visible while hovering. */
+  tbody tr:hover td {
+    background: color-mix(in oklab, var(--sl-color-gray-6) 50%, transparent);
+  }
+
+  tbody tr:hover td.hl {
+    background: color-mix(
+      in oklab,
+      var(--sl-color-accent-low) 55%,
+      var(--sl-color-gray-6) 45%
+    );
+  }
+
+  .tool-link {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--sl-color-gray-4);
+  }
+
+  .tool-link:hover {
+    color: var(--sl-color-accent-high);
+    border-bottom-color: var(--sl-color-accent);
+  }
+
+  /* Cells are verifiable: subtle dotted underline, accent on hover. */
+  .cell-link {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px dotted var(--sl-color-gray-4);
+  }
+
+  .cell-link:hover {
+    color: var(--sl-color-accent-high);
+    border-bottom-color: var(--sl-color-accent);
+  }
+
+  /* Presence is prominence on grays only; hue stays on the quality axis. */
+  .tone-good {
+    color: var(--sl-color-green);
+  }
+
+  .tone-warn {
+    color: var(--sl-color-orange);
+  }
+
+  .tone-off {
+    color: var(--sl-color-gray-3);
+  }
+
+  .tone-neutral {
+    color: var(--sl-color-text);
+  }
+
+  /* Highlighted Panix column. */
+  th.hl,
+  td.hl {
+    background: color-mix(
+      in oklab,
+      var(--sl-color-accent-low) 35%,
+      transparent
+    );
+  }
+
+  th.hl {
+    color: var(--sl-color-accent-high);
+  }
+
+  tbody td.hl {
+    border-inline: 1px solid var(--sl-color-accent-low);
+  }
+
+  tbody tr:last-child td.hl {
+    border-bottom: 1px solid var(--sl-color-accent);
+  }
+
+  .note {
+    margin: 0.75rem 0 0;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+
+  .note code {
+    font-size: 0.85em;
+  }
+
+  /* Collapsible term glossary below the table. */
+  .glossary {
+    margin: 1rem 0 0;
+  }
+
+  .glossary summary {
+    cursor: pointer;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+
+  .glossary summary:hover {
+    color: var(--sl-color-accent-high);
+  }
+
+  .glossary dl {
+    margin: 0.5rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: 0.35rem 1.5rem;
+  }
+
+  .glossary .gl {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+
+  .glossary dt {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-1);
+    white-space: nowrap;
+  }
+
+  .glossary dd {
+    margin: 0;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+
+  /* Live GitHub stars + repo age under each tool name. Reserve ~5ch while
+	   pending so numbers landing later do not shift columns; empty (failed)
+	   spans collapse. */
+  .repo-meta {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--sl-color-gray-3);
+    white-space: nowrap;
+    margin-top: 0.1rem;
+  }
+
+  .repo-meta.pending {
+    min-width: 5ch;
+  }
+
+  .repo-meta:empty {
+    display: none;
+  }
+</style>

@@ -1,9 +1,15 @@
 ---
-title: Keybinds
-description: Quick reference for all TUI keyboard shortcuts.
+title: TUI Reference
+description: Monitor live deployments in the terminal with every TUI keybind and view option.
 sidebar:
-  order: 2
+  order: 1
 ---
+
+The TUI stacks three views in one scrolling column: a live stats table (one row per machine), phase status, and build logs. Each stats row shows the machine, its status, flake, installable (output type and attribute name), architecture, generation and its date, OS version, and kernel version. Click or navigate (`left`/`right`) to a machine to filter its build logs; this also works for phase status.
+
+![TUI Showcase](../../../assets/images/tui.png)
+
+## Keybinds
 
 | Key | Action |
 |-----|--------|
@@ -18,6 +24,22 @@ sidebar:
 | `left`/`right` | Navigate between stats table or phase status entries |
 | `mouse click` | Select an entry from stats table, phase status, build logs (selecting selected stats table or phase status deselects them) |
 | `mouse scroll`/`up`/`down`/`j`/`k`/`pgup`/`pgdown` | Scroll main view or inner view when selected |
-| `s` | Take a snapshot of current workflow state (not available in snapshot view) |
+| `s` | Take a snapshot of current workflow state (not available in snapshot view; see [Snapshots](/guides/snapshots/)) |
 | `q` | Quit (sends stop signal to commands and waits for them to finish, then exits) |
 | `ctrl+q` | Force quit immediately |
+
+## Large Fleets
+
+When deploying to many machines, maximize visibility:
+
+- Show only active/errored build logs: `a` keybind or `--tui.show-active-only` flag
+- Reduce build log viewport height: `--tui.command-output-max-height=N` (default: 8)
+- Cap concurrent workers with `--runtime.max-concurrency` (default `0` = unlimited), see [CLI Deploy](/cli/deploy/)
+
+```sh
+panix deploy --tui.show-active-only --tui.command-output-max-height=2
+```
+
+Both flags can also be set in the config under `flags.tui` (`show_active_only`, `command_output_max_height`).
+
+The most useful keybinds for debugging are `a` (show active only), `h` (show all build logs), and `c` (toggle command labels).

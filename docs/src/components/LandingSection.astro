@@ -1,0 +1,106 @@
+---
+interface Props {
+	kicker: string;
+	title: string;
+	lead?: string;
+	band?: boolean;
+	id?: string;
+}
+
+const { kicker, title, lead, band = false, id } = Astro.props;
+---
+
+<!-- not-content opts inner markup out of .sl-markdown-content styling -->
+<section class:list={['landing-section landing-bleed not-content', { band }]}>
+	<div class="landing-inner">
+		<header class="section-head">
+			<p class="landing-kicker">// {kicker}</p>
+			<div class="sl-heading-wrapper level-h2">
+				{/* The heading and the anchor are kept adjacent with no whitespace between
+				    them on purpose: a text node here becomes a space that the anchor's
+				    negative pull-in cannot cancel, which doubles the icon gap relative to
+				    the same heading on any docs page. */}
+				<h2 class="title" id={id || undefined}>{title}</h2>{id && (
+					<a class="sl-anchor-link" href={`#${id}`}>
+						<span aria-hidden="true" class="sl-anchor-icon">
+							<svg width="16" height="16" viewBox="0 0 24 24">
+								<path
+									fill="currentcolor"
+									d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 0 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 1 0-1.42-1.42Zm8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 0 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 1 0 1.42 1.42l3.88-3.89a4.49 4.49 0 0 0 0-6.33ZM8.83 15.17a1 1 0 0 0 1.1.22 1 1 0 0 0 .32-.22l4.92-4.92a1 1 0 0 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42Z"
+								/>
+							</svg>
+						</span>
+						<span class="sr-only" data-pagefind-ignore="true">Section titled “{title}”</span>
+					</a>
+				)}
+			</div>
+			{lead && <p class="lead">{lead}</p>}
+		</header>
+		<slot />
+	</div>
+</section>
+
+<style>
+	.landing-section {
+		padding-block: clamp(2.5rem, 7vw, 4.5rem);
+	}
+
+	.landing-section.band {
+		background: color-mix(in oklab, var(--sl-color-gray-6) 55%, transparent);
+		border-block: 1px solid var(--sl-color-hairline);
+	}
+
+	.section-head {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-bottom: clamp(1.5rem, 4vw, 2.5rem);
+	}
+
+	/* Starlight's "non-heading sibling followed by a heading wrapper" rule
+	   gives the wrapper a 1.5em top margin, because the kicker precedes it.
+	   .section-head already spaces its children with flex gap, so cancel it.
+	   Astro scopes every compound of a scoped selector, so the Starlight
+	   ancestor that supplies the extra specificity must be :global(). */
+	:global(.sl-markdown-content) .section-head > div.sl-heading-wrapper {
+		margin-top: 0;
+	}
+
+	/* Starlight ships the heading-anchor geometry in its markdown-content layer,
+	   and that layer loses here: the heading stays block-level, so the anchor
+	   wraps onto its own line below the text. Restate the two declarations it
+	   would otherwise supply, against our own elements. The anchor's own styling
+	   (inline-flex, the negative pull-in, the icon transform) is inherited from
+	   the linked common bundle and needs no restating. */
+	.sl-heading-wrapper > .title {
+		display: inline;
+		padding-inline-end: var(--sl-anchor-icon-space);
+	}
+
+	/* The anchor svg carries width/height="16" attributes, so styling the CSS
+	   width alone leaves the box 28.95 x 16 at desktop heading sizes. Starlight's
+	   vertical centring assumes a square box of --sl-anchor-icon-size, so the icon
+	   lands ~6px high with a doubled gap. Pinning the height to the same token
+	   restores the square box, the centred position and the intended 0.25em gap,
+	   matching the anchor icons on every docs page. */
+	.sl-anchor-icon > svg {
+		height: var(--sl-anchor-icon-size);
+	}
+
+	.title {
+		margin: 0;
+		font-size: var(--sl-text-h2);
+		line-height: var(--sl-line-height-headings);
+		font-weight: 600;
+		color: var(--sl-color-white);
+		/* Fragment links land on this heading, which the fixed navbar would
+		   otherwise cover: offset by the navbar height Starlight exposes. */
+		scroll-margin-top: calc(var(--sl-nav-height) + 1rem);
+	}
+
+	.lead {
+		margin: 0;
+		max-width: 40rem;
+		color: var(--sl-color-gray-2);
+	}
+</style>
