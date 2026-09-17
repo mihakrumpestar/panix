@@ -6,6 +6,7 @@
 package pty
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"syscall"
@@ -18,19 +19,15 @@ import (
 type Winsize = unix.Winsize
 
 // Read reads output from the PTY master (what the child process writes to its terminal).
-// On Linux, reading from a master PTY whose slave has been closed returns EIO;
-// this is translated to io.EOF for correct Go semantics.
-// See: https://github.com/creack/pty/issues/21
-// Read reads output from the PTY master (what the child process writes to its terminal).
-// When the child exits and the slave PTY closes, the Linux kernel returns EIO from the
-// master read. This is a normal PTY lifecycle event, not an error. Read translates it
-// to a zero-byte read with nil error so the caller can treat 0 bytes as end-of-stream.
+// End-of-stream is reported as io.EOF on every platform: Linux returns EIO from the
+// master read after the child exits and the slave closes, while macOS/FreeBSD return
+// a zero-byte read that os.File surfaces as io.EOF. Genuine read errors are wrapped.
 // See: https://github.com/creack/pty/issues/21
 func (p *Pty) Read(b []byte) (int, error) {
 	bytesRead, err := p.master.Read(b)
 	if err != nil {
-		if isEIOError(err) {
-			return 0, nil
+		if isEIOError(err) || errors.Is(err, io.EOF) {
+			return bytesRead, io.EOF
 		}
 
 		return bytesRead, errors.Wrap(err, "pty: read")
