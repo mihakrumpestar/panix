@@ -2,10 +2,12 @@ package executioner
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -613,6 +615,87 @@ func TestProcessTerminalOutput_TabExpansion(t *testing.T) {
 	}
 }
 
+// readPTYOutputTestCase describes one scripted readPTYOutput scenario.
+type readPTYOutputTestCase struct {
+	name         string
+	reads        []scriptedStep
+	wantErr      string
+	wantContains []string
+	wantLines    []string
+}
+
+// TestReadPTYOutput pins the io.Reader contract: io.EOF ends the stream
+// without error (even when data arrives in the same read) and only genuine
+// read errors are fatal.
+func TestReadPTYOutput(t *testing.T) {
+	t.Parallel()
+
+	tests := []readPTYOutputTestCase{
+		{
+			name:  "EOF ends the stream",
+			reads: []scriptedStep{{err: io.EOF}},
+		},
+		{
+			name:  "zero-byte read with nil error ends the stream",
+			reads: []scriptedStep{{data: ""}},
+		},
+		{
+			name:      "data then EOF",
+			reads:     []scriptedStep{{data: "hello\r\n"}, {err: io.EOF}},
+			wantLines: []string{"hello"},
+		},
+		{
+			name:      "data with EOF in one read",
+			reads:     []scriptedStep{{data: "done\r\n", err: io.EOF}},
+			wantLines: []string{"done"},
+		},
+		{
+			name:         "data with fatal error keeps data",
+			reads:        []scriptedStep{{data: "important\r\n", err: errors.New("boom")}},
+			wantErr:      "pty read",
+			wantContains: []string{"important", "PTY read error: boom"},
+		},
+		{
+			name:         "genuine read error is fatal",
+			reads:        []scriptedStep{{err: errors.New("disk on fire")}},
+			wantErr:      "pty read",
+			wantContains: []string{"PTY read error: disk on fire"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			runReadPTYOutputCase(t, test)
+		})
+	}
+}
+
+// runReadPTYOutputCase runs one scripted case and asserts the output contract.
+func runReadPTYOutputCase(t *testing.T, test readPTYOutputTestCase) {
+	t.Helper()
+
+	ex := NewExecutioner(ExecutionerConf{Ctx: t.Context(), OnUpdateHook: func() {}})
+	cmdLog := newTestCommandLog()
+
+	err := ex.readPTYOutput(ex.conf.Ctx, &scriptedReader{steps: test.reads}, cmdLog)
+
+	for _, want := range test.wantContains {
+		assert.Contains(t, cmdLog.Output.String(), want)
+	}
+
+	if test.wantErr != "" {
+		require.ErrorContains(t, err, test.wantErr)
+
+		return
+	}
+
+	require.NoError(t, err)
+	assertLines(t, cmdLog, test.wantLines)
+	assert.NotContains(t, cmdLog.Output.String(), "PTY read error")
+}
+
 // processTestData is a test helper that runs terminalProcessor.process on
 // the given data and CommandLog.
 func processTestData(data []byte, cmdLog *command.CommandLog) {
@@ -641,4 +724,28 @@ func assertLines(t *testing.T, cmdLog *command.CommandLog, want []string) {
 	}
 
 	assert.Equal(t, want, got)
+}
+
+// scriptedStep is one scripted Read result: data and/or err.
+type scriptedStep struct {
+	data string
+	err  error
+}
+
+// scriptedReader replays scripted steps on successive Read calls, reporting
+// io.EOF once the steps are exhausted.
+type scriptedReader struct {
+	steps []scriptedStep
+	index int
+}
+
+func (r *scriptedReader) Read(dst []byte) (int, error) {
+	if r.index >= len(r.steps) {
+		return 0, io.EOF
+	}
+
+	step := r.steps[r.index]
+	r.index++
+
+	return copy(dst, step.data), step.err
 }

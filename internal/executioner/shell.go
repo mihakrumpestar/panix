@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 
@@ -89,7 +90,7 @@ func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
 	return nil
 }
 
-func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *pty.Pty, commandLog *command.CommandLog) error {
+func (ex *Executioner) readPTYOutput(ctx context.Context, reader io.Reader, commandLog *command.CommandLog) error {
 	buf := make([]byte, ptyBufferSize)
 	proc := terminalProcessor{output: commandLog.Output}
 
@@ -98,8 +99,21 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *pty.Pty, comm
 		case <-ctx.Done():
 			return errors.Wrap(ctx.Err(), "context canceled")
 		default:
-			bytesRead, err := ptyFile.Read(buf)
+			bytesRead, err := reader.Read(buf)
+
+			// Process data before the error: a reader may report n > 0 together with an error.
+			if bytesRead > 0 {
+				proc.process(buf[:bytesRead], commandLog)
+
+				ex.conf.OnUpdateHook()
+			}
+
 			if err != nil {
+				if errors.Is(err, io.EOF) {
+					// End-of-stream: exit status comes from cmd.Wait in finalizeExecution.
+					return nil
+				}
+
 				commandLog.Output.Write([]byte("PTY read error: " + err.Error()))
 				commandLog.Output.Write([]byte{})
 
@@ -107,12 +121,9 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, ptyFile *pty.Pty, comm
 			}
 
 			if bytesRead == 0 {
+				// PTY masters signal end-of-stream as io.EOF; this only guards a no-progress reader.
 				return nil
 			}
-
-			proc.process(buf[:bytesRead], commandLog)
-
-			ex.conf.OnUpdateHook()
 		}
 	}
 }
