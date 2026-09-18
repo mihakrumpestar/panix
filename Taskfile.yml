@@ -184,6 +184,8 @@ tasks:
   ci:
     desc: Run all CI checks
     cmds:
+      - gitleaks git --redact --staged
+      - gitleaks git --redact
       - task: generate
       - task: go:check
       - task: go:test

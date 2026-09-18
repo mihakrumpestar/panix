@@ -16,6 +16,8 @@
     "nix-update@latest",
     "gh@latest",
     "git-cliff@latest",
+    // Security
+    "gitleaks@latest",
     // For tests
     "tparse@latest",
     // CI
@@ -37,8 +39,9 @@
   },
   "shell": {
     "init_hook": [
-      "pre-commit autoupdate",
-      "pre-commit install",
+      // Git hook installation only makes sense in an interactive shell; CI
+      // also runs the init hook (devbox run) where stdout is not a TTY.
+      "if [ -t 1 ]; then pre-commit install; fi",
     ],
     "scripts": {
       "test": [

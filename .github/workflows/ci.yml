@@ -18,6 +18,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DO_NOT_TRACK: "1" # For devbox
+
 jobs:
   ci:
     name: Lint & Test
@@ -25,21 +28,29 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-
-      - uses: actions/setup-go@v7.0.0
         with:
-          go-version-file: go.mod
+          # gitleaks scans the full history; the default depth 1 would see
+          # only the pushed tip.
+          fetch-depth: 0
 
-      - uses: golangci/golangci-lint-action@v9.3.0
+      # Devbox (devbox.json + devbox.lock) is the single source of truth for
+      # the toolchain: go, golangci-lint, tparse, go-task, gcc, gitleaks.
+      # The action caches the Nix store keyed on devbox.lock.
+      - uses: jetify-com/devbox-install-action@v0.15.0
         with:
-          version: v2.12.2
-          install-only: true
+          enable-cache: "true"
 
-      - run: go install github.com/mfridman/tparse@v0.18.0
+      # Go module and build caches are outside the devbox environment.
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-
 
-      - uses: go-task/setup-task@v2.2.0
-
-      - run: task ci
+      - run: devbox run -- task ci
 
       # Fail if the CI tasks modified or created anything in the repo:
       # run 'task ci' locally and commit the results.
@@ -75,6 +86,16 @@ jobs:
           skipPush: ${{ secrets.CACHIX_AUTH_TOKEN == '' }}
           pushFilter: "(-source$|\\.drv$)"
 
-      - uses: go-task/setup-task@v2.2.0
+      # Reuses the Nix installed above; devbox only contributes the tooling
+      # pinned in devbox.lock (go-task) so 'task nix:build' runs exactly as it
+      # does locally. Store caching is off here: the devbox store cache is
+      # keyed to the devbox-installed Nix generation, and restoring it over
+      # install-nix-action's live store/profile would clobber the cachix
+      # binary and the live store DB; cachix + cache.nixos.org already
+      # provide substitution for this job.
+      - uses: jetify-com/devbox-install-action@v0.15.0
+        with:
+          skip-nix-installation: "true"
+          enable-cache: "false"
 
-      - run: task nix:build
+      - run: devbox run -- task nix:build

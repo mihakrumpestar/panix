@@ -57,6 +57,7 @@ The following packages were inadequate for use for Panix:
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
 - [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: speed is about the same, and it does not seem to provide a meaningful benefit over `nix build`
+- [nixos-facter](https://github.com/nix-community/nixos-facter): the generated json contains way too much unnecessary/verbose, and also sensitive data, like exact BIOS version and motherboard model/revision, that may be used against individuals. While some of the probes may be disabled, the project itself does not have meaningful benefits (at least not yet) against the `nixos-generate-config`.
 
 ## Demo video
 
