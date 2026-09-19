@@ -1,11 +1,11 @@
 ---
 title: Multi-Flake Deployments
-description: Deploy across multiple Nix flakes and repositories.
+description: Deploy machines from multiple flakes and repositories in one fleet.
 sidebar:
-  order: 1
+  order: 4
 ---
 
-Your infrastructure may span multiple flakes/repositories. Panix treats this as a first-class concern:
+Your infrastructure may span multiple flakes and repositories. A Panix fleet can reference any number of them:
 
 ```yaml
 fleet:
@@ -18,7 +18,7 @@ fleet:
             machines:
               server-01:
               server-02:
-    
+
     monitoring:
       url: github:myorg/monitoring-flake
       installables:
@@ -26,7 +26,7 @@ fleet:
           prometheus:
             machines:
               prom-01:
-    
+
     secrets-management:
       url: git+ssh://git@github.com/myorg/vault-nixos
       installables:
@@ -36,7 +36,7 @@ fleet:
               vault-01:
 ```
 
-With this you get complete visibility across your entire infrastructure. Each flake builds independently, each installable deduplicates builds across its machines.
+Each flake builds independently, and each installable deduplicates builds across its machines. See the [configuration model](/concepts/configuration-model/) for how installables and machines relate.
 
 ## Flake URL Schemes
 
@@ -48,6 +48,7 @@ Panix supports several URL schemes for flake references:
 | `github:` | `github:myorg/repo` | GitHub repository |
 | `github:owner/repo#ref` | `github:myorg/repo#main` | GitHub repo at specific ref |
 | `git+ssh://` | `git+ssh://git@github.com/myorg/repo` | Git over SSH |
+| `ssh:` | `ssh://myorg@host/repo` | A remote flake over SSH |
 | `.` (default) | Omit `url` field | Current directory |
 
 When `url` is omitted, it defaults to `"."` (current directory).

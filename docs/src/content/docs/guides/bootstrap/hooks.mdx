@@ -2,21 +2,25 @@
 title: Hooks
 description: Hook points during the bootstrap process.
 sidebar:
-  order: 2
+  order: 4
 ---
 
-Panix provides multiple hook points during bootstrap:
+Run commands at fixed points during the bootstrap process.
+
+Hook commands are shell script strings: each runs as `sh -c` on the target (as the SSH user, unprivileged; elevate explicitly with `sudo` where needed — passwordless, since Panix cannot answer prompts). Use POSIX syntax: on Debian-family targets `sh` is dash, so bash-isms like `[[` or arrays will fail.
 
 | Hook | When it runs | SSH used |
 |------|--------------|----------|
 | `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
 | `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
-| `post_bootstrap_provisioned_hooks` | After reboot into new system (immediately in the installer when automatic reboot is disabled) | Regular SSH |
+| `post_bootstrap_provisioned_hooks` | After reboot into new system (immediately in the installer when automatic reboot is disabled, over bootstrap SSH) | Regular SSH |
 
 ## Special Hook Commands
 
 - `waitForOnline`: Wait for machine to become reachable (useful after reboot)
 - `waitForOffline`: Wait for machine to become unreachable (useful during reboot)
+
+These two are exact-match keywords, not shell commands: anything else — including `waitForOnline && echo up` — runs as a shell script via `sh -c`.
 
 ## Example
 

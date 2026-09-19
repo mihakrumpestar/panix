@@ -4,6 +4,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 )
 
 type Handler struct{}
@@ -16,7 +17,14 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return err
 	}
 
-	// Bootstrap detection (only for bootstrappable types)
+	// su -l requires a root executing user: otherwise the PTY prompts for
+	// a password and hangs until timeout. Validate before any deploy phase;
+	// Activate re-validates after connection switches.
+	err = phaseops.ValidateTargetUser(fleetLeaf.Installable, machineI)
+	if err != nil {
+		return err //nolint:wrapcheck // error names installable, target user, and executing user
+	}
+
 	if fleetLeaf.Installable.Preset.IsBootstrappable {
 		err = runBootstrapInspect(exc, machineI)
 		if err != nil {
@@ -38,14 +46,19 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 
 	// Generation reading (all types with a profile path)
 	if fleetLeaf.Installable.Preset.ProfilePath != "" {
-		return readGenerations(exc, machineI, fleetLeaf.Installable.Preset.ProfilePath, fleetLeaf.Installable.User)
+		return readGenerations(
+			exc,
+			machineI,
+			fleetLeaf.Installable.Preset,
+			fleetLeaf.Installable.Preset.ProfilePath,
+			fleetLeaf.Installable.User,
+		)
 	}
 
 	return nil
 }
 
-// runCommonChecks runs SSH reachability, architecture, and superuser checks
-// that apply to all output types.
+// runCommonChecks covers the checks that apply to all output types.
 func runCommonChecks(exc *executioner.Executioner, machineI *machine.Machine) error {
 	if machineI.SSH.IsLocal() {
 		machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
@@ -69,12 +82,12 @@ func runCommonChecks(exc *executioner.Executioner, machineI *machine.Machine) er
 		return err
 	}
 
-	return checkSuperuser(exc, machineI)
+	return phaseops.RefreshSuperuser(exc, machineI) //nolint:wrapcheck // error is pre-annotated with its own context
 }
 
-// runBootstrapInspect runs bootstrap-specific inspection: detects bootstrap
-// status, validates SSH state and secrets paths, and handles unbootstrapped
-// machines.
+// runBootstrapInspect: order matters. The SSH and secrets validations read
+// the status detected first; unbootstrapped handling runs only when not
+// bootstrapped.
 func runBootstrapInspect(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := detectBootstrapStatus(exc, machineI)
 	if err != nil {

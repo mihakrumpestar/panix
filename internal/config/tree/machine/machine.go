@@ -38,24 +38,29 @@ type Machine struct {
 type MetaInspect struct {
 	Reachable      bool `yaml:"-" json:"reachable,omitempty"`
 	SSHConnectable bool `yaml:"-" json:"ssh_connectable,omitempty"`
-	IsRoot         bool `yaml:"-" json:"is_root,omitempty"`
-	Bootstrapped   bool `yaml:"-" json:"bootstrapped,omitempty"`
-	RequiresKexec  bool `yaml:"-" json:"requires_kexec,omitempty"`
-	NixAvailable   bool `yaml:"-" json:"nix_available,omitempty"`
+	// Probed during the last RefreshSuperuser on the then-active SSH
+	// connection; not re-probed after kexec switches the active connection.
+	IsRoot bool `yaml:"-" json:"is_root,omitempty"`
+	// A real probe has run (vs. a dry-run placeholder), so a later dry-run
+	// re-probe does not clobber the real value.
+	IsRootProbed  bool `yaml:"-" json:"is_root_probed,omitempty"`
+	Bootstrapped  bool `yaml:"-" json:"bootstrapped,omitempty"`
+	RequiresKexec bool `yaml:"-" json:"requires_kexec,omitempty"`
+	NixAvailable  bool `yaml:"-" json:"nix_available,omitempty"`
 
 	Architecture stringbyte.StringByte `yaml:"-" json:"architecture,omitempty"`
-	Generations  *Generations     `yaml:"-" json:"generations,omitempty"`
+	Generations  *Generations          `yaml:"-" json:"generations,omitempty"`
 	Date         stringbyte.StringByte `yaml:"-" json:"date,omitempty"`
 	OSVersion    stringbyte.StringByte `yaml:"-" json:"nixos,omitempty"`
 	Kernel       stringbyte.StringByte `yaml:"-" json:"kernel,omitempty"`
 }
 
 type State struct {
-	Status    stats.StatsState     `yaml:"-" json:"status"`
-	StatusMsg stringbyte.StringByte     `yaml:"-" json:"status_msg"`
-	Phase     phase.Phase          `yaml:"-" json:"phase"`
-	Error     *jsonerror.JSONError `yaml:"-" json:"error,omitempty"`
-	ActiveSSH SSHType              `yaml:"-" json:"active_ssh,omitempty" default:"regular"`
+	Status    stats.StatsState      `yaml:"-" json:"status"`
+	StatusMsg stringbyte.StringByte `yaml:"-" json:"status_msg"`
+	Phase     phase.Phase           `yaml:"-" json:"phase"`
+	Error     *jsonerror.JSONError  `yaml:"-" json:"error,omitempty"`
+	ActiveSSH SSHType               `yaml:"-" json:"active_ssh,omitempty" default:"regular"`
 }
 
 type Generations struct {
@@ -89,9 +94,8 @@ func (m *Machine) Init(name string, parentAttributes *attributes.Attributes) err
 	return nil
 }
 
-// InitSSH initializes SSH configuration for this machine.
-// Must be called after Init and after filtering, so only surviving machines
-// trigger SSH config loading (which may fail if ~/.ssh/config is missing).
+// InitSSH must be called after Init and after filtering, so only surviving
+// machines trigger SSH config loading (which may fail without ~/.ssh/config).
 func (m *Machine) InitSSH(localMachineHostname string, nixInfo nixver.Info) error {
 	err := m.Attributes.InitSSH(localMachineHostname, nixInfo)
 	if err != nil {
@@ -132,9 +136,28 @@ func (m *Machine) GetActiveSSH() ssh.SSHClient {
 	return sshClient
 }
 
+// MaybeSudo returns the elevation prefix for SSH-user commands: the sudo
+// program unless the user is root (rootness is known only at runtime).
 func (m *Machine) MaybeSudo() []string {
 	mi := m.MetaInspect.Load()
 	if mi != nil && mi.IsRoot {
+		return []string{}
+	}
+
+	return []string{m.SudoProgram.String()}
+}
+
+// MaybeSudoFor is MaybeSudo extended to a target user, and the single predicate
+// behind every elevation decision: "" delegates to the SSH user, "root" needs
+// no elevation, anything else gets the sudo program. Target-user rootness is
+// name-based (su -l and the config speak usernames; a UID-0 alias under another
+// name merely gets a redundant, fail-safe prefix), unlike the SSH user's UID probe.
+func (m *Machine) MaybeSudoFor(user string) []string {
+	if user == "" {
+		return m.MaybeSudo()
+	}
+
+	if user == "root" {
 		return []string{}
 	}
 

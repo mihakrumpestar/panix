@@ -42,11 +42,12 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink str
 		}
 	}
 
+	// The disko script partitions disks and must run as root.
 	err = exc.Exec(
 		"disko",
 		"partitioning disk",
 		"diskoScript failed",
-		[]string{diskoScript},
+		append(machine.MaybeSudo(), diskoScript),
 		executioner.Trim(),
 	)
 	if err != nil {
@@ -56,8 +57,8 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink str
 	return nil
 }
 
-// executeDiskEncryptionKeys transfers disk encryption keys to the target machine.
-// Must be called BEFORE disko runs, so keys are available for LUKS unlocking.
+// executeDiskEncryptionKeys must run before disko: the keys are needed for
+// LUKS unlocking during partitioning.
 func executeDiskEncryptionKeys(exc *executioner.Executioner, machine *machine.Machine) error {
 	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
 		err := phaseops.TransferFile(exc, machine, diskEncryptionKey, "disk encryption key", false)

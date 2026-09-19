@@ -1,9 +1,13 @@
 ---
 title: Other Commands
-description: init, schema, inspect, build, secrets, rollback, snapshot.
+description: Reference for panix init, schema, template, eval, inspect, build, secrets, rollback, snapshot, and completion; secrets and rollback also run Inspect first.
 sidebar:
-  order: 3
+  order: 4
 ---
+
+Run every panix command besides deploy: scaffold config, validate it, run single phases, and roll back.
+
+inspect, build, secrets, and rollback accept the same flags as `panix deploy` (see [Deploy Flags](/cli/deploy/)); rollback additionally accepts `--gen`.
 
 ## init
 
@@ -12,6 +16,11 @@ Initialize a new `panix.yml` configuration file:
 ```sh
 panix init
 ```
+
+Flags:
+
+- `-o/--output`: output path (default: `panix.yml`)
+- `-f/--force`: overwrite an existing file; without it a second `panix init` fails with a hint to use `--force`
 
 ## schema
 
@@ -25,11 +34,43 @@ Writes `panix-schema.yaml` to the current directory. See [IDE Support](/configur
 
 ## template
 
-Process templates and anchors, output the result. See [panix template](/configuration/template-command/) for details.
+Previews the processed YAML configuration with templates evaluated and anchors resolved, without performing validation:
+
+```sh
+panix template                    # Output to stdout (colorized)
+panix template -o processed.yaml  # Output to file (plain YAML)
+```
+
+What it does:
+
+- Resolves all `{{...}}` template expressions
+- Merges YAML anchors
+- Outputs the `flags`, `fleet`, and `output_types` (when defined) top level keys
+
+Use it to debug template expressions, verify anchor merging, or feed plain YAML to other tools. For full validation, use [eval](#eval) instead.
 
 ## eval
 
-Fully evaluate and validate configuration. See [panix eval](/configuration/eval-command/) for details.
+Fully evaluates and validates the configuration, preparing it for execution:
+
+```sh
+panix eval                    # Output to stdout (colorized)
+panix eval -o processed.yaml  # Output to file (plain YAML)
+panix eval -t <tag>           # Evaluate only machines matching the tag
+```
+
+Everything [template](#template) does, plus:
+
+- Loads and validates the full configuration
+- Validates flake URLs and configuration keys
+- Validates bootstrap disk encryption key local paths
+- Resolves inherited attributes, tags, and secrets
+- Filters out disabled and untagged parts of the configuration
+- Outputs the fully resolved configuration
+
+The `--validate.flakes` and `--validate.bootstrap-secrets` flags are opt-in on workflow commands (see [Deploy Flags](/cli/deploy/)); `panix eval` forces both on unconditionally.
+
+Use it to validate configuration before deploying, see the resolved configuration after inheritance and tag filtering, debug inheritance issues (which secrets, tags, and settings each machine receives), or as a CI/CD validation step.
 
 ## inspect
 
@@ -51,7 +92,7 @@ panix build
 
 Runs only the Build phase. Useful for pre-building without deploying.
 
-Pass `--out-links` (or set `flags.out_links` in `panix.yml`) to also leave GC-rooted outlinks for the built installables, so they survive garbage collection and are easy to inspect on disk. See [Build Outlinks](/features/nix-flags/#build-outlinks) for details.
+Pass `--out-links` (or set `flags.out_links` in `panix.yml`) to also leave GC-rooted outlinks for the built installables, so they survive garbage collection and are easy to inspect on disk. See [Build Outlinks](/configuration/nix-flags/#build-outlinks) for details.
 
 ## secrets
 
@@ -61,24 +102,33 @@ Deploy secrets to machines:
 panix secrets
 ```
 
-Runs only the Secrets phase. Useful for updating secrets without a full deploy.
+Runs Inspect, then the Secrets phase. Useful for updating secrets without a full deploy.
 
 ## rollback
 
 Rollback to a previous generation:
 
 ```sh
-panix rollback            # Rollback to previous generation (-1)
-panix rollback --gen=-2   # Rollback to 2 generations ago
-panix rollback --gen=5    # Rollback to specific generation number
+panix rollback               # Default: previous generation (--gen=-1)
+panix rollback --gen=0       # Current generation
+panix rollback --gen=-2      # Two generations before current
+panix rollback --gen=5       # Specific generation number
 ```
+
+`--gen` semantics: `0` is the current generation, `-N` is the Nth generation before current, and a positive `N` is a specific generation number.
+
+For rolling back automatically after a failed deploy, see [Auto Rollback](/guides/auto-rollback/).
 
 ## snapshot
 
 View a snapshot in TUI:
 
 ```sh
-panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
+panix snapshot --path <snapshot-file.json>
 ```
 
-See [Snapshots](/guides/snapshots/) for details on taking and viewing snapshots.
+`--path` (`-p`) is required and points at a snapshot JSON file. See [Snapshots](/guides/snapshots/) for taking snapshots and the file format.
+
+## completion
+
+Prints shell code for initializing tab completion (bash, zsh, fish). See [Shell Completion](/cli/shell-completion/) for setup.

@@ -19,6 +19,10 @@ task
 
 Code has to pass `task ci` checks, if larger or critical sections were changed, then also `task go:test:e2e`.
 
+After changing CLI flags or config structs, run `task generate` and commit the regenerated `gen/` artifacts (schema, badges) and the synced docs blocks; CI's clean-tree check fails when they diverge.
+
+Large docs assets (demo gif) are not committed to git; `task docs:assets` fetches them into `docs/public/` (run automatically by `docs:dev`/`docs:build`).
+
 ## Binary cache
 
 CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cachix.org/cache/mihakrumpestar). Pushing requires the `CACHIX_AUTH_TOKEN` secret to be set on the repository; without it the workflow skips pushing and only builds.
@@ -33,7 +37,7 @@ CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cac
 - **Test factories**: use `internal/testutil/faker.go` for generating fake domain objects (SSH clients, machines, configs, flakes, fleets).
 - **Linting**: `testifylint` is enforced via golangci-lint with all checks enabled.
 - **Coverage**: `task go:test` runs with `-race -shuffle=on`, generates a coverage profile at `test/cover.out` and a badge at `gen/coverage.svg`. CI enforces a minimum total coverage of 60%.
-- **Clean tree**: CI tasks must leave the repository unchanged. At the end of the job, [numtide/clean-git-action](https://github.com/numtide/clean-git-action) fails the build on any uncommitted change.
+- **Clean tree**: CI tasks must leave the repository unchanged. At the end of the job, CI's "Verify clean working tree" step fails the build on any uncommitted change.
 
 Icons from [nerdfonts](https://www.nerdfonts.com/cheat-sheet).
 
@@ -53,6 +57,7 @@ The following packages were inadequate for use for Panix:
 - [Viper link to issue](https://github.com/spf13/viper/issues/819)
 - [urfave/cli](https://github.com/urfave/cli): using with [sflags](https://github.com/urfave/sflags) keeps placeholders just as "value" in help, does not properly generate env vars and flag names (have to manually specify them)
 - [nix-fast-build](https://github.com/Mic92/nix-fast-build) instead of `nix build`: speed is about the same, and it does not seem to provide a meaningful benefit over `nix build`
+- [nixos-facter](https://github.com/nix-community/nixos-facter): the generated json contains way too much unnecessary/verbose, and also sensitive data, like exact BIOS version and motherboard model/revision, that may be used against individuals. While some of the probes may be disabled, the project itself does not have meaningful benefits (at least not yet) against the `nixos-generate-config`.
 
 ## Demo video
 

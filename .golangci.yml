@@ -24,6 +24,11 @@ linters:
     - gomodguard_v2
 
   settings:
+    nolintlint:
+      # Under a newer linter a directive can look unused and issues.fix would
+      # then delete it, silently breaking the pinned linter used by CI.
+      allow-unused: true
+
     govet:
       enable:
         - shadow

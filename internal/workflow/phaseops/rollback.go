@@ -11,17 +11,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-// RollbackActivationMode returns the activation mode used when rolling back to
-// a previous generation. It uses the preset's declared default activation
-// mode. When unset it returns an empty string, meaning no mode argument is
-// passed to the activation script.
+// RollbackActivationMode returns the preset's default activation mode, or an
+// empty string when unset: no mode argument is then passed to the activation
+// script.
 func RollbackActivationMode(preset installable.Preset) string {
 	return preset.ActivationDefaultMode
 }
 
+// FindGenerationClosure resolves a generation link's closure path via readlink,
+// wrapped as the installable's target user via WrapAsTargetUser.
 func FindGenerationClosure(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
+	preset installable.Preset,
+	targetUser string,
 	profilePath string,
 	generation uint,
 ) (string, error) {
@@ -33,7 +36,7 @@ func FindGenerationClosure(
 		"find generation closure",
 		"finding generation closure path",
 		"failed to find generation closure",
-		append(machine.MaybeSudo(), "readlink", generationLink),
+		WrapAsTargetUser(machine, preset, targetUser, []string{"readlink", generationLink}),
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			closurePath = strings.TrimSpace(log.Output.String())
 

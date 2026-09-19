@@ -30,6 +30,14 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		if err != nil {
 			return err
 		}
+
+		// The target now runs the NixOS installer, so nixos-generate-config
+		// exists: generate the hardware config before disko, whose build
+		// evaluates the operator's configuration, which may import it.
+		err = phaseops.GenerateHardwareConfig(exc, machine)
+		if err != nil {
+			return err //nolint:wrapcheck // error is pre-annotated with its own context
+		}
 	}
 
 	if !machine.Bootstrap.DisableDisko {

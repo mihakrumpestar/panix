@@ -5,7 +5,9 @@ sidebar:
   order: 5
 ---
 
-Panix can force a reinstall of an already running NixOS system. This is useful when you want to completely wipe and reinstall a machine from scratch.
+Force Panix to bootstrap over an already running NixOS system, wiping and reinstalling it from scratch.
+
+The flags plug into the regular [bootstrap flow](/guides/bootstrap/); kexec settings follow [Kexec](/guides/bootstrap/kexec/) and connection details follow [Bootstrap SSH](/guides/bootstrap/ssh/).
 
 Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
@@ -21,6 +23,10 @@ machines:
       kexec:
         ssh_port: 22                     # SSH port for kexec installer (default: 22)
 ```
+
+:::caution
+This is highly experimental and has not yet been successful.
+:::
 
 ## Options
 

@@ -1,0 +1,187 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+import LandingSection from "./LandingSection.astro";
+
+const features = [
+	{
+		icon: "code-branch",
+		hue: "var(--sl-color-accent)",
+		hueLow: "var(--sl-color-accent-low)",
+		title: "Stateless",
+		desc: "No state is kept between runs. Every deploy derives from your flake and panix.yml.",
+		link: "/concepts/overview/",
+		linkLabel: "How it works",
+	},
+	{
+		icon: "laptop",
+		hue: "var(--sl-color-purple)",
+		hueLow: "var(--sl-color-purple-low)",
+		title: "Real-time TUI",
+		desc: "Live progress for every machine and phase. Retry failed phases without restarting.",
+		link: "/tui/keybinds/",
+		linkLabel: "Keybinds",
+	},
+	{
+		icon: "rocket",
+		hue: "var(--sl-color-orange)",
+		hueLow: "var(--sl-color-orange-low)",
+		title: "Bootstrap bare metal",
+		desc: "kexec, disko, and secrets in one command, onto a machine with nothing installed.",
+		link: "/guides/bootstrap/",
+		linkLabel: "Bootstrap guide",
+	},
+	{
+		icon: "puzzle",
+		hue: "var(--sl-color-green)",
+		hueLow: "var(--sl-color-green-low)",
+		title: "Multi-flake fleets",
+		desc: "Machines can come from different flakes and repositories in a single fleet.",
+		link: "/concepts/multi-flake/",
+		linkLabel: "Multi-flake",
+	},
+	{
+		icon: "list-format",
+		hue: "var(--sl-color-red)",
+		hueLow: "var(--sl-color-red-low)",
+		title: "Tag-based filtering",
+		desc: "Deploy a subset of the fleet using tags set at any level of the hierarchy.",
+		link: "/configuration/tag-filtering/",
+		linkLabel: "Tag filtering",
+	},
+	{
+		icon: "nix",
+		hue: "var(--sl-color-accent)",
+		hueLow: "var(--sl-color-accent-low)",
+		title: "Any output type",
+		desc: "nixosConfigurations, home-manager, and plain packages deploy side by side.",
+		link: "/configuration/output-types/",
+		linkLabel: "Output types",
+	},
+];
+---
+
+<LandingSection
+	kicker="features"
+	title="What Panix does"
+	lead="A phase-oriented pipeline wrapped around your existing flake."
+	id="features"
+>
+	<ul class="grid">
+		{
+			features.map((f) => (
+				<li
+					class="card"
+					style={`--hue: ${f.hue}; --hue-low: ${f.hueLow}`}
+				>
+					<div class="card-head">
+						<span class="card-icon">
+							<Icon name={f.icon} size="1.25em" color={f.hue} />
+						</span>
+						<h3 class="card-title">{f.title}</h3>
+					</div>
+					<p class="card-desc">{f.desc}</p>
+					<a class="card-link" href={f.link}>
+						{f.linkLabel}
+						<span class="card-link-arrow" aria-hidden="true">→</span>
+					</a>
+				</li>
+			))
+		}
+	</ul>
+</LandingSection>
+
+<style>
+	.grid {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: 1fr;
+	}
+
+	@media (min-width: 40rem) {
+		.grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (min-width: 60rem) {
+		.grid {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+
+	.card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		padding: 1.25rem;
+		background: var(--sl-color-black);
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		transition:
+			border-color 0.2s ease,
+			transform 0.2s ease,
+			box-shadow 0.2s ease;
+	}
+
+	.card:hover {
+		border-color: var(--hue);
+		transform: translateY(-2px);
+		box-shadow: var(--sl-shadow-md);
+	}
+
+	.card-head {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.card-icon {
+		display: inline-flex;
+		padding: 0.3rem;
+		border: 1px solid var(--hue);
+		background: var(--hue-low);
+		border-radius: 0.375rem;
+	}
+
+	.card-title {
+		margin: 0;
+		font-size: var(--sl-text-h4);
+		font-weight: 600;
+		line-height: var(--sl-line-height-headings);
+		color: var(--sl-color-white);
+	}
+
+	.card-desc {
+		margin: 0;
+		flex-grow: 1;
+		font-size: var(--sl-text-sm);
+		line-height: 1.5;
+		color: var(--sl-color-gray-2);
+	}
+
+	.card-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		margin-top: 0.25rem;
+		font-size: var(--sl-text-sm);
+		text-decoration: none;
+		color: var(--sl-color-gray-2);
+		transition: color 0.15s ease;
+	}
+
+	.card-link:hover {
+		color: var(--sl-color-accent-high);
+	}
+
+	.card-link-arrow {
+		transition: translate 0.15s ease;
+	}
+
+	.card-link:hover .card-link-arrow {
+		translate: 0.15rem 0;
+	}
+</style>

@@ -11,11 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestApplyPresetDefaults_TypeLevelFields verifies that type-level fields
-// (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath) are always taken
-// from the type defaults, ignoring any user-provided values. This is the fix
-// for the pre-existing bug where `if !x { x = defaults }` silently overwrote
-// an explicit `false` when the default was `true`.
+// Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath) are
+// always taken from the defaults, ignoring any user-provided value.
 func TestApplyPresetDefaults_TypeLevelFields(t *testing.T) {
 	t.Parallel()
 
@@ -88,8 +85,7 @@ func assertTypeLevelFields(t *testing.T, inst *Installable, defaults Preset) {
 	assert.Equal(t, defaults.OmitTypeFromAttrPath, inst.Preset.OmitTypeFromAttrPath, "OmitTypeFromAttrPath should always come from defaults")
 }
 
-// TestApplyPresetDefaults_UserOverridableFields verifies that user-overridable
-// fields use the user value when non-zero, and fall back to defaults when zero.
+// User-overridable fields: a non-zero user value wins, zero falls back.
 func TestApplyPresetDefaults_UserOverridableFields(t *testing.T) {
 	t.Parallel()
 
@@ -148,11 +144,8 @@ func TestApplyPresetDefaults_UserOverridableFields(t *testing.T) {
 	})
 }
 
-// TestApplyPresetDefaults_AllKnownTypes exercises the full Init() ->
-// applyPresetDefaults() flow for every known output type. Starting from an
-// empty Preset, Init must populate every field from the type's preset entry in
-// the presets map. This catches integration issues that the field-level
-// applyPresetDefaults tests above might miss (e.g. Init not calling
+// Exercises the full Init -> applyPresetDefaults flow for every known type,
+// catching integration gaps the field-level tests cannot (Init not calling
 // applyPresetDefaults, or passing the wrong type key).
 func TestApplyPresetDefaults_AllKnownTypes(t *testing.T) {
 	t.Parallel()
@@ -174,29 +167,23 @@ func TestApplyPresetDefaults_AllKnownTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Start with an empty Preset — all fields are zero values,
-			// so applyPresetDefaults should fill in every field from the
-			// type's preset entry.
 			inst := &Installable{Preset: Preset{}}
 
-			// Init needs a non-nil parent Attributes (it merges parent into
-			// child and dereferences parent.Xpath). Use a fresh empty
-			// Attributes, matching how fleet.Init() calls attributes.New().
-			// parentNix can be nil — NixConfig.Init handles nil.
+			// Init dereferences parent.Xpath, so parent Attributes must be
+			// non-nil; parentNix may be nil (NixConfig.Init handles it).
 			err := inst.Init(tt.typ, "testname", attributes.New(), nil, nil)
 			require.NoError(t, err, "Init should succeed for %s", tt.typ)
 
 			expected := presets[tt.typ]
 
-		// User-overridable fields — all should come from defaults since
-		// the input Preset was empty.
-		assert.Equal(t, expected.BuildPath, inst.Preset.BuildPath, "BuildPath")
-		assert.Equal(t, expected.ProfilePath, inst.Preset.ProfilePath, "ProfilePath")
-		assert.Equal(t, expected.ActivationPath, inst.Preset.ActivationPath, "ActivationPath")
-		assert.Equal(t, expected.ActivationModes, inst.Preset.ActivationModes, "ActivationModes")
-		assert.Equal(t, expected.NonMutatingModes, inst.Preset.NonMutatingModes, "NonMutatingModes")
-		assert.Equal(t, expected.ProfileSkipModes, inst.Preset.ProfileSkipModes, "ProfileSkipModes")
-		assert.Equal(t, expected.ActivationDefaultMode, inst.Preset.ActivationDefaultMode, "ActivationDefaultMode")
+			// All user-overridable fields come from defaults (input Preset is empty).
+			assert.Equal(t, expected.BuildPath, inst.Preset.BuildPath, "BuildPath")
+			assert.Equal(t, expected.ProfilePath, inst.Preset.ProfilePath, "ProfilePath")
+			assert.Equal(t, expected.ActivationPath, inst.Preset.ActivationPath, "ActivationPath")
+			assert.Equal(t, expected.ActivationModes, inst.Preset.ActivationModes, "ActivationModes")
+			assert.Equal(t, expected.NonMutatingModes, inst.Preset.NonMutatingModes, "NonMutatingModes")
+			assert.Equal(t, expected.ProfileSkipModes, inst.Preset.ProfileSkipModes, "ProfileSkipModes")
+			assert.Equal(t, expected.ActivationDefaultMode, inst.Preset.ActivationDefaultMode, "ActivationDefaultMode")
 
 			// SetProfile is *bool; compare via dereference, handling nil.
 			if expected.SetProfile == nil {
@@ -205,7 +192,7 @@ func TestApplyPresetDefaults_AllKnownTypes(t *testing.T) {
 				assert.Equal(t, *expected.SetProfile, *inst.Preset.SetProfile, "SetProfile value")
 			}
 
-			// Type-level fields — always from defaults.
+			// Type-level fields always come from defaults.
 			assert.Equal(t, expected.IsSystemLevel, inst.Preset.IsSystemLevel, "IsSystemLevel")
 			assert.Equal(t, expected.IsBootstrappable, inst.Preset.IsBootstrappable, "IsBootstrappable")
 			assert.Equal(t, expected.OmitTypeFromAttrPath, inst.Preset.OmitTypeFromAttrPath, "OmitTypeFromAttrPath")
@@ -217,9 +204,8 @@ func TestApplyPresetDefaults_AllKnownTypes(t *testing.T) {
 	}
 }
 
-// TestInit_NilParentNixIsSafe verifies that Init tolerates a nil parentNix.
-// This matches the real call chain where the top-level fleet passes nil to
-// NixConfig.Init. A regression here would crash every config load.
+// Init must tolerate nil parentNix: the top-level fleet passes nil, and a
+// regression would crash every config load.
 func TestInit_NilParentNixIsSafe(t *testing.T) {
 	t.Parallel()
 
@@ -227,15 +213,13 @@ func TestInit_NilParentNixIsSafe(t *testing.T) {
 
 	err := inst.Init(FlakeOutputType("nixosConfigurations"), "host1", attributes.New(), nil, nil)
 	require.NoError(t, err)
-	// BuildMode defaults to local when unset (see NixConfig.Init).
+	// BuildMode defaults to local when unset.
 	assert.Equal(t, nix.BuildModeLocal, inst.Nix.BuildMode)
 }
 
-// TestInitCustomPresets verifies that Installable.Init applies a declared
-// custom preset (from output_types) as defaults with the same merge semantics
-// as built-in presets: installable-level YAML overrides win for user-
-// overridable fields, and type-level fields are always taken from the custom
-// preset.
+// A declared custom preset (output_types) is applied with the built-in merge
+// semantics: installable YAML wins for user-overridable fields, type-level
+// fields always come from the custom preset.
 func TestInitCustomPresets(t *testing.T) {
 	t.Parallel()
 
@@ -277,8 +261,7 @@ func TestInitCustomPresets(t *testing.T) {
 	t.Run("type-level fields always come from the custom preset", func(t *testing.T) {
 		t.Parallel()
 
-		// Per-installable YAML tries to flip system_level to false, but it's a
-		// type-level field, so the declared custom preset wins.
+		// Type-level field: the per-installable false is ignored.
 		inst := &Installable{Preset: Preset{
 			IsSystemLevel: new(false),
 		}}
@@ -292,9 +275,8 @@ func TestInitCustomPresets(t *testing.T) {
 	})
 }
 
-// assertCustomPresetDefaultsMerged verifies that an installable with an empty
-// preset gets every user-overridable field filled from the declared custom
-// preset defaults, and that type-level fields are taken from the custom preset.
+// assertCustomPresetDefaultsMerged checks the empty preset is fully populated
+// from the custom defaults, type-level fields included.
 func assertCustomPresetDefaultsMerged(t *testing.T, customPresets CustomOutputTypes) {
 	t.Helper()
 
@@ -316,10 +298,9 @@ func assertCustomPresetDefaultsMerged(t *testing.T, customPresets CustomOutputTy
 	assert.True(t, *inst.Preset.IsSystemLevel)
 }
 
-// TestRemoteBuilder_ReturnsFirstDeclaredMachine verifies the builder pin:
-// always the first declared machine, post-filter declaration order. Build
-// (--store) and transfer (--from) both target it so that once-per-installable
-// phases are deterministic regardless of which machine's goroutine executes.
+// Pins the builder: always the first declared machine, so once-per-installable
+// build (--store) and transfer (--from) are deterministic regardless of which
+// machine's goroutine executes.
 func TestRemoteBuilder_ReturnsFirstDeclaredMachine(t *testing.T) {
 	t.Parallel()
 
@@ -334,9 +315,8 @@ func TestRemoteBuilder_ReturnsFirstDeclaredMachine(t *testing.T) {
 	assert.Same(t, first, inst.RemoteBuilder())
 }
 
-// TestRemoteBuilder_NilWhenNoMachines documents the accessor contract: nil
-// means validation should have rejected the config (remote mode requires at
-// least 1 machine); remote-mode callers treat nil as an invariant violation.
+// Nil means validation should have rejected the config (remote mode requires a
+// machine); callers treat it as an invariant violation.
 func TestRemoteBuilder_NilWhenNoMachines(t *testing.T) {
 	t.Parallel()
 

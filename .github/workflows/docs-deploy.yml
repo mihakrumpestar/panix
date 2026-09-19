@@ -13,6 +13,9 @@ concurrency:
   group: docs-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DO_NOT_TRACK: "1" # For devbox
+
 jobs:
   deploy:
     name: Deploy to Cloudflare Pages
@@ -24,9 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: oven-sh/setup-bun@v2.2.0
+      # Devbox (devbox.json + devbox.lock) is the single source of truth for
+      # bun and go-task. The action caches the Nix store keyed on devbox.lock.
+      - uses: jetify-com/devbox-install-action@v0.15.0
+        with:
+          enable-cache: "true"
 
-      # setup-bun only caches the bun executable, not installed dependencies.
+      # Devbox does not cover the bun package install cache, only bun itself.
       - uses: actions/cache@v6.1.0
         with:
           path: ~/.bun/install/cache
@@ -34,9 +41,7 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-
 
-      - uses: go-task/setup-task@v2.2.0
+      - run: devbox run -- task docs:bun
 
-      - run: task docs:bun
-
-      - run: task docs:deploy
+      - run: devbox run -- task docs:deploy
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}

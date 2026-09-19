@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
@@ -12,6 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -121,42 +123,6 @@ func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine)
 	return nil
 }
 
-func checkSuperuser(exc *executioner.Executioner, machineI *machine.Machine) error {
-	err := exc.Exec(
-		"superuser check",
-		"checking superuser privileges",
-		"checking superuser failed",
-		[]string{"id", "-u"},
-		executioner.OnFailure(func(log *command.CommandLog, err error) error {
-			return errors.Wrap(err, log.Output.String())
-		}),
-		executioner.OnSuccess(func(log *command.CommandLog) error {
-			output := strings.Trim(log.Output.String(), "\n ")
-
-			parsedOutput, err := strconv.ParseUint(output, 10, 64)
-			if err != nil {
-				return errors.Wrapf(err, "failed to parse raw output %s to uint", strconv.Quote(output))
-			}
-
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.IsRoot = parsedOutput == 0
-			})
-
-			return nil
-		}),
-		executioner.OnDryRun(func() {
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.IsRoot = true
-			})
-		}),
-	)
-	if err != nil {
-		return errors.Wrap(err, "superuser check failed")
-	}
-
-	return nil
-}
-
 func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := exc.Exec(
 		"bootstrap detection",
@@ -207,8 +173,8 @@ func checkNixAvailable(exc *executioner.Executioner, machineI *machine.Machine) 
 	return errors.Wrap(err, "nix availability check failed")
 }
 
-// detectSystemInfo populates OS version and kernel for all system types.
-// Date is populated from the active generation's timestamp by readGenerations.
+// detectSystemInfo skips Date: readGenerations populates it from the active
+// generation.
 func detectSystemInfo(exc *executioner.Executioner, machineI *machine.Machine) error {
 	err := detectOSVersion(exc, machineI)
 	if err != nil {
@@ -335,36 +301,42 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 	return nil
 }
 
+// handleUnbootstrapped generates the hardware config during Inspect, via
+// phaseops so Bootstrap runs the same step after kexec.
 func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machine) error {
 	if machineI.HardwareConfigPath == "" {
 		return nil
 	}
 
-	err := exc.Exec(
-		"generate config",
-		"generating hardware config",
-		"nixos-generate-config failed",
-		append(machineI.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems", ">", machineI.HardwareConfigPath),
-	)
-	if err != nil {
-		return errors.Wrap(err, "hardware config generation failed")
+	// nixos-generate-config exists only on NixOS: skip before kexec boots
+	// the installer; Bootstrap generates it afterwards.
+	mi := machineI.MetaInspect.Load()
+	if mi != nil && mi.RequiresKexec {
+		log.Info().
+			Str("xpath", machineI.Xpath.String()).
+			Str("hardware_config_path", machineI.HardwareConfigPath).
+			Msg("skipping hardware config generation before kexec (nixos-generate-config is unavailable on the current OS)")
+
+		return nil
 	}
 
-	return nil
+	return phaseops.GenerateHardwareConfig(exc, machineI) //nolint:wrapcheck // error is pre-annotated with its own context
 }
 
-// readGenerations reads profile generations via nix-env --list-generations.
-// Works for any profile path (system, home-manager, system-manager, etc.).
-// When targetUser is set, the command runs as that user via su -l.
-// NIX_PAGER=cat: panix runs on a PTY and nix's pager would block forever (#14).
-func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, profilePath string, targetUser string) error {
-	args := []string{"env", "NIX_PAGER=cat", "nix-env", "--profile", profilePath, "--list-generations"}
-
-	if targetUser != "" {
-		args = phaseops.AsUser(targetUser, args)
-	} else {
-		args = append(machineI.MaybeSudo(), args...)
-	}
+// readGenerations works for any profile path (system, home-manager,
+// system-manager, ...). NIX_PAGER=cat: panix runs on a PTY and nix's pager
+// would block forever (#14).
+func readGenerations(
+	exc *executioner.Executioner,
+	machineI *machine.Machine,
+	preset installable.Preset,
+	profilePath string,
+	targetUser string,
+) error {
+	// The env prefix stays inline (not WithEnv) so it sits inside the
+	// privilege wrap regardless of which user runs nix-env.
+	args := phaseops.WrapAsTargetUser(machineI, preset, targetUser,
+		[]string{"env", "NIX_PAGER=cat", "nix-env", "--profile", profilePath, "--list-generations"})
 
 	err := exc.Exec(
 		"list generations",
@@ -384,9 +356,8 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, pr
 			return nil
 		}),
 		executioner.OnFailure(func(_ *command.CommandLog, err error) error {
-			// Exit code 1: profile doesn't exist yet (first deploy).
-			// Exit code 127: nix-env not in PATH (e.g. kexec VM before NixOS install).
-			// Both are expected; other errors (daemon broken, permissions, etc.) propagate.
+			// Exit 1 (no profile yet) and 127 (nix-env not in PATH, e.g.
+			// kexec VM) are expected; anything else propagates.
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
 				code := exitErr.ExitCode()
@@ -410,8 +381,7 @@ func readGenerations(exc *executioner.Executioner, machineI *machine.Machine, pr
 	return errors.Wrap(err, "failed to list generations")
 }
 
-// parseNixEnvGenerations parses output from `nix-env --profile <path> --list-generations`.
-// Format:
+// parseNixEnvGenerations expects one generation per line, current marked:
 //
 //	1   2026-08-01 15:00:44
 //	2   2026-08-01 15:10:22   (current)

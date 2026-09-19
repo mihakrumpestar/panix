@@ -47,11 +47,24 @@ fleet:
                   identity_file: {{ $key }}
                   disable_strict_key_checking: true
 {{ if $isBootstrap }}
+                # Hardware config generation runs during Inspect in the
+                # installer (RequiresKexec=false there) and writes to this
+                # path on the machine running panix (the test runner), NOT
+                # on the target.
+                hardware_config_path: /tmp/e2e-hardware-config.nix
                 bootstrap:
                   ssh: *ssh_nixos_iso
                   post_bootstrap_provisioned_hooks:
                     - waitForOnline
 {{ end }}
+          # Dedicated configuration for the kexec-bootstrapped machine: its
+          # config imports the generated hardware config (see flake.nix), so
+          # only this machine sets hardware_config_path to a path inside the
+          # testflakes source tree (flakes cannot import absolute paths
+          # outside their source). Bootstrap generates it right after kexec,
+          # before the disko build that imports it.
+          test-vm-kexec:
+            machines:
               kexec-vm:
                 ssh: &ssh_kexec
                   hostname: 127.0.0.1
@@ -60,6 +73,7 @@ fleet:
                   identity_file: {{ $key }}
                   disable_strict_key_checking: true
 {{ if $isBootstrap }}
+                hardware_config_path: {{ $dir }}/testflakes/hardware-configuration.nix
                 bootstrap:
                   ssh: *ssh_kexec
                   kexec:
@@ -67,6 +81,7 @@ fleet:
                     ssh_port: 10023
                   post_bootstrap_provisioned_hooks:
                     - waitForOnline
+                    - touch /tmp/e2e-hook-ran
 {{ end }}
 {{ end }}
 {{ if $isRemote }}

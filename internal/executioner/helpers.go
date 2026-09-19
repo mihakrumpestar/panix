@@ -15,13 +15,10 @@ var (
 	ErrHostReconnectTimeout  = errors.New("host did not reconnect within timeout")
 )
 
-// waitPollInterval is the polling interval used by WaitForDisconnect and
-// WaitForReconnect when checking host reachability.
 const waitPollInterval = time.Second
 
-// waitPollReachabilityTimeout is the TCP dial timeout for each reachability
-// probe inside the disconnect/reconnect wait loops. This is intentionally
-// shorter than the overall wait timeout, it bounds a single poll attempt.
+// waitPollReachabilityTimeout bounds one reachability probe and is
+// intentionally shorter than the overall wait timeout.
 const waitPollReachabilityTimeout = time.Second
 
 func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookName string) error {
@@ -44,11 +41,13 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 				return err
 			}
 		default:
+			// Hook commands are shell script strings: one argv element run
+			// via sh -c on both transports (SSH quotes it as a literal).
 			err := ex.Exec(
 				fmt.Sprintf("%s %d", hookName, idx+1),
 				fmt.Sprintf("running %s: %s", hookName, hook),
 				hookName+" failed",
-				[]string{string(hook)},
+				[]string{"sh", "-c", string(hook)},
 			)
 			if err != nil {
 				return err

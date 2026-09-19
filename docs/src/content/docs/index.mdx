@@ -3,12 +3,12 @@ title: Panix
 description: Universal Nix Deployment Orchestrator - stateless, phase-oriented deployment with real-time visibility.
 template: splash
 hero:
-  tagline: Stateless, phase-oriented deployment with real-time visibility across multi-flake fleets.
+  tagline: Stateless, phase-oriented deployment for Nix flakes, with real-time visibility.
   actions:
-    - text: Getting Started
+    - text: Get Started
       link: /getting-started/
       icon: right-arrow
-    - text: View on GitHub
+    - text: GitHub
       link: https://github.com/mihakrumpestar/panix
       icon: external
       variant: minimal
@@ -16,27 +16,12 @@ sidebar:
   order: 0
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import QuickStartStrip from '../../components/QuickStartStrip.astro';
+import FeatureGrid from '../../components/FeatureGrid.astro';
+import ComparisonTable from '../../components/ComparisonTable.astro';
 
-<div class="text-center my-8">
-	![Panix TUI](../../assets/images/tui.png)
-</div>
+<QuickStartStrip />
 
-<CardGrid stagger>
-	<Card title="Getting Started" icon="rocket">
-		Install Panix and deploy your first installable in minutes.
-		[Quick Start →](/getting-started/)
-	</Card>
-	<Card title="Configuration" icon="setting">
-		Define your fleet with a single YAML file. Tags, secrets, and SSH cascade through inheritance.
-		[Configuration Guide →](/configuration/)
-	</Card>
-	<Card title="Bootstrap" icon="puzzle">
-		Convert bare metal to NixOS automatically with kexec, disko, and TPM2-bound encryption.
-		[Bootstrap Guide →](/guides/bootstrap/)
-	</Card>
-	<Card title="Real-Time TUI" icon="laptop">
-		Watch deployments unfold. Retry failed phases without restarting.
-		[TUI Reference →](/tui/overview/)
-	</Card>
-</CardGrid>
+<FeatureGrid />
+
+<ComparisonTable />

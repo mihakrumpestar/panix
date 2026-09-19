@@ -123,11 +123,9 @@ func NewSchema(cfg SchemaConfig) *generator {
 	return gen
 }
 
-// findMapValueType detects map-like struct wrappers: structs with no YAML-visible
-// properties that contain a map[K]V field (e.g., ordered map implementations).
-// It prefers the map field with validate:"dive" tag as the main content field.
-// Returns the value type V, or nil if the struct is not a map-like wrapper.
-// Recurses into embedded anonymous struct fields (e.g., OutputMap embeds *AtomicOrderedMap).
+// findMapValueType detects map-like struct wrappers (no YAML-visible fields,
+// one map[K]V payload, possibly reached through embedded fields). The
+// validate:"dive" map wins when several exist, as it marks the main content.
 func findMapValueType(typ reflect.Type) reflect.Type {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -224,10 +222,9 @@ func (g *generator) Generate() (*Schema, error) {
 	return schema, nil
 }
 
-// countStructOccurrences traverses the type tree and counts how many times
-// each struct type appears as a field type. Inline fields are transparently
-// recursed into (their fields count as the parent's). Stack-based cycle
-// detection prevents infinite recursion while correctly counting diamond patterns.
+// countStructOccurrences counts how often each struct type appears as a field
+// type. Inline fields count as the parent's; stack-based cycle detection keeps
+// infinite recursion out while diamond patterns still count fully.
 func (g *generator) countStructOccurrences(typ reflect.Type, onStack map[reflect.Type]bool) {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -399,7 +396,7 @@ func resolveYAMLFieldName(structType reflect.Type, goFieldName string) string {
 				return strings.ToLower(goFieldName)
 			}
 
-			name := strings.Split(yt, ",")[0]
+			name, _, _ := strings.Cut(yt, ",")
 			if name != "" {
 				return name
 			}
@@ -416,7 +413,7 @@ func (g *generator) processType(typ reflect.Type, field reflect.StructField) (an
 		typ = typ.Elem()
 	}
 
-	// Check if this type should be a $ref definition (appears more than once)
+	// Types seen more than once become $ref definitions.
 	defName, ok := g.defTypes[typ]
 	if ok {
 		return g.processDefinitionType(typ, defName)
@@ -553,11 +550,9 @@ func (g *generator) buildObjectTypeDef(typ reflect.Type) (*TypeDefinition, error
 	}, nil
 }
 
-// processMapType handles map-like struct wrappers, generating
-// a schema with type: object and additionalProperties for the value type.
-// If the field has schema:"nullable_values" tag, values may be null.
-// If the field has schema:"two_level_map" tag, generates two nested
-// additionalProperties levels (e.g., map[string]map[string]V).
+// processMapType emits an object whose additionalProperties is the value
+// schema. The schema tag can additionally allow null values or nest a second
+// map level.
 func (g *generator) processMapType(valueType reflect.Type, field reflect.StructField) (*TypeDefinition, error) {
 	valueSchema, err := g.processType(valueType, reflect.StructField{})
 	if err != nil {
@@ -643,7 +638,7 @@ func yamlFieldName(field reflect.StructField, yamlTag string) string {
 		return strings.ToLower(field.Name)
 	}
 
-	name := strings.Split(yamlTag, ",")[0]
+	name, _, _ := strings.Cut(yamlTag, ",")
 	if name != "" {
 		return name
 	}

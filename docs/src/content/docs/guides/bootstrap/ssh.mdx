@@ -2,10 +2,10 @@
 title: SSH
 description: SSH configuration for bootstrapping machines.
 sidebar:
-  order: 3
+  order: 2
 ---
 
-For machines that need initial provisioning (bootstrap) you **must specify** SSH credentials.
+Connect to machines you are provisioning by specifying separate regular and bootstrap SSH credentials.
 
 Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 
@@ -26,15 +26,15 @@ machines:
 
 - **Unbootstrapped machines**: must have bootstrap SSH configured (unless `force_bootstrap: true`)
 - **Bootstrapped machines**: must not have bootstrap SSH configured (unless `force_bootstrap: true`)
-- The `force_bootstrap` option explicitly allows bypassing these requirements
-- **Inspect** phase will error if you try to use bootstrap SSH config on an already bootstrapped machine and vice versa (regular SSH config will error on an un-bootstrapped machine)
+- The Inspect phase errors if the SSH configuration does not match the machine state (bootstrap SSH on a bootstrapped machine, or regular SSH on an unbootstrapped one)
+- **SSH keys**: see [SSH Setup](/guides/ssh-config/) for creating and installing a key
+- **Non-root SSH users**: bootstrap as a non-root user is not end-to-end supported. Bootstrap commands that need root (kexec staging reset, disko, nixos-install, reboot, secret transfers) run via the configured `sudo_program` and need passwordless sudo — Panix cannot answer password prompts. Additionally, the closure copy into the installer's `/mnt` runs as the SSH user, so the full bootstrap flow assumes a root SSH user; SSH as root for the bootstrap phase.
 
 ## Workflow
 
-1. During **Inspect** phase: Panix validates SSH configuration matches machine state
-2. Later phases:
-   - If bootstrapping: Uses bootstrap SSH for all bootstrap operations; after reboot: automatically switches to regular SSH
-   - If already bootstrapped: uses regular SSH
+1. During **Inspect**: Panix validates that SSH configuration matches machine state
+2. While bootstrapping: bootstrap SSH is used for all bootstrap operations; after reboot, Panix switches to regular SSH as part of running the `post_bootstrap_provisioned_hooks` (with no provisioned hooks, the run ends right after the reboot)
+3. On already bootstrapped machines: regular SSH is used
 
 ## SSH Key Checking Options
 
@@ -53,9 +53,9 @@ ssh:
 ### Behavior
 
 - **Regular SSH**: uses the user's `~/.ssh/known_hosts` with `StrictHostKeyChecking=accept-new` (trusts new machines, verifies against existing entries)
-- **Bootstrap SSH**: Panix automatically creates a temporary known_hosts file and uses it for the duration of the bootstrap session. The first SSH connection records the installer's host key (trust on first use / TOFU). All subsequent commands during bootstrapping verify against that recorded key, preventing man-in-the-middle attacks mid-session. If `known_hosts_file` is explicitly set in bootstrap SSH config, that file is used instead of the temporary one. After bootstrapping completes, the temporary file (but not the user set one) is removed.
-- **After kexec**: the kexec installer preserves SSH host keys from the original system on remote, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new known_hosts entry is recorded (due to `StrictHostKeyChecking=accept-new`) for the new port (same key, different `[host]:port` entry).
-- Setting `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
+- **Bootstrap SSH**: Panix creates a temporary known_hosts file for the session. The first connection records the installer's host key (trust on first use); all subsequent commands verify against it, preventing man-in-the-middle attacks mid-session. If `known_hosts_file` is set, that file is used instead. The temporary file (but not the user set one) is removed when the machine's entire workflow finishes, not when bootstrapping completes.
+- **After kexec**: the kexec installer preserves SSH host keys from the original system, so the recorded key remains valid. If the kexec SSH port differs from the bootstrap SSH port, a new `[host]:port` entry is recorded for the new port (same key, different entry).
+- `disable_strict_key_checking: true` disables all host key checking (`UserKnownHostsFile=/dev/null`, `StrictHostKeyChecking=no`)
 
 :::caution
 Setting `disable_strict_key_checking: true` disables all host key verification, allowing man-in-the-middle attacks. Only use this in fully trusted networks (e.g., local VMs with no external access).

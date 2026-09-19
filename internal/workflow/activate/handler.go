@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
@@ -14,6 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
+	"github.com/mihakrumpestar/panix/pkg/shellquote"
 	"github.com/pkg/errors"
 )
 
@@ -39,6 +41,21 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 
 	if fleetLeaf.Installable.Preset.IsBootstrappable && shouldBootstrap {
 		return executeBootstrap(exc, machine, &fleetLeaf.Installable.Nix, systemClosure)
+	}
+
+	// Inspect validated the su -l precondition on its own connection, but
+	// the bootstrap reboot can switch the active SSH since then: re-probe
+	// rootness and re-validate before any wrapped command runs.
+	if fleetLeaf.Installable.User != "" {
+		err := phaseops.RefreshSuperuser(exc, machine)
+		if err != nil {
+			return err //nolint:wrapcheck // error is pre-annotated with its own context
+		}
+
+		err = phaseops.ValidateTargetUser(fleetLeaf.Installable, machine)
+		if err != nil {
+			return err //nolint:wrapcheck // error names installable, target user, and executing user
+		}
 	}
 
 	return executeActivation(exc, h.ActivationMode, h.NixFlavor, fleetLeaf, systemClosure, &fleetLeaf.Installable.Nix)
@@ -70,14 +87,13 @@ func executeActivation(
 	}
 
 	// No wrap here: the underlying command already prefixes its error with
-	// statusIfFailed ("activation failed"); the rollback outcome below is the
-	// only additional context this layer has to add.
+	// statusIfFailed ("activation failed"); only the rollback outcome adds
+	// context at this layer.
 	originalErr := activationErr
 
 	// Skip auto-rollback for non-mutating modes (nothing to restore), types
-	// without a profile, and cancellations: a cancelled context would make
-	// the rollback commands fail instantly, burying the real error under
-	// "auto-rollback failed: context canceled" noise.
+	// without a profile, and cancellations: rollback on a cancelled context
+	// would fail instantly and bury the real error under rollback noise.
 	if !fleetLeaf.Machine.AutoRollback ||
 		slices.Contains(preset.NonMutatingModes, mode) ||
 		preset.ProfilePath == "" ||
@@ -106,9 +122,8 @@ func autoRollbackToPreviousGeneration(
 	// otherwise the rollback would target the broken generation just activated.
 	targetGen := metaInspect.Generations.Current
 
-	// Announce the rollback in the command log so it is visible (TUI build
-	// logs, console/JSON output) that the steps following the failed
-	// activation are a rollback to the pre-deploy generation.
+	// Announce the rollback in the command log: the following steps belong
+	// to the pre-deploy generation, not a fresh deploy.
 	logErr := exc.ExecFn(
 		"auto rollback",
 		"activation failed, rolling back to previous generation",
@@ -123,7 +138,14 @@ func autoRollbackToPreviousGeneration(
 		return errors.Wrapf(originalErr, "auto-rollback failed: %v", logErr)
 	}
 
-	closurePath, closureErr := phaseops.FindGenerationClosure(exc, fleetLeaf.Machine, preset.ProfilePath, targetGen)
+	closurePath, closureErr := phaseops.FindGenerationClosure(
+		exc,
+		fleetLeaf.Machine,
+		preset,
+		fleetLeaf.Installable.User,
+		preset.ProfilePath,
+		targetGen,
+	)
 	if closureErr != nil {
 		return errors.Wrapf(originalErr, "auto-rollback failed to resolve generation: %v", closureErr)
 	}
@@ -146,16 +168,24 @@ func autoRollbackToPreviousGeneration(
 }
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixCfg *nix.NixConfig, systemClosure string) error {
-	err := exc.Exec(
+	// nixos-install writes to /mnt and installs the bootloader, so it must
+	// run elevated, with the env(1) argv inside the sudo prefix to survive
+	// env_reset. The binary must be resolved before elevation.
+	nixosInstall, err := resolveCommandPath(exc, "nixos-install")
+	if err != nil {
+		return err
+	}
+
+	err = exc.Exec(
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
-		phaseops.WithEnv(nixCfg.GetNixosInstallEnv(), slices.Concat(
-			[]string{"nixos-install"},
+		append(machine.MaybeSudo(), phaseops.WithEnv(nixCfg.GetNixosInstallEnv(), slices.Concat(
+			[]string{nixosInstall},
 			nixCfg.GetNixosInstallDefaultFlags(),
 			[]string{"--system", systemClosure, "--root", "/mnt"},
 			nixCfg.NixosInstallFlags,
-		)),
+		))...),
 		executioner.Trim(),
 	)
 	if err != nil {
@@ -186,14 +216,55 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	return nil
 }
 
+// resolveCommandPath resolves commands un-elevated, because sudo's
+// secure_path excludes the nix profile directories where installer
+// commands live on non-NixOS hosts; absolute paths pass through unchanged.
+func resolveCommandPath(exc *executioner.Executioner, cmdName string) (string, error) {
+	if strings.HasPrefix(cmdName, "/") {
+		return cmdName, nil
+	}
+
+	var resolved string
+
+	err := exc.Exec(
+		"resolve "+cmdName,
+		fmt.Sprintf("resolving %s path", cmdName),
+		"failed to resolve "+cmdName,
+		[]string{"sh", "-c", "command -v -- " + shellquote.Quote(cmdName)},
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			resolved = strings.TrimSpace(log.Output.String())
+
+			if resolved == "" {
+				return errors.Errorf("%s not found on PATH on the target", cmdName)
+			}
+
+			return nil
+		}),
+		executioner.OnFailure(func(_ *command.CommandLog, err error) error {
+			// command -v exits 1 when the command is missing.
+			return errors.Errorf("%s not found on PATH on the target (command -v failed: %v)", cmdName, err)
+		}),
+		executioner.OnDryRun(func() {
+			resolved = cmdName
+		}),
+	)
+	if err != nil {
+		return "", errors.Wrapf(err, "%s resolution failed", cmdName)
+	}
+
+	return resolved, nil
+}
+
 // Helpers
 
 func performReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
+	// Elevated: reboot needs root (a no-op prefix when the SSH user is
+	// already root, e.g. inside the kexec installer).
 	err := exc.Exec(
 		"reboot",
 		"rebooting",
 		"reboot failed",
-		[]string{"reboot"},
+		append(machineI.MaybeSudo(), "reboot"),
 	)
 	if err != nil {
 		return errors.Wrap(err, "reboot failed")

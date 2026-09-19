@@ -1,0 +1,155 @@
+---
+title: Nix Command Flags
+description: Control the flags Panix passes to nix build, nix copy, nixos-install, and nix profile add.
+sidebar:
+  order: 5
+---
+
+Control the exact flags Panix passes to `nix build`, `nix copy`, `nixos-install`, and `nix profile add`.
+
+## Default Flags vs Extra Flags
+
+| Category | Fields | Behavior |
+|----------|--------|----------|
+| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_add_default_flags` | **Replace** the built-in base flags when set. Leave unset for built-in defaults, set to `[]` to clear them. |
+| **Extra flags** | `extra_flags` (applies to `nix build` and `nix copy` only), `build_flags`, `copy_flags`, `nixos_install_flags` | **Append** after the default flags. Accumulate through inheritance. |
+
+The final command is assembled as `default flags + extra flags`.
+
+### Built-in defaults
+
+Used when the matching `*_default_flags` field is unset:
+
+| Field | Built-in default |
+|-------|-----------------|
+| `experimental_features` | `["--extra-experimental-features", "nix-command flakes"]` |
+| `build_default_flags` | `["--no-link", "--print-out-paths", "--keep-going"]` |
+| `copy_default_flags` | `["--no-check-sigs"]` |
+| `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy"]` |
+| `profile_add_default_flags` | `[]` (none) |
+
+:::caution
+Panix reads the output path from `--print-out-paths`; without it, builds fail.
+:::
+
+### Example
+
+```yaml
+fleet:
+  nix:
+    # Default flags REPLACE the built-in base flags
+    build_default_flags: ["--no-link", "--print-out-paths"]  # overrides build defaults
+    copy_default_flags: []                                   # clears copy defaults
+
+    # Extra flags APPEND after the default flags
+    extra_flags: ["--option", "sandbox", "false"]  # build and copy
+    build_flags: ["--max-jobs", "8"]               # nix build only
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          webserver:
+            nix:
+              copy_flags: ["--compress"]  # nix copy only
+            machines:
+              web-01:
+```
+
+The effective `nix build` flags are:
+`["--no-link", "--print-out-paths"]` (defaults) + `["--option", "sandbox", "false"]` + `["--max-jobs", "8"]` (extra, accumulated).
+
+### Non-nix commands
+
+The same pattern applies to non-nix commands:
+
+- `rsync_default_flags` (fleet/flake/installable/machine), default `["-rcPEx", "--mkpath"]`
+- `curl_default_flags` (under `bootstrap.kexec`), default `["--fail", "-#", "-L", "-C", "-"]`
+
+## Build Outlinks
+
+Enable `out_links` to leave a GC-rooted symlink per built installable, so closures survive garbage collection:
+
+```sh
+panix build --out-links
+```
+
+or:
+
+```yaml
+flags:
+  out_links: true
+  out_links_dir: .panix  # default
+```
+
+Each outlink is `<out_links_dir>/<flake>/<output_type>/<name>`, following the installable xpath:
+
+```sh
+$ tree .panix
+.panix
+└── mainFlake
+    ├── homeConfigurations
+    │   └── test-home -> /nix/store/...-home-manager-generation
+    └── nixosConfigurations
+        └── test-vm -> /nix/store/...-nixos-system-nixos-26.11
+```
+
+Bootstrapped installables also get a `<name>-disko` outlink for their disko script, so it cannot collide with the closure outlink.
+
+With outlinks enabled, the Build phase drops `--no-link` from the built-in build defaults and passes `--out-link <path>` instead, keeping `--print-out-paths` so later phases still receive the store path. `nix build` creates the symlink (including parent directories) and registers it as an indirect GC root under `/nix/var/nix/gcroots/auto/`.
+
+A literal `--no-link` in user-configured default flags is dropped, since it would contradict the outlink request; one in extra flags is never touched, and nix evaluates repeated flags last-wins, so it still disables outlink creation.
+
+:::note
+In [remote build mode](/configuration/build-modes/) the closure is built into the remote store and gets no outlink; `nix build` only creates outlinks for local stores.
+:::
+
+To release a built closure, remove its outlink and garbage-collect:
+
+```sh
+rm -rf .panix
+nix store gc
+```
+
+## Inheritance
+
+- **Extra flags** accumulate through inheritance (fleet, flake, installable): slices are appended, not replaced.
+- **Default flags** use override semantics: a child value is kept as-is; an unset (`nil`) field inherits the parent's value.
+- **Env vars** merge through inheritance: parent entries are inherited, child keys override parent keys with the same name.
+
+:::note
+`nix` config settings cannot be set at the `machine` level.
+:::
+
+## Environment Variables
+
+Some nix settings are only available via environment variables, with no CLI flag or `nix.conf` equivalent (e.g. `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`):
+
+| Field | Scope | Behavior |
+|-------|-------|----------|
+| `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile add |
+| `build_env` | `nix build` only | Merged on top of `env`, specific keys override global |
+| `copy_env` | `nix copy` only | Merged on top of `env` |
+| `nixos_install_env` | `nixos-install` only | Merged on top of `env` |
+| `profile_add_env` | `nix profile add` only | Merged on top of `env` |
+
+```yaml
+fleet:
+  nix:
+    env:
+      NIX_USER_CONF_FILES: /etc/nix/deploy-nix.conf
+      NIX_CONF_DIR: /etc/nix
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          webserver:
+            nix:
+              env:
+                NIX_STORE_DIR: /mnt/nix/store
+              build_env:
+                NIX_DAEMON_SOCKET_PATH: /tmp/alt-nix-daemon.sock
+```
+
+:::note
+Panix-internal env vars (`XDG_CACHE_HOME` for eval cache isolation, `NIX_SSHOPTS` for SSH) take precedence over user-configured keys. To change SSH options for nix commands, set the machine's `ssh.extra_flags` instead; Panix assembles `NIX_SSHOPTS` from the machine's SSH settings. See the [SSH config guide](/guides/ssh-config/).
+:::

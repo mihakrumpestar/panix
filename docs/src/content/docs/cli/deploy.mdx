@@ -1,9 +1,13 @@
 ---
-title: Deploy Flags
-description: Full flag reference for panix deploy.
+title: panix deploy
+description: Full flag reference for panix deploy, including runtime tunables and dry run.
 sidebar:
   order: 2
 ---
+
+`panix deploy` runs the full workflow: inspect, bootstrap, build, transfer, secrets, and activate.
+
+All flags can also be set via environment variables (shown in parentheses) or in the `flags` section of `panix.yml`, except per-invocation flags like `--config` (and the standalone commands' `-o`), which cannot be set in `panix.yml` (the universal `--help` and `--version` flags are excluded).
 
 {/* DEPLOY_FLAGS_START */}
 ```sh
@@ -38,7 +42,7 @@ Flags:
                                    'test') applies to all types. Per-type:
                                    'nixosConfigurations=test;homeConfigurations=switch'
                                    ($PANIX_ACTIVATION_MODE)
-      --output="tui"               Output mode: tui, console, json
+      --output=OUTPUT-MODE         Output mode: tui, console, json
                                    ($PANIX_OUTPUT)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ('retry' and 'restart' keybinds are disabled
@@ -125,8 +129,6 @@ Flags:
 ```
 {/* DEPLOY_FLAGS_END */}
 
-All flags can also be set via environment variables (shown in parentheses) or in the `flags` section of `panix.yml`, except per-invocation flags like `--config` (and the standalone commands' `-o`), which cannot be set in `panix.yml`.
-
 ## Runtime Tunables
 
 The `--runtime.*` flags configure operational timeouts and concurrency. They can be set via CLI flag, environment variable, or the `runtime:` block under `flags` in `panix.yml`.
@@ -138,3 +140,24 @@ The `--runtime.*` flags configure operational timeouts and concurrency. They can
 | `--runtime.reconnect-timeout` | `PANIX_RUNTIME_RECONNECT_TIMEOUT` | `10m` | Wait for host to reconnect after reboot |
 | `--runtime.ssh-reachability-timeout` | `PANIX_RUNTIME_SSH_REACHABILITY_TIMEOUT` | `2s` | TCP dial timeout for SSH reachability probe |
 | `--runtime.flake-validation-timeout` | `PANIX_RUNTIME_FLAKE_VALIDATION_TIMEOUT` | `60s` | Timeout for nix flake metadata/eval during validation |
+
+## Dry Run
+
+Preview what a deploy would do without executing it:
+
+```sh
+panix deploy --dry-run                # Config-only preview
+panix deploy --dry-run-with-inspect   # Preview with real Inspect queries
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Shows what Panix would do based on the configuration alone, without connecting to any machines. Useful for verifying configuration structure, tag filtering, and inheritance. |
+| `--dry-run-with-inspect` | Same as dry run, but executes the Inspect phase to query real machine states (reachability, OS, architecture, generations). The preview is more accurate because it knows which machines are NixOS and which need bootstrapping. |
+
+## Related
+
+- [Build Modes](/configuration/build-modes/): local vs remote builds, remote builder selection
+- [Output Types](/configuration/output-types/): `--activation-mode` values and per-type activation overrides
+- [Tag Filtering](/configuration/tag-filtering/): `-t, --tags` filtering and tag inheritance
+- [Output Modes](/cli/output-modes/): `--output`, file logging, and CI flags

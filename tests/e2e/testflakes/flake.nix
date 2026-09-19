@@ -53,6 +53,15 @@
           shell = pkgs.bash;
         };
       };
+
+      # The kexec-bootstrapped machine (nixosConfigurations.test-vm-kexec)
+      # imports the hardware config panix generates right after kexec and
+      # before the bootstrap build. Scope: only this configuration imports
+      # it; the other machines in this flake do not set
+      # hardware_config_path, so the file is never generated for them.
+      generatedHardwareConfigModule = {
+        imports = [ ./hardware-configuration.nix ];
+      };
       opensshModule = {
         services.openssh.enable = true;
         services.openssh.settings.PermitRootLogin = "yes";
@@ -164,6 +173,19 @@
           disko.nixosModules.disko
           ./configuration.nix
           authorizedKeysModule
+        ];
+      };
+
+      # Dedicated configuration for the kexec-bootstrapped machine: it
+      # imports the generated hardware config, so a missing generation step
+      # fails the disko build right after kexec.
+      nixosConfigurations.test-vm-kexec = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration.nix
+          authorizedKeysModule
+          generatedHardwareConfigModule
         ];
       };
 

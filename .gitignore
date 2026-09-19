@@ -45,8 +45,12 @@ tests/e2e/.cache/
 tests/e2e/log/
 tests/e2e/profile
 tests/e2e/bench-results/
+tests/e2e/testflakes/hardware-configuration.nix
 
 # Benchmarks
 /bench
 tests/bench/results.txt
 __pycache__
+
+# Large docs assets, fetched at build time (task docs:assets)
+docs/public/demo.gif

@@ -1,0 +1,14 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+
+interface Props {
+	title: string;
+	size?: string;
+}
+
+const { title, size = "14" } = Astro.props;
+---
+
+<span class="note-icon" role="tooltip" tabindex="0" title={title}>
+	<Icon name="information" label={title} size={`${size}px`} />
+</span>

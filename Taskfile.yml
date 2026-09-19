@@ -184,6 +184,8 @@ tasks:
   ci:
     desc: Run all CI checks
     cmds:
+      - gitleaks git --redact --staged
+      - gitleaks git --redact
       - task: generate
       - task: go:check
       - task: go:test
@@ -199,21 +201,26 @@ tasks:
         DEPLOY_HELP="$(go run cmd/panix/main.go deploy --help)"
         PANIX_YML="$(cat examples/panix.demo.yml)"
 
-        # Helper: replace content between markers with a code block
-        # Markers are outside code blocks. Content is wrapped in ```lang ... ```
+        # Helper: replace content between markers.
+        # Markers are outside code blocks. With LANG the content is wrapped in
+        # ```lang ... ```; with an empty LANG the content is inserted raw.
         # Usage: replace_block FILE START_MARKER END_MARKER LANG NEW_CONTENT_FILE
         replace_block() {
           local file="$1" start="$2" end="$3" lang="$4" content_file="$5"
-          awk -v start="$start" -v end="$end" -v lang="$lang" -v content_file="$content_file" 'BEGIN { while ((getline line < content_file) > 0) { new_content = new_content line "\n" } close(content_file) } $0 == start { print; printf "```%s\n", lang; printf "%s", new_content; printf "```\n"; skip=1; next } $0 == end { skip=0 } !skip { print }' "$file" 2>/dev/null > "${file}.tmp" && mv "${file}.tmp" "$file"
+          awk -v start="$start" -v end="$end" -v lang="$lang" -v content_file="$content_file" 'BEGIN { while ((getline line < content_file) > 0) { new_content = new_content line "\n" } close(content_file) } $0 == start { print; if (lang != "") printf "```%s\n", lang; printf "%s", new_content; if (lang != "") printf "```\n"; skip=1; next } $0 == end { skip=0 } !skip { print }' "$file" 2>/dev/null > "${file}.tmp" && mv "${file}.tmp" "$file"
         }
 
         # Write temp files for content
         echo "$PANIX_YML" > /tmp/_panix_yml.txt
         printf '> panix --help\n%s' "$HELP_OUTPUT" > /tmp/_cli_help.txt
         printf '> panix deploy --help\n%s' "$DEPLOY_HELP" > /tmp/_deploy_help.txt
+        go run ./gen/outputtypes_gen.go > /tmp/_output_types.txt
 
         # Update README.md panix.yml
         replace_block "README.md" "<!-- PANIX_YML_START -->" "<!-- PANIX_YML_END -->" yaml /tmp/_panix_yml.txt
+
+        # Update README.md built-in output types table
+        replace_block "README.md" "<!-- OUTPUT_TYPES_START -->" "<!-- OUTPUT_TYPES_END -->" "" /tmp/_output_types.txt
 
         # Update docs CLI help
         replace_block "docs/src/content/docs/cli/index.mdx" "{/\* CLI_HELP_START \*/}" "{/\* CLI_HELP_END \*/}" sh /tmp/_cli_help.txt
@@ -221,7 +228,13 @@ tasks:
         # Update docs deploy flags
         replace_block "docs/src/content/docs/cli/deploy.mdx" "{/\* DEPLOY_FLAGS_START \*/}" "{/\* DEPLOY_FLAGS_END \*/}" sh /tmp/_deploy_help.txt
 
-        rm -f /tmp/_panix_yml.txt /tmp/_cli_help.txt /tmp/_deploy_help.txt
+        # Update docs output types table
+        replace_block "docs/src/content/docs/configuration/output-types.mdx" "{/\* OUTPUT_TYPES_START \*/}" "{/\* OUTPUT_TYPES_END \*/}" "" /tmp/_output_types.txt
+
+        # Update docs config schema tab
+        replace_block "docs/src/content/docs/configuration/reference.mdx" "{/\* SCHEMA_START \*/}" "{/\* SCHEMA_END \*/}" yaml gen/panix-schema.yaml
+
+        rm -f /tmp/_panix_yml.txt /tmp/_cli_help.txt /tmp/_deploy_help.txt /tmp/_output_types.txt
 
   release:
     desc: |
@@ -339,16 +352,31 @@ tasks:
     cmds:
       - bun update
 
+  docs:assets:
+    desc: Fetch docs assets that are not committed to git (demo gif, ~10MB)
+    dir: ./docs
+    cmds:
+      - |
+        if [ -f public/demo.gif ]; then
+          echo "public/demo.gif already present, skipping download"
+        else
+          curl -sL --fail -o public/demo.gif "https://files.catbox.moe/4puobf.gif"
+        fi
+
   # Note: to update astro, run: npx @astrojs/upgrade
   docs:dev:
     desc: Run live dev docs
     dir: ./docs
+    deps:
+      - docs:assets
     cmds:
       - bun dev
 
   docs:build:
     desc: Build docs static site
     dir: ./docs
+    deps:
+      - docs:assets
     cmds:
       - bun run build
 

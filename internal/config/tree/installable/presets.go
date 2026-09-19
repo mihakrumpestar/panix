@@ -1,29 +1,22 @@
 package installable
 
 import (
+	"cmp"
+	"slices"
+
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 )
 
 // CustomOutputTypes maps user-declared custom flake output type names to their
-// presets. Loaded from the top-level output_types section of panix.yml and
-// applied as defaults to installables of that type, with the same merge
-// semantics as built-in presets (installable-level YAML overrides win).
+// presets, loaded from the top-level output_types section of panix.yml and
+// applied with the same merge semantics as built-in presets.
 type CustomOutputTypes = *atomicorderedmap.AtomicOrderedMap[string, Preset]
 
 // Preset defines the build path, activation mechanism, and profile management
-// for a specific FlakeOutputType. Each known output type has a preset that
-// auto-infers behavior, users don't need to specify these manually.
-//
-// Fields are split into two categories:
-//   - User-overridable: settable per-installable via YAML. Zero values fall
-//     back to the type default. (OutputTypeAttr, BuildPath, ProfilePath,
-//     ActivationPath, SetProfile, ActivationModes, ActivationDefaultMode,
-//     NonMutatingModes, ProfileSkipModes)
-//   - Type-level: intrinsic to the output type, not user-configurable
-//     per-installable. Always taken from the type default. For built-ins the
-//     default comes from the presets table; for custom types declared under
-//     output_types it comes from the declared preset. (IsSystemLevel,
-//     IsBootstrappable, OmitTypeFromAttrPath)
+// for a FlakeOutputType. Fields come in three kinds: user-overridable (a
+// non-zero per-installable value wins), type-level (intrinsic to the output
+// type, always from the default) and docs-only (never read from or written to
+// config).
 //
 //nolint:lll
 type Preset struct {
@@ -38,21 +31,25 @@ type Preset struct {
 	ProfileSkipModes      []string `yaml:"activation_profile_skip_modes,omitempty" json:"activation_profile_skip_modes,omitempty" desc:"Activation modes that skip setting the profile before activation (the activation runs against the passed closure without switching the profile to it)"`
 	ActivationDefaultMode string   `yaml:"activation_default_mode,omitempty" json:"activation_default_mode,omitempty" desc:"Default activation mode"`
 
-	// Type-level fields. For built-in types these are not user-configurable
-	// (always taken from the type default). For custom types declared under
-	// output_types they are set in the declaration and still applied as type
-	// defaults to every installable of that type.
+	// Type-level fields: not user-configurable, always taken from the type
+	// default (for custom types, from their output_types declaration).
 	IsSystemLevel        *bool `yaml:"system_level,omitempty" json:"system_level,omitempty" desc:"System-level (root) vs user-level. Type-level field: set only under output_types declarations"`
 	IsBootstrappable     bool  `yaml:"-" json:"-" desc:"Supports bootstrap"`
 	OmitTypeFromAttrPath bool  `yaml:"omit_type_from_attr_path,omitempty" json:"omit_type_from_attr_path,omitempty" desc:"Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"`
+
+	// Docs-only presentation metadata for the generated output-type tables;
+	// custom types leave these empty and are never listed.
+	DocOrder      int    `yaml:"-" json:"-"`
+	DocDeploys    string `yaml:"-" json:"-"`
+	DocActivation string `yaml:"-" json:"-"`
 }
 
-// IsSystemLevelValue reports whether the preset targets the system level (root) rather than a user level.
+// IsSystemLevelValue treats nil (not declared) as user level.
 func (p Preset) IsSystemLevelValue() bool {
 	return p.IsSystemLevel != nil && *p.IsSystemLevel
 }
 
-// presets maps each known FlakeOutputType to its Preset.
+//nolint:mnd
 var presets = map[FlakeOutputType]Preset{
 	FlakeOutputType("nixosConfigurations"): {
 		BuildPath:             "config.system.build.toplevel",
@@ -65,6 +62,10 @@ var presets = map[FlakeOutputType]Preset{
 		NonMutatingModes:      []string{"dry-activate"},
 		ActivationDefaultMode: "switch",
 		IsBootstrappable:      true,
+
+		DocOrder:      1,
+		DocDeploys:    "[NixOS](https://nixos.org/manual/nixos/stable/) system",
+		DocActivation: "`switch-to-configuration` (only type that supports bootstrap)",
 	},
 	FlakeOutputType("darwinConfigurations"): {
 		BuildPath:      "system",
@@ -72,6 +73,10 @@ var presets = map[FlakeOutputType]Preset{
 		SetProfile:     new(true),
 		IsSystemLevel:  new(true),
 		ActivationPath: "activate",
+
+		DocOrder:      2,
+		DocDeploys:    "[nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS)",
+		DocActivation: "`activate` script",
 	},
 	FlakeOutputType("systemConfigs"): {
 		BuildPath:      "",
@@ -79,30 +84,80 @@ var presets = map[FlakeOutputType]Preset{
 		SetProfile:     new(true),
 		IsSystemLevel:  new(true),
 		ActivationPath: "bin/activate",
+
+		DocOrder:      3,
+		DocDeploys:    "[system-manager](https://github.com/numtide/system-manager)",
+		DocActivation: "`bin/activate`",
 	},
 	FlakeOutputType("homeConfigurations"): {
 		BuildPath:      "activationPackage",
 		ProfilePath:    "~/.local/state/nix/profiles/home-manager",
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
+
+		DocOrder:      4,
+		DocDeploys:    "[home-manager](https://github.com/nix-community/home-manager)",
+		DocActivation: "`activationPackage/activate`",
 	},
 	FlakeOutputType("nixOnDroidConfigurations"): {
 		BuildPath:      "build.activationPackage",
 		ProfilePath:    "~/.local/state/nix/profiles/nix-on-droid",
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
+
+		DocOrder:      5,
+		DocDeploys:    "[Nix-on-Droid](https://github.com/nix-community/nix-on-droid)",
+		DocActivation: "`activate` script",
 	},
 	FlakeOutputType("packages"): {
 		BuildPath:            "",
 		IsSystemLevel:        new(false),
 		OmitTypeFromAttrPath: true,
+
+		DocOrder:      6,
+		DocDeploys:    "[Arbitrary packages](/guides/packages/)",
+		DocActivation: "`nix profile add` (nix profile install under Lix)",
 	},
 	// User-defined output convention for nix-maid (https://github.com/viperML/nix-maid)
 	// configuration bundles; activated via bin/activate in the closure.
 	FlakeOutputType("maidConfigurations"): {
 		IsSystemLevel:  new(false),
 		ActivationPath: "bin/activate",
+
+		DocOrder:      7,
+		DocDeploys:    "[nix-maid](https://github.com/viperML/nix-maid)",
+		DocActivation: "`bin/activate`",
 	},
+}
+
+// OutputTypeTableRow is one row of the generated output-type tables.
+type OutputTypeTableRow struct {
+	Type       string
+	Deploys    string
+	Activation string
+}
+
+// OutputTypeTable returns the built-in output types for the generated README
+// and docs tables, ordered by DocOrder with the type name as a tiebreaker.
+func OutputTypeTable() []OutputTypeTableRow {
+	rows := make([]OutputTypeTableRow, 0, len(presets))
+
+	for typ, preset := range presets {
+		rows = append(rows, OutputTypeTableRow{
+			Type:       string(typ),
+			Deploys:    preset.DocDeploys,
+			Activation: preset.DocActivation,
+		})
+	}
+
+	slices.SortFunc(rows, func(a, b OutputTypeTableRow) int {
+		orderA := presets[FlakeOutputType(a.Type)].DocOrder
+		orderB := presets[FlakeOutputType(b.Type)].DocOrder
+
+		return cmp.Or(cmp.Compare(orderA, orderB), cmp.Compare(a.Type, b.Type))
+	})
+
+	return rows
 }
 
 var knownOutputTypes = func() []FlakeOutputType {
@@ -133,7 +188,8 @@ func IsBootstrappableType(t FlakeOutputType) bool {
 	return p.IsBootstrappable
 }
 
-// ActivationModes returns the activation modes supported by nixosConfigurations.
+// ActivationModes returns nixosConfigurations modes, feeding the bare
+// activation_mode CLI completion.
 func ActivationModes() []string {
 	return presets[FlakeOutputType("nixosConfigurations")].ActivationModes
 }

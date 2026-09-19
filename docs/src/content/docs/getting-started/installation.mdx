@@ -1,13 +1,11 @@
 ---
 title: Installation
-description: How to install Panix.
+description: Run Panix directly with nix or add it to your flake.
 sidebar:
   order: 2
 ---
 
 ## 1. Run directly
-
-The simplest way to run Panix without installing:
 
 ```sh
 nix run github:mihakrumpestar/panix -- deploy
@@ -25,9 +23,12 @@ Add Panix as a flake input and include it in your system packages:
     panix.url = "github:mihakrumpestar/panix";
   };
 
-  outputs = { self, nixpkgs, panix, ... }@inputs: {
+  outputs = { self, nixpkgs, panix, ... }@inputs:
+  let
+    system = "x86_64-linux";
+  in {
     nixosConfigurations.my-server = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
+      inherit system;
       modules = [
         ./configuration.nix
         {
@@ -42,7 +43,7 @@ Add Panix as a flake input and include it in your system packages:
 ```
 
 :::note[Binary cache]
-CI pushes build results to a Cachix cache, so prebuilt binaries are available instead of compiling from source (which takes about 10s to build on mid-range hardware). To use it, add the cache to your own flake:
+CI pushes build results to a Cachix cache, so prebuilt binaries are fetched instead of compiling from source (compiling takes about 10s on mid-range hardware). To opt in, add the cache to your flake:
 
 ```nix
 {

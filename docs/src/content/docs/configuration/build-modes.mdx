@@ -1,0 +1,72 @@
+---
+title: Build Modes
+description: Choose whether Nix closures are built locally or on the target's first machine.
+sidebar:
+  order: 7
+---
+
+Choose where the Nix closure is built: locally on the machine running Panix (default), or remotely on the installable's first machine.
+
+## Local Mode (Default)
+
+Builds run on the machine executing Panix:
+
+```sh
+nix build --no-link --print-out-paths --keep-going <flake-url>#<installable>
+```
+
+Panix also passes the experimental features flags and any configured [nix command flags](/configuration/nix-flags/); the same applies to the remote command below. The closure is then transferred to each target machine via `nix copy`. Machines whose hostname matches `local_machine_hostname` skip the transfer entirely: they share the local store.
+
+## Remote Mode
+
+Builds run on the installable's first machine via the Nix remote store protocol:
+
+```sh
+nix build --eval-store auto --store ssh-ng://<first-machine> --option builders "" --no-link --print-out-paths --keep-going <flake-url>#<installable>
+```
+
+Use remote mode when:
+
+- The target machine has more resources (CPU/RAM) than the machine running Panix
+- The machine running Panix and the targets are not the same architecture
+
+:::note
+For installables with multiple machines, the closure is built on the first machine and copied to the remaining machines via `nix copy --from ssh-ng://<first-machine> --to ssh-ng://<other-machine>`. Single-machine installables skip the transfer phase.
+:::
+
+:::caution
+The first machine must be remote (not the machine running Panix) and have Nix installed and the flake inputs available. If the first machine is bootstrapped in the same run, remote builds may target its temporary installer environment, whose store is discarded on reboot; builds racing that reboot can fail. Prefer an already-provisioned first machine, or bootstrap it in a separate run.
+:::
+
+## Configuration
+
+```yaml
+fleet:
+  flakes:
+    my-flake:
+      url: <url>
+      installables:
+        nixosConfigurations:
+          my-server:
+            nix:
+              build_mode: remote
+            machines:
+              builder-and-target:   # first machine: remote builder and target
+                ssh:
+                  hostname: 192.168.1.100
+              target-2:             # closure copied from builder-and-target
+                ssh:
+                  hostname: 192.168.1.101
+```
+
+`build_mode` can be set at fleet, flake, or installable level, inherited like other `nix` options. It cannot be set at machine level, since build is a per-installable phase shared by the installable's machines.
+
+## Advanced Distributed Builds
+
+For advanced distributed builds:
+
+- [Distributed build: NixOS Wiki](https://wiki.nixos.org/wiki/Distributed_build)
+- [Distributed builds: Nix manual](https://nix.dev/manual/nix/latest/advanced-topics/distributed-builds)
+- [Distributed builds setup: nix.dev](https://nix.dev/tutorials/nixos/distributed-builds-setup.html)
+- [Remote builds: nixbuild.net](https://docs.nixbuild.net/remote-builds/)
+- [Use as substituter: nixbuild.net](https://docs.nixbuild.net/use-as-substituter/)

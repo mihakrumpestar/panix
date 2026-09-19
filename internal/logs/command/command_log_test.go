@@ -12,6 +12,7 @@ import (
 func TestJoinCommand(t *testing.T) {
 	t.Parallel()
 
+	// Rendered lines are the verbatim argv, transport-quoted elements as-is.
 	tests := []struct {
 		name string
 		cmd  []string
@@ -19,14 +20,15 @@ func TestJoinCommand(t *testing.T) {
 	}{
 		{"nil", nil, ""},
 		{"plain", []string{"nix", "build", ".#foo"}, "nix build .#foo"},
-		{"arg with spaces", []string{"echo", "hello world"}, "echo 'hello world'"},
-		{"arg with quotes", []string{"echo", `it's "fine"`}, `echo 'it's "fine"'`},
+		{"arg with spaces", []string{"echo", "hello world"}, "echo hello world"},
+		{"arg with quotes", []string{"echo", `it's "fine"`}, `echo it's "fine"`},
 		{"env argv", []string{"env", "NIX_PAGER=cat", "nix-env"}, "env NIX_PAGER=cat nix-env"},
-		{"env argv with spaces", []string{"env", "NIX_CONFIG=a b", "nix", "build"}, "env 'NIX_CONFIG=a b' nix build"},
+		{"env argv with spaces", []string{"env", "NIX_CONFIG=a b", "nix", "build"}, "env NIX_CONFIG=a b nix build"},
 		{"env argv with equals", []string{"env", "OPTS=--flag=value", "cmd"}, "env OPTS=--flag=value cmd"},
 		{"env argv empty value", []string{"env", "EMPTY=", "cmd"}, "env EMPTY= cmd"},
-		{"env argv with tab", []string{"env", "TAB=\tval", "cmd"}, "env 'TAB=\tval' cmd"},
+		{"env argv with tab", []string{"env", "TAB=\tval", "cmd"}, "env TAB=\tval cmd"},
 		{"multiple env argv", []string{"env", "A=1", "B=2", "cmd"}, "env A=1 B=2 cmd"},
+		{"transport-quoted ssh argv stays as-is", []string{"ssh", "host", "'echo'", "'a b'"}, "ssh host 'echo' 'a b'"},
 	}
 
 	for _, tt := range tests {

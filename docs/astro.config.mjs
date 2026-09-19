@@ -13,13 +13,24 @@ export default defineConfig({
 		plugins: [tailwindcss()],
 	},
 	integrations: [
-		mermaid(),
+		mermaid({
+			mermaidConfig: {
+				themeVariables: {
+					fontSize: '18px',
+				},
+				flowchart: {
+					nodeSpacing: 30,
+					rankSpacing: 35,
+					padding: 8,
+				},
+			},
+		}),
 		starlight({
 			title: 'Panix',
 			logo: {
 				src: './public/icon.svg',
 			},
-			description: 'Universal Nix Deployment Orchestrator - documentation and wiki',
+			description: 'Panix - Universal Nix Deployment Orchestrator',
 			customCss: ['./src/styles/panix-theme.css'],
 			components: {
 				ThemeProvider: './src/components/ForceDarkTheme.astro',
@@ -49,16 +60,16 @@ export default defineConfig({
 			plugins: [
 				starlightUtils({
 					navLinks: {
-						leading: { useSidebarLabelled: 'leadingNavLinks' },
+						leading: { useSidebarLabelled: 'navbar' },
 					},
 				}),
 			],
 			sidebar: [
 				{
-					label: 'leadingNavLinks',
-					items: [
-						{ label: 'Docs', link: '/getting-started/' },
-					],
+					label: 'navbar',
+				items: [
+					{ label: 'Docs', link: '/getting-started/' },
+				],
 				},
 				{
 					label: 'Getting Started',
@@ -76,26 +87,23 @@ export default defineConfig({
 						{ autogenerate: { directory: 'configuration' } },
 					],
 				},
-				{
-					label: 'Features',
-					items: [{ autogenerate: { directory: 'features' } }],
-				},
-				{
-					label: 'Guides',
-					items: [
-						{
-							label: 'Bootstrap',
-							items: [
-								{ autogenerate: { directory: 'guides/bootstrap' } },
-							],
-						},
-						{ slug: 'guides/reinstall' },
-						{ slug: 'guides/secrets' },
-						{ slug: 'guides/ssh-config' },
-						{ slug: 'guides/snapshots' },
-						{ slug: 'guides/packages' },
-					],
-				},
+			{
+				label: 'Guides',
+				items: [
+					{
+						label: 'Bootstrap',
+						items: [
+							{ autogenerate: { directory: 'guides/bootstrap' } },
+						],
+					},
+					{ slug: 'guides/reinstall' },
+					{ slug: 'guides/secrets' },
+					{ slug: 'guides/ssh-config' },
+					{ slug: 'guides/snapshots' },
+					{ slug: 'guides/packages' },
+					{ slug: 'guides/auto-rollback' },
+				],
+			},
 				{
 					label: 'TUI',
 					items: [{ autogenerate: { directory: 'tui' } }],
@@ -104,15 +112,11 @@ export default defineConfig({
 					label: 'CLI Reference',
 					items: [{ autogenerate: { directory: 'cli' } }],
 				},
-				{
-					label: 'Internals',
-					items: [{ autogenerate: { directory: 'internals' } }],
-				},
-				{
-					label: 'Project',
-					items: [{ autogenerate: { directory: 'project' } }],
-				},
-			],
+			{
+				label: 'Internals',
+				items: [{ autogenerate: { directory: 'internals' } }],
+			},
+		],
 		}),
 		mdx(),
 	],

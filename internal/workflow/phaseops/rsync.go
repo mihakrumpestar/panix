@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TransferFile rsyncs plainFileOrDir to the machine; transferOSSecrets targets
+// the bootstrapping root because the final root may not exist yet.
 func TransferFile(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
@@ -18,11 +20,20 @@ func TransferFile(
 	transferOfWhat string,
 	transferOSSecrets bool,
 ) error {
+	activeSSH := machine.GetActiveSSH()
+
 	commandWithArgs := slices.Concat([]string{"rsync"}, machine.GetRsyncDefaultFlags())
 
+	// Elevation: remotely the receiving rsync writes the files, so sudo rides
+	// along via --rsync-path; locally rsync ignores --rsync-path, so the whole
+	// command is prefixed instead.
 	maybeSudo := machine.MaybeSudo()
 	if len(maybeSudo) != 0 {
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", strings.Join(maybeSudo, " ")))
+		if activeSSH.IsLocal() {
+			commandWithArgs = slices.Concat(maybeSudo, commandWithArgs)
+		} else {
+			commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", strings.Join(maybeSudo, " ")))
+		}
 	}
 
 	perms := plainFileOrDir.Permissions.String()
@@ -39,7 +50,6 @@ func TransferFile(
 		secretRemotePath = machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
 	}
 
-	activeSSH := machine.GetActiveSSH()
 	if activeSSH.IsLocal() {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)
 	} else {

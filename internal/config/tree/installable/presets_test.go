@@ -7,14 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestAllPresetsExpectedValues is a table-driven test that asserts every field
-// of every preset matches the expected value. This guards against accidental
-// drift in the presets map (e.g. someone changing a build path or flipping a
-// type-level flag) which would silently change panix's behavior for that
-// output type.
-//
-// Each row also verifies IsKnown() and IsBootstrappableType() so that the
-// lookup helpers stay consistent with the map contents.
+// presetExpectedTest pins every preset field of one output type, so unintended
+// drift in the presets map cannot silently change behavior.
 type presetExpectedTest struct {
 	name string
 	typ  FlakeOutputType
@@ -171,9 +165,7 @@ func TestAllPresetsExpectedValues(t *testing.T) {
 	}
 }
 
-// TestKnownOutputTypes verifies that KnownOutputTypes returns exactly the 7
-// supported output types, that IsKnown returns true for each, and that an
-// unknown type is rejected.
+// Exactly 7 types are known; unknown and empty types are rejected.
 func TestKnownOutputTypes(t *testing.T) {
 	t.Parallel()
 
@@ -204,8 +196,7 @@ func TestKnownOutputTypes(t *testing.T) {
 		"empty type should not be known")
 }
 
-// TestIsBootstrappableType verifies that only nixosConfigurations is
-// bootstrappable. All other known types (and unknown types) return false.
+// Only nixosConfigurations is bootstrappable; unknown and empty types fail closed.
 func TestIsBootstrappableType(t *testing.T) {
 	t.Parallel()
 
@@ -235,21 +226,39 @@ func TestIsBootstrappableType(t *testing.T) {
 	}
 }
 
-// TestPresetConsistency verifies cross-field logical invariants that must hold
-// for every preset. These rules encode the domain semantics:
-//
-//   - A type with no activation path (packages) has nothing to roll back to,
-//     so it must not define a profile path.
-//   - Only system-level types can bootstrap (user-level types run as a user,
-//     not root, so they can't provision a system from scratch).
-//   - Types that omit the output type from the attrpath (packages) use bare
-//     names, so a build path suffix would be meaningless and must be empty.
-//   - If SetProfile is true, there must be a profile path to set.
-//   - If there's no profile path, SetProfile must be nil (nothing to set).
-//
-// If any of these fail, the preset map has an internal contradiction that
-// would cause runtime errors (e.g. trying to set a profile that doesn't
-// exist, or activating a package that has no activation script).
+// Pins the docs contract: a new built-in type fails the suite until documented,
+// and DocOrder must be positive and distinct so the rendered output-type tables
+// are deterministic.
+func TestBuiltinPresetsAreDocumented(t *testing.T) {
+	t.Parallel()
+
+	orders := make(map[int]FlakeOutputType, len(presets))
+
+	for typ, preset := range presets {
+		assert.NotEmpty(t, preset.DocDeploys, "%s DocDeploys", typ)
+		assert.NotEmpty(t, preset.DocActivation, "%s DocActivation", typ)
+		assert.Positive(t, preset.DocOrder, "%s DocOrder", typ)
+		assert.NotContains(t, orders, preset.DocOrder,
+			"DocOrder %d is used by more than one built-in type", preset.DocOrder)
+
+		orders[preset.DocOrder] = typ
+	}
+
+	rows := OutputTypeTable()
+	assert.Len(t, rows, len(presets), "OutputTypeTable must return one row per built-in preset")
+
+	renderedOrders := make([]int, 0, len(rows))
+	for _, row := range rows {
+		renderedOrders = append(renderedOrders, presets[FlakeOutputType(row.Type)].DocOrder)
+	}
+
+	assert.IsIncreasing(t, renderedOrders, "OutputTypeTable must be sorted by DocOrder")
+}
+
+// Pins the cross-field invariants that encode domain semantics (rollback needs
+// a profile, bootstrap needs root, bare-name types have no build path, mode
+// lists may only reference declared modes). A violation is an internal preset
+// contradiction that would surface as a runtime error.
 func TestPresetConsistency(t *testing.T) {
 	t.Parallel()
 
@@ -260,9 +269,8 @@ func TestPresetConsistency(t *testing.T) {
 			preset, ok := presets[typ]
 			assert.True(t, ok, "preset should exist for known type %s", typ)
 
-			// No activation path => no rollback => no profile path.
-			// packages is the canonical case: it's a bare package, nothing to
-			// activate or roll back.
+			// No activation path means no rollback; packages is the canonical
+			// case, a bare package with nothing to activate or roll back.
 			if preset.ActivationPath == "" {
 				assert.Empty(t, preset.ProfilePath,
 					"%s: ActivationPath is empty so ProfilePath must also be empty (no rollback target)", typ)
@@ -274,8 +282,7 @@ func TestPresetConsistency(t *testing.T) {
 					"%s: non-system-level types cannot be bootstrappable (bootstrap needs root)", typ)
 			}
 
-			// Omit-type types use bare names; a build path suffix would be
-			// appended to a bare name, which is wrong for packages.
+			// Bare names (omit-type) have nothing to append a build path suffix to.
 			if preset.OmitTypeFromAttrPath {
 				assert.Empty(t, preset.BuildPath,
 					"%s: OmitTypeFromAttrPath is true so BuildPath must be empty (bare name, no suffix)", typ)
@@ -293,8 +300,7 @@ func TestPresetConsistency(t *testing.T) {
 					"%s: ProfilePath is empty so SetProfile must be nil (no profile to set)", typ)
 			}
 
-			// Mode lists reference modes the activation script understands,
-			// so every entry must be a declared activation mode.
+			// Mode lists may only reference modes the activation script understands.
 			for _, mode := range preset.NonMutatingModes {
 				assert.Contains(t, preset.ActivationModes, mode,
 					"%s: NonMutatingModes entry %q must be in ActivationModes", typ, mode)
