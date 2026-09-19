@@ -147,6 +147,27 @@ func cleanupFifos() {
 	}
 }
 
+// cleanupGeneratedHardwareConfig drops the intent-to-add index entry panix
+// created for a generated config (only when the path lives inside the repo)
+// and removes the file. Best effort: it must never mask the test result.
+func cleanupGeneratedHardwareConfig(repoRoot, path string) {
+	rel, err := filepath.Rel(repoRoot, path)
+	if err == nil && filepath.IsLocal(rel) {
+		_ = exec.CommandContext(context.Background(), "git", "-C", repoRoot, //nolint:gosec // args are test-controlled paths, not user input
+			"restore", "--staged", "--quiet", "--", rel).Run()
+	}
+
+	_ = os.Remove(path)
+}
+
+// cleanupGeneratedHardwareConfigs removes the hardware configs a run generated
+// so a finished run leaves no files and no git status residue behind.
+func cleanupGeneratedHardwareConfigs() {
+	root := findProjectRoot()
+	cleanupGeneratedHardwareConfig(root, e2eHardwareConfigPath)
+	cleanupGeneratedHardwareConfig(root, e2eKexecHardwareConfigPath)
+}
+
 func run() error {
 	testStart = time.Now()
 
@@ -184,6 +205,7 @@ func run() error {
 
 	defer vms.kill()
 	defer cleanupFifos()
+	defer cleanupGeneratedHardwareConfigs()
 
 	err = runDeployPhases(configPath, res)
 	if err != nil {

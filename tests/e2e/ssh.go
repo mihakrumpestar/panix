@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -307,6 +308,114 @@ func verifyBootstrapHook(kexecPort int, keyPath string) error {
 	return nil
 }
 
+const (
+	hardwareConfigLogDescription = "generate config"
+	hardwareConfigLogSuccess     = "success"
+
+	isoVMHardwareConfigXPath   = "test/nixosConfigurations/test-vm/nixos-iso-vm"
+	kexecVMHardwareConfigXPath = "test/nixosConfigurations/test-vm-kexec/kexec-vm"
+
+	nixosGenerateConfigArg     = "nixos-generate-config"
+	nixosShowHardwareConfigArg = "--show-hardware-config"
+	nixosNoFilesystemsArg      = "--no-filesystems"
+)
+
+// hardwareConfigLogEntry is the subset of executioner JSON log fields needed to
+// prove hardware config generation. Entries without a matching description or
+// status are ignored by the verifier.
+type hardwareConfigLogEntry struct {
+	XPath       string `json:"xpath"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	Command     string `json:"command"`
+}
+
+// requiredHardwareConfigXPaths returns every xpath that must show a successful
+// hardware config generation in the bootstrap log.
+func requiredHardwareConfigXPaths() []string {
+	return []string{isoVMHardwareConfigXPath, kexecVMHardwareConfigXPath}
+}
+
+// successfulHardwareConfigEntries maps xpath to the successful "generate
+// config" JSON entries found in the log. Non-JSON lines and entries with a
+// different description or status are ignored.
+func successfulHardwareConfigEntries(log string) map[string]hardwareConfigLogEntry {
+	entries := make(map[string]hardwareConfigLogEntry)
+
+	for line := range strings.SplitSeq(log, "\n") {
+		if !strings.Contains(line, hardwareConfigLogDescription) {
+			continue
+		}
+
+		var entry hardwareConfigLogEntry
+
+		err := json.Unmarshal([]byte(line), &entry)
+		if err != nil {
+			continue
+		}
+
+		if entry.Description != hardwareConfigLogDescription || entry.Status != hardwareConfigLogSuccess {
+			continue
+		}
+
+		entries[entry.XPath] = entry
+	}
+
+	return entries
+}
+
+// verifyHardwareConfigGenerationLogContent proves the bootstrap log records a
+// successful hardware config generation for every required xpath and that each
+// logged command carries every required argv token. JSON parsing plus
+// token-by-token command checks keep the assertion quoting-agnostic: the
+// executioner shell-quotes each argv element, so a raw substring match on the
+// joined command breaks as soon as quoting is introduced.
+func verifyHardwareConfigGenerationLogContent(log string) error {
+	requiredXPaths := requiredHardwareConfigXPaths()
+	successful := successfulHardwareConfigEntries(log)
+
+	var found, missing []string
+
+	for _, xpath := range requiredXPaths {
+		_, ok := successful[xpath]
+		if ok {
+			found = append(found, xpath)
+		} else {
+			missing = append(missing, xpath)
+		}
+	}
+
+	if len(missing) > 0 {
+		return errors.Errorf(
+			"hardware config generation not proven: successful xpaths %q, missing %q",
+			found, missing,
+		)
+	}
+
+	return verifyHardwareConfigCommandArgs(successful)
+}
+
+// verifyHardwareConfigCommandArgs asserts every required argv token appears in
+// the logged command for each xpath, independently of shell quoting.
+func verifyHardwareConfigCommandArgs(successful map[string]hardwareConfigLogEntry) error {
+	requiredArgs := []string{nixosGenerateConfigArg, nixosShowHardwareConfigArg, nixosNoFilesystemsArg}
+
+	for _, xpath := range requiredHardwareConfigXPaths() {
+		entry := successful[xpath]
+
+		for _, arg := range requiredArgs {
+			if !strings.Contains(entry.Command, arg) {
+				return errors.Errorf(
+					"hardware config generation for xpath %q: logged command missing token %q: %q",
+					xpath, arg, entry.Command,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
 // verifyHardwareConfigGenerationLog reads the bootstrap log as the execution
 // evidence on the targets: the generated configs themselves are local files.
 func verifyHardwareConfigGenerationLog() error {
@@ -322,18 +431,7 @@ func verifyHardwareConfigGenerationLog() error {
 		return errors.Wrapf(err, "read bootstrap log %s", logPath)
 	}
 
-	log := string(content)
-
-	count := strings.Count(log, `"description":"generate config"`)
-	if count < 2 {
-		return errors.Errorf("expected hardware config generation for the ISO and kexec VMs in %s, found %d", logPath, count)
-	}
-
-	if !strings.Contains(log, "nixos-generate-config --show-hardware-config --no-filesystems") {
-		return errors.Errorf("nixos-generate-config command not found in %s", logPath)
-	}
-
-	return nil
+	return errors.Wrapf(verifyHardwareConfigGenerationLogContent(string(content)), "verify bootstrap log %s", logPath)
 }
 
 // verifyHardwareConfigLocalWrite checks the ISO config is written locally, not
