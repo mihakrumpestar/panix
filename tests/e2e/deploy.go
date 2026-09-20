@@ -10,7 +10,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	panixDeploySubcommand  = "deploy"
+	panixSecretsSubcommand = "secrets"
+)
+
 func runPanixDeployWithArgs(configPath string, extraArgs []string, envVars ...string) error {
+	return runPanixCommandWithArgs(panixDeploySubcommand, configPath, extraArgs, envVars...)
+}
+
+// runPanixSecretsWithArgs runs the Inspect+Secrets phases only: used to prove
+// the conditional write skip on an already bootstrapped machine.
+func runPanixSecretsWithArgs(configPath string, extraArgs []string, envVars ...string) error {
+	return runPanixCommandWithArgs(panixSecretsSubcommand, configPath, extraArgs, envVars...)
+}
+
+func runPanixCommandWithArgs(subcommand, configPath string, extraArgs []string, envVars ...string) error {
 	root := findProjectRoot()
 
 	mode := envValue(envVars, "PANIX_TEST_MODE")
@@ -21,10 +36,10 @@ func runPanixDeployWithArgs(configPath string, extraArgs []string, envVars ...st
 	panixLogPath := filepath.Join(logDirPath, "panix-"+mode+".log")
 	e2eDir := filepath.Join(root, "tests", "e2e")
 
-	return runPanixInConsole(root, configPath, panixLogPath, extraArgs, envVars, e2eDir)
+	return runPanixInConsole(root, subcommand, configPath, panixLogPath, extraArgs, envVars, e2eDir)
 }
 
-func runPanixInConsole(root, configPath, panixLogPath string, extraArgs []string, envVars []string, e2eDir string) error {
+func runPanixInConsole(root, subcommand, configPath, panixLogPath string, extraArgs []string, envVars []string, e2eDir string) error {
 	stopSequentialMgr()
 
 	bin, baseArgs := panixExecArgs(root)
@@ -33,7 +48,7 @@ func runPanixInConsole(root, configPath, panixLogPath string, extraArgs []string
 
 	cmdArgs = append(cmdArgs, baseArgs...)
 	cmdArgs = append(cmdArgs,
-		"deploy", "-c", configPath,
+		subcommand, "-c", configPath,
 		"--exit-on-complete",
 		"--log", "--log-file", panixLogPath,
 	)

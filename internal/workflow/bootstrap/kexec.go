@@ -10,6 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/runtimevars"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/pkg/shellquote"
@@ -19,15 +20,12 @@ import (
 var ErrKexecBootFailed = errors.New("kexec did not boot into NixOS installer")
 
 func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
-	arch := machineI.MetaInspect.Load().Architecture.String()
-
-	if arch == "DRY_RUN" {
-		arch = "x86_64"
+	kexecURL, err := resolveKexecURL(machineI)
+	if err != nil {
+		return err
 	}
 
-	kexecURL := strings.ReplaceAll(machineI.Bootstrap.Kexec.Image.String(), "<arch>", arch)
-
-	err := createKexecDirectory(exc, machineI)
+	err = createKexecDirectory(exc, machineI)
 	if err != nil {
 		return err
 	}
@@ -67,6 +65,26 @@ func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error
 	return nil
 }
 
+// resolveKexecURL expands PANIX_* runtime variables in the configured kexec
+// image. The dry-run pseudo-architecture maps to x86_64 so dry-run plans stay
+// explicit.
+func resolveKexecURL(machineI *machine.Machine) (string, error) {
+	arch := machineI.MetaInspect.Load().Architecture.String()
+
+	if arch == "DRY_RUN" {
+		arch = "x86_64"
+	}
+
+	image := machineI.Bootstrap.Kexec.Image.String()
+
+	kexecURL, err := runtimevars.Vars{runtimevars.Arch: arch}.Expand(image)
+	if err != nil {
+		return "", errors.Wrap(err, "invalid kexec image")
+	}
+
+	return kexecURL, nil
+}
+
 // createKexecDirectory resets and creates the staging dir in ONE elevated
 // command (rm + install -d -m 700 -o <sshuser>): SSH-user ownership keeps
 // un-elevated curl/rsync/tar working and closes the rm→mkdir TOCTOU window.
@@ -103,7 +121,7 @@ func downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Mach
 			slices.Concat([]string{"curl"}, machine.Bootstrap.Kexec.GetCurlDefaultFlags(), []string{"-o", "/tmp/kexec/kexec.tar", kexecURL}),
 		)
 	} else {
-		err = phaseops.TransferFile(exc, machine, attributes.PlainFileOrDirToTransfer{
+		err = phaseops.TransferFile(exc, machine, attributes.TransferSource{
 			LocalPath:  kexecURL,
 			RemotePath: "/tmp/kexec/kexec.tar",
 		}, "kexec tarball", false)

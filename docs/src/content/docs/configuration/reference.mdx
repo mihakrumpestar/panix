@@ -351,7 +351,7 @@ properties:
                               type: array
                               description: Files or directories to transfer to the remote machine
                               items:
-                                $ref: "#/definitions/PlainFileOrDirToTransfer"
+                                $ref: "#/definitions/TransferSource"
                             ssh:
                               description: SSH configuration for remote access
                               $ref: "#/definitions/SSHClient"
@@ -380,7 +380,7 @@ properties:
                       type: array
                       description: Files or directories to transfer to the remote machine
                       items:
-                        $ref: "#/definitions/PlainFileOrDirToTransfer"
+                        $ref: "#/definitions/TransferSource"
                     ssh:
                       description: SSH configuration for remote access
                       $ref: "#/definitions/SSHClient"
@@ -411,7 +411,7 @@ properties:
               type: array
               description: Files or directories to transfer to the remote machine
               items:
-                $ref: "#/definitions/PlainFileOrDirToTransfer"
+                $ref: "#/definitions/TransferSource"
             ssh:
               description: SSH configuration for remote access
               $ref: "#/definitions/SSHClient"
@@ -446,7 +446,7 @@ properties:
         type: array
         description: Files or directories to transfer to the remote machine
         items:
-          $ref: "#/definitions/PlainFileOrDirToTransfer"
+          $ref: "#/definitions/TransferSource"
       ssh:
         description: SSH configuration for remote access
         $ref: "#/definitions/SSHClient"
@@ -487,7 +487,7 @@ definitions:
         type: array
         description: Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'
         items:
-          $ref: "#/definitions/PlainFileOrDirToTransfer"
+          $ref: "#/definitions/TransferSource"
       force_bootstrap:
         type: boolean
         description: Force bootstrap even if machine is already NixOS (requires allow_destructive_actions)
@@ -531,8 +531,8 @@ definitions:
           type: string
       image:
         type: string
-        description: "URL or path to kexec tarball for bootstrapping non-NixOS machines (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz)"
-        default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz
+        description: "URL or path to kexec tarball for bootstrapping non-NixOS machines (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz)"
+        default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz
       ssh_port:
         type: integer
         description: "SSH port for kexec installer (default: 22)"
@@ -619,37 +619,6 @@ definitions:
         additionalProperties:
           type: string
     additionalProperties: false
-  PlainFileOrDirToTransfer:
-    type: object
-    properties:
-      gid:
-        type: integer
-        description: Optional Group ID for remote
-      local_path:
-        type: string
-        description: Path to a local file or dir
-        format: file-path
-      permissions:
-        type: integer
-        description: "File permissions (default: 0700)"
-        default: 700
-      remote_path:
-        type: string
-        description: Absolute path on remote machine
-        pattern: ^/.*
-        format: uri-reference
-      uid:
-        type: integer
-        description: Optional User ID for remote
-    required:
-    - local_path
-    - remote_path
-    dependencies:
-      gid:
-      - uid
-      uid:
-      - gid
-    additionalProperties: false
   Preset:
     type: object
     properties:
@@ -726,6 +695,43 @@ definitions:
         type: string
         description: "SSH username (default: root)"
         default: root
+    additionalProperties: false
+  TransferSource:
+    type: object
+    properties:
+      command:
+        type: string
+        description: Command whose stdout is streamed to remote_path. At least one of local_path or command is required, when both are set the command receives the path as PANIX_SECRET_LOCAL_PATH
+      gid:
+        type: integer
+        description: Optional Group ID for remote
+      local_path:
+        type: string
+        description: Path to a local file or dir. At least one of local_path or command is required, when both are set the command receives the path as PANIX_SECRET_LOCAL_PATH
+      permissions:
+        type: integer
+        description: "File permissions (default: 0700)"
+        default: 700
+      remote_path:
+        type: string
+        description: Absolute path on remote machine
+        pattern: ^/.*
+        format: uri-reference
+      uid:
+        type: integer
+        description: Optional User ID for remote
+    required:
+    - remote_path
+    dependencies:
+      gid:
+      - uid
+      uid:
+      - gid
+    anyOf:
+    - required:
+      - command
+    - required:
+      - local_path
     additionalProperties: false
 ```
 {/* SCHEMA_END */}

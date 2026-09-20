@@ -34,21 +34,24 @@ func newLocalExecMachine(t *testing.T) *machine.Machine {
 	return mach
 }
 
-func newLocalExecutioner(t *testing.T, mach *machine.Machine) (*Executioner, *phaselogs.PhaseLog) {
+func newLocalExecutioner(t *testing.T, mach *machine.Machine, mutators ...func(*ExecutionerConf)) (*Executioner, *phaselogs.PhaseLog) {
 	t.Helper()
 
-	phaseLog := phaselogs.NewPhaseLog()
-	exc := NewExecutioner(ExecutionerConf{
+	conf := ExecutionerConf{
 		Ctx:          context.Background(),
 		Timeout:      10 * time.Second,
 		Xpath:        xpath.New("test"),
 		Machine:      mach,
 		Phase:        phase.Bootstrap,
-		PhaseLog:     phaseLog,
+		PhaseLog:     phaselogs.NewPhaseLog(),
 		OnUpdateHook: func() {},
-	})
+	}
 
-	return exc, phaseLog
+	for _, mutate := range mutators {
+		mutate(&conf)
+	}
+
+	return NewExecutioner(conf), conf.PhaseLog
 }
 
 // Pins the local half of the transport-agnostic quoting model: space-bearing

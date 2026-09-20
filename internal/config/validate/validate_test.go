@@ -2,8 +2,13 @@ package validate
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
@@ -16,6 +21,98 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// transferSourceValidator mirrors the validator the loader builds: registered
+// path validators plus required-struct semantics.
+func transferSourceValidator() *validator.Validate {
+	validate := validator.New(validator.WithRequiredStructEnabled())
+	registerPathValidators(validate)
+
+	return validate
+}
+
+// transferSourceRoot wraps a TransferSource so ValidateStructTags, the entry
+// point LoadConfig uses, can validate it exactly like the loader does.
+type transferSourceRoot struct {
+	Source attributes.TransferSource
+}
+
+// TestTransferSourceLocalPathDirectoryRegression guards that an existing
+// directory local_path passes ValidateStructTags, the entry point the loader
+// uses: rsync and the docs support directory sources, so no path validator may
+// reject directories here again.
+func TestTransferSourceLocalPathDirectoryRegression(t *testing.T) {
+	t.Parallel()
+
+	secretDir := t.TempDir()
+
+	root := transferSourceRoot{
+		Source: attributes.TransferSource{LocalPath: secretDir, RemotePath: "/etc/secrets"},
+	}
+
+	err := ValidateStructTags(&root, &fleet.Fleet{}, nil, flags.ValidateFlags{}, 0)
+	require.NoError(t, err, "an existing directory local_path must pass validation")
+}
+
+// TestTransferSourceRequiredWithout covers the local_path/command pair: either
+// source alone passes, both together pass, and neither produces a readable
+// "one of" error instead of the raw validator tag.
+func TestTransferSourceRequiredWithout(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "secret.key")
+	require.NoError(t, os.WriteFile(existingFile, []byte("secret"), 0600))
+
+	validate := transferSourceValidator()
+
+	tests := []struct {
+		name    string
+		source  attributes.TransferSource
+		wantErr bool
+	}{
+		{
+			name:   "command only passes",
+			source: attributes.TransferSource{Command: "echo secret", RemotePath: "/etc/secret"},
+		},
+		{
+			name:   "local path only passes",
+			source: attributes.TransferSource{LocalPath: existingFile, RemotePath: "/etc/secret"},
+		},
+		{
+			name: "both set passes",
+			source: attributes.TransferSource{
+				LocalPath:  existingFile,
+				Command:    "cat $PANIX_SECRET_LOCAL_PATH",
+				RemotePath: "/etc/secret",
+			},
+		},
+		{
+			name:    "neither set fails",
+			source:  attributes.TransferSource{RemotePath: "/etc/secret"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validate.Struct(tt.source)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+
+			msg := humanizeValidationErrors(err)
+			assert.Contains(t, msg, "one of command or local_path is required")
+			assert.NotContains(t, msg, "failed validation")
+		})
+	}
+}
 
 // buildFleetWithTypes builds a minimal Fleet containing one flake with one
 // installable per given output type. Each installable is Init'd so its Xpath

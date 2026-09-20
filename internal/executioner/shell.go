@@ -134,9 +134,13 @@ func (ex *Executioner) finalizeExecution(
 	commandLog *command.CommandLog,
 	excOpt *ExecOptions,
 ) error {
-	waitErr := cmd.Wait()
-	err := consolidateErrors(waitErr, readErr)
+	return finalizeExecError(consolidateErrors(cmd.Wait(), readErr), commandLog, excOpt)
+}
 
+// finalizeExecError applies the caller's OnFailure/OnSuccess hooks to the
+// consolidated process error. It is shared by the PTY and pipe paths so both
+// keep identical status handling.
+func finalizeExecError(err error, commandLog *command.CommandLog, excOpt *ExecOptions) error {
 	if err != nil && excOpt.onFailure != nil {
 		return excOpt.onFailure(commandLog, err)
 	}

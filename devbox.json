@@ -26,6 +26,8 @@
     "qemu_kvm@latest",
     "cdrkit@latest", // For genisoimage
     "harmonia@latest",
+    "age@latest", // Encrypts the age secret fixture
+    "sops@latest", // Encrypts the sops secret fixture
     // For benchmark graphing
     "python313",
     "python313Packages.matplotlib",

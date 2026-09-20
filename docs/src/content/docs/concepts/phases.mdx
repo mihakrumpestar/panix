@@ -44,7 +44,7 @@ flowchart LR
   end
 
   subgraph Secrets
-    A5[rsync --chmod --chown]
+    A5[rsync or command stream]
   end
 
   subgraph Activate
@@ -106,7 +106,7 @@ flowchart LR
 | **Bootstrap** | Per-machine | kexec into NixOS installer (if needed), encryption keys transfer (if provided), disko partitioning |
 | **Build** | Per-installable | Build the installable closure via `nix build` (local or [remote mode](/configuration/build-modes/)) |
 | **Transfer** | Per-machine | `nix copy` closure to target |
-| **Secrets** | Per-machine | Transfer files/directories with proper ownership via rsync |
+| **Secrets** | Per-machine | Transfer `local_path` files/directories via rsync, or stream `command` stdout to the remote path, with proper ownership |
 | **Activate** | Per-machine | Dispatches based on installable type: `switch-to-configuration` (nixos), `activate` (darwin/home/droid), or `nix profile add` for `packages` (`nix profile install` when Lix is detected) |
 
 ## Standalone Phases

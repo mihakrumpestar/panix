@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -124,6 +125,15 @@ const e2eHardwareConfigPath = "/tmp/e2e-hardware-config.nix"
 // in panix.yml and lives inside the testflakes source tree: the flake imports
 // it, and flakes cannot import absolute paths outside their source. Set by initDirs.
 var e2eKexecHardwareConfigPath string
+
+// Secret fixture contents. Single source of truth: generateSecretFixtures
+// writes or encrypts exactly these bytes and ssh.go asserts them on the
+// targets.
+const (
+	e2eCommandSecretContent = "panix-e2e-command-secret\n" //nolint:gosec // test fixture, not a credential
+	e2eAgePlainContent      = "panix-e2e-age-secret\n"
+	e2eSopsPlainContent     = "panix-e2e-sops-secret: panix-e2e-sops-value\n"
+)
 
 func main() {
 	parseFlags()
@@ -305,7 +315,12 @@ func runDeployNixOS(configPath string, res *testResources) error {
 		return err
 	}
 
-	return verifyAll(res.keyPath)
+	err = verifyAll(res.keyPath)
+	if err != nil {
+		return err
+	}
+
+	return verifySecretsConditionalSkip(configPath, res)
 }
 
 // runDeployAutoRollback deploys the always-failing test-vm-failing config
@@ -518,6 +533,11 @@ func phase0Setup() (*testResources, error) {
 		return nil, err
 	}
 
+	err = simpleStep("Generate secret fixtures", generateSecretFixtures)
+	if err != nil {
+		return nil, err
+	}
+
 	err = createDisks(res)
 	if err != nil {
 		return nil, err
@@ -526,8 +546,87 @@ func phase0Setup() (*testResources, error) {
 	return res, nil
 }
 
+// generateSecretFixtures creates the age identity plus the plaintext,
+// age-encrypted and sops-encrypted fixtures in the gitignored .cache dir: no
+// key material or ciphertext is ever committed. The plaintext local_path
+// fixture (testflakes/secret-fixture.txt) is committed separately. age,
+// age-keygen and sops come from the devbox environment on PATH.
+func generateSecretFixtures() error {
+	ageKeyPath := filepath.Join(cacheDirPath, "age.key")
+	ageSecretPath := filepath.Join(cacheDirPath, "secret.age")
+	sopsSecretPath := filepath.Join(cacheDirPath, "secret.sops.yaml")
+
+	agePlainPath := filepath.Join(cacheDirPath, "secret-plain.txt")
+	sopsPlainPath := filepath.Join(cacheDirPath, "secret-plain.yaml")
+
+	err := os.WriteFile(agePlainPath, []byte(e2eAgePlainContent), filePerm)
+	if err != nil {
+		return errors.Wrap(err, "write age plaintext fixture")
+	}
+
+	err = os.WriteFile(sopsPlainPath, []byte(e2eSopsPlainContent), filePerm)
+	if err != nil {
+		return errors.Wrap(err, "write sops plaintext fixture")
+	}
+
+	// Regenerate the identity every run so the fixtures are deterministic.
+	_ = os.Remove(ageKeyPath)
+
+	err = runFixtureCommand("age-keygen", "age-keygen", "-o", ageKeyPath)
+	if err != nil {
+		return err
+	}
+
+	recipient, err := fixtureCommandOutput("age-keygen -y", "age-keygen", "-y", ageKeyPath)
+	if err != nil {
+		return err
+	}
+
+	err = runFixtureCommand("age encrypt", "age", "-e", "-r", recipient, "-o", ageSecretPath, agePlainPath)
+	if err != nil {
+		return err
+	}
+
+	encrypted, err := exec.CommandContext(context.Background(), "sops", //nolint:gosec // test-controlled fixture generation
+		"--encrypt", "--age", recipient, "--input-type", "yaml", "--output-type", "yaml", sopsPlainPath).Output()
+	if err != nil {
+		return errors.Wrap(err, "sops encrypt")
+	}
+
+	err = os.WriteFile(sopsSecretPath, encrypted, filePerm)
+	if err != nil {
+		return errors.Wrap(err, "write sops fixture")
+	}
+
+	return nil
+}
+
+// runFixtureCommand runs a fixture tool, folding combined output into the
+// error so a failure names the tool and its diagnostics.
+func runFixtureCommand(name string, args ...string) error {
+	//nolint:gosec // test-controlled fixture tooling
+	output, err := exec.CommandContext(context.Background(), args[0], args[1:]...).CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "%s: %s", name, strings.TrimSpace(string(output)))
+	}
+
+	return nil
+}
+
+// fixtureCommandOutput runs a fixture tool and returns its trimmed stdout.
+func fixtureCommandOutput(name string, args ...string) (string, error) {
+	//nolint:gosec // test-controlled fixture tooling
+	output, err := exec.CommandContext(context.Background(), args[0], args[1:]...).Output()
+	if err != nil {
+		return "", errors.Wrap(err, name)
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
 func buildNixArtifacts(res *testResources) error {
 	parGroup := newParallelGroup()
+
 	parGroup.Go("Build kexec installer", func() error {
 		var buildErr error
 
@@ -818,6 +917,9 @@ func verifyAll(keyPath string) error {
 		parGroup.Go("Verify bootstrap hook and hardware config on kexec VM", func() error {
 			return verifyKexecBootstrapArtifacts(kexecVMPort, nixosISOPort, keyPath)
 		})
+		parGroup.Go("Verify secrets on NixOS ISO VM", func() error {
+			return verifySecrets(nixosISOPort, keyPath)
+		})
 	}
 
 	if testScopeFlag.remote() {
@@ -826,6 +928,9 @@ func verifyAll(keyPath string) error {
 		})
 		parGroup.Go("Verify NixOS on remote kexec VM", func() error {
 			return verifyNixOSInstallation(remoteKexecPort, keyPath)
+		})
+		parGroup.Go("Verify secrets on remote ISO VM", func() error {
+			return verifySecrets(remoteISOPort, keyPath)
 		})
 	}
 
@@ -882,11 +987,26 @@ func runPanixDeployStep(name, configPath string, envVars ...string) error {
 }
 
 func runPanixDeployStepWithArgs(name, configPath string, extraArgs []string, envVars ...string) error {
+	return runPanixStepWithArgs(panixDeploySubcommand, name, configPath, extraArgs, envVars...)
+}
+
+// runPanixSecretsStepWithArgs runs the Inspect+Secrets-only subcommand in the
+// same step/elapsed style as the deploy steps.
+func runPanixSecretsStepWithArgs(name, configPath string, extraArgs []string, envVars ...string) error {
+	return runPanixStepWithArgs(panixSecretsSubcommand, name, configPath, extraArgs, envVars...)
+}
+
+func runPanixStepWithArgs(subcommand, name, configPath string, extraArgs []string, envVars ...string) error {
 	start := time.Now()
 
 	fmt.Printf("  → %s\n", name)
 
-	err := runPanixDeployWithArgs(configPath, extraArgs, envVars...)
+	var err error
+	if subcommand == panixSecretsSubcommand {
+		err = runPanixSecretsWithArgs(configPath, extraArgs, envVars...)
+	} else {
+		err = runPanixDeployWithArgs(configPath, extraArgs, envVars...)
+	}
 
 	elapsed := formatElapsed(time.Since(start))
 

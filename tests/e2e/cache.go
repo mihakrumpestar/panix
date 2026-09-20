@@ -67,11 +67,16 @@ func checkKVM() error {
 	return nil
 }
 
+// checkDeps verifies every tool the harness shells out to. age, age-keygen
+// and sops come from the devbox environment, so a miss there almost always
+// means the harness was started outside nix shell.
 func checkDeps() error {
-	for _, dep := range []string{"qemu-system-x86_64", "qemu-img", "nix", "curl"} {
+	deps := []string{"qemu-system-x86_64", "qemu-img", "nix", "curl", "age", "age-keygen", "sops"}
+
+	for _, dep := range deps {
 		_, err := exec.LookPath(dep)
 		if err != nil {
-			return errors.Errorf("dependency %q not found", dep)
+			return errors.Errorf("dependency %q not found: run the e2e tests inside the devbox shell (devbox run -- go run ./tests/e2e/)", dep)
 		}
 	}
 

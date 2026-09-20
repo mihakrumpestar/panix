@@ -56,7 +56,10 @@ tasks:
       - go mod tidy
       - golangci-lint run ./...
       - |
-        if grep -rn "; " internal/ --include="*.go" | grep -v "for " | grep -v "//"; then
+        # Heuristic: quoted-string semicolons are ignored, so inlined statements there are missed; do not grow this into noise.
+        if grep -rnE --include="*.go" \
+          -e '(^[[:space:]]*|\{[[:space:]]+)[A-Za-z_][A-Za-z0-9_]*[[:space:]]*(:=|=)[^"`;]*(;[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*(:=|=|\())' \
+          -e '(^[[:space:]]*|\{[[:space:]]+)[A-Za-z_][A-Za-z0-9_.]*\([^"`;]*\)[[:space:]]*;[[:space:]]+[A-Za-z_]' internal/; then
           echo "Error: Inlining pattern detected"
           exit 1
         fi
