@@ -85,13 +85,13 @@ func TestPassAttributesIntoMergesSecrets(t *testing.T) {
 	t.Parallel()
 
 	parent := &Attributes{
-		Secrets: []PlainFileOrDirToTransfer{
+		Secrets: []TransferSource{
 			{LocalPath: "/etc/parent.key", RemotePath: "/etc/parent.key"},
 		},
 	}
 
 	child := &Attributes{
-		Secrets: []PlainFileOrDirToTransfer{
+		Secrets: []TransferSource{
 			{LocalPath: "/etc/child.key", RemotePath: "/etc/child.key"},
 		},
 	}

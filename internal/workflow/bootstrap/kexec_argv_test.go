@@ -1,14 +1,17 @@
 package bootstrap
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/testutil"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +130,115 @@ func TestRunKexecCommand_Elevation(t *testing.T) {
 			require.NoError(t, runKexecCommand(exc, mach))
 
 			assert.Equal(t, tt.want, testutil.LastCommandLine(t, phaseLog))
+		})
+	}
+}
+
+// newKexecMachineWithArch builds a local machine with the given probed
+// architecture, as resolveKexecURL sees it after inspection.
+func newKexecMachineWithArch(t *testing.T, arch string) *machine.Machine {
+	t.Helper()
+
+	mach := newKexecMachine(t, false)
+	mach.MetaInspect.Store(&machine.MetaInspect{Architecture: stringbyte.StringByte(arch)})
+
+	return mach
+}
+
+// The kexec image is a plain argv value, so only PANIX_* variables are
+// expanded; the dry-run pseudo-architecture maps to x86_64.
+func TestResolveKexecURL_Expansion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		arch  string
+		image attributes.KexecImage
+		want  string
+	}{
+		{
+			name:  "dollar form expanded from detected architecture",
+			arch:  "aarch64",
+			image: attributes.KexecImage("./kexec-$PANIX_ARCH.tar.gz"),
+			want:  "./kexec-aarch64.tar.gz",
+		},
+		{
+			name:  "brace form expanded",
+			arch:  "x86_64",
+			image: attributes.KexecImage("https://example.com/${PANIX_ARCH}/kexec.tar.gz"),
+			want:  "https://example.com/x86_64/kexec.tar.gz",
+		},
+		{
+			name:  "dry run architecture maps to x86_64",
+			arch:  "DRY_RUN",
+			image: attributes.KexecImage("./kexec-$PANIX_ARCH.tar.gz"),
+			want:  "./kexec-x86_64.tar.gz",
+		},
+		{
+			name:  "default image is a $PANIX_ARCH template",
+			arch:  "aarch64",
+			image: attributes.KexecImage(""),
+			want:  strings.ReplaceAll(attributes.DefaultKexecImage, "$PANIX_ARCH", "aarch64"),
+		},
+		{
+			name:  "foreign references stay untouched",
+			arch:  "x86_64",
+			image: attributes.KexecImage("https://example.com/$USER/kexec-$PANIX_ARCH.tar.gz"),
+			want:  "https://example.com/$USER/kexec-x86_64.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mach := newKexecMachineWithArch(t, tt.arch)
+			mach.Bootstrap.Kexec.Image = tt.image
+
+			got, err := resolveKexecURL(mach)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestResolveKexecURL_Errors pins the hard failures: runtime variable mistakes
+// surface with the kexec image context.
+func TestResolveKexecURL_Errors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		image   attributes.KexecImage
+		wantErr []string
+	}{
+		{
+			name:    "unknown panix variable",
+			image:   attributes.KexecImage("./kexec-$PANIX_NOPE.tar.gz"),
+			wantErr: []string{"invalid kexec image", "unknown panix runtime variable PANIX_NOPE"},
+		},
+		{
+			name:    "known variable unavailable in kexec context",
+			image:   attributes.KexecImage("./kexec-$PANIX_SECRET_LOCAL_PATH.tar.gz"),
+			wantErr: []string{"invalid kexec image", "panix runtime variable PANIX_SECRET_LOCAL_PATH is not available in this context"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mach := newKexecMachineWithArch(t, "x86_64")
+			mach.Bootstrap.Kexec.Image = tt.image
+
+			got, err := resolveKexecURL(mach)
+			require.Error(t, err)
+			assert.Empty(t, got)
+
+			for _, want := range tt.wantErr {
+				assert.Contains(t, err.Error(), want)
+			}
 		})
 	}
 }

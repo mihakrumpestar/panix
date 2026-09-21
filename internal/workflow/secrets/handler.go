@@ -18,9 +18,15 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	}
 
 	for _, secret := range secrets {
-		err := phaseops.TransferFile(exc, machine, secret, "secrets", true)
+		err := phaseops.TransferSecret(exc, machine, secret, "secrets", true)
 		if err != nil {
-			return errors.Wrapf(err, "failed to transfer secret %s", secret.LocalPath)
+			// Command-only sources have no local path: name them by command.
+			secretName := secret.LocalPath
+			if secretName == "" {
+				secretName = secret.Command
+			}
+
+			return errors.Wrapf(err, "failed to transfer secret %s", secretName)
 		}
 	}
 

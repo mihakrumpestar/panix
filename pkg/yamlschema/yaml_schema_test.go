@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,6 +99,31 @@ type rootWithInline struct {
 type rootWithDependency struct {
 	Mode   string `yaml:"mode" validate:"required_with=Config"`
 	Config string `yaml:"config"`
+}
+
+// transferSourceLike mirrors attributes.TransferSource: either local_path or
+// command must be set, declared symmetrically from both fields.
+type transferSourceLike struct {
+	LocalPath string `yaml:"local_path" validate:"required_without=Command,omitempty"`
+	Command   string `yaml:"command" validate:"required_without=LocalPath"`
+}
+
+type rootWithTransferSource struct {
+	Source transferSourceLike `yaml:"source"`
+}
+
+type rootWithRequiredWithout struct {
+	LocalPath string `yaml:"local_path" validate:"required_without=Command,omitempty"`
+	Command   string `yaml:"command" validate:"required_without=LocalPath"`
+}
+
+type innerWithDependency struct {
+	Mode   string `yaml:"mode" validate:"required_with=Config"`
+	Config string `yaml:"config"`
+}
+
+type rootWithNestedDependency struct {
+	Inner innerWithDependency `yaml:"inner"`
 }
 
 // mustGetTypeDef extracts a *TypeDefinition from a property map.
@@ -364,6 +390,58 @@ func TestNewSchema_DependencyCollection(t *testing.T) {
 
 	configDef := mustGetTypeDef(t, schema.Properties, "config")
 	assert.Equal(t, "string", configDef.Type, "config type mismatch")
+}
+
+// TestNewSchema_RequiredWithoutAnyOf pins the required_without translation on a
+// nested object mirroring attributes.TransferSource: the symmetric pair
+// deduplicates to a single anyOf with two required variants, and neither field
+// stays in the object's required list.
+func TestNewSchema_RequiredWithoutAnyOf(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithTransferSource]())
+
+	sourceDef := mustGetTypeDef(t, schema.Properties, "source")
+
+	require.Len(t, sourceDef.AnyOf, 2, "symmetric declarations must deduplicate to one anyOf")
+	assert.Equal(t, requiredList{"command"}, sourceDef.AnyOf[0].Required)
+	assert.Equal(t, requiredList{"local_path"}, sourceDef.AnyOf[1].Required)
+	assert.Empty(t, sourceDef.AllOf, "a single anyOf group needs no allOf wrapper")
+	assert.NotContains(t, sourceDef.Required, "local_path")
+	assert.NotContains(t, sourceDef.Required, "command")
+
+	// The schema output carries the object-level anyOf key.
+	out, err := yaml.Marshal(sourceDef)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "anyOf:")
+	assert.Contains(t, string(out), "required:")
+}
+
+// TestNewSchema_RequiredWithoutAtRoot covers the root-object path: a pair
+// declared at the root lands in the top-level anyOf.
+func TestNewSchema_RequiredWithoutAtRoot(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithRequiredWithout]())
+
+	require.Len(t, schema.AnyOf, 2)
+	assert.Equal(t, requiredList{"command"}, schema.AnyOf[0].Required)
+	assert.Equal(t, requiredList{"local_path"}, schema.AnyOf[1].Required)
+}
+
+// TestNewSchema_RequiredWithDependenciesPreserved guards that translating
+// required_without does not disturb the existing dependencies output produced
+// by required_with.
+func TestNewSchema_RequiredWithDependenciesPreserved(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithNestedDependency]())
+
+	innerDef := mustGetTypeDef(t, schema.Properties, "inner")
+
+	require.Contains(t, innerDef.Dependencies, "config")
+	assert.Equal(t, dependencyList{"mode"}, innerDef.Dependencies["config"])
+	assert.Empty(t, innerDef.AnyOf, "required_with must not produce anyOf")
 }
 
 func TestNewSchema_AdditionalPropertiesTrue(t *testing.T) {

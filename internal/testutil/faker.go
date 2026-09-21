@@ -8,8 +8,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
@@ -55,7 +55,7 @@ func (f *Faker) MachineWithSecrets(count int) *machine.Machine {
 	mach := f.Machine()
 
 	for range count {
-		mach.Secrets = append(mach.Secrets, attributes.PlainFileOrDirToTransfer{
+		mach.Secrets = append(mach.Secrets, attributes.TransferSource{
 			LocalPath:  fmt.Sprintf("/etc/secrets/%s.key", f.RandomStringWithLength(secretLen)),
 			RemotePath: fmt.Sprintf("/etc/secrets/%s.key", f.RandomStringWithLength(secretLen)),
 		})

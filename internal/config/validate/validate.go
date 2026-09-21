@@ -109,6 +109,7 @@ func humanizePath(namespace string) string {
 	return strings.Join(result, ".")
 }
 
+//nolint:cyclop // one branch per validator tag, tags are independent
 func humanizeTagMessage(fieldError validator.FieldError) string {
 	switch fieldError.Tag() {
 	case "required":
@@ -123,6 +124,8 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("must be a valid URL, got: %v", fieldError.Value())
 	case "uri":
 		return fmt.Sprintf("must be a valid URI, got: %v", fieldError.Value())
+	case "required_without":
+		return humanizeRequiredWithout(fieldError)
 	case "oneof":
 		return fmt.Sprintf("must be one of [%s], got: %v", fieldError.Param(), fieldError.Value())
 	case "dive":
@@ -130,6 +133,21 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 	default:
 		return fmt.Sprintf("failed validation '%s' (value: %v)", fieldError.Tag(), fieldError.Value())
 	}
+}
+
+// humanizeRequiredWithout renders a required_without error as a readable
+// choice: the field and the field(s) it depends on are sorted so symmetric
+// declarations (a required_without b, b required_without a) produce the same
+// message.
+func humanizeRequiredWithout(fieldError validator.FieldError) string {
+	names := []string{strcase.SnakeCase(fieldError.Field())}
+	for name := range strings.FieldsSeq(fieldError.Param()) {
+		names = append(names, strcase.SnakeCase(name))
+	}
+
+	slices.Sort(names)
+
+	return fmt.Sprintf("one of %s is required", strings.Join(names, " or "))
 }
 
 func validateBuildModes(f *fleet.Fleet) error {
@@ -221,8 +239,8 @@ func validateOutputTypes(fleetConfig *fleet.Fleet, declaredPresets installablepk
 				}
 
 				errs = append(errs, fmt.Sprintf(
-				"%s: unknown output type '%s', known types: %s. "+
-					"Custom output types can be declared under 'output_types'",
+					"%s: unknown output type '%s', known types: %s. "+
+						"Custom output types can be declared under 'output_types'",
 					installable.Xpath.String(), typeKey, strings.Join(knownTypeStrs, ", ")))
 
 				return true

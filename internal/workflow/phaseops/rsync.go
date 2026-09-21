@@ -11,12 +11,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TransferFile rsyncs plainFileOrDir to the machine; transferOSSecrets targets
+// TransferFile rsyncs source to the machine; transferOSSecrets targets
 // the bootstrapping root because the final root may not exist yet.
 func TransferFile(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
-	plainFileOrDir attributes.PlainFileOrDirToTransfer,
+	source attributes.TransferSource,
 	transferOfWhat string,
 	transferOSSecrets bool,
 ) error {
@@ -36,18 +36,18 @@ func TransferFile(
 		}
 	}
 
-	perms := plainFileOrDir.Permissions.String()
+	perms := source.Permissions.String()
 	commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=D%s,F%s", perms, perms))
 
-	if plainFileOrDir.UID != nil && plainFileOrDir.GID != nil {
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chown=%d:%d", *plainFileOrDir.UID, *plainFileOrDir.GID))
+	if source.UID != nil && source.GID != nil {
+		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chown=%d:%d", *source.UID, *source.GID))
 	}
 
-	commandWithArgs = append(commandWithArgs, plainFileOrDir.LocalPath)
+	commandWithArgs = append(commandWithArgs, source.LocalPath)
 
-	secretRemotePath := plainFileOrDir.RemotePath
+	secretRemotePath := source.RemotePath
 	if transferOSSecrets {
-		secretRemotePath = machine.MaybeBootstrappingPath(plainFileOrDir.RemotePath)
+		secretRemotePath = machine.MaybeBootstrappingPath(source.RemotePath)
 	}
 
 	if activeSSH.IsLocal() {

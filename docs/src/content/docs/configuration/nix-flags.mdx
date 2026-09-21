@@ -65,6 +65,8 @@ The same pattern applies to non-nix commands:
 - `rsync_default_flags` (fleet/flake/installable/machine), default `["-rcPEx", "--mkpath"]`
 - `curl_default_flags` (under `bootstrap.kexec`), default `["--fail", "-#", "-L", "-C", "-"]`
 
+The `rsync_default_flags` defaults assume a modern rsync: `--mkpath` requires rsync 3.2.3 or newer on both ends (see [Requirements](/getting-started/requirements/)).
+
 ## Build Outlinks
 
 Enable `out_links` to leave a GC-rooted symlink per built installable, so closures survive garbage collection:

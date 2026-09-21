@@ -61,7 +61,7 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink str
 // LUKS unlocking during partitioning.
 func executeDiskEncryptionKeys(exc *executioner.Executioner, machine *machine.Machine) error {
 	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
-		err := phaseops.TransferFile(exc, machine, diskEncryptionKey, "disk encryption key", false)
+		err := phaseops.TransferSecret(exc, machine, diskEncryptionKey, "disk encryption key", false)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transfer disk encryption key to %s", diskEncryptionKey.RemotePath)
 		}

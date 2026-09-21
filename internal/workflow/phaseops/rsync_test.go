@@ -55,7 +55,7 @@ func newRemoteTransferMachine(t *testing.T, isRoot bool) *machine.Machine {
 func TestTransferFile_Elevation(t *testing.T) {
 	t.Parallel()
 
-	file := attributes.PlainFileOrDirToTransfer{
+	file := attributes.TransferSource{
 		LocalPath:  "/tmp/src.key",
 		RemotePath: "/var/secrets/key",
 	}
@@ -133,7 +133,7 @@ func TestTransferFile_Chown(t *testing.T) {
 
 	uid := uint(1000)
 	gid := uint(100)
-	fileWithOwner := attributes.PlainFileOrDirToTransfer{
+	fileWithOwner := attributes.TransferSource{
 		LocalPath:  "/tmp/src.key",
 		RemotePath: "/var/secrets/key",
 		UID:        &uid,

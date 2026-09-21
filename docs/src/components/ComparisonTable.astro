@@ -34,8 +34,6 @@ const NIXOS_INSTALL_MANUAL_ROOT =
   "https://nixos.org/manual/nixos/stable/#sec-installation-manual-installing";
 const NIXOS_AUTO_UPGRADE =
   "https://nixos.org/manual/nixos/stable/#sec-upgrading-automatic";
-const NIXOS_AUTO_UPGRADE_OPTIONS =
-  "https://search.nixos.org/options?query=system.autoUpgrade";
 const NIXOS_AUTO_UPGRADE_MODULE =
   "https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/tasks/auto-upgrade.nix";
 // Lustration deprecation lives in the NixOS manual (NIXOS_LUSTRATE removal
@@ -55,17 +53,13 @@ const NIXOS_ANYWHERE_FINISHED = `${NIXOS_ANYWHERE_QUICKSTART}#finished`;
 const NIXOS_ANYWHERE_FLAKE = `${NIXOS_ANYWHERE_QUICKSTART}#2-initialize-a-flake`;
 const NIXOS_ANYWHERE_SECRETS =
   "https://nix-community.github.io/nixos-anywhere/howtos/secrets.html";
-const NIXOS_ANYWHERE_USAGE = `${NIXOS_ANYWHERE_REPO}#how-to-use-nixos-anywhere`;
 const NIXOS_ANYWHERE_RUN = `${NIXOS_ANYWHERE_QUICKSTART}#9-run-it`;
 const NIXOS_ANYWHERE_REFERENCE =
   "https://nix-community.github.io/nixos-anywhere/reference.html";
-const NIXOS_ANYWHERE_TEST = `${NIXOS_ANYWHERE_QUICKSTART}#7-optional-test-your-nixos-and-disko-configuration`;
 
 // NixOps
 const NIXOPS_DEPLOY_COMMAND =
   "https://nixops.readthedocs.io/en/latest/manual/nixops.html#command-nixops-deploy";
-const NIXOPS_CHECK_COMMAND =
-  "https://nixops.readthedocs.io/en/latest/manual/nixops.html#command-nixops-check";
 const NIXOPS_COMMON_OPTIONS =
   "https://nixops.readthedocs.io/en/latest/manual/nixops.html#common-options";
 const NIXOPS_DOCS = "https://nixops.readthedocs.io/en/latest/";
@@ -206,7 +200,17 @@ const tools: ToolColumn[] = [
         note: "Updates consume unmodified configs; bootstrap targets need a disko module",
         href: "/concepts/overview/",
       },
-      secrets: { text: "Bypass", tone: "neutral", href: "/guides/secrets/" },
+      secrets: {
+        items: [
+          { text: "Plaintext", tone: "neutral", href: "/guides/secrets/" },
+          {
+            text: "Pre-transfer",
+            tone: "neutral",
+            note: "sops, age, or any command that prints the secret",
+            href: "/guides/secrets/",
+          },
+        ],
+      },
     },
   },
   {
@@ -329,7 +333,8 @@ const tools: ToolColumn[] = [
   {
     name: "nixos-infect",
     href: NIXOS_INFECT_REPO,
-    notice: "Third-party and deprecated: NIXOS_LUSTRATE removal is scheduled for 26.11, and on 26.05 the script leaves the host unreachable",
+    notice:
+      "Third-party and deprecated: NIXOS_LUSTRATE removal is scheduled for 26.11, and on 26.05 the script leaves the host unreachable",
     cells: {
       bootstrap: {
         text: "Yes",
@@ -405,7 +410,8 @@ const tools: ToolColumn[] = [
   {
     name: "NixOps",
     href: "https://github.com/NixOS/nixops",
-    notice: "NixOps 2 is in low-maintenance mode upstream; an experimental rewrite exists as nixops4",
+    notice:
+      "NixOps 2 is in low-maintenance mode upstream; an experimental rewrite exists as nixops4",
     cells: {
       bootstrap: {
         text: "Cloud",
@@ -442,7 +448,7 @@ const tools: ToolColumn[] = [
         href: NIXOPS_MIGRATION,
       },
       secrets: {
-        text: "Keys",
+        text: "Deployment keys",
         tone: "neutral",
         href: `${NIXOPS_OVERVIEW}#managing-keys`,
       },
@@ -451,7 +457,8 @@ const tools: ToolColumn[] = [
   {
     name: "Colmena",
     href: COLMENA_REPO,
-    notice: "Links point at the 0.5 (unstable) docs; the latest release is 0.4, whose flake interface differs",
+    notice:
+      "Links point at the 0.5 (unstable) docs; the latest release is 0.4, whose flake interface differs",
     cells: {
       bootstrap: { text: "No", tone: "off", href: COLMENA_MIGRATION },
       update: {
@@ -497,9 +504,8 @@ const tools: ToolColumn[] = [
         href: `${COLMENA_DOCS}/tutorial/flakes.html`,
       },
       secrets: {
-        text: "Keys",
+        text: "Deployment keys",
         tone: "neutral",
-        note: "Default /run/keys is in-memory; destDir can target arbitrary, even persistent paths",
         href: `${COLMENA_DOCS}/features/keys.html`,
       },
     },
@@ -507,7 +513,8 @@ const tools: ToolColumn[] = [
   {
     name: "deploy-rs",
     href: DEPLOY_RS_REPO,
-    notice: "No releases or tags exist; every claim here is audited against master",
+    notice:
+      "No releases or tags exist; every claim here is audited against master",
     cells: {
       bootstrap: { text: "No", tone: "off", href: DEPLOY_RS_CLI_SOURCE },
       update: { text: "Yes", tone: "good", href: `${DEPLOY_RS_REPO}#usage` },
@@ -594,7 +601,7 @@ const tools: ToolColumn[] = [
         href: `${MORPH_REPO}#using-morph`,
       },
       secrets: {
-        text: "Bypass",
+        text: "Plaintext",
         tone: "neutral",
         href: `${MORPH_REPO}#secrets`,
       },
@@ -655,7 +662,7 @@ const tools: ToolColumn[] = [
         href: NIXUS_DEPLOY_EXAMPLE,
       },
       secrets: {
-        text: "Bypass",
+        text: "Plaintext",
         tone: "neutral",
         href: `${NIXUS_REPO}#secret-management`,
       },
@@ -706,7 +713,7 @@ const tools: ToolColumn[] = [
         href: `${KROPS_REPO}#minimal-example`,
       },
       secrets: {
-        text: "Bypass",
+        text: "Plaintext",
         tone: "neutral",
         href: `${KROPS_REPO}#source-types`,
       },
@@ -743,7 +750,7 @@ const tools: ToolColumn[] = [
         href: `${LOLLYPOPS_REPO}#configuration`,
       },
       secrets: {
-        text: "Bypass",
+        text: "Plaintext",
         tone: "neutral",
         href: `${LOLLYPOPS_REPO}#secrets`,
       },
@@ -961,7 +968,7 @@ const tools: ToolColumn[] = [
         href: `${THYMIS_DOCS}/reference/concepts/project-repository#structure-of-the-project-repository`,
       },
       secrets: {
-        text: "Encrypted",
+        text: "Activation",
         tone: "neutral",
         note: "age-encrypted at rest in the controller's database; the agent decrypts to a caller-configured path (docs suggest /run)",
         href: `${THYMIS_DOCS}/reference/concepts/secrets`,
@@ -1020,7 +1027,7 @@ const tools: ToolColumn[] = [
         href: CLAN_FLAKE_TEMPLATE,
       },
       secrets: {
-        text: "Encrypted",
+        text: "Activation",
         tone: "neutral",
         note: "Encrypted in the store and decrypted at activation by sops-nix; activation-scoped vars and the machine age key are additionally uploaded to a persistent path outside the store",
         href: `${CLAN_DOCS}/guides/vars/sops/secrets`,
@@ -1110,9 +1117,14 @@ const TERM_NOTES: Record<string, string> = {
   Adapter:
     "The tool needs a module, output, or import wired into your flake or configs",
   Rewrite: "Your configs must be rebuilt around the tool's own format",
-  Bypass: "Secrets are transferred outside the Nix store to arbitrary paths",
-  Keys: "Materialized as key files via a keys API (default /run/keys, in-memory; destDir can target persistent paths)",
-  Encrypted: "Encrypted in the store, decrypted at activation",
+  Plaintext:
+    "Secrets are transferred to the machine as-is, outside the Nix store; the tool itself does no decryption",
+  "Deployment keys":
+    "Secrets are pushed as key files through deployment.keys (the default /run/keys is in-memory; destDir can target persistent paths)",
+  "Activation":
+    "Encrypted at rest; the machine holds the key and decrypts locally at activation",
+  "Pre-transfer":
+    "Encrypted at rest; the control host decrypts before transfer, so targets never hold a key",
   "Install-phase": "Secrets are only handled during the install phase",
 };
 
@@ -1132,7 +1144,8 @@ const CAP_NOTES: Record<string, string> = {
   state: "What does the tool remember between runs?",
   flake:
     "Must the tool itself be wired into your flake or config (module, output, import)? Fleet descriptor files beside your configs (panix.yml, krops.nix, nixops.nix) don't count; required dependencies like disko don't either",
-  secrets: "How are secrets delivered to machines?",
+  secrets:
+    "How are secrets delivered to machines and where are they decrypted?",
 };
 
 // Build-time guard: every cell text must have a TERM_NOTES definition and
@@ -1161,11 +1174,7 @@ const CAP_NOTES: Record<string, string> = {
 }
 ---
 
-<LandingSection
-  kicker="comparison"
-  title="How Panix compares"
-  id="comparison"
->
+<LandingSection kicker="comparison" title="How Panix compares" id="comparison">
   <div
     class="filters"
     data-compare-filters
@@ -1331,10 +1340,9 @@ const CAP_NOTES: Record<string, string> = {
   </div>
   <p class="note">
     Every cell links to what verifies it: the feature's own doc section where
-    one exists, otherwise the source file that enumerates the tool's commands
-    or options, since a documentation page cannot state that something is
-    missing. Hover a cell or term for its plain-language meaning. Verified
-    2026-09-15.
+    one exists, otherwise the source file that enumerates the tool's commands or
+    options, since a documentation page cannot state that something is missing.
+    Hover a cell or term for its plain-language meaning. Verified 2026-09-15.
   </p>
   <p class="note">
     Filter with the row dropdowns (multiple rows combine), toggle tools with the
@@ -1577,7 +1585,9 @@ const CAP_NOTES: Record<string, string> = {
         .querySelectorAll<HTMLElement>("th[data-tool]")
         .forEach((headerCell) => {
           if (headerCell.dataset.tool !== "Panix")
-            headerCell.hidden = !visibleToolNameSet.has(headerCell.dataset.tool!);
+            headerCell.hidden = !visibleToolNameSet.has(
+              headerCell.dataset.tool!,
+            );
         });
 
       for (const tableRow of tableBodyRows) {

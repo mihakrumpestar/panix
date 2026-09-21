@@ -603,3 +603,259 @@ func verifySystemManagers(keyPath string) error {
 
 	return parGroup.Wait()
 }
+
+const (
+	// secretsRemoteRoot is where panix.yml transfers every secret fixture.
+	// The path is persistent across reboots: during install the bootstrapping
+	// prefix writes it into the target root, so it reappears at the final path.
+	//nolint:gosec // not a credential: the shared destination root for fixtures
+	secretsRemoteRoot = "/var/lib/panix-e2e"
+
+	secretVerifyParts = 2
+
+	secretStatFieldCount = 3
+
+	// tamperedSecretName is the command-sourced secret whose mode is broken
+	// before the skip proof rerun: the probe must restore it without a write.
+	tamperedSecretName = "command"
+	tamperedSecretMode = "0644"
+)
+
+// e2eSecretExpectation is one transferred secret fixture; name maps to the
+// remote path under secretsRemoteRoot.
+type e2eSecretExpectation struct {
+	name    string
+	content string
+	mode    string
+}
+
+// e2eSecretExpectations returns every secret panix.yml transfers. The
+// local_path fixture content is read from the committed fixture so config and
+// verification share one source of truth.
+func e2eSecretExpectations() ([]e2eSecretExpectation, error) {
+	fixturePath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", "secret-fixture.txt")
+
+	fixture, err := os.ReadFile(fixturePath) //nolint:gosec // repo-local fixture
+	if err != nil {
+		return nil, errors.Wrapf(err, "read local_path fixture %s", fixturePath)
+	}
+
+	fixtureContent := string(fixture)
+
+	return []e2eSecretExpectation{
+		{name: "local-path", content: fixtureContent, mode: "640"},
+		{name: "command", content: e2eCommandSecretContent, mode: "600"},
+		{name: "command-local-path", content: fixtureContent, mode: "600"},
+		{name: "age", content: e2eAgePlainContent, mode: "600"},
+		{name: "sops", content: e2eSopsPlainContent, mode: "600"},
+	}, nil
+}
+
+// commandSecretNames lists the command-sourced secrets: the sha256
+// conditional-write logic applies to them (local_path-only sources go through
+// rsync instead).
+func commandSecretNames() []string {
+	return []string{"command", "command-local-path", "age", "sops"}
+}
+
+// verifySecrets checks content and mode of every transferred secret fixture on
+// the given port.
+func verifySecrets(port int, keyPath string) error {
+	expectations, err := e2eSecretExpectations()
+	if err != nil {
+		return err
+	}
+
+	for _, expected := range expectations {
+		err = verifySecret(port, keyPath, expected)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func verifySecret(port int, keyPath string, expected e2eSecretExpectation) error {
+	path := filepath.Join(secretsRemoteRoot, expected.name)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	output, err := sshRun(port, keyPath, fmt.Sprintf("stat -c '%%a' -- %s; echo '---'; cat -- %s", path, path))
+	if err != nil {
+		return errors.Wrapf(err, "verify secret %s on %s", expected.name, addr)
+	}
+
+	parts := strings.SplitN(output, "---", secretVerifyParts)
+	if len(parts) != secretVerifyParts {
+		return errors.Errorf("unexpected secret verify output on %s for %s", addr, expected.name)
+	}
+
+	mode := strings.TrimSpace(parts[0])
+	if mode != expected.mode {
+		return errors.Errorf("secret %s on %s has mode %s, want %s", expected.name, addr, mode, expected.mode)
+	}
+
+	content := strings.TrimPrefix(parts[1], "\n")
+	if content != expected.content {
+		return errors.Errorf("secret %s on %s content mismatch: got %q, want %q", expected.name, addr, content, expected.content)
+	}
+
+	return nil
+}
+
+// secretStat is a secret's identity on the target: inode, mtime in epoch
+// seconds, mode and content hash. A sha256 skip leaves all four untouched.
+type secretStat struct {
+	inode string
+	mtime string
+	mode  string
+	hash  string
+}
+
+func readSecretStat(port int, keyPath, path string) (secretStat, error) {
+	output, err := sshRun(port, keyPath, fmt.Sprintf("stat -c '%%i %%Y %%a' -- %s; sha256sum -- %s", path, path))
+	if err != nil {
+		return secretStat{}, errors.Wrapf(err, "read secret stat %s", path)
+	}
+
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if len(lines) != secretVerifyParts {
+		return secretStat{}, errors.Errorf("unexpected stat output for %s: %q", path, output)
+	}
+
+	fields := strings.Fields(lines[0])
+	if len(fields) != secretStatFieldCount {
+		return secretStat{}, errors.Errorf("unexpected stat fields for %s: %q", path, lines[0])
+	}
+
+	return secretStat{inode: fields[0], mtime: fields[1], mode: fields[2], hash: strings.TrimSpace(lines[1])}, nil
+}
+
+// secretVerifyTarget is one VM receiving secrets for the active test scope.
+type secretVerifyTarget struct {
+	label string
+	port  int
+}
+
+func secretVerifyTargets() []secretVerifyTarget {
+	var targets []secretVerifyTarget
+
+	if testScopeFlag.local() {
+		targets = append(targets, secretVerifyTarget{label: "NixOS ISO VM", port: nixosISOPort})
+	}
+
+	if testScopeFlag.remote() {
+		targets = append(targets, secretVerifyTarget{label: "remote ISO VM", port: remoteISOPort})
+	}
+
+	return targets
+}
+
+// verifySecretsConditionalSkip proves the sha256 conditional write end to end:
+// a second Inspect+Secrets run with identical command output must skip every
+// write, so inode, mtime and content hash stay identical, while the probe
+// still enforces a tampered mode without rewriting the file.
+func verifySecretsConditionalSkip(configPath string, res *testResources) error {
+	printPhasef("Phase: Secrets conditional skip")
+
+	targets := secretVerifyTargets()
+
+	before := make(map[string]map[string]secretStat, len(targets))
+
+	for _, target := range targets {
+		stats, err := readCommandSecretStats(target.port, res.keyPath)
+		if err != nil {
+			return errors.Wrapf(err, "capture secret state on %s", target.label)
+		}
+
+		before[target.label] = stats
+
+		tamperedPath := filepath.Join(secretsRemoteRoot, tamperedSecretName)
+
+		_, err = sshRun(target.port, res.keyPath, "chmod "+tamperedSecretMode+" -- "+tamperedPath)
+		if err != nil {
+			return errors.Wrapf(err, "tamper with %s on %s", tamperedPath, target.label)
+		}
+
+		fmt.Printf("  %s: broke %s to mode %s before the rerun\n", target.label, tamperedPath, tamperedSecretMode)
+	}
+
+	err := runPanixSecretsStepWithArgs("Run panix secrets (skip proof)", configPath,
+		[]string{"--tags", "test-vm,test-vm-kexec,test-vm-remote"},
+		"PANIX_TEST_MODE=deploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, target := range targets {
+		err = verifyCommandSecretsUnchanged(target, res.keyPath, before[target.label])
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("  %s: all command-sourced secrets skipped (inode, mtime and content unchanged)\n", target.label)
+	}
+
+	return nil
+}
+
+func readCommandSecretStats(port int, keyPath string) (map[string]secretStat, error) {
+	stats := make(map[string]secretStat)
+
+	for _, name := range commandSecretNames() {
+		path := filepath.Join(secretsRemoteRoot, name)
+
+		stat, err := readSecretStat(port, keyPath, path)
+		if err != nil {
+			return nil, err
+		}
+
+		stats[name] = stat
+	}
+
+	return stats, nil
+}
+
+func verifyCommandSecretsUnchanged(target secretVerifyTarget, keyPath string, before map[string]secretStat) error {
+	expectations, err := e2eSecretExpectations()
+	if err != nil {
+		return err
+	}
+
+	for _, expected := range expectations {
+		previous, tracked := before[expected.name]
+		if !tracked {
+			continue
+		}
+
+		path := filepath.Join(secretsRemoteRoot, expected.name)
+
+		after, statErr := readSecretStat(target.port, keyPath, path)
+		if statErr != nil {
+			return statErr
+		}
+
+		if after.inode != previous.inode {
+			return errors.Errorf("secret %s on %s inode changed: %s -> %s", expected.name, target.label, previous.inode, after.inode)
+		}
+
+		if after.mtime != previous.mtime {
+			return errors.Errorf("secret %s on %s mtime changed: %s -> %s (write was not skipped)",
+				expected.name, target.label, previous.mtime, after.mtime)
+		}
+
+		if after.hash != previous.hash {
+			return errors.Errorf("secret %s on %s content changed: %s -> %s", expected.name, target.label, previous.hash, after.hash)
+		}
+
+		if after.mode != expected.mode {
+			return errors.Errorf("secret %s on %s has mode %s, want %s after probe enforcement",
+				expected.name, target.label, after.mode, expected.mode)
+		}
+	}
+
+	return nil
+}

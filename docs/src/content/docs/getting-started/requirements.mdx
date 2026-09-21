@@ -8,10 +8,14 @@ sidebar:
 ## Requirements
 
 - **Nix**: `nix` on PATH, plus common utilities (`uname`, `id`, `echo`, `cat`, `readlink`, `curl`, `tar`) that run on the target machines during Inspect, Bootstrap, and Rollback
-- **rsync**: on local and remote machines for file transfers (included in kexec images)
+- **rsync**: on the control host and targets for file transfers (included in kexec images); version 3.2.3 or newer, since Panix passes `--mkpath`
 - **kexec memory**: 1GB RAM minimum without swap for kexec bootstrap
 - **SSH key auth**: password authentication is not supported
 - **Flakes**: only Nix flakes are supported
+
+:::caution
+macOS's bundled rsync (2.6.9 before Sequoia, openrsync from Sequoia onward) does not support the `--mkpath` flag Panix passes by default, so deploys fail until you install GNU rsync 3.2.3 or newer on the control host (for example `nix shell nixpkgs#rsync`, or `brew install rsync`). Targets need the same, since Panix pushes and `--mkpath` is forwarded to the receiving side. The flags are configurable via [`rsync_default_flags`](/configuration/nix-flags/).
+:::
 
 ## Lix Support
 

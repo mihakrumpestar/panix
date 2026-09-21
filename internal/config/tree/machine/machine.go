@@ -177,6 +177,11 @@ func (m *Machine) ValidateSecretsPaths() error {
 	var errs []string
 
 	for _, secret := range m.Secrets {
+		// Command-only sources have no local path to stat.
+		if secret.LocalPath == "" {
+			continue
+		}
+
 		_, err := os.Stat(secret.LocalPath)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: secrets local path does not exist: %s", m.Xpath, secret.LocalPath))
@@ -194,6 +199,11 @@ func (m *Machine) ValidateBootstrapSecretsPaths() error {
 	var errs []string
 
 	for _, key := range m.Bootstrap.DiskEncryptionKeys {
+		// Command-only sources have no local path to stat.
+		if key.LocalPath == "" {
+			continue
+		}
+
 		_, err := os.Stat(key.LocalPath)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: bootstrap disk encryption key local path does not exist: %s", m.Xpath, key.LocalPath))

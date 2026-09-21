@@ -20,9 +20,9 @@ var (
 
 //nolint:lll
 type Attributes struct {
-	SSH     ssh.SSHClient              `yaml:"ssh" json:"ssh" desc:"SSH configuration for remote access"`
-	Tags    []string                   `yaml:"tags" json:"tags,omitempty" desc:"Tags for filtering (flakes, configs and machines are already registered as tags)"`
-	Secrets []PlainFileOrDirToTransfer `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine" validate:"dive"`
+	SSH     ssh.SSHClient    `yaml:"ssh" json:"ssh" desc:"SSH configuration for remote access"`
+	Tags    []string         `yaml:"tags" json:"tags,omitempty" desc:"Tags for filtering (flakes, configs and machines are already registered as tags)"`
+	Secrets []TransferSource `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine" validate:"dive"`
 
 	Disabled           bool        `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
 	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the elevation program used when the executing user (SSH or target user) is not root" default:"sudo"`
@@ -40,8 +40,10 @@ type Attributes struct {
 	PhaseXpaths map[phase.Phase]xpath.Xpath `yaml:"-" json:"-"`
 }
 
-type PlainFileOrDirToTransfer struct {
-	LocalPath   string   `yaml:"local_path,required" json:"local_path" desc:"Path to a local file or dir" validate:"required,filepath"`
+//nolint:lll
+type TransferSource struct {
+	LocalPath   string   `yaml:"local_path,omitempty" json:"local_path,omitempty" desc:"Path to a local file or dir. At least one of local_path or command is required, when both are set the command receives the path as PANIX_SECRET_LOCAL_PATH" validate:"required_without=Command"`
+	Command     string   `yaml:"command,omitempty" json:"command,omitempty" desc:"Command whose stdout is streamed to remote_path. At least one of local_path or command is required, when both are set the command receives the path as PANIX_SECRET_LOCAL_PATH" validate:"required_without=LocalPath"`
 	RemotePath  string   `yaml:"remote_path,required" json:"remote_path" desc:"Absolute path on remote machine" validate:"required,abspath"`
 	UID         *uint    `yaml:"uid,omitempty" json:"uid,omitempty" desc:"Optional User ID for remote" validate:"required_with=GID"`
 	GID         *uint    `yaml:"gid,omitempty" json:"gid,omitempty" desc:"Optional Group ID for remote" validate:"required_with=UID"`
@@ -51,7 +53,7 @@ type PlainFileOrDirToTransfer struct {
 //nolint:lll
 type Bootstrap struct {
 	SSH                           ssh.SSHClient              `yaml:"ssh" json:"ssh" desc:"Bootstrap SSH configuration (used during initial provisioning)"`
-	DiskEncryptionKeys            []PlainFileOrDirToTransfer `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'" validate:"dive"`
+	DiskEncryptionKeys            []TransferSource           `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'" validate:"dive"`
 	PostBootstrapHooks            []PostBootstrapHookCommand `yaml:"post_bootstrap_hooks" json:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning"`
 	PostBootstrapInstallHooks     []PostBootstrapHookCommand `yaml:"post_bootstrap_install_hooks" json:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`
 	PostBootstrapProvisionedHooks []PostBootstrapHookCommand `yaml:"post_bootstrap_provisioned_hooks" json:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`
@@ -65,7 +67,7 @@ type Bootstrap struct {
 
 //nolint:lll
 type KexecConfig struct {
-	Image            KexecImage   `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"`
+	Image            KexecImage   `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url|filepath" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"`
 	ExtraFlags       []string     `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
 	SSHPort          KexecSSHPort `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
 	CurlDefaultFlags []string     `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L, -C, -])"`

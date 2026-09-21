@@ -3,6 +3,7 @@ package yamlschema
 import (
 	"maps"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -66,6 +67,16 @@ func (d dependenciesMap) MarshalYAML() (any, error) {
 	return map[string]dependencyList(d), nil
 }
 
+// anyOfVariant is one branch of an object-level "at least one of" constraint:
+// every field it lists must be present.
+type anyOfVariant struct {
+	Required requiredList `yaml:"required"`
+}
+
+// anyOfGroup is one constraint derived from required_without declarations,
+// e.g. [{required: [local_path]}, {required: [command]}].
+type anyOfGroup []anyOfVariant
+
 type TypeDefinition struct {
 	Type                 string                       `yaml:"type,omitempty"`
 	Description          string                       `yaml:"description,omitempty"`
@@ -74,6 +85,8 @@ type TypeDefinition struct {
 	Items                any                          `yaml:"items,omitempty"`
 	Required             requiredList                 `yaml:"required,omitempty"`
 	Dependencies         dependenciesMap              `yaml:"dependencies,omitempty"`
+	AnyOf                anyOfGroup                   `yaml:"anyOf,omitempty"`
+	AllOf                []*TypeDefinition            `yaml:"allOf,omitempty"`
 	Enum                 []string                     `yaml:"enum,omitempty"`
 	Pattern              string                       `yaml:"pattern,omitempty"`
 	AdditionalProperties *additionalPropertiesWrapper `yaml:"additionalProperties,omitempty"`
@@ -82,16 +95,18 @@ type TypeDefinition struct {
 }
 
 type Schema struct {
-	Schema               string         `yaml:"$schema"`
-	ID                   string         `yaml:"$id,omitempty"`
-	Version              string         `yaml:"version,omitempty"`
-	Title                string         `yaml:"title,omitempty"`
-	Description          string         `yaml:"description,omitempty"`
-	Type                 string         `yaml:"type,omitempty"`
-	Properties           map[string]any `yaml:"properties,omitempty"`
-	Required             requiredList   `yaml:"required,omitempty"`
-	AdditionalProperties any            `yaml:"additionalProperties,omitempty"`
-	Definitions          map[string]any `yaml:"definitions,omitempty"`
+	Schema               string            `yaml:"$schema"`
+	ID                   string            `yaml:"$id,omitempty"`
+	Version              string            `yaml:"version,omitempty"`
+	Title                string            `yaml:"title,omitempty"`
+	Description          string            `yaml:"description,omitempty"`
+	Type                 string            `yaml:"type,omitempty"`
+	Properties           map[string]any    `yaml:"properties,omitempty"`
+	Required             requiredList      `yaml:"required,omitempty"`
+	AnyOf                anyOfGroup        `yaml:"anyOf,omitempty"`
+	AllOf                []*TypeDefinition `yaml:"allOf,omitempty"`
+	AdditionalProperties any               `yaml:"additionalProperties,omitempty"`
+	Definitions          map[string]any    `yaml:"definitions,omitempty"`
 }
 
 var formatConstraints = map[string]struct {
@@ -198,7 +213,7 @@ func findMapFieldType(typ reflect.Type) reflect.Type {
 }
 
 func (g *generator) Generate() (*Schema, error) {
-	properties, required, _, err := g.processStruct(g.config.RootType)
+	properties, required, _, anyOf, err := g.processStruct(g.config.RootType)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to process root struct")
 	}
@@ -214,6 +229,8 @@ func (g *generator) Generate() (*Schema, error) {
 		Required:             required,
 		AdditionalProperties: true,
 	}
+
+	schema.AnyOf, schema.AllOf = requiredWithoutSchema(anyOf)
 
 	if len(g.definitions) > 0 {
 		schema.Definitions = g.definitions
@@ -296,19 +313,24 @@ func (g *generator) countFieldTypeInfo(typ reflect.Type) {
 	}
 }
 
-func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, dependenciesMap, error) {
+//nolint:funlen // one cohesive field scan; the per-feature collectors live in their own helpers
+func (g *generator) processStruct(structType reflect.Type) (map[string]any, requiredList, dependenciesMap, []anyOfGroup, error) {
 	properties := make(map[string]any)
 
 	var required requiredList
 
 	dependencies := make(dependenciesMap)
 
+	var anyOf []anyOfGroup
+
+	seenAnyOf := make(map[string]bool)
+
 	if structType.Kind() == reflect.Pointer {
 		structType = structType.Elem()
 	}
 
 	if structType.Kind() != reflect.Struct {
-		return nil, nil, nil, errors.Errorf("expected struct type, got %v", structType.Kind())
+		return nil, nil, nil, nil, errors.Errorf("expected struct type, got %v", structType.Kind())
 	}
 
 	for field := range structType.Fields() {
@@ -319,9 +341,9 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 		yamlTag := field.Tag.Get("yaml")
 
 		if strings.Contains(yamlTag, ",inline") {
-			inlineProps, inlineRequired, inlineDeps, err := g.processStruct(field.Type)
+			inlineProps, inlineRequired, inlineDeps, inlineAnyOf, err := g.processStruct(field.Type)
 			if err != nil {
-				return nil, nil, nil, errors.Wrapf(err, "failed to process inline field %s", field.Name)
+				return nil, nil, nil, nil, errors.Wrapf(err, "failed to process inline field %s", field.Name)
 			}
 
 			maps.Copy(properties, inlineProps)
@@ -330,6 +352,8 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 
 			maps.Copy(dependencies, inlineDeps)
 
+			anyOf = append(anyOf, inlineAnyOf...)
+
 			continue
 		}
 
@@ -337,7 +361,7 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 
 		prop, err := g.processType(field.Type, field)
 		if err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "failed to process field %s", field.Name)
+			return nil, nil, nil, nil, errors.Wrapf(err, "failed to process field %s", field.Name)
 		}
 
 		g.setFieldDescription(prop, field)
@@ -348,9 +372,106 @@ func (g *generator) processStruct(structType reflect.Type) (map[string]any, requ
 		}
 
 		g.collectDependencies(structType, field, fieldName, dependencies)
+
+		anyOf = appendRequiredWithout(anyOf, seenAnyOf, collectRequiredWithout(structType, field, fieldName))
 	}
 
-	return properties, required, dependencies, nil
+	return properties, required, dependencies, anyOf, nil
+}
+
+// appendRequiredWithout deduplicates required_without groups by canonical key
+// while preserving declaration order.
+func appendRequiredWithout(anyOf []anyOfGroup, seen map[string]bool, groups []anyOfGroup) []anyOfGroup {
+	for _, group := range groups {
+		key := anyOfGroupKey(group)
+		if seen[key] {
+			continue
+		}
+
+		seen[key] = true
+
+		anyOf = append(anyOf, group)
+	}
+
+	return anyOf
+}
+
+// collectRequiredWithout translates a required_without=Field declaration into
+// an object-level anyOf group: field A declaring required_without=P1 P2
+// becomes anyOf: [{required: [P1, P2]}, {required: [A]}], which reads "A is
+// required whenever any of the listed fields is absent".
+func collectRequiredWithout(structType reflect.Type, field reflect.StructField, fieldName string) []anyOfGroup {
+	validateTag := field.Tag.Get("validate")
+	if validateTag == "" {
+		return nil
+	}
+
+	var groups []anyOfGroup
+
+	for tag := range strings.SplitSeq(validateTag, ",") {
+		tag = strings.TrimSpace(tag)
+
+		params, ok := strings.CutPrefix(tag, "required_without=")
+		if !ok {
+			continue
+		}
+
+		deps := strings.Fields(params)
+		if len(deps) == 0 {
+			continue
+		}
+
+		requiredDeps := make(requiredList, 0, len(deps))
+		for _, dep := range deps {
+			requiredDeps = append(requiredDeps, resolveYAMLFieldName(structType, dep))
+		}
+
+		slices.Sort(requiredDeps)
+
+		groups = append(groups, anyOfGroup{
+			{Required: requiredDeps},
+			{Required: requiredList{fieldName}},
+		})
+	}
+
+	return groups
+}
+
+// anyOfGroupKey canonicalizes a group into its set of variants so symmetric
+// declarations (a required_without b, b required_without a) deduplicate to a
+// single group regardless of declaration order.
+func anyOfGroupKey(group anyOfGroup) string {
+	variants := make([]string, 0, len(group))
+
+	for _, variant := range group {
+		required := slices.Clone(variant.Required)
+		slices.Sort(required)
+
+		variants = append(variants, strings.Join(required, " "))
+	}
+
+	slices.Sort(variants)
+
+	return strings.Join(variants, "\x00")
+}
+
+// requiredWithoutSchema attaches required_without groups to an object schema:
+// one group is emitted directly as anyOf, several independent groups become
+// allOf of anyOf so each stays its own "at least one of" constraint.
+func requiredWithoutSchema(groups []anyOfGroup) (anyOfGroup, []*TypeDefinition) {
+	switch len(groups) {
+	case 0:
+		return nil, nil
+	case 1:
+		return groups[0], nil
+	default:
+		allOf := make([]*TypeDefinition, 0, len(groups))
+		for _, group := range groups {
+			allOf = append(allOf, &TypeDefinition{AnyOf: group})
+		}
+
+		return nil, allOf
+	}
 }
 
 func (g *generator) collectDependencies(structType reflect.Type, field reflect.StructField, fieldName string, dependencies dependenciesMap) {
@@ -536,18 +657,22 @@ func (g *generator) processDefinitionType(typ reflect.Type, defName string) (any
 }
 
 func (g *generator) buildObjectTypeDef(typ reflect.Type) (*TypeDefinition, error) {
-	properties, required, dependencies, err := g.processStruct(typ)
+	properties, required, dependencies, anyOf, err := g.processStruct(typ)
 	if err != nil {
 		return nil, err
 	}
 
-	return &TypeDefinition{
+	typeDef := &TypeDefinition{
 		Type:                 "object",
 		Properties:           properties,
 		Required:             required,
 		Dependencies:         dependencies,
 		AdditionalProperties: FalseAdditionalProperties(),
-	}, nil
+	}
+
+	typeDef.AnyOf, typeDef.AllOf = requiredWithoutSchema(anyOf)
+
+	return typeDef, nil
 }
 
 // processMapType emits an object whose additionalProperties is the value

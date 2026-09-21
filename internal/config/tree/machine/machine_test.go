@@ -476,7 +476,7 @@ func TestValidateSecretsPaths_ExistingFile(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Secrets = []attributes.PlainFileOrDirToTransfer{
+	mach.Secrets = []attributes.TransferSource{
 		{LocalPath: secretFile, RemotePath: "/etc/secret.key"},
 	}
 
@@ -494,7 +494,7 @@ func TestValidateSecretsPaths_ExistingDirectory(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Secrets = []attributes.PlainFileOrDirToTransfer{
+	mach.Secrets = []attributes.TransferSource{
 		{LocalPath: secretDir, RemotePath: "/etc/secrets"},
 	}
 
@@ -508,7 +508,7 @@ func TestValidateSecretsPaths_NonExistentFile(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Secrets = []attributes.PlainFileOrDirToTransfer{
+	mach.Secrets = []attributes.TransferSource{
 		{LocalPath: "/nonexistent/path/secret.key", RemotePath: "/etc/secret.key"},
 	}
 
@@ -528,7 +528,7 @@ func TestValidateSecretsPaths_MultipleSecrets_OneMissing(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Secrets = []attributes.PlainFileOrDirToTransfer{
+	mach.Secrets = []attributes.TransferSource{
 		{LocalPath: existingFile, RemotePath: "/etc/existing.key"},
 		{LocalPath: "/nonexistent/missing.key", RemotePath: "/etc/missing.key"},
 	}
@@ -552,7 +552,7 @@ func TestValidateSecretsPaths_MultipleSecrets_AllExist(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Secrets = []attributes.PlainFileOrDirToTransfer{
+	mach.Secrets = []attributes.TransferSource{
 		{LocalPath: file1, RemotePath: "/etc/key1"},
 		{LocalPath: file2, RemotePath: "/etc/key2"},
 	}
@@ -560,6 +560,56 @@ func TestValidateSecretsPaths_MultipleSecrets_AllExist(t *testing.T) {
 	err := mach.ValidateSecretsPaths()
 
 	assert.NoError(t, err)
+}
+
+// Command-only sources produce their content at transfer time, so there is no
+// local path to stat.
+func TestValidateSecretsPaths_CommandOnlySkipped(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
+	mach.Secrets = []attributes.TransferSource{
+		{Command: "vault kv get -field=password secret/app", RemotePath: "/etc/secret.key"},
+	}
+
+	assert.NoError(t, mach.ValidateSecretsPaths())
+}
+
+// A source with both a local path and a command still stats the local path,
+// because it is exported to the command as PANIX_SECRET_LOCAL_PATH.
+func TestValidateSecretsPaths_LocalPathAndCommand(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	secretFile := filepath.Join(tmpDir, "secret.key")
+	require.NoError(t, os.WriteFile(secretFile, []byte("secret"), 0600))
+
+	mach := newTestMachine()
+	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
+	mach.Secrets = []attributes.TransferSource{
+		{LocalPath: secretFile, Command: "cat $PANIX_SECRET_LOCAL_PATH", RemotePath: "/etc/secret.key"},
+	}
+
+	assert.NoError(t, mach.ValidateSecretsPaths())
+}
+
+// Command-only sources are skipped without masking missing local paths of
+// other secrets.
+func TestValidateSecretsPaths_CommandOnlyDoesNotMaskMissingPath(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
+	mach.Secrets = []attributes.TransferSource{
+		{Command: "echo secret", RemotePath: "/etc/command.key"},
+		{LocalPath: "/nonexistent/path/secret.key", RemotePath: "/etc/secret.key"},
+	}
+
+	err := mach.ValidateSecretsPaths()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "/nonexistent/path/secret.key")
 }
 
 // --- ValidateBootstrapSecretsPaths ---
@@ -584,7 +634,7 @@ func TestValidateBootstrapSecretsPaths_ExistingFile(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Bootstrap.DiskEncryptionKeys = []attributes.PlainFileOrDirToTransfer{
+	mach.Bootstrap.DiskEncryptionKeys = []attributes.TransferSource{
 		{LocalPath: keyFile, RemotePath: "/tmp/disk-encryption.key"},
 	}
 
@@ -598,7 +648,7 @@ func TestValidateBootstrapSecretsPaths_NonExistentFile(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Bootstrap.DiskEncryptionKeys = []attributes.PlainFileOrDirToTransfer{
+	mach.Bootstrap.DiskEncryptionKeys = []attributes.TransferSource{
 		{LocalPath: "/nonexistent/disk-encryption.key", RemotePath: "/tmp/disk-encryption.key"},
 	}
 
@@ -621,7 +671,7 @@ func TestValidateBootstrapSecretsPaths_MultipleKeys_AllExist(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Bootstrap.DiskEncryptionKeys = []attributes.PlainFileOrDirToTransfer{
+	mach.Bootstrap.DiskEncryptionKeys = []attributes.TransferSource{
 		{LocalPath: key1, RemotePath: "/tmp/key1"},
 		{LocalPath: key2, RemotePath: "/tmp/key2"},
 	}
@@ -629,6 +679,19 @@ func TestValidateBootstrapSecretsPaths_MultipleKeys_AllExist(t *testing.T) {
 	err := mach.ValidateBootstrapSecretsPaths()
 
 	assert.NoError(t, err)
+}
+
+// Command-only disk encryption keys have no local path to stat.
+func TestValidateBootstrapSecretsPaths_CommandOnlySkipped(t *testing.T) {
+	t.Parallel()
+
+	mach := newTestMachine()
+	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
+	mach.Bootstrap.DiskEncryptionKeys = []attributes.TransferSource{
+		{Command: "pass show disk/key", RemotePath: "/tmp/disk-encryption.key"},
+	}
+
+	assert.NoError(t, mach.ValidateBootstrapSecretsPaths())
 }
 
 func TestValidateBootstrapSecretsPaths_MultipleKeys_OneMissing(t *testing.T) {
@@ -640,7 +703,7 @@ func TestValidateBootstrapSecretsPaths_MultipleKeys_OneMissing(t *testing.T) {
 
 	mach := newTestMachine()
 	mach.Xpath = xpath.New("fleet/flake/cfg/machine")
-	mach.Bootstrap.DiskEncryptionKeys = []attributes.PlainFileOrDirToTransfer{
+	mach.Bootstrap.DiskEncryptionKeys = []attributes.TransferSource{
 		{LocalPath: existingKey, RemotePath: "/tmp/existing.key"},
 		{LocalPath: "/nonexistent/missing.key", RemotePath: "/tmp/missing.key"},
 	}

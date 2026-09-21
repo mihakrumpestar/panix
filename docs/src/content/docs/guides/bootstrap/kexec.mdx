@@ -28,8 +28,8 @@ You can provide a custom kexec tarball:
 ```yaml
 bootstrap:
   kexec:
-    image: https://example.com/custom-kexec-<arch>.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz);
-    # <arch> placeholder replaced with detected architecture
+    image: https://example.com/custom-kexec-$PANIX_ARCH.tar.gz #  Optional custom image tarball (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz);
+    # $PANIX_ARCH is expanded from the detected machine architecture
     extra_flags: # Optional flags passed to kexec (default: "")
       - "--no-sync"
     ssh_port: 22 # Optional kexec ssh port (default: 22)
@@ -59,7 +59,7 @@ machines:
       hostname: 192.168.1.100
     bootstrap:
       kexec:
-        image: ./kexec-<arch>.tar.gz  # <arch> placeholder replaced with detected architecture
+        image: ./kexec-$PANIX_ARCH.tar.gz  # $PANIX_ARCH expanded from detected architecture
 ```
 
-The `<arch>` placeholder is automatically replaced with the detected architecture (e.g. `x86_64`). Panix detects whether `image` is a local path or an HTTP URL: local paths are transferred via `rsync`, URLs trigger a remote download with `curl`.
+The `$PANIX_ARCH` variable is replaced with the detected architecture (e.g. `x86_64`). Unknown `PANIX_*` variables, and known ones that are not available in the current context, fail the deployment with an error. Panix detects whether `image` is a local path or an HTTP URL: local paths are transferred via `rsync` (which needs a modern rsync, see [Requirements](/getting-started/requirements/)), URLs trigger a remote download with `curl`.

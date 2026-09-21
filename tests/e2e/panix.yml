@@ -8,6 +8,30 @@
 {{- $isLocal := or (eq $scope "local") (eq $scope "both") -}}
 {{- $isRemote := or (eq $scope "remote") (eq $scope "both") -}}
 
+# Shared secret fixtures: the local and remote NixOS configs transfer the same
+# five sources, so one anchor keeps them identical. The age key and the
+# encrypted fixtures live in the gitignored tests/e2e/.cache; only the
+# plaintext local_path fixture is committed.
+anchor_e2e_secrets: &e2e_secrets
+  - local_path: {{ $dir }}/testflakes/secret-fixture.txt
+    remote_path: /var/lib/panix-e2e/local-path
+    uid: 0
+    gid: 0
+    permissions: 0640
+  - command: printf 'panix-e2e-command-secret\n'
+    remote_path: /var/lib/panix-e2e/command
+    permissions: 0600
+  - local_path: {{ $dir }}/testflakes/secret-fixture.txt
+    command: 'cat "$PANIX_SECRET_LOCAL_PATH"'
+    remote_path: /var/lib/panix-e2e/command-local-path
+    permissions: 0600
+  - command: 'age -d -i {{ $dir }}/.cache/age.key {{ $dir }}/.cache/secret.age'
+    remote_path: /var/lib/panix-e2e/age
+    permissions: 0600
+  - command: 'SOPS_AGE_KEY_FILE={{ $dir }}/.cache/age.key sops -d {{ $dir }}/.cache/secret.sops.yaml'
+    remote_path: /var/lib/panix-e2e/sops
+    permissions: 0600
+
 flags:
   timeout: 600s
   require_all_success: true
@@ -46,6 +70,7 @@ fleet:
                   username: root
                   identity_file: {{ $key }}
                   disable_strict_key_checking: true
+                secrets: *e2e_secrets
 {{ if $isBootstrap }}
                 # Hardware config generation runs during Inspect in the
                 # installer (RequiresKexec=false there) and writes to this
@@ -101,6 +126,7 @@ fleet:
                   username: root
                   identity_file: {{ $key }}
                   disable_strict_key_checking: true
+                secrets: *e2e_secrets
 {{ if $isBootstrap }}
                 bootstrap:
                   ssh: *ssh_nixos_iso_remote

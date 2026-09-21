@@ -306,7 +306,7 @@ func TestKexecImageDefaults(t *testing.T) {
 	t.Parallel()
 
 	defaultImage := "https://github.com/nix-community/nixos-images/releases/latest/" +
-		"download/nixos-kexec-installer-noninteractive-<arch>-linux.tar.gz"
+		"download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"
 
 	tests := []struct {
 		name  string
