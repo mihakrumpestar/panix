@@ -62,4 +62,4 @@ machines:
         image: ./kexec-$PANIX_ARCH.tar.gz  # $PANIX_ARCH expanded from detected architecture
 ```
 
-The `$PANIX_ARCH` variable is replaced with the detected architecture (e.g. `x86_64`). Unknown `PANIX_*` variables, and known ones that are not available in the current context, fail the deployment with an error. Panix detects whether `image` is a local path or an HTTP URL: local paths are transferred via `rsync`, URLs trigger a remote download with `curl`.
+The `$PANIX_ARCH` variable is replaced with the detected architecture (e.g. `x86_64`). Unknown `PANIX_*` variables, and known ones that are not available in the current context, fail the deployment with an error. Panix detects whether `image` is a local path or an HTTP URL: local paths are transferred via `rsync` (which needs a modern rsync, see [Requirements](/getting-started/requirements/)), URLs trigger a remote download with `curl`.
