@@ -27,6 +27,20 @@ Large docs assets (demo gif) are not committed to git; `task docs:assets` fetche
 
 CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cachix.org/cache/mihakrumpestar). Pushing requires the `CACHIX_AUTH_TOKEN` secret to be set on the repository; without it the workflow skips pushing and only builds.
 
+## Release process
+
+Releases use two tasks in [Taskfile.yml](Taskfile.yml), run from the devbox shell. Both need `GH_TOKEN`.
+
+```sh
+task release            # opens your editor to pick the version, then pauses
+# write the release description in CHANGELOG.md, under the new '## [X.Y.Z]' heading
+task release:publish    # shows the section, confirms, then creates the GitHub release
+```
+
+`task release` writes `gen/VERSION`, runs `go generate ./...` and prepends the generated section to `CHANGELOG.md`, then pauses while you write the release description under the new heading. On Enter it commits with `chore: bump version to X.Y.Z`, pushes and creates the tag. It refuses to run when a local `vX.Y.Z` tag or a `CHANGELOG.md` section for that version already exists; drop prepared changes with `git restore CHANGELOG.md gen/`. Set `RELEASE_OFFLINE=1` to render without GitHub PR links and author logins.
+
+`task release:publish` extracts the `gen/VERSION` section from `CHANGELOG.md`, shows it and, after the y/N confirmation, creates the GitHub release with `gh release create "vX.Y.Z" --notes-file -`.
+
 ## Testing Conventions
 
 - **Table-driven tests**: use `[]struct{ name string; ... }` with `t.Run(tt.name, func(t *testing.T) { ... })`. See existing tests for examples.

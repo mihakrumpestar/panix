@@ -246,6 +246,8 @@ tasks:
       (under the new version header), and run 'task release:publish'.
     vars:
       VERSION_FILE: gen/VERSION
+      RELEASE_OFFLINE: '{{.RELEASE_OFFLINE | default ""}}'
+      CLIFF_OFFLINE: '{{if eq .RELEASE_OFFLINE "1"}}--offline{{end}}'
     cmds:
       - |
         if [ -z "$GH_TOKEN" ]; then
@@ -268,13 +270,16 @@ tasks:
           exit 1
         fi
 
+        if git rev-parse -q --verify "refs/tags/v$NEW_VERSION" >/dev/null 2>&1; then echo "Error: local tag v$NEW_VERSION already exists" >&2; exit 1; fi
+
         if [ "$NEW_VERSION" != "$CURRENT" ]; then
           echo "$NEW_VERSION" > {{.VERSION_FILE}}
 
-          go generate ./...
+          task generate
         fi
 
-        git-cliff --unreleased --tag "v$NEW_VERSION" --prepend CHANGELOG.md
+        if grep -Fq "## [$NEW_VERSION]" CHANGELOG.md; then echo "Error: CHANGELOG.md already has a section for $NEW_VERSION, restore with: git restore CHANGELOG.md gen/" >&2; exit 1; fi
+        git-cliff --unreleased --tag "v$NEW_VERSION" {{.CLIFF_OFFLINE}} --prepend CHANGELOG.md
 
         echo ""
         echo "=== CHANGELOG.md updated with git-cliff commits ==="
@@ -315,8 +320,8 @@ tasks:
         # Extract this version's section from CHANGELOG.md:
         # from "## [VERSION]" up to (not including) the next "## [" or EOF.
         NOTES=$(awk -v ver="$NEW_VERSION" '
-          $0 ~ "^## \\[" ver "\\]" { found=1; print; next }
-          found && /^## \[/ { exit }
+          index($0, "## [" ver "]") == 1 { found=1; print; next }
+          found && index($0, "## [") == 1 { exit }
           found { print }
         ' CHANGELOG.md)
 

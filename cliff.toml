@@ -1,66 +1,59 @@
+# Changelog entries: compare-link heading, plain group names, scope/PR/author/short-hash.
 [changelog]
 header = """
 # Changelog\n
 """
+# Tera whitespace control: trailing "\" joins the lines below into one release heading.
 body = """
 {% if version %}\
+{% set repo_url = "https://github.com/" ~ remote.github.owner ~ "/" ~ remote.github.repo %}\
 {% set grouped = commits | group_by(attribute="group") %}\
 {% if grouped | length > 0 %}\
-    ## [{{ version | trim_start_matches(pat="v") }}]\
-        (https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}\
-            /compare/{% if previous.version %}{{ previous.version }}..{% endif %}{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+    ## [{{ version | trim_start_matches(pat="v") }}]({{ repo_url }}/compare/{% if previous.version %}{{ previous.version }}..{% endif %}{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
 {% for group, commits in grouped %}
-    ### {{ group | striptags | trim | upper_first }}
+    ### {{ group | upper_first }}
     {% for commit in commits %}
         - {% if commit.scope %}({{ commit.scope }}) {% endif %}\
             {% if commit.breaking %}[**breaking**] {% endif %}\
             {{ commit.message | upper_first }} \
             {% if commit.remote.pr_number %}\
-                ([#{{ commit.remote.pr_number }}](https://github.com/mihakrumpestar/panix/pull/{{ commit.remote.pr_number }})) \
+                ([#{{ commit.remote.pr_number }}]({{ repo_url }}/pull/{{ commit.remote.pr_number }})) \
             {% endif %}\
             {% if commit.remote.username %}\
                 by @{{ commit.remote.username }} \
             {% elif commit.author %}\
                 by {{ commit.author.name }} \
             {% endif %}\
-            ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/mihakrumpestar/panix/commit/{{ commit.id }}))\
+            ([{{ commit.id | truncate(length=7, end="") }}]({{ repo_url }}/commit/{{ commit.id }}))\
     {% endfor %}
 {% endfor %}
 {% endif %}\
 {% endif %}\
 """
-trim = true
 
+# Supplies compare/commit URLs, and (online) PR numbers and @logins.
 [remote.github]
 owner = "mihakrumpestar"
 repo = "panix"
 
 [git]
-conventional_commits = true
-filter_unconventional = true
-split_commits = true
-commit_preprocessors = [
-    { pattern = '\(#\d+\)$', replace = "" },
-]
+# Strips the trailing "(#NN)" GitHub appends to squash subjects (and the space
+# before it, so the template's own PR link keeps a single separating space), so
+# the template's PR link is the only one. (?m) is required: without it "$" does
+# not match the subject line of a commit that continues with a body.
+commit_preprocessors = [{ pattern = '(?m)[[:blank:]]*\(#\d+\)$', replace = "" }]
+# Explicit names for the groups that differ from git-cliff's type fallback
+# (feat -> "Feat", doc -> "Doc", chore -> "Chore", ...); everything else groups
+# by its conventional type.
 commit_parsers = [
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
     { message = "^doc", group = "Documentation" },
     { message = "^perf", group = "Performance" },
-    { message = "^refactor: golangci", group = "Miscellaneous" },
-    { message = "^refactor", group = "Refactor" },
     { message = "^style", group = "Styling" },
     { message = "^test", group = "Testing" },
-    { message = "^security", group = "Security" },
-    { message = "^chore\\(release\\):", skip = true },
+    # Our own release commit. The tag range already excludes it in the normal flow;
+    # kept so a publish that commits but fails to tag cannot leak into the next release.
     { message = "^chore: bump version", skip = true },
     { message = "^chore|^ci", group = "Miscellaneous" },
-    { sha = "687d7173c594ca60a1d469f65766c32b943ed86a", skip = true },
 ]
-protect_breaking_commits = false
-filter_commits = false
-tag_pattern = "v[0-9]*"
-skip_tags = ""
-ignore_tags = ""
-topo_order = false
-sort_commits = "oldest"
