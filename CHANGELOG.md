@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.10.0](https://github.com/mihakrumpestar/panix/compare/v0.9.3..v0.10.0) - 2026-09-22
+
+Secrets can now come from a command: the new `command` field runs on the control host and streams its stdout into the destination file, so anything that prints a secret works (`sops --decrypt`, `age`, `pass show`, `op read`) and encrypted material can stay encrypted in the repo until transfer. It combines with `local_path`, exported as `PANIX_SECRET_LOCAL_PATH`, and bootstrap disk encryption keys accept it too. No temporary file is written on either side and the output is never logged; content that already matches is skipped by hash, leaving the file untouched.
+
+Elevation is now a single code path for every installable type. `user` is honored everywhere: a system-level installable with a non-root target user runs through `su -l <user> -c "sudo <cmd>"` (that user needs passwordless sudo), while system-level `user: root` means unset. Misconfigurations fail fast at Inspect instead of hanging on a `su` password prompt. Bootstrap now elevates `nixos-install`, disko and reboot, which previously only worked when the SSH user was root.
+
+`hardware_config_path` is now written locally on the control host and staged with `git add -N` so the flake can see it; machines that need kexec get it generated right after kexec, before disko. SSH arguments are single-quoted, hook commands run via `sh -c`, and the kexec `image` placeholder is now `$PANIX_ARCH` instead of `<arch>`, so explicit `image` values need updating.
+
+**Note:** with `output` unset, non-TTY runs such as pipes and CI now select `console` instead of `tui`.
+
+This release also fixes PTY reads on macOS and BSD, where the final chunk of output was dropped from every PTY-backed command (#15), adds unit and e2e coverage for the new paths, and rebuilds the docs site with generated output-type tables and schema.
+
+### Bug Fixes
+
+- Mac pty EOF, fixes #15 ([#16](https://github.com/mihakrumpestar/panix/pull/16)) by @mihakrumpestar ([13006ef](https://github.com/mihakrumpestar/panix/commit/13006efaddc3ccf831be78d5b3d9073fa78e27f2))
+
+### Features
+
+- Docs refactor and fix their code misalignment ([#20](https://github.com/mihakrumpestar/panix/pull/20)) by @mihakrumpestar ([7d0c24b](https://github.com/mihakrumpestar/panix/commit/7d0c24b65f6ffcd6c8872c7945f711c9df38c891))
+- Encrypted secrets at rest with command output ([#21](https://github.com/mihakrumpestar/panix/pull/21)) by @mihakrumpestar ([67efec8](https://github.com/mihakrumpestar/panix/commit/67efec80ef4e66ad53f0a31f35aff4e7ac98cdb3))
+
+### Miscellaneous
+
+- Improve cliff by mihakrumpestar ([542b405](https://github.com/mihakrumpestar/panix/commit/542b405f5911b2b0efca4adb47a3308292c76580))
+
 ## [0.9.3](https://github.com/mihakrumpestar/panix/compare/v0.9.2..v0.9.3) - 2026-09-07
 
 Panix can now leave GC roots for built closures: the new `--out-links` flag (or `out_links`/`out_links_dir` in the flags section) creates a symlink per built installable, laid out along the installable xpath as `<out_links_dir>/<flake>/<output_type>/<name>`, so built closures survive garbage collection and are easy to inspect. Bootstrapped installables also get a `-disko` outlink for their disko script. Remote build mode gets no outlinks, since the closure lives on the builder machine's store (#13).
