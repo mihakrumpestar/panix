@@ -43,7 +43,7 @@
 
             doCheck = false; # Tests run in CI with race detection and coverage
 
-            vendorHash = "sha256-c+Qjn/RTZdSOFeqCaANBLaJl3zFeJYe7lIAve35rDkQ=";
+            vendorHash = "sha256-/76T5gN3t8CLwdm7vxZw3c4g0Y+DVkCLUJXbu7QFmqI=";
 
             # Install shell completions so that NixOS / Home Manager users get
             # tab completion automatically via programs.{bash,zsh,fish}.enable

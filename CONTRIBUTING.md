@@ -3,7 +3,7 @@
 Get into dev shell:
 
 ```sh
-devbox shell
+devenv shell
 ```
 
 Tasks that are used are implemented in [Taskfile.yml](Taskfile.yml).
@@ -29,7 +29,7 @@ CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cac
 
 ## Release process
 
-Releases use two tasks in [Taskfile.yml](Taskfile.yml), run from the devbox shell. Both need `GH_TOKEN`.
+Releases use two tasks in [Taskfile.yml](Taskfile.yml), run from the devenv shell. Both need `GH_TOKEN`.
 
 ```sh
 task release            # opens your editor to pick the version, then pauses

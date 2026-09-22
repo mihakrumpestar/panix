@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DO_NOT_TRACK: "1" # For devbox
+  DO_NOT_TRACK: "1" # Tool telemetry opt-out
 
 jobs:
   deploy:
@@ -27,13 +27,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # Devbox (devbox.json + devbox.lock) is the single source of truth for
-      # bun and go-task. The action caches the Nix store keyed on devbox.lock.
-      - uses: jetify-com/devbox-install-action@v0.15.0
+      # devenv (devenv.yaml + devenv.lock) is the single source of truth
+      - uses: cachix/install-nix-action@v31.11.1
         with:
-          enable-cache: "true"
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
 
-      # Devbox does not cover the bun package install cache, only bun itself.
+      # devenv does not cover the bun package install cache, only bun itself.
       - uses: actions/cache@v6.1.0
         with:
           path: ~/.bun/install/cache
@@ -41,7 +43,10 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-
 
-      - run: devbox run -- task docs:bun
+      - name: Install devenv.sh
+        run: nix profile add nixpkgs#devenv
 
-      - run: devbox run -- task docs:deploy
+      - run: devenv shell -- task docs:bun
+
+      - run: devenv shell -- task docs:deploy
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}

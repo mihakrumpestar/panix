@@ -55,3 +55,7 @@ __pycache__
 
 # Large docs assets, fetched at build time (task docs:assets)
 docs/public/demo.gif
+
+# devenv
+.devenv/
+.pre-commit-config.yaml

@@ -74,7 +74,7 @@ tasks:
         -coverprofile={{.COVER_PROFILE}} -covermode=atomic -coverpkg=./internal/...,./pkg/... -json
         | tee {{.TEST_DIR}}/test.json | tparse -trimpath
         "github.com/mihakrumpestar/panix"
-      - go run github.com/vladopajic/go-test-coverage/v2@v2.19.0
+      - go tool go-test-coverage
         --profile={{.COVER_PROFILE}} --threshold-total=60 --badge-file-name=gen/coverage.svg
 
   go:test:bench:
@@ -175,7 +175,7 @@ tasks:
   update:
     desc: Update all deps
     cmds:
-      - devbox update
+      - devenv update
       - go get -u all
       - go mod tidy
       #- go mod vendor

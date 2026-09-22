@@ -12,6 +12,7 @@ linters:
     - goconst # Just some same strings across codebase
     - gochecknoglobals # Constants are ok
     - exhaustruct # Structs are generally initialized empty
+    - exhaustruct_v5 # Same as before
     - exhaustive # Not necessery as we use default
     - containedctx # We use ctx to check if it is done
     - testpackage # Don't want separate packages for testing
