@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
     paths: [docs/**, gen/VERSION]
+  schedule:
+    # Weekly rebuild so build-time GitHub star lookups
+    # (docs/src/lib/fetch-repo-stars.ts) stay current.
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 permissions:

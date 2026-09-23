@@ -35,6 +35,10 @@ export interface ToolColumn {
   // Lifecycle caveat shown as a hover marker beside the tool name in the
   // header. Server-rendered only: left out of the tools data attribute.
   notice?: string;
+  // GitHub star count resolved when the docs build runs, null for tools
+  // without a repo or when GitHub was unreachable. Fed to the stars
+  // order toggle through the tools data attribute.
+  stars?: number | null;
   cells: Record<string, Cell>;
 }
 
@@ -58,6 +62,17 @@ export function cellTexts(cell: Cell | undefined): string[] {
   if (!cell) return [];
   if ("items" in cell) return cell.items.map((item) => item.text);
   return cell.text ? [cell.text] : [];
+}
+
+// Sort/filter rank of a capability cell: the best (lowest) item tone for
+// multi-feature cells, the tone otherwise, off (worst) when the cell is
+// absent. Shared by the SSR dropdown ordering and the client row sort so
+// the two can never drift.
+export function cellRank(cell: Cell | undefined): number {
+  if (!cell) return TONE_RANK.off;
+  return "items" in cell
+    ? Math.min(...cell.items.map((item) => TONE_RANK[item.tone]))
+    : TONE_RANK[cell.tone];
 }
 
 // Typed read of a JSON payload embedded in a data attribute. Keeps `any` out

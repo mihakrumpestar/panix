@@ -4,12 +4,14 @@ import IconNote from "./IconNote.astro";
 import type { Capability, ToolColumn } from "../lib/comparison";
 import {
   DEFAULT_HIDDEN_TOOL_NAMES,
-  TONE_RANK,
+  cellRank,
   cellTexts,
 } from "../lib/comparison";
+import { GITHUB_REPOS, type GitHubRepo } from "../lib/github-repos";
+import { fetchRepoStars } from "../lib/fetch-repo-stars";
 
 // Tone: good = capability present, warn = limited or a cost, off = absent,
-// neutral = a model difference, not a quality. Fact set verified 2026-09-15
+// neutral = a model difference, not a quality. Fact set verified
 // against each tool's official repo/docs. Every cell links to the page that
 // proves it: the feature's doc section where present, the closest matching
 // section (where the capability would live) when it is absent.
@@ -26,6 +28,17 @@ import {
 // - TONE_RANK linearizes the 2-axis tone system as good < warn < neutral <
 //   off: neutral below warn is deliberate (matches the legend order), so
 //   dropdowns list limited values above equally-valid models.
+// - Tool columns: Panix pinned first as the baseline; nixos-rebuild,
+//   nixos-install and system.autoUpgrade are nixpkgs-native with no
+//   standalone repo and predate the rest, so they are pinned last. The
+//   default order is repo age, youngest first; the "Sort tools by"
+//   select above the chip row (Newest or Most stars, URL param o)
+//   re-sorts by GitHub stars. Stars resolve at docs build time
+//   (lib/fetch-repo-stars.ts, batched search API; a failed fetch fails
+//   the build); slugs and the immutable created_at are hardcoded in
+//   lib/github-repos.ts. The weekly docs-deploy cron rebuilds HEAD for
+//   fresh stars; no committed data. All view state lives in the URL
+//   only (no browser storage) so shared links are exact.
 
 // nixos-rebuild / nixos-install / system.autoUpgrade
 const NIXOS_REBUILD_MANUAL =
@@ -74,6 +87,18 @@ const NIXOPS_MIGRATION = `${NIXOPS_DOCS}manual/migrating.html#code-layout-change
 const COLMENA_REPO = "https://github.com/nix-community/colmena";
 const COLMENA_DOCS = "https://colmena.cli.rs/unstable";
 const COLMENA_MIGRATION = `${COLMENA_DOCS}/tutorial/migration.html#colmena-deploys-to-existing-nixos-hosts`;
+
+// wire
+const WIRE_REPO = "https://github.com/forallsys/wire";
+const WIRE_APPLY_DOC = `${WIRE_REPO}/blob/trunk/doc/guides/apply.md`;
+const WIRE_TARGETING_DOC = `${WIRE_REPO}/blob/trunk/doc/guides/targeting.md`;
+const WIRE_KEYS_DOC = `${WIRE_REPO}/blob/trunk/doc/guides/keys.md`;
+const WIRE_FLAKE_DOC = `${WIRE_REPO}/blob/trunk/doc/guides/flakes/overview.md`;
+const WIRE_CLI_SOURCE = `${WIRE_REPO}/blob/trunk/crates/cli/src/cli.rs`;
+const WIRE_STATUS_SOURCE = `${WIRE_REPO}/blob/trunk/crates/core/src/status.rs`;
+const WIRE_STEPS_SOURCE = `${WIRE_REPO}/blob/trunk/crates/core/src/hive/node.rs`;
+const WIRE_ACTIVATE_SOURCE = `${WIRE_REPO}/blob/trunk/crates/core/src/hive/steps/activate.rs`;
+const WIRE_CACHE_SOURCE = `${WIRE_REPO}/blob/trunk/crates/core/src/cache/mod.rs`;
 
 // deploy-rs
 const DEPLOY_RS_REPO = "https://github.com/serokell/deploy-rs";
@@ -139,32 +164,42 @@ const BENTO_SCRIPT = `${BENTO_REPO}/blob/main/bento`;
 const PANIX_REPO = "https://github.com/mihakrumpestar/panix";
 const CODE_ROLLBACK_HANDLER = `${PANIX_REPO}/blob/7f8d2c94c6084031a8b78ece4f2f5bbe2d14fe12/internal/workflow/activate/handler.go#L81`;
 
-// GitHub repos for live stars/age in the header; tools absent here are
-// native primitives or docs-only, no repo meta.
-const GITHUB_REPOS: Record<string, string> = {
-  Panix: "mihakrumpestar/panix",
-  "nixos-infect": "elitak/nixos-infect",
-  "nixos-anywhere": "nix-community/nixos-anywhere",
-  NixOps: "NixOS/nixops",
-  Colmena: "nix-community/colmena",
-  "deploy-rs": "serokell/deploy-rs",
-  morph: "DBCDK/morph",
-  Nixus: "Infinisil/nixus",
-  krops: "krebs/krops",
-  lollypops: "pinpox/lollypops",
-  nixinate: "MatthewCroughan/nixinate",
-  bento: "rapenne-s/bento",
-  comin: "nlewo/comin",
-  Thymis: "Thymis-io/thymis",
-  Clan: "clan-lol/clan-core",
+// GitHub repo meta under each tool name: repo age from the hardcoded
+// creation date (lib/github-repos.ts) plus stars resolved at build time
+// (lib/fetch-repo-stars.ts, whose failure fails the build). Tools
+// absent from the map are nixpkgs-native primitives with no standalone
+// repo and get no meta.
+const repoStars = await fetchRepoStars();
+
+const formatStarCount = (starCount: number) =>
+  starCount >= 10000
+    ? `${Math.round(starCount / 1000)}k`
+    : starCount >= 1000
+      ? `${(starCount / 1000).toFixed(1)}k`
+      : `${starCount}`;
+
+const formatRepositoryAge = (createdAt: string) => {
+  const repositoryAgeDays = Math.floor(
+    (Date.now() - new Date(createdAt).getTime()) / 86400000,
+  );
+  if (repositoryAgeDays >= 365)
+    return `${Math.floor(repositoryAgeDays / 365)}y`;
+  if (repositoryAgeDays >= 30) return `${Math.floor(repositoryAgeDays / 30)}mo`;
+  return `${repositoryAgeDays}d`;
 };
+
+// Stars + age, both as of the docs build date.
+const formatRepositoryMeta = (repo: GitHubRepo, stars: number) =>
+  `★ ${formatStarCount(stars)} · ${formatRepositoryAge(repo.createdAt)}`;
 
 // Cell model: every cell is either a single value or a list of items
 // (multi-feature cells render each item as its own filterable link).
-// Tool columns: Panix first (pinned baseline), then native primitives,
-// then third-party tools. Cells with several features carry an item list
-// (each item its own link, filterable on its own); `note` renders as a
-// hover tooltip instead of an asterisk suffix.
+// Tool columns: authoring order groups Panix (pinned baseline), then
+// native primitives, then third-party tools; display order is derived
+// below (and by the client sort control), never hand-maintained. Cells
+// with several features carry an item list (each item its own link,
+// filterable on its own); `note` renders as a hover tooltip instead of
+// an asterisk suffix.
 const tools: ToolColumn[] = [
   {
     name: "Panix",
@@ -511,6 +546,62 @@ const tools: ToolColumn[] = [
         text: "Deployment keys",
         tone: "neutral",
         href: `${COLMENA_DOCS}/features/keys.html`,
+      },
+    },
+  },
+  {
+    name: "wire",
+    href: WIRE_REPO,
+    cells: {
+      bootstrap: { text: "No", tone: "off", href: WIRE_CLI_SOURCE },
+      update: { text: "Yes", tone: "good", href: WIRE_APPLY_DOC },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        note: "--on node lists and @tag targeting; nodes deploy in parallel (default 10)",
+        href: WIRE_TARGETING_DOC,
+      },
+      visibility: {
+        text: "Progress",
+        tone: "good",
+        note: "Live per-node status bar with step counts and the last log line; --no-progress to disable",
+        href: WIRE_STATUS_SOURCE,
+      },
+      health: {
+        text: "No",
+        tone: "off",
+        note: "The step pipeline ends at switch-to-configuration; nothing checks services after activation",
+        href: WIRE_STEPS_SOURCE,
+      },
+      rollback: {
+        text: "None",
+        tone: "off",
+        note: "On activation failure it only logs, re-pings SSH and errors out; no rollback command exists",
+        href: WIRE_ACTIVATE_SOURCE,
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        note: "Nodes deploy over SSH; a node whose name matches the local host may apply locally (allowLocalDeployment)",
+        href: WIRE_APPLY_DOC,
+      },
+      state: {
+        text: "Stateless",
+        tone: "good",
+        note: "A SQLite cache skips re-evaluation between runs; it is invalidated on GC, not deployment state",
+        href: WIRE_CACHE_SOURCE,
+      },
+      flake: {
+        text: "Adapter",
+        tone: "warn",
+        note: "Requires a wire = wire.makeHive output (or a hive.nix for npins); Colmena hives migrate with a one-line diff",
+        href: WIRE_FLAKE_DOC,
+      },
+      secrets: {
+        text: "Deployment keys",
+        tone: "neutral",
+        note: "Unopinionated about encryption; a command source runs on the deploying host, so decryption happens before transfer",
+        href: WIRE_KEYS_DOC,
       },
     },
   },
@@ -1040,6 +1131,21 @@ const tools: ToolColumn[] = [
   },
 ];
 
+// Display order is derived, never hand-maintained: Panix first, then
+// tools by repo age (newest first), repoless primitives last. The
+// literal order above is authoring order only; the client "Sort tools
+// by" select re-sorts by GitHub stars on top of this.
+tools.sort((a, b) => {
+  if (a.highlight) return -1;
+  if (b.highlight) return 1;
+  const aMs = Date.parse(GITHUB_REPOS[a.name]?.createdAt ?? "");
+  const bMs = Date.parse(GITHUB_REPOS[b.name]?.createdAt ?? "");
+  if (Number.isNaN(aMs) && Number.isNaN(bMs)) return 0;
+  if (Number.isNaN(aMs)) return 1;
+  if (Number.isNaN(bMs)) return -1;
+  return bMs - aMs;
+});
+
 // Capability rows, with the distinct filterable values per row. Cells with
 // item lists contribute every item, so each is filterable on its own.
 const capabilityKeys = [
@@ -1059,10 +1165,7 @@ const capabilities: Capability[] = capabilityKeys.map(({ key, label }) => {
   for (const tool of tools) {
     const cell = tool.cells[key];
     if (!cell) continue;
-    const rank =
-      "items" in cell
-        ? Math.min(...cell.items.map((item) => TONE_RANK[item.tone]))
-        : TONE_RANK[cell.tone];
+    const rank = cellRank(cell);
     for (const text of cellTexts(cell)) {
       bestRankByValue.set(
         text,
@@ -1081,6 +1184,7 @@ const toolsDataJson = JSON.stringify(
     name: tool.name,
     href: tool.href,
     highlight: !!tool.highlight,
+    stars: repoStars[tool.name] ?? null,
     cells: tool.cells,
   })),
 );
@@ -1125,7 +1229,7 @@ const TERM_NOTES: Record<string, string> = {
     "Secrets are transferred to the machine as-is, outside the Nix store; the tool itself does no decryption",
   "Deployment keys":
     "Secrets are pushed as key files through deployment.keys (the default /run/keys is in-memory; destDir can target persistent paths)",
-  "Activation":
+  Activation:
     "Encrypted at rest; the machine holds the key and decrypts locally at activation",
   "Pre-transfer":
     "Encrypted at rest; the control host decrypts before transfer, so targets never hold a key",
@@ -1185,6 +1289,13 @@ const CAP_NOTES: Record<string, string> = {
     data-tools={toolsDataJson}
     data-tool-names={toolNamesJson}
   >
+    <div class="sort-tools">
+      <label for="sort-tools">Sort tools by</label>
+      <select id="sort-tools" class="pill-select" data-order-select>
+        <option value="age">Newest</option>
+        <option value="stars">Most stars</option>
+      </select>
+    </div>
     <div class="filter-group" role="group" aria-label="Toggle tool columns">
       {
         tools.map((tool) =>
@@ -1208,18 +1319,8 @@ const CAP_NOTES: Record<string, string> = {
       }
       <button type="button" class="chip reset" data-reset>Reset</button>
     </div>
-    <div class="legend" aria-hidden="true">
-      <span class="legend-item"><i class="sw sw-good"></i>present</span>
-      <span class="legend-item"
-        ><i class="sw sw-warn"></i>limited or a cost</span
-      >
-      <span class="legend-item"
-        ><i class="sw sw-neutral"></i>different model</span
-      >
-      <span class="legend-item"><i class="sw sw-off"></i>absent</span>
-    </div>
   </div>
-  <div class="scroll" data-compare-scroll>
+  <div class="scroll">
     <table data-compare-table>
       <thead>
         <tr>
@@ -1231,9 +1332,6 @@ const CAP_NOTES: Record<string, string> = {
                 class:list={[{ hl: tool.highlight }]}
                 data-tool={tool.name}
                 hidden={DEFAULT_HIDDEN_TOOL_NAMES.includes(tool.name)}
-                title={
-                  tool.highlight ? undefined : "Click to compare beside Panix"
-                }
               >
                 <span class="head-with-note">
                   {tool.href ? (
@@ -1252,10 +1350,15 @@ const CAP_NOTES: Record<string, string> = {
                 </span>
                 {GITHUB_REPOS[tool.name] && (
                   <span
-                    class="repo-meta pending"
-                    data-repo={GITHUB_REPOS[tool.name]}
-                    aria-label="GitHub stars and age"
-                  />
+                    class="repo-meta"
+                    aria-label="GitHub stars and repo age"
+                    title="GitHub stars and repo age as of the docs build date"
+                  >
+                    {formatRepositoryMeta(
+                      GITHUB_REPOS[tool.name],
+                      repoStars[tool.name],
+                    )}
+                  </span>
                 )}
               </th>
             ))
@@ -1277,7 +1380,7 @@ const CAP_NOTES: Record<string, string> = {
                     title={CAP_NOTES[capability.key] ?? capability.label}
                   />
                   <select
-                    class="row-filter"
+                    class="pill-select"
                     data-row-filter={capability.key}
                     aria-label={`Filter by ${capability.label}`}
                   >
@@ -1349,16 +1452,24 @@ const CAP_NOTES: Record<string, string> = {
       </tbody>
     </table>
   </div>
+  <div class="legend" aria-hidden="true">
+    <span class="legend-item"><i class="sw sw-good"></i>present</span>
+    <span class="legend-item"><i class="sw sw-warn"></i>limited or a cost</span>
+    <span class="legend-item"><i class="sw sw-neutral"></i>different model</span
+    >
+    <span class="legend-item"><i class="sw sw-off"></i>absent</span>
+  </div>
+  <br />
   <p class="note">
     Every cell links to what verifies it: the feature's own doc section where
     one exists, otherwise the source file that enumerates the tool's commands or
     options, since a documentation page cannot state that something is missing.
-    Hover a cell or term for its plain-language meaning. Verified 2026-09-15.
+    Hover a cell or term for its plain-language meaning. Verified 2026-09-23.
   </p>
   <p class="note">
-    Filter with the row dropdowns (multiple rows combine), toggle tools with the
-    chips, click a tool header to move it beside Panix, click a capability name
-    to sort tools by it. The filter state is shareable via the URL.
+    Filter with the row dropdowns, toggle tools with the chips, sort tools with
+    the dropdown above or by clicking a capability name. The filter state is
+    shareable via the URL.
   </p>
   <details class="glossary">
     <summary>Term glossary</summary>
@@ -1387,23 +1498,10 @@ const CAP_NOTES: Record<string, string> = {
   import type { ToolColumn } from "../lib/comparison";
   import {
     DEFAULT_HIDDEN_TOOL_NAMES,
-    TONE_RANK,
+    cellRank,
     cellTexts,
     parseJson,
   } from "../lib/comparison";
-
-  // Stable wire shape for filter state shared through URLs and localStorage.
-  interface SerializedFilterState {
-    hide?: string[];
-    f?: Record<string, string>;
-    order?: string[];
-  }
-
-  // Fields read from the GitHub repository endpoint.
-  interface GitHubRepositoryResponse {
-    stargazers_count: number;
-    created_at: string;
-  }
 
   const filtersRoot = document.querySelector<HTMLElement>(
     "[data-compare-filters]",
@@ -1411,11 +1509,8 @@ const CAP_NOTES: Record<string, string> = {
   const tableElement = document.querySelector<HTMLTableElement>(
     "[data-compare-table]",
   );
-  const scrollElement = document.querySelector<HTMLElement>(
-    "[data-compare-scroll]",
-  );
 
-  if (filtersRoot && tableElement && scrollElement) {
+  if (filtersRoot && tableElement) {
     // Cell model parsed from the server-rendered data: a single value or
     // a list of items (each its own filterable link).
     const tools = parseJson<ToolColumn[]>(filtersRoot.dataset.tools, "tools");
@@ -1425,56 +1520,27 @@ const CAP_NOTES: Record<string, string> = {
     );
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
 
-    const FILTER_STORAGE_KEY = "panix-compare-filters-v4";
-
-    // URL state wins over localStorage so shared links are exact.
+    // The URL is the only state store: shared links are exact and nothing
+    // is persisted elsewhere.
     function readInitialFilterState(): {
       hiddenToolNames: string[];
       filters: Record<string, string>;
-      columnOrder: string[];
+      orderMode: "age" | "stars";
     } {
       const urlParams = new URLSearchParams(location.search);
-      const hasUrlFilterState = urlParams.has("hide") || urlParams.has("f");
-      try {
-        if (hasUrlFilterState) {
-          return {
-            hiddenToolNames: (urlParams.get("hide") ?? "")
-              .split(",")
-              .filter(Boolean),
-            filters: Object.fromEntries(
+      return {
+        hiddenToolNames: urlParams.has("hide")
+          ? (urlParams.get("hide") ?? "").split(",").filter(Boolean)
+          : [...DEFAULT_HIDDEN_TOOL_NAMES],
+        filters: urlParams.has("f")
+          ? Object.fromEntries(
               (urlParams.get("f") ?? "")
                 .split(",")
                 .filter(Boolean)
                 .map((pair) => pair.split("=", 2) as [string, string]),
-            ),
-            columnOrder: [] as string[],
-          };
-        }
-        const parsedState: unknown = JSON.parse(
-          localStorage.getItem(FILTER_STORAGE_KEY) || "null",
-        );
-        const savedFilterState = parsedState as SerializedFilterState | null;
-        if (savedFilterState) {
-          return {
-            hiddenToolNames: Array.isArray(savedFilterState.hide)
-              ? savedFilterState.hide
-              : [...DEFAULT_HIDDEN_TOOL_NAMES],
-            filters:
-              savedFilterState.f && typeof savedFilterState.f === "object"
-                ? savedFilterState.f
-                : {},
-            columnOrder: Array.isArray(savedFilterState.order)
-              ? savedFilterState.order
-              : [],
-          };
-        }
-      } catch {
-        /* corrupted entry, fall back to defaults */
-      }
-      return {
-        hiddenToolNames: [...DEFAULT_HIDDEN_TOOL_NAMES],
-        filters: {},
-        columnOrder: [],
+            )
+          : {},
+        orderMode: urlParams.get("o") === "stars" ? "stars" : "age",
       };
     }
     const initialFilterState = readInitialFilterState();
@@ -1504,14 +1570,20 @@ const CAP_NOTES: Record<string, string> = {
             false,
           ]),
         ),
-        columnOrder: initialFilterState.columnOrder.filter((toolName) =>
-          toolNames.includes(toolName),
-        ),
       },
     });
 
     // Active per-capability value filters: { capabilityKey: value }.
     let rowFilters: Record<string, string> = initialFilterState.filters;
+
+    // Column order mode: "age" is the static tools order (youngest repo
+    // first, Panix pinned first, nixpkgs-native tools last); "stars" sorts
+    // by GitHub star count resolved at docs build time, falling back to
+    // the age order where stars are absent.
+    let orderMode: "age" | "stars" = initialFilterState.orderMode;
+
+    const starCountOf = (toolName: string) =>
+      toolsByName.get(toolName)?.stars ?? null;
 
     function passesFilters(tool: ToolColumn) {
       for (const [capabilityKey, value] of Object.entries(rowFilters)) {
@@ -1542,9 +1614,14 @@ const CAP_NOTES: Record<string, string> = {
       const filterEntries = Object.entries(rowFilters).filter(
         ([, value]) => value,
       );
-      const columnOrder = table.atoms.columnOrder.get();
       const urlParams = new URLSearchParams();
-      if (hiddenToolNames.length)
+      // The default hidden set is the absence of state: keep the URL clean
+      // (notably after Reset) instead of re-encoding it.
+      const defaultHidden = new Set(DEFAULT_HIDDEN_TOOL_NAMES);
+      const hidesDefaultSet =
+        hiddenToolNames.length === defaultHidden.size &&
+        hiddenToolNames.every((toolName) => defaultHidden.has(toolName));
+      if (hiddenToolNames.length && !hidesDefaultSet)
         urlParams.set("hide", hiddenToolNames.join(","));
       if (filterEntries.length)
         urlParams.set(
@@ -1553,23 +1630,14 @@ const CAP_NOTES: Record<string, string> = {
             .map(([filterKey, value]) => `${filterKey}=${value}`)
             .join(","),
         );
+      if (orderMode === "stars") urlParams.set("o", "stars");
+      // The URL is the only state store: shared links stay exact.
+      const queryString = urlParams.toString();
       history.replaceState(
         null,
         "",
-        `${location.pathname}${urlParams.size ? `?${urlParams}` : ""}`,
+        `${location.pathname}${queryString ? `?${queryString}` : ""}`,
       );
-      try {
-        localStorage.setItem(
-          FILTER_STORAGE_KEY,
-          JSON.stringify({
-            hide: hiddenToolNames,
-            f: Object.fromEntries(filterEntries),
-            order: columnOrder,
-          }),
-        );
-      } catch {
-        /* storage unavailable, URL still carries state */
-      }
     }
 
     const tableHeadRow = tableElement.tHead!.rows[0];
@@ -1642,7 +1710,9 @@ const CAP_NOTES: Record<string, string> = {
           .forEach((rowFilterSelect) => {
             rowFilterSelect.value = "";
           });
-        // Reset restores the default view (primitives hidden).
+        // Reset restores the default view (primitives hidden) and the
+        // default age order.
+        orderMode = "age";
         table.setColumnVisibility(
           Object.fromEntries(
             toolNames
@@ -1653,6 +1723,7 @@ const CAP_NOTES: Record<string, string> = {
           ),
         );
         table.setColumnOrder(toolNames);
+        updateOrderSelect();
         // Atoms may already hold these defaults, in which case no
         // subscription fires: repaint directly.
         render();
@@ -1663,6 +1734,54 @@ const CAP_NOTES: Record<string, string> = {
       if (toolButton) {
         table.getColumn(toolButton.dataset.toolBtn!)!.toggleVisibility();
       }
+    });
+
+    // Sort control: age (static array order) or GitHub stars, its own
+    // row above the chips so it cannot read as a column toggle.
+    const orderSelect = filtersRoot.querySelector<HTMLSelectElement>(
+      "[data-order-select]",
+    );
+    function updateOrderSelect() {
+      if (orderSelect) orderSelect.value = orderMode;
+    }
+
+    // Stars mode: repo tools by star count resolved at build time
+    // (descending, age order breaks ties and stands in where stars are
+    // absent), tools without stars stay last, Panix stays first.
+    function starsOrderedToolNames(): string[] {
+      const byStars = (a: string, b: string) =>
+        (starCountOf(b) ?? -1) - (starCountOf(a) ?? -1) ||
+        toolNames.indexOf(a) - toolNames.indexOf(b);
+      return [
+        "Panix",
+        ...toolNames
+          .filter(
+            (toolName) =>
+              toolName !== "Panix" && starCountOf(toolName) !== null,
+          )
+          .sort(byStars),
+        ...toolNames.filter(
+          (toolName) => toolName !== "Panix" && starCountOf(toolName) === null,
+        ),
+      ];
+    }
+
+    function applyOrderMode() {
+      table.setColumnOrder(
+        orderMode === "stars" ? starsOrderedToolNames() : toolNames,
+      );
+      updateOrderSelect();
+      // Atoms may already hold this order, in which case no subscription
+      // fires: repaint directly.
+      render();
+      persistFilterState();
+    }
+
+    orderSelect?.addEventListener("change", () => {
+      const nextMode = orderSelect.value;
+      if (nextMode !== "age" && nextMode !== "stars") return;
+      orderMode = nextMode;
+      applyOrderMode();
     });
 
     // Row filter dropdowns (AND-composed across rows). The selects live
@@ -1679,31 +1798,14 @@ const CAP_NOTES: Record<string, string> = {
       }
     });
 
-    // Click a tool header to move the column right after Panix.
-    tableElement.tHead!.addEventListener("click", (event) => {
-      const headerCell = (event.target as HTMLElement).closest<HTMLElement>(
-        "th[data-tool]",
-      );
-      if (!headerCell || headerCell.dataset.tool === "Panix") return;
-      if ((event.target as HTMLElement).closest("a")) return;
-      const clickedToolName = headerCell.dataset.tool!;
-      const remainingToolNames = visibleTools().filter(
-        (toolName) => toolName !== clickedToolName && toolName !== "Panix",
-      );
-      table.setColumnOrder([
-        "Panix",
-        clickedToolName,
-        ...remainingToolNames,
-        ...hiddenToolNames(),
-      ]);
-    });
-
     // Click a capability row header to sort tools by that row's values.
     tableElement.tBodies[0].addEventListener("click", (event) => {
       if ((event.target as HTMLElement).closest("select, a")) return;
-      const tableRow = (event.target as HTMLElement).closest<HTMLElement>(
-        "tr[data-cap]",
+      const rowHead = (event.target as HTMLElement).closest<HTMLElement>(
+        "th.rowhead",
       );
+      if (!rowHead) return;
+      const tableRow = rowHead.closest<HTMLElement>("tr[data-cap]");
       if (!tableRow) return;
       const capabilityKey = tableRow.dataset.cap!;
       const rankedToolNames = toolNames
@@ -1712,11 +1814,7 @@ const CAP_NOTES: Record<string, string> = {
           const cell = toolsByName.get(toolName)?.cells[capabilityKey];
           return {
             toolName,
-            rank: cell
-              ? "items" in cell
-                ? Math.min(...cell.items.map((item) => TONE_RANK[item.tone]))
-                : TONE_RANK[cell.tone]
-              : 3,
+            rank: cellRank(cell),
             text: cell
               ? "items" in cell
                 ? (cell.items[0]?.text ?? "")
@@ -1731,16 +1829,12 @@ const CAP_NOTES: Record<string, string> = {
             a.toolName.localeCompare(b.toolName),
         )
         .map((rankedTool) => rankedTool.toolName);
+      // The capability order is transient and not a URL mode: drop the
+      // mode label so the select and shared links stay truthful.
+      orderMode = "age";
+      updateOrderSelect();
       table.setColumnOrder(["Panix", ...rankedToolNames]);
     });
-
-    function hiddenToolNames() {
-      const columnVisibility = table.atoms.columnVisibility.get();
-      return toolNames.filter(
-        (toolName) =>
-          toolName !== "Panix" && columnVisibility[toolName] === false,
-      );
-    }
 
     // Reflect loaded row filters in the dropdowns.
     tableElement
@@ -1750,117 +1844,11 @@ const CAP_NOTES: Record<string, string> = {
           rowFilters[rowFilterSelect.dataset.rowFilter!] ?? "";
       });
 
-    // Reserve the container's tallest state (every tool column revealed,
-    // min-height floored) so toggling a tool can never shift the page.
-    function measureFullTableHeight() {
-      const hiddenCells = tableElement.querySelectorAll<HTMLElement>(
-        "th[data-tool][hidden], td[data-tool][hidden]",
-      );
-      const previousMinHeight = scrollElement.style.minHeight;
-      scrollElement.style.minHeight = "";
-      hiddenCells.forEach((cell) => (cell.hidden = false));
-      const height = Math.ceil(scrollElement.getBoundingClientRect().height);
-      hiddenCells.forEach((cell) => (cell.hidden = true));
-      scrollElement.style.minHeight = previousMinHeight;
-      return height;
-    }
-
-    let reservedTableHeight = measureFullTableHeight();
-    scrollElement.style.minHeight = `${reservedTableHeight}px`;
-    // Fallback fonts under-measure; re-measure once real fonts are active.
-    void document.fonts?.ready.then(() => {
-      const height = measureFullTableHeight();
-      if (height > reservedTableHeight) {
-        reservedTableHeight = height;
-        scrollElement.style.minHeight = `${height}px`;
-      }
-    });
-
-    // Live GitHub stars + repo age in tool headers, cached 24h in
-    // localStorage (stale-while-revalidate). Isolated: a failure here
-    // must never break the table logic.
-    function loadRepositoryMeta() {
-      try {
-        const repositoryMetaElements = [
-          ...tableElement.querySelectorAll<HTMLSpanElement>("[data-repo]"),
-        ];
-        const repositoryMetaCache: Record<
-          string,
-          { stars: number; created: string; cachedAt: number }
-        > = JSON.parse(localStorage.getItem("panix-compare-stars-v1") || "{}");
-        const formatStarCount = (starCount: number) =>
-          starCount >= 10000
-            ? `${Math.round(starCount / 1000)}k`
-            : starCount >= 1000
-              ? `${(starCount / 1000).toFixed(1)}k`
-              : `${starCount}`;
-        const formatRepositoryAge = (createdAt: string) => {
-          const repositoryAgeDays = Math.floor(
-            (Date.now() - new Date(createdAt).getTime()) / 86400000,
-          );
-          if (repositoryAgeDays >= 365)
-            return `${Math.floor(repositoryAgeDays / 365)}y`;
-          if (repositoryAgeDays >= 30)
-            return `${Math.floor(repositoryAgeDays / 30)}mo`;
-          return `${repositoryAgeDays}d`;
-        };
-        const paintRepositoryMeta = (
-          repositoryMetaElement: HTMLSpanElement,
-          cacheEntry: { stars: number; created: string },
-        ) => {
-          repositoryMetaElement.textContent = `★ ${formatStarCount(cacheEntry.stars)} · ${formatRepositoryAge(cacheEntry.created)}`;
-          repositoryMetaElement.classList.remove("pending");
-        };
-        const saveRepositoryMetaCache = () => {
-          try {
-            localStorage.setItem(
-              "panix-compare-stars-v1",
-              JSON.stringify(repositoryMetaCache),
-            );
-          } catch {
-            /* storage unavailable, keep in-memory values */
-          }
-        };
-        const fetchRepositoryMeta = (
-          repositorySlug: string,
-          repositoryMetaElement: HTMLSpanElement,
-        ) =>
-          fetch(`https://api.github.com/repos/${repositorySlug}`)
-            .then((response) =>
-              response.ok ? response.json() : Promise.reject(response),
-            )
-            .then((payload: unknown) => {
-              const repositoryJson = payload as GitHubRepositoryResponse;
-              repositoryMetaCache[repositorySlug] = {
-                stars: repositoryJson.stargazers_count,
-                created: repositoryJson.created_at,
-                cachedAt: Date.now(),
-              };
-              saveRepositoryMetaCache();
-              paintRepositoryMeta(
-                repositoryMetaElement,
-                repositoryMetaCache[repositorySlug],
-              );
-            })
-            .catch(() => repositoryMetaElement.classList.remove("pending"));
-        for (const repositoryMetaElement of repositoryMetaElements) {
-          const repositorySlug = repositoryMetaElement.dataset.repo!;
-          const cacheEntry = repositoryMetaCache[repositorySlug];
-          if (cacheEntry && Date.now() - cacheEntry.cachedAt < 86400000)
-            paintRepositoryMeta(repositoryMetaElement, cacheEntry);
-          else {
-            if (cacheEntry)
-              paintRepositoryMeta(repositoryMetaElement, cacheEntry);
-            fetchRepositoryMeta(repositorySlug, repositoryMetaElement);
-          }
-        }
-      } catch {
-        /* dead meta, table still works */
-      }
-    }
-    loadRepositoryMeta();
-
-    render();
+    updateOrderSelect();
+    // A shared link may open in stars mode: the build-time star counts
+    // are available immediately, so the order applies at startup.
+    if (orderMode === "stars") applyOrderMode();
+    else render();
   }
 </script>
 
@@ -1877,6 +1865,20 @@ const CAP_NOTES: Record<string, string> = {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
+  }
+
+  /* Sort control row: a labeled select above the chip row, styled like
+     the in-table pill selects so every dropdown control shares one
+     vocabulary and the chips stay pure column toggles. */
+  .sort-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sort-tools label {
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
   }
 
   .chip {
@@ -1930,11 +1932,12 @@ const CAP_NOTES: Record<string, string> = {
     border-style: dashed;
   }
 
-  /* Color legend. */
+  /* Color legend, below the table. */
   .legend {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1.25rem;
+    margin-top: 0.75rem;
   }
 
   .legend-item {
@@ -1971,7 +1974,7 @@ const CAP_NOTES: Record<string, string> = {
   }
 
   /* Full-bleed: the table escapes the content column to the viewport
-	   edges so 18 columns fit without scrolling on desktop. */
+	   edges so 19 columns fit without scrolling on desktop. */
   .scroll {
     margin-inline: calc(-50vw + 50%);
     padding-inline: 0.75rem;
@@ -2004,11 +2007,6 @@ const CAP_NOTES: Record<string, string> = {
 		   column width. */
     white-space: normal;
     overflow-wrap: anywhere;
-    cursor: pointer;
-  }
-
-  thead th.hl {
-    cursor: default;
   }
 
   .rowhead {
@@ -2037,7 +2035,11 @@ const CAP_NOTES: Record<string, string> = {
     font-size: 0.8125rem;
   }
 
-  .row-filter {
+  /* Shared pill select: in-table row filters and the sort control.
+     Appearance-none with an inline caret; the table scopes the width cap
+     so narrow row filters never stretch, the sort select sizes to its
+     options. */
+  .pill-select {
     appearance: none;
     font-family: var(--sl-font-mono, var(--sl-font-system-mono));
     font-size: 0.75rem;
@@ -2049,16 +2051,19 @@ const CAP_NOTES: Record<string, string> = {
       url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23979db0' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E")
       no-repeat right 0.35rem center;
     color: var(--sl-color-gray-1);
-    max-width: 7.5rem;
     text-overflow: ellipsis;
     cursor: pointer;
   }
 
-  .row-filter:hover {
+  table .pill-select {
+    max-width: 7.5rem;
+  }
+
+  .pill-select:hover {
     border-color: var(--sl-color-gray-3);
   }
 
-  .row-filter:focus {
+  .pill-select:focus {
     outline: 1px solid var(--sl-color-accent);
     border-color: var(--sl-color-accent);
   }
@@ -2249,9 +2254,8 @@ const CAP_NOTES: Record<string, string> = {
     color: var(--sl-color-gray-2);
   }
 
-  /* Live GitHub stars + repo age under each tool name. Reserve ~5ch while
-	   pending so numbers landing later do not shift columns; empty (failed)
-	   spans collapse. */
+  /* GitHub stars + repo age under each tool name, resolved at build
+     time; the tooltip says so. */
   .repo-meta {
     display: block;
     font-size: 0.6875rem;
@@ -2260,13 +2264,5 @@ const CAP_NOTES: Record<string, string> = {
     color: var(--sl-color-gray-3);
     white-space: nowrap;
     margin-top: 0.1rem;
-  }
-
-  .repo-meta.pending {
-    min-width: 5ch;
-  }
-
-  .repo-meta:empty {
-    display: none;
   }
 </style>
