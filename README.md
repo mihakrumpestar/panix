@@ -27,9 +27,6 @@
 
 ---
 
-> [!WARNING]
-> The tool is currently in beta stage. There might be breaking changes.
-
 ## Demo
 
 ![Demo](https://github.com/user-attachments/assets/eb1a5539-65f0-4a75-b5de-5a7988e89036)

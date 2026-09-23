@@ -7,10 +7,14 @@ import tailwindcss from '@tailwindcss/vite';
 
 import mdx from '@astrojs/mdx';
 
+import { REPO_URL } from './src/lib/repo';
+
 export default defineConfig({
 	site: 'https://panix.xyz',
 	vite: {
 		plugins: [tailwindcss()],
+		// Allow dev-server imports of files outside docs/ (gen/VERSION via src/lib/repo).
+		server: { fs: { allow: ['..'] } },
 	},
 	integrations: [
 		mermaid({
@@ -36,6 +40,7 @@ export default defineConfig({
 				ThemeProvider: './src/components/ForceDarkTheme.astro',
 				ThemeSelect: './src/components/EmptyComponent.astro',
 				Hero: './src/components/Hero.astro',
+				SocialIcons: './src/components/HeaderSocial.astro',
 			},
 			expressiveCode: {
 				themes: ['starlight-dark'],
@@ -45,7 +50,7 @@ export default defineConfig({
 				{
 					icon: 'github',
 					label: 'GitHub',
-					href: 'https://github.com/mihakrumpestar/panix',
+					href: REPO_URL,
 				},
 				{
 					icon: 'heart',
@@ -54,8 +59,7 @@ export default defineConfig({
 				},
 			],
 			editLink: {
-				baseUrl:
-					'https://github.com/mihakrumpestar/panix/edit/main/docs/',
+				baseUrl: `${REPO_URL}/edit/main/docs/`,
 			},
 			plugins: [
 				starlightUtils({

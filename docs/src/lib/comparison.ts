@@ -44,6 +44,14 @@ export interface Capability {
   values: string[];
 }
 
+// Tool columns hidden in the default view: raw NixOS primitives + nixos-infect; nixos-anywhere stays visible as the maintained bootstrap representative.
+export const DEFAULT_HIDDEN_TOOL_NAMES: readonly string[] = [
+  "nixos-rebuild",
+  "nixos-install",
+  "system.autoUpgrade",
+  "nixos-infect",
+];
+
 // The text(s) a cell contributes to filtering: item texts for a multi-feature
 // cell, the single value otherwise, [] when the cell is absent.
 export function cellTexts(cell: Cell | undefined): string[] {

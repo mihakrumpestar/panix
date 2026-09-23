@@ -2,7 +2,11 @@
 import LandingSection from "./LandingSection.astro";
 import IconNote from "./IconNote.astro";
 import type { Capability, ToolColumn } from "../lib/comparison";
-import { TONE_RANK, cellTexts } from "../lib/comparison";
+import {
+  DEFAULT_HIDDEN_TOOL_NAMES,
+  TONE_RANK,
+  cellTexts,
+} from "../lib/comparison";
 
 // Tone: good = capability present, warn = limited or a cost, off = absent,
 // neutral = a model difference, not a quality. Fact set verified 2026-09-15
@@ -1193,7 +1197,9 @@ const CAP_NOTES: Record<string, string> = {
               type="button"
               class="chip"
               data-tool-btn={tool.name}
-              aria-pressed="true"
+              aria-pressed={
+                DEFAULT_HIDDEN_TOOL_NAMES.includes(tool.name) ? "false" : "true"
+              }
             >
               {tool.name}
             </button>
@@ -1224,6 +1230,7 @@ const CAP_NOTES: Record<string, string> = {
                 scope="col"
                 class:list={[{ hl: tool.highlight }]}
                 data-tool={tool.name}
+                hidden={DEFAULT_HIDDEN_TOOL_NAMES.includes(tool.name)}
                 title={
                   tool.highlight ? undefined : "Click to compare beside Panix"
                 }
@@ -1295,7 +1302,11 @@ const CAP_NOTES: Record<string, string> = {
                   .filter(Boolean)
                   .join(" ");
                 return (
-                  <td data-tool={tool.name} class={cellClassName}>
+                  <td
+                    data-tool={tool.name}
+                    class={cellClassName}
+                    hidden={DEFAULT_HIDDEN_TOOL_NAMES.includes(tool.name)}
+                  >
                     {"items" in cell ? (
                       <span class="items">
                         {cell.items.map((item) => (
@@ -1374,7 +1385,12 @@ const CAP_NOTES: Record<string, string> = {
   } from "@tanstack/table-core";
   import { storeReactivityBindings } from "@tanstack/table-core/store-reactivity-bindings";
   import type { ToolColumn } from "../lib/comparison";
-  import { TONE_RANK, cellTexts, parseJson } from "../lib/comparison";
+  import {
+    DEFAULT_HIDDEN_TOOL_NAMES,
+    TONE_RANK,
+    cellTexts,
+    parseJson,
+  } from "../lib/comparison";
 
   // Stable wire shape for filter state shared through URLs and localStorage.
   interface SerializedFilterState {
@@ -1411,17 +1427,6 @@ const CAP_NOTES: Record<string, string> = {
 
     const FILTER_STORAGE_KEY = "panix-compare-filters-v4";
 
-    // Default-hidden baseline cluster: the raw NixOS primitives plus
-    // nixos-infect (third-party, lustration-based, removal scheduled in
-    // NixOS 26.11). nixos-anywhere stays visible as the maintained
-    // representative of the bootstrap primitives. One chip click away.
-    const DEFAULT_HIDDEN_TOOL_NAMES = [
-      "nixos-rebuild",
-      "nixos-install",
-      "system.autoUpgrade",
-      "nixos-infect",
-    ];
-
     // URL state wins over localStorage so shared links are exact.
     function readInitialFilterState(): {
       hiddenToolNames: string[];
@@ -1453,7 +1458,7 @@ const CAP_NOTES: Record<string, string> = {
           return {
             hiddenToolNames: Array.isArray(savedFilterState.hide)
               ? savedFilterState.hide
-              : DEFAULT_HIDDEN_TOOL_NAMES,
+              : [...DEFAULT_HIDDEN_TOOL_NAMES],
             filters:
               savedFilterState.f && typeof savedFilterState.f === "object"
                 ? savedFilterState.f
@@ -1467,7 +1472,7 @@ const CAP_NOTES: Record<string, string> = {
         /* corrupted entry, fall back to defaults */
       }
       return {
-        hiddenToolNames: DEFAULT_HIDDEN_TOOL_NAMES,
+        hiddenToolNames: [...DEFAULT_HIDDEN_TOOL_NAMES],
         filters: {},
         columnOrder: [],
       };
@@ -1745,11 +1750,31 @@ const CAP_NOTES: Record<string, string> = {
           rowFilters[rowFilterSelect.dataset.rowFilter!] ?? "";
       });
 
-    // Reserve vertical space from the full (unfiltered) SSR table so
-    // filtering never changes the page layout.
-    scrollElement.style.minHeight = `${Math.ceil(
-      tableElement.getBoundingClientRect().height,
-    )}px`;
+    // Reserve the container's tallest state (every tool column revealed,
+    // min-height floored) so toggling a tool can never shift the page.
+    function measureFullTableHeight() {
+      const hiddenCells = tableElement.querySelectorAll<HTMLElement>(
+        "th[data-tool][hidden], td[data-tool][hidden]",
+      );
+      const previousMinHeight = scrollElement.style.minHeight;
+      scrollElement.style.minHeight = "";
+      hiddenCells.forEach((cell) => (cell.hidden = false));
+      const height = Math.ceil(scrollElement.getBoundingClientRect().height);
+      hiddenCells.forEach((cell) => (cell.hidden = true));
+      scrollElement.style.minHeight = previousMinHeight;
+      return height;
+    }
+
+    let reservedTableHeight = measureFullTableHeight();
+    scrollElement.style.minHeight = `${reservedTableHeight}px`;
+    // Fallback fonts under-measure; re-measure once real fonts are active.
+    void document.fonts?.ready.then(() => {
+      const height = measureFullTableHeight();
+      if (height > reservedTableHeight) {
+        reservedTableHeight = height;
+        scrollElement.style.minHeight = `${height}px`;
+      }
+    });
 
     // Live GitHub stars + repo age in tool headers, cached 24h in
     // localStorage (stale-while-revalidate). Isolated: a failure here

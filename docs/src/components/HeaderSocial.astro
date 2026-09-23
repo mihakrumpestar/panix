@@ -1,0 +1,11 @@
+---
+// Header right-group override (version link + social icons); styles live in
+// ../styles/panix-theme.css (.social-icons > a.version).
+import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+import { PANIX_VERSION, REPO_URL } from '../lib/repo';
+
+const version = PANIX_VERSION;
+---
+
+<a class="version" href={`${REPO_URL}/releases`}>v{version}</a>
+<SocialIcons />

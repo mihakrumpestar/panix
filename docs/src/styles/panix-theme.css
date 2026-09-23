@@ -152,7 +152,9 @@
 	/* muted cyan                        */
 }
 
-/* ── Nav links styling ───────────────────────────────────────── */
+/* ── Navbar text links ───────────────────────────────────────── */
+/* Shared metrics for the starlight-utils leading links ("Docs") and the
+   version link; only the nav link gets the chip background (active state). */
 .title-wrapper ul {
 	list-style: none;
 	margin: 0;
@@ -162,25 +164,42 @@
 	align-items: center;
 }
 
-.title-wrapper ul li a {
-	display: inline-block;
-	padding: 0.35rem 0.75rem;
-	border-radius: 0.375rem;
-	font-size: 0.875rem;
+.title-wrapper ul li a,
+.social-icons > a.version {
+	font-size: 1rem;
 	font-weight: 500;
 	color: var(--sl-color-gray-2);
 	text-decoration: none;
 	transition: color 0.15s, background-color 0.15s;
 }
 
-.title-wrapper ul li a:hover {
+.title-wrapper ul li a:hover,
+.title-wrapper ul li a:focus,
+.social-icons > a.version:hover,
+.social-icons > a.version:focus {
 	color: var(--sl-color-white);
+}
+
+.title-wrapper ul li a {
+	display: inline-block;
+	padding: 0.4rem 0.85rem;
+	border-radius: 0.375rem;
+}
+
+.title-wrapper ul li a:hover,
+.title-wrapper ul li a:focus {
 	background-color: var(--sl-color-gray-5);
 }
 
 .title-wrapper ul li a[aria-current="page"] {
 	color: var(--sl-color-accent-high);
 	background-color: var(--sl-color-accent-low);
+}
+
+/* ── Version link optical nudge ──────────────────────────────── */
+/* Aligns the version text's ink envelope with the adjacent icon envelopes. */
+.social-icons > a.version {
+	transform: translateY(var(--panix-version-optical-nudge, 0.75px));
 }
 
 /* ── Social icons size ───────────────────────────────────────── */
@@ -190,10 +209,60 @@
 	--sl-icon-size: 1.5rem;
 }
 
-/* ── Nav link size ───────────────────────────────────────────── */
-.title-wrapper ul li a {
-	font-size: 1rem;
-	padding: 0.4rem 0.85rem;
+/* ── Brand: bar height, logo, wordmark ────────────────────────── */
+/* Bar and brand scale together; nudges are optical, tuned per measurement.
+   The wordmark's line box must stay >= the mark or the title-wrapper's
+   overflow: clip crops the mark. */
+:root {
+	--sl-nav-height: 4rem; /* 64px */
+	--panix-brand-logo-size: 3.125rem; /* 50px */
+	--panix-brand-title-size: 2rem; /* 32px */
+	--panix-brand-gap: 0.125rem; /* 2px */
+	--panix-brand-logo-nudge: -0.42px;
+	--panix-brand-title-nudge: 0.125px;
+}
+
+@media (min-width: 50rem) {
+	:root {
+		--sl-nav-height: 4.5rem; /* 72px */
+		--panix-brand-logo-size: 3.5rem; /* 56px */
+		--panix-brand-title-size: var(--sl-text-4xl); /* 35px */
+		--panix-brand-title-nudge: 1.15px;
+	}
+}
+
+.site-title {
+	gap: var(--panix-brand-gap);
+	font-size: var(--panix-brand-title-size);
+}
+
+.site-title img {
+	height: var(--panix-brand-logo-size);
+	transform: translateY(var(--panix-brand-logo-nudge));
+}
+
+.site-title span {
+	transform: translateY(var(--panix-brand-title-nudge));
+}
+
+/* Very narrow phones: smaller brand step + compact navbar spacing so the
+   wordmark is never flex-shrunk into Starlight's span overflow clip. */
+@media (max-width: 22rem) {
+	:root {
+		--panix-brand-logo-size: 2.75rem; /* 44px */
+		--panix-brand-title-size: 1.625rem; /* 26px */
+		--panix-brand-title-nudge: 1.6px;
+		--sl-nav-gap: 0.5rem; /* 8px, header-scoped */
+	}
+}
+
+/* ── Search placement (desktop) ──────────────────────────────── */
+/* Pin the header grid's brand column so the search sits one nav gap after the
+   Docs chip instead of floating; middle column stays 1fr, right cluster flush. */
+@media (min-width: 50rem) {
+	header.header > .header {
+		grid-template-columns: auto 1fr auto;
+	}
 }
 
 /* ── Landing page shared utilities ──────────────────────────── */
