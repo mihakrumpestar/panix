@@ -34,7 +34,13 @@ const { kicker, title, lead, band = false, id } = Astro.props;
 					</a>
 				)}
 			</div>
-			{lead && <p class="lead">{lead}</p>}
+			{/* Named slot wins over the lead prop, which stays working for
+			    plain-string callers. */}
+			{Astro.slots.has("lead") ? (
+				<slot name="lead" />
+			) : lead ? (
+				<p class="lead">{lead}</p>
+			) : null}
 		</header>
 		<slot />
 	</div>

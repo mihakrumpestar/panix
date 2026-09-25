@@ -135,6 +135,16 @@ const CLAN_DOCS = "https://clan.lol/docs/26.05";
 const CLAN_MACHINES_CLI = `${CLAN_DOCS}/reference/cli/machines`;
 const CLAN_REPO = "https://github.com/clan-lol/clan-core";
 
+// devenv: the machines feature, new in devenv 2.4 (experimental).
+const DEVENV_REPO = "https://github.com/cachix/devenv";
+const DEVENV_MACHINES = "https://devenv.sh/machines/";
+const DEVENV_FRESH_HOST = `${DEVENV_MACHINES}#installing-on-a-fresh-host`;
+const DEVENV_UPDATE = `${DEVENV_MACHINES}#updating-an-existing-host`;
+const DEVENV_SEVERAL = `${DEVENV_MACHINES}#deploy-several-machines`;
+const DEVENV_ROLLBACK_HEALTH = `${DEVENV_MACHINES}#nixos-rollback-and-health-checks`;
+const DEVENV_DEFINE = `${DEVENV_MACHINES}#define-a-machine`;
+const DEVENV_SECRETS = `${DEVENV_MACHINES}#bootstrap-files-and-secrets-for-nixos-installs`;
+
 // Source files that enumerate a tool's complete capability surface. Absence
 // cells link these: a documentation page cannot state that something is
 // missing, but the file defining every command or option can.
@@ -1129,6 +1139,84 @@ const tools: ToolColumn[] = [
       },
     },
   },
+  {
+    name: "devenv machines",
+    href: DEVENV_REPO,
+    notice:
+      "Only the machines feature is compared here: it is experimental, new in devenv 2.4, and its interface may change before it is declared stable",
+    cells: {
+      bootstrap: {
+        text: "Yes",
+        tone: "good",
+        note: "kexec installer plus disko over root SSH; the host need not run NixOS; wipes disks without a confirmation prompt and has no dry run",
+        href: DEVENV_FRESH_HOST,
+      },
+      update: {
+        text: "Yes",
+        tone: "good",
+        note: "Builds, shows a plan and asks for confirmation; --yes skips it",
+        href: DEVENV_UPDATE,
+      },
+      scope: {
+        text: "Fleet",
+        tone: "good",
+        note: "No tags or group selectors; activates in name order with --max-concurrent batches, and a failed batch stops later batches",
+        href: DEVENV_SEVERAL,
+      },
+      visibility: {
+        text: "Status",
+        tone: "warn",
+        note: "Deploy prints a per-machine plan review and a confirmation prompt, then concurrent per-machine start and completion lines; no live per-stage progress and deploy never uses the TUI; status reports the latest operation per machine as JSON",
+        href: DEVENV_UPDATE,
+      },
+      health: {
+        text: "Yes",
+        tone: "good",
+        note: "A configurable check command runs as root after activation (NixOS only); the default only verifies system paths",
+        href: DEVENV_ROLLBACK_HEALTH,
+      },
+      rollback: {
+        items: [
+          {
+            text: "Manual",
+            tone: "warn",
+            note: "devenv machines rollback switches to the recorded previous system",
+            href: DEVENV_ROLLBACK_HEALTH,
+          },
+          {
+            text: "Auto",
+            tone: "good",
+            note: "A target-side watchdog restores the previous system if activation or the health check fails, or confirmation misses the deadline; NixOS only, and also recovers after reboot",
+            href: DEVENV_ROLLBACK_HEALTH,
+          },
+        ],
+      },
+      execution: {
+        text: "Push",
+        tone: "neutral",
+        note: "No agent: the closure is copied over SSH and activation runs in a systemd service on the target; --use-machines-as-builders can use targets as remote builders",
+        href: DEVENV_SEVERAL,
+      },
+      state: {
+        text: "Stateful",
+        tone: "warn",
+        note: "The target keeps /var/lib/devenv-machines and GC roots, and a new deployment is blocked while the previous outcome is unknown; saved plans live under .devenv/machine-plans",
+        href: DEVENV_ROLLBACK_HEALTH,
+      },
+      flake: {
+        text: "Rewrite",
+        tone: "warn",
+        note: "Machine definitions are authored in devenv.nix around devenv's format rather than a flake: nixosConfigurations outputs are not consumed, and in plain devenv projects devenv.yaml pins the inputs; existing NixOS module files import unchanged, but the disko input is required for every NixOS machine",
+        href: DEVENV_DEFINE,
+      },
+      secrets: {
+        text: "Install-phase",
+        tone: "warn",
+        note: "Bootstrap credentials via SecretSpec during install only; ongoing delivery is BYO with sops-nix or agenix in your modules",
+        href: DEVENV_SECRETS,
+      },
+    },
+  },
 ];
 
 // Display order is derived, never hand-maintained: Panix first, then
@@ -1189,6 +1277,19 @@ const toolsDataJson = JSON.stringify(
   })),
 );
 const toolNamesJson = JSON.stringify(tools.map((tool) => tool.name));
+
+// Header count: the compared column total is derived from the tools
+// array at build time, never hardcoded; the visible subset (default
+// view minus the hidden primitives, then minus active row filters)
+// is corrected live by the client script.
+const toolTotal = tools.length;
+const defaultVisibleCount =
+  toolTotal -
+  new Set(
+    DEFAULT_HIDDEN_TOOL_NAMES.filter((hidden) =>
+      tools.some((tool) => tool.name === hidden),
+    ),
+  ).size;
 
 // Plain-language definitions for every table term: shown as the cell-link
 // hover tooltip and repeated in the glossary below the table.
@@ -1283,6 +1384,11 @@ const CAP_NOTES: Record<string, string> = {
 ---
 
 <LandingSection kicker="comparison" title="How Panix compares" id="comparison">
+  <p slot="lead" class="lead-count">
+    A comparison between <span data-count-visible>{defaultVisibleCount}</span> out
+    of <span data-count-total>{toolTotal}</span> NixOS deployment tools.
+  </p>
+
   <div
     class="filters"
     data-compare-filters
@@ -1464,7 +1570,7 @@ const CAP_NOTES: Record<string, string> = {
     Every cell links to what verifies it: the feature's own doc section where
     one exists, otherwise the source file that enumerates the tool's commands or
     options, since a documentation page cannot state that something is missing.
-    Hover a cell or term for its plain-language meaning. Verified 2026-09-23.
+    Hover a cell or term for its plain-language meaning. Verified 2026-09-25.
   </p>
   <p class="note">
     Filter with the row dropdowns, toggle tools with the chips, sort tools with
@@ -1509,6 +1615,8 @@ const CAP_NOTES: Record<string, string> = {
   const tableElement = document.querySelector<HTMLTableElement>(
     "[data-compare-table]",
   );
+  // The lead sentence's live visible-tool count, corrected by render().
+  const visibleCountElement = document.querySelector("[data-count-visible]");
 
   if (filtersRoot && tableElement) {
     // Cell model parsed from the server-rendered data: a single value or
@@ -1646,6 +1754,8 @@ const CAP_NOTES: Record<string, string> = {
     function render() {
       const visibleToolNames = visibleTools();
       const visibleToolNameSet = new Set(visibleToolNames);
+      if (visibleCountElement)
+        visibleCountElement.textContent = String(visibleToolNames.length);
 
       // Physically reorder and hide tool columns, header first.
       for (const toolName of visibleToolNames) {
@@ -2210,6 +2320,21 @@ const CAP_NOTES: Record<string, string> = {
 
   .note code {
     font-size: 0.85em;
+  }
+
+  /* Lead sentence from the named slot: styled here because slot content
+     is scoped by the component that authors it, not LandingSection.
+     Mirrors LandingSection's .lead, sized to the section head. */
+  .lead-count {
+    margin: 0;
+    max-width: 40rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .lead-count :global([data-count-visible]),
+  .lead-count :global([data-count-total]) {
+    color: var(--sl-color-white);
+    font-variant-numeric: tabular-nums;
   }
 
   /* Collapsible term glossary below the table. */

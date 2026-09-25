@@ -1,6 +1,6 @@
 // Single source of truth mapping comparison-table tool names to their
 // GitHub repo: the slug for build-time star resolution and the repo
-// creation date (verified against the GitHub API 2026-09-23) hardcoded
+// creation date (verified against the GitHub API 2026-09-25) hardcoded
 // here because it is immutable. Consumed by fetch-repo-stars.ts, which
 // resolves stars when the docs build runs.
 // Tools absent here are nixpkgs-native primitives with no standalone repo
@@ -13,10 +13,7 @@ export interface GitHubRepo {
 export const GITHUB_REPOS: Record<string, GitHubRepo> = {
   Panix: { slug: "mihakrumpestar/panix", createdAt: "2025-05-22" },
   "nixos-infect": { slug: "elitak/nixos-infect", createdAt: "2016-04-18" },
-  "nixos-anywhere": {
-    slug: "nix-community/nixos-anywhere",
-    createdAt: "2022-11-09",
-  },
+  "nixos-anywhere": { slug: "nix-community/nixos-anywhere", createdAt: "2022-11-09", },
   NixOps: { slug: "NixOS/nixops", createdAt: "2011-10-24" },
   Colmena: { slug: "nix-community/colmena", createdAt: "2020-12-16" },
   wire: { slug: "forallsys/wire", createdAt: "2024-07-01" },
@@ -30,4 +27,6 @@ export const GITHUB_REPOS: Record<string, GitHubRepo> = {
   comin: { slug: "nlewo/comin", createdAt: "2022-12-10" },
   Thymis: { slug: "Thymis-io/thymis", createdAt: "2023-10-01" },
   Clan: { slug: "clan-lol/clan-core", createdAt: "2023-07-11" },
+  // The machines feature carries the column; the devenv repo hosts it.
+  "devenv machines": { slug: "cachix/devenv", createdAt: "2022-10-22" },
 };
