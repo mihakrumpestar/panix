@@ -43,6 +43,14 @@ fleet:
                   # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
                   # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
 
+          mihakrumpestar-work-laptop:
+            machines:
+              mihakrumpestar-work-laptop:
+                bootstrap:
+                  <<: *bootstrap_defaults
+                  # Run after reboot manually, since FIDO2 key needs to get unlocked interactively
+                  # systemd-cryptenroll --fido2-device=auto --fido2-with-client-pin=no --fido2-with-user-presence=yes --wipe-slot=all /dev/nvme0n1p2
+
           server-01:
             machines:
               server-01:
