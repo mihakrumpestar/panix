@@ -48,8 +48,10 @@ type PipeSpec struct {
 // are buffered for the comparison; larger payloads stream and always write.
 // Any probe failure means write, never transfer failure.
 //
-// SkipIfLocal, DisableAutoSSHCommand and Trim are rejected. Dry-run starts
-// nothing and requires OnDryRun whenever OnSuccess is provided.
+// SkipIfLocal, DisableAutoSSHCommand, Trim, Quiet, FreshConnection, WithStdin
+// and WithOutputTap are rejected. WithTimeout is honored: it bounds the whole
+// pipe. Dry-run starts nothing and requires OnDryRun whenever OnSuccess is
+// provided.
 func (ex *Executioner) ExecPipe(
 	description, statusIfRunning, statusIfFailed string,
 	spec PipeSpec,
@@ -75,13 +77,13 @@ func (ex *Executioner) ExecPipe(
 		return err
 	}
 
-	commandLog := ex.conf.PhaseLog.NewCommand(
-		ex.phaseXpath, description, statusIfRunning, statusIfFailed,
+	commandLog := ex.newCommandLog(
+		excOpt, description, statusIfRunning, statusIfFailed,
 		spec.Source, 0,
 	)
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
 
-	cmdCtx, cancel := context.WithTimeout(ex.conf.Ctx, ex.conf.Timeout)
+	cmdCtx, cancel := context.WithTimeout(ex.conf.Ctx, ex.execTimeout(excOpt))
 	defer cancel()
 
 	var execErr error
@@ -134,6 +136,14 @@ func validatePipeOptions(excOpt *ExecOptions) error {
 		return errors.New("exec pipe: DisableAutoSSHCommand is not supported")
 	case excOpt.trim:
 		return errors.New("exec pipe: Trim is not supported")
+	case excOpt.quiet:
+		return errors.New("exec pipe: Quiet is not supported")
+	case excOpt.freshConnection:
+		return errors.New("exec pipe: FreshConnection is not supported")
+	case excOpt.stdin != nil:
+		return errors.New("exec pipe: WithStdin is not supported")
+	case excOpt.outputTap != nil:
+		return errors.New("exec pipe: WithOutputTap is not supported")
 	default:
 		return nil
 	}

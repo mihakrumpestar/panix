@@ -172,7 +172,6 @@ const BENTO_SCRIPT = `${BENTO_REPO}/blob/main/bento`;
 
 // Panix code anchors: facts link to the exact code or docs section.
 const PANIX_REPO = "https://github.com/mihakrumpestar/panix";
-const CODE_ROLLBACK_HANDLER = `${PANIX_REPO}/blob/7f8d2c94c6084031a8b78ece4f2f5bbe2d14fe12/internal/workflow/activate/handler.go#L81`;
 
 // GitHub repo meta under each tool name: repo age from the hardcoded
 // creation date (lib/github-repos.ts) plus stars resolved at build time
@@ -229,15 +228,26 @@ const tools: ToolColumn[] = [
         note: "TUI is the default only on a TTY; a non-interactive run falls back to console output",
         href: "/tui/keybinds/",
       },
-      health: { text: "No", tone: "off", href: "/concepts/phases/" },
+      health: {
+        text: "Yes",
+        tone: "good",
+        note: "Configurable command checks after activation: local checks gate the commit, remote checks run before confirmation",
+        href: "/guides/activation-guard/",
+      },
       rollback: {
         items: [
           { text: "Manual", tone: "warn", href: "/cli/other-commands/" },
           {
             text: "Auto",
             tone: "good",
-            note: "Opt-in via auto_rollback",
-            href: CODE_ROLLBACK_HANDLER,
+            note: "Target-side transaction: the target commits on success and reverts on failure or timeout; local health checks can gate the commit; opt-in via the rollback attribute",
+            href: "/guides/activation-guard/",
+          },
+          {
+            text: "Magic",
+            tone: "good",
+            note: "Auto plus a confirmation window: panix must reconnect and confirm in time, with remote health checks first, or the target reverts",
+            href: "/guides/activation-guard/",
           },
         ],
       },
@@ -1186,7 +1196,7 @@ const tools: ToolColumn[] = [
           {
             text: "Auto",
             tone: "good",
-            note: "A target-side watchdog restores the previous system if activation or the health check fails, or confirmation misses the deadline; NixOS only, and also recovers after reboot",
+            note: "A target-side watchdog restores the previous system if activation or the health check fails, or confirmation misses the deadline; NixOS only, and also recovers after reboot; recovery requires the target to reach userspace",
             href: DEVENV_ROLLBACK_HEALTH,
           },
         ],
@@ -1200,7 +1210,7 @@ const tools: ToolColumn[] = [
       state: {
         text: "Stateful",
         tone: "warn",
-        note: "The target keeps /var/lib/devenv-machines and GC roots, and a new deployment is blocked while the previous outcome is unknown; saved plans live under .devenv/machine-plans",
+        note: "The target keeps /var/lib/devenv-machines checkpoints and GC roots, and a new deployment is blocked while the previous outcome is unknown; this is a transaction guard, not a dependency: later deploys re-derive everything and proceed when the state is missing; saved plans live under .devenv/machine-plans",
         href: DEVENV_ROLLBACK_HEALTH,
       },
       flake: {

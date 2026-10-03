@@ -1,0 +1,132 @@
+---
+title: Activation Guard
+description: Guarded deploys that commit or revert on their own, with health checks and bounded timeouts.
+sidebar:
+  order: 10
+---
+
+A guarded deploy is a remote transaction. Instead of switching the profile and hoping the activation works, panix hands the activation to a guardian on the target. The guardian runs it, verifies that the system actually works, and then either commits the new generation or reverts to the pre-deploy one. The transaction finishes on its own: even if panix dies, the connection drops, or the machine reboots mid-deploy, the target ends up either fully committed or back where it started, within a bounded time.
+
+## The Three Guarantees
+
+1. **Failure reverts.** If the activation fails or hangs, the guardian reverts to the pre-deploy generation. The deploy still reports the original activation error, so a reverted deploy never looks like a successful one.
+2. **Lost connectivity reverts.** The guardian is detached from the SSH session, so it outlives disconnects and panix crashes. On the `magic` tier, a deploy is only committed when panix proves it can still reach the machine and confirm; no confirmation by the deadline means revert, and the machine heals itself.
+3. **Commits need evidence.** Confirmation requires more than a clean exit code: SSH reachability (`magic` tier) and health checks (local and remote) all have to pass before anything is committed.
+
+On the tiers where panix controls the profile (NixOS `switch` and `test`, darwin, systemConfigs), the profile stays untouched until the activation is confirmed, and on NixOS the bootloader default does too, so a reboot mid-deploy boots the old generation.
+
+## Tiers
+
+The `rollback` attribute picks the tier. It is a regular attribute: set it at fleet, flake, installable, or machine level, and it is inherited downward.
+
+| `rollback` | Behavior | Pick it when |
+|---|---|---|
+| `off` (default) | Direct activation, no guard | You want the previous panix behavior, or you manage rollback yourself |
+| `auto` | The guardian commits on success and reverts on any failure or timeout; local health checks can gate the commit | Unattended deploys and CI, where nobody is around to confirm |
+| `magic` | `auto` plus a confirmation window: panix must reconnect and confirm within `rollback_confirm_timeout`, and remote health checks must pass first | You want a dead panix or a broken network to end in a revert instead of a silent commit |
+
+:::note
+The `magic` confirmation is automatic, not a prompt. After activation, panix opens a fresh connection to the target and confirms the deploy. If the deploy broke the network or killed sshd, that confirmation never arrives and the guardian reverts when the window closes.
+:::
+
+## Attributes
+
+```yaml
+fleet:
+  flakes:
+    my-infra:
+      installables:
+        nixosConfigurations:
+          webserver:
+            rollback: magic             # opt-in per installable
+            health_checks:
+              - systemctl is-system-running
+            machines:
+              web-01:
+                rollback: off           # explicit opt-out for one machine
+```
+
+| Attribute | Default | Tiers | Purpose |
+|---|---|---|---|
+| `rollback` | `off` | all | Guard tier: `off`, `auto`, or `magic` |
+| `activation_timeout` | `15m` | `auto`, `magic` | Bound for the activation phase; a hung activation is killed and reverted at the deadline |
+| `rollback_confirm_timeout` | `60s` | `magic` | How long the guardian waits for panix's confirmation before reverting |
+| `reboot_on_revert_failure` | `off` | `auto`, `magic` | Last-resort reboot when the revert itself fails; only fires when the rollback target is verifiably restored, and never in `boot` mode |
+| `health_checks` | `[]` | `magic` | Commands panix runs on the target after activation, before it confirms; any failure reverts the deploy |
+| `health_checks_local` | `[]` | `auto`, `magic` | Commands the guardian runs on the target after activation; any failure skips the commit and reverts |
+
+Validation runs at config load:
+
+- `health_checks` requires `rollback: magic`; any other tier is a config error.
+- `health_checks_local` with `rollback: off` is a config error.
+- `rollback_confirm_timeout` with `rollback: off` or `rollback: auto` is a config error.
+- The remote checks must fit inside the confirmation window: each check gets up to 30s by default, plus a 5s margin.
+
+On a NixOS target, `health_checks_local` also covers a built-in check: if system units that were healthy before the deploy are failed afterwards, the commit is skipped.
+
+### Inheritance
+
+`rollback` and the guard attributes follow the same one-way inheritance rules as other attributes: set them at the highest level that needs them, and every descendant inherits.
+
+Because `rollback` is a string instead of a boolean, absence is the inherit signal: an explicit value, including `rollback: off`, always overrides the parent. This differs from boolean attributes like `disabled`, where `false` is indistinguishable from unset during the merge. To opt one machine out of a fleet-wide `rollback: magic`, set `rollback: off` on that machine.
+
+## What You See in the TUI
+
+A guarded deploy streams as one continuous narrative: the activation output first, then the health check results, then either the commit steps or the revert steps. You watch the transaction resolve instead of seeing a failed activation followed by a separate cleanup.
+
+If the connection drops mid-deploy, panix reconnects and reattaches to the running transaction, and the narrative continues from where it left off. When a deploy fails or reverts, panix reports the original activation error and prints the path to the transaction log on the target.
+
+## When Things Go Wrong
+
+| Scenario | Outcome |
+|---|---|
+| Activation exits non-zero | Immediate revert; the deploy fails with the original activation error |
+| Activation hangs | The activation is killed at `activation_timeout`, then the guardian reverts |
+| Activation breaks the network or kills sshd | panix reconnects and reattaches; with no confirmation by the deadline the guardian reverts and the machine heals itself |
+| Services broken but SSH alive | The health checks fail, so nothing is committed and the guardian reverts; the deploy reports the failed checks |
+| Machine reboots mid-deploy | It boots the old generation, because the bootloader default and the profile stay untouched until commit; user-level tiers reconcile on the next deploy. Exception: `boot` mode boots the new generation |
+| panix dies mid-deploy | `auto` commits a successful activation; `magic` reverts when the confirmation deadline passes. The next deploy reports the converged outcome |
+| panix dies after confirming | The commit stands; the next deploy's pre-flight sweep reports it |
+| Garbage collection runs mid-window | The rollback target cannot be collected: the guard keeps a GC root on whichever generation the profile does not already protect |
+| The revert itself fails | The revert is retried; if it still fails, the deploy reports the revert failure, optionally followed by the gated reboot |
+
+## KillUserProcesses on Linux
+
+:::caution
+On Linux targets with `KillUserProcesses=yes`, guarded deploys hard-fail before activation, with remediation guidance in the error. This is the upstream systemd default since v230; NixOS defaults to `no`, but many other distributions inherit `yes`. The fix is `KillUserProcesses=no` in `logind.conf`. Enabling lingering for the SSH user does not help: the guardian is killed together with the session that started it, so lingering is not a workaround. If the setting cannot be determined at all, guarded deploys fail closed.
+:::
+
+## FAQ
+
+### Where did the failed generation go
+
+On the tiers where panix controls the profile switch (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`, and home-manager >= 25.11), the profile only moves at commit time, after the activation is confirmed. A reverted deploy never switched the profile, so there is no failed generation left in the list. Legacy home-manager activations advance their profile themselves, so a failed one can leave a generation entry behind, but the revert re-activates the previous generation, so nothing broken stays current. Note that in every tier, `home.packages` changes advance the default user-packages profile during activation itself (that is home-manager's own behavior), not the HM generation profile panix transacts on.
+
+### Why do magic deploys take slightly longer
+
+The confirmation is a proof of life: after activation, panix opens a fresh connection to the target and confirms the deploy. That round trip adds roughly 1-2s on success, and it is what makes a dead panix or a broken network end in a revert instead of a silent commit.
+
+### What happens if panix dies mid-deploy
+
+The transaction no longer depends on panix. The guardian on the target finishes it: `auto` commits a successful activation, `magic` reverts when the confirmation deadline passes. The next deploy to that machine runs a pre-flight sweep that reports the converged outcome before touching anything.
+
+### What does the guard leave on the target
+
+Exactly two filesystem entries per profile, both cleaned up automatically when the deploy reaches its final state:
+
+- The transaction log: the streaming transcript you see in the TUI, which doubles as the post-mortem record. It lives under `/run/panix-guard` for NixOS system deploys (cleared on reboot), `/var/root/panix-guard` for macOS, and `~/.local/state/panix-guard` for user-level deploys.
+- One GC-root symlink protecting the rollback target.
+
+## Mode and Type Caveats
+
+- `boot` mode touches the bootloader before confirmation: the profile is set before activation and the boot entry is written during it, so a reboot mid-deploy boots the new generation. `reboot_on_revert_failure` never fires in `boot` mode.
+- `dry-activate` runs unguarded: it is non-mutating, so there is nothing to revert.
+- Bootstrap is never guarded: a fresh machine has no previous generation to revert to.
+- `packages` have no activation and no guard; their behavior is unchanged.
+- `maidConfigurations` and `nixOnDroidConfigurations` run the minimal tier: the activation executes detached with a captured log and the timeout, but there is no revert.
+- Guarded deploys need the guardian binary embedded in panix for the target architecture; builds without it fail fast at Inspect.
+- A debug-only `--unsafe-direct-activation` flag bypasses the guard for emergencies.
+
+Which types get which tier is listed in [Output Types](/configuration/output-types/). To switch to an earlier generation explicitly, use the standalone `panix rollback` command, see [Other Commands](/cli/other-commands/).
+
+The full mechanics (transaction ordering, sweep and convergence, and the guardian protocol) are specified in the [design document](https://github.com/mihakrumpestar/panix/blob/main/docs/design/activation-guard.md).

@@ -48,6 +48,11 @@ tests/e2e/profile
 tests/e2e/bench-results/
 tests/e2e/testflakes/hardware-configuration.nix
 
+# Guardian embed artifacts built locally by `task build` (task go:guardian);
+# bin/.gitkeep and bin/README.md stay tracked. The flake build copies its own
+# variants at build time and must not trip the CI clean-tree step.
+internal/workflow/phaseops/guard/bin/*.gz
+
 # Benchmarks
 /bench
 tests/bench/results.txt
@@ -59,3 +64,4 @@ docs/public/demo.gif
 # devenv
 .devenv/
 .pre-commit-config.yaml
+/panix-guard

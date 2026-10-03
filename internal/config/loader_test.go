@@ -410,6 +410,40 @@ func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 		"unset installable-level fields should fall back to the custom default")
 }
 
+// TestGuardTierPropagationThroughLoader pins the loader-level propagation of
+// the type-level guard preset fields (GuardTier, GuardCommitScript): the tier
+// is a property of the output type and must reach every installable resolved
+// through the real decode+init pipeline. Regression: when routing moved to the
+// per-installable Preset, applyPresetDefaults stopped copying the fields, so
+// every guarded deploy silently routed to the legacy direct-activation path
+// while scoped unit tests (which build Preset structs directly) stayed green.
+func TestGuardTierPropagationThroughLoader(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "with_rollback_tiers.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
+	must.True(ok)
+
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	must.True(ok)
+
+	cfg, ok := attrMap.Get("my-config")
+	must.True(ok)
+
+	assertion := assert.New(t)
+	assertion.Equal(installable.GuardTierFull, cfg.Preset.GuardTier,
+		"type-level GuardTier must propagate from the built-in preset through Init")
+	assertion.Equal(installable.GuardTierFull, cfg.Preset.GuardTierValue())
+	assertion.True(cfg.Preset.GuardTier.IsGuarded())
+	assertion.Empty(cfg.Preset.GuardCommitScript,
+		"nixosConfigurations has no commit script; the empty value must still propagate")
+}
+
 // TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath verifies that an
 // output_type_attr declared in the output_types preset is merged as a type
 // default into installables of that custom type and drives the resolved flake
@@ -478,4 +512,70 @@ func TestOutputTypeAttrOverrideResolvesAttrpath(t *testing.T) {
 		installable.ResolveFlakeInstallable(inst.Type, inst.Name, inst.Preset),
 		"resolved attrpath should use output_type_attr instead of the type key",
 	)
+}
+
+// TestRollbackAttributeInheritanceChain walks the full attribute merge chain
+// (fleet -> flake -> installable -> machine) for the Activation Guard tier: a
+// machine without its own rollback inherits the fleet's magic tier, while a
+// machine that sets rollback: off explicitly keeps it despite the parent's
+// magic. Health checks append down the chain and unset timeouts resolve to
+// their defaults.
+func TestRollbackAttributeInheritanceChain(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "with_rollback_tiers.yml"))
+	require.NoError(t, err)
+
+	require.NoError(t, conf.Fleet.Init())
+
+	flk, ok := conf.Fleet.Flakes.Get("my-flake")
+	require.True(t, ok)
+	require.NoError(t, flk.Init("my-flake", &conf.Fleet.Attributes, &conf.Fleet.Nix))
+
+	attrMap, ok := flk.Installables.Get("nixosConfigurations")
+	require.True(t, ok)
+
+	cfg, ok := attrMap.Get("my-config")
+	require.True(t, ok)
+	require.NoError(t, cfg.Init(installable.FlakeOutputType("nixosConfigurations"), "my-config", &flk.Attributes, &flk.Nix, nil))
+
+	inheriting, ok := cfg.Machines.Get("inheriting-machine")
+	require.True(t, ok)
+	require.NoError(t, inheriting.Init("inheriting-machine", &cfg.Attributes))
+
+	assertion := assert.New(t)
+	assertion.Equal(attributes.RollbackMagic, inheriting.Rollback,
+		"machine should inherit the fleet's magic tier")
+	assertion.True(inheriting.Rollback.IsGuarded())
+	assertion.Equal([]string{"fleet-check"}, inheriting.HealthChecksLocal,
+		"machine should inherit the fleet's local health checks")
+	assertion.Equal(attributes.DefaultActivationTimeout, inheriting.GetActivationTimeout(),
+		"unset activation timeout should resolve to the default")
+	assertion.Equal(attributes.DefaultRollbackConfirmTimeout, inheriting.GetRollbackConfirmTimeout(),
+		"unset rollback confirm timeout should resolve to the default")
+
+	overridden, ok := cfg.Machines.Get("overridden-machine")
+	require.True(t, ok)
+	require.NoError(t, overridden.Init("overridden-machine", &cfg.Attributes))
+
+	assertion.Equal(attributes.RollbackOff, overridden.Rollback,
+		"an explicit child off must override the inherited magic tier")
+	assertion.False(overridden.Rollback.IsGuarded())
+}
+
+// TestDecodeConfigFileLegacyAutoRollbackRejected verifies that the removed
+// auto_rollback attribute fails config load with the migration hint, at every
+// level it may appear on (installable and machine in the fixture).
+func TestDecodeConfigFileLegacyAutoRollbackRejected(t *testing.T) {
+	t.Parallel()
+
+	_, err := decodeConfigFile(testdataPath(t, "legacy_auto_rollback.yml"))
+	require.Error(t, err, "the removed auto_rollback key must fail config load")
+
+	msg := err.Error()
+	assert.Contains(t, msg, `legacy attribute "auto_rollback"`)
+	assert.Contains(t, msg, "fleet.flakes.my-flake.installables.nixosConfigurations.my-config")
+	assert.Contains(t, msg, "fleet.flakes.my-flake.installables.nixosConfigurations.my-config.machines.my-machine")
+	assert.Contains(t, msg, "replace auto_rollback: true with rollback: magic")
+	assert.Contains(t, msg, "auto_rollback: false with rollback: off")
 }

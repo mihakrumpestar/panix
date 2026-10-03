@@ -199,15 +199,128 @@
         ];
       };
 
-      # Dedicated NixOS config whose activation ALWAYS fails (after the profile
-      # switch). Used by the e2e auto-rollback test to deterministically
-      # trigger an activation failure without a runtime flag file or a fresh
-      # re-evaluation of configuration.nix.
+      # Dedicated NixOS config whose activation ALWAYS fails. Used by the e2e
+      # guard rollback leg (tests/e2e/guard.go) to deterministically trigger an
+      # activation failure under the guard's profile-last transaction.
       nixosConfigurations.test-vm-failing = nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
           disko.nixosModules.disko
           ./configuration-failing.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # Activation Guard fixtures (tests/e2e/guard.go): one single-purpose
+      # activation behavior per leg, all derived from the shared good
+      # configuration so only the injected script differs.
+      nixosConfigurations.test-vm-hang = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-hang.nix
+          authorizedKeysModule
+        ];
+      };
+
+      nixosConfigurations.test-vm-sshd-kill = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-sshd-kill.nix
+          authorizedKeysModule
+        ];
+      };
+
+      nixosConfigurations.test-vm-gc-fail = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-gc-fail.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # Stage 3 Activation Guard fixtures (tests/e2e/guard_v2.go): one
+      # single-purpose behavior per leg, derived from the shared good
+      # configuration so only the injected part differs.
+      # test-vm-commit: activation succeeds -> the magic gate confirms and the
+      # guardian commits (the e2e's commit coverage; the relay must map the
+      # post-commit EOF to the terminal record, not to exit 6).
+      nixosConfigurations.test-vm-commit = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-commit.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # test-vm-boot: boot-mode guarded deploy (activation_mode: boot). The
+      # pre-start boot set replaces the profile-set mutation, so the TXN
+      # record must carry an empty commit list and the profile must resolve
+      # to the TXN's new closure after the commit.
+      nixosConfigurations.test-vm-boot = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-boot.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # test-vm-boot-revert: the same commit closure deployed in boot mode
+      # with the activation_path override (panix.yml: etc/panix-e2e-boot-
+      # activation, the wrapper configuration-boot.nix ships). The deploy
+      # closure does not carry the wrapper, so its activation child fails
+      # immediately and the boot-mode revert re-runs OLD's activation through
+      # it, which execs OLD's real switch-to-configuration: profile-first
+      # restore, then OLD's boot activation (spec 4.2). Boot mode's effective
+      # gate is auto (nothing to confirm, spec 5), so the revert comes from
+      # the failing activation, not from a health check.
+      nixosConfigurations.test-vm-boot-revert = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-commit.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # test-vm-guardian-kill: activation kills the detached guardian
+      # mid-window and hangs as an orphan; the relay must classify exit 6 and
+      # panix must converge inline from the transaction's own records.
+      nixosConfigurations.test-vm-guardian-kill = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-guardian-kill.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # test-vm-flood: activation floods the wire with thousands of output
+      # lines; the guardian must log LINK_DEGRADED for the dropped frames and
+      # still carry the transaction to the commit.
+      nixosConfigurations.test-vm-flood = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-flood.nix
+          authorizedKeysModule
+        ];
+      };
+
+      # The retry-after-revert leg re-deploys the good configuration through a
+      # guarded installable. One extra marker file makes this closure differ
+      # from test-vm's, so the retry advances the system profile and the
+      # standalone rollback leg has a real previous generation to roll back to
+      # (same-closure deploys leave the generation list unchanged).
+      nixosConfigurations.test-vm-retry = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          disko.nixosModules.disko
+          ./configuration-retry.nix
           authorizedKeysModule
         ];
       };
@@ -235,6 +348,25 @@
               homeDirectory = "/home/alice";
               stateVersion = lib.trivial.release;
               file.".panix-home-test-marker".text = "panix-e2e-test-pass";
+            };
+          }
+        ];
+      };
+
+      # Guarded user-tier fixture (tests/e2e/guard_v2.go): the magic confirm
+      # rides the wire stdin through the su -l wrapper, so a successful
+      # guarded deploy is the stdin-forwarding proof. Deployed first by the
+      # unguarded home phase (creates the profile's first generation), then by
+      # the guard leg through the guarded route.
+      homeConfigurations.test-home-guard = home-manager.lib.homeManagerConfiguration {
+        inherit pkgs;
+        modules = [
+          {
+            home = {
+              username = "guarduser";
+              homeDirectory = "/home/guarduser";
+              stateVersion = lib.trivial.release;
+              file.".panix-guard-user-marker".text = "panix-e2e-user-tier-stdin-ok";
             };
           }
         ];
@@ -302,10 +434,12 @@
 
         # Debian 12 cloud image (qcow2) — used as base for Debian VMs.
         # NOTE: The URL points to "latest"; when Debian bumps the point release
-        # the hash will change and this will need updating.
+        # the hash will change and this will need updating. Verified against the
+        # served image on 2026-09-25 (upstream replaced the file; nix reported
+        # the new hash on fetch).
         debian-cloud-image = pkgs.fetchurl {
           url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2";
-          hash = "sha256-3T29I6OWUxjMmq4yWS3P3kq8uPkKUMp2Cpyp6PO6YlU=";
+          hash = "sha256-MNoTrQOocT888rmygwtNuJLi59yiVy+etpD4atTo/pc=";
         };
 
         # Cloud-init NoCloud seed ISOs — built via genisoimage (pkgs.cdrkit).

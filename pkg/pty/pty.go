@@ -62,6 +62,51 @@ func (p *Pty) Write(b []byte) (int, error) {
 	return n, nil
 }
 
+// SetEcho toggles the terminal echo of the PTY line discipline.
+//
+// The master and the slave of a PTY pair share one termios state, so the
+// ioctl is applied on the master fd: startCommand closes the parent's slave
+// fd, which leaves the master as the only handle available after Start.
+//
+// SetEcho(false) clears the echo flags (ECHO and ECHONL) only. The line
+// discipline stays in canonical mode with every other flag untouched, which
+// is deliberately not a full raw-mode switch: canonical mode is fine for
+// newline-delimited frames, while ECHONL would still echo line feeds even
+// with ECHO off, so both flags must go.
+//
+// Callers that write command frames to the PTY master (a control channel in
+// front of ssh) call SetEcho(false) after Start so the frames are not echoed
+// back into the outbound stream. When the method is never called, the PTY
+// keeps its default line discipline unchanged.
+//
+// On platforms without PTY support, and on a PTY without a master fd,
+// SetEcho returns ErrUnsupported.
+func (p *Pty) SetEcho(enabled bool) error {
+	if p.master == nil {
+		return ErrUnsupported
+	}
+
+	termios, err := getTermios(p.master)
+	if err != nil {
+		return errors.Wrap(err, "pty: get termios")
+	}
+
+	echoBits := echoTermiosBits()
+
+	if enabled {
+		termios.Lflag |= echoBits
+	} else {
+		termios.Lflag &^= echoBits
+	}
+
+	err = setTermios(p.master, termios)
+	if err != nil {
+		return errors.Wrap(err, "pty: set termios")
+	}
+
+	return nil
+}
+
 // Close closes the PTY master and slave file descriptors.
 // It is safe to call Close multiple times.
 func (p *Pty) Close() error {

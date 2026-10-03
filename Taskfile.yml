@@ -50,6 +50,26 @@ tasks:
     cmds:
       - go build -o /dev/null ./...
 
+  build:
+    desc: Populate the guardian embed dir for the local platform, then build panix (dev builds embed it)
+    cmds:
+      - task: go:guardian
+      - task: go:build
+
+  go:guardian:
+    desc: Build the local-platform panix-guard into the embed dir and gzip it (spec 15)
+    vars:
+      GUARD_EMBED_DIR: internal/workflow/phaseops/guard/bin
+      GUARD_OS:
+        sh: go env GOOS
+      GUARD_ARCH:
+        sh: go env GOARCH
+    cmds:
+      - mkdir -p {{.GUARD_EMBED_DIR}}
+      - CGO_ENABLED=0 go build -trimpath
+        -o {{.GUARD_EMBED_DIR}}/panix-guard-{{.GUARD_OS}}-{{.GUARD_ARCH}} ./cmd/panix-guard
+      - gzip -9nf {{.GUARD_EMBED_DIR}}/panix-guard-{{.GUARD_OS}}-{{.GUARD_ARCH}}
+
   go:check:
     desc: Run checks
     cmds:

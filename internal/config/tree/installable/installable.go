@@ -134,4 +134,6 @@ func (i *Installable) applyPresetDefaults(defaults Preset) {
 	i.Preset.IsSystemLevel = defaults.IsSystemLevel
 	i.Preset.IsBootstrappable = defaults.IsBootstrappable
 	i.Preset.OmitTypeFromAttrPath = defaults.OmitTypeFromAttrPath
+	i.Preset.GuardTier = defaults.GuardTier
+	i.Preset.GuardCommitScript = defaults.GuardCommitScript
 }

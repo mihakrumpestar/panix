@@ -1,0 +1,11 @@
+fleet:
+  flakes:
+    my-flake:
+      url: path:./my-flake
+      installables:
+        nixosConfigurations:
+          my-config:
+            auto_rollback: false
+            machines:
+              my-machine:
+                auto_rollback: true

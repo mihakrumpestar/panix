@@ -96,6 +96,13 @@ func decodeConfigFile(configPath string) (*Config, error) {
 		return nil, errors.Wrap(err, "failed to process templates in config")
 	}
 
+	// Reject attributes removed in breaking releases with a migration hint,
+	// before the strict decode reports them as unknown fields.
+	err = rejectLegacyKeys(processedYAML)
+	if err != nil {
+		return nil, err
+	}
+
 	conf := &Config{}
 
 	err = yamlx.Decode(processedYAML, conf)

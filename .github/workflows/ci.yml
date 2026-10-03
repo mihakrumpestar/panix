@@ -66,6 +66,47 @@ jobs:
             exit 1
           fi
 
+  guardian-compile:
+    name: Guardian Compile Gates (linux/darwin x amd64/arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # devenv (devenv.yaml + devenv.lock) is the single source of truth for the toolchain
+      - uses: cachix/install-nix-action@v31.11.1
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            extra-substituters = https://devenv.cachix.org
+            extra-trusted-public-keys = devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=
+
+      # Go module and build caches are outside the devenv environment.
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-
+
+      - name: Install devenv.sh
+        run: nix profile add nixpkgs#devenv
+
+      # Compile gate for all four GOOS/GOARCH targets (spec 13). Pure Go
+      # cross compilation: CGO disabled, GOOS/GOARCH from the environment.
+      - name: Compile panix-guard for all four GOOS/GOARCH pairs
+        run: |
+          devenv shell -- bash -euo pipefail -c '
+            for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+              os="${pair%%/*}"
+              arch="${pair#*/}"
+              echo "=== panix-guard: GOOS=$os GOARCH=$arch ==="
+              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -o /dev/null ./cmd/panix-guard/...
+            done
+          '
+
   nix-build:
     name: Nix Build
     runs-on: ubuntu-latest
@@ -97,3 +138,17 @@ jobs:
         run: nix profile add nixpkgs#devenv
 
       - run: devenv shell -- task nix:build
+
+      # Spec 15: the release artifact must embed all four guardian variants.
+      # The filenames live in the //go:embed filesystem metadata, so a plain
+      # text search on the built binary is a sufficient presence check.
+      - name: Verify embedded guardians
+        run: |
+          set -euo pipefail
+          for variant in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            if ! grep -aq "panix-guard-$variant.gz" result/bin/panix; then
+              echo "Error: panix-guard-$variant.gz is not embedded in result/bin/panix" >&2
+              exit 1
+            fi
+          done
+          echo "All four guardian variants embedded."

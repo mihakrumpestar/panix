@@ -7,10 +7,14 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
+	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
+	"github.com/mihakrumpestar/panix/internal/workflow/phaseops/guard"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/pkg/errors"
 	"github.com/stoewer/go-strcase"
@@ -53,6 +57,11 @@ func ValidateStructTags(
 	err = validateBuildModes(fl)
 	if err != nil {
 		return errors.Wrap(err, "invalid build mode configuration")
+	}
+
+	err = validateRollbackAttributes(fl)
+	if err != nil {
+		return errors.Wrap(err, "invalid rollback configuration")
 	}
 
 	err = validateOutputTypes(fl, outputTypes)
@@ -332,4 +341,154 @@ func validateModeSubset(typ installablepkg.FlakeOutputType, modes, supportedMode
 	}
 
 	return errs
+}
+
+// validateRollbackAttributes enforces the Activation Guard tier rules at every
+// attribute level (fleet, flake, installable, machine), per
+// docs/design/activation-guard.md section 2:
+//
+//   - health_checks non-empty requires rollback: magic, and a mode where the
+//     transaction is gate-eligible (boot mode degrades magic to auto, so the
+//     tier-level rule pairs with the per-installable boot-mode rule below)
+//   - health_checks_local non-empty requires rollback: auto or magic
+//   - rollback_confirm_timeout set requires rollback: magic
+//
+// Values are post-merge (inheritance already applied), so an empty rollback
+// means no level set it and behaves like off. The rollback enum itself is
+// covered by the oneof struct tag validated over the whole configuration.
+//
+// The tier-attribute checks walk the attribute levels; the remote checks' one
+// mode-dependent inertness rule (health_checks on a boot-mode transaction,
+// spec 5) needs the installable, whose activation mode never rides
+// Attributes, so it is enforced separately per installable below.
+func validateRollbackAttributes(f *fleet.Fleet) error {
+	var errs []string
+
+	errs = validateRollbackTier("fleet", f.Attributes, errs)
+
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
+		if flakeV == nil {
+			return true
+		}
+
+		errs = validateRollbackTier(flakeV.Xpath.String(), flakeV.Attributes, errs)
+
+		flakeV.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]) bool {
+			if attrMap == nil {
+				return true
+			}
+
+			attrMap.ForEach(func(_ string, installable *installablepkg.Installable) bool {
+				if installable == nil {
+					return true
+				}
+
+				errs = validateRollbackTier(installable.Xpath.String(), installable.Attributes, errs)
+
+				errs = validateInertHealthChecks(installable, errs)
+
+				installable.Machines.ForEach(func(_ string, mach *machine.Machine) bool {
+					if mach == nil {
+						return true
+					}
+
+					errs = validateRollbackTier(mach.Xpath.String(), mach.Attributes, errs)
+
+					return true
+				})
+
+				return true
+			})
+
+			return true
+		})
+
+		return true
+	})
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "\n"))
+	}
+
+	return nil
+}
+
+// validateInertHealthChecks rejects health_checks where the effective gate for
+// the installable's activation mode is auto by gate ineligibility rather than
+// by tier choice (docs/design/activation-guard.md section 2, spec 2): boot
+// mode's full-tier commit is empty by design (the profile set moves to
+// pre-start and the bootloader install belongs to the activation), so the
+// magic tier degrades to auto at composition, the confirm loop never arms,
+// and the panix-side remote checks would never run. There is no live new
+// system to confirm anyway: the running system stays the old generation until
+// reboot. Only the remote checks are gate-gated; health_checks_local run in
+// the guardian's CHECKING phase regardless of the gate and stay valid in boot
+// mode. The mode comes from the same precedence the activate handler applies
+// at workflow time (installable activation_mode override, then the preset
+// default); the CLI override is workflow runtime state and stays out of
+// config-time validation.
+func validateInertHealthChecks(installable *installablepkg.Installable, errs []string) []string {
+	mode := installable.Preset.ActivationDefaultMode
+	if installable.ActivationMode != "" {
+		mode = installable.ActivationMode
+	}
+
+	if !guard.BootModeGateIneligible(installable.Preset, mode) {
+		return errs
+	}
+
+	if len(installable.HealthChecks) == 0 {
+		return errs
+	}
+
+	return append(errs, fmt.Sprintf(
+		"%s: health_checks never run in boot mode: the activation guard degrades to the auto tier because "+ //nolint:lll
+			"boot mode has nothing to confirm (the new system is not live until reboot); "+ //nolint:lll
+			"use rollback: auto without checks, or a non-boot mode for checks", //nolint:lll
+		installable.Xpath.String(),
+	))
+}
+
+// validateRollbackTier appends the tier-rule violations of a single attribute
+// level to errs, prefixed with the level's xpath (or "fleet" at the root,
+// whose xpath is empty by design).
+func validateRollbackTier(path string, attrs attributes.Attributes, errs []string) []string {
+	rollback := attrs.Rollback
+
+	if len(attrs.HealthChecks) > 0 && rollback != attributes.RollbackMagic {
+		errs = append(errs, pathPrefix(path)+": health_checks requires rollback: magic")
+	}
+
+	if len(attrs.HealthChecksLocal) > 0 && (rollback == "" || rollback == attributes.RollbackOff) {
+		errs = append(errs, pathPrefix(path)+": health_checks_local requires rollback: auto or magic")
+	}
+
+	if attrs.RollbackConfirmTimeout != 0 && rollback != attributes.RollbackMagic {
+		errs = append(errs, pathPrefix(path)+": rollback_confirm_timeout requires rollback: magic")
+	}
+
+	// Spec 2 check budget: remote checks run inside the confirmation window with a
+	// 30s guardian-internal timeout each, plus the 5s margin; the window must fit
+	// them or panix could confirm past its own deadline.
+	if rollback == attributes.RollbackMagic && len(attrs.HealthChecks) > 0 {
+		budget := time.Duration(len(attrs.HealthChecks))*30*time.Second + 5*time.Second
+		if budget > attrs.GetRollbackConfirmTimeout() {
+			errs = append(errs, fmt.Sprintf(
+				"%s: check budget (%d checks x 30s + 5s margin = %s) exceeds rollback_confirm_timeout (%s); raise rollback_confirm_timeout or remove checks",
+				pathPrefix(path), len(attrs.HealthChecks), budget, attrs.GetRollbackConfirmTimeout()),
+			)
+		}
+	}
+
+	return errs
+}
+
+// pathPrefix formats an error location: an empty xpath (the fleet root) reads
+// as "fleet".
+func pathPrefix(path string) string {
+	if path == "" {
+		return "fleet"
+	}
+
+	return path
 }

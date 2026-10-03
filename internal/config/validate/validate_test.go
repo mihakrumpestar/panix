@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
@@ -670,4 +671,298 @@ func TestValidateBuildMode_RemoteFirstMachineLocalRejected(t *testing.T) {
 	assert.Equal(t,
 		[]string{"test.xpath: remote mode requires the first machine to be remote (not local)"},
 		validateBuildMode(inst, "test.xpath", nil))
+}
+
+// rollbackRoot wraps Attributes so ValidateStructTags validates the rollback
+// enum exactly like the loader does over the full configuration.
+type rollbackRoot struct {
+	attributes.Attributes
+}
+
+// buildRollbackFleet builds a one-flake one-installable one-machine fleet with
+// the given attributes at each level, with xpaths matching a real Init'd tree
+// so rule violations report meaningful paths.
+func buildRollbackFleet(fleetAttrs, flakeAttrs, instAttrs, machAttrs attributes.Attributes) *fleet.Fleet {
+	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
+
+	flakeObj := &flake.Flake{URL: "github:test/test"}
+	flakeObj.Logs = logs.New()
+	flakeObj.Attributes = flakeAttrs
+	flakeObj.Xpath = xpath.New("my-flake")
+	flakeObj.Installables = atomicorderedmap.New[string, *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]]()
+
+	inst := &installablepkg.Installable{}
+	inst.Logs = logs.New()
+	inst.Attributes = instAttrs
+	inst.Xpath = xpath.New("my-flake").NewXpathWithAppend("nixosConfigurations/my-config")
+	inst.Machines = atomicorderedmap.New[string, *machine.Machine]()
+
+	mach := &machine.Machine{}
+	mach.Attributes = machAttrs
+	mach.Xpath = xpath.New("my-flake").NewXpathWithAppend("nixosConfigurations/my-config").NewXpathWithAppend("m0")
+	inst.Machines.Set("m0", mach)
+
+	attrMap := atomicorderedmap.New[string, *installablepkg.Installable]()
+	attrMap.Set("cfg0", inst)
+	flakeObj.Installables.Set("nixosConfigurations", attrMap)
+
+	flakesMap.Set("flake0", flakeObj)
+
+	return &fleet.Fleet{Flakes: flakesMap, Attributes: fleetAttrs}
+}
+
+// TestValidateRollbackAttributes covers the Activation Guard tier rules from
+// docs/design/activation-guard.md section 2 at the machine level (the level
+// deployment runs at), plus fleet- and flake-level enforcement. The check
+// budget rule is intentionally absent: per-check timeouts are guardian
+// internal constants, not configuration.
+func TestValidateRollbackAttributes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		fleetAttrs attributes.Attributes
+		flakeAttrs attributes.Attributes
+		instAttrs  attributes.Attributes
+		machAttrs  attributes.Attributes
+		wantErr    bool
+		wantMsg    string
+	}{
+		{
+			name:    "clean config passes",
+			wantErr: false,
+		},
+		{
+			name:      "health_checks with magic passes",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackMagic, HealthChecks: []string{"curl localhost"}},
+			wantErr:   false,
+		},
+		{
+			name:      "health_checks with off fails",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackOff, HealthChecks: []string{"curl localhost"}},
+			wantErr:   true,
+			wantMsg:   "health_checks requires rollback: magic",
+		},
+		{
+			name:      "health_checks with unset tier fails",
+			machAttrs: attributes.Attributes{HealthChecks: []string{"curl localhost"}},
+			wantErr:   true,
+			wantMsg:   "health_checks requires rollback: magic",
+		},
+		{
+			name:      "health_checks_local with auto passes",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackAuto, HealthChecksLocal: []string{"systemctl is-active app"}},
+			wantErr:   false,
+		},
+		{
+			name:      "health_checks_local with magic passes",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackMagic, HealthChecksLocal: []string{"systemctl is-active app"}},
+			wantErr:   false,
+		},
+		{
+			name:      "health_checks_local with off fails",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackOff, HealthChecksLocal: []string{"systemctl is-active app"}},
+			wantErr:   true,
+			wantMsg:   "health_checks_local requires rollback: auto or magic",
+		},
+		{
+			name:      "health_checks_local with unset tier fails",
+			machAttrs: attributes.Attributes{HealthChecksLocal: []string{"systemctl is-active app"}},
+			wantErr:   true,
+			wantMsg:   "health_checks_local requires rollback: auto or magic",
+		},
+		{
+			name:      "rollback_confirm_timeout with magic passes",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackMagic, RollbackConfirmTimeout: 90 * time.Second},
+			wantErr:   false,
+		},
+		{
+			name:      "rollback_confirm_timeout with auto fails",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackAuto, RollbackConfirmTimeout: 90 * time.Second},
+			wantErr:   true,
+			wantMsg:   "rollback_confirm_timeout requires rollback: magic",
+		},
+		{
+			name:      "rollback_confirm_timeout with off fails",
+			machAttrs: attributes.Attributes{Rollback: attributes.RollbackOff, RollbackConfirmTimeout: 90 * time.Second},
+			wantErr:   true,
+			wantMsg:   "rollback_confirm_timeout requires rollback: magic",
+		},
+		{
+			name:      "rollback_confirm_timeout with unset tier fails",
+			machAttrs: attributes.Attributes{RollbackConfirmTimeout: 90 * time.Second},
+			wantErr:   true,
+			wantMsg:   "rollback_confirm_timeout requires rollback: magic",
+		},
+		{
+			name:       "fleet level rule fires with fleet path",
+			fleetAttrs: attributes.Attributes{HealthChecks: []string{"curl localhost"}},
+			wantErr:    true,
+			wantMsg:    "fleet: health_checks requires rollback: magic",
+		},
+		{
+			name:       "flake level rule fires with flake path",
+			flakeAttrs: attributes.Attributes{RollbackConfirmTimeout: 30 * time.Second},
+			wantErr:    true,
+			wantMsg:    "my-flake: rollback_confirm_timeout requires rollback: magic",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := buildRollbackFleet(tt.fleetAttrs, tt.flakeAttrs, tt.instAttrs, tt.machAttrs)
+
+			err := validateRollbackAttributes(f)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantMsg)
+		})
+	}
+}
+
+// TestValidateRollbackEnumRejected verifies the rollback tier enum through the
+// full ValidateStructTags entry point: an unknown tier value fails with the
+// humanized oneof message naming the valid tiers.
+func TestValidateRollbackEnumRejected(t *testing.T) {
+	t.Parallel()
+
+	root := &rollbackRoot{Attributes: attributes.Attributes{Rollback: "banana"}}
+
+	err := ValidateStructTags(root, &fleet.Fleet{}, nil, flags.ValidateFlags{}, 0)
+	require.Error(t, err, "an unknown rollback tier must fail validation")
+
+	assert.Contains(t, err.Error(), "must be one of [off auto magic]")
+}
+
+// TestValidateHealthChecksNeverRunInBootMode covers the inert-checks rule
+// (validateInertHealthChecks): remote health_checks are a config error on a
+// boot-mode installable whose transaction is gate-ineligible (the full tier's
+// boot-mode commit is empty by design, so magic degrades to auto and the
+// checks would never run), while non-boot modes, empty checks, and the
+// guardian-side health_checks_local stay valid.
+func TestValidateHealthChecksNeverRunInBootMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		activationMode    string // installable-level override; empty uses the preset default
+		presetType        installablepkg.FlakeOutputType
+		healthChecks      []string
+		healthChecksLocal []string
+		wantErr           bool
+		wantMsg           string
+	}{
+		{
+			name:           "boot mode with magic and health_checks is an inert config error",
+			activationMode: "boot",
+			presetType:     installablepkg.FlakeOutputType("nixosConfigurations"),
+			healthChecks:   []string{"curl localhost"},
+			wantErr:        true,
+			wantMsg:        "health_checks never run in boot mode",
+		},
+		{
+			name:           "boot mode with preset-default mode override and checks fails",
+			activationMode: "boot",
+			presetType:     installablepkg.FlakeOutputType("nixosConfigurations"),
+			healthChecks:   []string{"curl localhost"},
+			wantErr:        true,
+			wantMsg:        "use rollback: auto without checks, or a non-boot mode for checks",
+		},
+		{
+			name:           "switch mode under magic passes (inert rule is boot-only)",
+			activationMode: "switch",
+			presetType:     installablepkg.FlakeOutputType("nixosConfigurations"),
+			healthChecks:   []string{"curl localhost"},
+			wantErr:        false,
+		},
+		{
+			name:           "boot mode without health_checks passes",
+			activationMode: "boot",
+			presetType:     installablepkg.FlakeOutputType("nixosConfigurations"),
+			wantErr:        false,
+		},
+		{
+			name:              "boot mode health_checks_local stay valid (not gate-gated)",
+			activationMode:    "boot",
+			presetType:        installablepkg.FlakeOutputType("nixosConfigurations"),
+			healthChecksLocal: []string{"systemctl is-active app"},
+			wantErr:           false,
+		},
+		{
+			name:           "non-full tier boot mode (home-manager) is not gate-ineligible",
+			activationMode: "boot",
+			presetType:     installablepkg.FlakeOutputType("homeConfigurations"),
+			healthChecks:   []string{"curl localhost"},
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Magic everywhere above installable so the fleet/flake/machine
+			// tier rules never fire: this table isolates the boot-mode rule.
+			magic := attributes.Attributes{Rollback: attributes.RollbackMagic}
+			f := buildRollbackFleet(magic, magic, magic, magic)
+			inst := onlyInstallable(f)
+			require.NotNil(t, inst)
+
+			inst.Preset = buildPresetForType(t, tt.presetType)
+			inst.ActivationMode = tt.activationMode
+			inst.HealthChecks = tt.healthChecks
+			inst.HealthChecksLocal = tt.healthChecksLocal
+
+			err := validateRollbackAttributes(f)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantMsg)
+		})
+	}
+}
+
+// onlyInstallable returns the single fixture installable of a
+// buildRollbackFleet fleet.
+func onlyInstallable(f *fleet.Fleet) *installablepkg.Installable {
+	var inst *installablepkg.Installable
+
+	f.Flakes.ForEach(func(_ string, flakeV *flake.Flake) bool {
+		return flakeV.Installables.ForEach(func(_ string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]) bool {
+			if attrMap == nil {
+				return true
+			}
+
+			attrMap.ForEach(func(_ string, i *installablepkg.Installable) bool {
+				inst = i
+
+				return true
+			})
+
+			return true
+		})
+	})
+
+	return inst
+}
+
+// buildPresetForType returns the preset row for a built-in output type.
+func buildPresetForType(t *testing.T, typ installablepkg.FlakeOutputType) installablepkg.Preset {
+	t.Helper()
+
+	preset, ok := installablepkg.PresetForType(typ)
+	require.True(t, ok, "unknown preset type %q in fixture", typ)
+
+	return preset
 }

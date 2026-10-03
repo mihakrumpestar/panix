@@ -244,6 +244,18 @@ func (sC SSHClient) controlMasterArgs() []string {
 	}
 }
 
+// FreshConnectionArgs returns the ssh options that force a dedicated
+// connection instead of the multiplexed master. They are appended after
+// MaybeSSHCommandArguments so they win: ssh honors the last value of a
+// repeated option. Use for control channel execs (confirm, attach, poll)
+// that must not depend on the master connection staying alive.
+func (sC SSHClient) FreshConnectionArgs() []string {
+	return []string{
+		"-o", "ControlMaster=no",
+		"-o", "ControlPath=none",
+	}
+}
+
 // controlSocketPath returns a deterministic temp path for the SSH control socket.
 func (sC SSHClient) controlSocketPath() string {
 	return filepath.Join(os.TempDir(), "panix-ssh-"+sC.Hostname+"-"+sC.PortString())

@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, config, ... }:
 {
   # Go toolchain, gopls (LSP) and the editor helper tools (go-tools, gotools,
   # gomodifytags, impl, gotests, iferr) come from the language module, all
@@ -55,8 +55,9 @@
     CGO_ENABLED = "0";
   };
 
-  # Git hooks are declared here and installed by devenv on shell entry.
-  # The generated .pre-commit-config.yaml is gitignored.
+  # Per-project shell history, stored in the gitignored .devenv/state dir.
+  env.HISTFILE = "${config.devenv.state}/shell_history";
+
   git-hooks.hooks.ci = {
     enable = true;
     entry = "task ci";

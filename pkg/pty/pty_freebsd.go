@@ -50,3 +50,34 @@ func ptsname(f *os.File) (string, error) {
 	}
 	return "/dev/pts/" + strconv.Itoa(int(n)), nil
 }
+
+// getTermios reads the termios state of the PTY through the master fd. The
+// master and the slave share one termios state, so this covers the slave's
+// line discipline even though the parent's slave fd is closed after Start.
+func getTermios(f *os.File) (syscall.Termios, error) {
+	var termios syscall.Termios
+
+	err := ioctl(f, syscall.TIOCGETA, uintptr(unsafe.Pointer(&termios))) //nolint:gosec // Expected unsafe pointer for ioctl syscall.
+	if err != nil {
+		return syscall.Termios{}, errors.Wrap(err, "pty: tiocgeta")
+	}
+
+	return termios, nil
+}
+
+// setTermios writes the termios state of the PTY through the master fd.
+func setTermios(f *os.File, termios syscall.Termios) error {
+	err := ioctl(f, syscall.TIOCSETA, uintptr(unsafe.Pointer(&termios))) //nolint:gosec // Expected unsafe pointer for ioctl syscall.
+	if err != nil {
+		return errors.Wrap(err, "pty: tiocseta")
+	}
+
+	return nil
+}
+
+// echoTermiosBits returns the local flags that make the line discipline echo
+// input back to the master. ECHONL echoes line feeds even when ECHO is off,
+// so both must be cleared to silence a newline-delimited control channel.
+func echoTermiosBits() uint32 {
+	return syscall.ECHO | syscall.ECHONL
+}

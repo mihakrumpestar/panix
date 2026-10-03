@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,8 +12,9 @@ import (
 )
 
 const (
-	panixDeploySubcommand  = "deploy"
-	panixSecretsSubcommand = "secrets"
+	panixDeploySubcommand   = "deploy"
+	panixSecretsSubcommand  = "secrets"
+	panixRollbackSubcommand = "rollback"
 )
 
 func runPanixDeployWithArgs(configPath string, extraArgs []string, envVars ...string) error {
@@ -26,6 +28,17 @@ func runPanixSecretsWithArgs(configPath string, extraArgs []string, envVars ...s
 }
 
 func runPanixCommandWithArgs(subcommand, configPath string, extraArgs []string, envVars ...string) error {
+	stopSequentialMgr()
+
+	return errors.Wrap(panixCommandSpec(subcommand, configPath, extraArgs, envVars, nil).Run(), "run panix")
+}
+
+// panixCommandSpec builds (but does not start) one panix process: the shared
+// construction for the sequential deploy steps and the concurrent-deploy leg's
+// parallel processes. A nil sink inherits the harness's stdout/stderr; a sink
+// captures the process output for assertions and keeps concurrent processes'
+// TUIs off the shared terminal.
+func panixCommandSpec(subcommand, configPath string, extraArgs []string, envVars []string, sink io.Writer) *exec.Cmd {
 	root := findProjectRoot()
 
 	mode := envValue(envVars, "PANIX_TEST_MODE")
@@ -35,12 +48,6 @@ func runPanixCommandWithArgs(subcommand, configPath string, extraArgs []string, 
 
 	panixLogPath := filepath.Join(logDirPath, "panix-"+mode+".log")
 	e2eDir := filepath.Join(root, "tests", "e2e")
-
-	return runPanixInConsole(root, subcommand, configPath, panixLogPath, extraArgs, envVars, e2eDir)
-}
-
-func runPanixInConsole(root, subcommand, configPath, panixLogPath string, extraArgs []string, envVars []string, e2eDir string) error {
-	stopSequentialMgr()
 
 	bin, baseArgs := panixExecArgs(root)
 
@@ -60,10 +67,16 @@ func runPanixInConsole(root, subcommand, configPath, panixLogPath string, extraA
 	cleanEnv := sanitizedOsEnviron("PANIX_TEST_MODE")
 	cmd.Env = append(append(cleanEnv, envVars...), "PANIX_E2E_DIR="+e2eDir)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	return errors.Wrap(cmd.Run(), "run panix")
+	if sink == nil {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stdout = sink
+		cmd.Stderr = sink
+	}
+
+	return cmd
 }
 
 func envValue(envVars []string, key string) string {

@@ -1,4 +1,4 @@
-{config, ...}: {
+{config, pkgs, ...}: {
   imports = [./disko.nix];
 
   boot.initrd.availableKernelModules = ["virtio_blk" "virtio_pci" "virtio_net"];
@@ -14,6 +14,19 @@
   # user-level activations (e.g. nix-maid's systemd-tmpfiles --user and
   # sd-switch) have a D-Bus session and XDG_RUNTIME_DIR available.
   users.users.root.linger = true;
+
+  # Dedicated non-root user for the guarded user-tier e2e leg
+  # (tests/e2e/guard_v2.go): its home-manager profile stays fresh until the
+  # home phase creates the first generation, which keeps the leg's guarded
+  # deploys off alice's concurrently deployed profile and gives the leg a
+  # deterministic rollback target.
+  users.users.guarduser = {
+    isSystemUser = true;
+    home = "/home/guarduser";
+    createHome = true;
+    group = "users";
+    shell = pkgs.bash;
+  };
 
   networking.useDHCP = true;
 

@@ -23,11 +23,27 @@ Each built-in type auto-infers its build path, activation mechanism, profile pat
 | `maidConfigurations` | [nix-maid](https://github.com/viperML/nix-maid) | `bin/activate` |
 {/* OUTPUT_TYPES_END */}
 
-System-level types activate as root (via the configured `sudo_program`, or bare when the SSH user is already root; a non-root target user can also be chosen with the `user` field — see the [configuration model](/concepts/configuration-model/)). User-level types activate as the SSH user. To deploy a user-level installable to a different user, set the `user` field on the installable (see the [configuration model](/concepts/configuration-model/)).
+System-level types activate as root (via the configured `sudo_program`, or bare when the SSH user is already root; a non-root target user can also be chosen with the `user` field: see the [configuration model](/concepts/configuration-model/)). User-level types activate as the SSH user. To deploy a user-level installable to a different user, set the `user` field on the installable (see the [configuration model](/concepts/configuration-model/)).
 
 :::note
 To get a new output type added as built-in, [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
 :::
+
+## Activation Guard Support
+
+Each type resolves to a guard tier class, selected with the `rollback` attribute (`off`, `auto`, or `magic`), see [Activation Guard](/guides/activation-guard/):
+
+| Type | Tier class | Guard coverage |
+|------|-----------|----------------|
+| `nixosConfigurations` | full | `switch`, `test`, and `boot` modes are guarded |
+| `darwinConfigurations` | standard | guarded activation with a commit step |
+| `systemConfigs` | standard | guarded activation with a commit step |
+| `homeConfigurations` | self-setting, or standard for home-manager >= 25.11 | guarded. home-manager >= 25.11 (detected per deploy via the generation's `gen-version`) is profile-last: panix sets the profile itself and the activation's `--driver-version 1` performs no profile operations. Older home-manager keeps the self-setting shape: activation advances the profile itself, the revert re-activates the old generation |
+| `maidConfigurations` | minimal | activation runs detached with a captured log, no revert |
+| `nixOnDroidConfigurations` | minimal | activation runs detached with a captured log, no revert |
+| `packages` | none | no guard; installed via `nix profile add` |
+
+`dry-activate` always runs unguarded (it is non-mutating), and bootstrap is never guarded (there is no previous generation to revert to).
 
 ## Preset Fields
 
@@ -42,7 +58,7 @@ Each type's behavior is data-driven through preset fields. User-overridable fiel
 | `profile_path` | no | user-overridable | Nix profile path for generation tracking. Enables rollback when set. Built-ins: `nixosConfigurations`, `darwinConfigurations`, and `systemConfigs` also run `nix-env --profile --set` before activation; `homeConfigurations` and `nixOnDroidConfigurations` track the profile without setting it; `packages` and `maidConfigurations` set none |
 | `set_profile` | no | user-overridable | Run `nix-env --profile --set` before activation |
 | `activation_supported_modes` | no | user-overridable | List of valid modes (e.g. `["switch", "boot"]`). If set, `activation_default_mode` is required |
-| `activation_non_mutating_modes` | no | user-overridable | Modes that do not mutate the target system; auto rollback is skipped for these (built-in NixOS preset: `["dry-activate"]`) |
+| `activation_non_mutating_modes` | no | user-overridable | Modes that do not mutate the target system; the activation guard is skipped for these (built-in NixOS preset: `["dry-activate"]`) |
 | `activation_profile_skip_modes` | no | user-overridable | Modes that skip `nix-env --profile --set`, so the profile keeps pointing at the current generation (built-in NixOS preset: `["test", "dry-activate"]`) |
 | `activation_default_mode` | no | user-overridable | Default mode used when none is specified per-installable or via CLI |
 | `omit_type_from_attr_path` | no | type-level | Omit the type key from the attrpath (bare name resolution, like `packages`) |

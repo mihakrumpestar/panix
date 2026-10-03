@@ -12,6 +12,23 @@ import (
 // applied with the same merge semantics as built-in presets.
 type CustomOutputTypes = *atomicorderedmap.AtomicOrderedMap[string, Preset]
 
+// GuardTier is the Activation Guard support level of an output type (spec 2):
+// the tier is a property of the output type, never of user config.
+type GuardTier string
+
+const (
+	GuardTierFull        GuardTier = "full"         // nixos: all modes, bootloader-aware revert
+	GuardTierStandard    GuardTier = "standard"     // darwin, system-manager: profile-last, no bootloader
+	GuardTierSelfSetting GuardTier = "self-setting" // legacy home-manager: activation advances the profile itself (modern HM >= 25.11 composes profile-last per deploy, gen-version detection)
+	GuardTierMinimal     GuardTier = "minimal"      // maid, nix-on-droid: detached execution, no revert
+	GuardTierNone        GuardTier = "none"         // packages and unknown types: legacy direct activation
+)
+
+// IsGuarded reports whether the tier runs guarded transactions at all.
+func (t GuardTier) IsGuarded() bool {
+	return t == GuardTierFull || t == GuardTierStandard || t == GuardTierSelfSetting
+}
+
 // Preset defines the build path, activation mechanism, and profile management
 // for a FlakeOutputType. Fields come in three kinds: user-overridable (a
 // non-zero per-installable value wins), type-level (intrinsic to the output
@@ -33,9 +50,11 @@ type Preset struct {
 
 	// Type-level fields: not user-configurable, always taken from the type
 	// default (for custom types, from their output_types declaration).
-	IsSystemLevel        *bool `yaml:"system_level,omitempty" json:"system_level,omitempty" desc:"System-level (root) vs user-level. Type-level field: set only under output_types declarations"`
-	IsBootstrappable     bool  `yaml:"-" json:"-" desc:"Supports bootstrap"`
-	OmitTypeFromAttrPath bool  `yaml:"omit_type_from_attr_path,omitempty" json:"omit_type_from_attr_path,omitempty" desc:"Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"`
+	IsSystemLevel        *bool     `yaml:"system_level,omitempty" json:"system_level,omitempty" desc:"System-level (root) vs user-level. Type-level field: set only under output_types declarations"`
+	IsBootstrappable     bool      `yaml:"-" json:"-" desc:"Supports bootstrap"`
+	GuardTier            GuardTier `yaml:"guard_tier,omitempty" json:"guard_tier,omitempty" desc:"Activation Guard support level (full/standard/self-setting/minimal/none). Type-level field: set only under output_types declarations"`
+	GuardCommitScript    string    `yaml:"guard_commit_script,omitempty" json:"guard_commit_script,omitempty" desc:"Closure-relative script finalizing the guard commit after the profile set (e.g. system-manager's register-profile). Type-level field: set only under output_types declarations"`
+	OmitTypeFromAttrPath bool      `yaml:"omit_type_from_attr_path,omitempty" json:"omit_type_from_attr_path,omitempty" desc:"Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"`
 
 	// Docs-only presentation metadata for the generated output-type tables;
 	// custom types leave these empty and are never listed.
@@ -47,6 +66,16 @@ type Preset struct {
 // IsSystemLevelValue treats nil (not declared) as user level.
 func (p Preset) IsSystemLevelValue() bool {
 	return p.IsSystemLevel != nil && *p.IsSystemLevel
+}
+
+// GuardTierValue treats an empty tier (not declared, custom types) as none:
+// those types stay on the legacy direct-activation path.
+func (p Preset) GuardTierValue() GuardTier {
+	if p.GuardTier == "" {
+		return GuardTierNone
+	}
+
+	return p.GuardTier
 }
 
 //nolint:mnd
@@ -62,6 +91,7 @@ var presets = map[FlakeOutputType]Preset{
 		NonMutatingModes:      []string{"dry-activate"},
 		ActivationDefaultMode: "switch",
 		IsBootstrappable:      true,
+		GuardTier:             GuardTierFull,
 
 		DocOrder:      1,
 		DocDeploys:    "[NixOS](https://nixos.org/manual/nixos/stable/) system",
@@ -73,17 +103,20 @@ var presets = map[FlakeOutputType]Preset{
 		SetProfile:     new(true),
 		IsSystemLevel:  new(true),
 		ActivationPath: "activate",
+		GuardTier:      GuardTierStandard,
 
 		DocOrder:      2,
 		DocDeploys:    "[nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS)",
 		DocActivation: "`activate` script",
 	},
 	FlakeOutputType("systemConfigs"): {
-		BuildPath:      "",
-		ProfilePath:    "/nix/var/nix/profiles/system-manager-profiles",
-		SetProfile:     new(true),
-		IsSystemLevel:  new(true),
-		ActivationPath: "bin/activate",
+		BuildPath:         "",
+		ProfilePath:       "/nix/var/nix/profiles/system-manager-profiles",
+		SetProfile:        new(true),
+		IsSystemLevel:     new(true),
+		ActivationPath:    "bin/activate",
+		GuardTier:         GuardTierStandard,
+		GuardCommitScript: "bin/register-profile",
 
 		DocOrder:      3,
 		DocDeploys:    "[system-manager](https://github.com/numtide/system-manager)",
@@ -94,6 +127,7 @@ var presets = map[FlakeOutputType]Preset{
 		ProfilePath:    "~/.local/state/nix/profiles/home-manager",
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
+		GuardTier:      GuardTierSelfSetting,
 
 		DocOrder:      4,
 		DocDeploys:    "[home-manager](https://github.com/nix-community/home-manager)",
@@ -104,6 +138,7 @@ var presets = map[FlakeOutputType]Preset{
 		ProfilePath:    "~/.local/state/nix/profiles/nix-on-droid",
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
+		GuardTier:      GuardTierMinimal,
 
 		DocOrder:      5,
 		DocDeploys:    "[Nix-on-Droid](https://github.com/nix-community/nix-on-droid)",
@@ -112,6 +147,7 @@ var presets = map[FlakeOutputType]Preset{
 	FlakeOutputType("packages"): {
 		BuildPath:            "",
 		IsSystemLevel:        new(false),
+		GuardTier:            GuardTierNone,
 		OmitTypeFromAttrPath: true,
 
 		DocOrder:      6,
@@ -123,6 +159,7 @@ var presets = map[FlakeOutputType]Preset{
 	FlakeOutputType("maidConfigurations"): {
 		IsSystemLevel:  new(false),
 		ActivationPath: "bin/activate",
+		GuardTier:      GuardTierMinimal,
 
 		DocOrder:      7,
 		DocDeploys:    "[nix-maid](https://github.com/viperML/nix-maid)",
@@ -186,6 +223,33 @@ func IsBootstrappableType(t FlakeOutputType) bool {
 	}
 
 	return p.IsBootstrappable
+}
+
+// GuardTierForType returns the Activation Guard support level of an output type
+// (spec 2). Unknown and custom types without an explicit tier map to none:
+// they stay on the legacy direct-activation path.
+func GuardTierForType(t FlakeOutputType) GuardTier {
+	p, ok := presets[t]
+	if !ok {
+		return GuardTierNone
+	}
+
+	return p.GuardTierValue()
+}
+
+// PresetForType returns the preset row for an output type; ok is false for
+// unknown types (custom types read their own output_types declaration).
+func PresetForType(t FlakeOutputType) (Preset, bool) {
+	p, ok := presets[t]
+
+	return p, ok
+}
+
+// GuardCommitScriptForType returns the closure-relative script finalizing the
+// guard commit after the profile set; empty when the type needs none
+// (system-manager's register-profile is the only one today, verified V1).
+func GuardCommitScriptForType(t FlakeOutputType) string {
+	return presets[t].GuardCommitScript
 }
 
 // ActivationModes returns nixosConfigurations modes, feeding the bare

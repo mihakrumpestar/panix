@@ -286,10 +286,23 @@ func runDeployPhase(configPath string, res *testResources) error {
 				return err
 			}
 
-			// Auto-rollback needs the fresh known-good generation from the
-			// NixOS deploy, so run it immediately after.
+			// The Activation Guard legs need the fresh known-good generation
+			// from the NixOS deploy as their rollback target, so they run
+			// immediately after, local scope only: every guarded fixture maps
+			// to the same local VM (nixos-iso-vm) and its guard slot.
 			if deploy.typ == deployNixos && testScopeFlag.local() {
-				err = runDeployAutoRollback(configPath, res)
+				err = runGuardRollbackLegs(configPath, res)
+				if err != nil {
+					return err
+				}
+			}
+
+			// The guarded user-tier leg (guard_v2.go, spec 13 leg 6) runs
+			// after the home phase: the guard route needs guarduser's first
+			// home-manager generation, which the home phase's unguarded
+			// deploy creates.
+			if deploy.typ == deployHome && testScopeFlag.local() {
+				err = runGuardUserTierLeg(configPath, res)
 				if err != nil {
 					return err
 				}
@@ -305,7 +318,8 @@ func runDeployNixOS(configPath string, res *testResources) error {
 
 	err := runPanixDeployStepWithArgs("Run panix deploy (nixos)", configPath,
 		// Explicit attribute tags instead of the broad "nixosConfigurations"
-		// type tag: test-vm-failing is deployed only by the auto-rollback test.
+		// type tag: test-vm-failing is deployed only by the guard rollback
+		// legs.
 		[]string{"--tags", "test-vm,test-vm-kexec,test-vm-remote"},
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
@@ -321,64 +335,6 @@ func runDeployNixOS(configPath string, res *testResources) error {
 	}
 
 	return verifySecretsConditionalSkip(configPath, res)
-}
-
-// runDeployAutoRollback deploys the always-failing test-vm-failing config
-// (auto_rollback: true) after the regular NixOS deploy has left a known-good
-// generation, expecting activation to fail and the previous closure restored.
-func runDeployAutoRollback(configPath string, res *testResources) error {
-	printPhasef("Phase: Deploy NixOS with auto-rollback")
-
-	keyPath := res.keyPath
-
-	closureBefore, err := readSystemProfileClosure(keyPath)
-	if err != nil {
-		return errors.Wrap(err, "read system closure before failing deploy")
-	}
-
-	genBefore, err := readSystemProfileGeneration(keyPath)
-	if err != nil {
-		return errors.Wrap(err, "read system generation before failing deploy")
-	}
-
-	fmt.Printf("  before: closure=%s generation=%d\n", closureBefore, genBefore)
-
-	err = runPanixDeployWithArgs(configPath,
-		[]string{"--tags", "test-vm-failing"},
-		"PANIX_TEST_MODE=deploy",
-		"PANIX_TEST_SCOPE="+string(testScopeFlag),
-		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
-	)
-	if err == nil {
-		return errors.New("expected auto-rollback deploy to fail")
-	}
-
-	fmt.Printf("  forced-failure deploy failed as expected: %v\n", err)
-
-	closureAfter, err := readSystemProfileClosure(keyPath)
-	if err != nil {
-		return errors.Wrap(err, "read system closure after rollback")
-	}
-
-	genAfter, err := readSystemProfileGeneration(keyPath)
-	if err != nil {
-		return errors.Wrap(err, "read system generation after rollback")
-	}
-
-	fmt.Printf("  after: closure=%s generation=%d\n", closureAfter, genAfter)
-
-	// Same closure as before (rollback restored it) but a higher generation
-	// (activation ran and mutated the profile before failing, rather than
-	// failing at build).
-	if closureAfter != closureBefore {
-		return errors.Errorf("expected rollback to restore closure %s, got %s", closureBefore, closureAfter)
-	}
-
-	if genAfter <= genBefore {
-		return errors.Errorf("expected generation to advance (activation ran), before=%d after=%d", genBefore, genAfter)
-	}
-
-	return nil
 }
 
 func runDeployHome(configPath string, res *testResources) error {
@@ -648,14 +604,15 @@ func buildNixArtifacts(res *testResources) error {
 	// config generated during Bootstrap, which does not exist yet.
 
 	if testScopeFlag.local() {
-		parGroup.Go("Pre-build test-vm-failing closure", func() error {
-			return preBuildClosure("test-vm-failing", "nixosConfigurations.test-vm-failing.config.system.build.toplevel")
-		})
+		preBuildGuardClosures(parGroup)
 		parGroup.Go("Pre-build home-manager closure", func() error {
 			return preBuildClosure("home-manager", "homeConfigurations.test-home.activationPackage")
 		})
 		parGroup.Go("Pre-build home-manager (alice) closure", func() error {
 			return preBuildClosure("home-manager-alice", "homeConfigurations.test-home-alice.activationPackage")
+		})
+		parGroup.Go("Pre-build home-manager (guarduser) closure", func() error {
+			return preBuildClosure("home-manager-guard", "homeConfigurations.test-home-guard.activationPackage")
 		})
 		parGroup.Go("Pre-build test-package closure", func() error {
 			return preBuildClosure("test-package", "test-package")
@@ -678,6 +635,45 @@ func buildNixArtifacts(res *testResources) error {
 	}
 
 	return parGroup.Wait()
+}
+
+// preBuildGuardClosures pre-builds the failing fixture and the Activation
+// Guard fixtures: one closure per guard leg so the timed legs only transfer
+// their (small) closure delta, never build.
+func preBuildGuardClosures(parGroup *parallelGroup) {
+	parGroup.Go("Pre-build test-vm-failing closure", func() error {
+		return preBuildClosure("test-vm-failing", "nixosConfigurations.test-vm-failing.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-retry closure", func() error {
+		return preBuildClosure("test-vm-retry", "nixosConfigurations.test-vm-retry.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-hang closure", func() error {
+		return preBuildClosure("test-vm-hang", "nixosConfigurations.test-vm-hang.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-sshd-kill closure", func() error {
+		return preBuildClosure("test-vm-sshd-kill", "nixosConfigurations.test-vm-sshd-kill.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-gc-fail closure", func() error {
+		return preBuildClosure("test-vm-gc-fail", "nixosConfigurations.test-vm-gc-fail.config.system.build.toplevel")
+	})
+	// Stage 3 guard fixtures (guard_v2.go): test-vm-boot-revert shares the
+	// commit fixture's closure (boot mode + failing health checks), so the
+	// builds dedupe in the store.
+	parGroup.Go("Pre-build test-vm-commit closure", func() error {
+		return preBuildClosure("test-vm-commit", "nixosConfigurations.test-vm-commit.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-boot closure", func() error {
+		return preBuildClosure("test-vm-boot", "nixosConfigurations.test-vm-boot.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-boot-revert closure", func() error {
+		return preBuildClosure("test-vm-boot-revert", "nixosConfigurations.test-vm-boot-revert.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-guardian-kill closure", func() error {
+		return preBuildClosure("test-vm-guardian-kill", "nixosConfigurations.test-vm-guardian-kill.config.system.build.toplevel")
+	})
+	parGroup.Go("Pre-build test-vm-flood closure", func() error {
+		return preBuildClosure("test-vm-flood", "nixosConfigurations.test-vm-flood.config.system.build.toplevel")
+	})
 }
 
 func createDisks(res *testResources) error {

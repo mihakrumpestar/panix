@@ -1,6 +1,8 @@
 package attributes
 
 import (
+	"time"
+
 	"dario.cat/mergo"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
@@ -28,7 +30,17 @@ type Attributes struct {
 	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the elevation program used when the executing user (SSH or target user) is not root" default:"sudo"`
 	HardwareConfigPath string      `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake"`
 	RsyncDefaultFlags  []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync command (default: [-rcPEx, --mkpath])"`
-	AutoRollback       bool        `yaml:"auto_rollback" json:"auto_rollback,omitempty" desc:"Automatically roll back to the pre-deploy generation when activation fails"`
+
+	// Activation Guard tiers (docs/design/activation-guard.md section 2).
+	// Rollback's zero value ("") means inherit: merging copies a parent's
+	// non-empty tier into unset children, so an explicit "off" overrides a
+	// parent's "magic" while absence inherits.
+	Rollback               Rollback      `yaml:"rollback" json:"rollback,omitempty" desc:"Activation guard tier: off activates directly, auto commits on success and reverts on failure or timeout, magic additionally waits for panix to confirm within rollback_confirm_timeout before committing (default: off; unset inherits)" validate:"omitempty,oneof=off auto magic"`
+	ActivationTimeout      time.Duration `yaml:"activation_timeout" json:"activation_timeout,omitempty" desc:"Bound for the activation phase on guarded deploys (e.g. '15m'); a hung activation is killed and reverted at the deadline" default:"15m" validate:"omitempty,gt=0"`
+	RollbackConfirmTimeout time.Duration `yaml:"rollback_confirm_timeout" json:"rollback_confirm_timeout,omitempty" desc:"How long the guardian waits for panix's confirmation before reverting (e.g. '60s'); requires rollback: magic" default:"60s" validate:"omitempty,gt=0"`
+	RebootOnRevertFailure  bool          `yaml:"reboot_on_revert_failure" json:"reboot_on_revert_failure,omitempty" desc:"Reboot the target as a last resort when the revert itself fails (default: off; never fires in boot mode)"`
+	HealthChecks           []string      `yaml:"health_checks" json:"health_checks,omitempty" desc:"Commands panix runs on the target after activation and before confirming a magic-tier deploy; any failure reverts the deploy (requires rollback: magic)"`
+	HealthChecksLocal      []string      `yaml:"health_checks_local" json:"health_checks_local,omitempty" desc:"Commands the target-side guardian runs after activation to gate the commit; any failure reverts the deploy (rollback: auto and magic)"`
 
 	Bootstrap Bootstrap `yaml:"bootstrap" json:"bootstrap" desc:"Bootstrap configuration for initial provisioning"`
 

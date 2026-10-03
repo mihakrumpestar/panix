@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+**Breaking:** the `auto_rollback` attribute is replaced by `rollback`, a tier selector with three values: `off` (direct activation, the previous default), `auto` (guarded: commits on success, reverts on failure or timeout) and `magic` (guarded plus a confirmation window). The legacy `auto_rollback` key now fails config load with a migration hint: `auto_rollback: true` becomes `rollback: magic`, `auto_rollback: false` becomes `rollback: off`.
+
+Guarded deploys activate as a two-phase transaction: a target-side guardian runs the activation and either commits the new generation or reverts to the pre-deploy one, even when panix dies, the connection drops, or the machine reboots mid-deploy. Failed guarded deploys no longer leave a failed generation in the profile list, and a reverted deploy still reports the original activation error. The magic tier confirms through a fresh connection after activation, which adds about 1-2s on success.
+
+New attributes, settable at fleet, flake, installable, and machine level: `rollback` (default `off`), `activation_timeout` (15m), `rollback_confirm_timeout` (60s, magic only), `reboot_on_revert_failure` (off), `health_checks` (magic only), `health_checks_local` (auto and magic).
+
+On Linux targets with `KillUserProcesses=yes`, guarded deploys hard-fail before activation; set `KillUserProcesses=no` (lingering does not help). A debug-only `--unsafe-direct-activation` flag bypasses the guard for emergencies.
+
 ## [0.10.0](https://github.com/mihakrumpestar/panix/compare/v0.9.3..v0.10.0) - 2026-09-22
 
 Secrets can now come from a command: the new `command` field runs on the control host and streams its stdout into the destination file, so anything that prints a secret works (`sops --decrypt`, `age`, `pass show`, `op read`) and encrypted material can stay encrypted in the repo until transfer. It combines with `local_path`, exported as `PANIX_SECRET_LOCAL_PATH`, and bootstrap disk encryption keys accept it too. No temporary file is written on either side and the output is never logged; content that already matches is skipped by hash, leaving the file untouched.

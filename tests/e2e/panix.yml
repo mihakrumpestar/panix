@@ -152,10 +152,97 @@ fleet:
 {{ end }}
 {{ if and $isLocal (not $isBootstrap) }}
           test-vm-failing:
-            auto_rollback: true
+            rollback: magic
             machines:
               nixos-iso-vm-failing:
                 ssh: *ssh_nixos_iso
+{{ end }}
+{{ if and $isLocal (not $isBootstrap) }}
+          # Activation Guard e2e fixtures (tests/e2e/guard.go): every machine
+          # maps to the same VM as nixos-iso-vm, so the legs share one system
+          # profile and its guard slot. The e2e-short timeouts keep the
+          # deadline legs quick; rollback_confirm_timeout requires
+          # rollback: magic (inherited from the installable).
+          test-vm-retry:
+            rollback: magic
+            machines:
+              nixos-iso-vm-retry:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          test-vm-hang:
+            rollback: magic
+            machines:
+              nixos-iso-vm-hang:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          test-vm-sshd-kill:
+            rollback: magic
+            machines:
+              nixos-iso-vm-sshd-kill:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          test-vm-gc-fail:
+            rollback: magic
+            machines:
+              nixos-iso-vm-gc-fail:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          # Stage 3 guard fixtures (tests/e2e/guard_v2.go): same VM, same slot
+          # rules, one injected behavior per installable.
+          test-vm-commit:
+            rollback: magic
+            machines:
+              nixos-iso-vm-commit:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          test-vm-boot:
+            rollback: magic
+            activation_mode: boot
+            machines:
+              nixos-iso-vm-boot:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          test-vm-boot-revert:
+            rollback: magic
+            activation_mode: boot
+            # Boot mode has nothing to confirm (the effective gate degrades
+            # to auto; docs/design/activation-guard.md section 5), so the
+            # remote health_checks would never run at runtime and the
+            # validator rejects them at config load. The revert is triggered
+            # by a failing activation instead: the user-overridable
+            # activation_path points at the boot fixture's wrapper script
+            # (configuration-boot.nix). The deploy closure (configuration-
+            # commit.nix) does not ship it, so the activation child fails
+            # immediately, and the boot-mode revert re-runs OLD's activation
+            # through the same wrapper against the boot closure, which execs
+            # the real switch-to-configuration: the genuine revert
+            # (profile-first restore, then OLD's boot activation, spec 4.2).
+            preset:
+              activation_path: etc/panix-e2e-boot-activation
+            machines:
+              nixos-iso-vm-boot-revert:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+          test-vm-guardian-kill:
+            rollback: magic
+            machines:
+              nixos-iso-vm-guardian-kill:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
+          test-vm-flood:
+            rollback: magic
+            machines:
+              nixos-iso-vm-flood:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
 {{ end }}
 {{ if and $isLocal (not $isBootstrap) }}
         homeConfigurations:
@@ -177,6 +264,20 @@ fleet:
                 ssh: *ssh_nixos_iso
               debian-nix-vm:
                 ssh: *ssh_debian_nix
+          # Guarded user tier for the su -l stdin-forwarding leg
+          # (tests/e2e/guard_v2.go): the magic confirm rides the wire stdin
+          # through the su -l wrapper, so a successful guarded deploy is the
+          # forwarding proof. The unguarded home-phase deploy creates
+          # guarduser's first profile generation; the guard leg's deploy then
+          # routes through the guard with a real rollback target.
+          test-home-guard:
+            user: guarduser
+            rollback: magic
+            machines:
+              nixos-iso-vm-home-guard:
+                ssh: *ssh_nixos_iso
+                activation_timeout: 30s
+                rollback_confirm_timeout: 15s
         packages:
           test-package:
             # user: root ensures activation runs via `su -l root -c`, which creates

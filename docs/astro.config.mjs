@@ -105,7 +105,7 @@ export default defineConfig({
 					{ slug: 'guides/ssh-config' },
 					{ slug: 'guides/snapshots' },
 					{ slug: 'guides/packages' },
-					{ slug: 'guides/auto-rollback' },
+					{ slug: 'guides/activation-guard' },
 				],
 			},
 				{

@@ -1,6 +1,7 @@
 package executioner
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -28,8 +29,8 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		maxOutputLines = ex.conf.MaxOutputLines
 	}
 
-	commandLog := ex.conf.PhaseLog.NewCommand(
-		ex.phaseXpath, description, statusIfRunning, statusIfFailed,
+	commandLog := ex.newCommandLog(
+		excOpt, description, statusIfRunning, statusIfFailed,
 		commandWithArgs, maxOutputLines,
 	)
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
@@ -40,7 +41,7 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 		endLog(execErr, commandLog)
 	}()
 
-	cmdCtx, cancel := context.WithTimeout(ex.conf.Ctx, ex.conf.Timeout)
+	cmdCtx, cancel := context.WithTimeout(ex.conf.Ctx, ex.execTimeout(excOpt))
 	defer cancel()
 
 	cmd := ex.prepareCommand(cmdCtx, commandWithArgs)
@@ -57,7 +58,20 @@ func (ex *Executioner) shellStream(description, statusIfRunning, statusIfFailed 
 
 	defer func() { _ = ptyFile.Close() }()
 
-	readErr := ex.readPTYOutput(cmdCtx, ptyFile, commandLog)
+	// WithStdin feeds the PTY master from the caller's reader: the duplex
+	// control channel of the activation guard. Echo is disabled BEFORE the
+	// pump starts, so command frames are never echoed back into the inbound
+	// stream: the echo decision is asynchronous in the line discipline, so
+	// the flag must be fixed before the first frame exists. Best-effort: the
+	// protocol's echo defense ignores command-shaped lines even when the
+	// ioctl fails. Without WithStdin the line discipline stays untouched.
+	if excOpt.stdin != nil {
+		_ = ptyFile.SetEcho(false)
+
+		_ = startStdinPump(cmdCtx, ptyFile, excOpt.stdin)
+	}
+
+	readErr := ex.readPTYOutputTap(cmdCtx, ptyFile, commandLog, excOpt.outputTap)
 	finalizeCommandLog(commandLog)
 
 	execErr = ex.finalizeExecution(cmd, readErr, commandLog, excOpt)
@@ -90,7 +104,22 @@ func (ex *Executioner) handleDryRun(excOpt *ExecOptions) error {
 	return nil
 }
 
+// readPTYOutput reads the PTY master until end-of-stream and processes the
+// output into the command log with no output tap.
 func (ex *Executioner) readPTYOutput(ctx context.Context, reader io.Reader, commandLog *command.CommandLog) error {
+	return ex.readPTYOutputTap(ctx, reader, commandLog, nil)
+}
+
+// readPTYOutputTap is readPTYOutput with an optional raw output tap: every
+// chunk read is handed to outputTap in stream order before terminal
+// processing, and the tap never alters the command log path. A nil tap is
+// the plain readPTYOutput behavior.
+func (ex *Executioner) readPTYOutputTap(
+	ctx context.Context,
+	reader io.Reader,
+	commandLog *command.CommandLog,
+	outputTap func([]byte),
+) error {
 	buf := make([]byte, ptyBufferSize)
 	proc := terminalProcessor{output: commandLog.Output}
 
@@ -103,6 +132,13 @@ func (ex *Executioner) readPTYOutput(ctx context.Context, reader io.Reader, comm
 
 			// Process data before the error: a reader may report n > 0 together with an error.
 			if bytesRead > 0 {
+				// The tap sees the raw chunk before terminal processing, in
+				// stream order, on this read goroutine. The chunk is copied
+				// because the callback may retain it while buf is reused.
+				if outputTap != nil {
+					outputTap(bytes.Clone(buf[:bytesRead]))
+				}
+
 				proc.process(buf[:bytesRead], commandLog)
 
 				ex.conf.OnUpdateHook()

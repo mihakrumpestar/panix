@@ -181,9 +181,10 @@ properties:
     type: object
     description: Fleet configuration
     properties:
-      auto_rollback:
-        type: boolean
-        description: Automatically roll back to the pre-deploy generation when activation fails
+      activation_timeout:
+        type: string
+        description: "Bound for the activation phase on guarded deploys (e.g. '15m'); a hung activation is killed and reverted at the deadline (default: 15m)"
+        default: 15m
       bootstrap:
         description: Bootstrap configuration for initial provisioning
         $ref: "#/definitions/Bootstrap"
@@ -196,9 +197,10 @@ properties:
         additionalProperties:
           type: object
           properties:
-            auto_rollback:
-              type: boolean
-              description: Automatically roll back to the pre-deploy generation when activation fails
+            activation_timeout:
+              type: string
+              description: "Bound for the activation phase on guarded deploys (e.g. '15m'); a hung activation is killed and reverted at the deadline (default: 15m)"
+              default: 15m
             bootstrap:
               description: Bootstrap configuration for initial provisioning
               $ref: "#/definitions/Bootstrap"
@@ -208,6 +210,16 @@ properties:
             hardware_config_path:
               type: string
               description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+            health_checks:
+              type: array
+              description: "Commands panix runs on the target after activation and before confirming a magic-tier deploy; any failure reverts the deploy (requires rollback: magic)"
+              items:
+                type: string
+            health_checks_local:
+              type: array
+              description: "Commands the target-side guardian runs after activation to gate the commit; any failure reverts the deploy (rollback: auto and magic)"
+              items:
+                type: string
             installables:
               type: object
               description: Installables (e.g. nixosConfigurations, homeConfigurations)
@@ -219,9 +231,10 @@ properties:
                     activation_mode:
                       type: string
                       description: Activation mode (overrides preset default)
-                    auto_rollback:
-                      type: boolean
-                      description: Automatically roll back to the pre-deploy generation when activation fails
+                    activation_timeout:
+                      type: string
+                      description: "Bound for the activation phase on guarded deploys (e.g. '15m'); a hung activation is killed and reverted at the deadline (default: 15m)"
+                      default: 15m
                     bootstrap:
                       description: Bootstrap configuration for initial provisioning
                       $ref: "#/definitions/Bootstrap"
@@ -231,6 +244,16 @@ properties:
                     hardware_config_path:
                       type: string
                       description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+                    health_checks:
+                      type: array
+                      description: "Commands panix runs on the target after activation and before confirming a magic-tier deploy; any failure reverts the deploy (requires rollback: magic)"
+                      items:
+                        type: string
+                    health_checks_local:
+                      type: array
+                      description: "Commands the target-side guardian runs after activation to gate the commit; any failure reverts the deploy (rollback: auto and magic)"
+                      items:
+                        type: string
                     machines:
                       type: object
                       description: Machines configuration
@@ -238,9 +261,10 @@ properties:
                         anyOf:
                         - type: object
                           properties:
-                            auto_rollback:
-                              type: boolean
-                              description: Automatically roll back to the pre-deploy generation when activation fails
+                            activation_timeout:
+                              type: string
+                              description: "Bound for the activation phase on guarded deploys (e.g. '15m'); a hung activation is killed and reverted at the deadline (default: 15m)"
+                              default: 15m
                             bootstrap:
                               description: Bootstrap configuration for initial provisioning
                               $ref: "#/definitions/Bootstrap"
@@ -250,6 +274,30 @@ properties:
                             hardware_config_path:
                               type: string
                               description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+                            health_checks:
+                              type: array
+                              description: "Commands panix runs on the target after activation and before confirming a magic-tier deploy; any failure reverts the deploy (requires rollback: magic)"
+                              items:
+                                type: string
+                            health_checks_local:
+                              type: array
+                              description: "Commands the target-side guardian runs after activation to gate the commit; any failure reverts the deploy (rollback: auto and magic)"
+                              items:
+                                type: string
+                            reboot_on_revert_failure:
+                              type: boolean
+                              description: "Reboot the target as a last resort when the revert itself fails (default: off; never fires in boot mode)"
+                            rollback:
+                              type: string
+                              description: "Activation guard tier: off activates directly, auto commits on success and reverts on failure or timeout, magic additionally waits for panix to confirm within rollback_confirm_timeout before committing (default: off; unset inherits)"
+                              enum:
+                              - "off"
+                              - auto
+                              - magic
+                            rollback_confirm_timeout:
+                              type: string
+                              description: "How long the guardian waits for panix's confirmation before reverting (e.g. '60s'); requires rollback: magic (default: 60s)"
+                              default: 60s
                             rsync_default_flags:
                               type: array
                               description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
@@ -279,6 +327,20 @@ properties:
                       $ref: "#/definitions/NixConfig"
                     preset:
                       $ref: "#/definitions/Preset"
+                    reboot_on_revert_failure:
+                      type: boolean
+                      description: "Reboot the target as a last resort when the revert itself fails (default: off; never fires in boot mode)"
+                    rollback:
+                      type: string
+                      description: "Activation guard tier: off activates directly, auto commits on success and reverts on failure or timeout, magic additionally waits for panix to confirm within rollback_confirm_timeout before committing (default: off; unset inherits)"
+                      enum:
+                      - "off"
+                      - auto
+                      - magic
+                    rollback_confirm_timeout:
+                      type: string
+                      description: "How long the guardian waits for panix's confirmation before reverting (e.g. '60s'); requires rollback: magic (default: 60s)"
+                      default: 60s
                     rsync_default_flags:
                       type: array
                       description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
@@ -310,6 +372,20 @@ properties:
             nix:
               description: Nix build and copy configuration
               $ref: "#/definitions/NixConfig"
+            reboot_on_revert_failure:
+              type: boolean
+              description: "Reboot the target as a last resort when the revert itself fails (default: off; never fires in boot mode)"
+            rollback:
+              type: string
+              description: "Activation guard tier: off activates directly, auto commits on success and reverts on failure or timeout, magic additionally waits for panix to confirm within rollback_confirm_timeout before committing (default: off; unset inherits)"
+              enum:
+              - "off"
+              - auto
+              - magic
+            rollback_confirm_timeout:
+              type: string
+              description: "How long the guardian waits for panix's confirmation before reverting (e.g. '60s'); requires rollback: magic (default: 60s)"
+              default: 60s
             rsync_default_flags:
               type: array
               description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
@@ -342,9 +418,33 @@ properties:
       hardware_config_path:
         type: string
         description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+      health_checks:
+        type: array
+        description: "Commands panix runs on the target after activation and before confirming a magic-tier deploy; any failure reverts the deploy (requires rollback: magic)"
+        items:
+          type: string
+      health_checks_local:
+        type: array
+        description: "Commands the target-side guardian runs after activation to gate the commit; any failure reverts the deploy (rollback: auto and magic)"
+        items:
+          type: string
       nix:
         description: Nix build and copy configuration
         $ref: "#/definitions/NixConfig"
+      reboot_on_revert_failure:
+        type: boolean
+        description: "Reboot the target as a last resort when the revert itself fails (default: off; never fires in boot mode)"
+      rollback:
+        type: string
+        description: "Activation guard tier: off activates directly, auto commits on success and reverts on failure or timeout, magic additionally waits for panix to confirm within rollback_confirm_timeout before committing (default: off; unset inherits)"
+        enum:
+        - "off"
+        - auto
+        - magic
+      rollback_confirm_timeout:
+        type: string
+        description: "How long the guardian waits for panix's confirmation before reverting (e.g. '60s'); requires rollback: magic (default: 60s)"
+        default: 60s
       rsync_default_flags:
         type: array
         description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
@@ -554,6 +654,12 @@ definitions:
       build_path:
         type: string
         description: Build path within the flake output
+      guard_commit_script:
+        type: string
+        description: "Closure-relative script finalizing the guard commit after the profile set (e.g. system-manager's register-profile). Type-level field: set only under output_types declarations"
+      guard_tier:
+        type: string
+        description: "Activation Guard support level (full/standard/self-setting/minimal/none). Type-level field: set only under output_types declarations"
       omit_type_from_attr_path:
         type: boolean
         description: "Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"

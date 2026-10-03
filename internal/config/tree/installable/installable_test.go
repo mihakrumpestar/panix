@@ -11,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath) are
-// always taken from the defaults, ignoring any user-provided value.
+// Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath,
+// GuardTier, GuardCommitScript) are always taken from the defaults, ignoring
+// any user-provided value.
 func TestApplyPresetDefaults_TypeLevelFields(t *testing.T) {
 	t.Parallel()
 
@@ -65,6 +66,15 @@ func TestApplyPresetDefaults_TypeLevelFields(t *testing.T) {
 			},
 			defaults: presets[FlakeOutputType("packages")],
 		},
+		{
+			name: "systemConfigs defaults: register-profile commit script enforced",
+			userPreset: Preset{
+				IsSystemLevel:    new(false),
+				IsBootstrappable: true,
+				GuardTier:        GuardTierNone, // user tries to downgrade the tier
+			},
+			defaults: presets[FlakeOutputType("systemConfigs")],
+		},
 	}
 
 	for _, tt := range tests {
@@ -83,6 +93,8 @@ func assertTypeLevelFields(t *testing.T, inst *Installable, defaults Preset) {
 	assert.Equal(t, defaults.IsSystemLevel, inst.Preset.IsSystemLevel, "IsSystemLevel should always come from defaults")
 	assert.Equal(t, defaults.IsBootstrappable, inst.Preset.IsBootstrappable, "IsBootstrappable should always come from defaults")
 	assert.Equal(t, defaults.OmitTypeFromAttrPath, inst.Preset.OmitTypeFromAttrPath, "OmitTypeFromAttrPath should always come from defaults")
+	assert.Equal(t, defaults.GuardTier, inst.Preset.GuardTier, "GuardTier should always come from defaults")
+	assert.Equal(t, defaults.GuardCommitScript, inst.Preset.GuardCommitScript, "GuardCommitScript should always come from defaults")
 }
 
 // User-overridable fields: a non-zero user value wins, zero falls back.

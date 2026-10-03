@@ -4,6 +4,7 @@ package pty
 
 import (
 	"io"
+	"os"
 	"os/exec"
 )
 
@@ -13,6 +14,12 @@ type Winsize struct {
 	Col    uint16
 	Xpixel uint16
 	Ypixel uint16
+}
+
+// termiosState is the stand-in for the platform termios type on unsupported
+// platforms; it only carries the local flags touched by SetEcho.
+type termiosState struct {
+	Lflag uint64
 }
 
 // Read on unsupported platforms always returns EOF.
@@ -36,4 +43,20 @@ func newPty() (*Pty, error) {
 
 func (p *Pty) startCommand(cmd *exec.Cmd) error {
 	return ErrUnsupported
+}
+
+// getTermios on unsupported platforms always fails with ErrUnsupported.
+func getTermios(*os.File) (termiosState, error) {
+	return termiosState{}, ErrUnsupported
+}
+
+// setTermios on unsupported platforms always fails with ErrUnsupported.
+func setTermios(*os.File, termiosState) error {
+	return ErrUnsupported
+}
+
+// echoTermiosBits on unsupported platforms has no flags to report; SetEcho
+// never reaches it because getTermios fails first.
+func echoTermiosBits() uint64 {
+	return 0
 }

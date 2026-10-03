@@ -159,6 +159,75 @@ func TestPassAttributesIntoEmptyNameNoNameTag(t *testing.T) {
 		"xpath should inherit from parent when name is empty")
 }
 
+// TestPassAttributesIntoRollbackInheritance covers the rollback tier's
+// inheritance semantics: the zero value ("") inherits from the parent, while
+// any explicit tier (including "off") overrides it. This is the non-pointer
+// mergo constraint that makes an explicit "off" meaningful at a child level.
+func TestPassAttributesIntoRollbackInheritance(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		parent Rollback
+		child  Rollback
+		want   Rollback
+	}{
+		{"unset child inherits parent magic", RollbackMagic, "", RollbackMagic},
+		{"unset child inherits parent off", RollbackOff, "", RollbackOff},
+		{"explicit child off overrides parent magic", RollbackMagic, RollbackOff, RollbackOff},
+		{"explicit child magic overrides parent off", RollbackOff, RollbackMagic, RollbackMagic},
+		{"explicit child magic overrides parent auto", RollbackAuto, RollbackMagic, RollbackMagic},
+		{"no level set stays unset", "", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			parent := &Attributes{Rollback: tt.parent}
+			child := &Attributes{Rollback: tt.child}
+
+			err := child.passAttributesInto("child-name", parent)
+			require.NoError(t, err)
+
+			assertion := assert.New(t)
+			assertion.Equal(tt.want, child.Rollback)
+		})
+	}
+}
+
+// TestPassAttributesIntoAppendsHealthChecks covers health check inheritance:
+// lists append (WithAppendSlice), so a child extends the parent's checks and
+// an unset child inherits the parent's.
+func TestPassAttributesIntoAppendsHealthChecks(t *testing.T) {
+	t.Parallel()
+
+	parent := &Attributes{HealthChecksLocal: []string{"fleet-check"}}
+
+	t.Run("child appends to parent checks", func(t *testing.T) {
+		t.Parallel()
+
+		child := &Attributes{HealthChecksLocal: []string{"machine-check"}}
+
+		err := child.passAttributesInto("child-name", parent)
+		require.NoError(t, err)
+
+		assertion := assert.New(t)
+		assertion.Equal([]string{"machine-check", "fleet-check"}, child.HealthChecksLocal)
+	})
+
+	t.Run("unset child inherits parent checks", func(t *testing.T) {
+		t.Parallel()
+
+		child := &Attributes{}
+
+		err := child.passAttributesInto("child-name", parent)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"fleet-check"}, child.HealthChecksLocal)
+	})
+}
+
 func TestNewAttributes(t *testing.T) {
 	t.Parallel()
 

@@ -119,6 +119,17 @@ func TestMaybeSSHCommandArguments_DisableAutoAddHostKeyWithoutKnownHostsFile(t *
 	assertion.NotContains(args, "UserKnownHostsFile")
 }
 
+func TestFreshConnectionArgs(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{Hostname: "example.com", Port: 22, Username: "root"}
+
+	assert.Equal(t,
+		[]string{"-o", "ControlMaster=no", "-o", "ControlPath=none"},
+		client.FreshConnectionArgs(),
+	)
+}
+
 func TestKnownHostsFile_IsAuto(t *testing.T) {
 	t.Parallel()
 

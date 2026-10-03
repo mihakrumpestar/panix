@@ -1,0 +1,14 @@
+fleet:
+  rollback: magic
+  health_checks_local:
+    - fleet-check
+  flakes:
+    my-flake:
+      url: path:./my-flake
+      installables:
+        nixosConfigurations:
+          my-config:
+            machines:
+              inheriting-machine: {}
+              overridden-machine:
+                rollback: off

@@ -115,7 +115,7 @@ flowchart LR
 |-------|-------|---------|
 | **Rollback** | Per-machine | Switch to a previous generation via the type's activation mechanism, for any type with a profile path |
 
-Rollback also runs automatically during Activate when activation fails and the machine has `auto_rollback: true`: see [Auto Rollback](/guides/auto-rollback/).
+Guarded deploys fold rollback into the Activate phase itself: when the machine's `rollback` tier is `auto` or `magic`, activation runs as a transaction that commits on success and reverts to the pre-deploy generation on failure, timeout, or a missed confirmation. See [Activation Guard](/guides/activation-guard/).
 
 ## Scope-Aware Execution
 
