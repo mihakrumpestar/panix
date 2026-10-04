@@ -126,8 +126,8 @@ tasks:
 
   go:test:e2e:build:
     desc: |
-      Build all e2e Nix artifacts (installer ISO, kexec installer, cloud-init
-      seeds, NixOS closures).
+      Build all e2e Nix artifacts (installer ISO, kexec installer,
+      nix-installer, cloud-init seeds, NixOS closures).
     cmds:
       - |
         set -euo pipefail
@@ -136,10 +136,12 @@ tasks:
         nix build --no-link --print-out-paths \
           "$FLAKE#installer-iso" \
           "$FLAKE#kexec-installer" \
+          "$FLAKE#nix-installer" \
           "$FLAKE#debian-cloud-image" \
           "$FLAKE#seed-iso" \
           "$FLAKE#seed-remote-iso" \
           "$FLAKE#seed-nix-iso" \
+          "$FLAKE#seed-nonix-iso" \
           "$FLAKE#bake-seed-iso" \
           "$FLAKE#bake-seed-nix-iso" \
           "$FLAKE#nixosConfigurations.test-vm.config.system.build.toplevel" \
@@ -148,7 +150,8 @@ tasks:
           "$FLAKE#homeConfigurations.test-home.activationPackage" \
           "$FLAKE#homeConfigurations.test-home-alice.activationPackage" \
           "$FLAKE#test-package" \
-          "$FLAKE#systemConfigs.test-system-manager"
+          "$FLAKE#systemConfigs.test-system-manager" \
+          "$FLAKE#systemConfigs.test-system-manager-nixinstall"
         echo "All e2e test artifacts built."
 
   # Nix

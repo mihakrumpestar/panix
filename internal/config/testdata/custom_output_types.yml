@@ -1,6 +1,7 @@
 output_types:
   colmenaConfigurations:
     system_level: true
+    bootstrap_mode: nixos
     build_path: config.system.build.toplevel
     profile_path: /nix/var/nix/profiles/system
     set_profile: true
@@ -9,6 +10,7 @@ output_types:
     activation_default_mode: switch
   customConfigurations:
     system_level: false
+    bootstrap_mode: nix-install
     output_type_attr: custom
 
 fleet:

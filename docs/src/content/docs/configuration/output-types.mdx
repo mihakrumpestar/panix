@@ -9,12 +9,12 @@ Installable types define how a flake output is built, activated, and tracked: pa
 
 ## Built-In Types
 
-Each built-in type auto-infers its build path, activation mechanism, profile path, and whether profile setting is needed; you do not configure these manually.
+Each built-in type auto-infers its build path, activation mechanism, profile path, whether profile setting is needed, and its bootstrap mode; you do not configure these manually. Custom types instead declare the bootstrap mode explicitly with `bootstrap_mode` (see [Custom Output Types](#custom-output-types)).
 
 {/* OUTPUT_TYPES_START */}
 | Type | Deploys | Activation |
 |------|---------|------------|
-| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (only type that supports bootstrap) |
+| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (only built-in type that supports NixOS bootstrap) |
 | `darwinConfigurations` | [nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS) | `activate` script |
 | `systemConfigs` | [system-manager](https://github.com/numtide/system-manager) | `bin/activate` |
 | `homeConfigurations` | [home-manager](https://github.com/nix-community/home-manager) | `activationPackage/activate` |
@@ -23,7 +23,9 @@ Each built-in type auto-infers its build path, activation mechanism, profile pat
 | `maidConfigurations` | [nix-maid](https://github.com/viperML/nix-maid) | `bin/activate` |
 {/* OUTPUT_TYPES_END */}
 
-System-level types activate as root (via the configured `sudo_program`, or bare when the SSH user is already root; a non-root target user can also be chosen with the `user` field — see the [configuration model](/concepts/configuration-model/)). User-level types activate as the SSH user. To deploy a user-level installable to a different user, set the `user` field on the installable (see the [configuration model](/concepts/configuration-model/)).
+Every built-in type is bootstrappable: `nixosConfigurations` via the NixOS bootstrap (kexec, disko, `nixos-install`), the other types via the Nix installer bootstrap, which installs Nix on targets that lack it before Build, Transfer, Secrets, and Activate (see the [Bootstrap guide](/guides/bootstrap/)).
+
+System-level types activate as root (via the configured `sudo_program`, or bare when the SSH user is already root; a non-root target user can also be chosen with the `user` field, see the [configuration model](/concepts/configuration-model/)). User-level types activate as the SSH user. To deploy a user-level installable to a different user, set the `user` field on the installable (see the [configuration model](/concepts/configuration-model/)).
 
 :::note
 To get a new output type added as built-in, [open a GitHub issue](https://github.com/mihakrumpestar/panix/issues).
@@ -36,6 +38,7 @@ Each type's behavior is data-driven through preset fields. User-overridable fiel
 | Field | Required | Scope | Purpose |
 |-------|----------|-------|---------|
 | `system_level` | **yes** | type-level | `true`: activation runs with sudo (system-level). `false`: activation runs as the SSH user (user-level) |
+| `bootstrap_mode` | no | type-level | Bootstrap mode: `nix-install` (Nix installer bootstrap), `nixos` (full NixOS bootstrap, requires `system_level: true` and `build_path: config.system.build.toplevel`), or omitted (no bootstrap). Set only under `output_types` declarations |
 | `output_type_attr` | no | user-overridable | Override the flake output attribute used in the attrpath. Defaults to the type key name |
 | `build_path` | no | user-overridable | Attrpath suffix for `nix build` (e.g. `config.system.build.toplevel`) |
 | `activation_path` | no | user-overridable | Script path within the closure to run during activation. Empty means `nix profile add` |
@@ -80,8 +83,9 @@ The flake must expose the matching output under `myApps.editor` (only bare names
 - If `activation_supported_modes` is declared, `activation_default_mode` must also be set.
 - `activation_default_mode` must be one of `activation_supported_modes`.
 - `set_profile: true` requires `profile_path` to be set.
+- `bootstrap_mode: nixos` requires `system_level: true` and `build_path: config.system.build.toplevel`. A per-installable `build_path` override is an expert knob and must still resolve to a NixOS system closure: a typo fails at Build, a non-system path fails at nixos-install.
 - Entries in `activation_non_mutating_modes` and `activation_profile_skip_modes` must be declared in `activation_supported_modes`.
-- Custom types are never bootstrappable (bootstrap only applies to `nixosConfigurations`).
+- Custom types are bootstrappable via `bootstrap_mode` in their `output_types` declaration: `nix-install` for the Nix installer bootstrap, `nixos` for the full NixOS bootstrap (requiring `system_level: true` and `build_path: config.system.build.toplevel`), omitted for no bootstrap. Per-installable `preset:` values are ignored: the type declaration wins.
 
 ## Attrpath Resolution
 
@@ -91,7 +95,7 @@ The top-level attribute of the build attrpath is picked by the first matching ru
 2. Else `omit_type_from_attr_path: true`: bare name only. `hello` builds `#hello` (nix resolves it under `packages.<system>.<name>`). This is how built-in `packages` works.
 3. Else (default): type key + name. `alice` under `homeConfigurations` builds `#homeConfigurations.alice`.
 
-`build_path`, if set, is appended: `#nixosConf.workstation.config.system.build.toplevel`.
+`build_path`, if set, is appended: `#nixosConf.workstation.config.system.build.toplevel`. The NixOS bootstrap builds the disko script at `config.system.build.diskoScript` under the same resolved output, so `output_type_attr` and `omit_type_from_attr_path` are honored for it too.
 
 Use `output_type_attr` when your flake exposes NixOS systems under `nixosConf.*` instead of `nixosConfigurations.*`:
 
@@ -101,6 +105,7 @@ output_types:
     system_level: true
     output_type_attr: nixosConf  # flake exposes systems under nixosConf.*, not mySystems.*
     build_path: config.system.build.toplevel
+    bootstrap_mode: nixos        # full NixOS bootstrap (kexec, disko, nixos-install)
     activation_path: bin/switch-to-configuration
     activation_supported_modes: ["switch", "boot", "test", "dry-activate"]
     activation_default_mode: switch

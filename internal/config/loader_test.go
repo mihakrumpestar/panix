@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/validate"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -399,6 +400,8 @@ func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 	assertion.True(*defaultCfg.Preset.SetProfile)
 	must.NotNil(defaultCfg.Preset.IsSystemLevel)
 	assertion.True(*defaultCfg.Preset.IsSystemLevel)
+	assertion.Equal(installable.BootstrapNixOS, defaultCfg.Preset.Bootstrap,
+		"declared bootstrap_mode should be merged as a type-level default")
 
 	// Installable-level YAML overrides win over the custom defaults.
 	overrideCfg, ok := attrMap.Get("overridden-config")
@@ -435,12 +438,52 @@ func TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath(t *testing.T) {
 	assertion := assert.New(t)
 	assertion.Equal("custom", inst.Preset.OutputTypeAttr,
 		"declared output_type_attr should be merged as a type default")
+	assertion.Equal(installable.BootstrapNixInstall, inst.Preset.Bootstrap,
+		"declared bootstrap_mode should be merged as a type default")
 
 	assertion.Equal(
 		"custom.my-custom",
 		installable.ResolveFlakeInstallable(inst.Type, inst.Name, inst.Preset),
 		"resolved attrpath should use the declared output_type_attr",
 	)
+}
+
+// TestCustomOutputTypesInvalidBootstrapModeUsesHouseError pins which
+// validation path owns the bootstrap_mode enum error, end-to-end through the
+// loader sequence (decode, initFleet, ValidateStructTags): the oneof struct
+// tag is enforced by the tag walk on every installable copy of the propagated
+// type-level value, but ValidateStructTags checks the output_types
+// declarations first, so the user sees exactly one house-style message naming
+// the YAML key and the valid modes, and the tag-driven duplicates cannot
+// surface.
+func TestCustomOutputTypesInvalidBootstrapModeUsesHouseError(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "custom_output_types.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	preset, ok := conf.OutputTypes.Get("colmenaConfigurations")
+	must.True(ok)
+
+	preset.Bootstrap = "bogus"
+	conf.OutputTypes.Set("colmenaConfigurations", preset)
+
+	must.NoError(conf.initFleet())
+
+	err = validate.ValidateStructTags(conf, conf.Fleet, conf.OutputTypes, conf.Flags.ValidateFlags, 0)
+	must.Error(err, "an invalid bootstrap_mode must be rejected")
+
+	msg := err.Error()
+	assertion := assert.New(t)
+	assertion.Contains(msg, "output_types: 'colmenaConfigurations' bootstrap_mode 'bogus' is not a valid bootstrap mode",
+		"the validateDeclaredPresets message must be the user-facing one")
+	assertion.Contains(msg, "must be one of 'nixos' or 'nix-install'",
+		"error must name the valid bootstrap modes")
+	assertion.NotContains(msg, "must be one of [",
+		"the tag-driven oneof message must not surface")
+	assertion.NotContains(msg, "output_types.values",
+		"the tag-driven error path must not surface")
 }
 
 // TestOutputTypeAttrOverrideResolvesAttrpath verifies that a per-installable

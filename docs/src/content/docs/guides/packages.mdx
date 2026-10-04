@@ -126,5 +126,4 @@ Activation requires a running systemd user session and D-Bus user bus on the tar
 
 - **No rollback for `packages` and `maidConfigurations`**: Panix rollback is skipped (no profile path). For `packages`, use `nix profile history` and `nix profile rollback` on the target machine directly.
 - **No activation modes**: both types activate immediately, no `switch`, `boot`, `test`, or `dry-activate` modes.
-- **No bootstrap support**: Neither type supports bootstrap. The target must already be running Nix.
 - **Profile conflicts** (`packages` only): `nix profile add` uses the user's default profile. Use `profile_add_default_flags: ["--priority", "N"]` to control priority.

@@ -7,11 +7,13 @@ sidebar:
 
 Run commands at fixed points during the bootstrap process.
 
-Hook commands are shell script strings: each runs as `sh -c` on the target (as the SSH user, unprivileged; elevate explicitly with `sudo` where needed — passwordless, since Panix cannot answer prompts). Use POSIX syntax: on Debian-family targets `sh` is dash, so bash-isms like `[[` or arrays will fail.
+Hook commands are shell script strings: each runs as `sh -c` on the target (as the SSH user, unprivileged; elevate explicitly with `sudo` where needed (passwordless, since Panix cannot answer prompts)). Use POSIX syntax: on Debian-family targets `sh` is dash, so bash-isms like `[[` or arrays will fail.
+
+The Nix installer bootstrap runs only `post_bootstrap_hooks`, after the installer. The `post_bootstrap_install_hooks` and `post_bootstrap_provisioned_hooks` stages are NixOS-bootstrap-only and never run in the Nix installer bootstrap.
 
 | Hook | When it runs | SSH used |
 |------|--------------|----------|
-| `post_bootstrap_hooks` | After disko partitioning | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
+| `post_bootstrap_hooks` | After disko partitioning, or after the Nix installer (Nix installer bootstrap) | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
 | `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
 | `post_bootstrap_provisioned_hooks` | After reboot into new system (immediately in the installer when automatic reboot is disabled, over bootstrap SSH) | Regular SSH |
 
@@ -20,7 +22,7 @@ Hook commands are shell script strings: each runs as `sh -c` on the target (as t
 - `waitForOnline`: Wait for machine to become reachable (useful after reboot)
 - `waitForOffline`: Wait for machine to become unreachable (useful during reboot)
 
-These two are exact-match keywords, not shell commands: anything else — including `waitForOnline && echo up` — runs as a shell script via `sh -c`.
+These two are exact-match keywords, not shell commands: anything else, including `waitForOnline && echo up`, runs as a shell script via `sh -c`.
 
 ## Example
 

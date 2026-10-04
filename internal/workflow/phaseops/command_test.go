@@ -216,34 +216,41 @@ func TestTransferCommandPipeSpecElevation(t *testing.T) {
 }
 
 // TestTransferCommandPipeSpecBootstrapping pins the /mnt prefix on the
-// destination script: os secrets are prefixed until the machine is
-// bootstrapped, plain secrets never are.
+// destination script: NixOS-bootstrapped content is prefixed until the
+// machine is bootstrapped, staging content (and every other bootstrap mode)
+// never is.
 func TestTransferCommandPipeSpecBootstrapping(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		bootstrapped      bool
-		transferOSSecrets bool
-		wantScript        string
-		wantNoScript      string
+		name            string
+		bootstrapped    bool
+		bootstrapsNixOS bool
+		wantScript      string
+		wantNoScript    string
 	}{
 		{
-			name:              "os secrets get the bootstrapping prefix",
-			transferOSSecrets: true,
-			wantScript:        "cat > '/mnt/var/secrets/key'",
+			name:            "nixos-bootstrapped content gets the bootstrapping prefix",
+			bootstrapsNixOS: true,
+			wantScript:      "cat > '/mnt/var/secrets/key'",
 		},
 		{
-			name:              "os secrets drop the prefix once bootstrapped",
-			bootstrapped:      true,
-			transferOSSecrets: true,
-			wantScript:        "cat > '/var/secrets/key'",
-			wantNoScript:      "/mnt",
+			name:            "nixos-bootstrapped content drops the prefix once bootstrapped",
+			bootstrapped:    true,
+			bootstrapsNixOS: true,
+			wantScript:      "cat > '/var/secrets/key'",
+			wantNoScript:    "/mnt",
 		},
 		{
-			name:         "plain secrets never get the prefix",
+			name:         "staging transfers never get the prefix",
 			wantScript:   "cat > '/var/secrets/key'",
 			wantNoScript: "/mnt",
+		},
+		{
+			name:            "non-NixOS bootstrap modes never get the prefix",
+			bootstrapsNixOS: false,
+			wantScript:      "cat > '/var/secrets/key'",
+			wantNoScript:    "/mnt",
 		},
 	}
 
@@ -255,7 +262,7 @@ func TestTransferCommandPipeSpecBootstrapping(t *testing.T) {
 			mach.MetaInspect.Store(&machine.MetaInspect{IsRoot: true, Bootstrapped: tt.bootstrapped})
 
 			source := attributes.TransferSource{Command: "printf secret", RemotePath: "/var/secrets/key"}
-			plan := transferCommandPipeSpec(mach, source, tt.transferOSSecrets)
+			plan := transferCommandPipeSpec(mach, source, tt.bootstrapsNixOS)
 
 			script := assertShScriptArgv(t, plan.Write, false)
 			assert.Contains(t, script, tt.wantScript)
@@ -274,12 +281,12 @@ func TestTransferCommandPipeSpecProbe(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		isRoot            bool
-		bootstrapped      bool
-		transferOSSecrets bool
-		wantSudo          bool
-		wantScript        string
+		name            string
+		isRoot          bool
+		bootstrapped    bool
+		bootstrapsNixOS bool
+		wantSudo        bool
+		wantScript      string
 	}{
 		{
 			name:       "root runs the probe directly",
@@ -293,17 +300,17 @@ func TestTransferCommandPipeSpecProbe(t *testing.T) {
 			wantScript: "sha256sum -- '/var/secrets/key'",
 		},
 		{
-			name:              "os secrets probe the bootstrapping root",
-			isRoot:            true,
-			transferOSSecrets: true,
-			wantScript:        "sha256sum -- '/mnt/var/secrets/key'",
+			name:            "nixos-bootstrapped content probes the bootstrapping root",
+			isRoot:          true,
+			bootstrapsNixOS: true,
+			wantScript:      "sha256sum -- '/mnt/var/secrets/key'",
 		},
 		{
-			name:              "bootstrapped os secrets probe the final root",
-			isRoot:            true,
-			bootstrapped:      true,
-			transferOSSecrets: true,
-			wantScript:        "sha256sum -- '/var/secrets/key'",
+			name:            "bootstrapped nixos content probes the final root",
+			isRoot:          true,
+			bootstrapped:    true,
+			bootstrapsNixOS: true,
+			wantScript:      "sha256sum -- '/var/secrets/key'",
 		},
 	}
 
@@ -315,7 +322,7 @@ func TestTransferCommandPipeSpecProbe(t *testing.T) {
 			mach.MetaInspect.Store(&machine.MetaInspect{IsRoot: tt.isRoot, Bootstrapped: tt.bootstrapped})
 
 			source := attributes.TransferSource{Command: "printf secret", RemotePath: "/var/secrets/key"}
-			plan := transferCommandPipeSpec(mach, source, tt.transferOSSecrets)
+			plan := transferCommandPipeSpec(mach, source, tt.bootstrapsNixOS)
 
 			script := assertShScriptArgv(t, plan.Probe, tt.wantSudo)
 			assert.Contains(t, script, tt.wantScript)

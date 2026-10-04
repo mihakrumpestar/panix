@@ -132,6 +132,6 @@ func (i *Installable) applyPresetDefaults(defaults Preset) {
 	}
 
 	i.Preset.IsSystemLevel = defaults.IsSystemLevel
-	i.Preset.IsBootstrappable = defaults.IsBootstrappable
+	i.Preset.Bootstrap = defaults.Bootstrap
 	i.Preset.OmitTypeFromAttrPath = defaults.OmitTypeFromAttrPath
 }

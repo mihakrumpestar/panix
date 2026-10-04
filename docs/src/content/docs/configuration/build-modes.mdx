@@ -35,7 +35,7 @@ For installables with multiple machines, the closure is built on the first machi
 :::
 
 :::caution
-The first machine must be remote (not the machine running Panix) and have Nix installed and the flake inputs available. If the first machine is bootstrapped in the same run, remote builds may target its temporary installer environment, whose store is discarded on reboot; builds racing that reboot can fail. Prefer an already-provisioned first machine, or bootstrap it in a separate run.
+The first machine must be remote (not the machine running Panix) and have Nix and the flake inputs available. Nix on the target is satisfied by the Bootstrap phase: the Nix installer bootstrap installs it on targets that lack it (see the [Bootstrap guide](/guides/bootstrap/)). If the first machine is NixOS-bootstrapped in the same run, remote builds may target its temporary installer environment, whose store is discarded on reboot; builds racing that reboot can fail. Prefer an already-provisioned first machine, or bootstrap it in a separate run.
 :::
 
 ## Configuration

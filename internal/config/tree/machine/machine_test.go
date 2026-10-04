@@ -419,39 +419,100 @@ func TestMaybeSudoFor_RootUserNeedsNoElevation(t *testing.T) {
 	assert.Empty(t, result, "root needs no elevation regardless of SSH user or sudo program")
 }
 
-// --- MaybeBootstrappingPath ---
+// --- MaybeBootstrappingPath / NixOSBootstrappingInProgress ---
 
-func TestMaybeBootstrappingPath_Bootstrapped(t *testing.T) {
-	t.Parallel()
-
-	mach := newTestMachine()
-	mach.MetaInspect.Store(&MetaInspect{Bootstrapped: true})
-
-	result := mach.MaybeBootstrappingPath("/etc/nixos")
-
-	assert.Equal(t, "/etc/nixos", result)
+// maybeBootstrappingPathCase pins one redirect matrix row: the /mnt prefix
+// applies only while a NixOS bootstrap is in progress (the preset bootstraps
+// NixOS and the final system is not installed yet). BootstrapNixInstall and
+// BootstrapNone targets write to the live root, their Nix availability never
+// redirects.
+type maybeBootstrappingPathCase struct {
+	name            string
+	bootstrapsNixOS bool
+	metaInspect     *MetaInspect // nil leaves the state unknown
+	path            string
+	want            string
+	wantInProgress  bool
 }
 
-func TestMaybeBootstrappingPath_NotBootstrapped(t *testing.T) {
-	t.Parallel()
-
-	mach := newTestMachine()
-	mach.MetaInspect.Store(&MetaInspect{Bootstrapped: false})
-
-	result := mach.MaybeBootstrappingPath("/etc/nixos")
-
-	assert.Equal(t, "/mnt/etc/nixos", result)
+var maybeBootstrappingPathCases = []maybeBootstrappingPathCase{
+	{
+		name:            "BootstrapsNixOS unbootstrapped: /mnt prefix",
+		bootstrapsNixOS: true,
+		metaInspect:     &MetaInspect{Bootstrapped: false},
+		path:            "/etc/nixos",
+		want:            "/mnt/etc/nixos",
+		wantInProgress:  true,
+	},
+	{
+		name:            "BootstrapsNixOS unbootstrapped with nix missing: /mnt prefix",
+		bootstrapsNixOS: true,
+		metaInspect:     &MetaInspect{Bootstrapped: false, NixAvailable: false},
+		path:            "/etc/nixos",
+		want:            "/mnt/etc/nixos",
+		wantInProgress:  true,
+	},
+	{
+		name:            "BootstrapsNixOS bootstrapped: plain path",
+		bootstrapsNixOS: true,
+		metaInspect:     &MetaInspect{Bootstrapped: true},
+		path:            "/etc/nixos",
+		want:            "/etc/nixos",
+	},
+	{
+		name:            "BootstrapsNixOS unknown state: /mnt prefix (assume not installed)",
+		bootstrapsNixOS: true,
+		metaInspect:     nil,
+		path:            "/etc/nixos",
+		want:            "/mnt/etc/nixos",
+		wantInProgress:  true,
+	},
+	{
+		name:        "BootstrapNixInstall with nix missing: plain path",
+		metaInspect: &MetaInspect{Bootstrapped: false, NixAvailable: false},
+		path:        "/etc/nixos",
+		want:        "/etc/nixos",
+	},
+	{
+		name:        "BootstrapNixInstall with nix present: plain path",
+		metaInspect: &MetaInspect{Bootstrapped: false, NixAvailable: true},
+		path:        "/etc/nixos",
+		want:        "/etc/nixos",
+	},
+	{
+		name:        "BootstrapNone: plain path",
+		metaInspect: &MetaInspect{NixAvailable: true},
+		path:        "/etc/nixos",
+		want:        "/etc/nixos",
+	},
+	{
+		name:            "BootstrapsNixOS unbootstrapped empty path: bare /mnt",
+		bootstrapsNixOS: true,
+		metaInspect:     &MetaInspect{Bootstrapped: false},
+		path:            "",
+		want:            "/mnt",
+		wantInProgress:  true,
+	},
 }
 
-func TestMaybeBootstrappingPath_EmptyPath(t *testing.T) {
+// The redirect must follow the single predicate shared with the nix copy
+// store redirect (Machine.NixOSBootstrappingInProgress).
+func TestMaybeBootstrappingPath_BootstrapModes(t *testing.T) {
 	t.Parallel()
 
-	mach := newTestMachine()
-	mach.MetaInspect.Store(&MetaInspect{Bootstrapped: false})
+	for _, tt := range maybeBootstrappingPathCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	result := mach.MaybeBootstrappingPath("")
+			mach := newTestMachine()
+			if tt.metaInspect != nil {
+				mach.MetaInspect.Store(tt.metaInspect)
+			}
 
-	assert.Equal(t, "/mnt", result)
+			assert.Equal(t, tt.want, mach.MaybeBootstrappingPath(tt.path, tt.bootstrapsNixOS))
+			assert.Equal(t, tt.wantInProgress, mach.NixOSBootstrappingInProgress(tt.bootstrapsNixOS))
+		})
+	}
 }
 
 // --- ValidateSecretsPaths ---

@@ -2,11 +2,8 @@ package bootstrap
 
 import (
 	"fmt"
-	"net/url"
-	"slices"
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
@@ -88,11 +85,11 @@ func resolveKexecURL(machineI *machine.Machine) (string, error) {
 // createKexecDirectory resets and creates the staging dir in ONE elevated
 // command (rm + install -d -m 700 -o <sshuser>): SSH-user ownership keeps
 // un-elevated curl/rsync/tar working and closes the rm→mkdir TOCTOU window.
-func createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine) error {
+func createKexecDirectory(exc *executioner.Executioner, machineI *machine.Machine) error {
 	// The machine is driven over the ACTIVE connection during kexec staging
 	// (bootstrap/kexec SSH), so that connection's user must own the staging
 	// dir, not the regular SSH user, which may differ.
-	sshUser := machine.GetActiveSSH().Username
+	sshUser := machineI.GetActiveSSH().Username
 	script := fmt.Sprintf(
 		"rm -rf %s && install -d -m 700 -o %s %s",
 		shellquote.Quote("/tmp/kexec"), shellquote.Quote(sshUser), shellquote.Quote("/tmp/kexec"),
@@ -102,7 +99,7 @@ func createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine
 		"create kexec directory",
 		"creating kexec directory",
 		"failed to create kexec directory",
-		append(machine.MaybeSudo(), "sh", "-c", script),
+		append(machineI.MaybeSudo(), "sh", "-c", script),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to create kexec directory")
@@ -111,23 +108,8 @@ func createKexecDirectory(exc *executioner.Executioner, machine *machine.Machine
 	return nil
 }
 
-func downloadOrTransferKexec(exc *executioner.Executioner, machine *machine.Machine, kexecURL string) error {
-	var err error
-	if isURL(kexecURL) {
-		err = exc.Exec(
-			"download kexec tarball",
-			"downloading kexec tarball",
-			"failed to download kexec tarball",
-			slices.Concat([]string{"curl"}, machine.Bootstrap.Kexec.GetCurlDefaultFlags(), []string{"-o", "/tmp/kexec/kexec.tar", kexecURL}),
-		)
-	} else {
-		err = phaseops.TransferFile(exc, machine, attributes.TransferSource{
-			LocalPath:  kexecURL,
-			RemotePath: "/tmp/kexec/kexec.tar",
-		}, "kexec tarball", false)
-	}
-
-	return errors.Wrap(err, "kexec tarball transfer failed")
+func downloadOrTransferKexec(exc *executioner.Executioner, machineI *machine.Machine, kexecURL string) error {
+	return downloadOrTransfer(exc, machineI, kexecURL, "/tmp/kexec/kexec.tar", "kexec tarball", machineI.Bootstrap.Kexec.GetCurlDefaultFlags())
 }
 
 // extractKexecTarball extracts the kexec tarball to the temporary directory.
@@ -163,11 +145,11 @@ func getTarArgs(kexecURL string) []string {
 }
 
 // runKexecCommand executes the kexec script to boot into the NixOS installer.
-func runKexecCommand(exc *executioner.Executioner, machine *machine.Machine) error {
-	kexecCmd := append(machine.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
+func runKexecCommand(exc *executioner.Executioner, machineI *machine.Machine) error {
+	kexecCmd := append(machineI.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
 
-	if len(machine.Bootstrap.Kexec.ExtraFlags) != 0 {
-		extraFlags := append([]string{"--kexec-extra-flags"}, machine.Bootstrap.Kexec.ExtraFlags...)
+	if len(machineI.Bootstrap.Kexec.ExtraFlags) != 0 {
+		extraFlags := append([]string{"--kexec-extra-flags"}, machineI.Bootstrap.Kexec.ExtraFlags...)
 
 		kexecCmd = append(kexecCmd, extraFlags...)
 	}
@@ -231,15 +213,4 @@ func verifyInstaller(exc *executioner.Executioner) error {
 	)
 
 	return errors.Wrap(err, "failed to verify installer")
-}
-
-// Helpers
-
-func isURL(s string) bool {
-	parsedURL, err := url.Parse(s)
-	if err != nil {
-		return false
-	}
-
-	return (parsedURL.Scheme == "http" || parsedURL.Scheme == "https") && parsedURL.Host != ""
 }

@@ -12,6 +12,20 @@ import (
 // applied with the same merge semantics as built-in presets.
 type CustomOutputTypes = *atomicorderedmap.AtomicOrderedMap[string, Preset]
 
+// BootstrapMode selects how a preset's targets are bootstrapped.
+type BootstrapMode string
+
+const (
+	// BootstrapNone: no bootstrap support. Built-in types always have a
+	// mode; custom output types stay here unless their output_types
+	// declaration opts in via bootstrap_mode.
+	BootstrapNone BootstrapMode = ""
+	// BootstrapNixOS: full NixOS bootstrap (kexec, disko, nixos-install).
+	BootstrapNixOS BootstrapMode = "nixos"
+	// BootstrapNixInstall: install Nix via the installer script when the target lacks it.
+	BootstrapNixInstall BootstrapMode = "nix-install"
+)
+
 // Preset defines the build path, activation mechanism, and profile management
 // for a FlakeOutputType. Fields come in three kinds: user-overridable (a
 // non-zero per-installable value wins), type-level (intrinsic to the output
@@ -33,9 +47,13 @@ type Preset struct {
 
 	// Type-level fields: not user-configurable, always taken from the type
 	// default (for custom types, from their output_types declaration).
-	IsSystemLevel        *bool `yaml:"system_level,omitempty" json:"system_level,omitempty" desc:"System-level (root) vs user-level. Type-level field: set only under output_types declarations"`
-	IsBootstrappable     bool  `yaml:"-" json:"-" desc:"Supports bootstrap"`
-	OmitTypeFromAttrPath bool  `yaml:"omit_type_from_attr_path,omitempty" json:"omit_type_from_attr_path,omitempty" desc:"Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"`
+	IsSystemLevel *bool `yaml:"system_level,omitempty" json:"system_level,omitempty" desc:"System-level (root) vs user-level. Type-level field: set only under output_types declarations"`
+	// Bootstrap is the bootstrap mode of the output type. Type-level like
+	// system_level: per-installable preset values are ignored, the declared
+	// (or built-in) type value always wins. The oneof values mirror the
+	// BootstrapMode constants; the schema test pins the sync.
+	Bootstrap            BootstrapMode `yaml:"bootstrap_mode,omitempty" json:"bootstrap_mode,omitempty" validate:"omitempty,oneof=nixos nix-install" desc:"Bootstrap mode for this output type: 'nixos' (full NixOS bootstrap) or 'nix-install' (install Nix on targets that lack it); empty disables bootstrap. Type-level field: set only under output_types declarations"`
+	OmitTypeFromAttrPath bool          `yaml:"omit_type_from_attr_path,omitempty" json:"omit_type_from_attr_path,omitempty" desc:"Omit output type from attrpath (for packages where nix auto-resolves bare names). Type-level field: set only under output_types declarations"`
 
 	// Docs-only presentation metadata for the generated output-type tables;
 	// custom types leave these empty and are never listed.
@@ -49,10 +67,27 @@ func (p Preset) IsSystemLevelValue() bool {
 	return p.IsSystemLevel != nil && *p.IsSystemLevel
 }
 
+// BootstrapsNixOS reports whether the preset bootstraps a full NixOS system
+// (kexec, disko, nixos-install).
+func (p Preset) BootstrapsNixOS() bool {
+	return p.Bootstrap == BootstrapNixOS
+}
+
+// BootstrapsNix reports whether the preset bootstraps Nix itself, via the
+// installer script, on targets that lack it.
+func (p Preset) BootstrapsNix() bool {
+	return p.Bootstrap == BootstrapNixInstall
+}
+
+// IsBootstrappable reports whether the preset supports any bootstrap mode.
+func (p Preset) IsBootstrappable() bool {
+	return p.Bootstrap != BootstrapNone
+}
+
 //nolint:mnd
 var presets = map[FlakeOutputType]Preset{
 	FlakeOutputType("nixosConfigurations"): {
-		BuildPath:             "config.system.build.toplevel",
+		BuildPath:             NixOSSystemBuildPath,
 		ProfilePath:           "/nix/var/nix/profiles/system",
 		SetProfile:            new(true),
 		IsSystemLevel:         new(true),
@@ -61,11 +96,11 @@ var presets = map[FlakeOutputType]Preset{
 		ProfileSkipModes:      []string{"test", "dry-activate"},
 		NonMutatingModes:      []string{"dry-activate"},
 		ActivationDefaultMode: "switch",
-		IsBootstrappable:      true,
+		Bootstrap:             BootstrapNixOS,
 
 		DocOrder:      1,
 		DocDeploys:    "[NixOS](https://nixos.org/manual/nixos/stable/) system",
-		DocActivation: "`switch-to-configuration` (only type that supports bootstrap)",
+		DocActivation: "`switch-to-configuration` (only built-in type that supports NixOS bootstrap)",
 	},
 	FlakeOutputType("darwinConfigurations"): {
 		BuildPath:      "system",
@@ -73,6 +108,7 @@ var presets = map[FlakeOutputType]Preset{
 		SetProfile:     new(true),
 		IsSystemLevel:  new(true),
 		ActivationPath: "activate",
+		Bootstrap:      BootstrapNixInstall,
 
 		DocOrder:      2,
 		DocDeploys:    "[nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS)",
@@ -84,6 +120,7 @@ var presets = map[FlakeOutputType]Preset{
 		SetProfile:     new(true),
 		IsSystemLevel:  new(true),
 		ActivationPath: "bin/activate",
+		Bootstrap:      BootstrapNixInstall,
 
 		DocOrder:      3,
 		DocDeploys:    "[system-manager](https://github.com/numtide/system-manager)",
@@ -94,6 +131,7 @@ var presets = map[FlakeOutputType]Preset{
 		ProfilePath:    "~/.local/state/nix/profiles/home-manager",
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
+		Bootstrap:      BootstrapNixInstall,
 
 		DocOrder:      4,
 		DocDeploys:    "[home-manager](https://github.com/nix-community/home-manager)",
@@ -104,6 +142,7 @@ var presets = map[FlakeOutputType]Preset{
 		ProfilePath:    "~/.local/state/nix/profiles/nix-on-droid",
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
+		Bootstrap:      BootstrapNixInstall,
 
 		DocOrder:      5,
 		DocDeploys:    "[Nix-on-Droid](https://github.com/nix-community/nix-on-droid)",
@@ -113,6 +152,7 @@ var presets = map[FlakeOutputType]Preset{
 		BuildPath:            "",
 		IsSystemLevel:        new(false),
 		OmitTypeFromAttrPath: true,
+		Bootstrap:            BootstrapNixInstall,
 
 		DocOrder:      6,
 		DocDeploys:    "[Arbitrary packages](/guides/packages/)",
@@ -123,6 +163,7 @@ var presets = map[FlakeOutputType]Preset{
 	FlakeOutputType("maidConfigurations"): {
 		IsSystemLevel:  new(false),
 		ActivationPath: "bin/activate",
+		Bootstrap:      BootstrapNixInstall,
 
 		DocOrder:      7,
 		DocDeploys:    "[nix-maid](https://github.com/viperML/nix-maid)",
@@ -177,15 +218,6 @@ func (t FlakeOutputType) IsKnown() bool {
 	_, ok := presets[t]
 
 	return ok
-}
-
-func IsBootstrappableType(t FlakeOutputType) bool {
-	p, ok := presets[t]
-	if !ok {
-		return false
-	}
-
-	return p.IsBootstrappable
 }
 
 // ActivationModes returns nixosConfigurations modes, feeding the bare

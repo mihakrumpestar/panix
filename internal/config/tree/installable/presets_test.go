@@ -24,7 +24,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "/nix/var/nix/profiles/system",
 			SetProfile:            new(true),
 			IsSystemLevel:         new(true),
-			IsBootstrappable:      true,
+			Bootstrap:             BootstrapNixOS,
 			ActivationPath:        "bin/switch-to-configuration",
 			ActivationModes:       []string{"switch", "boot", "test", "dry-activate"},
 			ProfileSkipModes:      []string{"test", "dry-activate"},
@@ -41,7 +41,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "/nix/var/nix/profiles/system",
 			SetProfile:            new(true),
 			IsSystemLevel:         new(true),
-			IsBootstrappable:      false,
+			Bootstrap:             BootstrapNixInstall,
 			ActivationPath:        "activate",
 			ActivationModes:       nil,
 			ActivationDefaultMode: "",
@@ -56,7 +56,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "/nix/var/nix/profiles/system-manager-profiles",
 			SetProfile:            new(true),
 			IsSystemLevel:         new(true),
-			IsBootstrappable:      false,
+			Bootstrap:             BootstrapNixInstall,
 			ActivationPath:        "bin/activate",
 			ActivationModes:       nil,
 			ActivationDefaultMode: "",
@@ -71,7 +71,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "~/.local/state/nix/profiles/home-manager",
 			SetProfile:            nil,
 			IsSystemLevel:         new(false),
-			IsBootstrappable:      false,
+			Bootstrap:             BootstrapNixInstall,
 			ActivationPath:        "activate",
 			ActivationModes:       nil,
 			ActivationDefaultMode: "",
@@ -86,7 +86,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "~/.local/state/nix/profiles/nix-on-droid",
 			SetProfile:            nil,
 			IsSystemLevel:         new(false),
-			IsBootstrappable:      false,
+			Bootstrap:             BootstrapNixInstall,
 			ActivationPath:        "activate",
 			ActivationModes:       nil,
 			ActivationDefaultMode: "",
@@ -101,7 +101,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "",
 			SetProfile:            nil,
 			IsSystemLevel:         new(false),
-			IsBootstrappable:      false,
+			Bootstrap:             BootstrapNixInstall,
 			ActivationPath:        "",
 			ActivationModes:       nil,
 			ActivationDefaultMode: "",
@@ -116,7 +116,7 @@ var allPresetsExpectedTests = []presetExpectedTest{
 			ProfilePath:           "",
 			SetProfile:            nil,
 			IsSystemLevel:         new(false),
-			IsBootstrappable:      false,
+			Bootstrap:             BootstrapNixInstall,
 			ActivationPath:        "bin/activate",
 			ActivationModes:       nil,
 			ActivationDefaultMode: "",
@@ -136,7 +136,7 @@ func assertPresetFields(t *testing.T, typ FlakeOutputType, got, want Preset) {
 	assert.Equal(t, want.NonMutatingModes, got.NonMutatingModes, "%s NonMutatingModes", typ)
 	assert.Equal(t, want.ProfileSkipModes, got.ProfileSkipModes, "%s ProfileSkipModes", typ)
 	assert.Equal(t, want.IsSystemLevel, got.IsSystemLevel, "%s IsSystemLevel", typ)
-	assert.Equal(t, want.IsBootstrappable, got.IsBootstrappable, "%s IsBootstrappable", typ)
+	assert.Equal(t, want.Bootstrap, got.Bootstrap, "%s Bootstrap", typ)
 	assert.Equal(t, want.OmitTypeFromAttrPath, got.OmitTypeFromAttrPath, "%s OmitTypeFromAttrPath", typ)
 
 	if want.SetProfile == nil {
@@ -159,8 +159,6 @@ func TestAllPresetsExpectedValues(t *testing.T) {
 
 			// Lookup helpers must agree with the map.
 			assert.True(t, tt.typ.IsKnown(), "IsKnown() should return true for %s", tt.typ)
-			assert.Equal(t, tt.want.IsBootstrappable, IsBootstrappableType(tt.typ),
-				"IsBootstrappableType() should match preset's IsBootstrappable for %s", tt.typ)
 		})
 	}
 }
@@ -196,32 +194,32 @@ func TestKnownOutputTypes(t *testing.T) {
 		"empty type should not be known")
 }
 
-// Only nixosConfigurations is bootstrappable; unknown and empty types fail closed.
-func TestIsBootstrappableType(t *testing.T) {
+// The mode helpers are the single classification of a preset's bootstrap
+// behavior: NixOS bootstrap and Nix install are mutually exclusive, and any
+// mode is bootstrappable.
+func TestPresetBootstrapModeHelpers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		typ  FlakeOutputType
-		want bool
+		name                 string
+		mode                 BootstrapMode
+		wantBootstrapsNixOS  bool
+		wantBootstrapsNix    bool
+		wantIsBootstrappable bool
 	}{
-		{"nixosConfigurations is bootstrappable", FlakeOutputType("nixosConfigurations"), true},
-		{"darwinConfigurations is not bootstrappable", FlakeOutputType("darwinConfigurations"), false},
-		{"systemConfigs is not bootstrappable", FlakeOutputType("systemConfigs"), false},
-		{"homeConfigurations is not bootstrappable", FlakeOutputType("homeConfigurations"), false},
-		{"nixOnDroidConfigurations is not bootstrappable", FlakeOutputType("nixOnDroidConfigurations"), false},
-		{"packages is not bootstrappable", FlakeOutputType("packages"), false},
-		{"maidConfigurations is not bootstrappable", FlakeOutputType("maidConfigurations"), false},
-		{"unknown type is not bootstrappable", FlakeOutputType("nope"), false},
-		{"empty type is not bootstrappable", FlakeOutputType(""), false},
+		{"none is not bootstrappable", BootstrapNone, false, false, false},
+		{"nixos bootstraps NixOS only", BootstrapNixOS, true, false, true},
+		{"nix-install bootstraps Nix only", BootstrapNixInstall, false, true, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := IsBootstrappableType(tt.typ)
-			assert.Equal(t, tt.want, got)
+			preset := Preset{Bootstrap: tt.mode}
+			assert.Equal(t, tt.wantBootstrapsNixOS, preset.BootstrapsNixOS())
+			assert.Equal(t, tt.wantBootstrapsNix, preset.BootstrapsNix())
+			assert.Equal(t, tt.wantIsBootstrappable, preset.IsBootstrappable())
 		})
 	}
 }
@@ -256,9 +254,10 @@ func TestBuiltinPresetsAreDocumented(t *testing.T) {
 }
 
 // Pins the cross-field invariants that encode domain semantics (rollback needs
-// a profile, bootstrap needs root, bare-name types have no build path, mode
-// lists may only reference declared modes). A violation is an internal preset
-// contradiction that would surface as a runtime error.
+// a profile, bootstrap needs root, NixOS bootstrap builds the system toplevel,
+// bare-name types have no build path, mode lists may only reference declared
+// modes). A violation is an internal preset contradiction that would surface
+// as a runtime error.
 func TestPresetConsistency(t *testing.T) {
 	t.Parallel()
 
@@ -276,11 +275,9 @@ func TestPresetConsistency(t *testing.T) {
 					"%s: ActivationPath is empty so ProfilePath must also be empty (no rollback target)", typ)
 			}
 
-			// Only system-level types can bootstrap.
-			if !preset.IsSystemLevelValue() {
-				assert.False(t, preset.IsBootstrappable,
-					"%s: non-system-level types cannot be bootstrappable (bootstrap needs root)", typ)
-			}
+			// Bootstrap invariants (root and system toplevel) are grouped
+			// in their own check.
+			assertBootstrapInvariants(t, typ, preset)
 
 			// Bare names (omit-type) have nothing to append a build path suffix to.
 			if preset.OmitTypeFromAttrPath {
@@ -311,5 +308,25 @@ func TestPresetConsistency(t *testing.T) {
 					"%s: ProfileSkipModes entry %q must be in ActivationModes", typ, mode)
 			}
 		})
+	}
+}
+
+// assertBootstrapInvariants pins the bootstrap cross-field invariants: only
+// system-level types can bootstrap NixOS (kexec, disko and nixos-install all
+// need root; nix-install works at any level), and the NixOS bootstrap must
+// build the NixOS system toplevel because it installs the built system
+// closure and resolves the disko script under the same output (the same rule
+// validation enforces for declared bootstrap_mode: nixos types).
+func assertBootstrapInvariants(t *testing.T, typ FlakeOutputType, preset Preset) {
+	t.Helper()
+
+	if !preset.IsSystemLevelValue() {
+		assert.False(t, preset.BootstrapsNixOS(),
+			"%s: non-system-level types cannot bootstrap NixOS (bootstrap needs root)", typ)
+	}
+
+	if preset.BootstrapsNixOS() {
+		assert.Equal(t, NixOSSystemBuildPath, preset.BuildPath,
+			"%s: NixOS bootstrap must build the system toplevel (nixos-install installs the built closure)", typ)
 	}
 }

@@ -28,7 +28,7 @@ machines:
 - **Bootstrapped machines**: must not have bootstrap SSH configured (unless `force_bootstrap: true`)
 - The Inspect phase errors if the SSH configuration does not match the machine state (bootstrap SSH on a bootstrapped machine, or regular SSH on an unbootstrapped one)
 - **SSH keys**: see [SSH Setup](/guides/ssh-config/) for creating and installing a key
-- **Non-root SSH users**: bootstrap as a non-root user is not end-to-end supported. Bootstrap commands that need root (kexec staging reset, disko, nixos-install, reboot, secret transfers) run via the configured `sudo_program` and need passwordless sudo — Panix cannot answer password prompts. Additionally, the closure copy into the installer's `/mnt` runs as the SSH user, so the full bootstrap flow assumes a root SSH user; SSH as root for the bootstrap phase.
+- **Non-root SSH users**: bootstrap as a non-root user is not end-to-end supported. Bootstrap commands that need root (kexec staging reset, disko, nixos-install, reboot, secret transfers) run via the configured `sudo_program` and need passwordless sudo (Panix cannot answer password prompts). Additionally, the closure copy into the installer's `/mnt` runs as the SSH user, so the full bootstrap flow assumes a root SSH user; SSH as root for the bootstrap phase.
 
 ## Workflow
 

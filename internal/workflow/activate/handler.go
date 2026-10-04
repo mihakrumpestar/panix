@@ -36,10 +36,10 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 		isBootstrapped = mi.Bootstrapped
 	}
 
-	// Run bootstrap if not bootstrapped, or force bootstrap is set
+	// Run the NixOS install path if not bootstrapped, or force bootstrap is set
 	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
-	if fleetLeaf.Installable.Preset.IsBootstrappable && shouldBootstrap {
+	if fleetLeaf.Installable.Preset.BootstrapsNixOS() && shouldBootstrap {
 		return executeBootstrap(exc, machine, &fleetLeaf.Installable.Nix, systemClosure)
 	}
 

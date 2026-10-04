@@ -103,7 +103,7 @@ flowchart LR
 | Phase | Scope | Purpose |
 |-------|-------|---------|
 | **Inspect** | Per-machine | TCP reachability, SSH authentication, architecture and kernel detection, OS detection, Nix availability, generation discovery |
-| **Bootstrap** | Per-machine | kexec into NixOS installer (if needed), encryption keys transfer (if provided), disko partitioning |
+| **Bootstrap** | Per-machine | Per installable type: NixOS bootstrap (kexec into NixOS installer if needed, encryption keys transfer if provided, disko partitioning) or Nix installer bootstrap (install Nix on targets that lack it); see the [Bootstrap guide](/guides/bootstrap/) |
 | **Build** | Per-installable | Build the installable closure via `nix build` (local or [remote mode](/configuration/build-modes/)) |
 | **Transfer** | Per-machine | `nix copy` closure to target |
 | **Secrets** | Per-machine | Transfer `local_path` files/directories via rsync, or stream `command` stdout to the remote path, with proper ownership |

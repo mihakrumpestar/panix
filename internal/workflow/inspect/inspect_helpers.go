@@ -150,27 +150,21 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 	return nil
 }
 
-func checkNixAvailable(exc *executioner.Executioner, machineI *machine.Machine) error {
-	err := exc.Exec(
-		"nix check",
-		"checking nix availability",
-		"nix not found on remote machine",
-		[]string{"nix", "--version"},
-		executioner.OnSuccess(func(log *command.CommandLog) error {
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.NixAvailable = true
-			})
+// checkNixForInstall probes nix availability for the nix-install bootstrap
+// mode. A missing nix is expected: the bootstrap phase installs it, unless
+// bootstrap.disable_nix_install opts out, which makes it a hard error.
+func checkNixForInstall(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := phaseops.ProbeNixAvailable(exc, machineI)
+	if err == nil {
+		return nil
+	}
 
-			return nil
-		}),
-		executioner.OnDryRun(func() {
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.NixAvailable = true
-			})
-		}),
-	)
+	if machineI.Bootstrap.DisableNixInstall {
+		return errors.Wrap(err, "nix is missing on the target and \"bootstrap.disable_nix_install\" prevents installing it; "+
+			"unset \"bootstrap.disable_nix_install\" to let panix install nix automatically, or install nix manually")
+	}
 
-	return errors.Wrap(err, "nix availability check failed")
+	return nil
 }
 
 // detectSystemInfo skips Date: readGenerations populates it from the active

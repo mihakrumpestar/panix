@@ -2,6 +2,7 @@ package inspect
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
@@ -25,17 +26,9 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return err //nolint:wrapcheck // error names installable, target user, and executing user
 	}
 
-	if fleetLeaf.Installable.Preset.IsBootstrappable {
-		err = runBootstrapInspect(exc, machineI)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Non-bootstrappable: check nix is available
-		err = checkNixAvailable(exc, machineI)
-		if err != nil {
-			return err
-		}
+	err = runBootstrapModeInspect(exc, fleetLeaf)
+	if err != nil {
+		return err
 	}
 
 	// System info detection (all types)
@@ -56,6 +49,22 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	}
 
 	return nil
+}
+
+// runBootstrapModeInspect is the bootstrap-mode matrix: full NixOS bootstrap
+// inspects the installer state, nix-install only probes nix (the bootstrap
+// phase installs it), everything else requires nix to be present.
+func runBootstrapModeInspect(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	machineI := fleetLeaf.Machine
+
+	switch fleetLeaf.Installable.Preset.Bootstrap {
+	case installable.BootstrapNixOS:
+		return runBootstrapInspect(exc, machineI)
+	case installable.BootstrapNixInstall:
+		return checkNixForInstall(exc, machineI)
+	default:
+		return phaseops.ProbeNixAvailable(exc, machineI) //nolint:wrapcheck // error is pre-annotated with its own context
+	}
 }
 
 // runCommonChecks covers the checks that apply to all output types.

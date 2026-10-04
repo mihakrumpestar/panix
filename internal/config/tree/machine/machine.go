@@ -164,13 +164,34 @@ func (m *Machine) MaybeSudoFor(user string) []string {
 	return []string{m.SudoProgram.String()}
 }
 
-func (m *Machine) MaybeBootstrappingPath(restOfPath string) string {
-	mi := m.MetaInspect.Load()
-	if mi != nil && mi.Bootstrapped {
-		return restOfPath
+// NixOSBootstrappingInProgress reports whether a NixOS bootstrap is in
+// progress on this machine: the output type bootstraps NixOS
+// (Preset.BootstrapsNixOS) and the final system is not installed yet, so the
+// target is still the installer whose /mnt holds the future root. Unknown
+// state (nothing stored in MetaInspect) counts as not yet installed. This is
+// the single predicate behind every /mnt redirect: the nix copy store redirect
+// and transfers targeting the bootstrapping root.
+func (m *Machine) NixOSBootstrappingInProgress(bootstrapsNixOS bool) bool {
+	if !bootstrapsNixOS {
+		return false
 	}
 
-	return "/mnt" + restOfPath
+	metaInspect := m.MetaInspect.Load()
+
+	return metaInspect == nil || !metaInspect.Bootstrapped
+}
+
+// MaybeBootstrappingPath prefixes restOfPath with the bootstrapping root while
+// a NixOS bootstrap is in progress (NixOSBootstrappingInProgress). Pass
+// Preset.BootstrapsNixOS() as bootstrapsNixOS: only the NixOS bootstrap
+// installs to /mnt, the other bootstrap modes and unbootstrappable output
+// types write to the live root.
+func (m *Machine) MaybeBootstrappingPath(restOfPath string, bootstrapsNixOS bool) string {
+	if m.NixOSBootstrappingInProgress(bootstrapsNixOS) {
+		return "/mnt" + restOfPath
+	}
+
+	return restOfPath
 }
 
 func (m *Machine) ValidateSecretsPaths() error {

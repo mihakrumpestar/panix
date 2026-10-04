@@ -59,7 +59,7 @@ Panix ships a preset for each built-in output type, covering build path, activat
 <!-- OUTPUT_TYPES_START -->
 | Type | Deploys | Activation |
 |------|---------|------------|
-| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (only type that supports bootstrap) |
+| `nixosConfigurations` | [NixOS](https://nixos.org/manual/nixos/stable/) system | `switch-to-configuration` (only built-in type that supports NixOS bootstrap) |
 | `darwinConfigurations` | [nix-darwin](https://github.com/nix-darwin/nix-darwin) (macOS) | `activate` script |
 | `systemConfigs` | [system-manager](https://github.com/numtide/system-manager) | `bin/activate` |
 | `homeConfigurations` | [home-manager](https://github.com/nix-community/home-manager) | `activationPackage/activate` |
