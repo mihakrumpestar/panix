@@ -75,12 +75,12 @@ func runNixInstaller(exc *executioner.Executioner, machineI *machine.Machine) er
 	err := exc.Exec(
 		"run nix installer",
 		"installing nix",
-		"nix installer failed",
+		"nix installer exited with an error",
 		nixInstallerRunArgv(machineI),
 		executioner.Trim(),
 	)
 	if err != nil {
-		return errors.Wrap(err, "nix installer failed")
+		return errors.Wrap(err, "nix installer run failed")
 	}
 
 	return nil

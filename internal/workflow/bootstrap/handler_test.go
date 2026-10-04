@@ -162,10 +162,12 @@ func TestShouldSkip(t *testing.T) {
 	}
 }
 
-// Install-condition matrix for the nix-install branch: the install step runs
-// only when nix is missing (or forced) and bootstrap.disable_nix_install does
-// not opt out. The opt-out must hold even when the inspect gate was skipped,
-// and the user-declared post_bootstrap_hooks always run.
+// Install-condition matrix for the nix-install branch: the need for an
+// install is settled by ShouldSkip (nix missing or forced), so once the phase
+// runs the install step runs unless bootstrap.disable_nix_install opts out.
+// The opt-out must hold even when the inspect gate was skipped, and the
+// user-declared post_bootstrap_hooks always run. The skip when nix is already
+// available is pinned by the ShouldSkip matrix.
 func TestRunPhase_NixInstall_InstallCondition(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -175,7 +177,6 @@ func TestRunPhase_NixInstall_InstallCondition(t *testing.T) {
 		wantInstall       bool
 	}{
 		{"nix missing: fetch, run, verify", false, false, false, true},
-		{"nix present: install step skipped", true, false, false, false},
 		{"force re-installs when nix is present", true, false, true, true},
 		{"disable_nix_install with nix missing: no fetch or run argv", false, true, false, false},
 		{"disable_nix_install wins over force", true, true, true, false},
@@ -214,6 +215,37 @@ func TestRunPhase_NixInstall_InstallCondition(t *testing.T) {
 				assert.Equal(t, tt.wantInstall, hasCommandContaining(lines, step),
 					"install step %q presence must match wantInstall", step)
 			}
+		})
+	}
+}
+
+// RunPhase fails closed: a BootstrapMode with no registered bootstrap path
+// (a future mode, or BootstrapNone reaching RunPhase) must error naming the
+// mode instead of falling through to the NixOS/kexec branch.
+func TestRunPhase_UnsupportedBootstrapModeFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		mode installable.BootstrapMode
+	}{
+		{"future mode", installable.BootstrapMode("future-mode")},
+		{"bootstrap-none", installable.BootstrapNone},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			leaf := newDiskoLeaf(t, true)
+			leaf.Installable.Preset.Bootstrap = tt.mode
+
+			exc, _ := testutil.NewDryRunExecutioner(t, leaf.Machine, phase.Bootstrap)
+
+			err := Handler{}.RunPhase(exc, leaf)
+			require.ErrorIs(t, err, ErrUnsupportedBootstrapMode)
+			assert.Contains(t, err.Error(), `"`+string(tt.mode)+`"`,
+				"the error must name the unknown mode")
 		})
 	}
 }

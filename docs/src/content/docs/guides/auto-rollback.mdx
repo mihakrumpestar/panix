@@ -31,7 +31,7 @@ Like other boolean attributes (e.g. `disabled`), inheritance is one-way: a child
 
 1. The activation fails (e.g. `switch-to-configuration` exits non-zero after the profile was already switched).
 2. Panix resolves the closure of the pre-deploy generation (the generation at Inspect time).
-3. It re-runs the activation against that closure, using the preset's default activation mode — and the `nix-env --profile --set` step before it, for types whose preset sets profiles (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`); profile-tracking types without profile-setting (`homeConfigurations`, `nixOnDroidConfigurations`) roll back the activation only.
+3. It re-runs the activation against that closure, using the preset's default activation mode and the `nix-env --profile --set` step before it, for types whose preset sets profiles (`nixosConfigurations`, `darwinConfigurations`, `systemConfigs`); profile-tracking types without profile-setting (`homeConfigurations`, `nixOnDroidConfigurations`) roll back the activation only.
 
 The rollback is visible in the build logs as an explicit step after the failed activation, so it is clear which commands are a rollback and which generation is being restored:
 

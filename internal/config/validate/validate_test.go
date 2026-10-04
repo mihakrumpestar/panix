@@ -114,6 +114,45 @@ func TestTransferSourceRequiredWithout(t *testing.T) {
 	}
 }
 
+// The url_or_file validator must surface the actionable house message, not
+// the generic "failed validation 'url_or_file'".
+func TestHumanizeTagMessage_URLorFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"http url passes", "https://host/installer", false},
+		{"local path passes", "./installers/nix-installer", false},
+		{"unsupported scheme fails with actionable message", "ftp://host/installer", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			validate := validator.New()
+			registerPathValidators(validate)
+
+			err := validate.Struct(attributes.NixConfig{URL: tt.url})
+
+			if !tt.wantErr {
+				assert.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+
+			msg := humanizeValidationErrors(err)
+			assert.Contains(t, msg, "must be an http(s) URL or a local path")
+			assert.NotContains(t, msg, "failed validation")
+		})
+	}
+}
+
 // buildFleetWithTypes builds a minimal Fleet containing one flake with one
 // installable per given output type. Each installable is Init'd so its Xpath
 // is populated (validateOutputTypes reads installable.Xpath for error

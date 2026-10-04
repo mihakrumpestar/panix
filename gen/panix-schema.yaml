@@ -414,7 +414,7 @@ definitions:
         $ref: "#/definitions/attributes_NixConfig"
       post_bootstrap_hooks:
         type: array
-        description: Commands to run after disko partitioning
+        description: Commands to run after disko partitioning (NixOS bootstrap) or after the Nix installer (Nix installer bootstrap)
         items:
           type: string
       post_bootstrap_install_hooks:
@@ -578,17 +578,17 @@ definitions:
     properties:
       args:
         type: array
-        description: "Arguments passed to the installer script after the script path (default: [install, --no-confirm])"
+        description: "Arguments passed to the installer after the installer path (default: [install, --no-confirm])"
         items:
           type: string
       curl_default_flags:
         type: array
-        description: "List of base flags for curl when downloading the Nix installer script (default: [--fail, -#, -L, -C, -])"
+        description: "List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L, -C, -])"
         items:
           type: string
       url:
         type: string
-        description: "Installer source used to install Nix when the target lacks it: a shell script or an installer binary (e.g. the nix-installer release binary), as an http(s) URL or a local path (default: https://install.determinate.systems/nix)"
+        description: "Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an http(s) URL or a local path (default: https://install.determinate.systems/nix)"
         default: https://install.determinate.systems/nix
     additionalProperties: false
   nix_NixConfig:

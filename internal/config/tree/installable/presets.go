@@ -22,7 +22,7 @@ const (
 	BootstrapNone BootstrapMode = ""
 	// BootstrapNixOS: full NixOS bootstrap (kexec, disko, nixos-install).
 	BootstrapNixOS BootstrapMode = "nixos"
-	// BootstrapNixInstall: install Nix via the installer script when the target lacks it.
+	// BootstrapNixInstall: install Nix via the installer when the target lacks it.
 	BootstrapNixInstall BootstrapMode = "nix-install"
 )
 
@@ -74,7 +74,7 @@ func (p Preset) BootstrapsNixOS() bool {
 }
 
 // BootstrapsNix reports whether the preset bootstraps Nix itself, via the
-// installer script, on targets that lack it.
+// installer, on targets that lack it.
 func (p Preset) BootstrapsNix() bool {
 	return p.Bootstrap == BootstrapNixInstall
 }

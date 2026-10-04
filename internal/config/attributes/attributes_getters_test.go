@@ -276,3 +276,66 @@ func Test_Attributes_Init_NixArgsOverrideSemantics(t *testing.T) {
 			"nil child Args should inherit parent value")
 	})
 }
+
+// --- Attributes.Init bootstrap.nix curl override semantics ---
+//
+// Bootstrap.Nix.CurlDefaultFlags is a "default" flag-style field like Args:
+// a child's non-nil value fully replaces the parent's, nil inherits it, and an
+// explicitly empty slice clears it.
+
+func Test_Attributes_Init_NixCurlDefaultFlagsOverrideSemantics(t *testing.T) {
+	t.Parallel()
+
+	// newParentAttr builds a minimal parent Attributes suitable for Init:
+	// Xpath must be set because passAttributesInto calls NewXpathWithAppend on it.
+	newParentAttr := func(nixCfg *NixConfig) *Attributes {
+		return &Attributes{
+			Bootstrap: Bootstrap{Nix: nixCfg},
+			Xpath:     xpath.New("fleet").NewXpathWithAppend("my-flake"),
+		}
+	}
+
+	t.Run("child curl flags override parent curl flags", func(t *testing.T) {
+		t.Parallel()
+
+		parent := newParentAttr(&NixConfig{URL: "https://parent.example.com/i", CurlDefaultFlags: []string{"-PARENT"}})
+		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{CurlDefaultFlags: []string{"-CHILD"}}}}
+
+		err := child.Init("child", parent)
+		require.NoError(t, err)
+
+		require.NotNil(t, child.Bootstrap.Nix)
+		assert.Equal(t, []string{"-CHILD"}, child.Bootstrap.Nix.CurlDefaultFlags,
+			"child's CurlDefaultFlags should replace parent's, not append")
+		assert.Equal(t, "https://parent.example.com/i", child.Bootstrap.Nix.URL,
+			"unset fields still cascade from the parent")
+	})
+
+	t.Run("nil child curl flags inherit parent curl flags", func(t *testing.T) {
+		t.Parallel()
+
+		parent := newParentAttr(&NixConfig{CurlDefaultFlags: []string{"-PARENT"}})
+		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{URL: "https://child.example.com/i"}}}
+
+		err := child.Init("child", parent)
+		require.NoError(t, err)
+
+		require.NotNil(t, child.Bootstrap.Nix)
+		assert.Equal(t, []string{"-PARENT"}, child.Bootstrap.Nix.CurlDefaultFlags,
+			"nil child CurlDefaultFlags should inherit parent value")
+	})
+
+	t.Run("explicit empty curl flags stay empty", func(t *testing.T) {
+		t.Parallel()
+
+		parent := newParentAttr(&NixConfig{CurlDefaultFlags: []string{"-PARENT"}})
+		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{CurlDefaultFlags: []string{}}}}
+
+		err := child.Init("child", parent)
+		require.NoError(t, err)
+
+		require.NotNil(t, child.Bootstrap.Nix)
+		assert.Equal(t, []string{}, child.Bootstrap.Nix.CurlDefaultFlags,
+			"explicitly empty CurlDefaultFlags must clear the parent value, not inherit it")
+	})
+}

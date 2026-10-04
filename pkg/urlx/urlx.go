@@ -23,8 +23,8 @@ func IsHTTPURL(s string) bool {
 // ValidateSource reports whether s is usable as a transfer source: a local
 // path (no URL scheme) or an http(s) URL. Any other scheme (ftp, file, s3,
 // typos like htps) is rejected with ErrUnsupportedURLScheme naming the scheme,
-// instead of silently falling through to the local-path branch. Unparseable
-// input cannot carry a scheme and counts as a local path.
+// instead of silently falling through to the local-path branch. Input that
+// fails to parse falls back to local-path treatment.
 func ValidateSource(s string) error {
 	parsedURL, _ := url.Parse(s)
 

@@ -11,9 +11,11 @@ Hook commands are shell script strings: each runs as `sh -c` on the target (as t
 
 The Nix installer bootstrap runs only `post_bootstrap_hooks`, after the installer. The `post_bootstrap_install_hooks` and `post_bootstrap_provisioned_hooks` stages are NixOS-bootstrap-only and never run in the Nix installer bootstrap.
 
+Hooks run as part of a bootstrap that actually runs; they do not trigger one, so on a machine that is already bootstrapped (or already has Nix) they are skipped unless `force_bootstrap` is set.
+
 | Hook | When it runs | SSH used |
 |------|--------------|----------|
-| `post_bootstrap_hooks` | After disko partitioning, or after the Nix installer (Nix installer bootstrap) | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
+| `post_bootstrap_hooks` | After disko partitioning, or after the Nix installer (Nix installer bootstrap) | Bootstrap SSH for the NixOS bootstrap (regular SSH when force-bootstrapping without bootstrap SSH configured); regular SSH for the Nix installer bootstrap |
 | `post_bootstrap_install_hooks` | After nixos-install, before reboot | Bootstrap SSH (regular SSH when force-bootstrapping without bootstrap SSH configured) |
 | `post_bootstrap_provisioned_hooks` | After reboot into new system (immediately in the installer when automatic reboot is disabled, over bootstrap SSH) | Regular SSH |
 

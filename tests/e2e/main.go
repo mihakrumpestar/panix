@@ -419,11 +419,7 @@ func runDeployHome(configPath string, res *testResources) error {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifyHomeManager(res.keyPath)
-	}
-
-	return nil
+	return verifyHomeManager(res.keyPath)
 }
 
 func runDeployPackages(configPath string, res *testResources) error {
@@ -440,11 +436,7 @@ func runDeployPackages(configPath string, res *testResources) error {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifyPackages(res.keyPath)
-	}
-
-	return nil
+	return verifyPackages(res.keyPath)
 }
 
 func runDeployMaid(configPath string, res *testResources) error {
@@ -461,11 +453,7 @@ func runDeployMaid(configPath string, res *testResources) error {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifyMaidPackages(res.keyPath)
-	}
-
-	return nil
+	return verifyMaidPackages(res.keyPath)
 }
 
 func runDeploySystemManager(configPath string, res *testResources) error {
@@ -485,11 +473,7 @@ func runDeploySystemManager(configPath string, res *testResources) error {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifySystemManagers(res.keyPath)
-	}
-
-	return nil
+	return verifySystemManagers(res.keyPath)
 }
 
 // runDeploySystemManagerNixInstall deploys the system-manager fixture to the
@@ -505,14 +489,12 @@ func runDeploySystemManager(configPath string, res *testResources) error {
 func runDeploySystemManagerNixInstall(configPath string, res *testResources) error {
 	printPhasef("Phase: Deploy system-manager (nix-install bootstrap)")
 
-	if testScopeFlag.local() {
-		err := verifyNixAbsent(debianNonixVMPort, res.keyPath)
-		if err != nil {
-			return err
-		}
+	err := verifyNixAbsent(debianNonixVMPort, res.keyPath)
+	if err != nil {
+		return err
 	}
 
-	err := runPanixDeployStepWithArgs("Run panix deploy (system-manager nix-install bootstrap)", configPath,
+	err = runPanixDeployStepWithArgs("Run panix deploy (system-manager nix-install bootstrap)", configPath,
 		[]string{"--tags", "test-system-manager-nixinstall"},
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
@@ -523,11 +505,7 @@ func runDeploySystemManagerNixInstall(configPath string, res *testResources) err
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifySystemManagerNixInstall(res.keyPath)
-	}
-
-	return nil
+	return verifySystemManagerNixInstall(res.keyPath)
 }
 
 func runChecks() error {

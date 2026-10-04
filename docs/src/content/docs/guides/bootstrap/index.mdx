@@ -96,7 +96,7 @@ The flow:
 2. **Bootstrap** fetches the installer to the target (with `curl` for URLs, with `rsync` for local paths) and marks it executable, runs it elevated with the configured args (a shell script runs via its shebang, an installer binary runs directly), verifies `nix` works, then runs `post_bootstrap_hooks`
 3. **Build**, **Transfer**, **Secrets**, and **Activate** proceed as usual, now against a target with Nix
 
-The step is zero-config by default: the script from `https://install.determinate.systems/nix` (the [Determinate nix-installer](https://github.com/DeterminateSystems/nix-installer)) runs with `install --no-confirm`, the canonical unattended invocation. The platform planner is auto-detected (linux, macos), so the same config works on both. On a systemd Debian or Ubuntu server this performs the default multi-user daemon install (`nix-daemon`). The installer writes the store and profiles system-wide, so it runs elevated: via the configured `sudo_program`, or bare when the SSH user is already root. Root or passwordless sudo is required.
+The step is zero-config by default: the installer from `https://install.determinate.systems/nix` (the [Determinate nix-installer](https://github.com/DeterminateSystems/nix-installer)) runs with `install --no-confirm`, the canonical unattended invocation. The platform planner is auto-detected (linux, macos), so the same config works on both. On a systemd Debian or Ubuntu server this performs the default multi-user daemon install (`nix-daemon`). The installer writes the store and profiles system-wide, so it runs elevated: via the configured `sudo_program`, or bare when the SSH user is already root. Root or passwordless sudo is required.
 
 ### Configuration
 
@@ -105,14 +105,14 @@ Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 ```yaml
 bootstrap:
   nix:
-    url: https://install.determinate.systems/nix     # default; installer shell script or binary, http(s) URL or local path
-    args: ["install", "--no-confirm"]                # default; full replacement of the script args
+    url: https://install.determinate.systems/nix     # default; shell script or installer binary, http(s) URL or local path
+    args: ["install", "--no-confirm"]                # default; full replacement of the installer args
     curl_default_flags: ["--fail", "-#", "-L", "-C", "-"]  # default; base curl flags for the download
   disable_nix_install: false                         # default; opt out of the automatic install
 ```
 
 - `nix.url`: installer source, a shell script or the `nix-installer` binary. An http(s) URL is downloaded on the target with `curl`; a local path is transferred with `rsync` (see [Requirements](/getting-started/requirements/)). Any other URL scheme is rejected.
-- `nix.args`: the argument list passed to the script after its path. It is a full replacement of the default `["install", "--no-confirm"]`, not an append, so keep the subcommand and flags you want (for example `install --no-confirm`) in the value. An explicitly empty list (`[]`) runs the script with no arguments.
+- `nix.args`: the argument list passed to the installer after its path. It is a full replacement of the default `["install", "--no-confirm"]`, not an append, so keep the subcommand and flags you want (for example `install --no-confirm`) in the value. An explicitly empty list (`[]`) runs the installer with no arguments.
 - `nix.curl_default_flags`: base flags for `curl` when `nix.url` is downloaded on the target. Default `["--fail", "-#", "-L", "-C", "-"]`; set to `[]` to clear them. Same semantics as [`bootstrap.kexec.curl_default_flags`](/configuration/nix-flags/).
 - `disable_nix_install: true` opts out of the automatic install. A target without Nix then fails at Inspect with the `nix not found on remote machine` error, which mentions the opt-out. Install Nix manually, or unset the flag.
 
@@ -122,19 +122,11 @@ Custom output types become bootstrappable at the type level: declare `bootstrap_
 
 ### Planner Arguments
 
-Some nix-installer flags belong to the platform planner: `--init none|systemd`, `--no-start-daemon`, and `--force` require naming the planner subcommand explicitly, so put the planner (`linux` or `macos`) in front of them. A bare `install --init none` fails:
-
-```yaml
-bootstrap:
-  nix:
-    args: ["install", "linux", "--init", "none", "--no-confirm"]
-```
-
-Without a planner subcommand the installer auto-detects the platform, which is what the default `["install", "--no-confirm"]` relies on.
+Panix invokes the installer with `install --no-confirm`, the canonical unattended invocation; planner subcommands and planner-specific flags are documented in the [nix-installer docs](https://github.com/DeterminateSystems/nix-installer).
 
 ### Pinning and Idempotence
 
-- Pin the installer for reproducible provisioning with a versioned script URL, e.g. `url: https://install.determinate.systems/nix/tag/v3.23.0`.
+- Pin the installer for reproducible provisioning with a versioned installer URL, e.g. `url: https://install.determinate.systems/nix/tag/v3.23.0`.
 - Re-running the installer with settings matching `/nix/receipt.json` on the target succeeds (exit 0); changed settings require an uninstall first.
 
 ### Forcing a Re-run

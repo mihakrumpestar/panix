@@ -2,11 +2,16 @@ package bootstrap
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/pkg/errors"
 )
+
+// ErrUnsupportedBootstrapMode fails closed for a BootstrapMode with no
+// registered bootstrap path in RunPhase.
+var ErrUnsupportedBootstrapMode = errors.New("unsupported bootstrap mode")
 
 type Handler struct {
 	OutLinks phaseops.OutLinks
@@ -14,7 +19,7 @@ type Handler struct {
 
 func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 	preset := fleetLeaf.Installable.Preset
-	if !preset.BootstrapsNixOS() && !preset.BootstrapsNix() {
+	if !preset.IsBootstrappable() {
 		return true
 	}
 
@@ -29,22 +34,23 @@ func (Handler) ShouldSkip(fleetLeaf *fleet.FleetLeaf) bool {
 }
 
 func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
-	if fleetLeaf.Installable.Preset.BootstrapsNix() {
+	switch fleetLeaf.Installable.Preset.Bootstrap {
+	case installable.BootstrapNixInstall:
 		return runNixInstallBootstrap(exc, fleetLeaf.Machine)
+	case installable.BootstrapNixOS:
+		return runNixOSBootstrap(exc, fleetLeaf, h.OutLinks.DiskoPath(fleetLeaf.Installable))
+	default:
+		return errors.Wrapf(ErrUnsupportedBootstrapMode, "%q", fleetLeaf.Installable.Preset.Bootstrap)
 	}
-
-	return runNixOSBootstrap(exc, fleetLeaf, h.OutLinks.DiskoPath(fleetLeaf.Installable))
 }
 
 // runNixInstallBootstrap installs Nix on targets that lack it, then runs the
-// post-bootstrap hooks. bootstrap.disable_nix_install opts out of the install
-// step only (the inspect gate already hard-errors when nix is missing then):
-// the hooks are user-declared and always run.
+// post-bootstrap hooks. Whether an install is needed is settled once, in
+// ShouldSkip (nix missing or forced); here bootstrap.disable_nix_install opts
+// out of the install step only (the inspect gate already hard-errors when nix
+// is missing then): the hooks run regardless of whether the install step ran.
 func runNixInstallBootstrap(exc *executioner.Executioner, machineI *machine.Machine) error {
-	metaInspect := machineI.MetaInspect.Load()
-	needsInstall := metaInspect == nil || !metaInspect.NixAvailable || machineI.Bootstrap.ForceBootstrap
-
-	if needsInstall && !machineI.Bootstrap.DisableNixInstall {
+	if !machineI.Bootstrap.DisableNixInstall {
 		err := installNix(exc, machineI)
 		if err != nil {
 			return errors.Wrap(err, "nix install failed")

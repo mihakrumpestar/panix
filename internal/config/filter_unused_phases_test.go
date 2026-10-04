@@ -13,7 +13,8 @@ import (
 )
 
 // disableNixInstallWithHooks opts the bootstrap out of the nix install step
-// while keeping the user-declared post-bootstrap hooks.
+// and declares post_bootstrap_hooks: without any other keep trigger the phase
+// is dropped, the hooks alone never create a bootstrap.
 func disableNixInstallWithHooks(bootstrap *attributes.Bootstrap) {
 	bootstrap.DisableNixInstall = true
 	bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
@@ -128,7 +129,19 @@ func TestHasRequiredPhases(t *testing.T) {
 
 				return fk.Fleet(fk.Flake(inst))
 			},
-			false, true,
+			false, false,
+		},
+		{
+			"bootstrap-none type with hooks and force_bootstrap",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.MachineWithForceBootstrap())
+				inst.Preset.Bootstrap = installable.BootstrapNone
+				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			false, false,
 		},
 		{
 			"nixos preset without any bootstrap config",
@@ -261,7 +274,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 		{
-			"keeps bootstrap for post_bootstrap_hooks with disable_nix_install",
+			"drops bootstrap for post_bootstrap_hooks with disable_nix_install",
 			func() *fleet.Fleet {
 				fk := testutil.NewFaker()
 				inst := fk.Installable(fk.Machine())
@@ -271,7 +284,20 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 				return fk.Fleet(fk.Flake(inst))
 			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
+		},
+		{
+			"drops bootstrap for bootstrap-none type with hooks and force_bootstrap",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.MachineWithForceBootstrap())
+				inst.Preset.Bootstrap = installable.BootstrapNone
+				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
+
+				return fk.Fleet(fk.Flake(inst))
+			},
 			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 	}
 

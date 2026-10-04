@@ -42,15 +42,11 @@ var (
 
 type KexecImage string
 
-// DefaultKexecImage is the built-in kexec tarball URL. The same literal is
-// duplicated in the KexecConfig.Image struct tag (struct tags cannot reference
-// constants); keep both in sync. $PANIX_ARCH is expanded at runtime.
-const DefaultKexecImage = "https://github.com/nix-community/nixos-images/releases/latest/download/" +
-	"nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"
-
+// Get returns the configured image or the built-in kexec tarball URL from the
+// KexecConfig.Image "default" tag ($PANIX_ARCH is expanded at runtime).
 func (k KexecImage) Get() KexecImage {
 	if k == "" {
-		return DefaultKexecImage
+		return KexecImage(structDefault[KexecConfig]("Image"))
 	}
 
 	return k

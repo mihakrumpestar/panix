@@ -182,26 +182,24 @@ func verifyNixOSInstallation(port int, keyPath string) error {
 func verifyHomeManager(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify home-manager (root) on NixOS ISO VM", func() error {
-			return verifyHomeManagerMarker(nixosISOPort, keyPath, "root")
-		})
-		parGroup.Go("Verify home-manager (root) on Debian-nix VM", func() error {
-			return verifyHomeManagerMarker(debianNixVMPort, keyPath, "root")
-		})
-		parGroup.Go("Verify home-manager (alice) on NixOS ISO VM", func() error {
-			return verifyHomeManagerMarkerAsUser(nixosISOPort, keyPath, "alice")
-		})
-		parGroup.Go("Verify home-manager (alice) on Debian-nix VM", func() error {
-			return verifyHomeManagerMarkerAsUser(debianNixVMPort, keyPath, "alice")
-		})
-		// First deploy legitimately lists no generations; by this phase the
-		// deploy has run twice (bootstrap + deploy), so the listing must not be
-		// empty.
-		parGroup.Go("Verify home-manager generations listed (root, NixOS ISO VM)", func() error {
-			return verifyHomeManagerGenerations(nixosISOPort, keyPath, "root")
-		})
-	}
+	parGroup.Go("Verify home-manager (root) on NixOS ISO VM", func() error {
+		return verifyHomeManagerMarker(nixosISOPort, keyPath, "root")
+	})
+	parGroup.Go("Verify home-manager (root) on Debian-nix VM", func() error {
+		return verifyHomeManagerMarker(debianNixVMPort, keyPath, "root")
+	})
+	parGroup.Go("Verify home-manager (alice) on NixOS ISO VM", func() error {
+		return verifyHomeManagerMarkerAsUser(nixosISOPort, keyPath, "alice")
+	})
+	parGroup.Go("Verify home-manager (alice) on Debian-nix VM", func() error {
+		return verifyHomeManagerMarkerAsUser(debianNixVMPort, keyPath, "alice")
+	})
+	// First deploy legitimately lists no generations; by this phase the
+	// deploy has run twice (bootstrap + deploy), so the listing must not be
+	// empty.
+	parGroup.Go("Verify home-manager generations listed (root, NixOS ISO VM)", func() error {
+		return verifyHomeManagerGenerations(nixosISOPort, keyPath, "root")
+	})
 
 	return parGroup.Wait()
 }
@@ -510,14 +508,12 @@ func verifyPackage(port int, keyPath string) error {
 func verifyPackages(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify package on NixOS ISO VM", func() error {
-			return verifyPackage(nixosISOPort, keyPath)
-		})
-		parGroup.Go("Verify package on Debian-nix VM", func() error {
-			return verifyPackage(debianNixVMPort, keyPath)
-		})
-	}
+	parGroup.Go("Verify package on NixOS ISO VM", func() error {
+		return verifyPackage(nixosISOPort, keyPath)
+	})
+	parGroup.Go("Verify package on Debian-nix VM", func() error {
+		return verifyPackage(debianNixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }
@@ -544,14 +540,12 @@ func verifyMaidPackage(port int, keyPath string) error {
 func verifyMaidPackages(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify maid package on NixOS ISO VM", func() error {
-			return verifyMaidPackage(nixosISOPort, keyPath)
-		})
-		parGroup.Go("Verify maid package on Debian-nix VM", func() error {
-			return verifyMaidPackage(debianNixVMPort, keyPath)
-		})
-	}
+	parGroup.Go("Verify maid package on NixOS ISO VM", func() error {
+		return verifyMaidPackage(nixosISOPort, keyPath)
+	})
+	parGroup.Go("Verify maid package on Debian-nix VM", func() error {
+		return verifyMaidPackage(debianNixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }
@@ -595,11 +589,9 @@ func verifySystemManager(port int, keyPath string) error {
 func verifySystemManagers(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify system-manager on Debian-nix VM", func() error {
-			return verifySystemManager(debianNixVMPort, keyPath)
-		})
-	}
+	parGroup.Go("Verify system-manager on Debian-nix VM", func() error {
+		return verifySystemManager(debianNixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }
@@ -648,9 +640,9 @@ const (
 
 // verifyNixAbsentOutput asserts the nix absence probe: the target must show
 // neither a nix binary nor a /nix tree, so the post-deploy proof can only come
-// from the bootstrap install step. Detecting core `nix` needs no login shell
-// (the product probes it bare, nixprobe.go); `su -l` here only matches the
-// sibling probes.
+// from the bootstrap install step. Detecting core `nix` over plain SSH is
+// verified with the Determinate Nix installer (its profile wiring is
+// system-wide); `su -l` here only matches the sibling probes.
 func verifyNixAbsentOutput(output string) error {
 	if strings.Contains(output, nixBinPresentMarker) || strings.Contains(output, nixDirPresentMarker) {
 		return errors.Errorf("target must start without Nix for the bootstrap scenario, got: %q", output)
@@ -700,11 +692,11 @@ func verifyNixInstalledOutput(versionSection, helloSection string) error {
 func verifyNixInstalled(port int, keyPath string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	// The product probes `nix --version` bare over plain SSH (nixprobe.go), so
-	// no login shell is required for it. `su -l` here only matches
-	// verifyPackage, which needs it to reach nix-profile binaries (not on the
-	// plain SSH PATH). || true on the readlink keeps the probe running so both
-	// sections are reported even when one fails.
+	// Bare `nix --version` over plain SSH is verified with the Determinate Nix
+	// installer (its profile wiring is system-wide; the product probes it bare
+	// in nixprobe.go). `su -l` here only matches verifyPackage, which needs it
+	// for nix-profile binaries (not on the plain SSH PATH); || true on the
+	// readlink keeps the probe running so both sections are reported.
 	output, err := sshRun(port, keyPath,
 		"su -l root -c '"+nixProbeVersionSection+"'; echo '---'; "+
 			"readlink -f /run/system-manager/sw/bin/hello 2>/dev/null || true")
@@ -786,17 +778,15 @@ func verifySecretLanding(port int, keyPath string) error {
 func verifySystemManagerNixInstall(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify system-manager on Debian nonix VM", func() error {
-			return verifySystemManager(debianNonixVMPort, keyPath)
-		})
-		parGroup.Go("Verify Nix bootstrapped on Debian nonix VM", func() error {
-			return verifyNixInstalled(debianNonixVMPort, keyPath)
-		})
-		parGroup.Go("Verify secret landing on Debian nonix VM", func() error {
-			return verifySecretLanding(debianNonixVMPort, keyPath)
-		})
-	}
+	parGroup.Go("Verify system-manager on Debian nonix VM", func() error {
+		return verifySystemManager(debianNonixVMPort, keyPath)
+	})
+	parGroup.Go("Verify Nix bootstrapped on Debian nonix VM", func() error {
+		return verifyNixInstalled(debianNonixVMPort, keyPath)
+	})
+	parGroup.Go("Verify secret landing on Debian nonix VM", func() error {
+		return verifySecretLanding(debianNonixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }

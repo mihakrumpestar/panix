@@ -55,7 +55,7 @@ type TransferSource struct {
 type Bootstrap struct {
 	SSH                           ssh.SSHClient              `yaml:"ssh" json:"ssh" desc:"Bootstrap SSH configuration (used during initial provisioning)"`
 	DiskEncryptionKeys            []TransferSource           `yaml:"disk_encryption_keys" json:"disk_encryption_keys,omitempty" desc:"Keys are transferred to root dir on remote, which is the installer. If you want them to be transferred to disk of the final system, prefix path with '/mnt'" validate:"dive"`
-	PostBootstrapHooks            []PostBootstrapHookCommand `yaml:"post_bootstrap_hooks" json:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning"`
+	PostBootstrapHooks            []PostBootstrapHookCommand `yaml:"post_bootstrap_hooks" json:"post_bootstrap_hooks,omitempty" desc:"Commands to run after disko partitioning (NixOS bootstrap) or after the Nix installer (Nix installer bootstrap)"`
 	PostBootstrapInstallHooks     []PostBootstrapHookCommand `yaml:"post_bootstrap_install_hooks" json:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`
 	PostBootstrapProvisionedHooks []PostBootstrapHookCommand `yaml:"post_bootstrap_provisioned_hooks" json:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`
 	Kexec                         KexecConfig                `yaml:"kexec" json:"kexec" desc:"Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation"`
@@ -70,9 +70,9 @@ type Bootstrap struct {
 
 //nolint:lll
 type NixConfig struct {
-	URL              string   `yaml:"url,omitempty" json:"url,omitempty" desc:"Installer source used to install Nix when the target lacks it: a shell script or an installer binary (e.g. the nix-installer release binary), as an http(s) URL or a local path" validate:"omitempty,url_or_file" default:"https://install.determinate.systems/nix"`
-	Args             []string `yaml:"args,omitempty" json:"args,omitempty" desc:"Arguments passed to the installer script after the script path (default: [install, --no-confirm])"`
-	CurlDefaultFlags []string `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading the Nix installer script (default: [--fail, -#, -L, -C, -])"`
+	URL              string   `yaml:"url,omitempty" json:"url,omitempty" desc:"Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an http(s) URL or a local path" validate:"omitempty,url_or_file" default:"https://install.determinate.systems/nix"`
+	Args             []string `yaml:"args,omitempty" json:"args,omitempty" desc:"Arguments passed to the installer after the installer path (default: [install, --no-confirm])"`
+	CurlDefaultFlags []string `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L, -C, -])"`
 }
 
 // GetURL returns the configured installer URL or the default if not set (empty).
@@ -85,8 +85,8 @@ func (n *NixConfig) GetURL() string {
 }
 
 // GetArgs returns the configured installer arguments or DefaultNixInstallerArgs
-// if not set (nil). An explicitly empty slice ([]) runs the installer script
-// without arguments.
+// if not set (nil). An explicitly empty slice ([]) runs the installer without
+// arguments.
 func (n *NixConfig) GetArgs() []string {
 	if n == nil {
 		return DefaultNixInstallerArgs
@@ -162,20 +162,24 @@ func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) e
 	return nil
 }
 
-// passAttributesInto merges parent attributes into the child without overriding.
-// All attributes must be non-pointers (mergo replaces whole pointers, never
-// their fields); must run before the rest of Init.
+// passAttributesInto merges parent attributes into the child without
+// overriding set fields, and must run before the rest of Init. mergo fills
+// unset fields from the parent (Bootstrap.Nix is merged field by field) and
+// appends parent slices onto child slices.
 //
-// RsyncDefaultFlags-style fields override instead: a child value is kept, nil
-// inherits from the parent, so parent defaults never pollute an explicit override.
-// Bootstrap.Nix.Args is such a field (a full argv list, fully replaced).
+// The default-flag slices cannot append (they are full argv lists):
+// RsyncDefaultFlags, Bootstrap.Kexec.CurlDefaultFlags, Bootstrap.Nix.Args and
+// Bootstrap.Nix.CurlDefaultFlags are saved around the merge and restored so a
+// child value overrides the parent, nil inherits it, and an explicitly empty
+// slice clears it.
 func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) error {
 	childRsyncDefault := a.RsyncDefaultFlags
 	childCurlDefault := a.Bootstrap.Kexec.CurlDefaultFlags
 
-	var childNixArgs []string
+	var childNixArgs, childNixCurlDefault []string
 	if a.Bootstrap.Nix != nil {
 		childNixArgs = a.Bootstrap.Nix.Args
+		childNixCurlDefault = a.Bootstrap.Nix.CurlDefaultFlags
 	}
 
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
@@ -194,6 +198,10 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 
 	if childNixArgs != nil {
 		a.Bootstrap.Nix.Args = childNixArgs
+	}
+
+	if childNixCurlDefault != nil {
+		a.Bootstrap.Nix.CurlDefaultFlags = childNixCurlDefault
 	}
 
 	// Custom set/merge

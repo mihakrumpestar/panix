@@ -132,6 +132,8 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("must be a valid URL, got: %v", fieldError.Value())
 	case "uri":
 		return fmt.Sprintf("must be a valid URI, got: %v", fieldError.Value())
+	case "url_or_file":
+		return fmt.Sprintf("must be an http(s) URL or a local path (unsupported schemes are rejected), got: %v", fieldError.Value())
 	case "required_without":
 		return humanizeRequiredWithout(fieldError)
 	case "oneof":
