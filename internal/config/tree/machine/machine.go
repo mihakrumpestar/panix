@@ -48,6 +48,7 @@ type MetaInspect struct {
 	RequiresKexec bool `yaml:"-" json:"requires_kexec,omitempty"`
 	NixAvailable  bool `yaml:"-" json:"nix_available,omitempty"`
 
+	OS           stringbyte.StringByte `yaml:"-" json:"os,omitempty"`
 	Architecture stringbyte.StringByte `yaml:"-" json:"architecture,omitempty"`
 	Generations  *Generations          `yaml:"-" json:"generations,omitempty"`
 	Date         stringbyte.StringByte `yaml:"-" json:"date,omitempty"`

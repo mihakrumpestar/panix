@@ -2,7 +2,10 @@ package clipboard
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,4 +104,85 @@ func TestWriteOSC52(t *testing.T) {
 			assert.Equal(t, normalized, string(decoded))
 		})
 	}
+}
+
+func TestClipboardPlan(t *testing.T) {
+	t.Parallel()
+
+	xclipArgs := []string{"-selection", "clipboard", "-in"}
+	xselArgs := []string{"--clipboard", "--input"}
+
+	tests := []struct {
+		name      string
+		goos      string
+		isWayland bool
+		want      []clipboardCommand
+	}{
+		{
+			name: "darwin: pbcopy always ships on macOS",
+			goos: "darwin",
+			want: []clipboardCommand{{name: "pbcopy"}},
+		},
+		{
+			name:      "linux wayland: wl-copy first, then the X11 tools",
+			goos:      "linux",
+			isWayland: true,
+			want: []clipboardCommand{
+				{name: "wl-copy", args: []string{"--"}},
+				{name: "xclip", args: xclipArgs},
+				{name: "xsel", args: xselArgs},
+			},
+		},
+		{
+			name: "linux x11: X11 tools only",
+			goos: "linux",
+			want: []clipboardCommand{
+				{name: "xclip", args: xclipArgs},
+				{name: "xsel", args: xselArgs},
+			},
+		},
+		{
+			name: "other platforms: no command, OSC52 handles them",
+			goos: "windows",
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, clipboardPlan(tt.goos, tt.isWayland))
+		})
+	}
+}
+
+// TestProbeClipboardCommands_LinuxFallsThrough pins the probe loop: a failing
+// candidate falls through to the next one and the text reaches the successful
+// command via stdin. The plan is built explicitly for linux (the CI machine is
+// linux); the darwin plan is never executed here.
+//
+//nolint:paralleltest // t.Setenv forbids parallel tests
+func TestProbeClipboardCommands_LinuxFallsThrough(t *testing.T) {
+	dir := t.TempDir()
+	stdinPath := filepath.Join(dir, "stdin.txt")
+
+	failScript := "#!/bin/sh\nexit 1\n"
+	//nolint:gosec // the stub must be executable to be found on PATH
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "wl-copy"), []byte(failScript), 0o700))
+
+	captureScript := "#!/bin/sh\ncat > '" + stdinPath + "'\n"
+	//nolint:gosec // the stub must be executable to be found on PATH
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "xclip"), []byte(captureScript), 0o700))
+
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	payload := "copy me"
+
+	ok := probeClipboardCommands(context.Background(), clipboardPlan("linux", true), payload)
+
+	require.True(t, ok, "the probe loop must fall through to xclip after wl-copy fails")
+
+	written, err := os.ReadFile(stdinPath) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+	assert.Equal(t, payload, string(written), "stdin must reach the successful command")
 }

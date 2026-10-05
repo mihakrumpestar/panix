@@ -6,6 +6,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/pkg/errors"
 )
 
 type Handler struct{}
@@ -57,6 +58,13 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 func runBootstrapModeInspect(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
 	machineI := fleetLeaf.Machine
 
+	// The NixOS bootstrap (kexec, disko, nixos-install) requires a Linux
+	// target; a macOS host cannot run it. MetaInspect.OS is populated by
+	// runCommonChecks, which always runs first.
+	if fleetLeaf.Installable.Preset.BootstrapsNixOS() && isDarwinHost(machineI) {
+		return errors.New("NixOS bootstrap requires a Linux target, but macOS was detected; deploy a darwinConfigurations (or homeConfigurations) output instead") //nolint:lll
+	}
+
 	switch fleetLeaf.Installable.Preset.Bootstrap {
 	case installable.BootstrapNixOS:
 		return runBootstrapInspect(exc, machineI)
@@ -87,6 +95,11 @@ func runCommonChecks(exc *executioner.Executioner, machineI *machine.Machine) er
 	}
 
 	err := detectArchitecture(exc, machineI)
+	if err != nil {
+		return err
+	}
+
+	err = detectOS(exc, machineI)
 	if err != nil {
 		return err
 	}
