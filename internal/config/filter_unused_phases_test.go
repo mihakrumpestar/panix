@@ -17,7 +17,7 @@ import (
 // is dropped, the hooks alone never create a bootstrap.
 func disableNixInstallWithHooks(bootstrap *attributes.Bootstrap) {
 	bootstrap.DisableNixInstall = true
-	bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
+	bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
 }
 
 //nolint:funlen
@@ -137,7 +137,7 @@ func TestHasRequiredPhases(t *testing.T) {
 				fk := testutil.NewFaker()
 				inst := fk.Installable(fk.MachineWithForceBootstrap())
 				inst.Preset.Bootstrap = installable.BootstrapNone
-				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
+				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
 
 				return fk.Fleet(fk.Flake(inst))
 			},
@@ -292,7 +292,7 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 				fk := testutil.NewFaker()
 				inst := fk.Installable(fk.MachineWithForceBootstrap())
 				inst.Preset.Bootstrap = installable.BootstrapNone
-				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
+				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
 
 				return fk.Fleet(fk.Flake(inst))
 			},

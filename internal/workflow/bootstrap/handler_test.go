@@ -192,7 +192,7 @@ func TestRunPhase_NixInstall_InstallCondition(t *testing.T) {
 			leaf.Installable.Preset.Bootstrap = installable.BootstrapNixInstall
 			leaf.Machine.Bootstrap.DisableNixInstall = tt.disableNixInstall
 			leaf.Machine.Bootstrap.ForceBootstrap = tt.force
-			leaf.Machine.Bootstrap.PostBootstrapHooks = []attributes.PostBootstrapHookCommand{"echo hook-ran"}
+			leaf.Machine.Bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
 			leaf.Machine.MetaInspect.Store(&machine.MetaInspect{IsRoot: true, NixAvailable: tt.nixAvailable})
 
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, leaf.Machine, phase.Bootstrap)

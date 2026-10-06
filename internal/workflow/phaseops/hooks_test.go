@@ -20,14 +20,32 @@ func TestExecuteHooks_ShellStringsRunViaSh(t *testing.T) {
 	mach := newLocalTransferMachine(t, true)
 	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
-	hooks := []attributes.PostBootstrapHookCommand{
+	hooks := []attributes.HookCommand{
 		"echo hello",
 		"touch /tmp/marker && echo done",
 	}
-	require.NoError(t, exc.ExecuteHooks(hooks, "test hook"))
+	require.NoError(t, exc.ExecuteHooks(hooks, "test hook", nil))
 
 	lines := testutil.CommandLines(t, phaseLog)
 	require.Len(t, lines, 2)
 	assert.Equal(t, "sh -c echo hello", lines[0])
 	assert.Equal(t, "sh -c touch /tmp/marker && echo done", lines[1])
+}
+
+// Hook environment variables must ride an env(1) prefix before sh -c, so
+// they reach the hook process on both transports; nil env keeps the bare
+// sh -c argv (bootstrap hooks pass none).
+func TestExecuteHooks_EnvExportedViaEnvPrefix(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
+
+	hooks := []attributes.HookCommand{"echo hello"}
+	env := []string{"PANIX_HOOK_PHASE=pre", "PANIX_CLOSURE=/nix/store/abc"}
+	require.NoError(t, exc.ExecuteHooks(hooks, "activation hook", env))
+
+	lines := testutil.CommandLines(t, phaseLog)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "env PANIX_HOOK_PHASE=pre PANIX_CLOSURE=/nix/store/abc sh -c echo hello", lines[0])
 }

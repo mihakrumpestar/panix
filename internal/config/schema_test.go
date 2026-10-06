@@ -75,3 +75,37 @@ func TestSchemaPresetBootstrapModeEnum(t *testing.T) {
 	assert.Equal(t, want, prop.Enum,
 		"bootstrap_mode enum must be exactly the BootstrapMode constants (the oneof tag must mirror them)")
 }
+
+// The generated schema must expose activation_hooks with its pre and post
+// hook lists. The config tree is inlined (fleet, installables and machines
+// share one property set through the embedded Attributes), so the fleet
+// definition doubles as the machine-level one; this pins the reference.
+func TestSchemaActivationHooksProperties(t *testing.T) {
+	t.Parallel()
+
+	generator := yamlschema.NewSchema(yamlschema.SchemaConfig{RootType: reflect.TypeFor[Config]()})
+
+	schema, err := generator.Generate()
+	require.NoError(t, err)
+
+	hooksDef := definitionOfType(t, schema, "ActivationHooks")
+	assert.Contains(t, hooksDef.Properties, "pre", "ActivationHooks must declare the pre property")
+	assert.Contains(t, hooksDef.Properties, "post", "ActivationHooks must declare the post property")
+
+	// The config tree is inlined: fleet, installables and machines share one
+	// property set through the embedded Attributes, so the root fleet
+	// property doubles as the machine-level one. This pins the reference.
+	fleetProp, ok := schema.Properties["fleet"]
+	require.True(t, ok, "schema root must declare the fleet property")
+
+	fleetDef, ok := fleetProp.(*yamlschema.TypeDefinition)
+	require.True(t, ok, "fleet property must be a TypeDefinition")
+
+	hooksProp, ok := fleetDef.Properties["activation_hooks"]
+	require.True(t, ok, "fleet must declare the activation_hooks property")
+
+	hooksRef, ok := hooksProp.(*yamlschema.TypeDefinition)
+	require.True(t, ok, "activation_hooks property must be a TypeDefinition")
+	assert.Equal(t, "#/definitions/ActivationHooks", hooksRef.Ref,
+		"activation_hooks must reference the shared ActivationHooks definition")
+}

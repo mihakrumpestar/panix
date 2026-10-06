@@ -91,5 +91,5 @@ func runNixOSBootstrap(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf,
 }
 
 func runPostBootstrapHooks(exc *executioner.Executioner, machineI *machine.Machine) error {
-	return errors.Wrap(exc.ExecuteHooks(machineI.Bootstrap.PostBootstrapHooks, "post bootstrap hook"), "post bootstrap hook failed")
+	return errors.Wrap(exc.ExecuteHooks(machineI.Bootstrap.PostBootstrapHooks, "post bootstrap hook", nil), "post bootstrap hook failed")
 }

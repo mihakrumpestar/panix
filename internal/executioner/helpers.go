@@ -21,19 +21,24 @@ const waitPollInterval = time.Second
 // intentionally shorter than the overall wait timeout.
 const waitPollReachabilityTimeout = time.Second
 
-func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand, hookName string) error {
+// ExecuteHooks runs hook commands on the target. Hook commands are either
+// reserved keywords (waitForOnline/waitForOffline) or shell programs. env
+// carries KEY=VALUE pairs exported to every shell hook invocation via
+// WithEnv (env(1) prefix), on both the local and SSH transports; the
+// keyword hooks take no environment.
+func (ex *Executioner) ExecuteHooks(hooks []attributes.HookCommand, hookName string, env []string) error {
 	machine := ex.conf.Machine
 
 	for idx, hook := range hooks {
 		switch hook {
-		case attributes.PostBootstrapHookWaitForOnline:
+		case attributes.HookWaitForOnline:
 			activeSSH := machine.GetActiveSSH()
 
 			err := WaitForReconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to be online", hookName), hookName+" did not come online")
 			if err != nil {
 				return err
 			}
-		case attributes.PostBootstrapHookWaitForOffline:
+		case attributes.HookWaitForOffline:
 			activeSSH := machine.GetActiveSSH()
 
 			err := WaitForDisconnect(ex, activeSSH, fmt.Sprintf("waiting for %s to go offline", hookName))
@@ -47,7 +52,7 @@ func (ex *Executioner) ExecuteHooks(hooks []attributes.PostBootstrapHookCommand,
 				fmt.Sprintf("%s %d", hookName, idx+1),
 				fmt.Sprintf("running %s: %s", hookName, hook),
 				hookName+" failed",
-				[]string{"sh", "-c", string(hook)},
+				WithEnv(env, []string{"sh", "-c", string(hook)}),
 			)
 			if err != nil {
 				return err

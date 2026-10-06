@@ -181,6 +181,9 @@ properties:
     type: object
     description: Fleet configuration
     properties:
+      activation_hooks:
+        description: "Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"
+        $ref: "#/definitions/ActivationHooks"
       auto_rollback:
         type: boolean
         description: Automatically roll back to the pre-deploy generation when activation fails
@@ -196,6 +199,9 @@ properties:
         additionalProperties:
           type: object
           properties:
+            activation_hooks:
+              description: "Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"
+              $ref: "#/definitions/ActivationHooks"
             auto_rollback:
               type: boolean
               description: Automatically roll back to the pre-deploy generation when activation fails
@@ -216,6 +222,9 @@ properties:
                 additionalProperties:
                   type: object
                   properties:
+                    activation_hooks:
+                      description: "Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"
+                      $ref: "#/definitions/ActivationHooks"
                     activation_mode:
                       type: string
                       description: Activation mode (overrides preset default)
@@ -238,6 +247,9 @@ properties:
                         anyOf:
                         - type: object
                           properties:
+                            activation_hooks:
+                              description: "Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"
+                              $ref: "#/definitions/ActivationHooks"
                             auto_rollback:
                               type: boolean
                               description: Automatically roll back to the pre-deploy generation when activation fails
@@ -379,6 +391,20 @@ required:
 - fleet
 additionalProperties: true
 definitions:
+  ActivationHooks:
+    type: object
+    properties:
+      post:
+        type: array
+        description: Commands to run after activation succeeds, only for mutating modes (skipped for non-mutating modes such as dry-activate); a failure fails the deploy without rolling back the successful activation
+        items:
+          type: string
+      pre:
+        type: array
+        description: Commands to run before activation (same format as bootstrap hooks); a failure skips activation and fails the machine without rollback, the system is untouched
+        items:
+          type: string
+    additionalProperties: false
   Bootstrap:
     type: object
     properties:

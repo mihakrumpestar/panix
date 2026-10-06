@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/flags"
@@ -81,9 +82,20 @@ func executeActivation(
 		mode = override
 	}
 
+	// Pre hooks gate the activation: a failure skips it and fails the
+	// machine without rollback, the system is untouched.
+	preErr := exc.ExecuteHooks(
+		fleetLeaf.Machine.ActivationHooks.Pre,
+		"pre activation hook",
+		activationHookEnv(fleetLeaf, hookPhasePre, mode, closure),
+	)
+	if preErr != nil {
+		return errors.Wrap(preErr, "pre activation hooks failed")
+	}
+
 	activationErr := phaseops.Activate(exc, fleetLeaf.Machine, *preset, closure, mode, fleetLeaf.Installable.User, nixCfg, nixFlavor)
 	if activationErr == nil {
-		return nil
+		return runPostActivationHooks(exc, fleetLeaf, mode, closure)
 	}
 
 	// No wrap here: the underlying command already prefixes its error with
@@ -102,6 +114,56 @@ func executeActivation(
 	}
 
 	return autoRollbackToPreviousGeneration(exc, fleetLeaf, *preset, nixCfg, nixFlavor, originalErr)
+}
+
+// Hook phases exported to hooks as PANIX_HOOK_PHASE.
+const (
+	hookPhasePre  = "pre"
+	hookPhasePost = "post"
+)
+
+// activationHookEnv builds the environment exported to every activation hook
+// invocation. Values unavailable on this path (no inspect data, no profile)
+// export as empty strings.
+func activationHookEnv(fleetLeaf *fleet.FleetLeaf, hookPhase, mode, closure string) []string {
+	var prevGeneration string
+
+	mi := fleetLeaf.Machine.MetaInspect.Load()
+	if mi != nil && mi.Generations != nil {
+		prevGeneration = strconv.FormatUint(uint64(mi.Generations.Current), 10)
+	}
+
+	return []string{
+		"PANIX_HOOK_PHASE=" + hookPhase,
+		"PANIX_CLOSURE=" + closure,
+		"PANIX_PROFILE_PATH=" + fleetLeaf.Installable.Preset.ProfilePath,
+		"PANIX_PREV_GENERATION=" + prevGeneration,
+		"PANIX_ACTIVATION_MODE=" + mode,
+		"PANIX_INSTALLABLE=" + fleetLeaf.Installable.Name.String(),
+		"PANIX_MACHINE=" + fleetLeaf.Machine.Name.String(),
+	}
+}
+
+// runPostActivationHooks runs post activation hooks after a successful
+// activation, skipped for non-mutating modes (nothing changed, nothing to
+// follow up). A post-hook failure fails the phase without triggering auto
+// rollback: the rollback path only runs for a failed activation, and rolling
+// back a generation that activated fine would discard the deploy.
+func runPostActivationHooks(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, mode, closure string) error {
+	if slices.Contains(fleetLeaf.Installable.Preset.NonMutatingModes, mode) {
+		return nil
+	}
+
+	postErr := exc.ExecuteHooks(
+		fleetLeaf.Machine.ActivationHooks.Post,
+		"post activation hook",
+		activationHookEnv(fleetLeaf, hookPhasePost, mode, closure),
+	)
+	if postErr != nil {
+		return errors.Wrap(postErr, "post activation hooks failed")
+	}
+
+	return nil
 }
 
 func autoRollbackToPreviousGeneration(
@@ -180,7 +242,7 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 		"nixos-install",
 		"installing NixOS",
 		"nixos-install failed",
-		append(machine.MaybeSudo(), phaseops.WithEnv(nixCfg.GetNixosInstallEnv(), slices.Concat(
+		append(machine.MaybeSudo(), executioner.WithEnv(nixCfg.GetNixosInstallEnv(), slices.Concat(
 			[]string{nixosInstall},
 			nixCfg.GetNixosInstallDefaultFlags(),
 			[]string{"--system", systemClosure, "--root", "/mnt"},
@@ -193,7 +255,7 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	}
 
 	if len(machine.Bootstrap.PostBootstrapInstallHooks) > 0 {
-		err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapInstallHooks, "post bootstrap install hook")
+		err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapInstallHooks, "post bootstrap install hook", nil)
 		if err != nil {
 			return errors.Wrap(err, "post bootstrap install hooks failed")
 		}
@@ -207,7 +269,7 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	}
 
 	if len(machine.Bootstrap.PostBootstrapProvisionedHooks) > 0 {
-		err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapProvisionedHooks, "post bootstrap provisioned hook")
+		err = exc.ExecuteHooks(machine.Bootstrap.PostBootstrapProvisionedHooks, "post bootstrap provisioned hook", nil)
 		if err != nil {
 			return errors.Wrap(err, "post bootstrap provisioned hooks failed")
 		}

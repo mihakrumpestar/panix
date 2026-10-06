@@ -96,6 +96,115 @@ func TestDecodeConfigFileWithDisabled(t *testing.T) {
 	assertion.True(mach.Disabled, "machine should be marked as disabled")
 }
 
+// TestDecodeConfigFileWithActivationHooks parses activation_hooks at every
+// tree level and verifies the fleet -> flake -> installable -> machine
+// inheritance: child entries stay first and inherited entries append, the
+// same slice semantics as every other Attributes list.
+func TestDecodeConfigFileWithActivationHooks(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "with_activation_hooks.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
+	must.True(ok, "expected flake 'my-flake' to exist")
+
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	must.True(ok, "expected nixosConfigurations to exist")
+
+	inst, ok := attrMap.Get("my-config")
+	must.True(ok, "expected configuration 'my-config' to exist")
+
+	mach, ok := inst.Machines.Get("my-machine")
+	must.True(ok, "expected machine 'my-machine' to exist")
+
+	assertion := assert.New(t)
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo fleet-pre"},
+		inst.ActivationHooks.Pre,
+		"fleet-level pre hooks must reach the installable (no installable-level pre hooks declared)",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo installable-post", "echo fleet-post"},
+		inst.ActivationHooks.Post,
+		"installable post hooks must keep their own entries and inherit the fleet ones",
+	)
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo machine-pre", "echo fleet-pre"},
+		mach.ActivationHooks.Pre,
+		"machine pre hooks must keep their own entries and inherit the fleet ones",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo installable-post", "echo fleet-post"},
+		mach.ActivationHooks.Post,
+		"machine post hooks must keep their own entries and inherit the installable and fleet ones",
+	)
+}
+
+// TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild covers the flake
+// level directly (its own entries plus the inherited fleet ones) and pins that
+// an explicitly empty child hook list (pre: []) inherits parent hooks exactly
+// like an absent list.
+func TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "with_activation_hooks.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("hooks-flake")
+	must.True(ok, "expected flake 'hooks-flake' to exist")
+
+	assertion := assert.New(t)
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-pre", "echo fleet-pre"},
+		flakePair.ActivationHooks.Pre,
+		"flake pre hooks must keep their own entries and inherit the fleet ones",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-post", "echo fleet-post"},
+		flakePair.ActivationHooks.Post,
+		"flake post hooks must keep their own entries and inherit the fleet ones",
+	)
+
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	must.True(ok, "expected nixosConfigurations to exist")
+
+	hooksConfig, ok := attrMap.Get("hooks-config")
+	must.True(ok, "expected configuration 'hooks-config' to exist")
+
+	absent, ok := hooksConfig.Machines.Get("absent-machine")
+	must.True(ok, "expected machine 'absent-machine' to exist")
+
+	empty, ok := hooksConfig.Machines.Get("empty-machine")
+	must.True(ok, "expected machine 'empty-machine' to exist")
+
+	// An explicitly empty child list must inherit exactly like an absent list.
+	assertion.Equal(absent.ActivationHooks.Pre, empty.ActivationHooks.Pre,
+		"pre: [] must inherit like an absent list")
+	assertion.Equal(absent.ActivationHooks.Post, empty.ActivationHooks.Post,
+		"post: [] must inherit like an absent list")
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-pre", "echo fleet-pre"},
+		empty.ActivationHooks.Pre,
+		"empty-machine pre hooks must equal the inherited flake and fleet entries",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-post", "echo fleet-post"},
+		empty.ActivationHooks.Post,
+		"empty-machine post hooks must equal the inherited flake and fleet entries",
+	)
+}
+
 func TestDecodeConfigFileFileNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +340,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 
 	must.NoError(mach.Init("my-machine", &cfg.Attributes))
 
-	// SSH init is separate — test it explicitly
+	// SSH init is separate, test it explicitly
 	mach.SSH.Hostname = "host.example.com"
 	must.NoError(mach.InitSSH("testhost", nixver.Info{}))
 

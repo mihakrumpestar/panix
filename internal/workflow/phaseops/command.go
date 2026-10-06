@@ -92,7 +92,7 @@ func transferCommandSourceArgv(source attributes.TransferSource) []string {
 		return command
 	}
 
-	return WithEnv([]string{runtimevars.SecretLocalPath + "=" + source.LocalPath}, command)
+	return executioner.WithEnv([]string{runtimevars.SecretLocalPath + "=" + source.LocalPath}, command)
 }
 
 // transferCommandScript returns the destination sh script: set -e aborts on

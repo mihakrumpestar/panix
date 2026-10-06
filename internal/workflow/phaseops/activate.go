@@ -91,7 +91,7 @@ func activatePackage(
 	profileSubcmd := profileSubcmdForFlavor(nixFlavor)
 
 	args := slices.Concat(
-		WithEnv(nixCfg.GetProfileAddEnv(), []string{"nix"}),
+		executioner.WithEnv(nixCfg.GetProfileAddEnv(), []string{"nix"}),
 		nixCfg.GetExperimentalFeatures(),
 		[]string{"profile", profileSubcmd},
 		nixCfg.GetProfileAddDefaultFlags(),

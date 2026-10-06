@@ -29,7 +29,7 @@ func CopyClosure(
 	baseArgs := nixCopyBaseArgs(installable, toURL)
 	// User env first so panix-internal NIX_SSHOPTS takes precedence on conflict.
 	env := slices.Concat(installable.Nix.GetCopyEnv(), sshOpts)
-	commandWithArgs := WithEnv(env, slices.Concat(
+	commandWithArgs := executioner.WithEnv(env, slices.Concat(
 		baseArgs,
 		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.CopyFlags),
 		toTransfer,
