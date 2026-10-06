@@ -333,13 +333,14 @@
           let
             hostPlatform = pkgs.stdenv.hostPlatform.system;
             hashes = {
-              x86_64-linux = "sha256-nLkbIOXHFXnuQajQDim2ecX+YOM0th+o19ParBlks2c=";
+              x86_64-linux = "sha256-QdeSo8EY2GkIg3wjdTYUPxFDz3FmGlHS3ntuwDnbCxQ=";
               aarch64-linux = "sha256-r2UmroyBZU+JWzooYvZkhH8NPD+3v+w+b/KVnVNzj80=";
             };
             # Release assets are named nix-installer-<system>; only the host
             # arch is supported because the e2e VMs run on the host arch.
             hash =
-              hashes.${hostPlatform} or (throw "nix-installer pin: unsupported platform ${hostPlatform}, expected x86_64-linux or aarch64-linux");
+              hashes.${hostPlatform}
+                or (throw "nix-installer pin: unsupported platform ${hostPlatform}, expected x86_64-linux or aarch64-linux");
             src = pkgs.fetchurl {
               url = "https://github.com/DeterminateSystems/nix-installer/releases/latest/download/nix-installer-${hostPlatform}";
               inherit hash;
@@ -357,7 +358,7 @@
         # derivation failure reports the new hash.
         debian-cloud-image = pkgs.fetchurl {
           url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2";
-          hash = "sha256-MNoTrQOocT888rmygwtNuJLi59yiVy+etpD4atTo/pc=";
+          hash = "sha256-QS7ukc78dTFu3ab8w7P3NYV8VOMdu27WNc/iz6CSya0=";
         };
 
         # Cloud-init NoCloud seed ISOs, built via genisoimage (pkgs.cdrkit).
