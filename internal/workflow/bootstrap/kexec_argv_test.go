@@ -178,7 +178,7 @@ func TestResolveKexecURL_Expansion(t *testing.T) {
 			name:  "default image is a $PANIX_ARCH template",
 			arch:  "aarch64",
 			image: attributes.KexecImage(""),
-			want:  strings.ReplaceAll(attributes.DefaultKexecImage, "$PANIX_ARCH", "aarch64"),
+			want:  strings.ReplaceAll(attributes.KexecImage("").String(), "$PANIX_ARCH", "aarch64"),
 		},
 		{
 			name:  "foreign references stay untouched",

@@ -1,0 +1,41 @@
+fleet:
+  activation_hooks:
+    pre:
+      - echo fleet-pre
+    post:
+      - echo fleet-post
+  flakes:
+    my-flake:
+      url: path:./my-flake
+      installables:
+        nixosConfigurations:
+          my-config:
+            activation_hooks:
+              post:
+                - echo installable-post
+            machines:
+              my-machine:
+                ssh:
+                  hostname: host.example.com
+                activation_hooks:
+                  pre:
+                    - echo machine-pre
+    hooks-flake:
+      url: path:./hooks-flake
+      activation_hooks:
+        pre:
+          - echo flake-pre
+        post:
+          - echo flake-post
+      installables:
+        nixosConfigurations:
+          hooks-config:
+            machines:
+              absent-machine:
+                ssh:
+                  hostname: absent.example.com
+              empty-machine:
+                ssh:
+                  hostname: empty.example.com
+                activation_hooks:
+                  pre: []

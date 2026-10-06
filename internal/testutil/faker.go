@@ -83,6 +83,11 @@ func (f *Faker) Installable(machines ...*machine.Machine) *installable.Installab
 	out := &installable.Installable{}
 	out.Machines = atomicorderedmap.New[string, *machine.Machine]()
 
+	// Flake registers every installable under the nixosConfigurations type
+	// key, so mirror the preset defaults production Init applies for that
+	// type (BootstrapNixOS) instead of leaving BootstrapNone.
+	out.Preset = installable.Preset{Bootstrap: installable.BootstrapNixOS}
+
 	for _, mach := range machines {
 		out.Machines.Set(f.nextID(), mach)
 	}

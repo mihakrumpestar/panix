@@ -135,7 +135,26 @@ func NewSchema(cfg SchemaConfig) *generator {
 		}
 	}
 
+	disambiguateDefNames(gen.defTypes)
+
 	return gen
+}
+
+// disambiguateDefNames qualifies definition names with the package name when
+// distinct types share a Go type name (e.g. nix.NixConfig and
+// attributes.NixConfig): definition keys must be unique and deterministic
+// regardless of map iteration order, so every colliding type is renamed.
+func disambiguateDefNames(defTypes map[reflect.Type]string) {
+	nameCounts := make(map[string]int, len(defTypes))
+	for _, name := range defTypes {
+		nameCounts[name]++
+	}
+
+	for typ, name := range defTypes {
+		if nameCounts[name] > 1 {
+			defTypes[typ] = strings.ReplaceAll(typ.String(), ".", "_")
+		}
+	}
 }
 
 // findMapValueType detects map-like struct wrappers (no YAML-visible fields,
@@ -731,11 +750,18 @@ func (g *generator) setFieldDescription(prop any, field reflect.StructField) {
 		desc = field.Tag.Get("help")
 	}
 
+	// The `default` tag is for scalars only: list defaults live in Go vars and
+	// are documented in the field's desc text (internal/config/attributes),
+	// so a tag on any other kind is ignored entirely (no schema `default`,
+	// no desc suffix).
 	defaultVal := field.Tag.Get("default")
 	if defaultVal != "" {
-		typeDef.Default = parseDefaultValue(defaultVal, field.Type)
-		if desc != "" {
-			desc += " (default: " + defaultVal + ")"
+		if def, scalar := parseDefaultValue(defaultVal, field.Type); scalar {
+			typeDef.Default = def
+
+			if desc != "" {
+				desc += " (default: " + defaultVal + ")"
+			}
 		}
 	}
 
@@ -771,23 +797,29 @@ func yamlFieldName(field reflect.StructField, yamlTag string) string {
 	return strings.ToLower(field.Name)
 }
 
-func parseDefaultValue(val string, typ reflect.Type) any {
+// parseDefaultValue converts a `default` struct-tag value into the schema
+// default for scalar-ish kinds (bool, the int/uint family, string, and
+// time.Duration). Any other kind (slice, map, struct, pointer, ...) reports
+// ok=false and no default: the `default` tag is for scalars only.
+func parseDefaultValue(val string, typ reflect.Type) (any, bool) {
 	if typ.String() == "time.Duration" {
-		return val
+		return val, true
 	}
 
 	switch typ.Kind() {
 	case reflect.Bool:
-		return val == "true"
+		return val == "true", true
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		intVal, err := strconv.Atoi(val)
 		if err == nil {
-			return intVal
+			return intVal, true
 		}
 
-		return val
-	default:
-		return val
+		return val, true
+	case reflect.String:
+		return val, true
 	}
+
+	return nil, false
 }

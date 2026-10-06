@@ -8,6 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/pkg/urlx"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +32,14 @@ func registerPathValidators(validate *validator.Validate) {
 	})
 	if err != nil {
 		panic(errors.Wrap(err, "failed to register dir validation"))
+	}
+
+	// Shape check only: a local file need not exist at config load time.
+	err = validate.RegisterValidation("url_or_file", func(fl validator.FieldLevel) bool {
+		return urlx.ValidateSource(fl.Field().String()) == nil
+	})
+	if err != nil {
+		panic(errors.Wrap(err, "failed to register url_or_file validation"))
 	}
 }
 

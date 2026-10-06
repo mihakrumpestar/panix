@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,7 @@ import (
 
 const cmdTimeout = 5 * time.Second
 
-var errClipboardUnavailable = errors.New("failed to copy to clipboard: no clipboard method available (tried wl-copy, xclip, xsel, and OSC52)")
+var errClipboardUnavailable = errors.New("failed to copy to clipboard: no clipboard method available (tried pbcopy, wl-copy, xclip, xsel, and OSC52)") //nolint:lll
 
 var envCache = struct {
 	sync.Once
@@ -25,8 +26,40 @@ var envCache = struct {
 	isWayland bool
 }{}
 
+// clipboardCommand is one candidate clipboard command.
+type clipboardCommand struct {
+	name string
+	args []string
+}
+
+// clipboardPlan returns the clipboard commands to probe, in order, for the
+// given platform. Darwin always has pbcopy; Linux probes the Wayland tool
+// first when a Wayland session is detected, then the X11 tools; other
+// platforms have no command (OSC52 handles them).
+func clipboardPlan(goos string, isWayland bool) []clipboardCommand {
+	switch goos {
+	case "darwin":
+		return []clipboardCommand{{name: "pbcopy"}}
+	case "linux":
+		if isWayland {
+			return []clipboardCommand{
+				{name: "wl-copy", args: []string{"--"}},
+				{name: "xclip", args: []string{"-selection", "clipboard", "-in"}},
+				{name: "xsel", args: []string{"--clipboard", "--input"}},
+			}
+		}
+
+		return []clipboardCommand{
+			{name: "xclip", args: []string{"-selection", "clipboard", "-in"}},
+			{name: "xsel", args: []string{"--clipboard", "--input"}},
+		}
+	default:
+		return nil
+	}
+}
+
 // CopyToClipboard copies text to system clipboard. Tries system commands
-// (wl-copy, xclip, xsel), then falls back to OSC52 for terminal/SSH.
+// (pbcopy, wl-copy, xclip, xsel), then falls back to OSC52 for terminal/SSH.
 func CopyToClipboard(text string) error {
 	normalized := normalizeText(text)
 
@@ -62,28 +95,23 @@ func isWayland() bool {
 }
 
 func copyWithCommand(ctx context.Context, text string) bool {
-	if isWayland() {
-		cmd := exec.CommandContext(ctx, "wl-copy", "--")
+	return probeClipboardCommands(ctx, clipboardPlan(runtime.GOOS, isWayland()), text)
+}
+
+// probeClipboardCommands feeds text to each plan candidate via stdin and
+// reports whether any of them succeeded.
+func probeClipboardCommands(ctx context.Context, plan []clipboardCommand, text string) bool {
+	for _, candidate := range plan {
+		//nolint:gosec // the candidate comes from the fixed clipboard plan, not user input
+		cmd := exec.CommandContext(ctx, candidate.name, candidate.args...)
 		cmd.Stdin = bytes.NewReader([]byte(text))
 
-		err := cmd.Run()
-		if err == nil {
+		if cmd.Run() == nil {
 			return true
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-in")
-	cmd.Stdin = bytes.NewReader([]byte(text))
-
-	err := cmd.Run()
-	if err == nil {
-		return true
-	}
-
-	cmd = exec.CommandContext(ctx, "xsel", "--clipboard", "--input")
-	cmd.Stdin = bytes.NewReader([]byte(text))
-
-	return cmd.Run() == nil
+	return false
 }
 
 func copyWithOSC52(text string) error {

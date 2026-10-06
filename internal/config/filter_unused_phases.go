@@ -25,13 +25,30 @@ func hasRequiredPhases(f *fleet.Fleet) optionalPhases {
 	var has optionalPhases
 
 	for _, fleetLeaf := range f.AllMachines() {
-		m := fleetLeaf.Machine
-		if len(m.Secrets) > 0 {
+		mach := fleetLeaf.Machine
+		if len(mach.Secrets) > 0 {
 			has.Secrets = true
 		}
 
-		if m.Bootstrap.SSH.IsInitialized() || m.Bootstrap.ForceBootstrap {
-			has.Bootstrap = true
+		// A machine keeps the bootstrap phase only when its preset
+		// bootstraps something. post_bootstrap_hooks run as part of a
+		// bootstrap (after the Nix installer, or after disko on the NixOS
+		// path) and never create one, so a machine that will not bootstrap
+		// does not keep the phase.
+		if fleetLeaf.Installable.Preset.IsBootstrappable() {
+			if mach.Bootstrap.SSH.IsInitialized() || mach.Bootstrap.ForceBootstrap {
+				has.Bootstrap = true
+			}
+
+			// The nix-install bootstrap mode installs Nix on targets that lack it,
+			// over the regular SSH connection, without any bootstrap config. That
+			// asymmetry with the NixOS bootstrap gate above is deliberate: kexec
+			// and disko are destructive and demand explicit intent (bootstrap ssh
+			// or force_bootstrap), while an automatic Nix install is additive and
+			// idempotent. Opt out with bootstrap.disable_nix_install.
+			if fleetLeaf.Installable.Preset.BootstrapsNix() && !mach.Bootstrap.DisableNixInstall {
+				has.Bootstrap = true
+			}
 		}
 
 		// Early return since we already have all possible optional phases

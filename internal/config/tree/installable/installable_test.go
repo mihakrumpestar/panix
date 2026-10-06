@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Type-level fields (IsSystemLevel, IsBootstrappable, OmitTypeFromAttrPath) are
+// Type-level fields (IsSystemLevel, Bootstrap, OmitTypeFromAttrPath) are
 // always taken from the defaults, ignoring any user-provided value.
 func TestApplyPresetDefaults_TypeLevelFields(t *testing.T) {
 	t.Parallel()
@@ -25,42 +25,42 @@ func TestApplyPresetDefaults_TypeLevelFields(t *testing.T) {
 			name: "user false on true defaults is overwritten (packages-like: omit=true)",
 			userPreset: Preset{
 				IsSystemLevel:        new(false), // user tries to override
-				IsBootstrappable:     false,
+				Bootstrap:            BootstrapNixOS,
 				OmitTypeFromAttrPath: false, // user tries to disable omit
 			},
 			defaults: Preset{
 				IsSystemLevel:        new(false),
-				IsBootstrappable:     false,
+				Bootstrap:            BootstrapNixInstall,
 				OmitTypeFromAttrPath: true,
 			},
 		},
 		{
 			name: "user true on false defaults is overwritten (nixos-like)",
 			userPreset: Preset{
-				IsSystemLevel:        new(true), // user tries to set system-level on a user-level type
-				IsBootstrappable:     true,      // user tries to enable bootstrap
-				OmitTypeFromAttrPath: true,      // user tries to enable omit
+				IsSystemLevel:        new(true),     // user tries to set system-level on a user-level type
+				Bootstrap:            BootstrapNone, // user tries to disable bootstrap
+				OmitTypeFromAttrPath: true,          // user tries to enable omit
 			},
 			defaults: Preset{
 				IsSystemLevel:        new(true),
-				IsBootstrappable:     true,
+				Bootstrap:            BootstrapNixOS,
 				OmitTypeFromAttrPath: false,
 			},
 		},
 		{
-			name: "nixosConfigurations defaults: system-level and bootstrappable enforced",
+			name: "nixosConfigurations defaults: system-level and NixOS bootstrap enforced",
 			userPreset: Preset{
 				IsSystemLevel:        new(false),
-				IsBootstrappable:     false,
+				Bootstrap:            BootstrapNone,
 				OmitTypeFromAttrPath: true,
 			},
 			defaults: presets[FlakeOutputType("nixosConfigurations")],
 		},
 		{
-			name: "packages defaults: omit-type enforced, not system-level, not bootstrappable",
+			name: "packages defaults: omit-type enforced, not system-level, nix-install bootstrap enforced",
 			userPreset: Preset{
 				IsSystemLevel:        new(true),
-				IsBootstrappable:     true,
+				Bootstrap:            BootstrapNixOS,
 				OmitTypeFromAttrPath: false,
 			},
 			defaults: presets[FlakeOutputType("packages")],
@@ -81,7 +81,7 @@ func TestApplyPresetDefaults_TypeLevelFields(t *testing.T) {
 func assertTypeLevelFields(t *testing.T, inst *Installable, defaults Preset) {
 	t.Helper()
 	assert.Equal(t, defaults.IsSystemLevel, inst.Preset.IsSystemLevel, "IsSystemLevel should always come from defaults")
-	assert.Equal(t, defaults.IsBootstrappable, inst.Preset.IsBootstrappable, "IsBootstrappable should always come from defaults")
+	assert.Equal(t, defaults.Bootstrap, inst.Preset.Bootstrap, "Bootstrap should always come from defaults")
 	assert.Equal(t, defaults.OmitTypeFromAttrPath, inst.Preset.OmitTypeFromAttrPath, "OmitTypeFromAttrPath should always come from defaults")
 }
 
@@ -194,7 +194,7 @@ func TestApplyPresetDefaults_AllKnownTypes(t *testing.T) {
 
 			// Type-level fields always come from defaults.
 			assert.Equal(t, expected.IsSystemLevel, inst.Preset.IsSystemLevel, "IsSystemLevel")
-			assert.Equal(t, expected.IsBootstrappable, inst.Preset.IsBootstrappable, "IsBootstrappable")
+			assert.Equal(t, expected.Bootstrap, inst.Preset.Bootstrap, "Bootstrap")
 			assert.Equal(t, expected.OmitTypeFromAttrPath, inst.Preset.OmitTypeFromAttrPath, "OmitTypeFromAttrPath")
 
 			// Init must also set Type and Name from the keys.
@@ -234,6 +234,7 @@ func TestInitCustomPresets(t *testing.T) {
 		NonMutatingModes:      []string{"boot"},
 		ProfileSkipModes:      []string{"boot"},
 		ActivationDefaultMode: "switch",
+		Bootstrap:             BootstrapNixOS,
 	})
 
 	t.Run("empty preset merges all custom defaults", func(t *testing.T) {
@@ -261,9 +262,10 @@ func TestInitCustomPresets(t *testing.T) {
 	t.Run("type-level fields always come from the custom preset", func(t *testing.T) {
 		t.Parallel()
 
-		// Type-level field: the per-installable false is ignored.
+		// Type-level fields: the per-installable values are ignored.
 		inst := &Installable{Preset: Preset{
 			IsSystemLevel: new(false),
+			Bootstrap:     BootstrapNixInstall,
 		}}
 
 		err := inst.Init(FlakeOutputType("colmenaConfigurations"), "cfg0", attributes.New(), nil, customPresets)
@@ -272,6 +274,8 @@ func TestInitCustomPresets(t *testing.T) {
 		require.NotNil(t, inst.Preset.IsSystemLevel)
 		assert.True(t, *inst.Preset.IsSystemLevel,
 			"system_level is type-level and must always come from the custom preset")
+		assert.Equal(t, BootstrapNixOS, inst.Preset.Bootstrap,
+			"bootstrap_mode is type-level and must always come from the custom preset")
 	})
 }
 
@@ -296,6 +300,81 @@ func assertCustomPresetDefaultsMerged(t *testing.T, customPresets CustomOutputTy
 	assert.True(t, *inst.Preset.SetProfile)
 	require.NotNil(t, inst.Preset.IsSystemLevel)
 	assert.True(t, *inst.Preset.IsSystemLevel)
+	// The Bootstrap mode is type-level: the declared bootstrap_mode on the
+	// custom type propagates to the resolved installable.
+	assert.Equal(t, BootstrapNixOS, inst.Preset.Bootstrap, "declared bootstrap_mode should be merged as a type-level default")
+}
+
+// The bootstrap mode is type-level like system_level: a declared
+// bootstrap_mode on a custom type propagates to the resolved installable, an
+// undeclared one stays BootstrapNone, and a per-installable preset value is
+// ignored in favor of the type declaration (for built-in types, in favor of
+// the built-in mode).
+//nolint:funlen
+func TestInitBootstrapModeIsTypeLevel(t *testing.T) {
+	t.Parallel()
+
+	customPresets := atomicorderedmap.New[string, Preset]()
+	customPresets.Set("nixosLikeConfigurations", Preset{
+		IsSystemLevel: new(true),
+		Bootstrap:     BootstrapNixOS,
+		BuildPath:     NixOSSystemBuildPath,
+	})
+	customPresets.Set("nixInstallLikeConfigurations", Preset{
+		IsSystemLevel: new(false),
+		Bootstrap:     BootstrapNixInstall,
+	})
+	customPresets.Set("plainConfigurations", Preset{
+		IsSystemLevel: new(false),
+	})
+
+	tests := []struct {
+		name       string
+		typ        FlakeOutputType
+		userPreset Preset
+		want       BootstrapMode
+	}{
+		{
+			name: "declared nixos propagates to the installable",
+			typ:  FlakeOutputType("nixosLikeConfigurations"),
+			want: BootstrapNixOS,
+		},
+		{
+			name: "declared nix-install propagates to the installable",
+			typ:  FlakeOutputType("nixInstallLikeConfigurations"),
+			want: BootstrapNixInstall,
+		},
+		{
+			name: "undeclared stays BootstrapNone",
+			typ:  FlakeOutputType("plainConfigurations"),
+			want: BootstrapNone,
+		},
+		{
+			name:       "per-installable value ignored in favor of the type declaration",
+			typ:        FlakeOutputType("nixosLikeConfigurations"),
+			userPreset: Preset{Bootstrap: BootstrapNixInstall},
+			want:       BootstrapNixOS,
+		},
+		{
+			name:       "per-installable value ignored in favor of the built-in mode",
+			typ:        FlakeOutputType("nixosConfigurations"),
+			userPreset: Preset{Bootstrap: BootstrapNone},
+			want:       BootstrapNixOS,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			inst := &Installable{Preset: tt.userPreset}
+
+			err := inst.Init(tt.typ, "cfg0", attributes.New(), nil, customPresets)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, inst.Preset.Bootstrap)
+		})
+	}
 }
 
 // Pins the builder: always the first declared machine, so once-per-installable

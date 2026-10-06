@@ -1,11 +1,11 @@
 ---
 title: Overview
-description: Converting bare metal or existing systems to NixOS.
+description: NixOS bootstrap and Nix installer bootstrap.
 sidebar:
   order: 1
 ---
 
-Bootstrap converts a bare-metal or existing system into a freshly installed NixOS machine without physical access or installation media.
+Bootstrap provisions a target before the regular deploy workflow continues: it converts a bare-metal or existing system into a freshly installed NixOS machine without physical access or installation media, or it installs Nix itself so profile deployments can run on targets that lack it.
 
 ## Demo
 
@@ -17,7 +17,20 @@ The demo bootstraps with kexec over an existing Arch install and auto-enrolls La
 Note that it was made with an older version of TUI, and therefore looks different from the current one.
 :::
 
-## The Bootstrap Flow
+## Two Bootstrap Modes
+
+The Bootstrap phase runs one of two modes, picked by the installable type's bootstrap mode (built-in types infer it, custom types declare `bootstrap_mode`, see [Output Types](/configuration/output-types/)):
+
+| Mode | Types | What runs |
+|------|-------|-----------|
+| **NixOS bootstrap** | `nixosConfigurations`, custom types with `bootstrap_mode: nixos` | kexec into a NixOS installer (if needed), disko partitioning, `nixos-install`, reboot |
+| **Nix installer bootstrap** | `systemConfigs`, `homeConfigurations`, `darwinConfigurations`, `nixOnDroidConfigurations`, `packages`, `maidConfigurations`, custom types with `bootstrap_mode: nix-install` | fetch and run the Nix installer when the target lacks `nix`, before Build, Transfer, Secrets, and Activate |
+
+Custom output types are not bootstrapped by default: their targets must already have Nix. They opt in by declaring `bootstrap_mode` in their `output_types` declaration (see [Output Types](/configuration/output-types/)).
+
+## NixOS Bootstrap
+
+### The Bootstrap Flow
 
 1. **Inspect** phase detects the target OS; if not NixOS, **kexec** boots into a NixOS installer image
 2. **Disko** partitions disks according to your configuration
@@ -44,7 +57,7 @@ machines:
 
 See [Bootstrap SSH](/guides/bootstrap/ssh/) for SSH configuration, [Kexec](/guides/bootstrap/kexec/) for custom images and local tarballs, [Bootstrap Hooks](/guides/bootstrap/hooks/) for hook points, and [Force Reinstall](/guides/reinstall/) for redoing already running systems.
 
-## Hardware Config
+### Hardware Config
 
 Once connected to the target, retrieve the hardware configuration for your NixOS config:
 
@@ -62,7 +75,7 @@ Panix can automate this: set `hardware_config_path` on the machine and Panix run
 
 After writing the file, Panix marks it for addition (`git add -N`, forced when gitignored) so the build that follows already has it: Nix snapshots a git-backed flake from the git tree, so an untracked file would be missing.
 
-## Encryption Password
+### Encryption Password
 
 If your bootstrap uses disk encryption, create the password file:
 
@@ -72,3 +85,66 @@ echo -n "test" > /tmp/disko-encryption-password.txt
 ```
 
 When specified as a disk encryption key in config, this file is transferred to the target during bootstrap, before disko runs.
+
+## Nix Installer Bootstrap
+
+Every non-NixOS built-in type, and every custom type with `bootstrap_mode: nix-install`, is bootstrappable via a Nix installer step: when the target lacks `nix`, the Bootstrap phase installs it before Build, Transfer, Secrets, and Activate run. This covers `systemConfigs` (system-manager), `homeConfigurations`, `darwinConfigurations`, `nixOnDroidConfigurations`, `packages`, and `maidConfigurations` targets, including Debian, Ubuntu, or macOS machines that were never Nix machines.
+
+The flow:
+
+1. **Inspect** probes `nix` on the target; a missing Nix is expected and tolerated (unless `disable_nix_install` is set, see below)
+2. **Bootstrap** fetches the installer to the target (with `curl` for URLs, with `rsync` for local paths) and marks it executable, runs it elevated with the configured args (a shell script runs via its shebang, an installer binary runs directly), verifies `nix` works, then runs `post_bootstrap_hooks`
+3. **Build**, **Transfer**, **Secrets**, and **Activate** proceed as usual, now against a target with Nix
+
+The step is zero-config by default: the installer from `https://install.determinate.systems/nix` (the [Determinate nix-installer](https://github.com/DeterminateSystems/nix-installer)) runs with `install --no-confirm`, the canonical unattended invocation. The platform planner is auto-detected (linux, macos), so the same config works on both. On a systemd Debian or Ubuntu server this performs the default multi-user daemon install (`nix-daemon`). The installer writes the store and profiles system-wide, so it runs elevated: via the configured `sudo_program`, or bare when the SSH user is already root. Root or passwordless sudo is required.
+
+### Configuration
+
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`. Like all `bootstrap` settings, `nix` and `disable_nix_install` inherit down from fleet, flake, or installable level. Both apply to the Nix installer bootstrap only; for the NixOS bootstrap (`nixosConfigurations`, custom types with `bootstrap_mode: nixos`) they have no effect.
+
+```yaml
+bootstrap:
+  nix:
+    url: https://install.determinate.systems/nix     # default; shell script or installer binary, http(s) URL or local path
+    args: ["install", "--no-confirm"]                # default; full replacement of the installer args
+    curl_default_flags: ["--fail", "-#", "-L", "-C", "-"]  # default; base curl flags for the download
+  disable_nix_install: false                         # default; opt out of the automatic install
+```
+
+- `nix.url`: installer source, a shell script or the `nix-installer` binary. An http(s) URL is downloaded on the target with `curl`; a local path is transferred with `rsync` (see [Requirements](/getting-started/requirements/)). Any other URL scheme is rejected.
+- `nix.args`: the argument list passed to the installer after its path. It is a full replacement of the default `["install", "--no-confirm"]`, not an append, so keep the subcommand and flags you want (for example `install --no-confirm`) in the value. An explicitly empty list (`[]`) runs the installer with no arguments.
+- `nix.curl_default_flags`: base flags for `curl` when `nix.url` is downloaded on the target. Default `["--fail", "-#", "-L", "-C", "-"]`; set to `[]` to clear them. Same semantics as [`bootstrap.kexec.curl_default_flags`](/configuration/nix-flags/).
+- `disable_nix_install: true` opts out of the automatic install. A target without Nix then fails at Inspect with the `nix not found on remote machine` error, which mentions the opt-out. Install Nix manually, or unset the flag.
+
+For machines without internet access, stage the installer binary locally and point `nix.url` at its path; Panix transfers it with `rsync` and runs it directly. The `nix-installer` binary is self-contained (it bundles the Nix it installs), so nothing is downloaded on the target.
+
+Custom output types become bootstrappable at the type level: declare `bootstrap_mode` under `output_types`, `nix-install` for this Nix installer bootstrap or `nixos` for the full NixOS bootstrap (which requires `system_level: true` and `build_path: config.system.build.toplevel`: the output must be a standard NixOS system evaluation, since nixos-install installs the built system closure and disko resolves `config.system.build.diskoScript` under the same flake output); omitted means no bootstrap. Per-installable `preset:` values are ignored (see [Output Types](/configuration/output-types/)).
+
+### Planner Arguments
+
+Panix invokes the installer with `install --no-confirm`, the canonical unattended invocation; planner subcommands and planner-specific flags are documented in the [nix-installer docs](https://github.com/DeterminateSystems/nix-installer).
+
+### Pinning and Idempotence
+
+- Pin the installer for reproducible provisioning with a versioned installer URL, e.g. `url: https://install.determinate.systems/nix/tag/v3.23.0`.
+- Re-running the installer with settings matching `/nix/receipt.json` on the target succeeds (exit 0); changed settings require an uninstall first.
+
+### Forcing a Re-run
+
+`force_bootstrap: true` re-runs the installer even when Nix is already present. Like the NixOS bootstrap it requires `allow_destructive_actions: true`:
+
+Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
+
+```yaml
+machines:
+  server:
+    bootstrap:
+      allow_destructive_actions: true  # Required for force_bootstrap
+      force_bootstrap: true            # Re-run the Nix installer even when Nix is present
+```
+
+See [Force Reinstall](/guides/reinstall/) for the NixOS counterpart and the full flag set.
+
+### Target Requirements
+
+Installing Nix on a target needs network access to the installer URL (`https://install.determinate.systems/nix` by default), `curl` on the target (`rsync` instead when `nix.url` is a local path), and root or passwordless sudo. See [Requirements](/getting-started/requirements/).

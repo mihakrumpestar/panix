@@ -1,0 +1,84 @@
+---
+title: Activation Hooks
+description: Run commands before and after the activation step of panix deploy.
+sidebar:
+  order: 11
+---
+
+Run commands around the activation step of `panix deploy`, per machine, on the target machine, for both local and remote machines.
+
+The command format is identical to bootstrap hooks: shell script strings, each runs as `sh -c` on the target, in order, and the first failure stops the phase (fail fast). Hooks run as the SSH user on the target, unprivileged; elevate explicitly with `sudo` where needed (passwordless, since Panix cannot answer prompts), exactly like bootstrap hooks. Use POSIX syntax: on Debian-family targets `sh` is dash, so bash-isms like `[[` or arrays will fail.
+
+## Configuration
+
+`activation_hooks` is a regular attribute: set it at fleet, flake, installable, or machine level, and it is inherited downward. Fleet-wide defaults with a per-machine override:
+
+```yaml
+fleet:
+  activation_hooks:
+    post:
+      - waitForOnline
+  flakes:
+    my-flake:
+      installables:
+        nixosConfigurations:
+          webserver:
+            machines:
+              web-01:
+                activation_hooks:
+                  pre:
+                    - nix run nixpkgs#nvd -- diff /run/current-system "$PANIX_CLOSURE"
+```
+
+Each of `pre` and `post` is a list of commands. Omitting a list at a level inherits entries from parent levels (an explicitly empty list inherits too, it cannot clear); to run no hooks for a phase, omit or leave empty the list at every level.
+
+## When hooks run
+
+| Hook | When it runs |
+|------|--------------|
+| `pre` | Before the profile is set and before activation, for every activation mode, including `dry-activate` |
+| `post` | After a successful activation, only for mutating activation modes; skipped for non-mutating modes such as `dry-activate` |
+
+Failure semantics:
+
+- A `pre` hook failure stops the machine: activation is skipped. No rollback is needed because the system was not touched.
+- A `post` hook failure fails the phase but does not trigger auto rollback.
+- Hooks are not run for the bootstrap path (see [bootstrap hooks](/guides/bootstrap/hooks/) for that) or during rollback.
+- In dry-run mode hooks are logged as steps but not executed.
+
+## Special Hook Commands
+
+- `waitForOnline`: Wait for machine to become reachable (useful after reboot)
+- `waitForOffline`: Wait for machine to become unreachable (useful during reboot)
+
+These behave exactly as in bootstrap hooks: exact-match keywords, not shell commands; anything else, including `waitForOnline && echo up`, runs as a shell script via `sh -c`.
+
+## Environment Variables
+
+Every hook invocation receives:
+
+| Variable | Value |
+|----------|-------|
+| `PANIX_HOOK_PHASE` | `pre` or `post` |
+| `PANIX_CLOSURE` | Store path of the new closure |
+| `PANIX_PROFILE_PATH` | Profile path of the preset; may contain a literal `~` for user-level presets, which expands against the hook-running user's home (the SSH user), not necessarily the deploy target user |
+| `PANIX_PREV_GENERATION` | Generation number active before activation, may be empty |
+| `PANIX_ACTIVATION_MODE` | Resolved activation mode, e.g. `switch`; may be empty for presets without a default activation mode |
+| `PANIX_INSTALLABLE` | Installable name |
+| `PANIX_MACHINE` | Machine name |
+
+## Example: Diff Before Switching
+
+Show what changes before switching, using `nvd` via `nix run` so it does not need to be installed inside the closure:
+
+```yaml
+machines:
+  web-01:
+    activation_hooks:
+      pre:
+        - nix run nixpkgs#nvd -- diff /run/current-system "$PANIX_CLOSURE"
+```
+
+The diff is informational: Panix does not gate or prompt on activation, so the switch proceeds regardless of what the diff shows.
+
+See the [phase pipeline](/concepts/phases/) for where activation sits in the deploy flow, [Auto Rollback](/guides/auto-rollback/) for what happens when activation itself fails, and the [configuration reference](/configuration/reference/) for the full attribute schema.

@@ -2,9 +2,11 @@ package inspect
 
 import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/pkg/errors"
 )
 
 type Handler struct{}
@@ -25,17 +27,9 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return err //nolint:wrapcheck // error names installable, target user, and executing user
 	}
 
-	if fleetLeaf.Installable.Preset.IsBootstrappable {
-		err = runBootstrapInspect(exc, machineI)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Non-bootstrappable: check nix is available
-		err = checkNixAvailable(exc, machineI)
-		if err != nil {
-			return err
-		}
+	err = runBootstrapModeInspect(exc, fleetLeaf)
+	if err != nil {
+		return err
 	}
 
 	// System info detection (all types)
@@ -58,6 +52,29 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 	return nil
 }
 
+// runBootstrapModeInspect is the bootstrap-mode matrix: full NixOS bootstrap
+// inspects the installer state, nix-install only probes nix (the bootstrap
+// phase installs it), everything else requires nix to be present.
+func runBootstrapModeInspect(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+	machineI := fleetLeaf.Machine
+
+	// The NixOS bootstrap (kexec, disko, nixos-install) requires a Linux
+	// target; a macOS host cannot run it. MetaInspect.OS is populated by
+	// runCommonChecks, which always runs first.
+	if fleetLeaf.Installable.Preset.BootstrapsNixOS() && isDarwinHost(machineI) {
+		return errors.New("NixOS bootstrap requires a Linux target, but macOS was detected; deploy a darwinConfigurations (or homeConfigurations) output instead") //nolint:lll
+	}
+
+	switch fleetLeaf.Installable.Preset.Bootstrap {
+	case installable.BootstrapNixOS:
+		return runBootstrapInspect(exc, machineI)
+	case installable.BootstrapNixInstall:
+		return checkNixForInstall(exc, machineI)
+	default:
+		return phaseops.ProbeNixAvailable(exc, machineI) //nolint:wrapcheck // error is pre-annotated with its own context
+	}
+}
+
 // runCommonChecks covers the checks that apply to all output types.
 func runCommonChecks(exc *executioner.Executioner, machineI *machine.Machine) error {
 	if machineI.SSH.IsLocal() {
@@ -78,6 +95,11 @@ func runCommonChecks(exc *executioner.Executioner, machineI *machine.Machine) er
 	}
 
 	err := detectArchitecture(exc, machineI)
+	if err != nil {
+		return err
+	}
+
+	err = detectOS(exc, machineI)
 	if err != nil {
 		return err
 	}

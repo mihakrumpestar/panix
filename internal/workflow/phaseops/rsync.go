@@ -11,14 +11,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TransferFile rsyncs source to the machine; transferOSSecrets targets
-// the bootstrapping root because the final root may not exist yet.
+// TransferFile rsyncs source to the machine; bootstrapsNixOS routes the
+// destination via the bootstrapping root, because the final root may not
+// exist yet (see TransferSecret for the parameter semantics).
 func TransferFile(
 	exc *executioner.Executioner,
 	machine *machine.Machine,
 	source attributes.TransferSource,
 	transferOfWhat string,
-	transferOSSecrets bool,
+	bootstrapsNixOS bool,
 ) error {
 	activeSSH := machine.GetActiveSSH()
 
@@ -45,10 +46,7 @@ func TransferFile(
 
 	commandWithArgs = append(commandWithArgs, source.LocalPath)
 
-	secretRemotePath := source.RemotePath
-	if transferOSSecrets {
-		secretRemotePath = machine.MaybeBootstrappingPath(source.RemotePath)
-	}
+	secretRemotePath := machine.MaybeBootstrappingPath(source.RemotePath, bootstrapsNixOS)
 
 	if activeSSH.IsLocal() {
 		commandWithArgs = append(commandWithArgs, secretRemotePath)

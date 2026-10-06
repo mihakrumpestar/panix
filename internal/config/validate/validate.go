@@ -16,9 +16,17 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-// ValidateStructTags runs struct-tag validation over the whole configuration
-// (via reflection on conf, which must be the *config.Config value), followed
-// by the path, flake, build-mode, and output-type checks. The fleet and its
+// ValidateStructTags validates the whole configuration: the output-type
+// checks first, then struct-tag validation over the whole configuration (via
+// reflection on conf, which must be the *config.Config value), followed by
+// the path, flake, and build-mode checks. The output-type checks run first
+// because validateDeclaredPresets is the authoritative bootstrap_mode check
+// (house-style messages naming the YAML keys): the schema's oneof tag on
+// Preset.Bootstrap is also enforced by the struct-tag walk, but the
+// type-level value is propagated to every installable of the type, so that
+// walk would report the same declaration mistake once per installable with
+// Go field paths. The declaration checks short-circuit first, so the
+// tag-driven message can never surface for output_types. The fleet and its
 // related settings are passed as explicit leaf-typed parameters rather than
 // derived from conf, because this package cannot import the config package
 // (the import direction is config -> validate).
@@ -33,7 +41,12 @@ func ValidateStructTags(
 
 	registerPathValidators(validate)
 
-	err := validate.Struct(conf)
+	err := validateOutputTypes(fl, outputTypes)
+	if err != nil {
+		return errors.Wrap(err, "invalid output type configuration")
+	}
+
+	err = validate.Struct(conf)
 	if err != nil {
 		return errors.New(humanizeValidationErrors(err))
 	}
@@ -53,11 +66,6 @@ func ValidateStructTags(
 	err = validateBuildModes(fl)
 	if err != nil {
 		return errors.Wrap(err, "invalid build mode configuration")
-	}
-
-	err = validateOutputTypes(fl, outputTypes)
-	if err != nil {
-		return errors.Wrap(err, "invalid output type configuration")
 	}
 
 	return nil
@@ -124,6 +132,8 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("must be a valid URL, got: %v", fieldError.Value())
 	case "uri":
 		return fmt.Sprintf("must be a valid URI, got: %v", fieldError.Value())
+	case "url_or_file":
+		return fmt.Sprintf("must be an http(s) URL or a local path (unsupported schemes are rejected), got: %v", fieldError.Value())
 	case "required_without":
 		return humanizeRequiredWithout(fieldError)
 	case "oneof":
@@ -202,7 +212,9 @@ func validateBuildMode(out *installablepkg.Installable, outPath string, errs []s
 // name, must declare whether they are system-level, and must declare an
 // activation default mode when they declare supported activation modes. When
 // both modes and a default mode are declared, the default must be one of the
-// supported modes, and set_profile: true requires a profile_path.
+// supported modes, and set_profile: true requires a profile_path. A declared
+// bootstrap_mode must name a BootstrapMode ('nixos' additionally requires
+// system_level: true and the NixOS system toplevel build_path).
 func validateOutputTypes(fleetConfig *fleet.Fleet, declaredPresets installablepkg.CustomOutputTypes) error {
 	var errs []string
 
@@ -264,7 +276,9 @@ func validateOutputTypes(fleetConfig *fleet.Fleet, declaredPresets installablepk
 // activation modes (the default must be one of the supported modes).
 // set_profile: true requires a profile_path. Entries in
 // activation_non_mutating_modes and activation_profile_skip_modes must be
-// declared in activation_supported_modes.
+// declared in activation_supported_modes. bootstrap_mode must name a
+// BootstrapMode; 'nixos' mirrors the built-in invariant (system-level and the
+// NixOS system toplevel build path), 'nix-install' has no extra requirements.
 func validateDeclaredPresets(declaredPresets installablepkg.CustomOutputTypes) []string {
 	var errs []string
 
@@ -304,6 +318,8 @@ func validateDeclaredPresets(declaredPresets installablepkg.CustomOutputTypes) [
 			errs = append(errs, fmt.Sprintf("output_types: '%s' declares set_profile: true but has no profile_path", typ))
 		}
 
+		errs = append(errs, validateDeclaredBootstrapMode(typ, preset)...)
+
 		// The mode semantic lists reference modes the activation script
 		// understands; entries outside activation_supported_modes would
 		// silently never match at runtime.
@@ -312,6 +328,51 @@ func validateDeclaredPresets(declaredPresets installablepkg.CustomOutputTypes) [
 
 		return true
 	})
+
+	return errs
+}
+
+// validateDeclaredBootstrapMode checks the declared bootstrap_mode of a
+// custom output type, returning an error message per violated rule: the mode
+// must name one of the BootstrapMode constants (the empty default disables
+// bootstrap), 'nixos' mirrors the built-in NixOS invariant (system-level
+// because kexec, disko and nixos-install need root, and the standard NixOS
+// system toplevel build path), while 'nix-install' works on any type.
+func validateDeclaredBootstrapMode(typ installablepkg.FlakeOutputType, preset installablepkg.Preset) []string {
+	var errs []string
+
+	switch preset.Bootstrap {
+	case installablepkg.BootstrapNone, installablepkg.BootstrapNixOS, installablepkg.BootstrapNixInstall:
+		// Valid bootstrap mode.
+	default:
+		return []string{fmt.Sprintf(
+			"output_types: '%s' bootstrap_mode '%s' is not a valid bootstrap mode, must be one of '%s' or '%s' (or empty to disable bootstrap)",
+			typ, preset.Bootstrap, installablepkg.BootstrapNixOS, installablepkg.BootstrapNixInstall,
+		)}
+	}
+
+	if preset.Bootstrap != installablepkg.BootstrapNixOS {
+		return errs
+	}
+
+	if !preset.IsSystemLevelValue() {
+		errs = append(errs, fmt.Sprintf(
+			"output_types: '%s' bootstrap_mode '%s' requires system_level: true (bootstrap needs root)",
+			typ, installablepkg.BootstrapNixOS,
+		))
+	}
+
+	// The NixOS bootstrap runs nixos-install on the built system closure and
+	// resolves the disko script under the same output, so the output must be
+	// a standard NixOS system evaluation.
+	if preset.BuildPath != installablepkg.NixOSSystemBuildPath {
+		errs = append(errs, fmt.Sprintf(
+			"output_types: '%s' bootstrap_mode '%s' requires build_path '%s' "+
+				"(the NixOS bootstrap runs nixos-install on the built system closure and resolves %s under the same output, "+
+				"so the output must be a standard NixOS system evaluation)",
+			typ, installablepkg.BootstrapNixOS, installablepkg.NixOSSystemBuildPath, installablepkg.NixOSDiskoScriptPath,
+		))
+	}
 
 	return errs
 }

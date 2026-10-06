@@ -18,7 +18,7 @@ Deploying NixOS at fleet scale today means stitching together separate tools for
 - **Installable/machine separation**: many machines can share one installable, so each closure builds once. See the [configuration model](/concepts/configuration-model/).
 - **Multi-flake fleets**: deploy machines from multiple flakes and repositories in one run. See [multi-flake deployments](/concepts/multi-flake/).
 - **Multiple output types per machine**: deploy a NixOS system and a home-manager profile to the same box. See [custom output types](/configuration/output-types/).
-- **Bootstrap support**: convert machines to NixOS via kexec and `disko`, with hooks and secrets at multiple stages. See the [bootstrap guide](/guides/bootstrap/).
+- **Bootstrap support**: convert machines to NixOS via kexec and `disko`, or install Nix on targets that lack it for profile deployments, with hooks and secrets at multiple stages. See the [bootstrap guide](/guides/bootstrap/).
 - **Auto rollback**: revert a machine to its pre-deploy generation when activation fails. See [auto rollback](/guides/auto-rollback/).
 - **Real-time TUI**: watch each phase per machine, inspect logs, and retry failed phases without restarting the workflow. See [TUI keybinds](/tui/keybinds/).
 - **Flake-agnostic configuration**: deployment configuration lives outside your flake. No flake modifications are required.

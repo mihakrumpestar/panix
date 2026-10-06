@@ -17,7 +17,9 @@ import (
 )
 
 var (
+	ErrOSOutputEmpty           = errors.New("OS output was empty")
 	ErrArchitectureOutputEmpty = errors.New("architecture output was empty")
+	ErrMacOSVersionEmpty       = errors.New("macOS version output was empty")
 	ErrPlatformUnsupported     = errors.New("platform unsupported, kexec supports limited platforms")
 )
 
@@ -99,7 +101,7 @@ func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine)
 		"uname failed",
 		[]string{"uname", "-m"},
 		executioner.OnSuccess(func(log *command.CommandLog) error {
-			architecture := strings.Trim(log.Output.String(), "\n")
+			architecture := strings.TrimSpace(log.Output.String())
 			if architecture == "" {
 				return ErrArchitectureOutputEmpty
 			}
@@ -121,6 +123,45 @@ func detectArchitecture(exc *executioner.Executioner, machineI *machine.Machine)
 	}
 
 	return nil
+}
+
+func detectOS(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := exc.Exec(
+		"OS family",
+		"detecting OS family",
+		"OS detection failed",
+		[]string{"uname", "-s"},
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			osFamily := strings.TrimSpace(log.Output.String())
+			if osFamily == "" {
+				return ErrOSOutputEmpty
+			}
+
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.OS = stringbyte.StringByte(osFamily)
+			})
+
+			return nil
+		}),
+		executioner.OnDryRun(func() {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.OS = stringbyte.StringByte("DRY_RUN")
+			})
+		}),
+	)
+	if err != nil {
+		return errors.Wrap(err, "OS detection failed")
+	}
+
+	return nil
+}
+
+// isDarwinHost reports whether the inspect phase detected a macOS host (the
+// uname -s output stored by detectOS). Unknown state is not Darwin.
+func isDarwinHost(machineI *machine.Machine) bool {
+	mi := machineI.MetaInspect.Load()
+
+	return mi != nil && mi.OS.String() == "Darwin"
 }
 
 func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machine) error {
@@ -150,27 +191,21 @@ func detectBootstrapStatus(exc *executioner.Executioner, machineI *machine.Machi
 	return nil
 }
 
-func checkNixAvailable(exc *executioner.Executioner, machineI *machine.Machine) error {
-	err := exc.Exec(
-		"nix check",
-		"checking nix availability",
-		"nix not found on remote machine",
-		[]string{"nix", "--version"},
-		executioner.OnSuccess(func(log *command.CommandLog) error {
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.NixAvailable = true
-			})
+// checkNixForInstall probes nix availability for the nix-install bootstrap
+// mode. A missing nix is expected: the bootstrap phase installs it, unless
+// bootstrap.disable_nix_install opts out, which makes it a hard error.
+func checkNixForInstall(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := phaseops.ProbeNixAvailable(exc, machineI)
+	if err == nil {
+		return nil
+	}
 
-			return nil
-		}),
-		executioner.OnDryRun(func() {
-			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
-				mi.NixAvailable = true
-			})
-		}),
-	)
+	if machineI.Bootstrap.DisableNixInstall {
+		return errors.Wrap(err, "nix is missing on the target and \"bootstrap.disable_nix_install\" prevents installing it; "+
+			"unset \"bootstrap.disable_nix_install\" to let panix install nix automatically, or install nix manually")
+	}
 
-	return errors.Wrap(err, "nix availability check failed")
+	return nil
 }
 
 // detectSystemInfo skips Date: readGenerations populates it from the active
@@ -184,7 +219,13 @@ func detectSystemInfo(exc *executioner.Executioner, machineI *machine.Machine) e
 	return detectKernel(exc, machineI)
 }
 
+// detectOSVersion branches on the OS family detected by detectOS: macOS
+// reports its version via sw_vers, everything else parses /etc/os-release.
 func detectOSVersion(exc *executioner.Executioner, machineI *machine.Machine) error {
+	if isDarwinHost(machineI) {
+		return detectMacOSVersion(exc, machineI)
+	}
+
 	err := exc.Exec(
 		"system info",
 		"detecting system info",
@@ -206,6 +247,34 @@ func detectOSVersion(exc *executioner.Executioner, machineI *machine.Machine) er
 						metaInspect.OSVersion = stringbyte.StringByte(pretty)
 					}
 				}
+			})
+
+			return nil
+		}),
+		executioner.OnDryRun(func() {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.OSVersion = stringbyte.StringByte("DRY_RUN")
+			})
+		}),
+	)
+
+	return errors.Wrap(err, "system info detection failed")
+}
+
+func detectMacOSVersion(exc *executioner.Executioner, machineI *machine.Machine) error {
+	err := exc.Exec(
+		"system info",
+		"detecting system info",
+		"system info detection failed",
+		[]string{"sw_vers", "-productVersion"},
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			version := strings.TrimSpace(log.Output.String())
+			if version == "" {
+				return ErrMacOSVersionEmpty
+			}
+
+			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
+				metaInspect.OSVersion = stringbyte.StringByte("macOS " + version)
 			})
 
 			return nil

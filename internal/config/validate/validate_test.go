@@ -114,6 +114,45 @@ func TestTransferSourceRequiredWithout(t *testing.T) {
 	}
 }
 
+// The url_or_file validator must surface the actionable house message, not
+// the generic "failed validation 'url_or_file'".
+func TestHumanizeTagMessage_URLorFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"http url passes", "https://host/installer", false},
+		{"local path passes", "./installers/nix-installer", false},
+		{"unsupported scheme fails with actionable message", "ftp://host/installer", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			validate := validator.New()
+			registerPathValidators(validate)
+
+			err := validate.Struct(attributes.NixConfig{URL: tt.url})
+
+			if !tt.wantErr {
+				assert.NoError(t, err)
+
+				return
+			}
+
+			require.Error(t, err)
+
+			msg := humanizeValidationErrors(err)
+			assert.Contains(t, msg, "must be an http(s) URL or a local path")
+			assert.NotContains(t, msg, "failed validation")
+		})
+	}
+}
+
 // buildFleetWithTypes builds a minimal Fleet containing one flake with one
 // installable per given output type. Each installable is Init'd so its Xpath
 // is populated (validateOutputTypes reads installable.Xpath for error
@@ -591,6 +630,119 @@ func runSetProfileRequiresProfilePathCase(t *testing.T, preset installablepkg.Pr
 		msg := err.Error()
 		assert.Contains(t, msg, "colmenaConfigurations", "error should name the offending type")
 		assert.Contains(t, msg, wantErrSubstr, "error should explain the missing profile_path")
+	} else {
+		assert.NoError(t, err, "custom type declaration should pass validation")
+	}
+}
+
+// TestValidateOutputTypes_BootstrapModeRules verifies the bootstrap_mode
+// declaration rules: the mode must name a BootstrapMode constant (or be
+// empty), 'nixos' mirrors the built-in invariant (system_level: true plus the
+// NixOS system toplevel build path), and 'nix-install' has no extra
+// requirements.
+//nolint:funlen
+func TestValidateOutputTypes_BootstrapModeRules(t *testing.T) {
+	t.Parallel()
+
+	toplevelPath := "requires build_path '" + installablepkg.NixOSSystemBuildPath + "'"
+
+	testCases := []struct {
+		name          string
+		preset        installablepkg.Preset
+		wantErr       bool
+		wantErrSubstr string
+	}{
+		{
+			name: "nixos with system_level and toplevel build_path accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				Bootstrap:     installablepkg.BootstrapNixOS,
+				BuildPath:     installablepkg.NixOSSystemBuildPath,
+			},
+			wantErr: false,
+		},
+		{
+			name: "nix-install with empty build_path accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(false),
+				Bootstrap:     installablepkg.BootstrapNixInstall,
+			},
+			wantErr: false,
+		},
+		{
+			name: "nix-install with arbitrary build_path accepted",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				Bootstrap:     installablepkg.BootstrapNixInstall,
+				BuildPath:     "some.subpath",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid bootstrap_mode value rejected",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				Bootstrap:     installablepkg.BootstrapMode("bogus"),
+			},
+			wantErr:       true,
+			wantErrSubstr: "bootstrap_mode 'bogus' is not a valid bootstrap mode",
+		},
+		{
+			name: "nixos without system_level rejected",
+			preset: installablepkg.Preset{
+				Bootstrap: installablepkg.BootstrapNixOS,
+				BuildPath: installablepkg.NixOSSystemBuildPath,
+			},
+			wantErr:       true,
+			wantErrSubstr: "bootstrap_mode 'nixos' requires system_level: true",
+		},
+		{
+			name: "nixos with wrong build_path rejected",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				Bootstrap:     installablepkg.BootstrapNixOS,
+				BuildPath:     "activationPackage",
+			},
+			wantErr:       true,
+			wantErrSubstr: toplevelPath,
+		},
+		{
+			name: "nixos with missing build_path rejected",
+			preset: installablepkg.Preset{
+				IsSystemLevel: new(true),
+				Bootstrap:     installablepkg.BootstrapNixOS,
+			},
+			wantErr:       true,
+			wantErrSubstr: toplevelPath,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			runBootstrapModeRulesCase(t, testCase.preset, testCase.wantErr, testCase.wantErrSubstr)
+		})
+	}
+}
+
+// runBootstrapModeRulesCase asserts the outcome of validating a declared
+// "colmenaConfigurations" preset against the bootstrap_mode declaration
+// rules.
+func runBootstrapModeRulesCase(t *testing.T, preset installablepkg.Preset, wantErr bool, wantErrSubstr string) {
+	t.Helper()
+
+	declared := buildDeclaredPresets("colmenaConfigurations", preset)
+
+	f := buildFleetWithTypes(t, "colmenaConfigurations")
+
+	err := validateOutputTypes(f, declared)
+	if wantErr {
+		require.Error(t, err, "invalid bootstrap_mode declaration should be rejected")
+
+		msg := err.Error()
+		assert.Contains(t, msg, "colmenaConfigurations", "error should name the offending type")
+		assert.Contains(t, msg, wantErrSubstr, "error should explain the violated bootstrap_mode rule")
 	} else {
 		assert.NoError(t, err, "custom type declaration should pass validation")
 	}

@@ -91,12 +91,18 @@
             local-hostname: ${hostname}
           '';
 
+          # curl and ca-certificates are installed unconditionally: the
+          # withNix bake downloads the installer with them at bake time, and
+          # both bakes share one package list so the Debian images stay
+          # identical apart from Nix. The nix-less VM itself never downloads:
+          # the panix deploy transfers the pinned installer as a local path
+          # (see the nix-installer package).
           packages = [
             "rsync"
-          ]
-          ++ lib.optionals withNix [
             "curl"
             "ca-certificates"
+          ]
+          ++ lib.optionals withNix [
             # Needed so the D-Bus user session bus is available for user-level
             # activations (e.g. nix-maid's sd-switch) on the Debian-nix VM.
             # Without it there is no /run/user/<uid>/bus socket to connect to.
@@ -106,7 +112,7 @@
 
           # Packages, SSH keys, and sshd config are only set up during baking
           # (shutdown=true). Runtime seeds boot against already-baked images
-          # where everything is pre-configured — they only need meta-data
+          # where everything is pre-configured: they only need meta-data
           # (hostname/instance-id) with a minimal user-data.
           nixInstallCmd = lib.optionalString withNix "  - curl -sSfL https://install.determinate.systems/nix | sh -s -- install --no-confirm\n";
           shutdownCmd = lib.optionalString shutdown "  - shutdown -h now\n";
@@ -165,6 +171,13 @@
             genisoimage -output $out -V cidata -r -J $tmpdir/meta-data $tmpdir/user-data
             rm -rf $tmpdir
           '';
+
+      # Single system-manager config shared by both systemConfigs fixtures so
+      # the nix-install bootstrap scenario activates the same profile as the
+      # regular system-manager test.
+      systemManagerConfig = system-manager.lib.makeSystemConfig {
+        modules = [ ./system-manager-config.nix ];
+      };
     in
     {
       nixosConfigurations.test-vm = nixpkgs.lib.nixosSystem {
@@ -240,14 +253,20 @@
         ];
       };
 
-      # system-manager config for non-NixOS Linux (Debian-nix VM).
+      # system-manager config for non-NixOS Linux (the Debian VMs).
       # Manages system-level packages and /etc files via systemd.
-      # NOTE: Do NOT include nix.settings here — the Debian-nix VM already has
-      # /etc/nix/nix.conf from the nix-installer, and system-manager will log a
-      # non-fatal (but confusing) warning if it tries to manage it.
-      systemConfigs.test-system-manager = system-manager.lib.makeSystemConfig {
-        modules = [ ./system-manager-config.nix ];
-      };
+      # NOTE: Do NOT include nix.settings here: both Debian VMs end up with
+      # /etc/nix/nix.conf from the nix-installer (baked at image bake time on
+      # debian-nix-vm, installed by the panix bootstrap on debian-nonix-vm),
+      # and system-manager will log a non-fatal (but confusing) warning if it
+      # tries to manage it.
+      systemConfigs.test-system-manager = systemManagerConfig;
+
+      # Same system-manager config, separate output for the nix-install
+      # bootstrap scenario: panix maps installable names to flake attribute
+      # names, so the scenario needs its own attribute to be selectable by
+      # tag (mirrors test-vm-failing).
+      systemConfigs.test-system-manager-nixinstall = systemManagerConfig;
 
       packages.${system} = {
         installer-iso =
@@ -300,15 +319,49 @@
             ];
           }).config.system.build.kexecInstallerTarball;
 
-        # Debian 12 cloud image (qcow2) — used as base for Debian VMs.
+        # Pinned nix-installer binary for the air-gapped nix-install
+        # bootstrap scenario (systemConfigs.test-system-manager-nixinstall):
+        # panix transfers it to the target as a local path (rsync), so the
+        # deploy never downloads anything. The self-contained binary embeds
+        # the Nix closure it installs, so the offline install works.
+        # NOTE: The URL points to "latest"; when a release lands the hashes
+        # change and this will need updating. The fixed-output derivation
+        # failure reports the new hash (or prefetch each asset directly:
+        # `nix store prefetch-file --json --hash-type sha256 <asset-url>`).
+        # Per-asset sha256 digests from the GitHub release, converted to SRI.
+        nix-installer =
+          let
+            hostPlatform = pkgs.stdenv.hostPlatform.system;
+            hashes = {
+              x86_64-linux = "sha256-QdeSo8EY2GkIg3wjdTYUPxFDz3FmGlHS3ntuwDnbCxQ=";
+              aarch64-linux = "sha256-r2UmroyBZU+JWzooYvZkhH8NPD+3v+w+b/KVnVNzj80=";
+            };
+            # Release assets are named nix-installer-<system>; only the host
+            # arch is supported because the e2e VMs run on the host arch.
+            hash =
+              hashes.${hostPlatform}
+                or (throw "nix-installer pin: unsupported platform ${hostPlatform}, expected x86_64-linux or aarch64-linux");
+            src = pkgs.fetchurl {
+              url = "https://github.com/DeterminateSystems/nix-installer/releases/latest/download/nix-installer-${hostPlatform}";
+              inherit hash;
+            };
+          in
+          # fetchurl files are read-only (444); install mode 755 so the
+          # output IS a plain executable file named nix-installer.
+          pkgs.runCommand "nix-installer" { } ''
+            install -Dm755 ${src} $out
+          '';
+
+        # Debian 12 cloud image (qcow2), used as base for Debian VMs.
         # NOTE: The URL points to "latest"; when Debian bumps the point release
-        # the hash will change and this will need updating.
+        # the hash will change and this will need updating. The fixed-output
+        # derivation failure reports the new hash.
         debian-cloud-image = pkgs.fetchurl {
           url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2";
-          hash = "sha256-3T29I6OWUxjMmq4yWS3P3kq8uPkKUMp2Cpyp6PO6YlU=";
+          hash = "sha256-QS7ukc78dTFu3ab8w7P3NYV8VOMdu27WNc/iz6CSya0=";
         };
 
-        # Cloud-init NoCloud seed ISOs — built via genisoimage (pkgs.cdrkit).
+        # Cloud-init NoCloud seed ISOs, built via genisoimage (pkgs.cdrkit).
         # Each produces a store path that IS the ISO file, usable directly as
         # -cdrom /nix/store/.../<name>.
         seed-iso = mkCloudInitSeed {
@@ -329,7 +382,16 @@
           hostname = "debian-nix-vm";
         };
 
-        # Bake seeds — used during Debian image baking, then VM shuts down.
+        # Simple SSH-only seed for the nix-less Debian VM. The baked image
+        # intentionally has no Nix: the panix deploy must install it through
+        # the bootstrap nix-install step before build/transfer/activate.
+        seed-nonix-iso = mkCloudInitSeed {
+          name = "seed-nonix.iso";
+          instanceId = "debian-nonix";
+          hostname = "debian-nonix-vm";
+        };
+
+        # Bake seeds, used during Debian image baking, then VM shuts down.
         bake-seed-iso = mkCloudInitSeed {
           name = "bake-seed.iso";
           instanceId = "debian-bake";

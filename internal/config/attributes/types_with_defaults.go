@@ -2,6 +2,7 @@ package attributes
 
 import (
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 
@@ -9,6 +10,29 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 )
+
+// structDefault returns the "default" struct tag of the named field on T.
+// Scalar defaults live in that tag: the same tag drives schema generation
+// (pkg/yamlschema) and these runtime fallbacks. List defaults live in the
+// Default* vars of this package, documented in the field's desc text.
+func structDefault[T any](field string) string {
+	structField, ok := reflect.TypeFor[T]().FieldByName(field)
+	if !ok {
+		return ""
+	}
+
+	return structField.Tag.Get("default")
+}
+
+// orDefault returns configured when non-nil (an explicitly empty slice clears
+// the default), else def.
+func orDefault(configured, def []string) []string {
+	if configured != nil {
+		return configured
+	}
+
+	return def
+}
 
 // KexecImage
 
@@ -18,15 +42,11 @@ var (
 
 type KexecImage string
 
-// DefaultKexecImage is the built-in kexec tarball URL. The same literal is
-// duplicated in the KexecConfig.Image struct tag (struct tags cannot reference
-// constants); keep both in sync. $PANIX_ARCH is expanded at runtime.
-const DefaultKexecImage = "https://github.com/nix-community/nixos-images/releases/latest/download/" +
-	"nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"
-
+// Get returns the configured image or the built-in kexec tarball URL from the
+// KexecConfig.Image "default" tag ($PANIX_ARCH is expanded at runtime).
 func (k KexecImage) Get() KexecImage {
 	if k == "" {
-		return DefaultKexecImage
+		return KexecImage(structDefault[KexecConfig]("Image"))
 	}
 
 	return k

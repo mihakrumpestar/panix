@@ -14,19 +14,23 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TransferSecret sends a config-declared source: command sources stream, plain sources rsync.
+// TransferSecret sends a config-declared source: command sources stream, plain
+// sources rsync. bootstrapsNixOS is the preset's NixOS bootstrap
+// classification (Preset.BootstrapsNixOS): final-system content follows the
+// bootstrapping root while that bootstrap is in progress, staging content
+// (kexec tarball, disko keys) passes false and always targets the live root.
 func TransferSecret(
 	exc *executioner.Executioner,
 	mach *machine.Machine,
 	source attributes.TransferSource,
 	transferOfWhat string,
-	transferOSSecrets bool,
+	bootstrapsNixOS bool,
 ) error {
 	if source.Command != "" {
-		return TransferCommand(exc, mach, source, transferOfWhat, transferOSSecrets)
+		return TransferCommand(exc, mach, source, transferOfWhat, bootstrapsNixOS)
 	}
 
-	return TransferFile(exc, mach, source, transferOfWhat, transferOSSecrets)
+	return TransferFile(exc, mach, source, transferOfWhat, bootstrapsNixOS)
 }
 
 // TransferCommand streams source.Command's stdout into the final destination
@@ -34,16 +38,16 @@ func TransferSecret(
 // unchanged while still enforcing ownership and mode, so an unchanged secret
 // keeps its inode and mtime. sh -u -c makes unset variable references fail
 // loudly, LocalPath is exported as PANIX_SECRET_LOCAL_PATH only when set, and
-// transferOSSecrets targets the bootstrapping root. Elevation rides on the
-// destination argv for local and remote machines alike.
+// bootstrapsNixOS routes the destination via the bootstrapping root. Elevation
+// rides on the destination argv for local and remote machines alike.
 func TransferCommand(
 	exc *executioner.Executioner,
 	mach *machine.Machine,
 	source attributes.TransferSource,
 	transferOfWhat string,
-	transferOSSecrets bool,
+	bootstrapsNixOS bool,
 ) error {
-	spec := transferCommandPipeSpec(mach, source, transferOSSecrets)
+	spec := transferCommandPipeSpec(mach, source, bootstrapsNixOS)
 
 	err := exc.ExecPipe(
 		"transfer of "+transferOfWhat,
@@ -58,16 +62,15 @@ func TransferCommand(
 	return nil
 }
 
-// transferCommandPipeSpec renders the source, probe and write argv for a command-sourced transfer.
+// transferCommandPipeSpec renders the source, probe and write argv for a
+// command-sourced transfer; the destination follows the same bootstrapping
+// root redirect as plain transfers.
 func transferCommandPipeSpec(
 	mach *machine.Machine,
 	source attributes.TransferSource,
-	transferOSSecrets bool,
+	bootstrapsNixOS bool,
 ) executioner.PipeSpec {
-	remotePath := source.RemotePath
-	if transferOSSecrets {
-		remotePath = mach.MaybeBootstrappingPath(source.RemotePath)
-	}
+	remotePath := mach.MaybeBootstrappingPath(source.RemotePath, bootstrapsNixOS)
 
 	return executioner.PipeSpec{
 		Source: transferCommandSourceArgv(source),
@@ -89,7 +92,7 @@ func transferCommandSourceArgv(source attributes.TransferSource) []string {
 		return command
 	}
 
-	return WithEnv([]string{runtimevars.SecretLocalPath + "=" + source.LocalPath}, command)
+	return executioner.WithEnv([]string{runtimevars.SecretLocalPath + "=" + source.LocalPath}, command)
 }
 
 // transferCommandScript returns the destination sh script: set -e aborts on

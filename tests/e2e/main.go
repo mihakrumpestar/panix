@@ -110,11 +110,13 @@ const (
 	overlayName         = "debian-overlay.qcow2"
 	overlayRemoteName   = "debian-overlay-remote.qcow2"
 	overlayNixName      = "debian-overlay-nix.qcow2"
+	overlayNonixName    = "debian-overlay-nonix.qcow2"
 	nixosISOPort        = 10022
 	kexecVMPort         = 10023
 	remoteISOPort       = 10025
 	remoteKexecPort     = 10026
 	debianNixVMPort     = 10027
+	debianNonixVMPort   = 10028
 )
 
 // e2eHardwareConfigPath mirrors the ISO VM machine's hardware_config_path in
@@ -259,6 +261,7 @@ func runBootstrapPhase(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=bootstrap",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err
@@ -267,32 +270,51 @@ func runBootstrapPhase(configPath string, res *testResources) error {
 	return verifyAll(res.keyPath)
 }
 
+// runDeployPhase runs the deploy steps selected by --deploy-type. Local-only
+// fixtures (everything but the nixosConfigurations step) are rendered in
+// panix.yml only when PANIX_TEST_SCOPE includes local (`{{ if and $isLocal ... }}`),
+// so their tags match no installable in remote scope and the deploy would fail
+// the empty fleet filter. One localOnly guard in this dispatch loop skips every
+// such step there, rather than duplicating the check in each step.
 func runDeployPhase(configPath string, res *testResources) error {
 	deploys := []struct {
 		typ deployType
-		fn  func(string, *testResources) error
+		// localOnly marks steps whose installables exist only when the test
+		// scope includes local (see the panix.yml template gates).
+		localOnly bool
+		fn        func(string, *testResources) error
 	}{
-		{deployNixos, runDeployNixOS},
-		{deployHome, runDeployHome},
-		{deployPackages, runDeployPackages},
-		{deployMaid, runDeployMaid},
-		{deploySystemConfigs, runDeploySystemManager},
+		{deployNixos, false, runDeployNixOS},
+		{deployHome, true, runDeployHome},
+		{deployPackages, true, runDeployPackages},
+		{deployMaid, true, runDeployMaid},
+		{deploySystemConfigs, true, runDeploySystemManager},
+		// The nix-install bootstrap scenario is a systemConfigs deploy to the
+		// nix-less VM; same deploy type, separate step so the premise check
+		// and the proof bracket exactly one panix run.
+		{deploySystemConfigs, true, runDeploySystemManagerNixInstall},
 	}
 
 	for _, deploy := range deploys {
-		if deployTypeFlag == deployAll || deployTypeFlag == deploy.typ {
-			err := deploy.fn(configPath, res)
+		if deployTypeFlag != deployAll && deployTypeFlag != deploy.typ {
+			continue
+		}
+
+		if deploy.localOnly && !testScopeFlag.local() {
+			continue
+		}
+
+		err := deploy.fn(configPath, res)
+		if err != nil {
+			return err
+		}
+
+		// Auto-rollback needs the fresh known-good generation from the
+		// NixOS deploy, so run it immediately after.
+		if deploy.typ == deployNixos && testScopeFlag.local() {
+			err = runDeployAutoRollback(configPath, res)
 			if err != nil {
 				return err
-			}
-
-			// Auto-rollback needs the fresh known-good generation from the
-			// NixOS deploy, so run it immediately after.
-			if deploy.typ == deployNixos && testScopeFlag.local() {
-				err = runDeployAutoRollback(configPath, res)
-				if err != nil {
-					return err
-				}
 			}
 		}
 	}
@@ -310,6 +332,7 @@ func runDeployNixOS(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err
@@ -348,6 +371,7 @@ func runDeployAutoRollback(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err == nil {
 		return errors.New("expected auto-rollback deploy to fail")
@@ -389,16 +413,13 @@ func runDeployHome(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifyHomeManager(res.keyPath)
-	}
-
-	return nil
+	return verifyHomeManager(res.keyPath)
 }
 
 func runDeployPackages(configPath string, res *testResources) error {
@@ -409,16 +430,13 @@ func runDeployPackages(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifyPackages(res.keyPath)
-	}
-
-	return nil
+	return verifyPackages(res.keyPath)
 }
 
 func runDeployMaid(configPath string, res *testResources) error {
@@ -429,36 +447,65 @@ func runDeployMaid(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifyMaidPackages(res.keyPath)
-	}
-
-	return nil
+	return verifyMaidPackages(res.keyPath)
 }
 
 func runDeploySystemManager(configPath string, res *testResources) error {
 	printPhasef("Phase: Deploy system-manager")
 
 	err := runPanixDeployStepWithArgs("Run panix deploy (system-manager)", configPath,
-		[]string{"--tags", "systemConfigs"},
+		// Explicit attribute tag instead of the broad "systemConfigs" type
+		// tag: test-system-manager-nixinstall is deployed only by the
+		// nix-install bootstrap test.
+		[]string{"--tags", "test-system-manager"},
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err
 	}
 
-	if testScopeFlag.local() {
-		return verifySystemManagers(res.keyPath)
+	return verifySystemManagers(res.keyPath)
+}
+
+// runDeploySystemManagerNixInstall deploys the system-manager fixture to the
+// nix-less Debian VM: the target has no Nix preinstalled, so the deploy must
+// install it through the bootstrap nix-install step before
+// build/transfer/activate can run. The installer is a pre-built binary
+// transferred as a local path (air-gapped, nothing is downloaded at deploy
+// time), with args disabling the installer's diagnostics check-in (its only
+// network call). Premise (nix absent)
+// and proof (nix runs, system-manager active, closure in the store, OS secret
+// on the live root without a bootstrapping-root redirect) bracket the deploy
+// so the scenario cannot pass without the bootstrap step.
+func runDeploySystemManagerNixInstall(configPath string, res *testResources) error {
+	printPhasef("Phase: Deploy system-manager (nix-install bootstrap)")
+
+	err := verifyNixAbsent(debianNonixVMPort, res.keyPath)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	err = runPanixDeployStepWithArgs("Run panix deploy (system-manager nix-install bootstrap)", configPath,
+		[]string{"--tags", "test-system-manager-nixinstall"},
+		"PANIX_TEST_MODE=deploy",
+		"PANIX_TEST_SCOPE="+string(testScopeFlag),
+		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	return verifySystemManagerNixInstall(res.keyPath)
 }
 
 func runChecks() error {
@@ -479,14 +526,17 @@ type testResources struct {
 	keyPath             string
 	installerISOPath    string
 	kexecInstallerPath  string
+	nixInstallerPath    string
 	cloudInitSeed       string
 	cloudInitSeedRemote string
 	cloudInitSeedNix    string
+	cloudInitSeedNonix  string
 	debianImagePath     string
 	debianNixImagePath  string
 	debianOverlay       string
 	debianOverlayRemote string
 	debianOverlayNix    string
+	debianOverlayNonix  string
 	blankDisk           string
 	blankDiskRemote     string
 }
@@ -624,23 +674,32 @@ func fixtureCommandOutput(name string, args ...string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// buildNixInstaller builds the pinned nix-installer binary from testflakes,
+// mirroring buildKexecInstaller (same nixBuild flags and error style). The
+// flake output IS the executable file, so the store path is the installer
+// path (unlike the kexec tarball, which lives inside its output directory).
+func buildNixInstaller() (string, error) {
+	return nixBuild("nix-installer")
+}
+
+// buildArtifactStep schedules one artifact build on the parallel group and
+// stores the produced path through target (shared by the kexec installer,
+// nix-installer and installer ISO builds).
+func buildArtifactStep(parGroup *parallelGroup, name string, target *string, build func() (string, error)) {
+	parGroup.Go(name, func() error {
+		var buildErr error
+
+		*target, buildErr = build()
+
+		return buildErr
+	})
+}
+
 func buildNixArtifacts(res *testResources) error {
 	parGroup := newParallelGroup()
 
-	parGroup.Go("Build kexec installer", func() error {
-		var buildErr error
-
-		res.kexecInstallerPath, buildErr = buildKexecInstaller()
-
-		return buildErr
-	})
-	parGroup.Go("Build NixOS installer ISO", func() error {
-		var buildErr error
-
-		res.installerISOPath, buildErr = buildInstallerISO()
-
-		return buildErr
-	})
+	buildArtifactStep(parGroup, "Build kexec installer", &res.kexecInstallerPath, buildKexecInstaller)
+	buildArtifactStep(parGroup, "Build NixOS installer ISO", &res.installerISOPath, buildInstallerISO)
 	parGroup.Go("Pre-build test-vm closure", func() error {
 		return preBuildClosure("test-vm", "nixosConfigurations.test-vm.config.system.build.toplevel")
 	})
@@ -648,6 +707,9 @@ func buildNixArtifacts(res *testResources) error {
 	// config generated during Bootstrap, which does not exist yet.
 
 	if testScopeFlag.local() {
+		// The nix-installer binary feeds only the nix-install bootstrap step
+		// (localOnly), so build it with the local-only artifacts.
+		buildArtifactStep(parGroup, "Build nix-installer", &res.nixInstallerPath, buildNixInstaller)
 		parGroup.Go("Pre-build test-vm-failing closure", func() error {
 			return preBuildClosure("test-vm-failing", "nixosConfigurations.test-vm-failing.config.system.build.toplevel")
 		})
@@ -665,6 +727,9 @@ func buildNixArtifacts(res *testResources) error {
 		})
 		parGroup.Go("Pre-build system-manager closure", func() error {
 			return preBuildClosure("system-manager", "systemConfigs.test-system-manager")
+		})
+		parGroup.Go("Pre-build system-manager nix-install closure", func() error {
+			return preBuildClosure("system-manager nixinstall", "systemConfigs.test-system-manager-nixinstall")
 		})
 	}
 
@@ -731,6 +796,25 @@ func createLocalDisks(parGroup *parallelGroup, res *testResources) {
 
 		return diskErr
 	})
+	parGroup.Go("Create Debian nonix cloud-init seed", func() error {
+		var seedErr error
+
+		// Simple SSH-only seed: the image is the plain Debian bake (curl and
+		// rsync, no Nix), so the systemConfigs deploy must install Nix itself.
+		res.cloudInitSeedNonix, seedErr = nixBuild("seed-nonix-iso")
+
+		return seedErr
+	})
+	parGroup.Go("Create Debian nonix overlay disk", func() error {
+		var diskErr error
+
+		// Reuses the plain Debian bake (same base as the kexec VMs): it has
+		// no Nix preinstalled, which is the premise of the nix-install
+		// bootstrap scenario.
+		res.debianOverlayNonix, diskErr = createDisk(overlayNonixName, "-b", res.debianImagePath, "-F", "qcow2")
+
+		return diskErr
+	})
 }
 
 func createRemoteDisks(parGroup *parallelGroup, res *testResources) {
@@ -763,6 +847,7 @@ type testVMs struct {
 	remoteISOVM   *qemuVM
 	remoteKexecVM *qemuVM
 	debianNixVM   *qemuVM
+	debianNonixVM *qemuVM
 }
 
 func startTestVMs(res *testResources) (*testVMs, error) {
@@ -795,7 +880,7 @@ func startTestVMs(res *testResources) (*testVMs, error) {
 func startLocalVMs(vms *testVMs, res *testResources) error {
 	var err error
 
-	vms.isoVM, err = startVMStep("Start NixOS ISO VM (port %d)", nixosISOPort, "iso-vm",
+	vms.isoVM, err = startVMStep("Start NixOS ISO VM (port %d)", nixosISOPort, "iso-vm", netOpen,
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDisk),
 		"-cdrom", res.installerISOPath,
 	)
@@ -803,7 +888,7 @@ func startLocalVMs(vms *testVMs, res *testResources) error {
 		return err
 	}
 
-	vms.kexecVM, err = startVMStep("Start kexec VM (port %d)", kexecVMPort, "kexec-vm",
+	vms.kexecVM, err = startVMStep("Start kexec VM (port %d)", kexecVMPort, "kexec-vm", netOpen,
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlay),
 		"-cdrom", res.cloudInitSeed,
 	)
@@ -813,9 +898,22 @@ func startLocalVMs(vms *testVMs, res *testResources) error {
 		return err
 	}
 
-	vms.debianNixVM, err = startVMStep("Start Debian-nix VM (port %d)", debianNixVMPort, "debian-nix-vm",
+	vms.debianNixVM, err = startVMStep("Start Debian-nix VM (port %d)", debianNixVMPort, "debian-nix-vm", netOpen,
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayNix),
 		"-cdrom", res.cloudInitSeedNix,
+	)
+	if err != nil {
+		vms.kill()
+
+		return err
+	}
+
+	// netAirGapped enforces the scenario's air-gap at the QEMU level: the
+	// nix-less VM gets its installer and closure transferred over SSH
+	// (hostfwd keeps working), all other guest traffic is blocked.
+	vms.debianNonixVM, err = startVMStep("Start Debian nonix VM (port %d)", debianNonixVMPort, "debian-nonix-vm", netAirGapped,
+		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayNonix),
+		"-cdrom", res.cloudInitSeedNonix,
 	)
 	if err != nil {
 		vms.kill()
@@ -829,7 +927,7 @@ func startLocalVMs(vms *testVMs, res *testResources) error {
 func startRemoteVMs(vms *testVMs, res *testResources) error {
 	var err error
 
-	vms.remoteISOVM, err = startVMStep("Start remote NixOS ISO VM (port %d)", remoteISOPort, "iso-vm-remote",
+	vms.remoteISOVM, err = startVMStep("Start remote NixOS ISO VM (port %d)", remoteISOPort, "iso-vm-remote", netOpen,
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.blankDiskRemote),
 		"-cdrom", res.installerISOPath,
 	)
@@ -839,7 +937,7 @@ func startRemoteVMs(vms *testVMs, res *testResources) error {
 		return err
 	}
 
-	vms.remoteKexecVM, err = startVMStep("Start remote kexec VM (port %d)", remoteKexecPort, "kexec-vm-remote",
+	vms.remoteKexecVM, err = startVMStep("Start remote kexec VM (port %d)", remoteKexecPort, "kexec-vm-remote", netOpen,
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio,cache=unsafe", res.debianOverlayRemote),
 		"-cdrom", res.cloudInitSeedRemote,
 	)
@@ -872,6 +970,10 @@ func (vms *testVMs) kill() {
 	if vms.debianNixVM != nil {
 		vms.debianNixVM.kill()
 	}
+
+	if vms.debianNonixVM != nil {
+		vms.debianNonixVM.kill()
+	}
 }
 
 func waitForAllSSH(keyPath string) error {
@@ -886,6 +988,9 @@ func waitForAllSSH(keyPath string) error {
 		})
 		parGroup.Go("Wait for SSH on Debian-nix VM", func() error {
 			return waitForSSH(debianNixVMPort, keyPath)
+		})
+		parGroup.Go("Wait for SSH on Debian nonix VM", func() error {
+			return waitForSSH(debianNonixVMPort, keyPath)
 		})
 	}
 
@@ -937,10 +1042,10 @@ func verifyAll(keyPath string) error {
 	return parGroup.Wait()
 }
 
-func startVMStep(format string, port int, logName string, extraArgs ...string) (*qemuVM, error) {
+func startVMStep(format string, port int, logName string, restrictNet netRestrict, extraArgs ...string) (*qemuVM, error) {
 	step := startStep(format, port)
 
-	guest, err := startQEMU(logName, port, extraArgs...)
+	guest, err := startQEMU(logName, port, restrictNet, extraArgs...)
 	if err != nil {
 		step.Fail(err)
 

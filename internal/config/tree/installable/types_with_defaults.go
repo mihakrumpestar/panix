@@ -19,31 +19,47 @@ func (n AttributeName) String() string {
 	return string(n)
 }
 
-// ResolveFlakeInstallable constructs the full nix installable attrpath
-// from the output type, attribute name, and preset.
+// NixOSSystemBuildPath is the attrpath suffix of the built system closure
+// under a NixOS system output: the nixosConfigurations preset BuildPath, and
+// nixos-install installs the system closure built at this path.
+const NixOSSystemBuildPath = "config.system.build.toplevel"
+
+// NixOSDiskoScriptPath is the attrpath suffix of the disko script under a
+// NixOS system output: bootstrap disko resolves the disko script next to the
+// system closure.
+const NixOSDiskoScriptPath = "config.system.build.diskoScript"
+
+// ResolveFlakeAttrBase constructs the base flake attrpath (output type and
+// attribute name, without any build path suffix).
 //
 // The top-level attribute has this precedence:
-//  1. preset.OutputTypeAttr when set, producing "outputTypeAttr.name[.buildPath]".
+//  1. preset.OutputTypeAttr when set, producing "outputTypeAttr.name".
 //     This lets the user point the config key (e.g. nixosConfigurations) at a
 //     differently-named flake output attribute (e.g. nixosConf).
 //  2. For types where OmitTypeFromAttrPath is true (e.g. "packages"), nix
 //     auto-resolves bare attribute names under "packages.<system>.<name>",
 //     so the type prefix must be omitted. In that case returns just
-//     "name[.buildPath]".
-//  3. Otherwise "type.name[.buildPath]" (e.g. "nixosConfigurations.server1.config.system.build.toplevel").
+//     "name".
+//  3. Otherwise "type.name" (e.g. "nixosConfigurations.server1").
 //
 // An explicit output_type_attr takes precedence over omit_type_from_attr_path.
-func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName, preset Preset) string {
-	var base string
-
+func ResolveFlakeAttrBase(outputType FlakeOutputType, attrName AttributeName, preset Preset) string {
 	switch {
 	case preset.OutputTypeAttr != "":
-		base = preset.OutputTypeAttr + "." + attrName.String()
+		return preset.OutputTypeAttr + "." + attrName.String()
 	case preset.OmitTypeFromAttrPath:
-		base = attrName.String()
+		return attrName.String()
 	default:
-		base = outputType.String() + "." + attrName.String()
+		return outputType.String() + "." + attrName.String()
 	}
+}
+
+// ResolveFlakeInstallable constructs the full nix installable attrpath from
+// the output type, attribute name, and preset: the base attrpath
+// (ResolveFlakeAttrBase) with the preset's build path appended as
+// "base[.buildPath]".
+func ResolveFlakeInstallable(outputType FlakeOutputType, attrName AttributeName, preset Preset) string {
+	base := ResolveFlakeAttrBase(outputType, attrName, preset)
 
 	if preset.BuildPath == "" {
 		return base

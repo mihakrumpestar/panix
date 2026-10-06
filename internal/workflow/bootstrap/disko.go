@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
@@ -16,10 +17,13 @@ var ErrDiskoNoOutputPaths = errors.New("disko build output did not contain any o
 // Keys must be available for LUKS unlocking during partitioning.
 func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink string) error {
 	flake := fleetLeaf.Flake
-	installable := fleetLeaf.Installable
-	machine := fleetLeaf.Machine
+	machineI := fleetLeaf.Machine
 
-	installables := []string{fmt.Sprintf("%s#%s.%s.config.system.build.diskoScript", flake.URL, installable.Type, installable.Name)}
+	// The disko script lives under the same NixOS system output as the
+	// system closure (NixOSDiskoScriptPath), so resolve the base attrpath
+	// exactly like every other installable lookup.
+	attrBase := installable.ResolveFlakeAttrBase(fleetLeaf.Installable.Type, fleetLeaf.Installable.Name, fleetLeaf.Installable.Preset)
+	installables := []string{fmt.Sprintf("%s#%s.%s", flake.URL, attrBase, installable.NixOSDiskoScriptPath)}
 
 	diskoScript, err := phaseops.BuildInstallable(exc, fleetLeaf, installables, "disko", outLink)
 	if err != nil {
@@ -35,8 +39,8 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink str
 		return errors.Wrap(err, "disko transfer failed")
 	}
 
-	if len(machine.Bootstrap.DiskEncryptionKeys) > 0 {
-		err = executeDiskEncryptionKeys(exc, machine)
+	if len(machineI.Bootstrap.DiskEncryptionKeys) > 0 {
+		err = executeDiskEncryptionKeys(exc, machineI)
 		if err != nil {
 			return err
 		}
@@ -47,7 +51,7 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink str
 		"disko",
 		"partitioning disk",
 		"diskoScript failed",
-		append(machine.MaybeSudo(), diskoScript),
+		append(machineI.MaybeSudo(), diskoScript),
 		executioner.Trim(),
 	)
 	if err != nil {
@@ -59,9 +63,9 @@ func disko(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf, outLink str
 
 // executeDiskEncryptionKeys must run before disko: the keys are needed for
 // LUKS unlocking during partitioning.
-func executeDiskEncryptionKeys(exc *executioner.Executioner, machine *machine.Machine) error {
-	for _, diskEncryptionKey := range machine.Bootstrap.DiskEncryptionKeys {
-		err := phaseops.TransferSecret(exc, machine, diskEncryptionKey, "disk encryption key", false)
+func executeDiskEncryptionKeys(exc *executioner.Executioner, machineI *machine.Machine) error {
+	for _, diskEncryptionKey := range machineI.Bootstrap.DiskEncryptionKeys {
+		err := phaseops.TransferSecret(exc, machineI, diskEncryptionKey, "disk encryption key", false)
 		if err != nil {
 			return errors.Wrapf(err, "failed to transfer disk encryption key to %s", diskEncryptionKey.RemotePath)
 		}

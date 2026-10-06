@@ -101,17 +101,42 @@ func TestUpdateConcurrent(t *testing.T) {
 	assertion.Equal(1000, *ptr.Load())
 }
 
-func TestUpdatePanicsOnNilPointer(t *testing.T) {
+func TestUpdateOnNilStoredPointer(t *testing.T) {
 	t.Parallel()
 
 	assertion := assert.New(t)
+	must := require.New(t)
 
-	ptr := New[int]()
+	ptr := New[testStruct]()
 	ptr.Pointer.Store(nil)
 
-	assertion.Panics(func() {
-		ptr.Update(func(val *int) { *val = 1 })
+	// A nil stored pointer is the zero value: the update succeeds and the
+	// written value is visible through a non-nil Load.
+	ptr.Update(func(val *testStruct) {
+		val.Name = "from-nil"
+		val.Value = 1
 	})
+
+	val := ptr.Load()
+	must.NotNil(val)
+	assertion.Equal("from-nil", val.Name)
+	assertion.Equal(1, val.Value)
+
+	// Concurrent updates on a nil base stay safe (race detector in CI) and
+	// all of them land on the zero base exactly once.
+	concurrent := New[int]()
+	concurrent.Pointer.Store(nil)
+
+	waitGroup := sync.WaitGroup{}
+
+	for range 1000 {
+		waitGroup.Go(func() {
+			concurrent.Update(func(val *int) { *val++ })
+		})
+	}
+
+	waitGroup.Wait()
+	assertion.Equal(1000, *concurrent.Load())
 }
 
 func TestClear(t *testing.T) {

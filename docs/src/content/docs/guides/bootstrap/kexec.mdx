@@ -7,7 +7,7 @@ sidebar:
 
 Boot a NixOS installer image on the target without physical access, by replacing the running kernel in memory.
 
-Kexec loads a new kernel and initramfs directly into memory, bypassing the BIOS/UEFI boot process. Once in the installer environment, disko can repartition the disks and the standard bootstrap flow continues: transfer the closure (kexec does not reuse the previous one), run `nixos-install`, and reboot into the freshly installed system.
+Kexec loads a new kernel and initramfs directly into memory, bypassing the BIOS/UEFI boot process. Once in the installer environment, disko can repartition the disks and the NixOS bootstrap flow continues: transfer the closure (kexec does not reuse the previous one), run `nixos-install`, and reboot into the freshly installed system.
 
 ## SSH After Kexec
 

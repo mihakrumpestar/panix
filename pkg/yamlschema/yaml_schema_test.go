@@ -1,6 +1,8 @@
 package yamlschema
 
 import (
+	"net/http"
+	"net/rpc"
 	"reflect"
 	"testing"
 	"time"
@@ -59,6 +61,16 @@ type rootWithDesc struct {
 	Timeout string `yaml:"timeout" desc:"Max wait time" default:"30s"`
 	Port    int    `yaml:"port" desc:"Listen port" default:"8080"`
 	Debug   bool   `yaml:"debug" desc:"Enable debug mode" default:"false"`
+}
+
+// rootWithDefaultKinds mixes scalar fields carrying `default` tags with a
+// slice carrying one: the tag is for scalars only (list defaults live in Go
+// vars, documented in the field's desc text).
+type rootWithDefaultKinds struct {
+	Items []string `yaml:"items" default:"[a,b]"`
+	Name  string   `yaml:"name" default:"panix"`
+	Count int      `yaml:"count" default:"3"`
+	Debug bool     `yaml:"debug" default:"true"`
 }
 
 type rootWithOmit struct {
@@ -314,6 +326,46 @@ func TestNewSchema_DefaultTag(t *testing.T) {
 
 	debugDef := mustGetTypeDef(t, schema.Properties, "debug")
 	assert.Equal(t, false, debugDef.Default, "debug default mismatch")
+}
+
+// TestNewSchema_DefaultTagScalarKinds pins the `default`-tag convention: a
+// struct field of type []string WITH a default tag generates NO `default` key
+// (the raw tag string must never leak as the default of an array property),
+// while string/bool/int fields with default tags still generate theirs.
+func TestNewSchema_DefaultTagScalarKinds(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithDefaultKinds]())
+
+	tests := []struct {
+		field   string
+		wantDef any // nil: the `default` key must be absent from the emitted schema
+	}{
+		{"items", nil},
+		{"name", "panix"},
+		{"count", 3},
+		{"debug", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			t.Parallel()
+
+			fieldDef := mustGetTypeDef(t, schema.Properties, tt.field)
+
+			if tt.wantDef == nil {
+				assert.Nil(t, fieldDef.Default, "%s: default tag must not produce a schema default", tt.field)
+
+				out, err := yaml.Marshal(fieldDef)
+				require.NoError(t, err)
+				assert.NotContains(t, string(out), "default", "%s: emitted schema must omit the default key", tt.field)
+
+				return
+			}
+
+			assert.Equal(t, tt.wantDef, fieldDef.Default, "%s default mismatch", tt.field)
+		})
+	}
 }
 
 func TestNewSchema_YamlDashOmitsField(t *testing.T) {
@@ -650,32 +702,64 @@ func TestIsFieldRequired_NotRequired(t *testing.T) {
 func TestParseDefaultValue_Bool(t *testing.T) {
 	t.Parallel()
 
-	result := parseDefaultValue("true", reflect.TypeFor[bool]())
+	result, ok := parseDefaultValue("true", reflect.TypeFor[bool]())
+	assert.True(t, ok)
 	assert.Equal(t, true, result)
 
-	result = parseDefaultValue("false", reflect.TypeFor[bool]())
+	result, ok = parseDefaultValue("false", reflect.TypeFor[bool]())
+	assert.True(t, ok)
 	assert.Equal(t, false, result)
 }
 
 func TestParseDefaultValue_Int(t *testing.T) {
 	t.Parallel()
 
-	result := parseDefaultValue("42", reflect.TypeFor[int]())
+	result, ok := parseDefaultValue("42", reflect.TypeFor[int]())
+	assert.True(t, ok)
 	assert.Equal(t, 42, result)
 }
 
 func TestParseDefaultValue_String(t *testing.T) {
 	t.Parallel()
 
-	result := parseDefaultValue("hello", reflect.TypeFor[string]())
+	result, ok := parseDefaultValue("hello", reflect.TypeFor[string]())
+	assert.True(t, ok)
 	assert.Equal(t, "hello", result)
 }
 
 func TestParseDefaultValue_Duration(t *testing.T) {
 	t.Parallel()
 
-	result := parseDefaultValue("30s", reflect.TypeFor[time.Duration]())
+	result, ok := parseDefaultValue("30s", reflect.TypeFor[time.Duration]())
+	assert.True(t, ok)
 	assert.Equal(t, "30s", result)
+}
+
+// TestParseDefaultValue_NonScalar: the `default` tag is for scalars only, so
+// non-scalar kinds report ok=false and yield no default (list defaults live
+// in Go vars, documented in the field's desc text).
+func TestParseDefaultValue_NonScalar(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		typ  reflect.Type
+	}{
+		{"slice", reflect.TypeFor[[]string]()},
+		{"map", reflect.TypeFor[map[string]string]()},
+		{"struct", reflect.TypeFor[simpleRoot]()},
+		{"ptr", reflect.TypeFor[*string]()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, ok := parseDefaultValue("[a,b]", tt.typ)
+			assert.False(t, ok, "expected no default for %s kind", tt.typ.Kind())
+			assert.Nil(t, result, "expected nil default for %s kind", tt.typ.Kind())
+		})
+	}
 }
 
 func TestResolveYAMLFieldName_WithTag(t *testing.T) {
@@ -705,4 +789,38 @@ func TestNewSchema_ProcessStruct_NonStructError(t *testing.T) {
 
 	_, err := gen.Generate()
 	require.Error(t, err)
+}
+
+// Distinct types sharing a Go type name (e.g. nix.NixConfig and
+// attributes.NixConfig in the real config tree) must get unique,
+// package-qualified definition names: without that, the second type silently
+// reuses the first type's definition.
+func TestDisambiguateDefNames(t *testing.T) {
+	t.Parallel()
+
+	// http.Client and rpc.Client are distinct types both named "Client".
+	httpClient := reflect.TypeFor[http.Client]()
+	rpcClient := reflect.TypeFor[rpc.Client]()
+
+	defTypes := map[reflect.Type]string{
+		httpClient: "Client",
+		rpcClient:  "Client",
+	}
+
+	disambiguateDefNames(defTypes)
+
+	assert.Equal(t, "http_Client", defTypes[httpClient])
+	assert.Equal(t, "rpc_Client", defTypes[rpcClient])
+}
+
+// Unique definition names stay bare.
+func TestDisambiguateDefNames_UniqueNameStaysBare(t *testing.T) {
+	t.Parallel()
+
+	typ := reflect.TypeFor[sharedStruct]()
+	defTypes := map[reflect.Type]string{typ: "sharedStruct"}
+
+	disambiguateDefNames(defTypes)
+
+	assert.Equal(t, "sharedStruct", defTypes[typ])
 }

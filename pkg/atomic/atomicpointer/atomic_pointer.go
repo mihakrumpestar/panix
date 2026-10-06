@@ -25,14 +25,19 @@ func (p *AtomicPointer[T]) Clear() {
 	p.Pointer.Store(&zero)
 }
 
+// Update applies fun to a copy of the stored value and swaps the copy back,
+// retrying while concurrent writers win the compare-and-swap. A nil stored
+// pointer is legitimate (the JSON "null" round-trip state) and is handled as
+// the zero value.
 func (p *AtomicPointer[T]) Update(fun func(*T)) {
 	for {
 		old := p.Pointer.Load()
-		if old == nil {
-			panic("atomicpointer: Update called on nil pointer")
+
+		var copied T
+		if old != nil {
+			copied = *old
 		}
 
-		copied := *old
 		fun(&copied)
 
 		if p.Pointer.CompareAndSwap(old, &copied) {

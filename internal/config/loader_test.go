@@ -11,6 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/validate"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -93,6 +94,115 @@ func TestDecodeConfigFileWithDisabled(t *testing.T) {
 	require.True(t, ok)
 
 	assertion.True(mach.Disabled, "machine should be marked as disabled")
+}
+
+// TestDecodeConfigFileWithActivationHooks parses activation_hooks at every
+// tree level and verifies the fleet -> flake -> installable -> machine
+// inheritance: child entries stay first and inherited entries append, the
+// same slice semantics as every other Attributes list.
+func TestDecodeConfigFileWithActivationHooks(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "with_activation_hooks.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
+	must.True(ok, "expected flake 'my-flake' to exist")
+
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	must.True(ok, "expected nixosConfigurations to exist")
+
+	inst, ok := attrMap.Get("my-config")
+	must.True(ok, "expected configuration 'my-config' to exist")
+
+	mach, ok := inst.Machines.Get("my-machine")
+	must.True(ok, "expected machine 'my-machine' to exist")
+
+	assertion := assert.New(t)
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo fleet-pre"},
+		inst.ActivationHooks.Pre,
+		"fleet-level pre hooks must reach the installable (no installable-level pre hooks declared)",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo installable-post", "echo fleet-post"},
+		inst.ActivationHooks.Post,
+		"installable post hooks must keep their own entries and inherit the fleet ones",
+	)
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo machine-pre", "echo fleet-pre"},
+		mach.ActivationHooks.Pre,
+		"machine pre hooks must keep their own entries and inherit the fleet ones",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo installable-post", "echo fleet-post"},
+		mach.ActivationHooks.Post,
+		"machine post hooks must keep their own entries and inherit the installable and fleet ones",
+	)
+}
+
+// TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild covers the flake
+// level directly (its own entries plus the inherited fleet ones) and pins that
+// an explicitly empty child hook list (pre: []) inherits parent hooks exactly
+// like an absent list.
+func TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "with_activation_hooks.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	must.NoError(conf.initFleet())
+
+	flakePair, ok := conf.Fleet.Flakes.Get("hooks-flake")
+	must.True(ok, "expected flake 'hooks-flake' to exist")
+
+	assertion := assert.New(t)
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-pre", "echo fleet-pre"},
+		flakePair.ActivationHooks.Pre,
+		"flake pre hooks must keep their own entries and inherit the fleet ones",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-post", "echo fleet-post"},
+		flakePair.ActivationHooks.Post,
+		"flake post hooks must keep their own entries and inherit the fleet ones",
+	)
+
+	attrMap, ok := flakePair.Installables.Get("nixosConfigurations")
+	must.True(ok, "expected nixosConfigurations to exist")
+
+	hooksConfig, ok := attrMap.Get("hooks-config")
+	must.True(ok, "expected configuration 'hooks-config' to exist")
+
+	absent, ok := hooksConfig.Machines.Get("absent-machine")
+	must.True(ok, "expected machine 'absent-machine' to exist")
+
+	empty, ok := hooksConfig.Machines.Get("empty-machine")
+	must.True(ok, "expected machine 'empty-machine' to exist")
+
+	// An explicitly empty child list must inherit exactly like an absent list.
+	assertion.Equal(absent.ActivationHooks.Pre, empty.ActivationHooks.Pre,
+		"pre: [] must inherit like an absent list")
+	assertion.Equal(absent.ActivationHooks.Post, empty.ActivationHooks.Post,
+		"post: [] must inherit like an absent list")
+
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-pre", "echo fleet-pre"},
+		empty.ActivationHooks.Pre,
+		"empty-machine pre hooks must equal the inherited flake and fleet entries",
+	)
+	assertion.Equal(
+		[]attributes.HookCommand{"echo flake-post", "echo fleet-post"},
+		empty.ActivationHooks.Post,
+		"empty-machine post hooks must equal the inherited flake and fleet entries",
+	)
 }
 
 func TestDecodeConfigFileFileNotFound(t *testing.T) {
@@ -230,7 +340,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 
 	must.NoError(mach.Init("my-machine", &cfg.Attributes))
 
-	// SSH init is separate — test it explicitly
+	// SSH init is separate, test it explicitly
 	mach.SSH.Hostname = "host.example.com"
 	must.NoError(mach.InitSSH("testhost", nixver.Info{}))
 
@@ -399,6 +509,8 @@ func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 	assertion.True(*defaultCfg.Preset.SetProfile)
 	must.NotNil(defaultCfg.Preset.IsSystemLevel)
 	assertion.True(*defaultCfg.Preset.IsSystemLevel)
+	assertion.Equal(installable.BootstrapNixOS, defaultCfg.Preset.Bootstrap,
+		"declared bootstrap_mode should be merged as a type-level default")
 
 	// Installable-level YAML overrides win over the custom defaults.
 	overrideCfg, ok := attrMap.Get("overridden-config")
@@ -435,12 +547,52 @@ func TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath(t *testing.T) {
 	assertion := assert.New(t)
 	assertion.Equal("custom", inst.Preset.OutputTypeAttr,
 		"declared output_type_attr should be merged as a type default")
+	assertion.Equal(installable.BootstrapNixInstall, inst.Preset.Bootstrap,
+		"declared bootstrap_mode should be merged as a type default")
 
 	assertion.Equal(
 		"custom.my-custom",
 		installable.ResolveFlakeInstallable(inst.Type, inst.Name, inst.Preset),
 		"resolved attrpath should use the declared output_type_attr",
 	)
+}
+
+// TestCustomOutputTypesInvalidBootstrapModeUsesHouseError pins which
+// validation path owns the bootstrap_mode enum error, end-to-end through the
+// loader sequence (decode, initFleet, ValidateStructTags): the oneof struct
+// tag is enforced by the tag walk on every installable copy of the propagated
+// type-level value, but ValidateStructTags checks the output_types
+// declarations first, so the user sees exactly one house-style message naming
+// the YAML key and the valid modes, and the tag-driven duplicates cannot
+// surface.
+func TestCustomOutputTypesInvalidBootstrapModeUsesHouseError(t *testing.T) {
+	t.Parallel()
+
+	conf, err := decodeConfigFile(testdataPath(t, "custom_output_types.yml"))
+	require.NoError(t, err)
+
+	must := require.New(t)
+	preset, ok := conf.OutputTypes.Get("colmenaConfigurations")
+	must.True(ok)
+
+	preset.Bootstrap = "bogus"
+	conf.OutputTypes.Set("colmenaConfigurations", preset)
+
+	must.NoError(conf.initFleet())
+
+	err = validate.ValidateStructTags(conf, conf.Fleet, conf.OutputTypes, conf.Flags.ValidateFlags, 0)
+	must.Error(err, "an invalid bootstrap_mode must be rejected")
+
+	msg := err.Error()
+	assertion := assert.New(t)
+	assertion.Contains(msg, "output_types: 'colmenaConfigurations' bootstrap_mode 'bogus' is not a valid bootstrap mode",
+		"the validateDeclaredPresets message must be the user-facing one")
+	assertion.Contains(msg, "must be one of 'nixos' or 'nix-install'",
+		"error must name the valid bootstrap modes")
+	assertion.NotContains(msg, "must be one of [",
+		"the tag-driven oneof message must not surface")
+	assertion.NotContains(msg, "output_types.values",
+		"the tag-driven error path must not surface")
 }
 
 // TestOutputTypeAttrOverrideResolvesAttrpath verifies that a per-installable

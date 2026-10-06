@@ -106,6 +106,7 @@ export default defineConfig({
 					{ slug: 'guides/snapshots' },
 					{ slug: 'guides/packages' },
 					{ slug: 'guides/auto-rollback' },
+					{ slug: 'guides/activation-hooks' },
 				],
 			},
 				{

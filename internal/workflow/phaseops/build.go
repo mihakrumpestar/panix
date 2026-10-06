@@ -43,7 +43,7 @@ func BuildInstallable(
 
 	var storePath string
 
-	commandWithArgs := WithEnv(env, nixBuildCommand(installable, installables, outLink))
+	commandWithArgs := executioner.WithEnv(env, nixBuildCommand(installable, installables, outLink))
 
 	err = exc.Exec(
 		"build "+whatIsBuilding,

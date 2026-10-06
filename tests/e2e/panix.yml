@@ -204,4 +204,41 @@ fleet:
             machines:
               debian-nix-vm:
                 ssh: *ssh_debian_nix
+          # Nix-install bootstrap scenario: the same system-manager output is
+          # deployed to a machine that has NO Nix preinstalled, so the deploy
+          # must bootstrap Nix (pre-built installer binary transferred as a
+          # local path, air-gapped) before build/transfer/activate can run. A
+          # separate installable so the scenario is selected with its own
+          # attribute tag, mirroring test-vm-failing. Premise (nix absent) and
+          # proof (nix runs, store closure present) are asserted by the e2e
+          # around this deploy.
+          test-system-manager-nixinstall:
+            machines:
+              debian-nonix-vm:
+                ssh: &ssh_debian_nonix
+                  hostname: 127.0.0.1
+                  port: 10028
+                  username: root
+                  identity_file: {{ $key }}
+                  disable_strict_key_checking: true
+                # The installer is pre-built (testflakes nix-installer) and
+                # transferred as a local path (rsync), so the deploy is
+                # air-gapped: nothing is downloaded at deploy time.
+                # --diagnostic-endpoint= disables the installer's diagnostics
+                # check-in (its only network call).
+                bootstrap:
+                  nix:
+                    url: {{ env "PANIX_NIX_INSTALLER_PATH" }}
+                    args: ["install", "--no-confirm", "--diagnostic-endpoint="]
+                # One OS secret pins the landing path of the nix-install
+                # bootstrap: it must land on the live root at the plain remote
+                # path, never under the bootstrapping root (that redirect is
+                # only for the NixOS bootstrap). Verification reads the same
+                # fixture file back, so the transferred bytes have one source.
+                secrets:
+                  - local_path: {{ $dir }}/testflakes/secret-nixinstall-fixture.txt
+                    remote_path: /etc/panix-e2e-secret-nixinstall
+                    uid: 0
+                    gid: 0
+                    permissions: 0600
 {{ end }}

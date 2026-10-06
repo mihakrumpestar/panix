@@ -182,26 +182,24 @@ func verifyNixOSInstallation(port int, keyPath string) error {
 func verifyHomeManager(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify home-manager (root) on NixOS ISO VM", func() error {
-			return verifyHomeManagerMarker(nixosISOPort, keyPath, "root")
-		})
-		parGroup.Go("Verify home-manager (root) on Debian-nix VM", func() error {
-			return verifyHomeManagerMarker(debianNixVMPort, keyPath, "root")
-		})
-		parGroup.Go("Verify home-manager (alice) on NixOS ISO VM", func() error {
-			return verifyHomeManagerMarkerAsUser(nixosISOPort, keyPath, "alice")
-		})
-		parGroup.Go("Verify home-manager (alice) on Debian-nix VM", func() error {
-			return verifyHomeManagerMarkerAsUser(debianNixVMPort, keyPath, "alice")
-		})
-		// First deploy legitimately lists no generations; by this phase the
-		// deploy has run twice (bootstrap + deploy), so the listing must not be
-		// empty.
-		parGroup.Go("Verify home-manager generations listed (root, NixOS ISO VM)", func() error {
-			return verifyHomeManagerGenerations(nixosISOPort, keyPath, "root")
-		})
-	}
+	parGroup.Go("Verify home-manager (root) on NixOS ISO VM", func() error {
+		return verifyHomeManagerMarker(nixosISOPort, keyPath, "root")
+	})
+	parGroup.Go("Verify home-manager (root) on Debian-nix VM", func() error {
+		return verifyHomeManagerMarker(debianNixVMPort, keyPath, "root")
+	})
+	parGroup.Go("Verify home-manager (alice) on NixOS ISO VM", func() error {
+		return verifyHomeManagerMarkerAsUser(nixosISOPort, keyPath, "alice")
+	})
+	parGroup.Go("Verify home-manager (alice) on Debian-nix VM", func() error {
+		return verifyHomeManagerMarkerAsUser(debianNixVMPort, keyPath, "alice")
+	})
+	// First deploy legitimately lists no generations; by this phase the
+	// deploy has run twice (bootstrap + deploy), so the listing must not be
+	// empty.
+	parGroup.Go("Verify home-manager generations listed (root, NixOS ISO VM)", func() error {
+		return verifyHomeManagerGenerations(nixosISOPort, keyPath, "root")
+	})
 
 	return parGroup.Wait()
 }
@@ -510,14 +508,12 @@ func verifyPackage(port int, keyPath string) error {
 func verifyPackages(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify package on NixOS ISO VM", func() error {
-			return verifyPackage(nixosISOPort, keyPath)
-		})
-		parGroup.Go("Verify package on Debian-nix VM", func() error {
-			return verifyPackage(debianNixVMPort, keyPath)
-		})
-	}
+	parGroup.Go("Verify package on NixOS ISO VM", func() error {
+		return verifyPackage(nixosISOPort, keyPath)
+	})
+	parGroup.Go("Verify package on Debian-nix VM", func() error {
+		return verifyPackage(debianNixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }
@@ -544,14 +540,12 @@ func verifyMaidPackage(port int, keyPath string) error {
 func verifyMaidPackages(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify maid package on NixOS ISO VM", func() error {
-			return verifyMaidPackage(nixosISOPort, keyPath)
-		})
-		parGroup.Go("Verify maid package on Debian-nix VM", func() error {
-			return verifyMaidPackage(debianNixVMPort, keyPath)
-		})
-	}
+	parGroup.Go("Verify maid package on NixOS ISO VM", func() error {
+		return verifyMaidPackage(nixosISOPort, keyPath)
+	})
+	parGroup.Go("Verify maid package on Debian-nix VM", func() error {
+		return verifyMaidPackage(debianNixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }
@@ -595,11 +589,204 @@ func verifySystemManager(port int, keyPath string) error {
 func verifySystemManagers(keyPath string) error {
 	parGroup := newParallelGroup()
 
-	if testScopeFlag.local() {
-		parGroup.Go("Verify system-manager on Debian-nix VM", func() error {
-			return verifySystemManager(debianNixVMPort, keyPath)
-		})
+	parGroup.Go("Verify system-manager on Debian-nix VM", func() error {
+		return verifySystemManager(debianNixVMPort, keyPath)
+	})
+
+	return parGroup.Wait()
+}
+
+// Nix-install bootstrap probes and their marker words. Each probe echoes
+// exactly one marker of its pair; the matching verifier asserts the ok/present
+// marker so the command string and the check share one naming source.
+const (
+	nixBinPresentMarker    = "nixbin-present"
+	nixBinAbsentMarker     = "nixbin-absent"
+	nixDirPresentMarker    = "nixdir-present"
+	nixDirAbsentMarker     = "nixdir-absent"
+	nixBinOKMarker         = "nixbin-ok"
+	nixBinMissingMarker    = "nixbin-missing"
+	nixStorePathPrefix     = "/nix/store/"
+	nixProbeDirSection     = "test -e /nix && echo " + nixDirPresentMarker + " || echo " + nixDirAbsentMarker
+	nixProbeBinSection     = "command -v nix >/dev/null 2>&1 && echo " + nixBinPresentMarker + " || echo " + nixBinAbsentMarker
+	nixProbeVersionSection = "nix --version >/dev/null 2>&1 && echo " + nixBinOKMarker + " || echo " + nixBinMissingMarker
+)
+
+// Nix-install secret landing probe: the OS secret must land on the live root
+// at the plain remote path with the exact fixture content, and must not exist
+// under the bootstrapping root (the redirect belongs to the NixOS bootstrap
+// only). Same marker-pair style as the nix probes: the probe echoes exactly
+// one marker of its pair so the command string and the check share one naming
+// source.
+const (
+	// nixinstallSecretRemotePath mirrors the secret remote_path in panix.yml.
+	nixinstallSecretRemotePath = "/etc/panix-e2e-secret-nixinstall" //nolint:gosec // remote path name, not a credential
+	// nixinstallSecretFixtureName is the committed fixture panix.yml
+	// transfers; readSecretFixture is the single reader of its bytes.
+	nixinstallSecretFixtureName = "secret-nixinstall-fixture.txt"
+	// bootstrappingRootPath is the root Machine.MaybeBootstrappingPath
+	// redirects to while a NixOS bootstrap is in progress.
+	bootstrappingRootPath = "/mnt"
+
+	secretLandingPlainMissingMarker = "secret-plain-missing"
+	secretLandingMntPresentMarker   = "secret-mnt-present" //nolint:gosec // marker name, not a credential
+	secretLandingMntAbsentMarker    = "secret-mnt-absent"  //nolint:gosec // marker name, not a credential
+
+	secretLandingPlainProbeSection = "cat -- " + nixinstallSecretRemotePath +
+		" 2>/dev/null || echo " + secretLandingPlainMissingMarker
+	secretLandingMntProbeSection = "test -e " + bootstrappingRootPath + nixinstallSecretRemotePath +
+		" && echo " + secretLandingMntPresentMarker + " || echo " + secretLandingMntAbsentMarker
+)
+
+// verifyNixAbsentOutput asserts the nix absence probe: the target must show
+// neither a nix binary nor a /nix tree, so the post-deploy proof can only come
+// from the bootstrap install step. Detecting core `nix` over plain SSH is
+// verified with the Determinate Nix installer (its profile wiring is
+// system-wide); `su -l` here only matches the sibling probes.
+func verifyNixAbsentOutput(output string) error {
+	if strings.Contains(output, nixBinPresentMarker) || strings.Contains(output, nixDirPresentMarker) {
+		return errors.Errorf("target must start without Nix for the bootstrap scenario, got: %q", output)
 	}
+
+	if !strings.Contains(output, nixBinAbsentMarker) || !strings.Contains(output, nixDirAbsentMarker) {
+		return errors.Errorf("unexpected nix absence probe output (want %q and %q): %q",
+			nixBinAbsentMarker, nixDirAbsentMarker, output)
+	}
+
+	return nil
+}
+
+// verifyNixAbsent pins the premise of the nix-install bootstrap scenario on
+// the target itself.
+func verifyNixAbsent(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	output, err := sshRun(port, keyPath, "su -l root -c '"+nixProbeBinSection+"'; "+nixProbeDirSection)
+	if err != nil {
+		return errors.Wrapf(err, "verify nix absence on %s", addr)
+	}
+
+	return errors.Wrapf(verifyNixAbsentOutput(output), "verify nix absence on %s", addr)
+}
+
+// verifyNixInstalledOutput asserts the nix-install bootstrap end state: the
+// nix binary runs (command-exit marker) and the system-manager hello binary
+// resolves into the /nix/store closure, i.e. the transferred closure is
+// materialized in the store.
+func verifyNixInstalledOutput(versionSection, helloSection string) error {
+	if !strings.Contains(versionSection, nixBinOKMarker) {
+		return errors.Errorf("nix --version failed after the nix-install bootstrap (want %q): %q",
+			nixBinOKMarker, strings.TrimSpace(versionSection))
+	}
+
+	helloPath := strings.TrimSpace(helloSection)
+	if !strings.HasPrefix(helloPath, nixStorePathPrefix) {
+		return errors.Errorf("system-manager closure does not resolve under %s: %q", nixStorePathPrefix, helloPath)
+	}
+
+	return nil
+}
+
+// verifyNixInstalled asserts the nix-install bootstrap end state on a target
+// that started without Nix.
+func verifyNixInstalled(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	// Bare `nix --version` over plain SSH is verified with the Determinate Nix
+	// installer (its profile wiring is system-wide; the product probes it bare
+	// in nixprobe.go). `su -l` here only matches verifyPackage, which needs it
+	// for nix-profile binaries (not on the plain SSH PATH); || true on the
+	// readlink keeps the probe running so both sections are reported.
+	output, err := sshRun(port, keyPath,
+		"su -l root -c '"+nixProbeVersionSection+"'; echo '---'; "+
+			"readlink -f /run/system-manager/sw/bin/hello 2>/dev/null || true")
+	if err != nil {
+		return errors.Wrapf(err, "verify nix-install bootstrap on %s", addr)
+	}
+
+	parts := strings.SplitN(output, "---", splitParts)
+	if len(parts) != splitParts {
+		return errors.Errorf("unexpected nix-install bootstrap output on %s: %q", addr, output)
+	}
+
+	return errors.Wrapf(
+		verifyNixInstalledOutput(parts[0], strings.TrimSpace(parts[1])),
+		"verify nix-install bootstrap on %s", addr)
+}
+
+// verifySecretLandingOutput asserts the nix-install secret landing probe: the
+// bootstrapping-root section must report the copy absent (no redirect for the
+// nix-install bootstrap) and the plain section must carry the exact secret
+// content on the live root. Sections are split like verifySecret: the raw cat
+// bytes keep their trailing newline so the content check stays content-exact.
+func verifySecretLandingOutput(output, wantContent string) error {
+	parts := strings.SplitN(output, "---", secretVerifyParts)
+	if len(parts) != secretVerifyParts {
+		return errors.Errorf("unexpected secret landing probe output: %q", output)
+	}
+
+	mntSection := strings.TrimPrefix(parts[1], "\n")
+	if strings.Contains(mntSection, secretLandingMntPresentMarker) {
+		return errors.Errorf("secret must not land under the bootstrapping root %s (want %q): %q",
+			bootstrappingRootPath, secretLandingMntAbsentMarker, strings.TrimSpace(mntSection))
+	}
+
+	if !strings.Contains(mntSection, secretLandingMntAbsentMarker) {
+		return errors.Errorf("unexpected secret landing probe output (want %q): %q",
+			secretLandingMntAbsentMarker, strings.TrimSpace(mntSection))
+	}
+
+	content := strings.TrimPrefix(parts[0], "\n")
+	if strings.Contains(content, secretLandingPlainMissingMarker) {
+		return errors.Errorf("secret missing at %s on the live root (want %q): %q",
+			nixinstallSecretRemotePath, wantContent, strings.TrimSpace(content))
+	}
+
+	if content != wantContent {
+		return errors.Errorf("secret %s content mismatch on the live root: got %q, want %q",
+			nixinstallSecretRemotePath, content, wantContent)
+	}
+
+	return nil
+}
+
+// verifySecretLanding asserts the secret landing end state on the target: the
+// OS secret sits on the live root at the plain remote path with the exact
+// fixture content and no copy exists under the bootstrapping root.
+func verifySecretLanding(port int, keyPath string) error {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	wantContent, err := readSecretFixture(nixinstallSecretFixtureName)
+	if err != nil {
+		return err
+	}
+
+	output, err := sshRun(port, keyPath,
+		secretLandingPlainProbeSection+"; echo '---'; "+secretLandingMntProbeSection)
+	if err != nil {
+		return errors.Wrapf(err, "verify secret landing on %s", addr)
+	}
+
+	return errors.Wrapf(verifySecretLandingOutput(output, wantContent),
+		"verify secret landing on %s", addr)
+}
+
+// verifySystemManagerNixInstall asserts the nix-install bootstrap scenario
+// end to end on the nix-less VM: the system-manager profile is active, the
+// bootstrap left a working Nix with the closure in /nix/store, and the OS
+// secret landed on the live root without a bootstrapping-root redirect.
+func verifySystemManagerNixInstall(keyPath string) error {
+	parGroup := newParallelGroup()
+
+	parGroup.Go("Verify system-manager on Debian nonix VM", func() error {
+		return verifySystemManager(debianNonixVMPort, keyPath)
+	})
+	parGroup.Go("Verify Nix bootstrapped on Debian nonix VM", func() error {
+		return verifyNixInstalled(debianNonixVMPort, keyPath)
+	})
+	parGroup.Go("Verify secret landing on Debian nonix VM", func() error {
+		return verifySecretLanding(debianNonixVMPort, keyPath)
+	})
 
 	return parGroup.Wait()
 }
@@ -629,18 +816,28 @@ type e2eSecretExpectation struct {
 	mode    string
 }
 
+// readSecretFixture reads a committed secret fixture from testflakes: the
+// fixture file is the single source of truth for the transferred bytes, so
+// panix.yml ships exactly these and the verifiers assert exactly these.
+func readSecretFixture(name string) (string, error) {
+	fixturePath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", name)
+
+	fixture, err := os.ReadFile(fixturePath) //nolint:gosec // repo-local fixture
+	if err != nil {
+		return "", errors.Wrapf(err, "read secret fixture %s", fixturePath)
+	}
+
+	return string(fixture), nil
+}
+
 // e2eSecretExpectations returns every secret panix.yml transfers. The
 // local_path fixture content is read from the committed fixture so config and
 // verification share one source of truth.
 func e2eSecretExpectations() ([]e2eSecretExpectation, error) {
-	fixturePath := filepath.Join(findProjectRoot(), "tests", "e2e", "testflakes", "secret-fixture.txt")
-
-	fixture, err := os.ReadFile(fixturePath) //nolint:gosec // repo-local fixture
+	fixtureContent, err := readSecretFixture("secret-fixture.txt")
 	if err != nil {
-		return nil, errors.Wrapf(err, "read local_path fixture %s", fixturePath)
+		return nil, err
 	}
-
-	fixtureContent := string(fixture)
 
 	return []e2eSecretExpectation{
 		{name: "local-path", content: fixtureContent, mode: "640"},
@@ -785,6 +982,7 @@ func verifySecretsConditionalSkip(configPath string, res *testResources) error {
 		"PANIX_TEST_MODE=deploy",
 		"PANIX_TEST_SCOPE="+string(testScopeFlag),
 		"PANIX_KEXEC_PATH="+res.kexecInstallerPath,
+		"PANIX_NIX_INSTALLER_PATH="+res.nixInstallerPath,
 	)
 	if err != nil {
 		return err

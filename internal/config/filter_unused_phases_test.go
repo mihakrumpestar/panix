@@ -5,10 +5,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
+	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/testutil"
 )
+
+// disableNixInstallWithHooks opts the bootstrap out of the nix install step
+// and declares post_bootstrap_hooks: without any other keep trigger the phase
+// is dropped, the hooks alone never create a bootstrap.
+func disableNixInstallWithHooks(bootstrap *attributes.Bootstrap) {
+	bootstrap.DisableNixInstall = true
+	bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
+}
 
 //nolint:funlen
 func TestHasRequiredPhases(t *testing.T) {
@@ -83,6 +93,64 @@ func TestHasRequiredPhases(t *testing.T) {
 				fk := testutil.NewFaker()
 
 				return fk.Fleet(fk.Flake(fk.Installable()))
+			},
+			false, false,
+		},
+		{
+			"nix-install preset without any bootstrap config",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixInstall
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			false, true,
+		},
+		{
+			"nix-install preset with disable_nix_install",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixInstall
+				inst.Machines.Pairs()[0].Value.Bootstrap.DisableNixInstall = true
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			false, false,
+		},
+		{
+			"post_bootstrap_hooks with disable_nix_install",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixInstall
+				disableNixInstallWithHooks(&inst.Machines.Pairs()[0].Value.Bootstrap)
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			false, false,
+		},
+		{
+			"bootstrap-none type with hooks and force_bootstrap",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.MachineWithForceBootstrap())
+				inst.Preset.Bootstrap = installable.BootstrapNone
+				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			false, false,
+		},
+		{
+			"nixos preset without any bootstrap config",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixOS
+
+				return fk.Fleet(fk.Flake(inst))
 			},
 			false, false,
 		},
@@ -178,6 +246,57 @@ func TestFilterOutUnusedPhases(t *testing.T) {
 				return fk.Fleet(fk.Flake(fk.Installable(fk.Machine())))
 			},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
+		},
+		{
+			"keeps bootstrap for nix-install preset without any bootstrap config",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixInstall
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+		},
+		{
+			"drops bootstrap for nix-install preset with disable_nix_install",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixInstall
+				inst.Machines.Pairs()[0].Value.Bootstrap.DisableNixInstall = true
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
+		},
+		{
+			"drops bootstrap for post_bootstrap_hooks with disable_nix_install",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.Machine())
+				inst.Preset.Bootstrap = installable.BootstrapNixInstall
+				disableNixInstallWithHooks(&inst.Machines.Pairs()[0].Value.Bootstrap)
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
+			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
+		},
+		{
+			"drops bootstrap for bootstrap-none type with hooks and force_bootstrap",
+			func() *fleet.Fleet {
+				fk := testutil.NewFaker()
+				inst := fk.Installable(fk.MachineWithForceBootstrap())
+				inst.Preset.Bootstrap = installable.BootstrapNone
+				inst.Machines.Pairs()[0].Value.Bootstrap.PostBootstrapHooks = []attributes.HookCommand{"echo hook-ran"}
+
+				return fk.Fleet(fk.Flake(inst))
+			},
+			[]phase.Phase{phase.Inspect, phase.Bootstrap, phase.Build, phase.Activate},
 			[]phase.Phase{phase.Inspect, phase.Build, phase.Activate},
 		},
 	}

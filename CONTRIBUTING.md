@@ -27,6 +27,17 @@ Large docs assets (demo gif) are not committed to git; `task docs:assets` fetche
 
 CI pushes Nix build results to the [mihakrumpestar Cachix cache](https://app.cachix.org/cache/mihakrumpestar). Pushing requires the `CACHIX_AUTH_TOKEN` secret to be set on the repository; without it the workflow skips pushing and only builds.
 
+## CI environment profiles
+
+The GitHub Actions workflows use slim devenv profiles so each job only realizes the tools it needs (~1 GiB instead of the full ~3.5 GiB closure), which keeps runs fast and the Nix store cacheable.
+
+- `devenv --profile ci shell`: only the Go lint/test toolchain (used by `task ci`, the `go:*` tasks and the Nix build job).
+- `devenv --profile docs shell`: only Bun (used by `task docs:*`).
+
+A plain `devenv shell` still enables every tool group. The groups are exposed as options (`panix.groups.<go|docs|e2e|bench|release>.enable`, all default `true`) and can be toggled per invocation, e.g. `devenv --option panix.groups.e2e.enable:bool false shell`.
+
+The `task ci` pre-commit hook is registered in every profile so committing always works: it gates commits with `task ci` where the `go` group is active, and is a no-op elsewhere (including the `ci` profile, whose jobs run `task ci` explicitly).
+
 ## Release process
 
 Releases use two tasks in [Taskfile.yml](Taskfile.yml), run from the devenv shell. Both need `GH_TOKEN`.

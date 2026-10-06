@@ -1,4 +1,4 @@
-package phaseops
+package executioner
 
 // WithEnv prefixes command with env KEY=VALUE pairs so the variables
 // reach the final command across every boundary panix uses: direct exec,

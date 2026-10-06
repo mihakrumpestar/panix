@@ -17,8 +17,12 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 		return nil
 	}
 
+	// OS secrets follow the NixOS bootstrapping root (if any) so they land
+	// on the future root while bootstrapping, and on the live root otherwise.
+	bootstrapsNixOS := fleetLeaf.Installable.Preset.BootstrapsNixOS()
+
 	for _, secret := range secrets {
-		err := phaseops.TransferSecret(exc, machine, secret, "secrets", true)
+		err := phaseops.TransferSecret(exc, machine, secret, "secrets", bootstrapsNixOS)
 		if err != nil {
 			// Command-only sources have no local path: name them by command.
 			secretName := secret.LocalPath

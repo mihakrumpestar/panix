@@ -23,13 +23,13 @@ func CopyClosure(
 	installable := fleetLeaf.Installable
 	activeSSH := machineI.GetActiveSSH()
 
-	toURL := nixCopyToURL(activeSSH, machineI, installable.Type, transferClosure)
+	toURL := nixCopyToURL(activeSSH, machineI, installable.Preset, transferClosure)
 	sshOpts := activeSSH.MaybeNixSSHOpts()
 
 	baseArgs := nixCopyBaseArgs(installable, toURL)
 	// User env first so panix-internal NIX_SSHOPTS takes precedence on conflict.
 	env := slices.Concat(installable.Nix.GetCopyEnv(), sshOpts)
-	commandWithArgs := WithEnv(env, slices.Concat(
+	commandWithArgs := executioner.WithEnv(env, slices.Concat(
 		baseArgs,
 		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.CopyFlags),
 		toTransfer,
@@ -55,14 +55,14 @@ func CopyClosure(
 	return nil
 }
 
-func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, outputType installable.FlakeOutputType, transferClosure bool) string {
+func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, preset installable.Preset, transferClosure bool) string {
 	var storeURLParams []string
 
-	// Only redirect to /mnt for bootstrappable output types that are being bootstrapped.
-	// Non-bootstrappable output types (homeConfigurations, packages, etc.) always copy
-	// to the live system's /nix/store, not /mnt.
-	mi := machineI.MetaInspect.Load()
-	if mi != nil && !mi.Bootstrapped && transferClosure && installable.IsBootstrappableType(outputType) {
+	// Only redirect to /mnt while NixOS-bootstrapping (the target is the
+	// installer and /mnt is the future root). All other bootstrap modes copy
+	// to the live system's /nix/store. Same predicate as the bootstrapping
+	// root transfers (Machine.MaybeBootstrappingPath).
+	if transferClosure && machineI.NixOSBootstrappingInProgress(preset.BootstrapsNixOS()) {
 		storeURLParams = append(storeURLParams, "remote-store=local?root=/mnt")
 	}
 
