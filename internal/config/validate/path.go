@@ -1,7 +1,6 @@
 package validate
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -24,14 +23,14 @@ func registerPathValidators(validate *validator.Validate) {
 		panic(errors.Wrap(err, "failed to register abspath validation"))
 	}
 
-	err = validate.RegisterValidation("dir_exists", func(fl validator.FieldLevel) bool {
-		p := fl.Field().String()
-		info, statErr := os.Stat(p)
+	// dir_shape: theoretical check only, the path need not exist on disk; rejects empty and NUL-byte paths.
+	err = validate.RegisterValidation("dir_shape", func(fl validator.FieldLevel) bool {
+		p := strings.TrimSpace(fl.Field().String())
 
-		return statErr == nil && info.IsDir()
+		return p != "" && !strings.ContainsRune(p, 0)
 	})
 	if err != nil {
-		panic(errors.Wrap(err, "failed to register dir validation"))
+		panic(errors.Wrap(err, "failed to register dir_shape validation"))
 	}
 
 	// Shape check only: a local file need not exist at config load time.

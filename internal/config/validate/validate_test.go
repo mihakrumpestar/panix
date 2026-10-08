@@ -640,6 +640,7 @@ func runSetProfileRequiresProfilePathCase(t *testing.T, preset installablepkg.Pr
 // empty), 'nixos' mirrors the built-in invariant (system_level: true plus the
 // NixOS system toplevel build path), and 'nix-install' has no extra
 // requirements.
+//
 //nolint:funlen
 func TestValidateOutputTypes_BootstrapModeRules(t *testing.T) {
 	t.Parallel()
@@ -822,4 +823,73 @@ func TestValidateBuildMode_RemoteFirstMachineLocalRejected(t *testing.T) {
 	assert.Equal(t,
 		[]string{"test.xpath: remote mode requires the first machine to be remote (not local)"},
 		validateBuildMode(inst, "test.xpath", nil))
+}
+
+// snapshotDirFixture mirrors the loader: flags.Snapshot is embedded, so its
+// tags run as they do for a full config.
+type snapshotDirFixture struct {
+	flags.Snapshot
+}
+
+// TestSnapshotDirValidation covers snapshot.dir's dir_shape contract: a
+// purely theoretical path check, so missing dirs and existing files pass
+// (snapshot.Write creates the dir, issue #30) while malformed paths fail.
+func TestSnapshotDirValidation(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	existingDir := filepath.Join(base, "exists")
+	require.NoError(t, os.MkdirAll(existingDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(base, "file.txt"), nil, 0o600))
+
+	tests := []struct {
+		name    string
+		dir     string
+		wantErr bool
+	}{
+		{"missing dir passes", filepath.Join(base, "missing", ".panix"), false},
+		{"existing dir passes", existingDir, false},
+		{"existing file passes, write fails later", filepath.Join(base, "file.txt"), false},
+		{"empty passes via omitempty", "", false},
+		{"nul byte fails", "bad\x00dir", true},
+		{"whitespace fails", " ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateStructTags(&snapshotDirFixture{Snapshot: flags.Snapshot{Dir: tt.dir}}, &fleet.Fleet{}, nil, flags.ValidateFlags{}, 0)
+			if tt.wantErr {
+				require.ErrorContains(t, err, "must be a directory path")
+
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestHumanizeTagMessage_URIorDir covers the readable message for the built-in
+// 'uri|dir' OR-tag (flake url): a local path that is not an existing directory
+// must render as an actionable message, not the raw-tag fallback.
+type dirHumanizeFixture struct {
+	URL string `validate:"omitempty,uri|dir"`
+}
+
+func TestHumanizeTagMessage_URIorDir(t *testing.T) {
+	t.Parallel()
+
+	validate := validator.New()
+	registerPathValidators(validate)
+
+	err := validate.Struct(dirHumanizeFixture{URL: "./does-not-exist"})
+	require.Error(t, err, "a non-existent local flake path must fail the built-in dir check")
+
+	var validationErrors validator.ValidationErrors
+	require.ErrorAs(t, err, &validationErrors)
+	require.NotEmpty(t, validationErrors)
+
+	assert.Contains(t, humanizeTagMessage(validationErrors[0]), "must be a valid URL or an existing local directory, got: ./does-not-exist")
 }

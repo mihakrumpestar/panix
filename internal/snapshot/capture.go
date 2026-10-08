@@ -7,7 +7,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/jsonerror"
 )
 
-func Capture(conf *config.Config, reason config.SnaphsotReason, workflowErr error) *config.Config {
+func Capture(conf *config.Config, reason config.SnapshotReason, workflowErr error) *config.Config {
 	conf.Fleet.Recalculate(conf.Phases)
 
 	confCopy := *conf

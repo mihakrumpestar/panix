@@ -86,7 +86,7 @@ type Tui struct {
 }
 
 type Snapshot struct {
-	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"omitempty,dir,dir_exists" default:"." completion-predictor:"dir"`
+	Dir     string `yaml:"dir" json:"dir" help:"Directory to save snapshots" validate:"omitempty,dir_shape" default:"." completion-predictor:"dir"`
 	OnRetry bool   `yaml:"on_retry" json:"on_retry,omitempty" help:"Take snapshot before retry"`
 	OnExit  bool   `yaml:"on_exit" json:"on_exit,omitempty" help:"Take snapshot on exit"`
 }

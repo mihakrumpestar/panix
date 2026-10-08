@@ -154,7 +154,7 @@ func (m *model) handleCopy() zeroterm.Cmd {
 // snapshot is taken exactly once per exit.
 func (m *model) quitCmd() zeroterm.Cmd {
 	if m.conf.Flags.Snapshot.OnExit {
-		m.captureSnapshot(config.SnaphsotReasonExit)
+		m.captureSnapshot(config.SnapshotReasonExit)
 	}
 
 	log.Debug().Msg("Context done, exiting TUI")
@@ -255,7 +255,7 @@ func (m *model) handleRetry() zeroterm.Cmd {
 	}
 
 	if m.conf.Flags.Snapshot.OnRetry {
-		m.captureSnapshot(config.SnaphsotReasonRetry)
+		m.captureSnapshot(config.SnapshotReasonRetry)
 	}
 
 	notifCmd := m.footer.Notification().Set("Retrying failed...", m.conf.ColorScheme.Status.OK.GetForeground())
@@ -301,12 +301,12 @@ func (m *model) handleEsc() zeroterm.Cmd {
 }
 
 func (m *model) handleSnapshot() zeroterm.Cmd {
-	m.captureSnapshot(config.SnaphsotReasonManual)
+	m.captureSnapshot(config.SnapshotReasonManual)
 
 	return m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())
 }
 
-func (m *model) captureSnapshot(reason config.SnaphsotReason) {
+func (m *model) captureSnapshot(reason config.SnapshotReason) {
 	if m.workflow == nil {
 		return
 	}

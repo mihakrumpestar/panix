@@ -32,20 +32,20 @@ type Snapshot struct {
 	PanixVersion string    `yaml:"-" json:"panix_version"`
 	StartTime    time.Time `yaml:"-" json:"start_time"`
 
-	Reason        SnaphsotReason       `yaml:"-" json:"reason"`
+	Reason        SnapshotReason       `yaml:"-" json:"reason"`
 	SnapshotTime  time.Time            `yaml:"-" json:"snapshot_time"`
 	WorkflowError *jsonerror.JSONError `yaml:"-" json:"workflow_error,omitempty"`
 }
 
-type SnaphsotReason string
+type SnapshotReason string
 
 const (
-	SnaphsotReasonManual SnaphsotReason = "manual"
-	SnaphsotReasonRetry  SnaphsotReason = "retry"
-	SnaphsotReasonExit   SnaphsotReason = "exit"
+	SnapshotReasonManual SnapshotReason = "manual"
+	SnapshotReasonRetry  SnapshotReason = "retry"
+	SnapshotReasonExit   SnapshotReason = "exit"
 )
 
-func (sr SnaphsotReason) String() string {
+func (sr SnapshotReason) String() string {
 	return string(sr)
 }
 

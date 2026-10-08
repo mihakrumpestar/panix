@@ -126,8 +126,10 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("invalid file path: %v", fieldError.Value())
 	case "abspath":
 		return fmt.Sprintf("must be an absolute path, got: %v", fieldError.Value())
-	case "dir_exists":
-		return fmt.Sprintf("directory does not exist: %v", fieldError.Value())
+	case "dir_shape":
+		return fmt.Sprintf("must be a directory path, got: %v", fieldError.Value())
+	case "uri|dir":
+		return fmt.Sprintf("must be a valid URL or an existing local directory, got: %v", fieldError.Value())
 	case "url":
 		return fmt.Sprintf("must be a valid URL, got: %v", fieldError.Value())
 	case "uri":
