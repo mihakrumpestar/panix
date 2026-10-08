@@ -2,11 +2,19 @@
 
 ## [0.11.0](https://github.com/mihakrumpestar/panix/compare/v0.10.0..v0.11.0) - 2026-10-08
 
-Panix can now bootstrap machines without Nix: every non-NixOS built-in installable type and custom types with `bootstrap_mode: nix-install` install Nix on the target during the Bootstrap phase when it is missing, before Build, Transfer, Secrets, and Activate run. Zero-config by default: the Determinate nix-installer runs elevated with `install --no-confirm`, planner auto-detected, so the same config covers Debian, Ubuntu, and macOS. Point `bootstrap.nix.url` at a local path to transfer the installer with `rsync` for offline machines; `disable_nix_install` opts out, `force_bootstrap` re-runs it.
+Targets without Nix now bootstrap: non-NixOS built-in installable types (and custom types via `bootstrap_mode: nix-install | nixos` in `output_types`) get Nix installed automatically during Bootstrap when missing, before Build, Transfer, Secrets, and Activate. No opt-in needed, unlike the NixOS bootstrap; `disable_nix_install` opts out, `force_bootstrap` re-runs. Default is the zero-config Determinate installer (`install --no-confirm`); `bootstrap.nix.url` accepts a local path for offline machines.
 
-Deploys gained `activation_hooks`: `pre` and `post` command lists, settable at fleet, flake, installable, or machine level and inherited downward. Entries run as `sh -c` on the target with fail-fast semantics: a `pre` failure skips activation, a `post` failure fails the phase without auto rollback. Hooks receive env vars like `PANIX_CLOSURE` and support the `waitForOnline`/`waitForOffline` keywords from bootstrap hooks.
+New `activation_hooks` attribute: `pre`/`post` command lists at fleet, flake, installable, or machine level, inherited downward. Entries run as `sh -c` on the target, fail fast: a `pre` failure skips activation, a `post` failure fails the phase without auto rollback. Env vars like `PANIX_CLOSURE` are provided, plus the `waitForOnline`/`waitForOffline` keywords.
 
-Also fixes config validation no longer requiring `snapshot.dir` to exist (#30), docs improvements (beta warning removed, comparison table) and migration from devbox to devenv.
+macOS: the clipboard now uses `pbcopy` instead of falling through to OSC52, Inspect detects the OS family and versions via `sw_vers` instead of the nonexistent `/etc/os-release`, and a NixOS bootstrap against a macOS host fails fast at Inspect.
+
+Along the way:
+
+- disko attrpath now honors `output_type_attr`/`omit_type_from_attr_path`
+- the `/mnt` redirect applies only to the NixOS bootstrap, so non-NixOS secrets land on the live root
+- `snapshot.dir` is no longer required to exist at config validation (#30)
+- docs improvements (beta warning removed, comparison table)
+- devbox to devenv migration with Nix store caching and slim per-job CI tool profiles
 
 ### Bug Fixes
 
