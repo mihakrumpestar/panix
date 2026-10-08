@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.11.0](https://github.com/mihakrumpestar/panix/compare/v0.10.0..v0.11.0) - 2026-10-08
+
+Panix can now bootstrap machines without Nix: every non-NixOS built-in installable type and custom types with `bootstrap_mode: nix-install` install Nix on the target during the Bootstrap phase when it is missing, before Build, Transfer, Secrets, and Activate run. Zero-config by default: the Determinate nix-installer runs elevated with `install --no-confirm`, planner auto-detected, so the same config covers Debian, Ubuntu, and macOS. Point `bootstrap.nix.url` at a local path to transfer the installer with `rsync` for offline machines; `disable_nix_install` opts out, `force_bootstrap` re-runs it.
+
+Deploys gained `activation_hooks`: `pre` and `post` command lists, settable at fleet, flake, installable, or machine level and inherited downward. Entries run as `sh -c` on the target with fail-fast semantics: a `pre` failure skips activation, a `post` failure fails the phase without auto rollback. Hooks receive env vars like `PANIX_CLOSURE` and support the `waitForOnline`/`waitForOffline` keywords from bootstrap hooks.
+
+Also fixes config validation no longer requiring `snapshot.dir` to exist (#30), docs improvements (beta warning removed, comparison table) and migration from devbox to devenv.
+
+### Bug Fixes
+
+- Don't require snapshot.dir to exist at config validation, fixes #30 by @mihakrumpestar ([e80414d](https://github.com/mihakrumpestar/panix/commit/e80414d8ae4c7177360ae4fe1782af16a61a0c58))
+
+### Documentation
+
+- Remove beta warning, improve docs navbar by @mihakrumpestar ([a4fcf73](https://github.com/mihakrumpestar/panix/commit/a4fcf738c8e1ab963d08195f1f64fc3674ba4f69))
+- Add wire tool to comparison table, improve comparison table by @mihakrumpestar ([4c6863c](https://github.com/mihakrumpestar/panix/commit/4c6863c96a784fbd089f5fd681fda6fc89542cb1))
+- Add devenv machines to comparison table by @mihakrumpestar ([e4253b5](https://github.com/mihakrumpestar/panix/commit/e4253b56c1f9d2b0a6ff27f70fce7dcd21c4e1ee))
+
+### Features
+
+- Nix-installer for non-NixOS systems and pre/post activation hooks ([#27](https://github.com/mihakrumpestar/panix/pull/27)) by @mihakrumpestar ([d126577](https://github.com/mihakrumpestar/panix/commit/d1265777b6a36095b1860a88f21a21aeda21e434))
+
+### Build
+
+- Migrate from devbox to devenv, improve ci by @mihakrumpestar ([f7a0bb2](https://github.com/mihakrumpestar/panix/commit/f7a0bb2d96f1f4b7f221d44f14742ec6aefc23ea))
+
+### Misc
+
+- Add work deploy machine to example by @mihakrumpestar ([c7c98ad](https://github.com/mihakrumpestar/panix/commit/c7c98ad2625784b3ae9cb8c8b5badd2fd4cefc97))
+
 ## [0.10.0](https://github.com/mihakrumpestar/panix/compare/v0.9.3..v0.10.0) - 2026-09-22
 
 Secrets can now come from a command: the new `command` field runs on the control host and streams its stdout into the destination file, so anything that prints a secret works (`sops --decrypt`, `age`, `pass show`, `op read`) and encrypted material can stay encrypted in the repo until transfer. It combines with `local_path`, exported as `PANIX_SECRET_LOCAL_PATH`, and bootstrap disk encryption keys accept it too. No temporary file is written on either side and the output is never logged; content that already matches is skipped by hash, leaving the file untouched.
