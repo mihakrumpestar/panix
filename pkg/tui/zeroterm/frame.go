@@ -1,8 +1,6 @@
 package zeroterm
 
 import (
-	"bytes"
-
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
 
@@ -28,23 +26,15 @@ func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCoun
 			continue
 		}
 
-	buf = append(buf, "\x1b["...)
-	buf = buffer.AppendInt(buf, lineIdx+1)
-	buf = append(buf, ";1H"...)
+		buf = append(buf, "\x1b["...)
+		buf = buffer.AppendInt(buf, lineIdx+1)
+		buf = append(buf, ";1H"...)
 
-	// Strip \r from line content inline; avoids strings.ReplaceAll
-	// allocation. lipgloss and ANSI renderers may emit \r within a
-	// "line" (e.g. for cursor repositioning within a styled region).
-	line := cur.Line(lineIdx)
+		// Strip \r and internal zone hit-test markers inline; avoids
+		// intermediate allocations. See appendSanitizedLine.
+		buf = appendSanitizedLine(buf, cur.Line(lineIdx))
 
-	found := bytes.Contains(line, []byte{'\r'})
-	if found {
-		buf = appendStripCR(buf, line)
-	} else {
-		buf = append(buf, line...)
-	}
-
-	buf = append(buf, "\x1b[0m\x1b[K"...)
+		buf = append(buf, "\x1b[0m\x1b[K"...)
 	}
 
 	contentEnd := min(lineCount, terminalHeight)
@@ -60,13 +50,41 @@ func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCoun
 	return buf
 }
 
-// appendStripCR appends line to buf with all \r bytes removed.
-func appendStripCR(buf []byte, line []byte) []byte {
-	for _, b := range line {
-		if b != '\r' {
-			buf = append(buf, b)
+// appendSanitizedLine appends line to buf with \r bytes and internal
+// zone hit-test markers removed, copying runs between stripped bytes.
+//
+// lipgloss and ANSI renderers may emit \r within a "line" (e.g. for
+// cursor repositioning within a styled region). Zone markers are
+// panix-internal state for mouse hit-testing (ZoneIDAtCol) and must
+// never reach the physical terminal: terminal parsers disagree on
+// unknown or malformed CSI sequences, and some print them as literal
+// text, corrupting the layout.
+func appendSanitizedLine(buf []byte, line []byte) []byte {
+	start := 0
+
+	for pos := 0; pos < len(line); {
+		byteI := line[pos]
+
+		if byteI == '\r' {
+			buf = append(buf, line[start:pos]...)
+			start = pos + 1
+			pos++
+
+			continue
 		}
+
+		if byteI == '\x1b' && pos+1 < len(line) && line[pos+1] == '[' {
+			if end, _, _, ok := parseZoneBody(line, pos+2); ok {
+				buf = append(buf, line[start:pos]...)
+				start = end
+				pos = end
+
+				continue
+			}
+		}
+
+		pos++
 	}
 
-	return buf
+	return append(buf, line[start:]...)
 }
