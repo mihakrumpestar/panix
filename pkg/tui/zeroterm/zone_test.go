@@ -221,5 +221,90 @@ func TestZoneID_FormatOpenClose(t *testing.T) {
 	closeMarker := id.FormatClose(nil)
 
 	assert.Equal(t, "\x1b[42z", string(open), "FormatOpen(42) = %q, want \\x1b[42z", open)
-	assert.Equal(t, "\x1b[/42z", string(closeMarker), "FormatClose(42) = %q, want \\x1b[/42z", closeMarker)
+	assert.Equal(t, "\x1b[42/z", string(closeMarker), "FormatClose(42) = %q, want \\x1b[42/z", closeMarker)
+}
+
+// TestZoneIDAtColSpecCompliantCloseMarker verifies that the close
+// marker \x1b[<id>/z (parameters before the intermediate byte) opens
+// and closes zones during the ZoneIDAtCol walk.
+func TestZoneIDAtColSpecCompliantCloseMarker(t *testing.T) {
+	t.Parallel()
+
+	id := zoneIDFromDigits([]byte("1341689252"))
+
+	line := id.FormatOpen(nil)
+	line = append(line, []byte("ok")...)
+	line = id.FormatClose(line)
+
+	found, ok := ZoneIDAtCol(line, 1)
+	assert.True(t, ok && found.Equal(id), "zone should cover content columns, got (%v, %v)", found, ok)
+
+	_, ok = ZoneIDAtCol(line, 2)
+	assert.False(t, ok, "no zone should remain active after the close marker")
+}
+
+// TestZoneIDAtColNestedZones verifies stack discipline of nested zone
+// markers with the spec-compliant close form.
+func TestZoneIDAtColNestedZones(t *testing.T) {
+	t.Parallel()
+
+	outer := zoneIDFromDigits([]byte("11"))
+	inner := zoneIDFromDigits([]byte("22"))
+
+	// open(outer) open(inner) XY close(inner) Z close(outer)
+	line := append(outer.FormatOpen(nil), inner.FormatOpen(nil)...)
+	line = append(line, []byte("XY")...)
+	line = inner.FormatClose(line)
+	line = append(line, 'Z')
+	line = outer.FormatClose(line)
+
+	found, ok := ZoneIDAtCol(line, 0)
+	assert.True(t, ok && found.Equal(inner), "col 0 (X) should resolve to inner zone, got (%v, %v)", found, ok)
+
+	found, ok = ZoneIDAtCol(line, 1)
+	assert.True(t, ok && found.Equal(inner), "col 1 (Y) should resolve to inner zone, got (%v, %v)", found, ok)
+
+	found, ok = ZoneIDAtCol(line, 2)
+	assert.True(t, ok && found.Equal(outer), "col 2 (Z) should resolve to outer zone, got (%v, %v)", found, ok)
+
+	_, ok = ZoneIDAtCol(line, 3)
+	assert.False(t, ok, "no zone should remain active after all close markers")
+}
+
+// TestZoneIDAtColSkipsNonZoneCSI verifies that SGR and other CSI
+// sequences interleaved with zone markers do not disturb the column
+// walk or the zone stack.
+func TestZoneIDAtColSkipsNonZoneCSI(t *testing.T) {
+	t.Parallel()
+
+	id := zoneIDFromDigits([]byte("7"))
+
+	line := id.FormatOpen(nil)
+	line = append(line, []byte("\x1b[31mred\x1b[0m")...)
+	line = id.FormatClose(line)
+
+	found, ok := ZoneIDAtCol(line, 2)
+	assert.True(t, ok && found.Equal(id), "col 2 should resolve inside the zone, got (%v, %v)", found, ok)
+}
+
+// TestZoneIDAtColLegacyCloseFormNotRecognized locks the migration
+// boundary for GH issue #31: the legacy (invalid) close form
+// \x1b[/<id>z must not be treated as a zone marker during hit-testing
+// and must not pop the enclosing zone.
+func TestZoneIDAtColLegacyCloseFormNotRecognized(t *testing.T) {
+	t.Parallel()
+
+	id := zoneIDFromDigits([]byte("11"))
+
+	line := id.FormatOpen(nil)
+	line = append(line, []byte("ok")...)
+	line = append(line, []byte("\x1b[/22z")...)
+
+	found, ok := ZoneIDAtCol(line, 1)
+	assert.True(t, ok && found.Equal(id), "content column should resolve to the open zone, got (%v, %v)", found, ok)
+
+	// The legacy close form is not a marker: zone 11 must still be
+	// active past the content instead of having been popped.
+	found, ok = ZoneIDAtCol(line, 2)
+	assert.True(t, ok && found.Equal(id), "legacy close form must not pop the open zone, got (%v, %v)", found, ok)
 }

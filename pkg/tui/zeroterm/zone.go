@@ -28,7 +28,7 @@ func newZoneID(id uint32) ZoneID {
 	return ZoneID{
 		id:    id,
 		open:  append(append([]byte("\x1b["), d...), 'z'),
-		close: append(append([]byte("\x1b[/"), d...), 'z'),
+		close: append(append([]byte("\x1b["), d...), '/', 'z'),
 	}
 }
 
@@ -37,7 +37,7 @@ func (id ZoneID) FormatOpen(dst []byte) []byte {
 	return append(dst, id.open...)
 }
 
-// FormatClose appends the pre-rendered \x1b[/<id>z to dst.
+// FormatClose appends the pre-rendered \x1b[<id>/z to dst.
 func (id ZoneID) FormatClose(dst []byte) []byte {
 	return append(dst, id.close...)
 }
@@ -133,49 +133,69 @@ func skipNonZoneCSI(line []byte, pos int) int {
 	return pos
 }
 
-func parseZoneDigits(line []byte, pos int, isClose bool, zoneStack []ZoneID) (int, []ZoneID) {
-	digitStart := pos
+// parseZoneBody parses a zone marker body directly after the '[' byte:
+// <digits>z (open) or <digits>/z (close; parameters precede the
+// intermediate byte per ECMA-48). Returns (end, digits, isClose, ok);
+// ok is false when the bytes do not form a marker, and end is then the
+// position where non-marker scanning should resume.
+func parseZoneBody(line []byte, pos int) (int, []byte, bool, bool) {
+	digitEnd := scanDigits(line, pos)
+	if digitEnd == pos {
+		return pos, nil, false, false
+	}
+
+	digits := line[pos:digitEnd]
+
+	switch {
+	case digitEnd < len(line) && line[digitEnd] == 'z': // open \x1b[<id>z
+		return digitEnd + 1, digits, false, true
+	case digitEnd+1 < len(line) && line[digitEnd] == '/' && line[digitEnd+1] == 'z': // close \x1b[<id>/z
+		return digitEnd + 2, digits, true, true
+	default:
+		return digitEnd, nil, false, false
+	}
+}
+
+// scanDigits returns the position just past a run of ASCII digits
+// starting at pos (which may equal pos when there are no digits).
+func scanDigits(line []byte, pos int) int {
 	for pos < len(line) && line[pos] >= '0' && line[pos] <= '9' {
 		pos++
 	}
 
-	if pos >= len(line) || line[pos] != 'z' {
-		return skipNonZoneCSI(line, pos), zoneStack
+	return pos
+}
+
+// parseZoneMarker consumes one escape sequence at pos (pointing at
+// \x1b) during the ZoneIDAtCol walk: zone markers push/pop zoneStack,
+// anything else is skipped as a non-zone CSI or two-byte escape.
+func parseZoneMarker(line []byte, pos int, zoneStack []ZoneID) (int, []ZoneID) {
+	pos++ // skip \x1b
+
+	if pos >= len(line) {
+		return pos, zoneStack
 	}
 
-	uid := zoneIDFromDigits(line[digitStart:pos])
-	pos++
+	if line[pos] != '[' {
+		return pos + 1, zoneStack // consume ESC + following byte
+	}
+
+	end, digits, isClose, ok := parseZoneBody(line, pos+1)
+	if !ok {
+		return skipNonZoneCSI(line, end), zoneStack
+	}
+
+	uid := zoneIDFromDigits(digits)
 
 	if isClose {
 		if len(zoneStack) > 0 && zoneStack[len(zoneStack)-1].id == uid.id {
 			zoneStack = zoneStack[:len(zoneStack)-1]
 		}
 
-		return pos, zoneStack
+		return end, zoneStack
 	}
 
-	return pos, append(zoneStack, uid)
-}
-
-func parseZoneMarker(line []byte, pos int, zoneStack []ZoneID) (int, []ZoneID) {
-	pos++
-
-	if pos >= len(line) || line[pos] != '[' {
-		if pos < len(line) {
-			pos++
-		}
-
-		return pos, zoneStack
-	}
-
-	pos++
-
-	isClose := pos < len(line) && line[pos] == '/'
-	if isClose {
-		pos++
-	}
-
-	return parseZoneDigits(line, pos, isClose, zoneStack)
+	return end, append(zoneStack, uid)
 }
 
 // zoneIDFromDigits builds a ZoneID from raw decimal digit bytes.

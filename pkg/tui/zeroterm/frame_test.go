@@ -381,6 +381,76 @@ func ansiShortContent() *buffer.LinesBufDiff {
 	return buf
 }
 
+// TestAppendSanitizedLine verifies that \r bytes and internal zone
+// hit-test markers are removed while all other content (SGR, partial
+// CSI, plain text) is preserved verbatim. Zone markers must never
+// reach the physical terminal (GH issue #31): strict terminal parsers
+// may print malformed or unknown CSI as literal text.
+//
+// Any digits-terminated CSI (\x1b[<digits>z, \x1b[<digits>/z) is
+// stripped deliberately: no standard terminal command uses a pure
+// digit parameter list with final 'z', so the only realistic sources
+// are panix's own markers.
+func TestAppendSanitizedLine(t *testing.T) {
+	t.Parallel()
+
+	id := zoneIDFromDigits([]byte("1341689252"))
+	open := string(id.FormatOpen(nil))
+	closeMarker := string(id.FormatClose(nil))
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain text passthrough", "hello world", "hello world"},
+		{"strips carriage returns", "ab\rcd", "abcd"},
+		{"strips open and close markers", open + "hello" + closeMarker, "hello"},
+		{"strips nested markers", open + open + "xy" + closeMarker + closeMarker, "xy"},
+		{"marker and CR mixed", open + "a\rb" + closeMarker, "ab"},
+		{"preserves SGR", "\x1b[31mred\x1b[0m", "\x1b[31mred\x1b[0m"},
+		{"preserves non-zone CSI", "\x1b[38;2;1;2;3m", "\x1b[38;2;1;2;3m"},
+		{"preserves truncated CSI", "\x1b[123", "\x1b[123"},
+		// The legacy (pre-fix) close form is not a valid marker; child
+		// content carrying it passes through untouched.
+		{"preserves legacy close form", "\x1b[/42z", "\x1b[/42z"},
+		// Deliberate drop: digits-z CSI is not a standard command, and
+		// strict parsers would print it as text.
+		{"strips foreign digits-z CSI", "x\x1b[999zy", "xy"},
+		{"strips foreign digits-slash-z CSI", "x\x1b[999/zy", "xy"},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, string(appendSanitizedLine(nil, []byte(tt.in))), "input %q", tt.in)
+	}
+}
+
+// TestRenderLinesStripsZoneMarkers is the regression test for GH issue
+// #31: zone hit-test markers leaked verbatim into terminal output, and
+// the x/ansi parser (as embedded by tuios) printed the malformed close
+// marker \x1b[/<id>z as literal digits, garbling the layout.
+func TestRenderLinesStripsZoneMarkers(t *testing.T) {
+	t.Parallel()
+
+	id := zoneIDFromDigits([]byte("1341689252"))
+
+	src := buffer.NewLinesBuf()
+	defer src.Release()
+
+	id.MarkBuf([]byte("hello world"), src)
+
+	frame := buffer.NewLinesBufDiff()
+	frame.Write(src.Line(0))
+
+	diffs := frame.Diff(buffer.NewLinesBufDiff())
+	out := string(RenderLines(nil, diffs, frame, 0, 10))
+
+	assert.Contains(t, out, "\x1b[1;1Hhello world", "content must be rendered: %q", out)
+	assert.NotContains(t, out, "1341689252", "zone ID digits must never leak: %q", out)
+	assert.NotContains(t, out, string(id.FormatOpen(nil)), "open marker must never leak: %q", out)
+	assert.NotContains(t, out, string(id.FormatClose(nil)), "close marker must never leak: %q", out)
+}
+
 // TestDiffLinesSameLengthDifferentContent ensures that when frames have
 // the same length but different content on every line, all lines are in diffs.
 //
