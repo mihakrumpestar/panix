@@ -333,7 +333,7 @@
           let
             hostPlatform = pkgs.stdenv.hostPlatform.system;
             hashes = {
-              x86_64-linux = "sha256-QdeSo8EY2GkIg3wjdTYUPxFDz3FmGlHS3ntuwDnbCxQ=";
+              x86_64-linux = "sha256-08F0uVuUirF0Spo1B1mdAwvzGjkDMwXodptRwxNNrv8=";
               aarch64-linux = "sha256-r2UmroyBZU+JWzooYvZkhH8NPD+3v+w+b/KVnVNzj80=";
             };
             # Release assets are named nix-installer-<system>; only the host
@@ -358,7 +358,7 @@
         # derivation failure reports the new hash.
         debian-cloud-image = pkgs.fetchurl {
           url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2";
-          hash = "sha256-QS7ukc78dTFu3ab8w7P3NYV8VOMdu27WNc/iz6CSya0=";
+          hash = "sha256-icBCGt3J3fIHIkki1hkheDEFKWe0IcYHtvEvc1BKi60=";
         };
 
         # Cloud-init NoCloud seed ISOs, built via genisoimage (pkgs.cdrkit).
