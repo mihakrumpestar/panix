@@ -110,8 +110,8 @@ func (m *model) workflowDoneMsgCmd(msg workflowDoneMsg) zeroterm.Cmd {
 	m.conf.Fleet.Recalculate(m.conf.Phases)
 	logFinalState(m.conf)
 
-	// Graceful quit (q key): the workflow has now truly finished, so this is
-	// where the TUI exits. ExitOnComplete below still quits on its own.
+	// Graceful quit (q key): the workflow has truly finished, so exit here.
+	// ExitOnComplete below still quits on its own.
 	if m.quitting {
 		m.setFailedMachinesErrorIfNil()
 
@@ -136,8 +136,6 @@ func (m *model) workflowRetry() {
 	m.workflow.State().Retry.Trigger()
 }
 
-//
-
 func (m *model) handleErrMsgCmd(msg errMsg) zeroterm.Cmd {
 	m.err = msg.err
 
@@ -152,6 +150,12 @@ func (m *model) handleErrMsgCmd(msg errMsg) zeroterm.Cmd {
 }
 
 func (m *model) handleMouseClick(msg zeroterm.MouseClickMsg) {
+	// Defense in depth: Update already captures clicks while a modal owns the
+	// keyboard; guard here so no caller can click through it.
+	if m.modal() != modalNone {
+		return
+	}
+
 	if m.statsTable.HandleMouseClick(msg) {
 		m.phaseFlow.Reset()
 

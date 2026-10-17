@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/theme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -29,11 +29,9 @@ import (
 const (
 	// TreeStep is the indent width per depth level.
 	TreeStep = 3
-	// timerIndent is the gap (in columns) between the deepest entity timer
-	// (flake, level 0) and the right edge. Each deeper entity level reduces
-	// the gap by 1 via timerLevel = indent/TreeStep. Phase uses level 4
-	// (gap 1), and command — rendered via JoinHorizontalBufs; sits at the
-	// right edge (gap 0), giving a clean 1-column staircase.
+	// timerIndent is the gap between the level-0 entity timer and the right
+	// edge. timerLevel = indent/TreeStep closes one column per level, so timers
+	// form a 1-column staircase down to the command at the right edge.
 	timerIndent       = 5
 	timerLevelPhase   = 4
 	timerLevelCommand = 5
@@ -62,8 +60,8 @@ var (
 	headerTitle = []byte("=== Build Logs ===")
 )
 
-// reuseBuf resets old if non-nil, otherwise returns a new LinesBuf.
-// Used by tree calculate callbacks to preserve buffer capacity across GC cycles.
+// reuseBuf resets old if non-nil, otherwise returns a new LinesBuf. Tree
+// calculate callbacks reuse it to preserve buffer capacity across GC cycles.
 func reuseBuf(old *buffer.LinesBuf) *buffer.LinesBuf {
 	if old != nil {
 		old.Reset()
@@ -76,16 +74,16 @@ func reuseBuf(old *buffer.LinesBuf) *buffer.LinesBuf {
 
 type BuildLogs struct {
 	conf        *config.Config
+	theme       *theme.Theme
 	statsTable  *statstable.StatsTable
 	phaseStatus *phaseflow.PhaseFlow
 
 	viewports *viewports.Viewports
 	spinners  *spinners.Spinners
 
-	styledTreeLine []byte
-	contentWidth   int
-	lastWidth      int
-	widthOffset    uint64
+	contentWidth int
+	lastWidth    int
+	widthOffset  uint64
 
 	cmdIconBuf  *buffer.LinesBuf
 	cmdLabelBuf *buffer.LinesBuf
@@ -95,9 +93,10 @@ type BuildLogs struct {
 	iconBuf     *buffer.LineBuf
 }
 
-func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *phaseflow.PhaseFlow) *BuildLogs {
+func New(conf *config.Config, scheme *theme.Theme, statsTable *statstable.StatsTable, phaseStatus *phaseflow.PhaseFlow) *BuildLogs {
 	return &BuildLogs{
 		conf:        conf,
+		theme:       scheme,
 		statsTable:  statsTable,
 		phaseStatus: phaseStatus,
 		cmdIconBuf:  buffer.NewLinesBuf(),
@@ -109,11 +108,15 @@ func New(conf *config.Config, statsTable *statstable.StatsTable, phaseStatus *ph
 	}
 }
 
-// RenderInto renders the build logs tree directly into target, avoiding
-// an intermediate buffer copy. Widths set by the tree renderer (via
-// writeLines/renderLeaf) are set directly on target, so the viewport can
-// adopt them via adoptCachedLineWidths, eliminating redundant CellWidth
-// scans in padNewLine.
+// ApplyTheme swaps the render-ready theme the build logs read from. The model
+// calls it on live theme changes; the theme carries its derived render values,
+// so rendering reads them directly with no per-widget snapshot.
+func (b *BuildLogs) ApplyTheme(scheme *theme.Theme) {
+	b.theme = scheme
+}
+
+// RenderInto renders the build logs tree directly into target, avoiding an extra
+// copy.
 func (b *BuildLogs) RenderInto(
 	target *buffer.LinesBuf,
 	treeNode *tree.Node,
@@ -123,12 +126,11 @@ func (b *BuildLogs) RenderInto(
 	b.viewports = viewports
 	b.spinners = spinners
 	b.contentWidth = viewports.ContentWidth()
-	b.styledTreeLine = b.conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
 	widthChanged := b.contentWidth != b.lastWidth
 	b.lastWidth = b.contentWidth
 
-	b.conf.ColorScheme.Header.Title.RenderLineInto(target, headerTitle)
+	b.theme.Header.Title.Style.RenderLineInto(target, headerTitle)
 	target.EmptyLine()
 
 	treeNode.BeginFrame()
@@ -148,7 +150,7 @@ func (b *BuildLogs) RenderInto(
 
 		flakeVersion := b.entityVersion(flake.Logs)
 		flakeNode := treeNode.Child(flake.Xpath, flakeVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Flake, flake.Name.String(), flake.Logs, old)
+			return b.entityNodeContent(depthWidth, b.theme.Flake, flake.Name.String(), flake.Logs, old)
 		})
 
 		b.buildInstallablesTree(flakeNode, flake)
@@ -159,16 +161,13 @@ func (b *BuildLogs) RenderInto(
 	treeNode.WriteRenderTo(target)
 }
 
-// buildInstallablesTree renders the two-level installables map (type → name → installable)
-// as nested tree nodes under flakeNode.
 func (b *BuildLogs) buildInstallablesTree(flakeNode *tree.Node, flake *flake.Flake) {
 	flake.Installables.ForEach(func(typeKey string, attrMap *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]) bool {
 		if attrMap == nil {
 			return true
 		}
 
-		// Pre-compute max duration across all installables of this type
-		// so the type grouping node can display it.
+		// Pre-compute the type's max duration so the grouping node can display it.
 		var maxTypeDuration time.Duration
 
 		typeRunning := false
@@ -188,10 +187,8 @@ func (b *BuildLogs) buildInstallablesTree(flakeNode *tree.Node, flake *flake.Fla
 			return true
 		})
 
-		// Create output type grouping node (e.g., "nixosConfigurations").
-		// tree.Node.Child is idempotent: same xpath returns the same node,
-		// so multiple outputs of the same type share one type node.
-		// Version is coarse (1/10th second) to avoid re-rendering every frame.
+		// tree.Node.Child is idempotent: the same xpath returns the same node, so
+		// outputs of one type share the type grouping node.
 		outputTypeXpath := flake.Xpath.NewXpathWithAppend(typeKey)
 
 		typeVersion := b.widthOffset
@@ -200,7 +197,7 @@ func (b *BuildLogs) buildInstallablesTree(flakeNode *tree.Node, flake *flake.Fla
 		}
 
 		typeNode := flakeNode.Child(outputTypeXpath, typeVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-			return b.entityNodeContentWithDuration(depthWidth, b.conf.ColorScheme.OutputType, typeKey, maxTypeDuration, old)
+			return b.entityNodeContentWithDuration(depthWidth, b.theme.OutputType, typeKey, maxTypeDuration, old)
 		})
 
 		attrMap.ForEach(func(nameKey string, installable *installable.Installable) bool {
@@ -208,10 +205,9 @@ func (b *BuildLogs) buildInstallablesTree(flakeNode *tree.Node, flake *flake.Fla
 				return true
 			}
 
-			// Create output name node (e.g., "server1").
 			outVersion := b.entityVersion(installable.Logs)
 			outNode := typeNode.Child(installable.Xpath, outVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-				return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Installable, installable.Name.String(), installable.Logs, old)
+				return b.entityNodeContent(depthWidth, b.theme.Installable, installable.Name.String(), installable.Logs, old)
 			})
 			b.buildOutputTree(outNode, installable)
 
@@ -246,7 +242,7 @@ func (b *BuildLogs) buildMachineSelectedTree(outNode *tree.Node, installable *in
 
 		entityVersion := b.entityVersion(machine.Logs)
 		machineNode := outNode.Child(machine.Xpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-			return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name.String(), machine.Logs, old)
+			return b.entityNodeContent(depthWidth, b.theme.Machine, machine.Name.String(), machine.Logs, old)
 		})
 
 		errored := b.addPhases(machineNode, machine.Logs, machine.PhaseXpaths, true, entityVersion, phase.Inspect)
@@ -332,7 +328,7 @@ func (b *BuildLogs) addMachineWithPhases(parent *tree.Node, machine *machine.Mac
 
 	entityVersion := b.entityVersion(machine.Logs)
 	machineNode := parent.Child(machine.Xpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
-		return b.entityNodeContent(depthWidth, b.conf.ColorScheme.Machine, machine.Name.String(), machine.Logs, old)
+		return b.entityNodeContent(depthWidth, b.theme.Machine, machine.Name.String(), machine.Logs, old)
 	})
 
 	b.addPhasesMulti(machineNode, machine.Logs, machine.PhaseXpaths, false, entityVersion, allowedSet)
@@ -495,7 +491,7 @@ func (b *BuildLogs) addPhase(
 	phaseNode := parent.Child(phaseXpath, displayVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
 		tas := phaseLog.TimeAndState
 		tasLoaded := tas.Load()
-		icon := b.spinnerOrIcon(phaseXpath, b.conf.ColorScheme.Phase.Icon, tasLoaded)
+		icon := b.spinnerOrIcon(phaseXpath, b.theme.Phase.IconBytes, tasLoaded)
 		durStyled, durWidth := b.durationBytes(tas)
 
 		b.iconBuf.Reset()
@@ -505,7 +501,7 @@ func (b *BuildLogs) addPhase(
 
 		leftWidth := style.CellWidth(icon) + len(upperName)
 
-		return b.layoutLineStyled(depthWidth, timerLevelPhase, b.conf.ColorScheme.Phase.Color, leftRaw, durStyled, leftWidth, durWidth, old)
+		return b.layoutLineStyled(depthWidth, timerLevelPhase, b.theme.Phase.Style, leftRaw, durStyled, leftWidth, durWidth, old)
 	})
 
 	return b.addCommands(phaseNode, phaseLog, phaseI, entityVersion)
@@ -573,7 +569,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 		icon := b.spinnerOrIcon(cmdXpath, b.iconBuf.Bytes(), tasCached)
 
 		b.cmdIconBuf.Reset()
-		b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdIconBuf, icon)
+		b.theme.Command.Style.RenderLineInto(b.cmdIconBuf, icon)
 
 		durStyled, durWidth := b.durationBytes(cmd.TimeAndState)
 
@@ -591,18 +587,18 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 
 		if cmd.Output.Len() > 0 {
 			for range labelResult.Len() - 1 {
-				b.conf.ColorScheme.Tree.Enumerator.RenderLineInto(b.cmdIconBuf, []byte("│"))
+				b.theme.Tree.Enumerator.Style.RenderLineInto(b.cmdIconBuf, b.theme.Tree.VerticalBytes)
 			}
 		}
 
 		b.cmdLabelBuf.Reset()
 
 		for i := range labelResult.Len() {
-			b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdLabelBuf, labelResult.Line(i))
+			b.theme.Command.Style.RenderLineInto(b.cmdLabelBuf, labelResult.Line(i))
 		}
 
 		b.cmdDurBuf.Reset()
-		b.conf.ColorScheme.Command.Color.RenderLineInto(b.cmdDurBuf, durStyled)
+		b.theme.Command.Style.RenderLineInto(b.cmdDurBuf, durStyled)
 
 		joinBuf := reuseBuf(old)
 		style.JoinHorizontalBufs(joinBuf, style.Top, b.cmdIconBuf, b.cmdLabelBuf, b.cmdDurBuf)
@@ -648,7 +644,7 @@ func (b *BuildLogs) addCommandChildren(
 	if err != nil {
 		cmdNode.Child(errXpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
 			errMsg := buffer.NewLineBufPooled()
-			errMsg.Write(b.conf.ColorScheme.Chars.ErrorIcon)
+			errMsg.Write(b.theme.Chars.ErrorIconBytes)
 			errMsg.WriteString(" Command failed: ")
 			errMsg.WriteString(err.Error())
 
@@ -662,7 +658,7 @@ func (b *BuildLogs) addCommandChildren(
 			errMsg.Release()
 
 			b.errBuf.Reset()
-			b.conf.ColorScheme.Error.Color.RenderIntoBuf(b.errBuf, errResult)
+			b.theme.Error.Style.RenderIntoBuf(b.errBuf, errResult)
 
 			errNodeBuf := reuseBuf(old)
 			errNodeBuf.AppendFrom(b.errBuf)
@@ -674,7 +670,7 @@ func (b *BuildLogs) addCommandChildren(
 
 func (b *BuildLogs) entityNodeContent(
 	indent int,
-	entity colorscheme.ColorSchemeLogEntity,
+	entity theme.ThemeLogEntity,
 	name string,
 	logNode *logs.Logs,
 	old *buffer.LinesBuf,
@@ -689,7 +685,7 @@ func (b *BuildLogs) entityNodeContent(
 
 func (b *BuildLogs) entityNodeContentWithDuration(
 	indent int,
-	entity colorscheme.ColorSchemeLogEntity,
+	entity theme.ThemeLogEntity,
 	name string,
 	duration time.Duration,
 	old *buffer.LinesBuf,
@@ -697,17 +693,17 @@ func (b *BuildLogs) entityNodeContentWithDuration(
 	dur := duration.Seconds()
 
 	b.iconBuf.Reset()
-	b.iconBuf.Write(entity.Icon)
+	b.iconBuf.Write(entity.IconBytes)
 	b.iconBuf.WriteByte(' ')
 	b.iconBuf.WriteString(name)
 	leftRaw := b.iconBuf.Bytes()
 
 	rightRaw := b.formatDuration(dur)
 
-	leftWidth := style.CellWidth(entity.Icon) + 1 + len(name)
+	leftWidth := style.CellWidth(entity.IconBytes) + 1 + len(name)
 	rightWidth := len(rightRaw)
 
-	return b.layoutLineStyled(indent, indent/TreeStep, entity.Color, leftRaw, rightRaw, leftWidth, rightWidth, old)
+	return b.layoutLineStyled(indent, indent/TreeStep, entity.Style, leftRaw, rightRaw, leftWidth, rightWidth, old)
 }
 
 func (b *BuildLogs) entityVersion(logNode *logs.Logs) uint64 {

@@ -10,28 +10,13 @@ import (
 
 const maxSpacesLen = 512
 const scrollbarColWidth = 2
+
+// borderOverhead is the vertical border height (top + bottom). Glyphs are
+// single-cell by registry invariant, so each border row is one cell.
 const borderOverhead = 2
 const mouseWheelDelta = 3
 
 var spaces = bytes.Repeat([]byte(" "), maxSpacesLen)
-
-var horizBorderBytes = func() []byte {
-	const utf8Len = 3
-
-	bytes := make([]byte, maxSpacesLen*utf8Len)
-	for idx := range bytes {
-		switch idx % utf8Len {
-		case 0:
-			bytes[idx] = 0xe2
-		case 1:
-			bytes[idx] = 0x94
-		default:
-			bytes[idx] = 0x80
-		}
-	}
-
-	return bytes
-}()
 
 // Viewport renders scrollable, optionally bordered content with a scrollbar.
 type Viewport struct {
@@ -51,18 +36,20 @@ type Viewport struct {
 	thumbStyle       style.Style
 	trackStyle       style.Style
 	borderStyle      style.Style
+	borderGlyphs     style.Border
 
 	// Pre-computed scrollbar cell bytes (built once in WithScrollbar).
 	thumbCell []byte
 	trackCell []byte
 	emptyCell []byte
 
-	// Cached horizontal border bytes. Invalidated when contentW or
-	// showBar changes. Avoids per-frame RenderLine allocations.
+	// Cached horizontal border bytes. Invalidated when contentW, showBar or
+	// the border glyphs change. Avoids per-frame RenderLine allocations.
 	horizBorderCache    []byte
 	horizBorderCacheKey int // contentW*2 + showBarInt
 
-	// Pre-computed border bytes (built once in WithBorder / SetBorderStyle).
+	// Pre-computed border bytes (built once in WithBorder / SetBorderStyle /
+	// setBorderGlyphs).
 	borderLeft  []byte
 	borderRight []byte
 	borderTopL  []byte
@@ -118,9 +105,7 @@ func WithScrollbar(thumbChar, trackChar string, thumbColor, trackColor style.Col
 		viewport.scrollbar = true
 		viewport.thumbChar = thumbChar
 		viewport.trackChar = trackChar
-		viewport.thumbStyle = style.NewStyle().Foreground(thumbColor)
-		viewport.trackStyle = style.NewStyle().Foreground(trackColor)
-		viewport.buildScrollbarCells()
+		viewport.setScrollbarColors(thumbColor, trackColor)
 	}
 }
 
@@ -140,8 +125,15 @@ func WithScrollbarReserve() Option {
 func WithBorder(borderColor style.Color) Option {
 	return func(m *Viewport) {
 		m.bordered = true
-		m.borderStyle = style.NewStyle().Foreground(borderColor)
-		m.buildBorderStrings()
+		m.setBorderStyle(borderColor)
+	}
+}
+
+// WithBorderGlyphs sets the border glyphs used by WithBorder; the default is
+// the rounded preset. Construction only: ApplyTheme is the theme entry point.
+func WithBorderGlyphs(glyphs style.Border) Option {
+	return func(m *Viewport) {
+		m.setBorderGlyphs(glyphs)
 	}
 }
 
@@ -155,6 +147,7 @@ func New(opts ...Option) Viewport {
 	model := Viewport{
 		paddedBufCW:         -1,
 		horizBorderCacheKey: -1,
+		borderGlyphs:        style.RoundedBorder(),
 	}
 
 	for _, opt := range opts {
@@ -166,12 +159,12 @@ func New(opts ...Option) Viewport {
 
 //nolint:funcorder
 func (m *Viewport) buildBorderStrings() {
-	m.borderLeft = m.borderStyle.RenderLine([]byte("│"))
-	m.borderRight = m.borderStyle.RenderLine([]byte("│"))
-	m.borderTopL = m.borderStyle.RenderLine([]byte("╭"))
-	m.borderTopR = m.borderStyle.RenderLine([]byte("╮"))
-	m.borderBotL = m.borderStyle.RenderLine([]byte("╰"))
-	m.borderBotR = m.borderStyle.RenderLine([]byte("╯"))
+	m.borderLeft = m.borderStyle.RenderLine(m.borderGlyphs.Vertical)
+	m.borderRight = m.borderStyle.RenderLine(m.borderGlyphs.Vertical)
+	m.borderTopL = m.borderStyle.RenderLine(m.borderGlyphs.TopLeft)
+	m.borderTopR = m.borderStyle.RenderLine(m.borderGlyphs.TopRight)
+	m.borderBotL = m.borderStyle.RenderLine(m.borderGlyphs.BottomLeft)
+	m.borderBotR = m.borderStyle.RenderLine(m.borderGlyphs.BottomRight)
 }
 
 func (m *Viewport) SetWidth(w int) {
@@ -191,14 +184,42 @@ func (m *Viewport) SetHeight(h int) {
 	}
 }
 
+// ApplyTheme applies the themed border glyphs and rebuilds the border and
+// scrollbar bytes, invalidating the render cache. It is the single public theme
+// entry point; parts the viewport was not constructed with are no-ops.
+func (m *Viewport) ApplyTheme(borderColor, thumbColor, trackColor style.Color, border style.Border) {
+	m.setBorderGlyphs(border)
+
+	if m.bordered {
+		m.setBorderStyle(borderColor)
+	}
+
+	if m.scrollbar {
+		m.setScrollbarColors(thumbColor, trackColor)
+	}
+
+	m.cacheValid = false
+}
+
 func (m *Viewport) SetBorderStyle(borderColor style.Color) {
-	newStyle := style.NewStyle().Foreground(borderColor)
-	if bytes.Equal(m.borderStyle.RenderLine(nil), newStyle.RenderLine(nil)) {
+	if bytes.Equal(m.borderStyle.RenderLine(nil), style.NewStyle().Foreground(borderColor).RenderLine(nil)) {
 		return
 	}
 
-	m.borderStyle = newStyle
-	m.buildBorderStrings()
+	m.setBorderStyle(borderColor)
+}
+
+// setBorderGlyphs replaces the border glyphs, rebuilds every derived border byte
+// and re-caches the horizontal fill. Unexported: ApplyTheme is the public entry.
+//
+//nolint:funcorder // grouped with the ApplyTheme/SetBorderStyle entry points
+func (m *Viewport) setBorderGlyphs(glyphs style.Border) {
+	m.borderGlyphs = glyphs
+
+	if m.bordered {
+		m.buildBorderStrings()
+	}
+
 	m.horizBorderCacheKey = -1
 	m.cacheValid = false
 }
@@ -259,10 +280,9 @@ func (m *Viewport) ViewLine(idx int) []byte {
 	return nil
 }
 
-// SetContent is the single entry point for setting viewport content.
-// For main viewports (pre-wrapped): stores lines directly.
-// For non-main viewports: wraps to viewport width, adopts the LinesBuf.
-// No deep copies. No allocations beyond the wrapping LinesBuf (pooled).
+// SetContent is the single content entry point. Main viewports (pre-wrapped)
+// store lines directly; non-main viewports wrap to width and adopt the pooled
+// LinesBuf. No deep copies.
 func (m *Viewport) SetContent(content [][]byte) error {
 	if m.main {
 		m.setLines(content)
@@ -371,11 +391,9 @@ func (m *Viewport) invalidateLineWidths() {
 	}
 }
 
-// Sync updates the viewport with new content and dimensions in the correct order.
-// If height > 0, it is used as a fixed viewport height (e.g. main/fullscreen).
-// If height == 0, the viewport auto-sizes up to maxHeight.
-// Sync is a no-op when content, width, and height are all unchanged —
-// SetWidth/SetHeight/SetContent all short-circuit internally.
+// Sync updates content and dimensions in order. height > 0 is a fixed height;
+// height == 0 auto-sizes up to maxHeight. It is a no-op when content, width and
+// height are unchanged.
 func (m *Viewport) Sync(content [][]byte, width, height int) error {
 	wasAtBottom := m.ScrollPercent() == 1 && !m.main
 	yOffset := m.yOffset
@@ -688,13 +706,10 @@ func (m *Viewport) renderEmptyInto(buf *buffer.LinesBuf, contentW, contentH int,
 	}
 }
 
-// ensurePaddedCache builds the contiguous padded-line buffer if needed.
-// All padded lines are joined with '\n' into paddedBuf, and lineOffsets
-// records the byte offset of each line start. Widths are computed eagerly
-// so that render paths never call fastWidth.
-// When only new lines were appended (prefix unchanged), the existing
-// paddedBuf is extended rather than rebuilt, avoiding O(n) copy for
-// unchanged lines.
+// ensurePaddedCache builds the contiguous padded-line buffer if needed: lines
+// joined with '\n' in paddedBuf, with each start offset in lineOffsets. Widths
+// are computed eagerly so render paths never call fastWidth. Appends extend the
+// existing buffer instead of rebuilding it.
 //
 
 // ensureBufSizes pre-allocates paddedBuf and lineOffsets capacity,
@@ -723,12 +738,9 @@ func (m *Viewport) ensureBufSizes(contentW int) {
 	}
 }
 
-// padLines builds or extends the padded-line buffer.
-// Starts from paddedLineCount, so that previously padded lines are
-// preserved when only new lines (or the last line) changed.
-// For the main viewport, uses a diff-based incremental approach:
-// line content is compared against the previous frame, and unchanged
-// lines are bulk-copied from the previous padded buffer.
+// padLines builds or extends the padded-line buffer from paddedLineCount. The
+// main viewport diffs against the previous frame and bulk-copies unchanged
+// lines.
 func (m *Viewport) padLines(contentW int) {
 	useBulkCopy := m.main && m.prevPaddedBuf != nil && m.prevContent.Len() > 0 && m.paddedBufCW == contentW
 
@@ -876,7 +888,9 @@ func (m *Viewport) renderUnborderedInto(
 	}
 }
 
-// appendHorizBorder appends the styled horizontal border line.
+// appendHorizBorder appends the styled horizontal border line. Border glyphs
+// are single-cell by registry invariant (see
+// style.TestBorderPresets_SingleCellGlyphs), so horizLen counts cells directly.
 func (m *Viewport) appendHorizBorder(buf []byte, contentW int, showBar bool) []byte {
 	horizLen := contentW
 	if showBar {
@@ -889,7 +903,7 @@ func (m *Viewport) appendHorizBorder(buf []byte, contentW int, showBar bool) []b
 	}
 
 	if m.horizBorderCacheKey != key {
-		m.horizBorderCache = m.borderStyle.RenderLine(horizBorderBytes[:horizLen*3])
+		m.horizBorderCache = m.borderStyle.RenderLine(bytes.Repeat(m.borderGlyphs.Horizontal, horizLen))
 		m.horizBorderCacheKey = key
 	}
 
@@ -986,11 +1000,9 @@ func (m *Viewport) line(i int) []byte {
 	return m.linesBuf.Line(i)
 }
 
-// adoptLinesBuf takes ownership of buf, releasing any previous buffer.
-// The viewport accesses lines via buf.Line(i) with zero allocations.
-// For non-main viewports where content grows by appending, paddedBuf and
-// lineWidths are preserved for the unchanged prefix when the wrapping
-// width hasn't changed, avoiding O(n) CellWidth recomputation.
+// adoptLinesBuf takes ownership of buf and releases the previous one. For
+// non-main viewports, paddedBuf and lineWidths survive for the unchanged prefix
+// when the wrapping width is unchanged.
 func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 	oldLen := m.linesLen
 	oldWidths := m.lineWidths
@@ -1030,10 +1042,10 @@ func (m *Viewport) adoptLinesBuf(buf *buffer.LinesBuf, oldWrappedW int) {
 	}
 }
 
-// tryPreservePrefix preserves the paddedBuf prefix for non-main viewports
-// when the wrapping width is unchanged, avoiding O(n) CellWidth recomputation.
-// The last few lines are always re-padded (CLI tools use \r to override them).
-// Bails when contentShifted (front trimmed) since the prefix is stale.
+// tryPreservePrefix keeps the paddedBuf prefix for non-main viewports when the
+// wrapping width is unchanged, avoiding O(n) CellWidth recomputation. The last
+// few lines are always re-padded because CLIs override them with \r; it bails
+// when the front was trimmed.
 func (m *Viewport) tryPreservePrefix(oldLen int, oldWidths []int, oldPaddedCount int, oldWrappedW int, contentShifted bool) {
 	if m.main || oldLen == 0 || m.linesLen < oldLen || oldPaddedCount != oldLen {
 		return
@@ -1109,11 +1121,27 @@ func (m *Viewport) buildScrollbarCells() {
 	m.emptyCell = []byte("  ")
 }
 
-// setLines stores pre-wrapped lines directly, adopting a new LinesBuf.
-// For main viewports, preserves the padded prefix when the content width
-// is unchanged; padLines starts from paddedLineCount, processing only
-// new/changed lines. Avoids the O(n) snapshot copy that setLinesBuf does.
-// Reuses the existing LinesBuf capacity when possible.
+// setBorderStyle rebuilds the pre-rendered border bytes from borderColor and
+// invalidates the render cache.
+func (m *Viewport) setBorderStyle(borderColor style.Color) {
+	m.borderStyle = style.NewStyle().Foreground(borderColor)
+	m.buildBorderStrings()
+	m.horizBorderCacheKey = -1
+	m.cacheValid = false
+}
+
+// setScrollbarColors rebuilds the pre-rendered scrollbar cell bytes and
+// invalidates the render cache.
+func (m *Viewport) setScrollbarColors(thumbColor, trackColor style.Color) {
+	m.thumbStyle = style.NewStyle().Foreground(thumbColor)
+	m.trackStyle = style.NewStyle().Foreground(trackColor)
+	m.buildScrollbarCells()
+	m.cacheValid = false
+}
+
+// setLines stores pre-wrapped lines directly. Main viewports keep the padded
+// prefix when the width is unchanged, so padLines processes only new or changed
+// lines; the existing LinesBuf capacity is reused.
 func (m *Viewport) setLines(lines [][]byte) {
 	// Check if we can preserve the padded prefix (same width, main viewport).
 	canPreservePrefix := m.main && m.paddedLineCount > 0 && m.paddedBufCW == m.ContentWidth()
@@ -1170,10 +1198,9 @@ func (m *Viewport) setLines(lines [][]byte) {
 	}
 }
 
-// setLinesBuf adopts a LinesBuf directly without copying, resetting the
-// incremental cache so that the next render does a full rebuild.
-// For main viewports, snapshots previous padded state so that
-// tryBulkCopyLine can skip CellWidth computation for unchanged lines.
+// setLinesBuf adopts a LinesBuf without copying and resets the incremental
+// cache for a full rebuild. Main viewports snapshot previous padded state so
+// tryBulkCopyLine can skip CellWidth for unchanged lines.
 func (m *Viewport) setLinesBuf(content *buffer.LinesBuf) {
 	if m.main {
 		m.prevPaddedBuf = append(m.prevPaddedBuf[:0], m.paddedBuf...)

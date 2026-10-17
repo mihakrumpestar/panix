@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
@@ -134,7 +133,6 @@ func makeWorkflowTestConfig() *config.Config {
 	flakesMap.Set("flake0", flakeObj)
 
 	return &config.Config{
-		ColorScheme: colorscheme.DefaultColorScheme(),
 		Fleet: &fleet.Fleet{
 			Flakes: flakesMap,
 		},

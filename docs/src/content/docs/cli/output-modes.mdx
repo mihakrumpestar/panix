@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-Choose how panix reports progress with `--output`, and pair non-interactive modes with file logging and CI flags.
+Choose how panix reports progress with `--output-mode`, and pair non-interactive modes with file logging and CI flags.
 
 ## Modes
 
@@ -16,9 +16,9 @@ Choose how panix reports progress with `--output`, and pair non-interactive mode
 | `json` | JSON-structured log output to stdout |
 
 ```sh
-panix deploy --output console   # Human-readable output
-panix deploy --output json      # JSON output for piping to tools
-panix deploy --output json --log
+panix deploy --output-mode console   # Human-readable output
+panix deploy --output-mode json      # JSON output for piping to tools
+panix deploy --output-mode json --log
 ```
 
 When no TTY is present, `console` is selected automatically since the TUI cannot render without a terminal. For interactive behavior in TUI mode (keybinds and view options), see [TUI Keybinds](/tui/keybinds/).

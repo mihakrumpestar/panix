@@ -3,7 +3,7 @@ package phaseflow
 import (
 	"strings"
 
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
+	"github.com/mihakrumpestar/panix/internal/config/theme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/internal/phase"
@@ -18,35 +18,18 @@ type Selected struct {
 }
 
 type PhaseFlow struct {
-	fleet       *fleet.Fleet
-	colorScheme *colorscheme.ColorScheme
-	pf          *flow.PhaseFlow
-	phases      []phase.Phase
-	Selected    Selected
-	content     *buffer.LinesBuf
-	data        []flow.PhaseData
+	fleet    *fleet.Fleet
+	scheme   *theme.Theme
+	pf       *flow.PhaseFlow
+	phases   []phase.Phase
+	Selected Selected
+	content  *buffer.LinesBuf
+	data     []flow.PhaseData
 }
 
 var phaseFlowHeader = []byte("=== Phase Flow ===")
 
-func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []phase.Phase) *PhaseFlow {
-	pfStyles := flow.Styles{
-		GradientRunning: colorfulPair(scheme.PhaseStatus.Running),
-		GradientFailed:  colorfulPair(scheme.PhaseStatus.Failed),
-		GradientDone:    colorfulPair(scheme.PhaseStatus.Done),
-		GradientDefault: colorfulPair(scheme.PhaseStatus.Default),
-		Pill:            scheme.PhaseStatus.Pill,
-		Status: flow.StatusStyles{
-			Running: scheme.Status.Running,
-			Failed:  scheme.Status.Failed,
-			Done:    scheme.Status.OK,
-		},
-		StatusSeparator: scheme.Table.Border,
-		Arrow:           scheme.Table.Border,
-		PhaseArrow:      scheme.Chars.PhaseArrow,
-		SelectionBg:     scheme.Table.SelectionHighlightBackground.GetBackground(),
-	}
-
+func New(fleet *fleet.Fleet, scheme *theme.Theme, workflowPhases []phase.Phase) *PhaseFlow {
 	names := make([]string, 0, len(workflowPhases)+1)
 	for _, p := range workflowPhases {
 		names = append(names, strings.ToUpper(p.String()))
@@ -56,21 +39,44 @@ func New(fleet *fleet.Fleet, scheme *colorscheme.ColorScheme, workflowPhases []p
 
 	phaseFlow := flow.New().
 		Phases(names...).
-		Styles(pfStyles).
 		SetZonePrefix("phase-status")
 
-	return &PhaseFlow{
-		fleet:       fleet,
-		colorScheme: scheme,
-		pf:          phaseFlow,
-		phases:      workflowPhases,
-		Selected:    Selected{Index: -1},
-		content:     buffer.NewLinesBuf(),
+	phaseFlowState := &PhaseFlow{
+		fleet:    fleet,
+		pf:       phaseFlow,
+		phases:   workflowPhases,
+		Selected: Selected{Index: -1},
+		content:  buffer.NewLinesBuf(),
 	}
+	phaseFlowState.ApplyTheme(scheme)
+
+	return phaseFlowState
 }
 
-func colorfulPair(cp colorscheme.ColorPair) flow.GradientPair {
-	return flow.GradientPair{Dark: cp[0], Light: cp[1]}
+// ApplyTheme re-applies the flow styles derived from the given theme.
+func (p *PhaseFlow) ApplyTheme(scheme *theme.Theme) {
+	p.scheme = scheme
+	p.pf.ApplyTheme(flowStyles(scheme))
+}
+
+// flowStyles derives the flow styles from the theme.
+func flowStyles(scheme *theme.Theme) flow.Styles {
+	return flow.Styles{
+		GradientRunning: flow.GradientPairFromColors(scheme.PhaseStatus.Running[0], scheme.PhaseStatus.Running[1]),
+		GradientFailed:  flow.GradientPairFromColors(scheme.PhaseStatus.Failed[0], scheme.PhaseStatus.Failed[1]),
+		GradientDone:    flow.GradientPairFromColors(scheme.PhaseStatus.Done[0], scheme.PhaseStatus.Done[1]),
+		GradientDefault: flow.GradientPairFromColors(scheme.PhaseStatus.Default[0], scheme.PhaseStatus.Default[1]),
+		Pill:            scheme.PhaseStatus.Pill.Style,
+		Status: flow.StatusStyles{
+			Running: scheme.Status.Running.Style,
+			Failed:  scheme.Status.Failed.Style,
+			Done:    scheme.Status.OK.Style,
+		},
+		StatusSeparator: scheme.Table.Border.Style,
+		Arrow:           scheme.Table.Border.Style,
+		PhaseArrow:      scheme.Chars.PhaseArrowBytes,
+		SelectionBg:     scheme.Table.SelectionHighlightBackground.Style.GetBackground(),
+	}
 }
 
 // Render renders the phase flow and returns the output buffer.
@@ -84,9 +90,9 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 
 	p.data = p.data[:0]
 
-	// Iterate over known workflow phases (not map keys) so that stale entries
-	// in the ordered map, e.g. a "" phase from machines that haven't started,
-	// cannot shift the data alignment or corrupt the "DONE" column.
+	// Iterate known workflow phases, not map keys: stale ordered-map entries
+	// (e.g. a "" phase) would shift the data alignment and corrupt the DONE
+	// column.
 	for _, ph := range p.phases {
 		phaseData := flow.PhaseData{}
 
@@ -99,9 +105,8 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 		p.data = append(p.data, phaseData)
 	}
 
-	// The "DONE" pseudo-phase reads the Done count from the last real
-	// workflow phase, not from spp.Last(), which would return the wrong
-	// phase if the ordered map contains extra keys.
+	// The "DONE" pseudo-phase reads the Done count from the last real workflow
+	// phase, not spp.Last(), which would return the wrong phase on extra keys.
 	lastPhase := p.phases[len(p.phases)-1]
 	lastStats, _ := spp.Get(lastPhase)
 
@@ -116,7 +121,7 @@ func (p *PhaseFlow) Render(width int) *buffer.LinesBuf {
 
 	p.content.Reset()
 
-	p.colorScheme.Header.Title.RenderLineInto(p.content, phaseFlowHeader)
+	p.scheme.Header.Title.Style.RenderLineInto(p.content, phaseFlowHeader)
 	p.content.EmptyLine()
 	p.content.AppendFrom(p.pf.Render())
 	p.content.EmptyLine()
@@ -148,8 +153,6 @@ func (p *PhaseFlow) HandleNavigation(key string, hasActiveInnerViewport bool) bo
 
 	return false
 }
-
-// Helpers
 
 func (p *PhaseFlow) syncSelection() {
 	idx := p.pf.SelectedIndex()

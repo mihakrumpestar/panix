@@ -22,6 +22,10 @@ type colorConfig struct {
 	Comment string
 }
 
+// defaultColors is the hardcoded 256-color palette used to colorize console
+// YAML output. It is intentionally NOT part of the TUI theme system
+// (internal/config/theme): it only colors printed YAML and is out of
+// scope for themes.
 var defaultColors = colorConfig{
 	Bool:    "\x1b[38;5;141m",
 	Number:  "\x1b[38;5;215m",

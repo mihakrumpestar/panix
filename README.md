@@ -50,6 +50,7 @@ Panix is a stateless deployment orchestrator for Nix flake installables. A deplo
 - **[Multi-flake](https://panix.xyz/concepts/multi-flake/) fleets with [tag filtering](https://panix.xyz/configuration/tag-filtering/)**: deploy across repositories and subsets like `panix deploy --tags production`.
 - **[Secrets](https://panix.xyz/guides/secrets/) and [bootstrap hooks](https://panix.xyz/guides/bootstrap/hooks/)**: files stay outside the Nix store with configurable ownership, hooks including `waitForOnline`/`waitForOffline`.
 - **Safety nets**: opt-in [auto rollback](https://panix.xyz/guides/auto-rollback/) and [dry-run modes](https://panix.xyz/cli/deploy/).
+- **[Themes](https://panix.xyz/configuration/themes/)**: built-in themes, each a full look with its own glyphs, icons, spinner and border style; selected via `theme:`/`--tui.theme`, with a `ctrl+t` live picker and custom themes in `panix-themes.yml`.
 - **[Custom output types](https://panix.xyz/configuration/output-types/)**: deploy any flake output with your own build and activation semantics, no flake modifications required.
 
 ## Output Types

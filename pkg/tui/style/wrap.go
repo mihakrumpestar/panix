@@ -150,34 +150,39 @@ func (s *wrapState) wrapOneLine(data []byte, hasBreakpoints bool) {
 			continue
 		}
 
-		// ASCII fast path: avoid utf8.DecodeRuneInString and runeWidth for
-		// single-byte characters (width always 1, inline space/break checks).
-		if byteI < 0x80 { //nolint:mnd
-			pos++
+		size, charWidth, measured := scanGlyph(data, pos)
+		start := pos
+		pos += size
+		end := pos
 
+		if !measured && size == 1 && byteI < 0x80 { //nolint:mnd
 			switch {
 			case byteI == '\n':
 				s.handleNewline()
 			case byteI == '\t':
-				s.handleTab(pos-1, pos)
+				s.handleTab(start, end)
 			case byteI == ' ' || byteI == '\v' || byteI == '\f' || byteI == '\r':
-				s.handleSpace(pos-1, pos, 1)
+				s.handleSpace(start, end, 1)
 			case byteI == '-':
-				s.handleBreakpoint(pos-1, pos, 1)
+				s.handleBreakpoint(start, end, 1)
 			case hasBreakpoints && s.isBreakpointRune(rune(byteI)):
-				s.handleBreakpoint(pos-1, pos, 1)
+				s.handleBreakpoint(start, end, 1)
 			default:
-				s.handleWordRune(pos-1, pos, 1)
+				s.handleWordRune(start, end, 1)
 			}
 
 			continue
 		}
 
-		runeI, size := utf8.DecodeRune(data[pos:])
-		start := pos
-		pos += size
-		end := pos
-		charWidth := runeWidth(runeI)
+		if measured {
+			// A measured sequence is one glyph: never split or classify it by
+			// its first byte (an ASCII-start keycap is still a word glyph).
+			s.handleWordRune(start, end, charWidth)
+
+			continue
+		}
+
+		runeI, _ := utf8.DecodeRune(data[start:end])
 
 		switch {
 		case runeI == '\t':
@@ -465,14 +470,13 @@ func lineExceedsLimitBytes(data []byte, limit int) bool {
 			pos = skipANSIPos(data, pos)
 
 			continue
-		case byteI < 0x80:
+		case byteI < 0x20 || byteI == 0x7F:
 			width++
 			pos++
 		default:
-			r, size := utf8.DecodeRune(data[pos:])
+			size, glyphWidth, _ := scanGlyph(data, pos)
+			width += glyphWidth
 			pos += size
-
-			width += runeWidth(r)
 		}
 
 		if width > limit {

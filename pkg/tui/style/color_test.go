@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestColor_RGBA_Hex(t *testing.T) {
@@ -201,4 +202,47 @@ func intToStr(val int) string {
 	}
 
 	return string(digits)
+}
+
+// TestParseColor is the grammar table for the shared color parser:
+// strict "#RRGGBB" hex or a decimal 0-255 palette index.
+func TestParseColor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{name: "lowercase hex", value: "#31748f", valid: true},
+		{name: "uppercase hex", value: "#AABBCC", valid: true},
+		{name: "palette index zero", value: "0", valid: true},
+		{name: "palette index max", value: "255", valid: true},
+		{name: "palette index middle", value: "139", valid: true},
+		{name: "empty is unset", value: ""},
+		{name: "non-hex digits", value: "#zzzzzz"},
+		{name: "short hex", value: "#fff"},
+		{name: "long hex", value: "#31748f00"},
+		{name: "hex without hash", value: "31748f"},
+		{name: "index out of range", value: "300"},
+		{name: "negative index", value: "-1"},
+		{name: "not a color", value: "not-a-color"},
+		{name: "hex with whitespace", value: " #fff000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			color, err := ParseColor(tt.value)
+
+			if tt.valid {
+				require.NoError(t, err)
+				assert.Equal(t, tt.value, string(color))
+			} else {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid color")
+			}
+		})
+	}
 }

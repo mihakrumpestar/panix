@@ -3,11 +3,57 @@
 package style
 
 import (
-	"fmt"
 	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type Color string
+
+// colorGrammar is the strict color grammar shared by config validation and
+// rendering: "#RRGGBB" hex or a decimal 0-255 palette index.
+const colorGrammar = `expected "#RRGGBB" hex or a decimal 0-255 palette index`
+
+// ParseColor parses one color string. The empty string is an error: callers
+// that treat empty as unset must skip it before parsing.
+func ParseColor(value string) (Color, error) {
+	if strings.HasPrefix(value, "#") {
+		if len(value) != len("#RRGGBB") {
+			return "", errors.Errorf("invalid color %q: %s", value, colorGrammar)
+		}
+
+		for _, digit := range value[1:] {
+			if !isHexDigit(digit) {
+				return "", errors.Errorf("invalid color %q: %s", value, colorGrammar)
+			}
+		}
+
+		return Color(value), nil
+	}
+
+	index, err := strconv.Atoi(value)
+	if err != nil || index < 0 || index > 255 { //nolint:mnd // palette index range 0-255
+		return "", errors.Errorf("invalid color %q: %s", value, colorGrammar)
+	}
+
+	return Color(value), nil
+}
+
+// ParseColorOrEmpty is the tolerant render helper: empty or invalid values
+// yield "" (uncolored).
+func ParseColorOrEmpty(value string) Color {
+	color, err := ParseColor(value)
+	if err != nil {
+		return ""
+	}
+
+	return color
+}
+
+func isHexDigit(digit rune) bool {
+	return digit >= '0' && digit <= '9' || digit >= 'a' && digit <= 'f' || digit >= 'A' && digit <= 'F'
+}
 
 var ansi16 = [16][3]uint8{
 	{0, 0, 0},
@@ -133,11 +179,4 @@ func ColorToRGB8(c Color) (uint8, uint8, uint8) {
 
 	//nolint:gosec // G115: safe; 8 = standard RGBA 16→8 bit depth shift
 	return uint8(ru >> 8), uint8(gu >> 8), uint8(bu >> 8) //nolint:mnd
-}
-
-// ColorToStyle converts any color.Color to a style.Color hex string.
-func ColorToStyle(c Color) Color {
-	r, g, b := ColorToRGB8(c)
-
-	return Color(fmt.Sprintf("#%02x%02x%02x", r, g, b))
 }

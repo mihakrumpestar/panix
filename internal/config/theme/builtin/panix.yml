@@ -1,0 +1,113 @@
+mode: dark
+header:
+  title:
+    fg: "#00ADD8"
+    bold: true
+status:
+  ok:
+    fg: "#50FA7B"
+  warning:
+    fg: "#FFB86C"
+  failed:
+    fg: "#FF5555"
+  running:
+    fg: "#00BFFF"
+  icons:
+    ok: ✅
+    failed: 🔴
+    running: 🔄
+table:
+  border:
+    fg: "#6272A4"
+  row:
+    fg: "#F8F8F2"
+  selection_highlight_background:
+    bg: "#3B3258"
+  selection_highlight_border:
+    bg: "#BD93F9"
+phase_status:
+  running:
+    - "#01536e"
+    - "#007da7"
+  failed:
+    - "#5f1414"
+    - "#DC2626"
+  done:
+    - "#14532D"
+    - "#11883d"
+  default:
+    - "#535862"
+    - "#6B7280"
+  pill:
+    fg: "#FFFFFF"
+    bold: true
+    pad_y: 0
+    pad_x: 1
+chars:
+  header_separator: │
+  snapshot_icon: ◉
+  error_icon: ✗
+  row_span_marker: 󱞩
+  header_title_sep: ":"
+  phase_arrow: 󰜴
+border:
+  table: sharp
+  overlay: sharp
+  viewport: rounded
+  notification: rounded
+tree:
+  enumerator:
+    fg: "#6272A4"
+  branch: "├"
+  branch_last: "╰"
+  vertical: "│"
+  horizontal: "─"
+spinner:
+  frames:
+    - ⣾
+    - ⣽
+    - ⣻
+    - ⢿
+    - ⡿
+    - ⣟
+    - ⣯
+    - ⣷
+  interval: 100ms
+footer:
+  help_key:
+    fg: "#FFFFFF"
+  help_desc:
+    fg: "#8e8e8e"
+  help_separator:
+    fg: "#6272A4"
+  help_selected_key:
+    fg: "#8BE9FD"
+    bold: true
+  help_selected_desc:
+    fg: "#568CAF"
+  notification_base_style:
+    bold: true
+notification:
+  default_fg_color: "#B4B4B4"
+flake:
+  color: "#F1FA8C"
+  icon: 📁
+  bold: true
+installable:
+  color: "#FFB86C"
+  icon: 📦
+output_type:
+  color: "#F8D97C"
+  icon: 🧬
+machine:
+  color: "#8BE9FD"
+  icon: 💻
+phase:
+  color: "#FF79C6"
+  icon: 📋
+command:
+  color: "#BD93F9"
+  icon: ⚙
+error:
+  color: "#FF5555"
+  icon: ✗

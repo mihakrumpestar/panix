@@ -7,6 +7,7 @@ import (
 var (
 	ansiReset      = []byte("\x1b[m")
 	ansiBold       = []byte("\x1b[1m")
+	ansiFaint      = []byte("\x1b[2m")
 	ansiForeground = []byte("\x1b[38;2;")
 	ansiBackground = []byte("\x1b[48;2;")
 )

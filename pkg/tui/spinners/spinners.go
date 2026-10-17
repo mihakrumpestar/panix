@@ -28,11 +28,26 @@ type Spinners struct {
 }
 
 func New(frames [][]byte, interval time.Duration) *Spinners {
-	return &Spinners{
-		entries:  atomicorderedmap.New[xpath.Xpath, *spinner.Spinner](),
-		frames:   frames,
-		interval: interval,
+	spinners := &Spinners{
+		entries: atomicorderedmap.New[xpath.Xpath, *spinner.Spinner](),
 	}
+	spinners.ApplyTheme(frames, interval)
+
+	return spinners
+}
+
+// ApplyTheme re-runs the constructor styling step: replaces the spinner
+// frames and tick interval, restyling every live spinner in place.
+func (s *Spinners) ApplyTheme(frames [][]byte, interval time.Duration) {
+	interval = spinner.ClampInterval(interval)
+	s.frames = frames
+	s.interval = interval
+
+	s.entries.ForEach(func(_ xpath.Xpath, sp *spinner.Spinner) bool {
+		sp.ApplyTheme(frames, interval)
+
+		return true
+	})
 }
 
 // Render returns the spinner frame for the given xpath as a byte slice.
@@ -102,6 +117,5 @@ func (s *Spinners) Debug(buf *buffer.LinesBuf) {
 }
 
 func (s *Spinners) nextTick() zeroterm.Cmd {
-	return zeroterm.TickCmd(s.interval, func(time.Time) zeroterm.Msg { return tickMsg{} })
+	return zeroterm.TickCmd(spinner.ClampInterval(s.interval), func(time.Time) zeroterm.Msg { return tickMsg{} })
 }
-

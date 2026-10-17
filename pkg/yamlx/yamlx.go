@@ -19,6 +19,7 @@ func Encode(val any, writer io.Writer) error {
 		yaml.WithSmartAnchor(),
 		yaml.UseLiteralStyleIfMultiline(true),
 		yaml.Indent(2),
+		yaml.IndentSequence(true),
 		yaml.OmitEmpty(),
 		yaml.OmitZero(),
 	)

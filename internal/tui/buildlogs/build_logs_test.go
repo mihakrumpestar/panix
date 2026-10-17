@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/theme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
@@ -33,8 +34,13 @@ import (
 
 var testTreeStyle = style.NewStyle()
 
-// testPhaseXpaths builds a PhaseXpaths map from a base xpath string, mimicking
-// what attributes.passAttributesInto does during Init.
+// testTheme returns a fresh resolved default theme. The resolved theme is runtime
+// state of the TUI, not of the config, so tests pass it explicitly.
+func testTheme() *theme.Theme {
+	return theme.DefaultTheme()
+}
+
+// testPhaseXpaths builds a PhaseXpaths map from a base xpath like Init does.
 func testPhaseXpaths(base string) map[phase.Phase]xpath.Xpath {
 	bx := xpath.New(base)
 	phases := make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
@@ -53,16 +59,13 @@ func lb(s string) *buffer.LinesBuf {
 	return buf
 }
 
-// testRootNode creates a tree Node with string content for tests.
 func testRootNode(s string) *tree.Node {
-	root := tree.NewTree(testTreeStyle, TreeStep)
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
 
 	return root.Child(xpath.New(s), 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 		return lb(s)
 	})
 }
-
-// --- formatDuration ---
 
 func TestFormatDuration(t *testing.T) {
 	t.Parallel()
@@ -86,8 +89,6 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-// --- isHideable ---
-
 func TestIsHideable(t *testing.T) {
 	t.Parallel()
 
@@ -105,13 +106,11 @@ func TestIsHideable(t *testing.T) {
 	}
 }
 
-// --- shouldHidePhase ---
-
 func TestShouldHidePhase_HideableFinishedNoError(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	phaseLog := newFinishedPhaseLog(nil)
 
@@ -122,8 +121,8 @@ func TestShouldHidePhase_HideableFinishedNoError(t *testing.T) {
 func TestShouldHidePhase_HideableFinishedWithError(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	phaseLog := newFinishedPhaseLog(os.ErrNotExist)
 
@@ -134,8 +133,8 @@ func TestShouldHidePhase_HideableFinishedWithError(t *testing.T) {
 func TestShouldHidePhase_HideableRunning(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	phaseLog := newRunningPhaseLog()
 
@@ -146,8 +145,8 @@ func TestShouldHidePhase_HideableRunning(t *testing.T) {
 func TestShouldHidePhase_NonHideableFinishedNoError(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	phaseLog := newFinishedPhaseLog(nil)
 
@@ -158,9 +157,9 @@ func TestShouldHidePhase_NonHideableFinishedNoError(t *testing.T) {
 func TestShouldHidePhase_ShowAllBuildLogs(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
+	conf := makeTestConfig(0, 0, 0)
 	conf.Flags.Tui.ShowAllBuildLogs = true
-	buildLogs := New(conf, nil, nil)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	phaseLog := newFinishedPhaseLog(nil)
 
@@ -171,9 +170,9 @@ func TestShouldHidePhase_ShowAllBuildLogs(t *testing.T) {
 func TestShouldHidePhase_ShowActiveOnly(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
+	conf := makeTestConfig(0, 0, 0)
 	conf.Flags.Tui.ShowActiveOnly = true
-	buildLogs := New(conf, nil, nil)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	runningPhaseLog := newRunningPhaseLog()
 	assert.False(t, buildLogs.shouldHidePhase(phase.Build, runningPhaseLog),
@@ -184,13 +183,11 @@ func TestShouldHidePhase_ShowActiveOnly(t *testing.T) {
 		"ShowActiveOnly should hide finished phase even if non-hideable")
 }
 
-// --- layoutLine ---
-
 func TestLayoutLine(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 80
 
 	line := buildLogs.layoutLineStyled(0, 0, style.NewStyle(), []byte("left"), []byte("right"), 4, 5, nil)
@@ -204,8 +201,8 @@ func TestLayoutLine(t *testing.T) {
 func TestLayoutLine_NarrowWidth(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 20
 
 	line := buildLogs.layoutLineStyled(6, 2, style.NewStyle(), []byte("BUILD"), []byte("(1.23s)"), 5, 7, nil)
@@ -219,55 +216,44 @@ func TestLayoutLine_NarrowWidth(t *testing.T) {
 func TestLayoutLine_TimerLevelConsistency(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
 
 	left := []byte("PHASE")
 	right := []byte("(1.00s)")
 	sty := style.NewStyle()
 
-	// Same timerLevel but different indent (simulating phase under config vs machine).
-	// The timer offset from the content start (indent + timerIndent - timerLevel) should
-	// produce the same connector-to-timer gap.
+	// The timer offset is indent + timerIndent - timerLevel: the same timerLevel
+	// yields the same connector-to-timer gap at any indent.
 	lineUnderCfg := buildLogs.layoutLineStyled(6, timerLevelPhase, sty, left, right, 5, 7, nil)
 	lineUnderMachine := buildLogs.layoutLineStyled(9, timerLevelPhase, sty, left, right, 5, 7, nil)
 
 	strCfg := buffer.LinesBufToStringForTests(lineUnderCfg)
 	strMachine := buffer.LinesBufToStringForTests(lineUnderMachine)
 
-	// The timer should be at the same relative offset from the connector end.
-	// Connector width is 3 (TreeStep). Timer offset = timerIndent - timerLevel.
-	// For timerLevelPhase=4, timerIndent=5: offset = 5-4 = 1 space after connector.
-	// Verify the timer appears at the expected column.
 	timerOffsetCfg := 6 + (timerIndent - timerLevelPhase) // 7
 
-	// Extract the portion from the timer position onward (after styled content).
-	// Both should have "(1.00s)" starting at their respective offsets.
 	assert.Contains(t, strCfg, "(1.00s)",
 		"phase under config should contain timer")
 	assert.Contains(t, strMachine, "(1.00s)",
 		"phase under machine should contain timer")
 
-	// The connector-to-timer gap should be 1 for both (timerLevelPhase=4 → 5-4=1).
 	expectedGap := timerIndent - timerLevelPhase
 	assert.Equal(t, expectedGap, 1,
 		"connector-to-timer gap should be 1 for timerLevelPhase=4, timerIndent=5")
 
-	// Verify different timerLevel produces different gap.
-	timerOffsetDiffLevel := 6 + (timerIndent - 2) // level 2 → offset 2
+	timerOffsetDiffLevel := 6 + (timerIndent - 2) // level 2
 	assert.NotEqual(t, timerOffsetCfg, timerOffsetDiffLevel,
 		"different timerLevel should produce different offset")
 }
 
-// --- spinnerOrIcon ---
-
 func TestSpinnerOrIcon_NotStarted(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	tas := &atomictimeandstate.TimeAndState{}
 
@@ -278,9 +264,9 @@ func TestSpinnerOrIcon_NotStarted(t *testing.T) {
 func TestSpinnerOrIcon_Finished(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	tas := atomictimeandstate.New()
 	tas.StartTimer()
@@ -294,9 +280,9 @@ func TestSpinnerOrIcon_Finished(t *testing.T) {
 func TestSpinnerOrIcon_Running(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	tas := atomictimeandstate.New()
 	tas.StartTimer()
@@ -307,13 +293,11 @@ func TestSpinnerOrIcon_Running(t *testing.T) {
 	assert.NotEqual(t, "OK ", string(result), "spinnerOrIcon for running should NOT return finished icon")
 }
 
-// --- addPhases ---
-
 func TestAddPhases_NilLogNode(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	parent := testRootNode("parent")
 
@@ -325,8 +309,8 @@ func TestAddPhases_NilLogNode(t *testing.T) {
 func TestAddPhases_NilPhaseLogs(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	logNode := &logs.Logs{}
 
@@ -337,10 +321,10 @@ func TestAddPhases_NilPhaseLogs(t *testing.T) {
 }
 
 func newBuildLogsForTest() *BuildLogs {
-	conf := makeTestConfig(0, 0, 0, nil)
-	bl := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	bl := New(conf, testTheme(), nil, nil)
 	bl.contentWidth = 120
-	bl.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	bl.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	bl.viewports = newTestViewports(conf)
 
 	return bl
@@ -402,10 +386,10 @@ func TestAddPhasesSingle_BuildPhaseNotFiltered(t *testing.T) {
 func TestAddPhasesMulti_Filtering(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	logNode := logs.New()
@@ -423,15 +407,13 @@ func TestAddPhasesMulti_Filtering(t *testing.T) {
 	assert.Equal(t, 1, parent.Len(), "addPhasesMulti should add 1 child (Build only, Inspect hidden), got %d", parent.Len())
 }
 
-// --- addCommands ---
-
 func TestAddCommands_NilCommandLogs(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	phaseLog := newFinishedPhaseLog(nil)
@@ -447,10 +429,10 @@ func TestAddCommands_NilCommandLogs(t *testing.T) {
 func TestAddCommands_WithCommandError(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	phaseLog := newFinishedPhaseLog(os.ErrNotExist)
@@ -471,11 +453,11 @@ func TestAddCommands_WithCommandError(t *testing.T) {
 func TestAddCommands_HideablePhaseOnlyLastCommandShown(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
+	conf := makeTestConfig(0, 0, 0)
 	conf.Flags.Tui.ShowAllBuildLogs = false
-	buildLogs := New(conf, nil, nil)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	phaseLog := newFinishedPhaseLog(nil)
@@ -518,11 +500,11 @@ func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			conf := makeTestConfig(0, 0, 0, nil)
+			conf := makeTestConfig(0, 0, 0)
 			conf.Flags.Tui.ShowAllBuildLogs = testCase.showAll
-			buildLogs := New(conf, nil, nil)
+			buildLogs := New(conf, testTheme(), nil, nil)
 			buildLogs.contentWidth = 120
-			buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+			buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 			buildLogs.viewports = newTestViewports(conf)
 
 			phaseLog := newFinishedPhaseLog(nil)
@@ -544,13 +526,51 @@ func TestAddCommands_HideableVsNonHideablePhase(t *testing.T) {
 	}
 }
 
-// --- addCommandChildren ---
+// TestAddCommand_UsesThemeTreeVerticalGlyph pins that command continuation rows
+// use the theme tree vertical glyph: a long label wraps and the icon column of
+// the continuation rows must carry that glyph.
+func TestAddCommand_UsesThemeTreeVerticalGlyph(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0)
+	conf.Flags.Tui.ShowCommandsInLabels = true
+
+	merged := testTheme().Merge(theme.Theme{Tree: theme.ThemeTree{Vertical: "║"}})
+	scheme := &merged
+
+	buildLogs := New(conf, scheme, nil, nil)
+	buildLogs.contentWidth = 24
+	buildLogs.spinners = spinners.New(scheme.Spinner.FrameBytes, scheme.Spinner.Interval.Duration())
+	buildLogs.viewports = newTestViewports(conf)
+
+	phaseLog := newFinishedPhaseLog(nil)
+
+	// Make the raw command long enough to wrap into continuation rows.
+	cmd := phaseLog.NewCommand(xpath.New("test"), "desc", "running", "failed",
+		[]string{"echo", strings.Repeat("x", 400)}, 0)
+	cmd.TimeAndState.StartTimer()
+	cmd.TimeAndState.EndTimerWithError(nil)
+	cmd.Output.Write([]byte("output line"))
+
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
+	phaseNode := root.Child(xpath.New("phase"), 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
+		return lb("phase")
+	})
+
+	buildLogs.addCommands(phaseNode, phaseLog, phase.Build, 0)
+
+	result := buffer.LinesBufToStringForTests(root.Render())
+	stripped := string(style.StripANSI([]byte(result)))
+
+	assert.Contains(t, stripped, "║",
+		"command continuation lines must use the theme tree vertical glyph")
+}
 
 func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
 	buildLogs.viewports = newTestViewports(conf)
 
@@ -570,8 +590,8 @@ func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
 	buildLogs.viewports = newTestViewports(conf)
 
@@ -586,20 +606,17 @@ func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
 		"addCommandChildren with no output and no error should add 0 children, got %d", cmdNode.Len())
 }
 
-// --- entityNode ---
-
 func TestEntityNode(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.styledTreeLine = conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
 	logNode := logs.New()
-	content := buildLogs.entityNodeContent(0, conf.ColorScheme.Flake, "my-flake", logNode, nil)
+	content := buildLogs.entityNodeContent(0, testTheme().Flake, "my-flake", logNode, nil)
 
-	root := tree.NewTree(testTreeStyle, TreeStep)
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
 	root.Child(xpath.New("test"), 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 		return content
 	})
@@ -615,14 +632,13 @@ func TestEntityNode(t *testing.T) {
 func TestEntityNode_NilLogNode(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.styledTreeLine = conf.ColorScheme.Tree.Enumerator.RenderLine([]byte("│"))
 
-	content := buildLogs.entityNodeContent(0, conf.ColorScheme.Flake, "my-flake", nil, nil)
+	content := buildLogs.entityNodeContent(0, testTheme().Flake, "my-flake", nil, nil)
 
-	root := tree.NewTree(testTreeStyle, TreeStep)
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
 	root.Child(xpath.New("test"), 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 		return content
 	})
@@ -635,15 +651,13 @@ func TestEntityNode_NilLogNode(t *testing.T) {
 		"entityNode with nil logNode should show 0.00s duration")
 }
 
-// --- buildDefaultTree ---
-
 func TestBuildDefaultTree_ConfigScopedPhases(t *testing.T) {
 	t.Parallel()
 
 	conf := makeTestConfigWithSingleMachine()
-	buildLogs := New(conf, nil, nil)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	out := getFirstOutput(conf)
@@ -658,10 +672,10 @@ func TestBuildDefaultTree_ConfigScopedPhases(t *testing.T) {
 func TestBuildDefaultTree_EmptyMachines(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(1, 1, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(1, 1, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	out := getFirstOutput(conf)
@@ -676,24 +690,20 @@ func TestBuildDefaultTree_EmptyMachines(t *testing.T) {
 		"buildDefaultTree should produce config-scoped phases even with no machines")
 }
 
-// --- buildPhaseSelectedTree ---
-
 func TestBuildPhaseSelectedTree_ConfigScopedPhase(t *testing.T) {
 	t.Parallel()
 
 	conf := makeTestConfigWithSingleMachine()
-	phaseFlow := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, nil, phaseFlow)
+	phaseFlow := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), nil, phaseFlow)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	out := getFirstOutput(conf)
 
-	// Add Build phase log to the output (output-scoped)
 	out.Logs.PhaseLogs.Set(phase.Build, newFinishedPhaseLog(nil))
 
-	// Select Build (output-scoped)
 	buildLogs.phaseStatus = phaseFlow
 	phaseFlow.Selected = phaseflow.Selected{Phase: phase.Build.String(), Index: 0}
 
@@ -709,23 +719,20 @@ func TestBuildPhaseSelectedTree_MachineScopedPhase(t *testing.T) {
 	t.Parallel()
 
 	conf := makeTestConfigWithSingleMachine()
-	phaseFlow := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, nil, phaseFlow)
+	phaseFlow := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), nil, phaseFlow)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	out := getFirstOutput(conf)
 
-	// Select Inspect (machine-scoped)
 	phaseFlow.Selected = phaseflow.Selected{Phase: phase.Inspect.String(), Index: 0}
 
 	cfgNode := testRootNode("cfg")
 
 	buildLogs.buildPhaseSelectedTree(cfgNode, out)
 }
-
-// --- renderBuildLogsString helper (for tests) ---
 
 func renderBuildLogsString(b *BuildLogs, ct *tree.Node, vp *viewports.Viewports, sp *spinners.Spinners) string {
 	target := buffer.NewLinesBuf()
@@ -736,19 +743,17 @@ func renderBuildLogsString(b *BuildLogs, ct *tree.Node, vp *viewports.Viewports,
 	return result
 }
 
-// --- View end-to-end ---
-
 func TestView_BasicOutput(t *testing.T) {
 	t.Parallel()
 
 	conf := makeTestConfigWithSingleMachine()
-	st := statstable.New(conf.Fleet, conf.ColorScheme)
-	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, st, ps)
+	st := statstable.New(conf.Fleet, testTheme())
+	ps := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), st, ps)
 
-	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	ct := tree.NewTree(testTheme().Tree.Enumerator.Style, TreeStep, tree.DefaultGlyphs())
 	vp := newTestViewports(conf)
-	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	sp := spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
@@ -763,14 +768,14 @@ func TestView_BasicOutput(t *testing.T) {
 func TestView_EmptyFleet(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	st := statstable.New(conf.Fleet, conf.ColorScheme)
-	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, st, ps)
+	conf := makeTestConfig(0, 0, 0)
+	st := statstable.New(conf.Fleet, testTheme())
+	ps := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), st, ps)
 
-	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	ct := tree.NewTree(testTheme().Tree.Enumerator.Style, TreeStep, tree.DefaultGlyphs())
 	vp := newTestViewports(conf)
-	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	sp := spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
@@ -782,15 +787,15 @@ func TestView_NilFlake(t *testing.T) {
 	t.Parallel()
 
 	conf := makeTestConfigWithSingleMachine()
-	st := statstable.New(conf.Fleet, conf.ColorScheme)
-	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, st, ps)
+	st := statstable.New(conf.Fleet, testTheme())
+	ps := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), st, ps)
 
 	conf.Fleet.Flakes.Set("nil-flake", nil)
 
-	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	ct := tree.NewTree(testTheme().Tree.Enumerator.Style, TreeStep, tree.DefaultGlyphs())
 	vp := newTestViewports(conf)
-	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	sp := spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
@@ -802,17 +807,17 @@ func TestView_NilMachine(t *testing.T) {
 	t.Parallel()
 
 	conf := makeTestConfigWithSingleMachine()
-	st := statstable.New(conf.Fleet, conf.ColorScheme)
-	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, st, ps)
+	st := statstable.New(conf.Fleet, testTheme())
+	ps := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), st, ps)
 
-	// Add a nil machine entry — the tree traversal should skip it
+	// A nil machine entry must be skipped by the tree traversal.
 	out := getFirstOutput(conf)
 	out.Machines.Set("nil-mach", nil)
 
-	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	ct := tree.NewTree(testTheme().Tree.Enumerator.Style, TreeStep, tree.DefaultGlyphs())
 	vp := newTestViewports(conf)
-	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	sp := spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
@@ -823,14 +828,14 @@ func TestView_NilMachine(t *testing.T) {
 func TestView_MultipleFlakes(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(2, 2, 2, nil)
-	st := statstable.New(conf.Fleet, conf.ColorScheme)
-	ps := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, st, ps)
+	conf := makeTestConfig(2, 2, 2)
+	st := statstable.New(conf.Fleet, testTheme())
+	ps := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), st, ps)
 
-	ct := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	ct := tree.NewTree(testTheme().Tree.Enumerator.Style, TreeStep, tree.DefaultGlyphs())
 	vp := newTestViewports(conf)
-	sp := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	sp := spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
 	result := renderBuildLogsString(buildLogs, ct, vp, sp)
 
@@ -840,15 +845,13 @@ func TestView_MultipleFlakes(t *testing.T) {
 		"View should contain second flake name")
 }
 
-// --- addPhase edge cases ---
-
 func TestAddPhase_NotStarted(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	phaseLog := newNotStartedPhaseLog()
@@ -864,15 +867,15 @@ func TestAddPhase_NotStarted(t *testing.T) {
 func TestAddPhase_RunningPhaseShowsSpinner(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 	buildLogs.contentWidth = 120
-	buildLogs.spinners = spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 	buildLogs.viewports = newTestViewports(conf)
 
 	phaseLog := newRunningPhaseLog()
 
-	root := tree.NewTree(testTreeStyle, TreeStep)
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
 	parent := root.Child(xpath.New("parent"), 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 		return lb("parent")
 	})
@@ -886,8 +889,6 @@ func TestAddPhase_RunningPhaseShowsSpinner(t *testing.T) {
 	assert.Contains(t, result, "BUILD",
 		"addPhase for Build should contain 'BUILD'")
 }
-
-// --- makeAllowedSet ---
 
 func TestMakeAllowedSet(t *testing.T) {
 	t.Parallel()
@@ -914,27 +915,21 @@ func TestMakeAllowedSet_Empty(t *testing.T) {
 	assert.Empty(t, set, "makeAllowedSet(nil) should be empty, got %d", len(set))
 }
 
-// --- styleForEntity ---
-
 func TestStyleForEntity(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-
-	entity := conf.ColorScheme.Flake
+	entity := testTheme().Flake
 	result := entity.Color
 
 	assert.True(t, reflect.DeepEqual(result, entity.Color),
 		"entity Color should be the entity's Color style")
 }
 
-// --- durationBytes ---
-
 func TestDurationBytes_Finished(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	tas := atomictimeandstate.New()
 	tas.StartTimer()
@@ -950,8 +945,8 @@ func TestDurationBytes_Finished(t *testing.T) {
 func TestDurationBytes_NotStarted(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	tas := atomictimeandstate.New()
 
@@ -962,13 +957,11 @@ func TestDurationBytes_NotStarted(t *testing.T) {
 		"durationBytes for not-started should return empty, got %q", styled)
 }
 
-// --- phaseLogsAndXpath ---
-
 func TestPhaseLogsAndXpath_ConfigScope(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	out := &installable.Installable{}
 	out.Logs = logs.New()
@@ -988,8 +981,8 @@ func TestPhaseLogsAndXpath_ConfigScope(t *testing.T) {
 func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
 	t.Parallel()
 
-	conf := makeTestConfig(0, 0, 0, nil)
-	buildLogs := New(conf, nil, nil)
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
 
 	out := &installable.Installable{}
 	out.Logs = logs.New()
@@ -1008,8 +1001,6 @@ func TestPhaseLogsAndXpath_MachineScope(t *testing.T) {
 	assert.Equal(t, mach.PhaseXpaths, xpsResult,
 		"phaseLogsAndXpath for machine scope should return m.PhaseXpaths")
 }
-
-// --- Helpers ---
 
 func newFinishedPhaseLog(err error) *phaselogs.PhaseLog {
 	phaseLog := phaselogs.NewPhaseLog()
@@ -1039,14 +1030,14 @@ func newFinishedCommandLog(description string, err error) *command.CommandLog {
 }
 
 func newTestViewports(conf *config.Config) *viewports.Viewports {
-	colorScheme := conf.ColorScheme
+	scheme := testTheme()
 
 	return viewports.New(
 		&viewports.Dimensions{Width: 200, Height: 80},
 		conf.Flags.Tui.CommandOutputMaxHeight,
-		colorScheme.Table.Border,
-		colorScheme.Table.SelectionHighlightBackground,
-		colorScheme.Table.SelectionHighlightBorder,
+		scheme.Table.Border.Style,
+		scheme.Table.SelectionHighlightBackground.Style,
+		scheme.Table.SelectionHighlightBorder.Style,
 	)
 }
 
@@ -1083,9 +1074,8 @@ func makeTestConfigWithSingleMachine() *config.Config {
 	flakesMap.Set(flakeName, flakeObj)
 
 	return &config.Config{
-		ColorScheme: colorscheme.DefaultColorScheme(),
-		Fleet:       &fleet.Fleet{Flakes: flakesMap},
-		Phases:      allPhases,
+		Fleet:  &fleet.Fleet{Flakes: flakesMap},
+		Phases: allPhases,
 	}
 }
 

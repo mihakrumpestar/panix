@@ -30,6 +30,8 @@ See the [Quick Start](/getting-started/) for a full minimal configuration, and t
 | `output_types` | Custom output type presets, applied as defaults to installables of that type |
 | `fleet` | Fleet definition: flakes, installables, machines, SSH, secrets, nix options |
 
+When the same setting comes from several sources, the highest-precedence one wins: CLI flag > `PANIX_*` environment variable > config file > built-in default.
+
 ## In This Section
 
 | Page | Contents |
@@ -40,4 +42,5 @@ See the [Quick Start](/getting-started/) for a full minimal configuration, and t
 | [Nix Command Flags](/configuration/nix-flags/) | Nix base flags, extra flags, and per-level overrides |
 | [Tag-Based Filtering](/configuration/tag-filtering/) | Tag inheritance and deploying subsets of the fleet |
 | [Build Modes](/configuration/build-modes/) | Local vs remote builds |
+| [Themes](/configuration/themes/) | TUI color themes, the `ctrl+t` theme picker, custom themes via `panix-themes.yml` |
 | [IDE Support](/configuration/ide-support/) | YAML schema for editor validation and autocompletion |
