@@ -125,6 +125,35 @@ func (b *LinesBuf) Line(i int) []byte {
 	return b.buf[start:end]
 }
 
+// SetLine replaces the content of line idx, copying line into the buffer.
+// The line count is unchanged and line is neither retained nor mutated.
+// Panics if idx is out of range, matching Line.
+func (b *LinesBuf) SetLine(idx int, line []byte) {
+	start := b.indexes[idx]
+
+	end := len(b.buf)
+	if idx+1 < len(b.indexes) {
+		end = b.indexes[idx+1]
+	}
+
+	delta := len(line) - (end - start)
+
+	switch {
+	case delta > 0:
+		b.buf = append(b.buf, make([]byte, delta)...)
+		copy(b.buf[end+delta:], b.buf[end:])
+	case delta < 0:
+		copy(b.buf[end+delta:], b.buf[end:])
+		b.buf = b.buf[:len(b.buf)+delta]
+	}
+
+	copy(b.buf[start:], line)
+
+	for j := idx + 1; j < len(b.indexes); j++ {
+		b.indexes[j] += delta
+	}
+}
+
 // Lines reconstructs [][]byte. Allocates, prefer Line(i).
 func (b *LinesBuf) Lines() [][]byte {
 	length := len(b.indexes)

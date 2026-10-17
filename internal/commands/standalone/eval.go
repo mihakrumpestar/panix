@@ -1,6 +1,8 @@
 package commands_standalone
 
 import (
+	"os"
+
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/pkg/yamlx"
@@ -16,7 +18,7 @@ type EvalCmd struct {
 }
 
 func (c *EvalCmd) Run() error {
-	flags := flags.Flags{
+	parsed := flags.Flags{
 		WorkflowFlags: flags.WorkflowFlags{
 			ConfigFlags: c.ConfigFlags,
 			EvalFlags:   c.EvalFlags,
@@ -24,10 +26,10 @@ func (c *EvalCmd) Run() error {
 		},
 	}
 
-	flags.WorkflowFlags.EvalFlags.Validate.Flakes = true
-	flags.WorkflowFlags.EvalFlags.Validate.BootstrapSecrets = true
+	parsed.WorkflowFlags.EvalFlags.Validate.Flakes = true
+	parsed.WorkflowFlags.EvalFlags.Validate.BootstrapSecrets = true
 
-	conf, err := config.LoadConfig(flags)
+	conf, err := config.LoadConfig(parsed, flags.ExplicitMask(os.Args[1:], c))
 	if err != nil {
 		return errors.Wrap(err, "evaluation failed")
 	}

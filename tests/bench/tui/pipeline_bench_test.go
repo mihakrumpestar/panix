@@ -346,7 +346,7 @@ func newZerotermPipeline() *zerotermPipeline {
 
 func buildZerotermTree() *tree.Node {
 	treeStyle := style.NewStyle().Foreground(style.Color("#6272A4"))
-	root := tree.NewTree(treeStyle, 3)
+	root := tree.NewTree(treeStyle, 3, tree.DefaultGlyphs())
 
 	var build func(depth int, parent *tree.Node, parentXp string) *tree.Node
 

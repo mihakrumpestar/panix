@@ -7,6 +7,54 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestCellWidth_StaticTablePins pins one representative codepoint per class of
+// the hand-rolled fallback table. The table only applies when panix cannot
+// measure glyphs (headless, or no cursor position reply); the live probe is the
+// source of truth for real terminals. These pins keep the fallback from drifting.
+func TestCellWidth_StaticTablePins(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"ascii", "a", 1},
+		{"space", " ", 1},
+		{"combining mark", "\u0301", 0},
+		{"variation selector", "\ufe0f", 0},
+		{"box drawing horizontal", "─", 1},
+		{"box drawing vertical", "│", 1},
+		{"arrow", "→", 1},
+		{"geometric shape", "▤", 1},
+		{"shade block", "░", 1},
+		{"ballot x", "✗", 1},
+		{"gear", "⚙", 1},
+		{"warning sign", "⚠", 1},
+		{"no entry", "⛔", 2},
+		{"white heavy check mark", "✅", 2},
+		{"cjk ideograph", "\u6f22", 2},
+		{"books", "📚", 2},
+		{"ladder", "🪜", 2},
+		{"log", "🪵", 2},
+		{"desktop computer", "🖥", 1},
+		{"file cabinet", "🗄", 1},
+		{"control knobs", "🎛", 1},
+		{"nerd font private use", "\uf121", 1},
+		// The fallback does not promote VS sequences; the live probe decides
+		// what the terminal actually does.
+		{"gear with variation selector", "⚙\ufe0f", 1},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tc.want, CellWidth([]byte(tc.in)), "CellWidth(%q)", tc.in)
+		})
+	}
+}
+
 func TestCellWidth_Equivalence(t *testing.T) {
 	t.Parallel()
 

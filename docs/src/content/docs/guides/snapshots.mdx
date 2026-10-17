@@ -7,7 +7,7 @@ sidebar:
 
 Capture the full state of a deployment workflow at a point in time, then replay it later in the TUI for inspection, debugging, or sharing (for example, as context for an LLM).
 
-A snapshot is a self-contained JSON file containing machine states, phase results, command outputs, inspect metadata, and timing information. Real snapshot examples live in the [`examples`](https://github.com/mihakrumpestar/panix/tree/main/examples) directory. Here is what one contains (trimmed for brevity):
+A snapshot is a self-contained JSON file containing machine states, phase results, command outputs, inspect metadata, timing information, and the theme name the TUI was using. Replaying a snapshot never depends on your current working directory or on themes files still being present: when the recorded theme is not available, the default theme is used. Real snapshot examples live in the [`examples`](https://github.com/mihakrumpestar/panix/tree/main/examples) directory. Here is what one contains (trimmed for brevity):
 
 ```json
 {

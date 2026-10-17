@@ -8,6 +8,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 )
 
 type Program struct {
@@ -23,6 +24,9 @@ type Program struct {
 	frames          [2]*buffer.LinesBufDiff
 	curFrame        int
 	renderCounter   uint64
+
+	widthProbeGlyphs  []string
+	widthProbeInstall func(measured map[string]int, elapsed time.Duration)
 }
 
 type ProgramOption func(*Program)
@@ -50,6 +54,17 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 // Raw disables frame diffing; every render writes all lines directly.
 func Raw() ProgramOption {
 	return func(p *Program) { p.raw = true }
+}
+
+// WithWidthProbe enables the glyph width probe: before the first frame, Run
+// measures each glyph and calls install with the widths and duration. glyphs
+// should cover every glyph the UI can draw. install runs at most once, and only
+// on success; otherwise the static width table is kept.
+func WithWidthProbe(glyphs []string, install func(measured map[string]int, elapsed time.Duration)) ProgramOption {
+	return func(p *Program) {
+		p.widthProbeGlyphs = glyphs
+		p.widthProbeInstall = install
+	}
 }
 
 // RenderCounter returns the current render counter.
@@ -88,13 +103,18 @@ func (p *Program) Run() error {
 		return errors.Wrap(err, "failed to clear screen")
 	}
 
+	// Probe before the first frame: raw mode and the alt screen are active, and
+	// the input goroutine does not exist yet, so the probe cannot race it. Bytes
+	// that are not probe replies are user keystrokes and go to the input loop.
+	probeLeftover := p.probeWidths()
+
 	p.processInitCmds()
 
 	sigCh := term.WatchResize()
 	defer term.StopWatchResize()
 
 	inputDone := make(chan struct{})
-	go p.readInput(inputDone)
+	go p.readInput(inputDone, probeLeftover)
 
 	defer func() { <-inputDone }()
 	defer close(p.stopCh)
@@ -109,6 +129,30 @@ func (p *Program) Run() error {
 	_, _ = os.Stdout.Write(p.outBuf)
 
 	return nil
+}
+
+// probeWidths runs the configured probe and installs the widths, returning
+// leftover input bytes for the input loop. A failure keeps the static width table
+// and is logged at debug level.
+func (p *Program) probeWidths() []byte {
+	if len(p.widthProbeGlyphs) == 0 || p.widthProbeInstall == nil {
+		return nil
+	}
+
+	start := time.Now()
+
+	measured, leftover, err := p.terminal.ProbeGlyphWidths(p.widthProbeGlyphs)
+	if err != nil {
+		log.Debug().Err(err).Msg("terminal glyph width probe failed; keeping static widths")
+
+		return leftover
+	}
+
+	if len(measured) > 0 {
+		p.widthProbeInstall(measured, time.Since(start))
+	}
+
+	return leftover
 }
 
 // processInitCmds runs the model's Init and initial WindowSize update, then
@@ -249,12 +293,14 @@ func (p *Program) processCmds(cmd Cmd) {
 }
 
 //nolint:cyclop
-func (p *Program) readInput(done chan<- struct{}) {
+func (p *Program) readInput(done chan<- struct{}, initialLeftover []byte) {
 	defer close(done)
 
 	buf := make([]byte, 1024) //nolint:mnd
 
-	var leftover []byte
+	// Dispatch bytes typed while the probe ran before starting the read loop:
+	// they already arrived, so waiting for the next read would strand them.
+	leftover := p.dispatchInput(initialLeftover, true)
 
 	readCh := make(chan readResult, 1)
 
@@ -285,25 +331,30 @@ func (p *Program) readInput(done chan<- struct{}) {
 			data := buf[:readRes.n]
 			if len(leftover) > 0 {
 				data = append(leftover, data...)
-				leftover = nil
 			}
 
 			// If we filled the buffer, more data may be available;
 			// partial sequences should be deferred.
 			canHaveMoreData := readRes.n == len(buf)
 
-			msgs, consumed := parseInput(data, canHaveMoreData)
-			for _, msg := range msgs {
-				p.msgCh <- msg
-			}
-
-			if consumed < len(data) && canHaveMoreData {
-				// Incomplete sequence at end of buffer; save for next read.
-				leftover = make([]byte, 0, len(data[consumed:])+len(buf))
-				leftover = append(leftover, data[consumed:]...)
-			}
+			leftover = p.dispatchInput(data, canHaveMoreData)
 		}
 	}
+}
+
+// dispatchInput parses data into messages and returns the unconsumed tail when
+// more data may follow. Incomplete sequences stay in the tail for the next read.
+func (p *Program) dispatchInput(data []byte, canHaveMoreData bool) []byte {
+	msgs, consumed := parseInput(data, canHaveMoreData)
+	for _, msg := range msgs {
+		p.msgCh <- msg
+	}
+
+	if consumed < len(data) && canHaveMoreData {
+		return append([]byte(nil), data[consumed:]...)
+	}
+
+	return nil
 }
 
 type readResult struct {

@@ -19,6 +19,7 @@ type Viewports struct {
 	items                        *atomicorderedmap.AtomicOrderedMap[xpath.Xpath, *item]
 	dimensions                   *Dimensions
 	commandOutputMaxHeight       int
+	borderGlyphs                 style.Border
 	border                       style.Style
 	selectionHighlightBackground style.Style
 	selectionHighlightBorder     style.Style
@@ -53,20 +54,46 @@ func (itm *item) release() {
 	}
 }
 
+// invalidate forces the next render to re-sync and re-render this item's
+// viewport despite unchanged versions, as on theme changes.
+func (itm *item) invalidate() {
+	itm.contentVersion = ^uint64(0)
+	itm.model.InvalidateCache()
+}
+
 func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHighlightBackground, selectionHighlightBorder style.Style) *Viewports {
 	mainXpath := xpath.New("main")
 
-	return &Viewports{
-		items:                        atomicorderedmap.New[xpath.Xpath, *item](),
-		dimensions:                   dimensions,
-		commandOutputMaxHeight:       commandOutputMaxHeight,
-		border:                       border,
-		selectionHighlightBackground: selectionHighlightBackground,
-		selectionHighlightBorder:     selectionHighlightBorder,
-		mainXpath:                    mainXpath,
-		activeXpath:                  mainXpath,
-		highlightBuf:                 buffer.NewLinesBuf(),
+	viewports := &Viewports{
+		items:                  atomicorderedmap.New[xpath.Xpath, *item](),
+		dimensions:             dimensions,
+		commandOutputMaxHeight: commandOutputMaxHeight,
+		mainXpath:              mainXpath,
+		activeXpath:            mainXpath,
+		highlightBuf:           buffer.NewLinesBuf(),
 	}
+	viewports.ApplyTheme(border, selectionHighlightBackground, selectionHighlightBorder, style.RoundedBorder())
+
+	return viewports
+}
+
+// ApplyTheme stores the styles and glyphs, then restyles every live viewport and
+// invalidates its render cache and content sync. It is the single theme entry
+// point; items created later pick the glyphs up via the constructor option.
+func (v *Viewports) ApplyTheme(border, selectionHighlightBackground, selectionHighlightBorder style.Style, glyphs style.Border) {
+	v.border = border
+	v.selectionHighlightBackground = selectionHighlightBackground
+	v.selectionHighlightBorder = selectionHighlightBorder
+	v.borderGlyphs = glyphs
+
+	sbColor := v.borderColor(false)
+
+	v.items.ForEach(func(xp xpath.Xpath, itm *item) bool {
+		itm.model.ApplyTheme(v.borderColor(xp == v.activeXpath), sbColor, sbColor, glyphs)
+		itm.invalidate()
+
+		return true
+	})
 }
 
 // Dimensions
@@ -393,6 +420,7 @@ func (v *Viewports) buildViewportOpts(
 	opts := []tuiviewport.Option{
 		tuiviewport.WithWidth(v.viewWidth(indent, explicitWidth)),
 		tuiviewport.WithHeight(max(1, explicitHeight)),
+		tuiviewport.WithBorderGlyphs(v.borderGlyphs),
 	}
 
 	if scrollbar {

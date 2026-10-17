@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -83,6 +84,8 @@ type TypeDefinition struct {
 	Default              any                          `yaml:"default,omitempty"`
 	Properties           map[string]any               `yaml:"properties,omitempty"`
 	Items                any                          `yaml:"items,omitempty"`
+	MinItems             *int                         `yaml:"minItems,omitempty"`
+	MaxItems             *int                         `yaml:"maxItems,omitempty"`
 	Required             requiredList                 `yaml:"required,omitempty"`
 	Dependencies         dependenciesMap              `yaml:"dependencies,omitempty"`
 	AnyOf                anyOfGroup                   `yaml:"anyOf,omitempty"`
@@ -300,17 +303,19 @@ func (g *generator) countStructOccurrences(typ reflect.Type, onStack map[reflect
 	delete(onStack, typ)
 }
 
-// countFieldType increments the occurrence count for a struct field's type.
+// countFieldType increments the occurrence count for a struct field's type:
+// slices count their element type and maps their value type (e.g.
+// map[string]Theme), so struct types reached only through containers are still
+// discovered for $ref definitions.
 func (g *generator) countFieldType(typ reflect.Type) {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
-	if typ.Kind() == reflect.Slice {
-		typ = typ.Elem()
-		if typ.Kind() == reflect.Pointer {
-			typ = typ.Elem()
-		}
+	if typ.Kind() == reflect.Slice || typ.Kind() == reflect.Map {
+		g.countFieldTypeInfo(typ.Elem())
+
+		return
 	}
 
 	if typ.Kind() == reflect.Struct {
@@ -559,8 +564,8 @@ func (g *generator) processType(typ reflect.Type, field reflect.StructField) (an
 		return g.processDefinitionType(typ, defName)
 	}
 
-	// Handle time.Duration
-	if typ.String() == "time.Duration" {
+	// Handle durations (time.Duration and serializable duration wrappers).
+	if isDurationType(typ) {
 		return &TypeDefinition{Type: "string", Description: "Duration string (e.g., '2h', '30m', '1h30m')"}, nil
 	}
 
@@ -586,7 +591,7 @@ func (g *generator) processByKind(kind reflect.Kind, typ reflect.Type, field ref
 	case reflect.String:
 		return g.applyConstraints(&TypeDefinition{Type: "string"}, field.Tag.Get("validate")), nil
 
-	case reflect.Slice:
+	case reflect.Slice, reflect.Array:
 		return g.processSlice(typ, field)
 
 	case reflect.Map:
@@ -611,7 +616,16 @@ func (g *generator) processSlice(typ reflect.Type, field reflect.StructField) (a
 		return nil, err
 	}
 
-	return g.applyConstraints(&TypeDefinition{Type: "array", Items: itemType}, field.Tag.Get("validate")), nil
+	typeDef := g.applyConstraints(&TypeDefinition{Type: "array", Items: itemType}, field.Tag.Get("validate"))
+
+	// Fixed size arrays ([2]string pairs) carry their length constraint.
+	if typ.Kind() == reflect.Array {
+		length := typ.Len()
+		typeDef.MinItems = &length
+		typeDef.MaxItems = &length
+	}
+
+	return typeDef, nil
 }
 
 func (g *generator) processMap(typ reflect.Type, field reflect.StructField) (any, error) {
@@ -797,12 +811,33 @@ func yamlFieldName(field reflect.StructField, yamlTag string) string {
 	return strings.ToLower(field.Name)
 }
 
+// isDurationType reports whether the type encodes as a Go duration string:
+// time.Duration itself or a named wrapper around it exposing
+// Duration() time.Duration (e.g. yamlx.Duration). Both decode a duration
+// string ("120ms") and always encode as one, so schemas render them as
+// strings, keeping the duration shape uniform across generated schemas.
+func isDurationType(typ reflect.Type) bool {
+	if typ == reflect.TypeFor[time.Duration]() {
+		return true
+	}
+
+	method, ok := typ.MethodByName("Duration")
+	if !ok {
+		return false
+	}
+
+	durationType := reflect.TypeFor[time.Duration]()
+
+	return method.Type.NumIn() == 1 && method.Type.In(0) == typ &&
+		method.Type.NumOut() == 1 && method.Type.Out(0) == durationType
+}
+
 // parseDefaultValue converts a `default` struct-tag value into the schema
 // default for scalar-ish kinds (bool, the int/uint family, string, and
-// time.Duration). Any other kind (slice, map, struct, pointer, ...) reports
+// durations). Any other kind (slice, map, struct, pointer, ...) reports
 // ok=false and no default: the `default` tag is for scalars only.
 func parseDefaultValue(val string, typ reflect.Type) (any, bool) {
-	if typ.String() == "time.Duration" {
+	if isDurationType(typ) {
 		return val, true
 	}
 

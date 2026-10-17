@@ -1,23 +1,30 @@
 package style
 
+import "unicode"
+
 // runeWidth returns the terminal cell width of a single rune.
 //
-// This is a replacement for rivo/uniseg's grapheme-cluster width.
-// The TUI renders terminal content (Nix build logs, tree connectors, braille
-// spinners) plus a fixed set of hardcoded emoji icons, so grapheme-cluster
-// segmentation (ZWJ sequences, skin-tone modifiers) is unnecessary.
-//
-// Rules:
-//   - control characters: width 0
-//   - combining marks, variation selectors, zero-width controls: width 0
-//   - East Asian wide/fullwidth runes (CJK, Hangul, fullwidth forms): width 2
-//   - emoji (U+1F300+ blocks plus the emoji-presentation symbols used by the
-//     color scheme): width 2
-//   - everything else (ASCII printable, box drawing, braille, ambiguous-width
-//     symbols like gear/ballot-x): width 1
-func runeWidth(r rune) int {
+// Grapheme segmentation (ZWJ, skin tones) is unnecessary: the TUI renders
+// terminal content and a fixed emoji set. Terminal-measured overrides win first;
+// controls, combining marks and zero-width controls are 0; East Asian
+// wide/fullwidth and Emoji_Presentation=Yes runes are 2, mirroring
+// go-runewidth's doublewidth table; everything else is 1. Combining marks are
+// checked by Unicode category before the wide ranges, so marks such as U+3099
+// that live inside a CJK block still measure 0. The static table stays a pure
+// fallback; overrides are installed separately.
+func runeWidth(target rune) int {
+	if overrides := measuredGlyphWidths.Load(); overrides != nil {
+		if width, ok := overrides.runes[target]; ok {
+			return width
+		}
+	}
+
+	if unicode.Is(unicode.Mn, target) || unicode.Is(unicode.Me, target) {
+		return 0
+	}
+
 	for _, entry := range widthRanges {
-		if r >= entry.lo && r <= entry.hi {
+		if target >= entry.lo && target <= entry.hi {
 			return entry.width
 		}
 	}
@@ -56,8 +63,10 @@ var widthRanges = []widthRange{
 	{0x23F3, 0x23F3, 2},   // hourglass
 	{0x25FD, 0x25FE, 2},   // small squares
 	{0x2614, 0x2615, 2},   // umbrella, hot beverage
+	{0x2630, 0x2637, 2},   // trigrams
 	{0x2648, 0x2653, 2},   // zodiac
 	{0x267F, 0x267F, 2},   // wheelchair
+	{0x268A, 0x268F, 2},   // monograms
 	{0x2693, 0x2693, 2},   // anchor
 	{0x26A1, 0x26A1, 2},   // high voltage
 	{0x26AA, 0x26AB, 2},   // circles
@@ -96,10 +105,56 @@ var widthRanges = []widthRange{
 	{0xFF00, 0xFF60, 2},   // fullwidth forms
 	{0xFFE0, 0xFFE6, 2},   // fullwidth signs
 	{0x1B000, 0x1B001, 2}, // Kana supplement
-	{0x1F300, 0x1F64F, 2}, // emoji
-	{0x1F680, 0x1F6FF, 2}, // transport and map symbols
-	{0x1F900, 0x1F9FF, 2}, // supplemental symbols
-	{0x1FA70, 0x1FAFF, 2}, // symbols and pictographs extended
+	// Emoji and pictographs: only codepoints with Unicode
+	// Emoji_Presentation=Yes measure 2. The ranges mirror go-runewidth's
+	// doublewidth table exactly, so text-presentation pictographs such as
+	// U+1F5A5 (desktop) measure 1 like the rest of the ecosystem.
+	{0x1F004, 0x1F004, 2}, // mahjong red dragon
+	{0x1F0CF, 0x1F0CF, 2}, // joker
+	{0x1F18E, 0x1F18E, 2}, // AB button
+	{0x1F191, 0x1F19A, 2}, // squared CL..VS
+	{0x1F200, 0x1F202, 2}, // squared katakana
+	{0x1F210, 0x1F23B, 2}, // squared CJK
+	{0x1F240, 0x1F248, 2}, // tortoise shell bracketed CJK
+	{0x1F250, 0x1F251, 2}, // circled ideographs
+	{0x1F260, 0x1F265, 2}, // rounded symbols
+	{0x1F300, 0x1F320, 2}, // weather, landscape, animals
+	{0x1F32D, 0x1F335, 2}, // food
+	{0x1F337, 0x1F37C, 2}, // plants and food
+	{0x1F37E, 0x1F393, 2}, // drinks and celebration
+	{0x1F3A0, 0x1F3CA, 2}, // entertainment and sport
+	{0x1F3CF, 0x1F3D3, 2}, // sport
+	{0x1F3E0, 0x1F3F0, 2}, // buildings
+	{0x1F3F4, 0x1F3F4, 2}, // black flag
+	{0x1F3F8, 0x1F43E, 2}, // sport, transport, animals
+	{0x1F440, 0x1F440, 2}, // eyes
+	{0x1F442, 0x1F4FC, 2}, // body, people, objects
+	{0x1F4FF, 0x1F53D, 2}, // objects and symbols
+	{0x1F54B, 0x1F54E, 2}, // religious symbols
+	{0x1F550, 0x1F567, 2}, // clock faces
+	{0x1F57A, 0x1F57A, 2}, // dancing man
+	{0x1F595, 0x1F596, 2}, // hand gestures
+	{0x1F5A4, 0x1F5A4, 2}, // black heart
+	{0x1F5FB, 0x1F64F, 2}, // pictographs and emoticons
+	{0x1F680, 0x1F6C5, 2}, // transport and map symbols
+	{0x1F6CC, 0x1F6CC, 2}, // person in bed
+	{0x1F6D0, 0x1F6D2, 2}, // symbols
+	{0x1F6D5, 0x1F6D8, 2}, // symbols
+	{0x1F6DC, 0x1F6DF, 2}, // symbols
+	{0x1F6EB, 0x1F6EC, 2}, // airplanes
+	{0x1F6F4, 0x1F6FC, 2}, // transport
+	{0x1F7E0, 0x1F7EB, 2}, // colored circles and squares
+	{0x1F7F0, 0x1F7F0, 2}, // heavy equals sign
+	{0x1F90C, 0x1F93A, 2}, // supplemental symbols
+	{0x1F93C, 0x1F945, 2}, // supplemental symbols
+	{0x1F947, 0x1F9FF, 2}, // supplemental symbols
+	{0x1FA70, 0x1FA7C, 2}, // symbols and pictographs extended-A
+	{0x1FA80, 0x1FA8A, 2}, // symbols and pictographs extended-A
+	{0x1FA8E, 0x1FAC6, 2}, // symbols and pictographs extended-A
+	{0x1FAC8, 0x1FAC8, 2}, // symbols and pictographs extended-A
+	{0x1FACD, 0x1FADC, 2}, // symbols and pictographs extended-A
+	{0x1FADF, 0x1FAEA, 2}, // symbols and pictographs extended-A
+	{0x1FAEF, 0x1FAF8, 2}, // symbols and pictographs extended-A
 	{0x20000, 0x2FFFD, 2}, // CJK ext B+
 	{0x30000, 0x3FFFD, 2}, // CJK ext G+
 }

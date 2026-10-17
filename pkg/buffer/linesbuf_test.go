@@ -175,3 +175,139 @@ func TestLineOffsetReset(t *testing.T) {
 
 	assert.Zero(t, buf.LineOffset(), "Reset should zero lineOffset")
 }
+
+// setLineCase describes one SetLine expectation.
+type setLineCase struct {
+	name    string
+	lines   []string
+	index   int
+	replace string
+	want    []string
+}
+
+// runSetLineCases builds a LinesBuf from the case lines, replaces one line and
+// asserts the resulting lines.
+func runSetLineCases(t *testing.T, cases []setLineCase) {
+	t.Helper()
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			buf := NewLinesBuf()
+
+			for _, line := range tt.lines {
+				buf.WriteString(line)
+			}
+
+			buf.SetLine(tt.index, []byte(tt.replace))
+
+			assert.Equal(t, tt.want, linesAsStrings(buf), "lines after SetLine")
+		})
+	}
+}
+
+func TestLinesBufSetLine(t *testing.T) {
+	t.Parallel()
+
+	runSetLineCases(t, []setLineCase{
+		{
+			name:    "replace with equal length",
+			lines:   []string{"a", "bb", "ccc"},
+			index:   1,
+			replace: "xx",
+			want:    []string{"a", "xx", "ccc"},
+		},
+		{
+			name:    "replace with longer line",
+			lines:   []string{"a", "bb", "ccc"},
+			index:   1,
+			replace: "four",
+			want:    []string{"a", "four", "ccc"},
+		},
+		{
+			name:    "replace with shorter line",
+			lines:   []string{"a", "bbbb", "ccc"},
+			index:   1,
+			replace: "x",
+			want:    []string{"a", "x", "ccc"},
+		},
+		{
+			name:    "replace first line",
+			lines:   []string{"aa", "bb", "cc"},
+			index:   0,
+			replace: "zzz",
+			want:    []string{"zzz", "bb", "cc"},
+		},
+		{
+			name:    "replace last line",
+			lines:   []string{"aa", "bb", "cc"},
+			index:   2,
+			replace: "z",
+			want:    []string{"aa", "bb", "z"},
+		},
+		{
+			name:    "replace with empty line",
+			lines:   []string{"aa", "bb", "cc"},
+			index:   1,
+			replace: "",
+			want:    []string{"aa", "", "cc"},
+		},
+	})
+}
+
+func TestLinesBufSetLineCopiesInput(t *testing.T) {
+	t.Parallel()
+
+	buf := NewLinesBuf()
+	buf.WriteString("aa")
+	buf.WriteString("bb")
+
+	line := []byte("XY")
+	buf.SetLine(1, line)
+	line[0] = 'Z'
+
+	assert.Equal(t, "XY", string(buf.Line(1)), "SetLine must copy the input, not alias it")
+
+	buf.SetLine(0, []byte("QQ"))
+
+	assert.Equal(t, "QQ", string(buf.Line(0)))
+	assert.Equal(t, "XY", string(buf.Line(1)), "other lines must stay intact")
+}
+
+func TestLinesBufSetLineOutOfBoundsPanics(t *testing.T) {
+	t.Parallel()
+
+	buf := NewLinesBuf()
+	buf.WriteString("aa")
+
+	assert.Panics(t, func() { buf.SetLine(1, []byte("x")) }, "out of range must panic like Line")
+	assert.Panics(t, func() { buf.SetLine(-1, []byte("x")) }, "negative index must panic like Line")
+}
+
+func TestLinesBufDiffSetLine(t *testing.T) {
+	t.Parallel()
+
+	buf := NewLinesBufDiff()
+	buf.WriteString("aa")
+
+	buf.SetLine(5, []byte("x"))
+	buf.SetLine(-1, []byte("x"))
+
+	assert.Equal(t, []string{"aa"}, linesAsStrings(buf.LinesBuf), "out of bounds must be a no-op")
+
+	buf.SetLine(0, []byte("bb"))
+
+	assert.Equal(t, []string{"bb"}, linesAsStrings(buf.LinesBuf), "in bounds must replace")
+}
+
+// linesAsStrings returns all lines of buf as strings.
+func linesAsStrings(buf *LinesBuf) []string {
+	out := make([]string, buf.Len())
+
+	for i := range buf.Len() {
+		out[i] = string(buf.Line(i))
+	}
+
+	return out
+}

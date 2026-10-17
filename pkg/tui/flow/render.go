@@ -11,7 +11,9 @@ import (
 
 func (pf *PhaseFlow) renderInto(buf *buffer.LinesBuf) {
 	numPhases := len(pf.phases)
-	available := pf.width - arrowCellWidth*(numPhases-1)
+
+	arrowWidth := style.CellWidth(pf.styles.PhaseArrow)
+	available := pf.width - arrowWidth*(numPhases-1)
 
 	if available <= 0 {
 		return
@@ -29,7 +31,7 @@ func (pf *PhaseFlow) renderInto(buf *buffer.LinesBuf) {
 	}
 
 	pf.arrowBuf.Reset()
-	pf.styles.Arrow.Width(1).Align(style.Center).RenderLineInto(pf.arrowBuf, pf.styles.PhaseArrow)
+	pf.styles.Arrow.Width(arrowWidth).Align(style.Center).RenderLineInto(pf.arrowBuf, pf.styles.PhaseArrow)
 
 	for len(pf.cellBufs) < numPhases {
 		pf.cellBufs = append(pf.cellBufs, buffer.NewLinesBuf())

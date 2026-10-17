@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"strconv"
 
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
+	"github.com/mihakrumpestar/panix/internal/config/theme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -19,55 +19,38 @@ const (
 )
 
 type StatsTable struct {
-	fleet       *fleet.Fleet
-	tbl         *table.Table
-	colorScheme *colorscheme.ColorScheme
-	content     *buffer.LinesBuf
-	rowMarker   []byte
+	fleet     *fleet.Fleet
+	tbl       *table.Table
+	scheme    *theme.Theme
+	content   *buffer.LinesBuf
+	rowMarker []byte
 }
 
-func New(fleet *fleet.Fleet, colorScheme *colorscheme.ColorScheme) *StatsTable {
-	indexWidth := len(strconv.Itoa(fleet.MachineCount()))
+func New(fleet *fleet.Fleet, scheme *theme.Theme) *StatsTable {
+	statsTable := &StatsTable{
+		fleet:   fleet,
+		content: buffer.NewLinesBuf(),
+	}
+	statsTable.ApplyTheme(scheme)
+	statsTable.tbl.SetZonePrefix(statsTableZonePrefix)
 
-	columnStyles := []style.Style{
-		colorScheme.Table.Row.Width(indexWidth).Align(style.Right),
-		colorScheme.Table.Row.Width(2),
-		colorScheme.Flake.Color,
-		colorScheme.OutputType.Color,
-		colorScheme.Installable.Color,
-		colorScheme.Machine.Color,
-		colorScheme.Table.Row,
-		colorScheme.Table.Row,
-		colorScheme.Table.Row,
-		colorScheme.Table.Row,
-		colorScheme.Table.Row,
-		colorScheme.Table.Row,
+	return statsTable
+}
+
+// ApplyTheme re-runs the constructor styling: column styles, headers, row marker
+// and table config, invalidating table render caches. Row selection is preserved.
+// The theme carries derived render values, so no per-widget snapshot is kept.
+func (s *StatsTable) ApplyTheme(scheme *theme.Theme) {
+	s.scheme = scheme
+
+	cfg := s.tableConfig(scheme)
+	if s.tbl == nil {
+		s.tbl = table.New(cfg)
+	} else {
+		s.tbl.ApplyTheme(cfg)
 	}
 
-	headers := [][]byte{[]byte(""), []byte(""),
-		joinBytes(colorScheme.Flake.Icon, " FLAKE"),
-		joinBytes(colorScheme.OutputType.Icon, " OUTPUT TYPE"),
-		joinBytes(colorScheme.Installable.Icon, " NAME"),
-		joinBytes(colorScheme.Machine.Icon, " MACHINE"),
-		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("GEN DATE"), []byte("OS VERSION"), []byte("KERNEL")}
-
-	tbl := table.New(table.Config{
-		Border:              style.NormalBorder(),
-		BorderStyle:         colorScheme.Table.Border,
-		Headers:             headers,
-		Wrap:                false,
-		SelectionBackground: colorScheme.Table.SelectionHighlightBackground.GetBackground(),
-		ColumnStyles:        columnStyles,
-	})
-	tbl.SetZonePrefix(statsTableZonePrefix)
-
-	return &StatsTable{
-		fleet:       fleet,
-		tbl:         tbl,
-		colorScheme: colorScheme,
-		content:     buffer.NewLinesBuf(),
-		rowMarker:   append([]byte{' '}, colorScheme.Chars.RowSpanMarker...),
-	}
+	s.rowMarker = append([]byte{' '}, scheme.Chars.RowSpanMarkerBytes...)
 }
 
 func (s *StatsTable) SelectedIndex() int {
@@ -99,7 +82,7 @@ func (s *StatsTable) HandleNavigation(key string, hasActiveInnerViewport bool) b
 func (s *StatsTable) Render(width int) *buffer.LinesBuf {
 	s.content.Reset()
 
-	s.colorScheme.Header.Title.RenderLineInto(s.content, []byte("=== Stats Table ==="))
+	s.scheme.Header.Title.Style.RenderLineInto(s.content, []byte("=== Stats Table ==="))
 	s.content.EmptyLine()
 
 	s.tbl.Width(width).SetRows(s.buildRows())
@@ -108,6 +91,50 @@ func (s *StatsTable) Render(width int) *buffer.LinesBuf {
 	s.content.EmptyLine()
 
 	return s.content
+}
+
+func (s *StatsTable) tableConfig(scheme *theme.Theme) table.Config {
+	indexWidth := len(strconv.Itoa(s.fleet.MachineCount()))
+
+	// The status column must fit the widest status icon: a 1-cell-only theme gets
+	// a 1-cell column, a mixed 1/2-cell theme gets 2, so nothing overflows or
+	// shifts the row separator.
+	statusIconWidth := max(
+		style.CellWidth(scheme.Status.Icons.OKBytes),
+		style.CellWidth(scheme.Status.Icons.FailedBytes),
+		style.CellWidth(scheme.Status.Icons.RunningBytes),
+	)
+
+	columnStyles := []style.Style{
+		scheme.Table.Row.Style.Width(indexWidth).Align(style.Right),
+		scheme.Table.Row.Style.Width(statusIconWidth),
+		scheme.Flake.Style,
+		scheme.OutputType.Style,
+		scheme.Installable.Style,
+		scheme.Machine.Style,
+		scheme.Table.Row.Style,
+		scheme.Table.Row.Style,
+		scheme.Table.Row.Style,
+		scheme.Table.Row.Style,
+		scheme.Table.Row.Style,
+		scheme.Table.Row.Style,
+	}
+
+	headers := [][]byte{[]byte(""), []byte(""),
+		joinBytes(scheme.Flake.IconBytes, " FLAKE"),
+		joinBytes(scheme.OutputType.IconBytes, " OUTPUT TYPE"),
+		joinBytes(scheme.Installable.IconBytes, " NAME"),
+		joinBytes(scheme.Machine.IconBytes, " MACHINE"),
+		[]byte("ARCH"), []byte("STATUS"), []byte("GEN"), []byte("GEN DATE"), []byte("OS VERSION"), []byte("KERNEL")}
+
+	return table.Config{
+		Border:              scheme.Border.TableGlyphs,
+		BorderStyle:         scheme.Table.Border.Style,
+		Headers:             headers,
+		Wrap:                false,
+		SelectionBackground: scheme.Table.SelectionHighlightBackground.Style.GetBackground(),
+		ColumnStyles:        columnStyles,
+	}
 }
 
 func (s *StatsTable) buildRows() [][][]byte {
@@ -142,13 +169,13 @@ func (s *StatsTable) buildRows() [][][]byte {
 
 		rows[idx] = [][]byte{
 			strconv.AppendInt(nil, int64(idx+1), 10), //nolint:mnd // decimal base
-			getStatusIcon(machineInfo.State.Status, s.colorScheme),
+			s.statusIcon(machineInfo.State.Status),
 			flakeDisplay,
 			outputTypeDisplay,
 			outputNameDisplay,
 			machineInfo.MachineName.Bytes(),
 			machineInfo.Architecture.Bytes(),
-			getStatusText(machineInfo.State.Status, machineInfo.StatusMsgBytes.Bytes(), s.colorScheme),
+			s.statusText(machineInfo.State.Status, machineInfo.StatusMsgBytes.Bytes()),
 			getGeneration(machineInfo),
 			machineInfo.Date.Bytes(),
 			machineInfo.OSVersion.Bytes(),
@@ -159,27 +186,27 @@ func (s *StatsTable) buildRows() [][][]byte {
 	return rows
 }
 
-func getStatusIcon(status stats.StatsState, colorScheme *colorscheme.ColorScheme) []byte {
+func (s *StatsTable) statusIcon(status stats.StatsState) []byte {
 	switch status {
 	case stats.Running:
-		return colorScheme.Status.Icons.Running
+		return s.scheme.Status.Icons.RunningBytes
 	case stats.Failed:
-		return colorScheme.Status.Icons.Failed
+		return s.scheme.Status.Icons.FailedBytes
 	case stats.Done:
-		return colorScheme.Status.Icons.OK
+		return s.scheme.Status.Icons.OKBytes
 	default:
 		return []byte("invalid")
 	}
 }
 
-func getStatusText(status stats.StatsState, statusMsg []byte, colorScheme *colorscheme.ColorScheme) []byte {
+func (s *StatsTable) statusText(status stats.StatsState, statusMsg []byte) []byte {
 	switch status {
 	case stats.Running:
-		return colorScheme.Status.Running.RenderLine(statusMsg)
+		return s.scheme.Status.Running.Style.RenderLine(statusMsg)
 	case stats.Failed:
-		return colorScheme.Status.Failed.RenderLine(statusMsg)
+		return s.scheme.Status.Failed.Style.RenderLine(statusMsg)
 	case stats.Done:
-		return colorScheme.Status.OK.RenderLine(statusMsg)
+		return s.scheme.Status.OK.Style.RenderLine(statusMsg)
 	default:
 		return []byte("invalid")
 	}

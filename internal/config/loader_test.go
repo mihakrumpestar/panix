@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -20,7 +21,7 @@ import (
 func testdataPath(t *testing.T, name string) string {
 	t.Helper()
 
-	return filepath.Join("testdata", name) //nolint:gojoinpath // test fixture path
+	return filepath.Join("testdata", name)
 }
 
 func TestDecodeConfigFileMinimalValid(t *testing.T) {
@@ -96,10 +97,9 @@ func TestDecodeConfigFileWithDisabled(t *testing.T) {
 	assertion.True(mach.Disabled, "machine should be marked as disabled")
 }
 
-// TestDecodeConfigFileWithActivationHooks parses activation_hooks at every
-// tree level and verifies the fleet -> flake -> installable -> machine
-// inheritance: child entries stay first and inherited entries append, the
-// same slice semantics as every other Attributes list.
+// TestDecodeConfigFileWithActivationHooks parses activation_hooks at every tree
+// level and verifies the fleet -> flake -> installable -> machine inheritance:
+// child entries stay first and inherited entries append.
 func TestDecodeConfigFileWithActivationHooks(t *testing.T) {
 	t.Parallel()
 
@@ -147,9 +147,8 @@ func TestDecodeConfigFileWithActivationHooks(t *testing.T) {
 }
 
 // TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild covers the flake
-// level directly (its own entries plus the inherited fleet ones) and pins that
-// an explicitly empty child hook list (pre: []) inherits parent hooks exactly
-// like an absent list.
+// level and pins that an explicitly empty child hook list (pre: []) inherits
+// parent hooks exactly like an absent list.
 func TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild(t *testing.T) {
 	t.Parallel()
 
@@ -187,7 +186,7 @@ func TestDecodeConfigFileActivationHooksFlakeLevelAndEmptyChild(t *testing.T) {
 	empty, ok := hooksConfig.Machines.Get("empty-machine")
 	must.True(ok, "expected machine 'empty-machine' to exist")
 
-	// An explicitly empty child list must inherit exactly like an absent list.
+	// An explicitly empty child list must inherit like an absent list.
 	assertion.Equal(absent.ActivationHooks.Pre, empty.ActivationHooks.Pre,
 		"pre: [] must inherit like an absent list")
 	assertion.Equal(absent.ActivationHooks.Post, empty.ActivationHooks.Post,
@@ -303,8 +302,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	must := require.New(t)
 	must.NoError(conf.Fleet.Init())
 
-	// Init flake manually since initFleet on Config is hard to test
-	// due to SSH config dependency
+	// Init flake manually: initFleet needs SSH config.
 	flk, ok := conf.Fleet.Flakes.Get("my-flake")
 	must.True(ok)
 
@@ -329,7 +327,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	assertion.Equal(expectedCfgXpath.String(), cfg.Xpath.String())
 	assertion.Equal("my-config", cfg.Name.String())
 
-	// Verify tags include both output type and attribute name
+	// Verify tags include the output type and attribute name.
 	assertion.Contains(cfg.Tags, "nixosConfigurations",
 		"installable type should be registered as a tag")
 	assertion.Contains(cfg.Tags, "my-config",
@@ -340,7 +338,7 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 
 	must.NoError(mach.Init("my-machine", &cfg.Attributes))
 
-	// SSH init is separate, test it explicitly
+	// SSH init is separate, so exercise it explicitly.
 	mach.SSH.Hostname = "host.example.com"
 	must.NoError(mach.InitSSH("testhost", nixver.Info{}))
 
@@ -349,7 +347,9 @@ func TestFleetInitSetsNamesAndXpathsThroughHierarchy(t *testing.T) {
 	assertion.Equal("my-machine", mach.Name.String())
 }
 
-func TestPostUnmarshalInitSetsColorScheme(t *testing.T) {
+// TestPostUnmarshalInitSetsThemeState pins that PostUnmarshalInit resolves the
+// configured theme name.
+func TestPostUnmarshalInitSetsThemeState(t *testing.T) {
 	t.Parallel()
 
 	conf := &Config{
@@ -357,13 +357,35 @@ func TestPostUnmarshalInitSetsColorScheme(t *testing.T) {
 			Flakes: atomicorderedmap.New[string, *flake.Flake](),
 		},
 	}
+	// An empty theme name is an error, so a hand-built Config must set it;
+	// production configs always carry the flag default.
+	conf.Flags.Tui.Theme = "panix"
 
 	require.NoError(t, conf.Fleet.Init())
-
-	conf.PostUnmarshalInit()
+	require.NoError(t, conf.PostUnmarshalInit())
 
 	assertion := assert.New(t)
-	assertion.NotNil(conf.ColorScheme, "colorscheme should be initialized")
+	assertion.NotNil(conf.Theme.Registry, "theme registry should be initialized")
+	assertion.NotEmpty(conf.Theme.Name, "theme name should be initialized")
+
+	theme, ok := conf.ResolveTheme()
+	assertion.True(ok, "the resolved theme should be available")
+	assertion.NotNil(theme, "the resolved theme should be initialized")
+}
+
+// TestDecodeConfigFileRejectsUnknownKeys pins strict decoding parity with the
+// themes files: unknown YAML keys fail in panix.yml and panix-themes.yml
+// identically (both decode through yamlx.Decode).
+func TestDecodeConfigFileRejectsUnknownKeys(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.yml")
+	require.NoError(t, os.WriteFile(path, []byte("nope: 1\n\nfleet: {}\n"), 0o600))
+
+	_, err := decodeConfigFile(path)
+
+	require.Error(t, err, "unknown config keys must fail exactly like unknown theme keys")
+	assert.Contains(t, err.Error(), "nope")
 }
 
 func TestSudoProgramDefaults(t *testing.T) {
@@ -470,9 +492,8 @@ func TestKexecImageArchSupport(t *testing.T) {
 }
 
 // TestCustomOutputTypesLoadAndInit verifies that a config declaring a custom
-// output type under output_types loads, and that fleet init merges the
-// declared preset as defaults for installables of that type (installable-level
-// YAML overrides win, same merge semantics as built-in presets).
+// output type under output_types loads, and that fleet init merges the preset as
+// defaults for installables of that type (installable YAML wins).
 func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 	t.Parallel()
 
@@ -486,7 +507,7 @@ func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 	assertion.Equal(2, conf.OutputTypes.Len(), "expected 2 declared output types")
 
 	// Fleet init wires the custom preset into installable Init. SSH init is
-	// separate (see initFleetSSH), so no network is touched here.
+	// separate, so no network is touched here.
 	must.NoError(conf.initFleet())
 
 	flakePair, ok := conf.Fleet.Flakes.Get("my-flake")
@@ -495,8 +516,7 @@ func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 	attrMap, ok := flakePair.Installables.Get("colmenaConfigurations")
 	must.True(ok, "custom type installable should be loaded")
 
-	// Installable with no per-installable preset: custom defaults are merged in
-	// (build_path, activation_path, modes, profile, system_level).
+	// No per-installable preset: the custom defaults are merged in.
 	defaultCfg, ok := attrMap.Get("default-config")
 	must.True(ok)
 
@@ -523,9 +543,8 @@ func TestCustomOutputTypesLoadAndInit(t *testing.T) {
 }
 
 // TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath verifies that an
-// output_type_attr declared in the output_types preset is merged as a type
-// default into installables of that custom type and drives the resolved flake
-// attrpath (same merge semantics as built-in presets).
+// output_type_attr declared in the output_types preset is merged as a type default
+// and drives the resolved flake attrpath.
 func TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath(t *testing.T) {
 	t.Parallel()
 
@@ -557,14 +576,11 @@ func TestCustomOutputTypesDeclaredOutputTypeAttrResolvesAttrpath(t *testing.T) {
 	)
 }
 
-// TestCustomOutputTypesInvalidBootstrapModeUsesHouseError pins which
-// validation path owns the bootstrap_mode enum error, end-to-end through the
-// loader sequence (decode, initFleet, ValidateStructTags): the oneof struct
-// tag is enforced by the tag walk on every installable copy of the propagated
-// type-level value, but ValidateStructTags checks the output_types
-// declarations first, so the user sees exactly one house-style message naming
-// the YAML key and the valid modes, and the tag-driven duplicates cannot
-// surface.
+// TestCustomOutputTypesInvalidBootstrapModeUsesHouseError pins which validation
+// path owns the bootstrap_mode enum error end to end (decode, initFleet,
+// ValidateStructTags): output_types declarations are checked first, so the user
+// sees one house-style message naming the YAML key and valid modes, and the
+// tag-driven duplicates cannot surface.
 func TestCustomOutputTypesInvalidBootstrapModeUsesHouseError(t *testing.T) {
 	t.Parallel()
 
@@ -596,9 +612,8 @@ func TestCustomOutputTypesInvalidBootstrapModeUsesHouseError(t *testing.T) {
 }
 
 // TestOutputTypeAttrOverrideResolvesAttrpath verifies that a per-installable
-// preset.output_type_attr overrides the top-level flake output attribute used in
-// the build/eval attrpath, while the installables type key (and with it all
-// built-in preset behavior keyed on it) stays unchanged.
+// preset.output_type_attr overrides the flake output attribute used in the
+// build/eval attrpath, while the installables type key stays unchanged.
 func TestOutputTypeAttrOverrideResolvesAttrpath(t *testing.T) {
 	t.Parallel()
 
@@ -623,8 +638,7 @@ func TestOutputTypeAttrOverrideResolvesAttrpath(t *testing.T) {
 	assertion.Equal("nixosConf", inst.Preset.OutputTypeAttr,
 		"per-installable output_type_attr should be set")
 
-	// This mirrors exactly how the build handler and flake validation resolve
-	// the installable attrpath (Type, Name, Preset).
+	// Mirrors how the build handler and flake validation resolve the attrpath.
 	assertion.Equal(
 		"nixosConf.my-config.config.system.build.toplevel",
 		installable.ResolveFlakeInstallable(inst.Type, inst.Name, inst.Preset),

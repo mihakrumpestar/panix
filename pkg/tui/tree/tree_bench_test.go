@@ -40,12 +40,12 @@ func simulateContent(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
 	return buf
 }
 
-// Ours — full frame cost (BeginFrame + rebuild + render).
+// Ours: full frame cost (BeginFrame + rebuild + render).
 func Benchmark__TreeNoChange(b *testing.B)   { benchOurRender(b, benchDepth, benchBreadth, changeNone) }
 func Benchmark__TreeAllChange(b *testing.B)  { benchOurRender(b, benchDepth, benchBreadth, changeAll) }
 func Benchmark__TreeHalfChange(b *testing.B) { benchOurRender(b, benchDepth, benchBreadth, changeHalf) }
 
-// Lipgloss has no incremental rendering — all variants re-render the full tree.
+// Lipgloss has no incremental rendering; all variants re-render the full tree.
 // Variants kept for side-by-side comparison with our benchmarks.
 func Benchmark_Lipgloss__TreeNoChange(b *testing.B) { benchLipglossRender(b, benchDepth, benchBreadth) }
 func Benchmark_Lipgloss__TreeAllChange(b *testing.B) {
@@ -107,7 +107,7 @@ func precomputeXpaths(depth, breadth int) *precomputedTree {
 }
 
 func buildTreeFromPrecomputed(xps *precomputedTree) *Node {
-	root := NewTree(benchStyle, 3)
+	root := NewTree(benchStyle, 3, DefaultGlyphs())
 
 	var build func(parent *Node, pt *precomputedTree)
 

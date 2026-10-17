@@ -18,7 +18,9 @@ func TestTickCmd(t *testing.T) {
 	})
 
 	result := cmd()
-	kpm, ok := result.(KeyPressMsg); require.True(t, ok) ; require.Equal(t, "tick", kpm.Key)
+	kpm, ok := result.(KeyPressMsg)
+	require.True(t, ok)
+	require.Equal(t, "tick", kpm.Key)
 }
 
 //nolint:paralleltest // package-level globals not concurrency-safe
@@ -35,6 +37,56 @@ type dummyModel struct{}
 func (m *dummyModel) Init() []Cmd                               { return nil }
 func (m *dummyModel) Update(msg Msg) Cmd                        { return nil }
 func (m *dummyModel) Render(buf *buffer.LinesBufDiff, _ uint64) {}
+
+// quitOnKeyModel quits when it receives the q key press.
+type quitOnKeyModel struct {
+	dummyModel
+}
+
+func (m *quitOnKeyModel) Update(msg Msg) Cmd {
+	if key, ok := msg.(KeyPressMsg); ok && key.Key == "q" {
+		return func() Msg { return QuitMsg{} }
+	}
+
+	return nil
+}
+
+// TestReadInputDispatchesInitialLeftover pins that keystrokes captured during the
+// width probe are dispatched before the read loop waits for more input: the
+// initial q must reach the model and quit without another write to the pipe.
+//
+//nolint:paralleltest // package-level globals not concurrency-safe
+func TestReadInputDispatchesInitialLeftover(t *testing.T) {
+	inputRead, inputWrite, err := os.Pipe()
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = inputRead.Close()
+		_ = inputWrite.Close()
+	})
+
+	prog := NewProgram(&quitOnKeyModel{})
+	prog.terminal = &Terminal{in: inputRead}
+	prog.stopCh = make(chan struct{})
+
+	inputDone := make(chan struct{})
+
+	go prog.readInput(inputDone, []byte("q"))
+
+	loopDone := make(chan error, 1)
+
+	go func() { loopDone <- prog.eventLoop(nil) }()
+
+	select {
+	case loopErr := <-loopDone:
+		require.NoError(t, loopErr)
+	case <-time.After(2 * time.Second):
+		t.Fatal("initial leftover was not dispatched without another read")
+	}
+
+	close(prog.stopCh)
+	<-inputDone
+}
 
 //nolint:paralleltest // package-level globals not concurrency-safe
 func TestProcessCmdsWithNil(t *testing.T) {
@@ -68,7 +120,8 @@ func TestRenderFrameDetectsChanges(t *testing.T) {
 	prog.renderFrame()
 
 	prevBuf := prog.frames[1-prog.curFrame]
-	assert.NotZero(t, prevBuf.Len(), "prevLines should have content after renderFrame") ; assert.Equal(t, "Hello World", string(prevBuf.Line(0)))
+	assert.NotZero(t, prevBuf.Len(), "prevLines should have content after renderFrame")
+	assert.Equal(t, "Hello World", string(prevBuf.Line(0)))
 }
 
 type renderTestModel struct {
@@ -147,7 +200,8 @@ func TestInitialWindowSizeMsgSent(t *testing.T) {
 	prog.renderFrame()
 
 	receivedSize = model.lastSize
-	assert.Equal(t, 80, receivedSize.Width, "model should have received initial WindowSizeMsg: got %dx%d") ; assert.Equal(t, 24, receivedSize.Height)
+	assert.Equal(t, 80, receivedSize.Width, "model should have received initial WindowSizeMsg: got %dx%d")
+	assert.Equal(t, 24, receivedSize.Height)
 }
 
 type sizeTrackingModel struct {

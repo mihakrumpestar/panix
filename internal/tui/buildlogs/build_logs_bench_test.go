@@ -6,22 +6,21 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/tui/phaseflow"
 	"github.com/mihakrumpestar/panix/internal/tui/statstable"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/tui/spinners"
 	"github.com/mihakrumpestar/panix/pkg/tui/tree"
 	"github.com/mihakrumpestar/panix/pkg/tui/viewports"
-	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -44,7 +43,7 @@ func Benchmark__Full_2x16x4(b *testing.B) { benchFull(b, 2, 16, 4) }
 func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.Helper()
 
-	conf := makeTestConfig(flakesCount, configsCount, machinesN, colorscheme.DefaultColorScheme())
+	conf := makeTestConfig(flakesCount, configsCount, machinesN)
 	buildLogs, viewportsInst, spinnersInst, cachedTree := setupRender(conf)
 
 	b.ResetTimer()
@@ -59,7 +58,7 @@ func benchView(b *testing.B, flakesCount, configsCount, machinesN int) {
 func benchFull(b *testing.B, flakesCount, configsCount, machinesN int) {
 	b.Helper()
 
-	conf := makeTestConfig(flakesCount, configsCount, machinesN, colorscheme.DefaultColorScheme())
+	conf := makeTestConfig(flakesCount, configsCount, machinesN)
 	buildLogs, viewportsInst, spinnersInst, cachedTree := setupRender(conf)
 
 	b.ResetTimer()
@@ -76,24 +75,23 @@ func benchFull(b *testing.B, flakesCount, configsCount, machinesN int) {
 func setupRender(conf *config.Config) (
 	*BuildLogs, *viewports.Viewports, *spinners.Spinners, *tree.Node,
 ) {
-	statsTbl := statstable.New(conf.Fleet, conf.ColorScheme)
-	phaseFlow := phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases)
-	buildLogs := New(conf, statsTbl, phaseFlow)
+	statsTbl := statstable.New(conf.Fleet, testTheme())
+	phaseFlow := phaseflow.New(conf.Fleet, testTheme(), conf.Phases)
+	buildLogs := New(conf, testTheme(), statsTbl, phaseFlow)
 
-	tableS := conf.ColorScheme.Table
+	tableS := testTheme().Table
 
 	viewportsInst := viewports.New(&viewports.Dimensions{Width: 200, Height: 80},
-		conf.Flags.CommandOutputMaxHeight, tableS.Border,
-		tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
+		conf.Flags.CommandOutputMaxHeight, tableS.Border.Style,
+		tableS.SelectionHighlightBackground.Style, tableS.SelectionHighlightBorder.Style,
 	)
-	spinnersInst := spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval)
+	spinnersInst := spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
 
-	cachedTree := tree.NewTree(conf.ColorScheme.Tree.Enumerator, TreeStep)
+	cachedTree := tree.NewTree(testTheme().Tree.Enumerator.Style, TreeStep, tree.DefaultGlyphs())
 
 	return buildLogs, viewportsInst, spinnersInst, cachedTree
 }
 
-// initPhaseXpaths populates PhaseXpaths for an entity from its Xpath.
 func initPhaseXpaths(xp xpath.Xpath) map[phase.Phase]xpath.Xpath {
 	phaseXpaths := make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
 
@@ -105,11 +103,7 @@ func initPhaseXpaths(xp xpath.Xpath) map[phase.Phase]xpath.Xpath {
 }
 
 //nolint:funlen // test fixture builder
-func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *colorscheme.ColorScheme) *config.Config {
-	if colorScheme == nil {
-		colorScheme = colorscheme.DefaultColorScheme()
-	}
-
+func makeTestConfig(flakesCount, configsCount, machinesN int) *config.Config {
 	const outputType = installable.FlakeOutputType("nixosConfigurations")
 
 	flakesMap := atomicorderedmap.New[string, *flake.Flake]()
@@ -170,9 +164,8 @@ func makeTestConfig(flakesCount, configsCount, machinesN int, colorScheme *color
 	}
 
 	return &config.Config{
-		ColorScheme: colorScheme,
-		Fleet:       fleetInst,
-		Phases:      allPhases,
+		Fleet:  fleetInst,
+		Phases: allPhases,
 	}
 }
 

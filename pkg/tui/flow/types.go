@@ -14,7 +14,6 @@ const (
 	gradientCycleTime = 4 * time.Second
 	animInterval      = 100 * time.Millisecond
 	animAmplitude     = 0.5
-	arrowCellWidth    = 1
 )
 
 var slashSep = []byte("/")
@@ -33,6 +32,24 @@ const (
 type GradientPair struct {
 	Dark  colorful.Color
 	Light colorful.Color
+}
+
+// ColorToColorful converts a style color to the colorful.Color the gradient
+// renderer interpolates. Hex channels keep the exact go-colorful scaling
+// (channel * 1/255) so built-in theme pairs stay byte-identical.
+func ColorToColorful(c style.Color) colorful.Color {
+	red, green, blue := style.ColorToRGB8(c)
+
+	return colorful.Color{
+		R: float64(red) * (1.0 / 255.0),   //nolint:mnd // 8-bit channel scaling
+		G: float64(green) * (1.0 / 255.0), //nolint:mnd // 8-bit channel scaling
+		B: float64(blue) * (1.0 / 255.0),  //nolint:mnd // 8-bit channel scaling
+	}
+}
+
+// GradientPairFromColors builds a gradient pair from two style colors.
+func GradientPairFromColors(from, to style.Color) GradientPair {
+	return GradientPair{Dark: ColorToColorful(from), Light: ColorToColorful(to)}
 }
 
 // StatusStyles holds the three count styles (normal and selected variants).

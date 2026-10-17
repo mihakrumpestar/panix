@@ -46,6 +46,30 @@ type rootWithDuration struct {
 	Timeout time.Duration `yaml:"timeout"`
 }
 
+// namedDuration mirrors a serializable duration wrapper (e.g.
+// yamlx.Duration): time.Duration underneath, exposed via Duration().
+type namedDuration time.Duration
+
+// Duration returns the value as a time.Duration.
+func (d namedDuration) Duration() time.Duration {
+	return time.Duration(d)
+}
+
+type rootWithNamedDuration struct {
+	Interval namedDuration `yaml:"interval"`
+}
+
+// rootWithMapOfStructs uses sharedStruct twice: once as a map value and once
+// as a plain field, so the map value must count towards the shared definition.
+type rootWithMapOfStructs struct {
+	Entries map[string]sharedStruct `yaml:"entries"`
+	Extra   sharedStruct            `yaml:"extra"`
+}
+
+type rootWithPair struct {
+	Pair [2]string `yaml:"pair"`
+}
+
 type rootWithValidate struct {
 	Mode    string `yaml:"mode" validate:"oneof=local remote"`
 	Level   int    `yaml:"level" validate:"min=1,max=10"`
@@ -262,6 +286,61 @@ func TestNewSchema_TimeDuration(t *testing.T) {
 	timeoutDef := mustGetTypeDef(t, schema.Properties, "timeout")
 	assert.Equal(t, "string", timeoutDef.Type, "timeout type mismatch")
 	assert.NotEmpty(t, timeoutDef.Description, "timeout description should not be empty")
+}
+
+// Named duration wrappers (e.g. yamlx.Duration) render like
+// time.Duration: a duration string, keeping the duration shape uniform across
+// generated schemas.
+func TestNewSchema_NamedDurationWrapper(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithNamedDuration]())
+
+	intervalDef := mustGetTypeDef(t, schema.Properties, "interval")
+	assert.Equal(t, "string", intervalDef.Type, "interval type mismatch")
+	assert.NotEmpty(t, intervalDef.Description, "interval description should not be empty")
+}
+
+// Struct types reached only through map values count towards shared
+// definitions: the map value becomes a $ref like any repeated struct field.
+func TestNewSchema_MapValueStructUsesDefinition(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithMapOfStructs]())
+
+	entriesDef := mustGetTypeDef(t, schema.Properties, "entries")
+	assert.Equal(t, "object", entriesDef.Type, "entries type mismatch")
+
+	require.NotNil(t, entriesDef.AdditionalProperties, "entries should declare additionalProperties")
+
+	valuesDef, ok := entriesDef.AdditionalProperties.Value.(*TypeDefinition)
+	require.True(t, ok, "entries values are not TypeDefinition")
+	assert.Equal(t, "#/definitions/sharedStruct", valuesDef.Ref, "entries values should reference the shared definition")
+
+	extraDef := mustGetTypeDef(t, schema.Properties, "extra")
+	assert.Equal(t, "#/definitions/sharedStruct", extraDef.Ref, "extra should reference the shared definition")
+
+	require.Contains(t, schema.Definitions, "sharedStruct")
+}
+
+// Fixed size arrays ([2]string pairs) carry their exact length as
+// minItems/maxItems.
+func TestNewSchema_FixedSizeArray(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithPair]())
+
+	pairDef := mustGetTypeDef(t, schema.Properties, "pair")
+	assert.Equal(t, "array", pairDef.Type, "pair type mismatch")
+
+	pairItem, ok := pairDef.Items.(*TypeDefinition)
+	require.True(t, ok, "pair.Items is not TypeDefinition")
+	assert.Equal(t, "string", pairItem.Type, "pair.Items type mismatch")
+
+	require.NotNil(t, pairDef.MinItems, "pair should declare minItems")
+	require.NotNil(t, pairDef.MaxItems, "pair should declare maxItems")
+	assert.Equal(t, 2, *pairDef.MinItems, "pair minItems mismatch")
+	assert.Equal(t, 2, *pairDef.MaxItems, "pair maxItems mismatch")
 }
 
 func TestNewSchema_ValidateOneOf(t *testing.T) {

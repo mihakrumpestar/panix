@@ -4,40 +4,54 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
+	"github.com/mihakrumpestar/panix/internal/config/theme"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
-// Header renders a static snapshot banner. Content is built once at construction;
-// only the terminal width varies at view time. The width-constrained output is
-// cached so re-rendering only happens on resize.
+// Header renders a static snapshot banner built once; only the width varies at
+// view time. The width output is cached and rebuilt on resize or theme change.
 type Header struct {
 	isSnapshot bool
+	snapshot   config.Snapshot
 	content    *buffer.LinesBuf
 
 	cachedWidth  int
 	cachedRender *buffer.LinesBuf
 }
 
-func New(isSnapshot bool, snapshot config.Snapshot, colorScheme *colorscheme.ColorScheme) *Header {
+func New(isSnapshot bool, snapshot config.Snapshot, scheme *theme.Theme) *Header {
 	header := &Header{
 		isSnapshot: isSnapshot,
+		snapshot:   snapshot,
 
 		cachedWidth:  -1,
 		cachedRender: buffer.NewLinesBuf(),
 	}
-
-	if isSnapshot {
-		header.content = buffer.NewLinesBuf()
-		renderLine(header.content, snapshot, colorScheme)
-	}
+	header.ApplyTheme(scheme)
 
 	return header
 }
 
-// Render applies the width constraint to the pre-built content and returns
-// the cached result. Returns nil for non-snapshot mode.
+// ApplyTheme rebuilds the pre-rendered banner and invalidates the cached render.
+func (h *Header) ApplyTheme(scheme *theme.Theme) {
+	h.cachedWidth = -1
+
+	if !h.isSnapshot {
+		return
+	}
+
+	if h.content == nil {
+		h.content = buffer.NewLinesBuf()
+	} else {
+		h.content.Reset()
+	}
+
+	renderLine(h.content, h.snapshot, scheme)
+}
+
+// Render applies the width constraint to the pre-built content and caches the
+// result; nil for non-snapshot mode.
 func (h *Header) Render(width int) *buffer.LinesBuf {
 	if !h.isSnapshot {
 		return nil
@@ -58,17 +72,17 @@ func (h *Header) Len() int {
 }
 
 // renderLine builds the header: ◉ Snapshot ─ v0.1.0 │ deploy │ started: ... │ taken: ...
-func renderLine(lineBuf *buffer.LinesBuf, snapshot config.Snapshot, colors *colorscheme.ColorScheme) {
-	title := colors.Header.Title
-	border := colors.Table.Border
+func renderLine(lineBuf *buffer.LinesBuf, snapshot config.Snapshot, colors *theme.Theme) {
+	title := colors.Header.Title.Style
+	border := colors.Table.Border.Style
 
-	sep := border.RenderLine(append(append([]byte{' '}, colors.Chars.HeaderSeparator...), ' '))
+	sep := border.RenderLine(append(append([]byte{' '}, colors.Chars.HeaderSeparatorBytes...), ' '))
 
-	title.RenderAppend(lineBuf, append(append([]byte{}, colors.Chars.SnapshotIcon...), " Snapshot"...))
-	border.RenderAppend(lineBuf, colors.Chars.HeaderTitleSep)
+	title.RenderAppend(lineBuf, append(append([]byte{}, colors.Chars.SnapshotIconBytes...), " Snapshot"...))
+	border.RenderAppend(lineBuf, colors.Chars.HeaderTitleSepBytes)
 	lineBuf.AppendToLine([]byte{' '})
 
-	colors.Status.Running.RenderAppend(lineBuf, []byte("v"+snapshot.PanixVersion))
+	colors.Status.Running.Style.RenderAppend(lineBuf, []byte("v"+snapshot.PanixVersion))
 	lineBuf.AppendToLine(sep)
 	border.RenderAppend(lineBuf, []byte(snapshot.Reason.String()))
 	lineBuf.AppendToLine(sep)

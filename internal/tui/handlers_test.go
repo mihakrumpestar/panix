@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
+	"github.com/mihakrumpestar/panix/internal/config/theme"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
@@ -115,19 +115,15 @@ func TestRestartWorkflow_IgnoresCancelErrors(t *testing.T) {
 
 	mdl := newTestModel(t)
 
-	// Set up a workflow and start it so Cancel() can complete
 	w, err := workflow.NewWorkflow(mdl.ctx, mdl.conf)
 	require.NoError(t, err)
 
 	mdl.workflow = w
 
 	go func() { _ = w.StartWorkflow() }()
-
-	// Wait briefly for the workflow to be running
+	// Give the workflow time to start; Cancel blocks until StartWorkflow returns.
 	time.Sleep(10 * time.Millisecond)
 
-	// Cancel blocks until StartWorkflow finishes, but the cancelled
-	// context should make it complete quickly.
 	restartCmd := mdl.workflowRestartCmd()
 	require.NotNil(t, restartCmd, "restart should proceed even if cancel errors")
 	assert.NoError(t, mdl.err, "restart should clear m.err regardless of cancel errors")
@@ -150,7 +146,6 @@ func TestHandleQuit_DetectsFailedMachinesFromFleetState(t *testing.T) {
 	mdl := newTestModel(t)
 	require.NoError(t, mdl.err, "no error initially")
 
-	// Mark a machine as failed in fleet state
 	for _, fleetLeaf := range mdl.conf.Fleet.AllMachines() {
 		fleetLeaf.Machine.State.Store(&machine.State{
 			Status: stats.Failed,
@@ -207,7 +202,6 @@ func TestHandleQuit_RunningWorkflow_ShowsHintAndWaits(t *testing.T) {
 
 	cmd := mdl.handleQuit()
 
-	// Graceful quit: the notification cmd is returned, not a quit command.
 	require.NotNil(t, cmd, "graceful quit should show the quitting notification")
 
 	msg := cmd()
@@ -231,8 +225,8 @@ func TestHandleQuit_RunningWorkflow_ShowsHintAndWaits(t *testing.T) {
 
 	assert.True(t, hintVisible, "quit hint should be visible in the rendered footer")
 
-	// Once the workflow finishes, the done message completes the quit and
-	// resolves the failed-machines error.
+	// Once the workflow finishes, the done message completes the quit and resolves
+	// the failed-machines error.
 	for _, fleetLeaf := range mdl.conf.Fleet.AllMachines() {
 		fleetLeaf.Machine.State.Store(&machine.State{
 			Status: stats.Failed,
@@ -309,13 +303,11 @@ func TestKeys_DisabledWhileQuitting(t *testing.T) {
 	mdl.workflow = workflow
 	mdl.quitting = true
 
-	// While quitting, all keys except ctrl+q (force quit) are dead at the
-	// dispatch level, including q itself.
+	// While quitting, all keys except ctrl+q are dead at dispatch level, q too.
 	for _, key := range []string{"q", "r", "ctrl+r", "s", "h", "a", "c", "ctrl+c", "m"} {
 		assert.Nil(t, mdl.HandleKeyInput(zeroterm.KeyPressMsg{Key: key}), "key %q should be disabled while quitting", key)
 	}
 
-	// ctrl+q force quit still works while quitting.
 	cmd := mdl.HandleKeyInput(zeroterm.KeyPressMsg{Key: "ctrl+q"})
 	require.NotNil(t, cmd)
 
@@ -323,8 +315,8 @@ func TestKeys_DisabledWhileQuitting(t *testing.T) {
 	_, ok := msg.(zeroterm.QuitMsg)
 	assert.True(t, ok, "ctrl+q should force quit even while quitting")
 
-	// The rendered keymap reflects what actually works: disabled keys are
-	// hidden, only the quit keys remain visible.
+	// The rendered keymap reflects what works: disabled keys are hidden, only the
+	// quit keys remain visible.
 	rendered := mdl.footer.Render(mdl.dimensions.Width)
 	require.NotNil(t, rendered)
 
@@ -346,23 +338,26 @@ func newTestModel(t *testing.T) *model {
 	conf := makeTestConfig()
 	conf.Flags.DryRun = true
 
+	scheme := theme.DefaultTheme()
+
 	dims := &viewports.Dimensions{Width: 200, Height: 80}
 
-	tableS := conf.ColorScheme.Table
+	tableS := scheme.Table
 
 	mdl := &model{
 		ctx:        context.Background(),
 		conf:       conf,
 		dimensions: dims,
-		header:     header.New(false, config.Snapshot{}, nil),
-		spinners:   spinners.New(conf.ColorScheme.Spinner.Frames, conf.ColorScheme.Spinner.Interval),
-		statsTable: statstable.New(conf.Fleet, conf.ColorScheme),
-		phaseFlow:  phaseflow.New(conf.Fleet, conf.ColorScheme, conf.Phases),
-		viewports: viewports.New(dims, 0, tableS.Border,
-			tableS.SelectionHighlightBackground, tableS.SelectionHighlightBorder,
+		theme:      scheme,
+		header:     header.New(false, config.Snapshot{}, scheme),
+		spinners:   spinners.New(scheme.Spinner.FrameBytes, scheme.Spinner.Interval.Duration()),
+		statsTable: statstable.New(conf.Fleet, scheme),
+		phaseFlow:  phaseflow.New(conf.Fleet, scheme, conf.Phases),
+		viewports: viewports.New(dims, 0, tableS.Border.Style,
+			tableS.SelectionHighlightBackground.Style, tableS.SelectionHighlightBorder.Style,
 		),
 	}
-	mdl.footer = footer.New(mdl.keyDefs(), conf.ColorScheme)
+	mdl.footer = footer.New(mdl.keyDefs(), scheme)
 
 	return mdl
 }
@@ -392,10 +387,7 @@ func makeTestConfig() *config.Config {
 	flakeObj.Installables.Set("nixosConfigurations", attrMap)
 	flakesMap.Set("flake0", flakeObj)
 
-	colorScheme := colorscheme.DefaultColorScheme()
-
 	return &config.Config{
-		ColorScheme: colorScheme,
 		Fleet: &fleet.Fleet{
 			Flakes: flakesMap,
 			Logs:   logs.New(),

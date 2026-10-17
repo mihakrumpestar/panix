@@ -14,5 +14,5 @@ func (c *RollbackCmd) Run() error {
 	flags := flags.Flags{RollbackFlags: c.RollbackFlags, WorkflowFlags: c.WorkflowFlags}
 	commandPhases := []phase.Phase{phase.Inspect, phase.Rollback}
 
-	return runWorkflow(flags, commandPhases)
+	return runWorkflow(c, flags, commandPhases)
 }

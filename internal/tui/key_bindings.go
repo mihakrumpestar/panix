@@ -9,21 +9,52 @@ import (
 	"github.com/mihakrumpestar/panix/internal/snapshot"
 	"github.com/mihakrumpestar/panix/internal/tui/footer"
 	"github.com/mihakrumpestar/panix/pkg/clipboard"
+	"github.com/mihakrumpestar/panix/pkg/tui/notification"
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/rs/zerolog/log"
 )
 
+// Quitting key metadata, the single source of truth for the quitting keys and
+// their footer help texts. The global keymap and the theme picker footer share
+// it so both always show the same keys and wording.
+const (
+	quitKey       = "q"
+	quitHelp      = "quit"
+	forceQuitKey  = "ctrl+q"
+	forceQuitHelp = "force quit"
+)
+
+// quittingKeyDefs builds the quitting bindings shared by the global keymap and
+// the theme picker footer (which strips the handlers).
+func (m *model) quittingKeyDefs() []footer.KeyDef {
+	return []footer.KeyDef{
+		{Keys: []string{quitKey}, Help: quitHelp, Handler: m.handleQuit},
+		{Keys: []string{forceQuitKey}, Help: forceQuitHelp, Handler: m.handleForceQuit},
+	}
+}
+
+// displayOnlyKeyDefs clears the handlers so the defs become display-only modal
+// footer entries, never dispatched (see isKeyDisabled). defs is modified in
+// place and returned.
+func displayOnlyKeyDefs(defs []footer.KeyDef) []footer.KeyDef {
+	for i := range defs {
+		defs[i].Handler = nil
+	}
+
+	return defs
+}
+
 //nolint:lll
 func (m *model) keyDefs() []footer.KeyDef {
-	kds := []footer.KeyDef{
-		{Keys: []string{"q"}, Help: "quit", Handler: m.handleQuit},
-		{Keys: []string{"ctrl+q"}, Help: "force quit", Handler: m.handleForceQuit},
+	kds := m.quittingKeyDefs()
+	kds = append(kds, []footer.KeyDef{
 		{Keys: []string{"h"}, Help: "toggle inspect/secrets logs", Active: func() bool { return m.conf.Flags.Tui.ShowAllBuildLogs }, Handler: m.handleToggle},
 		{Keys: []string{"a"}, Help: "toggle active only", Active: func() bool { return m.conf.Flags.Tui.ShowActiveOnly }, Handler: m.handleToggleActiveOnly},
 		{Keys: []string{"c"}, Help: "toggle descriptions/commands", Active: func() bool { return m.conf.Flags.Tui.ShowCommandsInLabels }, Handler: m.handleToggleCommands},
 		{Keys: []string{"ctrl+c"}, Help: "copy", Handler: m.handleCopy},
 		{Keys: []string{"m"}, Help: "fullscreen", Active: func() bool { return m.viewports.IsFullscreen() }, Handler: m.handleFullscreen},
-	}
+		{Keys: []string{"ctrl+t"}, Help: "themes", Active: func() bool { return m.themePicker.open }, Handler: m.handleThemePickerToggle},
+	}...)
 
 	if !m.isSnapshot {
 		kds = append(kds,
@@ -38,14 +69,13 @@ func (m *model) keyDefs() []footer.KeyDef {
 		}
 	}
 
-	// While quitting, only ctrl+q (force quit) remains usable; every other
-	// key is disabled and hidden from the keymap. Centralized here instead
-	// of per-handler guards: e.g. ctrl+r while quitting would call the
-	// blocking workflow.Cancel() inside the event loop (re-freezing the TUI)
-	// and the leftover quitting flag would kill the restarted run on its
-	// first done message.
+	// While quitting only ctrl+q stays usable; every other key is disabled and
+	// hidden. Centralized here because e.g. ctrl+r while quitting would call the
+	// blocking workflow.Cancel() inside the event loop (re-freezing the TUI) and
+	// the leftover quitting flag would kill the restarted run on its first done
+	// message.
 	for i := range kds {
-		if slices.Contains(kds[i].Keys, "ctrl+q") {
+		if slices.Contains(kds[i].Keys, forceQuitKey) {
 			continue
 		}
 
@@ -55,9 +85,38 @@ func (m *model) keyDefs() []footer.KeyDef {
 	return kds
 }
 
+// modalKeyDefs returns the footer bindings for the modal context: the modal's
+// display-only bindings while an overlay owns the keyboard, the global bindings
+// otherwise. The picker appends the shared quitting bindings display-only: the
+// picker does not block quitting and the footer keeps showing them.
+func (m *model) modalKeyDefs(kind modalKind) []footer.KeyDef {
+	switch kind {
+	case modalThemePicker:
+		return append([]footer.KeyDef{
+			{Keys: []string{"enter"}, Help: "apply"},
+			{Keys: []string{"up/down"}, Help: "select"},
+			{Keys: []string{"esc"}, Help: "cancel"},
+		}, displayOnlyKeyDefs(m.quittingKeyDefs())...)
+	default:
+		return m.keyDefs()
+	}
+}
+
+// syncFooterKeyDefs swaps the footer keymap to the modal context. Runs at the
+// top of Update (so dispatch never sees display-only bindings) and in Render
+// (so the footer is correct in the frame that closed a modal).
+func (m *model) syncFooterKeyDefs() {
+	kind := m.modal()
+	if kind == m.footerKeyCtx {
+		return
+	}
+
+	m.footerKeyCtx = kind
+	m.footer.SetKeyDefs(m.modalKeyDefs(kind))
+}
+
 // navigable is the contract for components that respond to left/right
-// navigation and can be deselected. Both *statstable.StatsTable and
-// *phaseflow.PhaseFlow satisfy it.
+// navigation and can be deselected.
 type navigable interface {
 	HandleNavigation(key string, hasActiveInnerViewport bool) bool
 	Reset()
@@ -72,9 +131,8 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 
 	hasActiveInner := m.viewports.HasActiveInner()
 
-	// Try the active component first. When nothing is active, the stats
-	// table gets priority for initial selection. If the active component
-	// is at a boundary it can't consume, the key spills over to the other.
+	// Try the active component first. When nothing is active the stats table
+	// gets priority; at a boundary the key spills over to the other component.
 	primary, secondary := navigable(m.statsTable), navigable(m.phaseFlow)
 
 	primaryComp, secondaryComp := compStatsTable, compPhaseFlow
@@ -122,9 +180,10 @@ func (m *model) HandleKeyInput(msg zeroterm.KeyPressMsg) zeroterm.Cmd {
 	return nil
 }
 
-// isKeyDisabled reports whether the key binding is currently unusable.
+// isKeyDisabled reports whether a key binding is unusable. A binding without a
+// handler is display-only (modal help) and never dispatched.
 func (m *model) isKeyDisabled(keyDef footer.KeyDef) bool {
-	return keyDef.Disabled != nil && keyDef.Disabled()
+	return keyDef.Handler == nil || (keyDef.Disabled != nil && keyDef.Disabled())
 }
 
 func (m *model) handleCopy() zeroterm.Cmd {
@@ -134,22 +193,22 @@ func (m *model) handleCopy() zeroterm.Cmd {
 
 	content, isInner := m.viewports.GetActiveInnerViewportContent()
 	if !isInner {
-		return m.footer.Notification().Set("Select an inner viewport to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
+		return m.footer.Notification().Set(notification.LevelWarning, "Select an inner viewport to copy")
 	}
 
 	if len(content) == 0 {
-		return m.footer.Notification().Set("No content to copy", m.conf.ColorScheme.Status.Warning.GetForeground())
+		return m.footer.Notification().Set(notification.LevelWarning, "No content to copy")
 	}
 
 	err := clipboard.CopyToClipboard(string(bytes.Join(content, []byte("\n"))))
 	if err != nil {
-		return m.footer.Notification().Set("Copy failed: "+err.Error(), m.conf.ColorScheme.Status.Failed.GetForeground())
+		return m.footer.Notification().Set(notification.LevelError, "Copy failed: "+err.Error())
 	}
 
-	return m.footer.Notification().Set("Copied to clipboard", m.conf.ColorScheme.Status.OK.GetForeground())
+	return m.footer.Notification().Set(notification.LevelSuccess, "Copied to clipboard")
 }
 
-// quitCmd centralizes TUI exit: captures the exit snapshot when enabled, logs,
+// quitCmd centralizes TUI exit: captures the exit snapshot when enabled, logs
 // and returns the quit command. Every exit site routes through here so the
 // snapshot is taken exactly once per exit.
 func (m *model) quitCmd() zeroterm.Cmd {
@@ -169,8 +228,8 @@ func (m *model) handleQuit() zeroterm.Cmd {
 
 	m.quitting = true
 
-	// Nothing to wait for without a workflow (or when it already finished,
-	// since no workflowDoneMsg will arrive again): quit immediately.
+	// Without a workflow (or when it already finished) no workflowDoneMsg will
+	// arrive again: quit immediately.
 	if m.workflow == nil {
 		m.setFailedMachinesErrorIfNil()
 
@@ -185,23 +244,18 @@ func (m *model) handleQuit() zeroterm.Cmd {
 	default:
 	}
 
-	// Cancel asynchronously: Cancel() blocks until every command finishes,
-	// which would freeze the zeroterm event loop. CancelAsync is a plain
-	// context cancel (non-blocking, idempotent, goroutine-safe). The TUI keeps
-	// rendering and exits from workflowDoneMsgCmd once the workflow completes.
+	// Cancel asynchronously: Cancel() blocks until every command finishes, which
+	// would freeze the zeroterm event loop. CancelAsync is non-blocking and
+	// idempotent; the TUI exits from workflowDoneMsgCmd once the workflow ends.
 	m.workflow.CancelAsync()
 
-	return m.footer.Notification().SetPersistent(
-		"Quitting, waiting for running commands to finish... (ctrl+q to force quit)",
-		m.conf.ColorScheme.Status.Warning.GetForeground(),
-	)
+	return m.footer.Notification().SetPersistent(notification.LevelWarning, "Quitting, waiting for running commands to finish... (ctrl+q to force quit)")
 }
 
 func (m *model) handleForceQuit() zeroterm.Cmd {
 	m.quitting = true
 
-	// Cancel synchronously so pond tasks stop writing fleet state before the
-	// final stdout render reads it.
+	// Cancel before the final stdout render reads fleet state.
 	if m.workflow != nil {
 		m.workflow.CancelAsync()
 	}
@@ -258,15 +312,15 @@ func (m *model) handleRetry() zeroterm.Cmd {
 		m.captureSnapshot(config.SnapshotReasonRetry)
 	}
 
-	notifCmd := m.footer.Notification().Set("Retrying failed...", m.conf.ColorScheme.Status.OK.GetForeground())
+	notifCmd := m.footer.Notification().Set(notification.LevelSuccess, "Retrying failed...")
 
 	return zeroterm.BatchCmd(notifCmd, retryCmd)
 }
 
 func (m *model) handleRestart() zeroterm.Cmd {
-	// The notification cmd also dispatches the restartMsg as a side effect,
-	// so both actions are triggered from a single cmd.
-	notifCmd := m.footer.Notification().Set("Restarting workflow...", m.conf.ColorScheme.Status.OK.GetForeground())
+	// The notification cmd also dispatches restartMsg as a side effect, so both
+	// actions are triggered from a single cmd.
+	notifCmd := m.footer.Notification().Set(notification.LevelSuccess, "Restarting workflow...")
 
 	return zeroterm.BatchCmd(notifCmd, restartCmd)
 }
@@ -283,7 +337,7 @@ func (m *model) handleFullscreen() zeroterm.Cmd {
 	if activeInnerXpath.Depth() > 0 {
 		m.viewports.SetFullscreen(activeInnerXpath)
 	} else {
-		return m.footer.Notification().Set("Select a viewport first", m.conf.ColorScheme.Status.Warning.GetForeground())
+		return m.footer.Notification().Set(notification.LevelWarning, "Select a viewport first")
 	}
 
 	return nil
@@ -303,7 +357,7 @@ func (m *model) handleEsc() zeroterm.Cmd {
 func (m *model) handleSnapshot() zeroterm.Cmd {
 	m.captureSnapshot(config.SnapshotReasonManual)
 
-	return m.footer.Notification().Set("Snapshot saved", m.conf.ColorScheme.Status.OK.GetForeground())
+	return m.footer.Notification().Set(notification.LevelSuccess, "Snapshot saved")
 }
 
 func (m *model) captureSnapshot(reason config.SnapshotReason) {

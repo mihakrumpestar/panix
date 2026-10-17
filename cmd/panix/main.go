@@ -44,7 +44,8 @@ func main() {
 		kong.Name("panix"),
 		kong.Description("Universal Nix Deployment Orchestrator"),
 		kong.Vars{"version": gen.Version()},
-		kong.DefaultEnvars("PANIX"),
+		kong.DefaultEnvars(flags.EnvPrefix),
+		kong.FlagNamer(flags.KongFlagName),
 	)
 
 	// Derive phase names and activation modes from their source-of-truth

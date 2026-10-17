@@ -3,6 +3,7 @@
 package zeroterm
 
 import (
+	"io"
 	"os"
 
 	"os/signal"
@@ -20,6 +21,10 @@ type Terminal struct {
 	sigCh    chan os.Signal
 	width    int
 	height   int
+
+	// probeOut, when set, receives the probe batch instead of out so tests can
+	// observe write boundaries. Production leaves it nil.
+	probeOut io.Writer
 }
 
 func NewTerminal(inputFile, outputFile *os.File) (*Terminal, error) {
@@ -98,10 +103,6 @@ func (t *Terminal) Write(data []byte) (int, error) {
 	}
 
 	return n, nil
-}
-
-func (t *Terminal) Sync() {
-	_ = t.out.Sync()
 }
 
 func (t *Terminal) WatchResize() <-chan os.Signal {

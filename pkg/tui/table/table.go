@@ -11,9 +11,9 @@ import (
 
 const HeaderRow = -1
 
-// Config holds immutable table configuration set at construction time.
-// Changing any field after construction has no effect; use Width() for
-// runtime width updates and SetRows() for data updates.
+// Config holds table configuration set by New or replaced wholesale by
+// ApplyTheme. Changing fields afterwards has no effect; use Width for runtime
+// width, SetRows for data, and ApplyTheme for re-styling.
 type Config struct {
 	Width               int
 	Border              style.Border
@@ -64,30 +64,39 @@ type Table struct {
 }
 
 func New(cfg Config) *Table {
-	bordered := len(cfg.Border.Vertical) > 0
-
 	table := &Table{
-		cfg:           cfg,
-		bordered:      bordered,
-		selBgStyle:    style.NewStyle().Background(cfg.SelectionBackground),
 		selectedIndex: -1,
 		outDirty:      true,
 		rowCacheSel:   -2,
 		content:       buffer.NewLinesBuf(),
 		rowBuf:        buffer.NewLineBuf(),
 	}
-
-	if bordered {
-		table.borderVertical = cfg.BorderStyle.RenderLine(cfg.Border.Vertical)
-		selBorderStyle := cfg.BorderStyle.Background(cfg.SelectionBackground)
-		table.selBgBorderVertical = selBorderStyle.RenderLine(cfg.Border.Vertical)
-	}
+	table.ApplyTheme(cfg)
 
 	return table
 }
 
+// ApplyTheme replaces the configuration, rebuilds derived style bytes and
+// invalidates every render cache. Selection state is preserved.
+func (t *Table) ApplyTheme(cfg Config) {
+	t.cfg = cfg
+	t.bordered = len(cfg.Border.Vertical) > 0
+	t.selBgStyle = style.NewStyle().Background(cfg.SelectionBackground)
+	t.borderVertical = nil
+	t.selBgBorderVertical = nil
+
+	if t.bordered {
+		t.borderVertical = cfg.BorderStyle.RenderLine(cfg.Border.Vertical)
+		selBorderStyle := cfg.BorderStyle.Background(cfg.SelectionBackground)
+		t.selBgBorderVertical = selBorderStyle.RenderLine(cfg.Border.Vertical)
+	}
+
+	t.invalidateCaches()
+}
+
 // Width updates the table width at runtime (e.g. on terminal resize).
-// All other configuration is set via Config at construction time.
+// All other configuration is set via Config, either at construction time or
+// through ApplyTheme.
 func (t *Table) Width(w int) *Table {
 	if t.cfg.Width == w {
 		return t
@@ -101,9 +110,8 @@ func (t *Table) Width(w int) *Table {
 	return t
 }
 
-// SetRows replaces all row data. Selection is preserved. Detects
-// identical data and skips cache invalidation, avoiding all
-// allocations for the common "same data, re-render" pattern.
+// SetRows replaces all row data, preserving selection. Identical data skips
+// cache invalidation so the common re-render case allocates nothing.
 func (t *Table) SetRows(rows [][][]byte) *Table {
 	if len(t.rows) == len(rows) {
 		anyChanged := false
@@ -167,11 +175,9 @@ func (t *Table) SetZonePrefix(prefix string) *Table {
 	return t
 }
 
-// HandleMouseClick checks if a mouse click landed on a data row and
-// updates the selection accordingly. Clicking the already-selected row
-// toggles (deselects) it. Clicking outside any row zone does NOT
-// deselect, only an explicit re-click of the selected row deselects.
-// Returns true if the selection state was changed.
+// HandleMouseClick selects the clicked data row. A click on the selected row
+// deselects it; clicks outside row zones do not. Returns whether selection
+// changed.
 
 func (t *Table) HandleMouseClick(msg zeroterm.MouseClickMsg) bool {
 	if t.zonePrefix == "" || len(t.rows) == 0 || msg.Lines == nil {
@@ -223,11 +229,9 @@ func (t *Table) HandleNavigation(key string, hasActiveInnerViewport bool) bool {
 	return false
 }
 
-// Render builds the table into the owned content buffer and returns it.
-// On cache hit (no data/width/selection change since last Render), returns
-// the existing buffer immediately with zero allocations.
-// Callers must use AppendFrom or read Line(i); do not retain the
-// pointer across frames.
+// Render builds the table into the owned content buffer, returning the cached
+// buffer with zero allocations when nothing changed. Callers must use AppendFrom
+// or Line(i) and must not retain the pointer across frames.
 //
 
 func (t *Table) Render() *buffer.LinesBuf {
@@ -263,11 +267,19 @@ func (t *Table) Render() *buffer.LinesBuf {
 	return t.content
 }
 
-// RenderInto writes the table output into dst, one line per LinesBuf entry.
-// Convenience wrapper; callers needing the table's own buffer can call
-// Render() directly and use AppendFrom.
+// RenderInto appends the table output to dst; use Render directly for the
+// table's own buffer.
 func (t *Table) RenderInto(dst *buffer.LinesBuf) {
 	dst.AppendFrom(t.Render())
+}
+
+// invalidateCaches marks all derived render state stale so the next Render
+// rebuilds it from the current configuration and data.
+func (t *Table) invalidateCaches() {
+	t.colWidthsCached = false
+	t.colANSIOK = false
+	t.structuralChange = true
+	t.outDirty = true
 }
 
 func (t *Table) findClickedRow(clickedID zeroterm.ZoneID) int {
@@ -639,9 +651,8 @@ func (t *Table) renderCell(cell []byte, colWidth, colIdx int,
 	t.appendAlignedCell(cell, cellWidth, colWidth, align, sty, selBg)
 }
 
-// composedCellStyle returns the column style for a cell, optionally with
-// selection background. The composed style's AppendStyledLine handles
-// re-emitting the full prefix (col fg + sel bg) after every ANSI reset
+// composedCellStyle returns the column style, optionally with selection
+// background. AppendStyledLine re-emits the full prefix after every ANSI reset
 // in the content.
 func (t *Table) composedCellStyle(rowIdx, colIdx int, selected bool) style.Style {
 	sty := style.NewStyle()
@@ -656,11 +667,9 @@ func (t *Table) composedCellStyle(rowIdx, colIdx int, selected bool) style.Style
 	return sty
 }
 
-// appendAlignedCell appends a cell's styled content to t.rowBuf with proper
-// alignment and truncation. The cell style is applied inline via
-// AppendStyledLine, and padding spaces are styled via AppendStyledPad,
-// eliminating per-cell allocations. selBg is applied to padding spaces when
-// a row is selected.
+// appendAlignedCell appends the aligned, truncated cell to t.rowBuf. Content
+// goes through AppendStyledLine and padding through AppendStyledPad, avoiding
+// per-cell allocations; selBg styles padding on selected rows.
 func (t *Table) appendAlignedCell(cell []byte, cellWidth, colWidth int, align style.Position, sty, selBg style.Style) {
 	switch {
 	case cellWidth < colWidth:
@@ -771,10 +780,9 @@ func (t *Table) contentWidths(numCols int, dst []int) {
 	}
 }
 
-// distributeWidths calculates column widths that exactly fill the table
-// width. When content is narrower than the table, columns expand. When
-// content is wider, columns shrink, prioritizing shrinking the widest
-// columns first (matching lipgloss behavior).
+// distributeWidths computes column widths that fill the table width exactly,
+// expanding when content is narrow and shrinking the widest columns first
+// (matching lipgloss).
 func (t *Table) distributeWidths(numCols int) []int {
 	if numCols == 0 {
 		return nil
@@ -877,7 +885,9 @@ func (t *Table) totalBorderWidth(numCols int) int {
 		return 0
 	}
 
-	// left + right + column separators
+	// Border glyphs are single-cell by registry invariant (see
+	// style.TestBorderPresets_SingleCellGlyphs), so each border rune is exactly
+	// one column: left + right + column separators.
 	return 2 + numCols - 1
 }
 
@@ -1037,7 +1047,8 @@ func biggestNonFixed(distributed, fixedWidths []int) int {
 	return bigIdx
 }
 
-// writeHorizontalBorder builds a horizontal border line into t.rowBuf.
+// writeHorizontalBorder builds a horizontal border line into t.rowBuf. Glyphs
+// are single-cell by registry invariant, so each advances one column.
 func (t *Table) writeHorizontalBorder(left, mid, right []byte,
 	colWidths []int,
 ) {
