@@ -42,8 +42,8 @@ Flags:
                                    'test') applies to all types. Per-type:
                                    'nixosConfigurations=test;homeConfigurations=switch'
                                    ($PANIX_ACTIVATION_MODE)
-      --output=OUTPUT-MODE         Output mode: tui, console, json
-                                   ($PANIX_OUTPUT)
+      --output-mode=OUTPUT-MODE    Output mode: tui, console, json
+                                   ($PANIX_OUTPUT_MODE)
       --require-all-success        Abort if any task fails, primarily for CI/CD
                                    ('retry' and 'restart' keybinds are disabled
                                    in this mode) ($PANIX_REQUIRE_ALL_SUCCESS)
@@ -95,6 +95,9 @@ Flags:
                                    command in TUI (older lines are
                                    trimmed from the front in batches)
                                    ($PANIX_TUI_COMMAND_OUTPUT_MAX_LINES)
+      --tui.theme="panix"          TUI color theme name ($PANIX_TUI_THEME)
+      --tui.themes-file=STRING     Path to the themes file (default:
+                                   ./panix-themes.yml) ($PANIX_TUI_THEMES_FILE)
       --profile.cpu=STRING         Path for CPU profile output (enables CPU
                                    profiling) ($PANIX_PROFILE_CPU)
       --profile.mem=STRING         Path for memory profile output (enables
@@ -160,4 +163,4 @@ panix deploy --dry-run-with-inspect   # Preview with real Inspect queries
 - [Build Modes](/configuration/build-modes/): local vs remote builds, remote builder selection
 - [Output Types](/configuration/output-types/): `--activation-mode` values and per-type activation overrides
 - [Tag Filtering](/configuration/tag-filtering/): `-t, --tags` filtering and tag inheritance
-- [Output Modes](/cli/output-modes/): `--output`, file logging, and CI flags
+- [Output Modes](/cli/output-modes/): `--output-mode`, file logging, and CI flags

@@ -221,6 +221,7 @@ tasks:
         printf '> panix --help\n%s' "$HELP_OUTPUT" > /tmp/_cli_help.txt
         printf '> panix deploy --help\n%s' "$DEPLOY_HELP" > /tmp/_deploy_help.txt
         go run ./gen/outputtypes_gen.go > /tmp/_output_types.txt
+        go run ./gen/themestable_gen.go > /tmp/_themes_table.txt
 
         # Update README.md panix.yml
         replace_block "README.md" "<!-- PANIX_YML_START -->" "<!-- PANIX_YML_END -->" yaml /tmp/_panix_yml.txt
@@ -237,10 +238,14 @@ tasks:
         # Update docs output types table
         replace_block "docs/src/content/docs/configuration/output-types.mdx" "{/\* OUTPUT_TYPES_START \*/}" "{/\* OUTPUT_TYPES_END \*/}" "" /tmp/_output_types.txt
 
+        # Update docs built-in themes table
+        replace_block "docs/src/content/docs/configuration/themes.mdx" "{/\* THEMES_TABLE_START \*/}" "{/\* THEMES_TABLE_END \*/}" "" /tmp/_themes_table.txt
+
         # Update docs config schema tab
         replace_block "docs/src/content/docs/configuration/reference.mdx" "{/\* SCHEMA_START \*/}" "{/\* SCHEMA_END \*/}" yaml gen/panix-schema.yaml
+        replace_block "docs/src/content/docs/configuration/themes.mdx" "{/* THEME_SCHEMA_START */}" "{/* THEME_SCHEMA_END */}" yaml gen/panix-themes-schema.yaml
 
-        rm -f /tmp/_panix_yml.txt /tmp/_cli_help.txt /tmp/_deploy_help.txt /tmp/_output_types.txt
+        rm -f /tmp/_panix_yml.txt /tmp/_cli_help.txt /tmp/_deploy_help.txt /tmp/_output_types.txt /tmp/_themes_table.txt
 
   release:
     desc: |

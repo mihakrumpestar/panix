@@ -2,6 +2,7 @@ package commands_workflow
 
 import (
 	"context"
+	"os"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
@@ -10,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func runWorkflow(f flags.Flags, commandPhases []phase.Phase) error {
-	conf, err := config.LoadConfig(f)
+func runWorkflow(cmd any, f flags.Flags, commandPhases []phase.Phase) error {
+	conf, err := config.LoadConfig(f, flags.ExplicitMask(os.Args[1:], cmd))
 	if err != nil {
 		return errors.Wrap(err, "failed to load config")
 	}

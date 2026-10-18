@@ -3,7 +3,6 @@ package config
 import (
 	"time"
 
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
@@ -12,7 +11,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 )
 
-// Config is the main internal and external state source
+// Config is the main internal and external state source.
 //
 //nolint:lll
 type Config struct {
@@ -25,7 +24,8 @@ type Config struct {
 	Flags       flags.Flags                   `yaml:"flags" json:"flags" desc:"Flags (CLI and YAML)"`
 	OutputTypes installable.CustomOutputTypes `yaml:"output_types" json:"output_types,omitempty" desc:"Custom output type presets, applied as defaults to installables of that type"`
 	Fleet       *fleet.Fleet                  `yaml:"fleet,required" json:"fleet" validate:"required" desc:"Fleet configuration"`
-	ColorScheme *colorscheme.ColorScheme      `yaml:"-" json:"-"`
+
+	Theme Theme `yaml:"-" json:"-"`
 }
 
 type Snapshot struct {
@@ -49,11 +49,28 @@ func (sr SnapshotReason) String() string {
 	return string(sr)
 }
 
-func (c *Config) PostUnmarshalInit() {
-	if c.ColorScheme == nil {
-		c.ColorScheme = colorscheme.DefaultColorScheme()
+func (c *Config) PostUnmarshalInit() error {
+	err := c.resolveTheme()
+	if err != nil {
+		return err
 	}
 
+	c.postUnmarshalInitDerived()
+
+	return nil
+}
+
+// PostUnmarshalSnapshotInit rehydrates a decoded snapshot. Theme resolution is
+// best-effort: snapshots are debugging artifacts, so an empty or unknown theme
+// name, a broken themes file or an unavailable config directory falls back to the
+// built-in default instead of failing the load. Normal config loading stays
+// strict through PostUnmarshalInit.
+func (c *Config) PostUnmarshalSnapshotInit() {
+	c.resolveSnapshotTheme()
+	c.postUnmarshalInitDerived()
+}
+
+func (c *Config) postUnmarshalInitDerived() {
 	if c.Fleet != nil {
 		c.Fleet.PostUnmarshalInit()
 		c.Fleet.RecalculateCachesOnly(c.Phases)

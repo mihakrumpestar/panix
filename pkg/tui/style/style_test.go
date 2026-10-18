@@ -34,7 +34,7 @@ func TestStyle_ChainMethodsReturnCopy(t *testing.T) {
 	original := NewStyle()
 	modified := original.Bold(true)
 
-	assert.False(t, original.bold, "Bold(true) mutated original style — methods must return copies")
+	assert.False(t, original.bold, "Bold(true) mutated original style; methods must return copies")
 	assert.True(t, modified.bold, "Bold(true) did not set bold on returned copy")
 }
 
@@ -135,6 +135,62 @@ func TestStyle_Bytes(t *testing.T) {
 	got = NewStyle().Bold(true).Bytes()
 	assert.True(t, bytes.Contains(got, ansiBold), "missing bold")
 	assert.True(t, bytes.Contains(got, ansiReset), "missing reset")
+
+	got = NewStyle().Faint(true).Bytes()
+	assert.True(t, bytes.Contains(got, ansiFaint), "missing faint")
+	assert.True(t, bytes.Contains(got, ansiReset), "missing reset")
+}
+
+func TestStyle_Faint(t *testing.T) {
+	t.Parallel()
+
+	original := NewStyle()
+	modified := original.Faint(true)
+
+	assert.False(t, original.faint, "Faint(true) mutated original style")
+	assert.True(t, modified.faint, "Faint(true) did not set faint on returned copy")
+}
+
+func TestStyle_Render_Faint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		sty  Style
+		line string
+		want string
+	}{
+		{
+			name: "faint wraps the line",
+			sty:  NewStyle().Faint(true),
+			line: "dim me",
+			want: "\x1b[2mdim me\x1b[m",
+		},
+		{
+			name: "faint re-emits after an embedded reset",
+			sty:  NewStyle().Faint(true),
+			line: "a\x1b[mb",
+			want: "\x1b[2ma\x1b[m\x1b[2mb\x1b[m",
+		},
+		{
+			name: "faint combines with foreground",
+			sty:  NewStyle().Faint(true).Foreground(Color("#FF0000")),
+			line: "x",
+			want: "\x1b[38;2;255;0;0m\x1b[2mx\x1b[m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.sty.RenderLine([]byte(tt.line))
+
+			assert.Equal(t, tt.want, string(got))
+			assert.Equal(t, string(StripANSI([]byte(tt.line))), string(StripANSI(got)),
+				"faint must not change visible content")
+		})
+	}
 }
 
 func TestStyle_Render_Empty(t *testing.T) {
@@ -464,6 +520,37 @@ func TestWidthWithMaxWidth_EqualValues(t *testing.T) {
 	got := renderForTest(sty, [][]byte{[]byte("hi")})
 
 	assert.Equal(t, 10, maxLineWidthBytes(got))
+}
+
+// TestStylePaddingClampsInsteadOfPanicking proves the renderer is defensive at
+// its public boundary: negative and oversized padding values are clamped to the
+// pre-rendered space buffer instead of slicing out of bounds.
+func TestStylePaddingClampsInsteadOfPanicking(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		style Style
+	}{
+		{"negative uniform padding", NewStyle().Padding(-5, -5)},
+		{"oversized horizontal padding", NewStyle().Padding(0, 5000)},
+		{"oversized vertical padding", NewStyle().Padding(5000, 0)},
+		{"oversized explicit width", NewStyle().Width(5000).Padding(1, 1)},
+		{"oversized single sides", NewStyle().PaddingLeft(5000).PaddingRight(-5).PaddingTop(5000).PaddingBottom(-5)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.NotPanics(t, func() {
+				_ = tc.style.RenderLine([]byte("x"))
+			})
+		})
+	}
+
+	assert.Len(t, PaddingBytes(5000), maxPaddingCells, "oversized padding is clamped")
+	assert.Empty(t, PaddingBytes(-5), "negative padding is clamped to zero")
 }
 
 // Helpers

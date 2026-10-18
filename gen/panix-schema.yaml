@@ -58,9 +58,9 @@ properties:
         type: string
         description: "Output mode: tui, console, json"
         enum:
-        - tui
-        - console
-        - json
+          - tui
+          - console
+          - json
       profile:
         type: object
         properties:
@@ -164,6 +164,13 @@ properties:
           show_commands_in_labels:
             type: boolean
             description: Show raw commands instead of descriptions as labels in build logs (keybind c)
+          theme:
+            type: string
+            description: "TUI color theme name (default: panix)"
+            default: panix
+          themes_file:
+            type: string
+            description: "Path to the themes file (default: ./panix-themes.yml)"
         additionalProperties: false
       validate:
         type: object
@@ -245,47 +252,47 @@ properties:
                       description: Machines configuration
                       additionalProperties:
                         anyOf:
-                        - type: object
-                          properties:
-                            activation_hooks:
-                              description: "Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"
-                              $ref: "#/definitions/ActivationHooks"
-                            auto_rollback:
-                              type: boolean
-                              description: Automatically roll back to the pre-deploy generation when activation fails
-                            bootstrap:
-                              description: Bootstrap configuration for initial provisioning
-                              $ref: "#/definitions/Bootstrap"
-                            disabled:
-                              type: boolean
-                              description: Disable this
-                            hardware_config_path:
-                              type: string
-                              description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
-                            rsync_default_flags:
-                              type: array
-                              description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
-                              items:
+                          - type: object
+                            properties:
+                              activation_hooks:
+                                description: "Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"
+                                $ref: "#/definitions/ActivationHooks"
+                              auto_rollback:
+                                type: boolean
+                                description: Automatically roll back to the pre-deploy generation when activation fails
+                              bootstrap:
+                                description: Bootstrap configuration for initial provisioning
+                                $ref: "#/definitions/Bootstrap"
+                              disabled:
+                                type: boolean
+                                description: Disable this
+                              hardware_config_path:
                                 type: string
-                            secrets:
-                              type: array
-                              description: Files or directories to transfer to the remote machine
-                              items:
-                                $ref: "#/definitions/TransferSource"
-                            ssh:
-                              description: SSH configuration for remote access
-                              $ref: "#/definitions/SSHClient"
-                            sudo_program:
-                              type: string
-                              description: "Override the elevation program used when the executing user (SSH or target user) is not root (default: sudo)"
-                              default: sudo
-                            tags:
-                              type: array
-                              description: Tags for filtering (flakes, configs and machines are already registered as tags)
-                              items:
+                                description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+                              rsync_default_flags:
+                                type: array
+                                description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                                items:
+                                  type: string
+                              secrets:
+                                type: array
+                                description: Files or directories to transfer to the remote machine
+                                items:
+                                  $ref: "#/definitions/TransferSource"
+                              ssh:
+                                description: SSH configuration for remote access
+                                $ref: "#/definitions/SSHClient"
+                              sudo_program:
                                 type: string
-                          additionalProperties: false
-                        - type: "null"
+                                description: "Override the elevation program used when the executing user (SSH or target user) is not root (default: sudo)"
+                                default: sudo
+                              tags:
+                                type: array
+                                description: Tags for filtering (flakes, configs and machines are already registered as tags)
+                                items:
+                                  type: string
+                            additionalProperties: false
+                          - type: "null"
                     nix:
                       description: Nix build and copy configuration
                       $ref: "#/definitions/nix_NixConfig"
@@ -317,7 +324,7 @@ properties:
                       type: string
                       description: Target user for activation. When set, commands run as this user via su -l, which requires SSHing as root (su -l would prompt for a password otherwise; system-level types elevate each command with the sudo program unless the target user is root, which is the default; a non-root target user needs passwordless sudo). If empty, uses the SSH username.
                   required:
-                  - machines
+                    - machines
                   additionalProperties: false
             nix:
               description: Nix build and copy configuration
@@ -349,7 +356,7 @@ properties:
               description: "Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax (default: .)"
               default: .
           required:
-          - installables
+            - installables
           additionalProperties: false
       hardware_config_path:
         type: string
@@ -380,7 +387,7 @@ properties:
         items:
           type: string
     required:
-    - flakes
+      - flakes
     additionalProperties: false
   output_types:
     type: object
@@ -388,7 +395,7 @@ properties:
     additionalProperties:
       $ref: "#/definitions/Preset"
 required:
-- fleet
+  - fleet
 additionalProperties: true
 definitions:
   ActivationHooks:
@@ -507,8 +514,8 @@ definitions:
         type: string
         description: "Bootstrap mode for this output type: 'nixos' (full NixOS bootstrap) or 'nix-install' (install Nix on targets that lack it); empty disables bootstrap. Type-level field: set only under output_types declarations"
         enum:
-        - nixos
-        - nix-install
+          - nixos
+          - nix-install
       build_path:
         type: string
         description: Build path within the flake output
@@ -587,17 +594,17 @@ definitions:
         type: integer
         description: Optional User ID for remote
     required:
-    - remote_path
+      - remote_path
     dependencies:
       gid:
-      - uid
+        - uid
       uid:
-      - gid
+        - gid
     anyOf:
-    - required:
-      - command
-    - required:
-      - local_path
+      - required:
+          - command
+      - required:
+          - local_path
     additionalProperties: false
   attributes_NixConfig:
     type: object
@@ -640,8 +647,8 @@ definitions:
         description: "Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine installables, transfer is skipped (closure is already on target). For multi-machine installables, the closure is copied from the first machine to the rest. (default: local)"
         default: local
         enum:
-        - local
-        - remote
+          - local
+          - remote
       copy_default_flags:
         type: array
         description: "List of base flags for 'nix copy' command (default: [--no-check-sigs])"

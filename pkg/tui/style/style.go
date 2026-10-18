@@ -3,7 +3,6 @@ package style
 import (
 	"bytes"
 	"slices"
-	"unicode/utf8"
 
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 )
@@ -16,6 +15,7 @@ type Style struct {
 	fgPrefix  []byte
 	bgPrefix  []byte
 	bold      bool
+	faint     bool
 	width     int
 	maxWidth  int
 	ellipsis  bool
@@ -74,6 +74,15 @@ func (s Style) Bold(v bool) Style {
 	return s
 }
 
+// Faint sets faint (dimmed) text rendering. Returns a copy. Used e.g. to dim
+// app content behind a focused modal while keeping it visible.
+func (s Style) Faint(v bool) Style {
+	s.faint = v
+	s.prefix = s.computePrefix()
+
+	return s
+}
+
 // Width sets the total block width including borders and padding (lipgloss v2
 // semantics). Shorter content lines are padded to fill; longer lines are not
 // wrapped (use MaxWidth for truncation). Width = content + padding + borders.
@@ -112,8 +121,11 @@ func (s Style) Align(p Position) Style {
 }
 
 // Padding sets uniform vertical and horizontal padding (in cells). Padding is
-// included in the block Width. Returns a copy.
+// clamped to [0, maxPaddingCells] so the pre-rendered pad buffer can never be
+// indexed out of bounds. Padding is included in the block Width. Returns a copy.
 func (s Style) Padding(vertical, horizontal int) Style {
+	vertical = clampPadding(vertical)
+	horizontal = clampPadding(horizontal)
 	s.padTop = vertical
 	s.padBottom = vertical
 	s.padLeft = horizontal
@@ -122,30 +134,30 @@ func (s Style) Padding(vertical, horizontal int) Style {
 	return s
 }
 
-// PaddingTop sets top padding. Returns a copy.
+// PaddingTop sets top padding, clamped to [0, maxPaddingCells]. Returns a copy.
 func (s Style) PaddingTop(v int) Style {
-	s.padTop = v
+	s.padTop = clampPadding(v)
 
 	return s
 }
 
-// PaddingRight sets right padding. Returns a copy.
+// PaddingRight sets right padding, clamped to [0, maxPaddingCells]. Returns a copy.
 func (s Style) PaddingRight(v int) Style {
-	s.padRight = v
+	s.padRight = clampPadding(v)
 
 	return s
 }
 
-// PaddingBottom sets bottom padding. Returns a copy.
+// PaddingBottom sets bottom padding, clamped to [0, maxPaddingCells]. Returns a copy.
 func (s Style) PaddingBottom(v int) Style {
-	s.padBottom = v
+	s.padBottom = clampPadding(v)
 
 	return s
 }
 
-// PaddingLeft sets left padding. Returns a copy.
+// PaddingLeft sets left padding, clamped to [0, maxPaddingCells]. Returns a copy.
 func (s Style) PaddingLeft(v int) Style {
-	s.padLeft = v
+	s.padLeft = clampPadding(v)
 
 	return s
 }
@@ -221,14 +233,31 @@ func (s Style) GetForeground() Color { return s.fgColor }
 
 func (s Style) GetBackground() Color { return s.bgColor }
 
+// BorderSides tells which border sides a style draws.
+type BorderSides struct {
+	Top    bool
+	Right  bool
+	Bottom bool
+	Left   bool
+}
+
+// GetBorder returns the border glyphs and which sides are drawn. When no
+// border is set the glyphs are empty and no side is drawn.
+func (s Style) GetBorder() (Border, BorderSides) {
+	return s.border, BorderSides{
+		Top:    s.borderTop,
+		Right:  s.borderRight,
+		Bottom: s.borderBottom,
+		Left:   s.borderLeft,
+	}
+}
+
 // GetWidth returns the explicit width set on the style, or 0 if none.
 func (s Style) GetWidth() int { return s.width }
 
-// TruncateToWidth truncates str to at most maxW visible cell width, preserving
-// any ANSI escape sequences. When ellipsis is true and the string is actually
-// truncated, ".." replaces the last 2 cells so overflowing content is visually
-// distinguishable. This is the exported version of truncateToWidth for use by
-// packages that need zero-allocation cell rendering.
+// TruncateToWidth truncates str to at most maxW cells, preserving ANSI escape
+// sequences. When ellipsis is true and truncation happens, ".." replaces the
+// last 2 cells. Exported for zero-allocation cell rendering.
 func TruncateToWidth(str []byte, maxW int, ellipsis bool) []byte {
 	return truncateToWidth(str, maxW, ellipsis)
 }
@@ -245,10 +274,8 @@ func (s Style) Bytes() []byte {
 	return buf
 }
 
-// RenderIntoBuf renders content from a LinesBuf through the full style pipeline
-// and writes the result lines into dst. Uses Line(i) for zero-alloc access.
-// For the color-only case (no layout), iterates directly without creating [][]byte.
-// Call Reset() on dst before if you want to overwrite it.
+// RenderIntoBuf renders content through the full style pipeline into dst. The
+// color-only path avoids a [][]byte allocation; call Reset on dst to overwrite.
 func (s Style) RenderIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
 	if content == nil || content.Len() == 0 {
 		if !s.hasBorder && s.padTop == 0 && s.padBottom == 0 && s.width == 0 {
@@ -262,7 +289,7 @@ func (s Style) RenderIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
 		return
 	}
 
-	// Layout requires [][]byte: build temporary view from LinesBuf.
+	// Layout requires [][]byte; build a temporary view.
 	lines := content.Lines()
 	result := s.applyLayout(lines)
 	s.renderColorOnlyInto(dst, result)
@@ -273,7 +300,7 @@ func (s Style) RenderIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
 // For the common color-only case, avoids the [][]byte allocation.
 func (s Style) RenderLine(line []byte) []byte {
 	if !s.hasLayoutProperties() {
-		if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold {
+		if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold && !s.faint {
 			return line
 		}
 
@@ -308,14 +335,9 @@ func (s Style) RenderLine(line []byte) []byte {
 	return styled[0]
 }
 
-// AppendStyledLine appends a single line styled with color/bold attributes
-// directly into buf. This is the zero-allocation equivalent of
-// buf.Write(s.RenderLine(cell)...) for the common case where the style has
-// no layout properties (no width, padding, or border).
-//
-// After every ANSI reset (\x1b[m) found in cell, the style prefix is
-// re-emitted so that the style persists across pre-styled content
-// (e.g. table cells with embedded ANSI).
+// AppendStyledLine is the zero-allocation form of writing s.RenderLine(cell) for
+// a style without layout properties. The prefix is re-emitted after every ANSI
+// reset in cell so styling persists across pre-styled content.
 func (s Style) AppendStyledLine(buf *buffer.LineBuf, cell []byte) {
 	prefix := s.stylePrefix()
 	reset := ansiReset
@@ -378,12 +400,9 @@ func (s Style) RenderLineInto(dst *buffer.LinesBuf, line []byte) {
 	s.renderColorOnlyInto(dst, result)
 }
 
-// RenderAppend applies the style's color/bold attributes to content and
-// appends the result to the current line of dst. Layout properties
-// (width, padding, borders) are ignored; the caller controls line structure.
-// After every ANSI reset (\x1b[m) found in content, the style prefix
-// is re-emitted so that the style persists across pre-styled content
-// (e.g. table cells with selection background).
+// RenderAppend appends content with the style's colors and bold to the current
+// line of dst, ignoring layout properties. The prefix is re-emitted after every
+// ANSI reset in content so styling persists across pre-styled cells.
 func (s Style) RenderAppend(dst *buffer.LinesBuf, content []byte) {
 	if dst.Len() == 0 {
 		s.RenderLineInto(dst, content)
@@ -411,11 +430,9 @@ func (s Style) RenderAppend(dst *buffer.LinesBuf, content []byte) {
 	dst.AppendToLine(reset)
 }
 
-// renderColorOnlyInto applies ANSI foreground/background/bold sequences to
-// every line of content, writing directly into dst. This avoids the contiguous
-// buffer + [][]byte slice allocation of renderColorOnly.
-// After every ANSI reset (\x1b[m) found in a line, the style prefix is
-// re-emitted so that the style persists across pre-styled content.
+// renderColorOnlyInto writes color/bold styling directly into dst, avoiding the
+// contiguous buffer and [][]byte of renderColorOnly. The prefix is re-emitted
+// after every ANSI reset so styling persists across pre-styled content.
 func (s Style) renderColorOnlyInto(dst *buffer.LinesBuf, content [][]byte) {
 	if content == nil {
 		return
@@ -453,16 +470,14 @@ func (s Style) renderColorOnlyInto(dst *buffer.LinesBuf, content [][]byte) {
 	}
 }
 
-// renderColorOnlyIntoBuf applies ANSI foreground/background/bold sequences to
-// every line of content using Line(i) for zero-alloc access.
-// After every ANSI reset (\x1b[m) found in a line, the style prefix is
-// re-emitted so that the style persists across pre-styled content.
+// renderColorOnlyIntoBuf styles every line into dst with zero-alloc Line access,
+// re-emitting the prefix after every ANSI reset.
 func (s Style) renderColorOnlyIntoBuf(dst *buffer.LinesBuf, content *buffer.LinesBuf) {
 	if content.Len() == 0 {
 		return
 	}
 
-	if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold {
+	if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold && !s.faint {
 		writeBufLines(dst, content)
 
 		return
@@ -565,31 +580,40 @@ func (s Style) hasLayoutProperties() bool {
 		s.padTop > 0 || s.padRight > 0 || s.padBottom > 0 || s.padLeft > 0
 }
 
-var prerenderedPadding = slices.Repeat([]byte(" "), 1000) //nolint:mnd
+// maxPaddingCells is the largest padding the renderer accepts on one side. The
+// pre-rendered space buffer is this size; padding values are clamped to it so any
+// caller (including a malformed theme) can never panic on a slice bound.
+const maxPaddingCells = 1000
+
+var prerenderedPadding = slices.Repeat([]byte(" "), maxPaddingCells)
+
+// clampPadding confines a padding value to the pre-rendered buffer range.
+func clampPadding(n int) int {
+	return max(min(n, maxPaddingCells), 0)
+}
 
 // PaddingBytes returns a slice of n space bytes for padding.
 // The returned slice shares a static buffer; do not modify it.
 func PaddingBytes(n int) []byte {
-	if n > len(prerenderedPadding) {
-		n = len(prerenderedPadding)
-	}
-
-	return prerenderedPadding[:n]
+	return prerenderedPadding[:clampPadding(n)]
 }
 
 // applyHorizontalPadding adds left/right padding to each line in-place.
 func (s Style) applyHorizontalPadding(content [][]byte) [][]byte {
-	if s.padLeft <= 0 && s.padRight <= 0 {
+	left := clampPadding(s.padLeft)
+	right := clampPadding(s.padRight)
+
+	if left <= 0 && right <= 0 {
 		return content
 	}
 
 	for idx := range content {
 		line := content[idx]
-		size := s.padLeft + len(line) + s.padRight
+		size := left + len(line) + right
 		buf := make([]byte, size)
-		off := copy(buf, prerenderedPadding[:s.padLeft])
+		off := copy(buf, PaddingBytes(left))
 		off += copy(buf[off:], line)
-		copy(buf[off:], prerenderedPadding[:s.padRight])
+		copy(buf[off:], PaddingBytes(right))
 		content[idx] = buf
 	}
 
@@ -598,24 +622,27 @@ func (s Style) applyHorizontalPadding(content [][]byte) [][]byte {
 
 // applyVerticalPadding prepends top and appends bottom padding lines.
 func (s Style) applyVerticalPadding(content [][]byte) [][]byte {
-	if s.padTop > 0 {
+	top := clampPadding(s.padTop)
+	bottom := clampPadding(s.padBottom)
+
+	if top > 0 {
 		padLine := s.padLine()
 
-		result := make([][]byte, s.padTop+len(content))
-		for i := range s.padTop {
+		result := make([][]byte, top+len(content))
+		for i := range top {
 			result[i] = padLine
 		}
 
-		copy(result[s.padTop:], content)
+		copy(result[top:], content)
 		content = result
 	}
 
-	if s.padBottom > 0 {
+	if bottom > 0 {
 		padLine := s.padLine()
 		oldLen := len(content)
 
-		content = append(content, make([][]byte, s.padBottom)...)
-		for i := range s.padBottom {
+		content = append(content, make([][]byte, bottom)...)
+		for i := range bottom {
 			content[oldLen+i] = padLine
 		}
 	}
@@ -625,17 +652,19 @@ func (s Style) applyVerticalPadding(content [][]byte) [][]byte {
 
 // padLine returns a blank line matching the style's width and horizontal padding.
 func (s Style) padLine() []byte {
-	toPad := s.padLeft + s.padRight
+	toPad := clampPadding(s.padLeft) + clampPadding(s.padRight)
 
 	// Content width
 	if s.width != 0 {
 		toPad = s.width
 	}
 
-	return prerenderedPadding[:toPad]
+	return PaddingBytes(toPad)
 }
 
 // borderCharWidth returns the number of border character columns (left + right).
+// Border glyphs are single-cell by registry invariant (see
+// TestBorderPresets_SingleCellGlyphs), so each drawn side is one column.
 func (s Style) borderCharWidth() int {
 	if !s.hasBorder {
 		return 0
@@ -703,15 +732,15 @@ func padLineAlignment(line []byte, pad int, align Position) []byte {
 	case align == Center:
 		left := pad / 2
 		right := pad - left
-		off := copy(buf, prerenderedPadding[:left])
+		off := copy(buf, PaddingBytes(left))
 		off += copy(buf[off:], line)
-		copy(buf[off:], prerenderedPadding[:right])
+		copy(buf[off:], PaddingBytes(right))
 	case align >= Right:
-		off := copy(buf, prerenderedPadding[:pad])
+		off := copy(buf, PaddingBytes(pad))
 		copy(buf[off:], line)
 	default:
 		off := copy(buf, line)
-		copy(buf[off:], prerenderedPadding[:pad])
+		copy(buf[off:], PaddingBytes(pad))
 	}
 
 	return buf
@@ -756,7 +785,7 @@ func (s Style) renderColorOnly(content [][]byte) [][]byte {
 		return nil
 	}
 
-	if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold {
+	if s.fgPrefix == nil && s.bgPrefix == nil && !s.bold && !s.faint {
 		return content
 	}
 
@@ -833,10 +862,8 @@ func appendWithResetReemitBytes(buf, content, prefix, reset []byte) []byte {
 	return buf
 }
 
-// writeWithResetReemit writes content into buf, re-emitting prefix after
-// every ANSI reset sequence found in content. This ensures that a parent
-// style persists across pre-styled content (e.g. table cells with embedded
-// ANSI sequences).
+// writeWithResetReemit writes content into buf, re-emitting prefix after every
+// ANSI reset so a parent style persists across pre-styled content.
 func writeWithResetReemit(buf *buffer.LineBuf, content, prefix, reset []byte) {
 	for len(content) > 0 {
 		idx := bytes.Index(content, reset)
@@ -873,6 +900,10 @@ func (s Style) computePrefix() []byte {
 		size += len(ansiBold)
 	}
 
+	if s.faint {
+		size += len(ansiFaint)
+	}
+
 	if size == 0 {
 		return nil
 	}
@@ -890,6 +921,11 @@ func (s Style) computePrefix() []byte {
 
 	if s.bold {
 		copy(buf[off:], ansiBold)
+		off += len(ansiBold)
+	}
+
+	if s.faint {
+		copy(buf[off:], ansiFaint)
 	}
 
 	return buf
@@ -1004,7 +1040,9 @@ func (s Style) wrapBorderLine(line, leftFg, rightFg, reset []byte) []byte {
 }
 
 // buildHorizontalBorder renders a top or bottom border line: corner + fill + corner.
-// The fill width is s.width minus the left and right border rune cells.
+// The fill width is s.width minus the left and right border rune cells. Border
+// glyphs are single-cell by registry invariant (see
+// TestBorderPresets_SingleCellGlyphs), so the rune cell counts are exact.
 func (s Style) buildHorizontalBorder(left, mid, right, borderFg, reset []byte) []byte {
 	width := max(s.width, 0)
 
@@ -1033,13 +1071,10 @@ func (s Style) buildHorizontalBorder(left, mid, right, borderFg, reset []byte) [
 	return buf
 }
 
-// truncateToWidth truncates str to at most maxW visible cell width, preserving
-// any ANSI escape sequences. When ellipsis is true and the string is actually
-// truncated, ".." replaces the last 2 cells so overflowing content is visually
-// distinguishable.
-//
-// Uses runeWidth (rune-based terminal cell width, consistent with CellWidth)
-// so emoji and other wide characters are measured correctly.
+// truncateToWidth truncates str to at most maxW cells, preserving ANSI escapes.
+// With ellipsis, ".." replaces the last 2 cells. Widths come from scanGlyph, the
+// same shared scanner CellWidth, wrapping and splicing use, so wide and measured
+// glyph sequences are measured consistently.
 func truncateToWidth(line []byte, maxW int, ellipsis bool) []byte {
 	if maxW <= 0 {
 		return nil
@@ -1079,31 +1114,13 @@ func scanTruncationPoint(line []byte, maxW int) (int, bool) {
 			continue
 		}
 
-		if char >= 0x20 && char < 0x7F {
-			if width+1 > maxW {
-				return pos, true
-			}
+		size, glyphWidth, _ := scanGlyph(line, pos)
 
-			width++
-			pos++
-
-			continue
-		}
-
-		if char < 0x80 { //nolint:mnd
-			pos++
-
-			continue
-		}
-
-		// Non-ASCII: measure per-rune width.
-		runeValue, size := utf8.DecodeRune(line[pos:])
-
-		if width+runeWidth(runeValue) > maxW {
+		if width+glyphWidth > maxW {
 			return pos, true
 		}
 
-		width += runeWidth(runeValue)
+		width += glyphWidth
 		pos += size
 	}
 

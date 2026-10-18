@@ -12,9 +12,6 @@ import (
 // proper width (CJK wide chars, emoji, etc.). For single-line input this is
 // equivalent to the total visible width. For multi-line input it returns the
 // widest line, matching lipgloss.Width behavior.
-//
-// Fast paths:
-//   - ASCII printable chars (0x20-0x7E): counted as width 1 without runeWidth
 func CellWidth(data []byte) int {
 	width := 0
 	maxWidth := 0
@@ -22,15 +19,6 @@ func CellWidth(data []byte) int {
 
 	for pos < len(data) {
 		char := data[pos]
-
-		// Fast ASCII path for printable characters (0x20-0x7E).
-		// Handles >90% of terminal content without decoding runes.
-		if char >= 0x20 && char < 0x7F {
-			width++
-			pos++
-
-			continue
-		}
 
 		switch char {
 		case '\x1b':
@@ -43,9 +31,9 @@ func CellWidth(data []byte) int {
 			width = 0
 			pos++
 		default:
-			r, size := utf8.DecodeRune(data[pos:])
+			size, glyphWidth, _ := scanGlyph(data, pos)
+			width += glyphWidth
 			pos += size
-			width += runeWidth(r)
 		}
 	}
 
@@ -54,6 +42,40 @@ func CellWidth(data []byte) int {
 	}
 
 	return maxWidth
+}
+
+// scanGlyph returns the byte length, cell width and whether a terminal-measured
+// sequence matched for the glyph at pos. The measured sequence check runs before
+// the ASCII fast path, so ASCII-start sequences (such as keycap emoji) override
+// their per-rune width. Measured sequence widths always win over rune widths.
+func scanGlyph(data []byte, pos int) (int, int, bool) {
+	if seqWidth, seqSize, ok := matchMeasuredSequence(data, pos); ok {
+		return seqSize, seqWidth, true
+	}
+
+	char := data[pos]
+	if char >= 0x20 && char < 0x7F {
+		return 1, 1, false
+	}
+
+	if char < 0x80 { //nolint:mnd // control byte, zero cells
+		return 1, 0, false
+	}
+
+	r, size := utf8.DecodeRune(data[pos:])
+
+	return size, runeWidth(r), false
+}
+
+// matchMeasuredSequence returns the width and byte length of a measured glyph
+// sequence at pos.
+func matchMeasuredSequence(data []byte, pos int) (int, int, bool) {
+	overrides := measuredGlyphWidths.Load()
+	if overrides == nil {
+		return 0, 0, false
+	}
+
+	return overrides.matchSequence(data[pos:])
 }
 
 // SkipANSI skips a complete ANSI escape sequence starting at pos (which points

@@ -13,5 +13,5 @@ func (c *InspectCmd) Run() error {
 	flags := flags.Flags{WorkflowFlags: c.WorkflowFlags}
 	commandPhases := []phase.Phase{phase.Inspect}
 
-	return runWorkflow(flags, commandPhases)
+	return runWorkflow(c, flags, commandPhases)
 }

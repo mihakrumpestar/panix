@@ -27,7 +27,7 @@ func Read(path string) (*config.Config, error) {
 		return nil, errors.Wrap(err, "failed to decode snapshot")
 	}
 
-	conf.PostUnmarshalInit()
+	conf.PostUnmarshalSnapshotInit()
 
 	return &conf, nil
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// spawnGate serializes executable writes against process spawns: a fork
+// inherits open descriptors, so writing an activate script while another test
+// spawns a process can leave the script open for writing in the child and make
+// the immediate exec fail with ETXTBSY (text file busy).
+var spawnGate sync.RWMutex
+
+// withSpawn runs fn while no executable is being written, so a fork cannot
+// inherit a writer's descriptor.
+func withSpawn(fn func() error) error {
+	spawnGate.RLock()
+	defer spawnGate.RUnlock()
+
+	return fn()
+}
 
 // newHookTestMachine builds a LOCAL machine with inspect data, so activation
 // hooks and scripts run for real through the local transport.
@@ -95,6 +111,9 @@ func newHookTestFleetLeaf(t *testing.T, profilePath string) *fleet.FleetLeaf {
 // file before exiting with the given code.
 func writeActivateScript(t *testing.T, closureDir string, exitCode int) {
 	t.Helper()
+
+	spawnGate.Lock()
+	defer spawnGate.Unlock()
 
 	binDir := filepath.Join(closureDir, "bin")
 	require.NoError(t, os.MkdirAll(binDir, 0o750))
@@ -199,7 +218,9 @@ func TestExecuteActivation_HooksRunWithEnv(t *testing.T) {
 
 	exc, phaseLog := newHookTestExecutioner(t, mach)
 
-	err := executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	err := withSpawn(func() error {
+		return executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	})
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(closure, "activated"), "activation must have run")
@@ -228,7 +249,9 @@ func TestExecuteActivation_PreHookFailurePreventsActivation(t *testing.T) {
 
 	exc, _ := newHookTestExecutioner(t, leaf.Machine)
 
-	err := executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	err := withSpawn(func() error {
+		return executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pre activation hooks failed")
 
@@ -252,7 +275,9 @@ func TestExecuteActivation_PostHooksSkippedForNonMutatingMode(t *testing.T) {
 	exc, phaseLog := newHookTestExecutioner(t, leaf.Machine)
 
 	// The dry-activate override exercises the CLI override resolution path.
-	err := executeActivation(exc, flags.ActivationMode{AllTypes: "dry-activate"}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	err := withSpawn(func() error {
+		return executeActivation(exc, flags.ActivationMode{AllTypes: "dry-activate"}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	})
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(closure, "activated"), "activation must have run")
@@ -277,7 +302,9 @@ func TestExecuteActivation_PostHookFailureFailsWithoutRollback(t *testing.T) {
 
 	exc, phaseLog := newHookTestExecutioner(t, leaf.Machine)
 
-	err := executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	err := withSpawn(func() error {
+		return executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "post activation hooks failed")
 
@@ -316,7 +343,9 @@ func TestExecuteActivation_HooksNotTriggeredDuringRollback(t *testing.T) {
 
 	exc, phaseLog := newHookTestExecutioner(t, leaf.Machine)
 
-	err := executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, failingClosure, &leaf.Installable.Nix)
+	err := withSpawn(func() error {
+		return executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, failingClosure, &leaf.Installable.Nix)
+	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auto-rollback succeeded", "the rollback activation must succeed")
 
@@ -352,7 +381,9 @@ func TestExecuteActivation_DryRunLogsHooksWithoutExecuting(t *testing.T) {
 		OnUpdateHook: func() {},
 	})
 
-	err := executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	err := withSpawn(func() error {
+		return executeActivation(exc, flags.ActivationMode{}, nixver.FlavorNix, leaf, closure, &leaf.Installable.Nix)
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"pre activation hook 1", "activate", "post activation hook 1"}, commandDescriptions(t, phaseLog))

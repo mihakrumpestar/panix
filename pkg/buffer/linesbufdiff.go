@@ -41,6 +41,16 @@ func (b *LinesBufDiff) Line(i int) []byte {
 	return b.LinesBuf.Line(i)
 }
 
+// SetLine replaces the content of line i, or no-ops if out of bounds.
+// The line count is unchanged and line is copied, never retained or mutated.
+func (b *LinesBufDiff) SetLine(i int, line []byte) {
+	if i < 0 || i >= b.Len() {
+		return
+	}
+
+	b.LinesBuf.SetLine(i, line)
+}
+
 func (b *LinesBufDiff) LastLine() []byte {
 	return b.Line(b.Len() - 1)
 }

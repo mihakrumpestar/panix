@@ -1,0 +1,486 @@
+---
+title: Themes
+description: TUI color themes, built-in themes, the ctrl+t live theme picker, and custom themes via panix-themes.yml.
+sidebar:
+  order: 9
+---
+
+The TUI renders with a color theme: styles, glyphs, borders and spinner settings derived from the selected theme. Panix ships built-in themes, loads custom themes from `panix-themes.yml`, and lets you browse all of them live with the `ctrl+t` picker, which restyles the TUI immediately.
+
+## Built-in Themes
+
+Panix ships a set of built-in themes (the table below is generated from them). Every theme is curated as one aesthetic: its own palette, glyphs, icons, spinner and border style. Themes are partial: anything a theme leaves unset inherits from the default `panix` theme. Match the theme to your terminal background (the table is generated from each theme's `mode`):
+
+{/* THEMES_TABLE_START */}
+| Name | Terminal background |
+|------|---------------------|
+| `panix` | dark (default) |
+| `ayu-dark` | dark |
+| `ayu-light` | light |
+| `ayu-mirage` | dark |
+| `catppuccin-frappe` | dark |
+| `catppuccin-latte` | light |
+| `catppuccin-macchiato` | dark |
+| `catppuccin-mocha` | dark |
+| `dracula` | dark |
+| `everforest-dark` | dark |
+| `everforest-light` | light |
+| `github-dark` | dark |
+| `github-light` | light |
+| `gruvbox-dark` | dark |
+| `gruvbox-light` | light |
+| `kanagawa-dragon` | dark |
+| `kanagawa-lotus` | light |
+| `kanagawa-wave` | dark |
+| `material-darker` | dark |
+| `material-oceanic` | dark |
+| `material-palenight` | dark |
+| `monokai-classic` | dark |
+| `nord` | dark |
+| `one-dark` | dark |
+| `rose-pine` | dark |
+| `rose-pine-dawn` | light |
+| `rose-pine-moon` | dark |
+| `solarized-dark` | dark |
+| `solarized-light` | light |
+| `synthwave-84` | dark |
+| `tokyonight-day` | light |
+| `tokyonight-moon` | dark |
+| `tokyonight-night` | dark |
+| `tokyonight-storm` | dark |
+{/* THEMES_TABLE_END */}
+
+Built-in themes are embedded YAML files (`internal/config/theme/builtin/<name>.yml`, loaded with `go:embed`), so adding one starts by dropping a file in; then run `task generate` to refresh the table above and the schema, and update the expected built-in name list pinned by the tests.
+
+## Selecting a Theme
+
+Set `theme` under `flags.tui` in `panix.yml`:
+
+```yaml
+flags:
+  tui:
+    theme: rose-pine
+```
+
+Or per run via the CLI flag or environment variable:
+
+```sh
+panix deploy --tui.theme=rose-pine-dawn
+PANIX_TUI_THEME=rose-pine-dawn panix deploy
+```
+
+When `theme` is not set, the default `panix` is used. When several sources set it, the highest-precedence one wins: the CLI flag beats `PANIX_TUI_THEME`, which beats the config file value, which beats the default.
+
+## Theme Picker (ctrl+t)
+
+Press `ctrl+t` in the TUI to open the theme picker. It lists every built-in and custom theme with its source (`builtin` or the themes file name) and marks the active one.
+
+- `up`/`down` (or `k`/`j`): move the selection; the whole TUI restyles live as a preview.
+- `enter`: apply the previewed theme and close the picker. To keep the choice across runs, set `theme` under `flags.tui` as shown above.
+- `esc` (or `ctrl+t` again): cancel and revert to the theme that was active before opening.
+- `q` / `ctrl+q`: quit / force quit. The quitting keybinds keep working while the picker is open, and the footer shows them too.
+
+## Theme Errors
+
+Theme problems are treated exactly like config errors: they fail the command at eval. That covers an unknown `theme:` name, an unreadable or unparseable `panix-themes.yml`, and invalid field values inside a theme (bad colors, bad durations, unknown border presets, malformed spinner frames). There is no fallback and no popup.
+
+## Custom Themes
+
+Custom themes live in `panix-themes.yml`:
+
+```yaml
+themes:
+  <name>:
+    <partial theme>
+```
+
+### File Location
+
+Themes are read from up to two locations:
+
+1. `<user config dir>/panix/panix-themes.yml`, e.g. `~/.config/panix/panix-themes.yml` (global)
+2. a local file: by default `./panix-themes.yml` in the directory where Panix runs, or the path set in `flags.tui.themes_file` (also `--tui.themes-file` and `PANIX_TUI_THEMES_FILE`)
+
+Setting `themes_file` replaces the implicit `./panix-themes.yml`; relative paths resolve from the working directory, and a path that is missing or is not a regular file fails at eval like any other config error. The global file is always read from the fixed location above.
+
+When both files exist they are merged field by field and the local file takes precedence: values set in the local file override the global ones, and fields unset in the local file inherit from the global theme. Fields unset in both files inherit from the default `panix` theme. A problem in either file fails the command at eval, like any config error.
+
+For example, with a global `work` theme and a local `work` theme that only overrides one color:
+
+```yaml
+# ~/.config/panix/panix-themes.yml
+themes:
+  work:
+    status:
+      ok: { fg: "#98c379" }
+      warning: { fg: "#c4a7e7" }
+```
+
+```yaml
+# ./panix-themes.yml
+themes:
+  work:
+    status:
+      ok: { fg: "#31748f" }
+```
+
+the effective `work` theme uses `#31748f` for `status.ok` (local), `#c4a7e7` for `status.warning` (global) and the default `panix` look for everything else. The theme picker shows the local file as the source of a merged theme.
+
+### Partial Themes
+
+A theme only needs the fields it wants to change. Every unset field inherits from the default `panix` theme, so a theme can override a couple of colors and leave the rest alone. A user theme with the same name as a built-in shadows it; the other built-ins stay available.
+
+Example:
+
+```yaml
+themes:
+  ember:
+    status:
+      ok:
+        fg: "#98c379"
+      failed:
+        fg: "#e06c75"
+        bold: true
+    header:
+      title:
+        fg: "#ebbcba"
+    phase_status:
+      running: ["#31748f", "#9ccfd8"]
+    spinner:
+      frames: ["|", "/", "-", "\\"]
+      interval: 120ms
+    border:
+      table: double
+      overlay: rounded
+    chars:
+      phase_arrow: ">"
+```
+
+Select it like any other theme: `flags: tui: theme: ember`, `--tui.theme=ember`, `PANIX_TUI_THEME=ember`, or the `ctrl+t` picker.
+
+### Theme Fields
+
+The full theme structure (every key optional, omitted keys inherit from `panix`):
+
+{/* THEME_SCHEMA_START */}
+```yaml
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: https://raw.githubusercontent.com/mihakrumpestar/panix/main/gen/panix-themes-schema.yaml
+version: 0.11.0
+title: Panix Themes File Schema
+description: Schema for Panix custom themes file panix-themes.yml
+type: object
+properties:
+  themes:
+    type: object
+    description: Theme name to (partial) theme mapping
+    additionalProperties:
+      type: object
+      properties:
+        border:
+          type: object
+          description: Border drawing presets per widget region
+          properties:
+            notification:
+              type: string
+              description: Border preset
+              enum:
+                - ascii
+                - blank
+                - dashed
+                - double
+                - heavy
+                - markdown
+                - rounded
+                - sharp
+            overlay:
+              type: string
+              description: Border preset
+              enum:
+                - ascii
+                - blank
+                - dashed
+                - double
+                - heavy
+                - markdown
+                - rounded
+                - sharp
+            table:
+              type: string
+              description: Border preset
+              enum:
+                - ascii
+                - blank
+                - dashed
+                - double
+                - heavy
+                - markdown
+                - rounded
+                - sharp
+            viewport:
+              type: string
+              description: Border preset
+              enum:
+                - ascii
+                - blank
+                - dashed
+                - double
+                - heavy
+                - markdown
+                - rounded
+                - sharp
+          additionalProperties: false
+        chars:
+          type: object
+          description: UI glyphs
+          properties:
+            error_icon:
+              type: string
+              description: Error icon
+            header_separator:
+              type: string
+              description: Separator between header columns
+            header_title_sep:
+              type: string
+              description: Separator between header title and value
+            phase_arrow:
+              type: string
+              description: Arrow shown before phase names
+            row_span_marker:
+              type: string
+              description: Marker for rows spanning multiple lines
+            snapshot_icon:
+              type: string
+              description: Snapshot icon
+          additionalProperties: false
+        command:
+          description: "Log entity: command"
+          $ref: "#/definitions/ThemeLogEntity"
+        error:
+          description: "Log entity: error"
+          $ref: "#/definitions/ThemeLogEntity"
+        flake:
+          description: "Log entity: flake"
+          $ref: "#/definitions/ThemeLogEntity"
+        footer:
+          type: object
+          description: Footer help line styling
+          properties:
+            help_desc:
+              description: Help description styling
+              $ref: "#/definitions/ThemeStyle"
+            help_key:
+              description: Help key styling
+              $ref: "#/definitions/ThemeStyle"
+            help_selected_desc:
+              description: Selected help description styling
+              $ref: "#/definitions/ThemeStyle"
+            help_selected_key:
+              description: Selected help key styling
+              $ref: "#/definitions/ThemeStyle"
+            help_separator:
+              description: Help key/description separator styling
+              $ref: "#/definitions/ThemeStyle"
+            notification_base_style:
+              description: Base styling for notifications
+              $ref: "#/definitions/ThemeStyle"
+          additionalProperties: false
+        header:
+          type: object
+          description: Header title styling
+          properties:
+            title:
+              description: Title styling
+              $ref: "#/definitions/ThemeStyle"
+          additionalProperties: false
+        installable:
+          description: "Log entity: installable"
+          $ref: "#/definitions/ThemeLogEntity"
+        machine:
+          description: "Log entity: machine"
+          $ref: "#/definitions/ThemeLogEntity"
+        mode:
+          type: string
+          description: Terminal background the theme targets
+          enum:
+            - dark
+            - light
+        notification:
+          type: object
+          description: Notification styling
+          properties:
+            default_fg_color:
+              type: string
+              description: "Default notification foreground color: hex #RRGGBB or 0-255 palette index"
+          additionalProperties: false
+        output_type:
+          description: "Log entity: output type"
+          $ref: "#/definitions/ThemeLogEntity"
+        phase:
+          description: "Log entity: phase"
+          $ref: "#/definitions/ThemeLogEntity"
+        phase_status:
+          type: object
+          description: Phase status pill colors
+          properties:
+            default:
+              type: array
+              description: Gradient pair [from, to] for other phases
+              items:
+                type: string
+              minItems: 2
+              maxItems: 2
+            done:
+              type: array
+              description: Gradient pair [from, to] for done phases
+              items:
+                type: string
+              minItems: 2
+              maxItems: 2
+            failed:
+              type: array
+              description: Gradient pair [from, to] for failed phases
+              items:
+                type: string
+              minItems: 2
+              maxItems: 2
+            pill:
+              description: Phase status pill label styling
+              $ref: "#/definitions/ThemeStyle"
+            running:
+              type: array
+              description: Gradient pair [from, to] for running phases
+              items:
+                type: string
+              minItems: 2
+              maxItems: 2
+          additionalProperties: false
+        spinner:
+          type: object
+          description: Spinner frames and interval
+          properties:
+            frames:
+              type: array
+              description: Spinner frames cycled while running
+              items:
+                type: string
+            interval:
+              type: string
+              description: "Frame interval: duration string like 120ms or integer nanoseconds"
+          additionalProperties: false
+        status:
+          type: object
+          description: Status colors and icons
+          properties:
+            failed:
+              description: Failed/error styling
+              $ref: "#/definitions/ThemeStyle"
+            icons:
+              type: object
+              description: Status icons
+              properties:
+                failed:
+                  type: string
+                  description: Icon for failed status
+                ok:
+                  type: string
+                  description: Icon for OK status
+                running:
+                  type: string
+                  description: Icon for running status
+              additionalProperties: false
+            ok:
+              description: OK/success styling
+              $ref: "#/definitions/ThemeStyle"
+            running:
+              description: Running/info styling
+              $ref: "#/definitions/ThemeStyle"
+            warning:
+              description: Warning styling
+              $ref: "#/definitions/ThemeStyle"
+          additionalProperties: false
+        table:
+          type: object
+          description: Stats table and log list styling
+          properties:
+            border:
+              description: Table border styling
+              $ref: "#/definitions/ThemeStyle"
+            row:
+              description: Table row styling
+              $ref: "#/definitions/ThemeStyle"
+            selection_highlight_background:
+              description: Selection highlight background
+              $ref: "#/definitions/ThemeStyle"
+            selection_highlight_border:
+              description: Selection highlight border
+              $ref: "#/definitions/ThemeStyle"
+          additionalProperties: false
+        tree:
+          type: object
+          description: Tree enumerator styling
+          properties:
+            branch:
+              type: string
+              description: Connector glyph before a non-last child (single cell)
+            branch_last:
+              type: string
+              description: Connector glyph before the last child (single cell)
+            enumerator:
+              description: Tree enumerator (branch lines) styling
+              $ref: "#/definitions/ThemeStyle"
+            horizontal:
+              type: string
+              description: Horizontal run glyph inside the connectors (single cell)
+            vertical:
+              type: string
+              description: Continuation glyph for a non-last parent (single cell)
+          additionalProperties: false
+      additionalProperties: false
+additionalProperties: true
+definitions:
+  ThemeLogEntity:
+    type: object
+    properties:
+      bold:
+        type: boolean
+        description: Bold text; unset inherits from the base theme
+      color:
+        type: string
+        description: "Foreground color: hex #RRGGBB or 0-255 palette index"
+      icon:
+        type: string
+        description: Icon glyph
+    additionalProperties: false
+  ThemeStyle:
+    type: object
+    properties:
+      bg:
+        type: string
+        description: "Background color: hex #RRGGBB or 0-255 palette index"
+      bold:
+        type: boolean
+        description: Bold text; unset inherits from the base theme
+      fg:
+        type: string
+        description: "Foreground color: hex #RRGGBB or 0-255 palette index"
+      pad_x:
+        type: integer
+        description: Horizontal padding; unset inherits from the base theme
+      pad_y:
+        type: integer
+        description: Vertical padding; unset inherits from the base theme
+    additionalProperties: false
+```
+{/* THEME_SCHEMA_END */}
+
+- Style keys (the `fg`, `bg`, `bold`, `pad_y`, `pad_x` fields in the schema above): omitting a key inherits it from the default theme; explicit values (including `bold: false` and `pad_x: 0`) override it. Padding must be between `0` and `16` cells per axis.
+- Colors: `#RRGGBB` hex or a decimal `0`-`255` palette index.
+- Gradient pairs (`phase_status.running`/`failed`/`done`/`default`): two colors `[from, to]`. Set both sides or omit the pair; a pair with an empty side is rejected at eval, and an omitted pair inherits from the base theme.
+- `spinner.frames`: list of frames cycled while running. All frames must share one display width (for example all one cell or all two cells); an empty list counts as unset and inherits from the base theme. `spinner.interval`: duration string like `120ms` (or integer nanoseconds), must be between `10ms` and `60s`.
+- `status.icons`, `chars.*` and the log entity `icon` keys hold literal glyphs (any string). Glyphs may be one or two terminal cells wide; panix measures every glyph and adapts the layout around it (status icon column, entity rows, phase arrow, notification marker), so emoji and single-width glyphs can be mixed freely.
+- panix measures each glyph's real cell width in your terminal before the first frame and lays out with those measured widths, so a glyph your font renders narrower or wider than its Unicode width (for example `🪜` or `🪵` when the emoji font does not cover them) still lines up. The probe is skipped when the terminal cannot be queried (headless runs, or a terminal that does not answer the cursor position query), and panix then uses its built-in width table.
+- `tree.branch`, `tree.branch_last`, `tree.vertical` and `tree.horizontal` are the tree connector glyphs. Each must be exactly one cell wide; they compose the per-level prefixes with the tree indent step, so set all four or none (unset glyphs inherit from the default `panix` theme).
+- `border.table`/`border.overlay`/`border.viewport`/`border.notification`: border drawing preset per widget region: `sharp`, `rounded`, `double`, `heavy`, `ascii`, `dashed`, `blank` or `markdown` (ASCII pipes and dashes). An unknown name fails at eval.
+- Log entity sections (`flake`, `installable`, `output_type`, `machine`, `phase`, `command`, `error`) style the matching labels in build logs: `color` (foreground), `icon`, `bold`.
+- `mode` records the terminal background a theme targets (`dark` or `light`). It is metadata only and does not affect rendering; the built-in themes table above is generated from it.

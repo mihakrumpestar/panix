@@ -2,7 +2,7 @@
 
 /*
  * Panix TUI color scheme — dark, muted, terminal feel.
- * Based on internal/config/colorscheme/color_scheme.go (Dracula-derived).
+ * Based on the default panix theme (internal/config/theme/builtin/panix.yml, Dracula-derived).
  *
  * Designed to be comfortable for long reading sessions.
  * Low brightness, muted accents, deep backgrounds.

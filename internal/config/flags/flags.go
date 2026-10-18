@@ -4,11 +4,9 @@ import (
 	"os"
 	"time"
 
-	"dario.cat/mergo"
 	"github.com/mattn/go-isatty"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/profile"
-	"github.com/pkg/errors"
 )
 
 type OutputMode string
@@ -28,7 +26,7 @@ type WorkflowFlags struct {
 	ConfigFlags `yaml:",inline"`
 	EvalFlags   `yaml:",inline"`
 
-	Output OutputMode `yaml:"output" json:"output" help:"Output mode: tui, console, json" validate:"omitempty,oneof=tui console json" completion-predictor:"output-mode"`
+	Output OutputMode `yaml:"output" json:"output" name:"output-mode" help:"Output mode: tui, console, json" validate:"omitempty,oneof=tui console json" completion-predictor:"output-mode"`
 
 	RequireAllSuccess bool `yaml:"require_all_success" json:"require_all_success,omitempty" help:"Abort if any task fails, primarily for CI/CD ('retry' and 'restart' keybinds are disabled in this mode)"`
 	ExitOnComplete    bool `yaml:"exit_on_complete" json:"exit_on_complete,omitempty" help:"Exit TUI on completion"`
@@ -83,6 +81,8 @@ type Tui struct {
 	ShowCommandsInLabels   bool   `yaml:"show_commands_in_labels" json:"show_commands_in_labels,omitempty" help:"Show raw commands instead of descriptions as labels in build logs (keybind c)"`
 	CommandOutputMaxHeight int    `yaml:"command_output_max_height" json:"command_output_max_height" help:"Maximum height for command labels and outputs viewports in TUI" default:"8"`
 	CommandOutputMaxLines  uint64 `yaml:"command_output_max_lines" json:"command_output_max_lines" help:"Maximum output lines to keep per command in TUI (older lines are trimmed from the front in batches)" default:"10000"`
+	Theme                  string `yaml:"theme" json:"theme,omitempty" help:"TUI color theme name" default:"panix"`
+	ThemesFile             string `yaml:"themes_file,omitempty" json:"themes_file,omitempty" help:"Path to the themes file (default: ./panix-themes.yml)"`
 }
 
 type Snapshot struct {
@@ -119,15 +119,6 @@ func (f *Flags) DefaultIfNoTTY() {
 	if f.Output != OutputModeTui {
 		f.ExitOnComplete = true
 	}
-}
-
-func (f *Flags) MergeConfWithCliFlags(cli Flags) error {
-	err := mergo.Merge(f, cli)
-	if err != nil {
-		return errors.Wrap(err, "failed to merge flags")
-	}
-
-	return nil
 }
 
 // Helpers

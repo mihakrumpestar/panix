@@ -33,7 +33,7 @@ func viewString(n *Node) string {
 func TestNewTree(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 
 	assert.Equal(t, 0, root.depth)
 	assert.Nil(t, root.content)
@@ -43,7 +43,7 @@ func TestNewTree(t *testing.T) {
 func TestChild_Add(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	child := addChild(root, "a", "content-a", 1)
 
 	assert.Equal(t, 1, child.depth)
@@ -55,7 +55,7 @@ func TestChild_Add(t *testing.T) {
 func TestChild_Update(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	child1 := addChild(root, "a", "v1", 1)
 
 	root.BeginFrame()
@@ -68,7 +68,7 @@ func TestChild_Update(t *testing.T) {
 func TestChild_UpdateSameVersion(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "v1", 1)
 
 	root.BeginFrame()
@@ -80,7 +80,7 @@ func TestChild_UpdateSameVersion(t *testing.T) {
 func TestChild_Multiple(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "a", 1)
 	addChild(root, "b", "b", 1)
 	addChild(root, "c", "c", 1)
@@ -91,7 +91,7 @@ func TestChild_Multiple(t *testing.T) {
 func TestChild_Depth(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	a := addChild(root, "a", "a", 1)
 	b := addChild(a, "a/b", "b", 1)
 	c := addChild(b, "a/b/c", "c", 1)
@@ -104,7 +104,7 @@ func TestChild_Depth(t *testing.T) {
 func TestRender_Empty(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	result := viewString(root)
 
 	assert.Empty(t, result)
@@ -113,7 +113,7 @@ func TestRender_Empty(t *testing.T) {
 func TestRender_SingleChild(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "hello", 1)
 
 	result := viewString(root)
@@ -123,7 +123,7 @@ func TestRender_SingleChild(t *testing.T) {
 func TestRender_MultipleChildren(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "a", 1)
 	addChild(root, "b", "b", 1)
 	addChild(root, "c", "c", 1)
@@ -137,7 +137,7 @@ func TestRender_MultipleChildren(t *testing.T) {
 func TestRender_Nested(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	a := addChild(root, "a", "a", 1)
 	addChild(a, "a/x", "x", 1)
 	addChild(a, "a/y", "y", 1)
@@ -155,7 +155,7 @@ func TestRender_Nested(t *testing.T) {
 func TestRender_CacheHit(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "hello", 1)
 
 	result1 := viewString(root)
@@ -167,7 +167,7 @@ func TestRender_CacheHit(t *testing.T) {
 func TestRender_CacheMiss_VersionChange(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "v1", 1)
 
 	result1 := viewString(root)
@@ -183,7 +183,7 @@ func TestRender_CacheMiss_VersionChange(t *testing.T) {
 func TestRender_CacheMiss_SiblingChange(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "a", 1)
 
 	viewString(root)
@@ -200,7 +200,7 @@ func TestRender_CacheMiss_SiblingChange(t *testing.T) {
 func TestRender_ConnectorChange(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "flake", 1)
 
 	viewString(root)
@@ -210,7 +210,7 @@ func TestRender_ConnectorChange(t *testing.T) {
 	addChild(root, "b", "flake2", 1)
 	result2 := viewString(root)
 
-	// Root children (flakes) render without prefix — no connectors at this level.
+	// Root children (flakes) render without prefix: no connectors at this level.
 	assert.Contains(t, result2, "flake")
 	assert.Contains(t, result2, "flake2")
 }
@@ -218,7 +218,7 @@ func TestRender_ConnectorChange(t *testing.T) {
 func TestRender_ConnectorsOnChildren(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	flake := addChild(root, "f", "flake", 1)
 	addChild(flake, "f/a", "child-a", 1)
 	addChild(flake, "f/b", "child-b", 1)
@@ -234,7 +234,7 @@ func TestRender_ConnectorsOnChildren(t *testing.T) {
 func TestReset(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "a", 1)
 	addChild(root, "b", "b", 1)
 
@@ -246,7 +246,7 @@ func TestReset(t *testing.T) {
 func TestInvalidateCache(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "a", 1)
 
 	viewString(root)
@@ -259,7 +259,7 @@ func TestInvalidateCache(t *testing.T) {
 func TestRender_LeafCacheContent(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	addChild(root, "a", "leaf-content", 1)
 
 	result := viewString(root)
@@ -269,7 +269,7 @@ func TestRender_LeafCacheContent(t *testing.T) {
 func TestRender_NonLeafNotCached(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	a := addChild(root, "a", "parent", 1)
 	addChild(a, "a/x", "child", 1)
 
@@ -284,7 +284,7 @@ func TestRender_NonLeafNotCached(t *testing.T) {
 func TestChild_PropagatesState(t *testing.T) {
 	t.Parallel()
 
-	root := NewTree(style.NewStyle(), testStep)
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
 	a := addChild(root, "a", "a", 1)
 	b := addChild(a, "a/b", "b", 1)
 
@@ -308,4 +308,68 @@ func TestInvalidateCache_NilSafe(t *testing.T) {
 	var n *Node
 
 	assert.NotPanics(t, func() { n.InvalidateCache() })
+}
+
+// TestApplyTheme_NonPositiveStepTreatedAsOne pins the step guard that keeps
+// connector composition from panicking.
+func TestApplyTheme_NonPositiveStepTreatedAsOne(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), 0, DefaultGlyphs())
+
+	assert.Equal(t, "├", string(root.treeStyle.connMid))
+	assert.Equal(t, "│", string(root.treeStyle.indMid))
+	assert.Equal(t, " ", string(root.treeStyle.indLast))
+}
+
+// TestDrainFreeList_ReleasesUnreusedNodes pins release of leftover prevChildren.
+func TestDrainFreeList_ReleasesUnreusedNodes(t *testing.T) {
+	t.Parallel()
+
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
+	addChild(root, "a", "a", 1)
+	addChild(root, "b", "b", 1)
+
+	// Rebuild only one child: the other becomes an unreused prevChild.
+	root.BeginFrame()
+	addChild(root, "a", "a", 1)
+
+	root.DrainFreeList()
+
+	assert.Empty(t, root.prevChildren, "DrainFreeList must release unreused nodes")
+}
+
+// TestNewTreeResetsPooledNodeState pins that a root node taken from nodePool
+// never inherits state from its previous life. Without the reset, a node that
+// was a child before (non-zero depth) makes a new root start at depth 1, which
+// shifted every child depth by one depending on shuffled test order.
+//
+//nolint:paralleltest // seeds the shared node pool; t.Parallel() would let another test consume the seed
+func TestNewTreeResetsPooledNodeState(t *testing.T) {
+	stale := nodePool.Get().(*Node) //nolint:forcetypeassert // pool always returns *Node
+	stale.depth = 7
+	stale.depthWidth = 21
+	stale.step = 3
+	stale.contentVersion = 9
+	stale.reuseIdx = 4
+	stale.xpath = xpath.New("stale", "child")
+	stale.children = append(stale.children, &Node{depth: 3})
+	stale.prevChildren = append(stale.prevChildren, &Node{depth: 4})
+	nodePool.Put(stale)
+
+	root := NewTree(style.NewStyle(), testStep, DefaultGlyphs())
+
+	assert.Equal(t, 0, root.depth)
+	assert.Equal(t, 0, root.depthWidth)
+	assert.Equal(t, 0, root.reuseIdx)
+	assert.Equal(t, uint64(0), root.contentVersion)
+	assert.Nil(t, root.content)
+	assert.Nil(t, root.cacheEntry)
+	assert.Empty(t, root.children)
+	assert.Empty(t, root.prevChildren)
+	assert.Equal(t, xpath.New(""), root.xpath)
+
+	child := addChild(root, "a", "a", 1)
+
+	assert.Equal(t, 1, child.depth)
 }

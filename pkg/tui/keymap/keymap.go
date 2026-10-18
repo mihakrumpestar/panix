@@ -39,17 +39,26 @@ type Keymap struct {
 }
 
 func New(pairs []Pair, styles Styles) *Keymap {
-	return &Keymap{
+	keymap := &Keymap{
 		pairs:    pairs,
-		styles:   styles,
 		cacheBuf: buffer.NewLinesBuf(),
 	}
+	keymap.ApplyTheme(styles)
+
+	return keymap
+}
+
+// ApplyTheme re-runs the constructor styling step: replaces the render
+// styles and invalidates the render cache.
+func (k *Keymap) ApplyTheme(styles Styles) {
+	k.styles = styles
+	k.invalidateCache()
 }
 
 // SetPairs replaces the keybinding pairs and invalidates the cache.
 func (k *Keymap) SetPairs(pairs []Pair) {
 	k.pairs = pairs
-	k.cacheBuf.Reset()
+	k.invalidateCache()
 }
 
 // Render writes the keymap into the provided LinesBuf. Results are cached
@@ -113,6 +122,11 @@ func (k *Keymap) Render(buf *buffer.LinesBuf, maxWidth int) {
 	k.cacheState = mask
 
 	buf.AppendFrom(k.cacheBuf)
+}
+
+// invalidateCache drops the cached render so the next Render rebuilds it.
+func (k *Keymap) invalidateCache() {
+	k.cacheBuf.Reset()
 }
 
 // isCached reports whether the rendered buffer still matches the given width

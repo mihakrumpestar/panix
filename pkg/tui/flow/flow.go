@@ -33,7 +33,15 @@ func (pf *PhaseFlow) Phases(names ...string) *PhaseFlow {
 	return pf
 }
 
+// Styles sets the style configuration. Alias of ApplyTheme, kept for the
+// builder chain.
 func (pf *PhaseFlow) Styles(s Styles) *PhaseFlow {
+	return pf.ApplyTheme(s)
+}
+
+// ApplyTheme re-runs the styling step: stores the styles, recomputes the
+// precomputed selected variants, and invalidates the render cache.
+func (pf *PhaseFlow) ApplyTheme(s Styles) *PhaseFlow {
 	pf.styles = s
 	pf.styles.InitSelectedStyles()
 	pf.outDirty = true

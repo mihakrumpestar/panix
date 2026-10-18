@@ -4,6 +4,27 @@ import (
 	"time"
 )
 
+// Interval bounds: a tick faster than the minimum is a hot loop, and one slower
+// than the maximum is indistinguishable from a stalled spinner. Config validation
+// and the runtime scheduler share these bounds.
+const (
+	MinInterval = 10 * time.Millisecond
+	MaxInterval = 60 * time.Second
+)
+
+// ClampInterval returns interval clamped into [MinInterval, MaxInterval].
+func ClampInterval(interval time.Duration) time.Duration {
+	if interval < MinInterval {
+		return MinInterval
+	}
+
+	if interval > MaxInterval {
+		return MaxInterval
+	}
+
+	return interval
+}
+
 // Spinner is an animated spinner component with internal frame state.
 type Spinner struct {
 	frames   [][]byte
@@ -13,7 +34,18 @@ type Spinner struct {
 
 // New creates a new spinner with the given animation frames and tick interval.
 func New(frames [][]byte, interval time.Duration) *Spinner {
-	return &Spinner{frames: frames, interval: interval}
+	spinner := &Spinner{}
+	spinner.ApplyTheme(frames, interval)
+
+	return spinner
+}
+
+// ApplyTheme re-runs the constructor styling step: replaces the animation
+// frames and tick interval. The current frame position is kept; Render wraps
+// it into the new frame range.
+func (s *Spinner) ApplyTheme(frames [][]byte, interval time.Duration) {
+	s.frames = frames
+	s.interval = ClampInterval(interval)
 }
 
 // Update advances the spinner to the next frame.

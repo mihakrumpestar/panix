@@ -7,7 +7,6 @@ import (
 
 	"github.com/gookit/goutil/dump"
 	"github.com/mihakrumpestar/panix/gen"
-	"github.com/mihakrumpestar/panix/internal/config/colorscheme"
 	"github.com/mihakrumpestar/panix/internal/config/flags"
 	"github.com/mihakrumpestar/panix/internal/config/template"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
@@ -21,21 +20,24 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
+// LoadConfig decodes the configuration file and resolves the effective flags
+// from all sources. Source precedence, highest first: explicit CLI flags,
+// explicitly set PANIX_* env vars, config file values, kong defaults. The explicit
+// set comes from flags.ExplicitMask at the command call sites, scoped to the flags
+// the running command declares.
+func LoadConfig(parsedFlags flags.Flags, explicit map[string]bool) (*Config, error) {
 	dump.Config(func(d *dump.Options) {
 		d.BytesAsString = true
 		d.SkipNilField = true
 		d.MaxDepth = 99
 	})
 
-	// Load YAML config file using streaming
 	conf, err := decodeConfigFile(parsedFlags.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply defaults and merge with CLI flags
-	err = applyConfigDefaults(conf, parsedFlags)
+	err = applyConfigDefaults(conf, parsedFlags, explicit)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +47,6 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
-	// Filter based on tags and disabled flags
 	err = conf.Fleet.Filter(conf.Flags)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter config")
@@ -65,7 +66,6 @@ func LoadConfig(parsedFlags flags.Flags) (*Config, error) {
 		return nil, errors.Wrap(err, "invalid configuration")
 	}
 
-	// Validate configuration
 	err = validate.ValidateStructTags(conf, conf.Fleet, conf.OutputTypes, conf.Flags.ValidateFlags, conf.Flags.Runtime.FlakeValidationTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid configuration")
@@ -106,15 +106,19 @@ func decodeConfigFile(configPath string) (*Config, error) {
 	return conf, nil
 }
 
-// applyConfigDefaults merges configuration with CLI flags and applies defaults.
-func applyConfigDefaults(conf *Config, parsedFlags flags.Flags) error {
-	err := conf.Flags.MergeConfWithCliFlags(parsedFlags)
+// applyConfigDefaults resolves the effective flags from all sources (explicit CLI
+// flags, explicitly set PANIX_* env vars, config file values, kong defaults; see
+// flags.ApplySources) and applies derived defaults (theme resolution, hostname
+// fallback, output mode fallback, logging).
+func applyConfigDefaults(conf *Config, parsedFlags flags.Flags, explicit map[string]bool) error {
+	err := conf.Flags.ApplySources(parsedFlags, explicit)
 	if err != nil {
-		return errors.Wrap(err, "failed merging config with cli flags")
+		return errors.Wrap(err, "failed to apply flag sources")
 	}
 
-	if conf.ColorScheme == nil {
-		conf.ColorScheme = colorscheme.DefaultColorScheme()
+	err = conf.resolveTheme()
+	if err != nil {
+		return err
 	}
 
 	if conf.Flags.LocalMachineHostname == "" {
@@ -161,8 +165,8 @@ func (c *Config) initFleet() error {
 	return nil
 }
 
-// initInstallables initializes the two-level installables map (type -> name -> installable)
-// and all machines within each installable.
+// initInstallables initializes the two-level installables map
+// (type -> name -> installable) and all machines within each installable.
 func (c *Config) initInstallables(flakeV *flake.Flake) error {
 	for _, typePair := range flakeV.Installables.Pairs() {
 		typeKey := typePair.Key
@@ -203,7 +207,7 @@ func initMachines(installable *installablepkg.Installable) error {
 	for _, machinePair := range installable.Machines.Pairs() {
 		machineV := machinePair.Value
 
-		// Machine may be nil due to existing only as key (this is intended behavior), so we set it here in that case
+		// Machine may be nil when it only exists as a key (intended), so materialize it.
 		if machineV == nil {
 			machineV = &machine.Machine{}
 
@@ -219,8 +223,8 @@ func initMachines(installable *installablepkg.Installable) error {
 	return nil
 }
 
-// initFleetSSH resolves SSH for machines surviving filtering; kept separate
-// from initFleet so filtered-out machines never trigger SSH config loading.
+// initFleetSSH resolves SSH for machines surviving filtering; separate from
+// initFleet so filtered-out machines never trigger SSH config loading.
 func (c *Config) initFleetSSH() error {
 	for _, leaf := range c.Fleet.AllMachines() {
 		err := leaf.Machine.InitSSH(c.Flags.LocalMachineHostname, *c.Nix)
