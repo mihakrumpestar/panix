@@ -43,7 +43,7 @@ func TestJoinCommand(t *testing.T) {
 func TestNewCommandLog_Fields(t *testing.T) {
 	t.Parallel()
 
-	commandLog := NewCommandLog(xpath.New("test"), "desc", "running", "failed", []string{"env", "NIX_PAGER=cat", "ls", "-la"})
+	commandLog := NewCommandLog(xpath.New("test"), 0, "desc", "running", "failed", []string{"env", "NIX_PAGER=cat", "ls", "-la"})
 
 	require.NotNil(t, commandLog)
 	assert.Equal(t, "desc", commandLog.Description)
@@ -57,7 +57,7 @@ func TestNewCommandLog_Fields(t *testing.T) {
 func TestNewCommandLog_NilCommand(t *testing.T) {
 	t.Parallel()
 
-	cl := NewCommandLog(xpath.New("test"), "desc", "running", "failed", nil)
+	cl := NewCommandLog(xpath.New("test"), 0, "desc", "running", "failed", nil)
 
 	require.NotNil(t, cl)
 	assert.Empty(t, cl.Command.Bytes())

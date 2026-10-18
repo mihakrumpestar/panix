@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/mihakrumpestar/panix/internal/config"
 	"github.com/mihakrumpestar/panix/internal/config/logs"
@@ -566,6 +567,49 @@ func TestAddCommand_UsesThemeTreeVerticalGlyph(t *testing.T) {
 		"command continuation lines must use the theme tree vertical glyph")
 }
 
+// TestAddCommands_DuplicateDescriptionsKeepSeparateOutputViewports pins issue
+// #33: an activation followed by its automatic rollback activation shares the
+// description, but each command must keep its own output viewport so selecting
+// and copying the failed output does not read the rollback output instead.
+func TestAddCommands_DuplicateDescriptionsKeepSeparateOutputViewports(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.contentWidth = 120
+	buildLogs.spinners = spinners.New(testTheme().Spinner.FrameBytes, testTheme().Spinner.Interval.Duration())
+
+	viewports_ := newTestViewports(conf)
+	buildLogs.viewports = viewports_
+
+	phaseLog := newFinishedPhaseLog(nil)
+	phaseXpath := xpath.New("flake0", "cfg0", "machine0", "activate")
+
+	failed := phaseLog.NewCommand(phaseXpath, "activate", "activating", "activation failed", []string{"activate"}, 0)
+	failed.TimeAndState.StartTimer()
+	failed.TimeAndState.EndTimerWithError(os.ErrNotExist)
+	failed.Output.Write([]byte("first activation failed output"))
+
+	rollback := phaseLog.NewCommand(phaseXpath, "activate", "activating", "activation failed", []string{"rollback"}, 0)
+	rollback.TimeAndState.StartTimer()
+	rollback.TimeAndState.EndTimerWithError(nil)
+	rollback.Output.Write([]byte("rollback output"))
+
+	buildLogs.addCommands(testRootNode("phase"), phaseLog, phase.Activate, 0)
+
+	require.NotEqual(t, failed.OutputXpath, rollback.OutputXpath,
+		"duplicate command descriptions must not share an output xpath")
+
+	failedContent := viewports_.GetViewportContent(failed.OutputXpath)
+	rollbackContent := viewports_.GetViewportContent(rollback.OutputXpath)
+
+	require.NotNil(t, failedContent, "failed activation output viewport must exist")
+	require.NotNil(t, rollbackContent, "rollback output viewport must exist")
+
+	assert.Contains(t, buffer.LinesBufToStringForTests(failedContent), "first activation failed output")
+	assert.Contains(t, buffer.LinesBufToStringForTests(rollbackContent), "rollback output")
+}
+
 func TestAddCommandChildren_WithOutputAndError(t *testing.T) {
 	t.Parallel()
 
@@ -1022,7 +1066,7 @@ func newNotStartedPhaseLog() *phaselogs.PhaseLog {
 }
 
 func newFinishedCommandLog(description string, err error) *command.CommandLog {
-	cmd := command.NewCommandLog(xpath.New("test"), description, "running", "failed", []string{"echo", "test"})
+	cmd := command.NewCommandLog(xpath.New("test"), 0, description, "running", "failed", []string{"echo", "test"})
 	cmd.TimeAndState.StartTimer()
 	cmd.TimeAndState.EndTimerWithError(err)
 

@@ -1,6 +1,8 @@
 package command
 
 import (
+	"strconv"
+
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
@@ -23,8 +25,12 @@ type CommandLog struct {
 	ErrorXpath  xpath.Xpath `yaml:"-" json:"-"`
 }
 
-func NewCommandLog(phaseXpath xpath.Xpath, description, statusIfRunning, statusIfFailed string, command []string) *CommandLog {
-	cmdXpath := phaseXpath.NewXpathWithAppend(description)
+// NewCommandLog builds a command log whose xpath is unique within its phase.
+// ordinal is the command's position in the phase log: descriptions repeat
+// (an activation followed by its automatic rollback activation), so the
+// description alone is not a unique identity.
+func NewCommandLog(phaseXpath xpath.Xpath, ordinal int, description, statusIfRunning, statusIfFailed string, command []string) *CommandLog {
+	cmdXpath := phaseXpath.NewXpathWithAppend(strconv.Itoa(ordinal), description)
 
 	commandLog := &CommandLog{
 		Description:     description,
