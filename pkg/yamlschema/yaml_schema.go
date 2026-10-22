@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+
+	"github.com/mihakrumpestar/panix/pkg/filemode"
 )
 
 type generator struct {
@@ -111,6 +113,15 @@ type Schema struct {
 	AdditionalProperties any               `yaml:"additionalProperties,omitempty"`
 	Definitions          map[string]any    `yaml:"definitions,omitempty"`
 }
+
+// fileModeMarker is implemented by types whose `default` struct tag holds a
+// canonical four-digit octal file mode (e.g. attributes.FileMode). The
+// structural marker keeps this package independent of the config package.
+type fileModeMarker interface {
+	IsFileMode()
+}
+
+var fileModeMarkerType = reflect.TypeFor[fileModeMarker]()
 
 var formatConstraints = map[string]struct {
 	format  string
@@ -580,6 +591,11 @@ func (g *generator) processType(typ reflect.Type, field reflect.StructField) (an
 }
 
 func (g *generator) processByKind(kind reflect.Kind, typ reflect.Type, field reflect.StructField) (any, error) {
+	// File modes have one canonical spelling: four octal digits such as "0700".
+	if typ.Implements(fileModeMarkerType) {
+		return &TypeDefinition{Type: "string", Pattern: filemode.Pattern}, nil
+	}
+
 	switch kind {
 	case reflect.Bool:
 		return &TypeDefinition{Type: "boolean"}, nil
@@ -839,6 +855,15 @@ func isDurationType(typ reflect.Type) bool {
 func parseDefaultValue(val string, typ reflect.Type) (any, bool) {
 	if isDurationType(typ) {
 		return val, true
+	}
+
+	if typ.Implements(fileModeMarkerType) {
+		mode, err := filemode.Parse(val)
+		if err != nil {
+			return val, true
+		}
+
+		return filemode.Format(mode), true
 	}
 
 	switch typ.Kind() {

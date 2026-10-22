@@ -35,12 +35,13 @@ func TestRunPhase_KexecThenHardwareConfigThenDisko(t *testing.T) {
 
 	lines := nonEmptyCommandLines(t, phaseLog)
 
-	kexecIdx := indexOfCommandContaining(t, lines, "/tmp/kexec/kexec/run")
+	kexecIdx := indexOfCommandContaining(t, lines, "/kexec/run")
 	configIdx := indexOfCommandContaining(t, lines, "nixos-generate-config --show-hardware-config --no-filesystems")
 	diskoIdx := indexOfCommandContaining(t, lines, "disko_BUILD_OUTPUT_PATH_PLACEHOLDER")
 
 	assert.Less(t, kexecIdx, configIdx, "hardware config must be generated after kexec boots the installer")
 	assert.Less(t, configIdx, diskoIdx, "hardware config must exist before the disko build evaluates the configuration")
+	assert.NotContains(t, strings.Join(lines, "\n"), "/tmp/kexec")
 }
 
 // nonEmptyCommandLines drops argv-less entries recorded by ExecFn wait loops.
@@ -109,13 +110,15 @@ func TestRunPhase_NixInstall_FetchInstallerThenRunInstallerThenVerify(t *testing
 	lines := nonEmptyCommandLines(t, phaseLog)
 
 	fetchIdx := indexOfCommandContaining(t, lines, "curl --fail")
-	chmodIdx := indexOfCommandContaining(t, lines, "chmod +x /tmp/panix-nix-installer")
-	runIdx := indexOfCommandContaining(t, lines, "/tmp/panix-nix-installer install --no-confirm")
+	chmodIdx := indexOfCommandContaining(t, lines, "chmod +x /tmp/panix-installer-")
+	runIdx := indexOfCommandContaining(t, lines, "/installer install --no-confirm")
 	verifyIdx := indexOfCommandContaining(t, lines, "nix --version")
 
 	assert.Less(t, fetchIdx, chmodIdx, "the installer must be fetched before it is marked executable")
 	assert.Less(t, chmodIdx, runIdx, "the installer must be executable before it is run")
 	assert.Less(t, runIdx, verifyIdx, "nix must be verified after the installer ran")
+
+	assert.NotContains(t, strings.Join(lines, "\n"), "/tmp/panix-nix-installer")
 
 	assert.True(t, leaf.Machine.MetaInspect.Load().NixAvailable,
 		"verification must refresh MetaInspect.NixAvailable")
@@ -207,8 +210,8 @@ func TestRunPhase_NixInstall_InstallCondition(t *testing.T) {
 
 			installSteps := []string{
 				"curl --fail",
-				"chmod +x /tmp/panix-nix-installer",
-				"/tmp/panix-nix-installer install --no-confirm",
+				"chmod +x /tmp/panix-installer-",
+				"/installer install --no-confirm",
 				"nix --version",
 			}
 			for _, step := range installSteps {
@@ -290,9 +293,10 @@ func TestRunNixInstallBootstrap_NilMetaInspectPerformsInstall(t *testing.T) {
 
 			lines := nonEmptyCommandLines(t, phaseLog)
 			assert.True(t, hasCommandContaining(lines, "curl --fail"), "the installer must be fetched")
-			assert.True(t, hasCommandContaining(lines, "chmod +x /tmp/panix-nix-installer"), "the staged installer must be marked executable")
-			assert.True(t, hasCommandContaining(lines, "/tmp/panix-nix-installer install --no-confirm"), "the installer must be run")
+			assert.True(t, hasCommandContaining(lines, "chmod +x /tmp/panix-installer-"), "the staged installer must be marked executable")
+			assert.True(t, hasCommandContaining(lines, "/installer install --no-confirm"), "the installer must be run")
 			assert.True(t, hasCommandContaining(lines, "nix --version"), "the verification probe must run")
+			assert.NotContains(t, strings.Join(lines, "\n"), "/tmp/panix-nix-installer")
 
 			assert.True(t, leaf.Machine.MetaInspect.Load().NixAvailable,
 				"verification must refresh MetaInspect.NixAvailable")

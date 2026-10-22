@@ -4,12 +4,15 @@ import (
 	"net/http"
 	"net/rpc"
 	"reflect"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mihakrumpestar/panix/pkg/filemode"
 )
 
 type simpleRoot struct {
@@ -68,6 +71,17 @@ type rootWithMapOfStructs struct {
 
 type rootWithPair struct {
 	Pair [2]string `yaml:"pair"`
+}
+
+// testFileMode mirrors attributes.FileMode: a scalar whose `default` tag is an
+// octal mode.
+type testFileMode uint32
+
+// IsFileMode satisfies the schema generation marker for octal file modes.
+func (testFileMode) IsFileMode() {}
+
+type rootWithFileMode struct {
+	Permissions testFileMode `yaml:"permissions" default:"0700"`
 }
 
 type rootWithValidate struct {
@@ -796,6 +810,54 @@ func TestParseDefaultValue_Int(t *testing.T) {
 	result, ok := parseDefaultValue("42", reflect.TypeFor[int]())
 	assert.True(t, ok)
 	assert.Equal(t, 42, result)
+}
+
+func TestParseDefaultValue_FileMode(t *testing.T) {
+	t.Parallel()
+
+	pattern := regexp.MustCompile(filemode.Pattern)
+
+	for _, val := range []string{"0700", "0600", "0755", "1777", "7777"} {
+		result, ok := parseDefaultValue(val, reflect.TypeFor[testFileMode]())
+		require.True(t, ok, "file mode default %q should parse", val)
+
+		formatted, ok := result.(string)
+		require.True(t, ok, "file mode default %q must render as a string", val)
+		assert.Equal(t, val, formatted, "file mode default %q must stay in canonical form", val)
+		assert.True(t, pattern.MatchString(formatted),
+			"canonical default %q must satisfy the schema pattern", formatted)
+	}
+}
+
+func TestNewSchema_FileModeIsFourDigitString(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithFileMode]())
+
+	permissionsDef := mustGetTypeDef(t, schema.Properties, "permissions")
+	assert.Equal(t, "string", permissionsDef.Type)
+	assert.Empty(t, permissionsDef.AnyOf)
+	assert.Equal(t, filemode.Pattern, permissionsDef.Pattern)
+
+	pattern, err := regexp.Compile(permissionsDef.Pattern)
+	require.NoError(t, err)
+
+	for _, mode := range []string{"0700", "0600", "0755", "1777", "7777"} {
+		assert.True(t, pattern.MatchString(mode), "canonical mode %q must be accepted", mode)
+	}
+
+	for _, mode := range []string{"600", "0o600", "0O600", "0000", "409", "999", "10000", ""} {
+		assert.False(t, pattern.MatchString(mode), "non-canonical mode %q must be rejected", mode)
+	}
+}
+
+func TestNewSchema_FileModeDefaultIsOctalString(t *testing.T) {
+	t.Parallel()
+
+	schema := generate(t, reflect.TypeFor[rootWithFileMode]())
+
+	permissionsDef := mustGetTypeDef(t, schema.Properties, "permissions")
+	assert.Equal(t, "0700", permissionsDef.Default, "schema default must be the four-digit octal string 0700")
 }
 
 func TestParseDefaultValue_String(t *testing.T) {

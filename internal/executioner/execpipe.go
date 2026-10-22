@@ -26,10 +26,20 @@ const pipeBufferLimit = 4 << 20 // 4 MiB
 // PipeSpec is the ExecPipe contract: Source runs on the control host and its
 // stdout is the payload, Probe reports the target's current sha256, and Write
 // receives the payload on stdin when the target must change.
+//
+// Commit and Cleanup let Write stage the payload without committing it. Write
+// must leave the payload at a path Commit can atomically move into place;
+// Commit runs only after the write and the source both succeed. Cleanup runs on
+// every failure after Write may have created staged content. DisplaySource, when
+// set, replaces Source in the command log and zerolog fields only; execution
+// always uses Source.
 type PipeSpec struct {
-	Source []string // control-host argv whose stdout is the payload; also the logged command
-	Probe  []string // destination-side argv; first stdout token must be the target's sha256
-	Write  []string // destination-side argv receiving the payload on stdin
+	Source        []string // control-host argv whose stdout is the payload
+	DisplaySource []string // optional display-only argv recorded instead of Source
+	Probe         []string // destination-side argv; first stdout token must be the target's sha256
+	Write         []string // destination-side argv receiving the payload on stdin
+	Commit        []string // optional destination-side argv that moves staged content into place
+	Cleanup       []string // optional destination-side argv that removes staged content on failure
 }
 
 // ExecPipe streams spec.Source's stdout into spec.Write's stdin through an OS
@@ -75,9 +85,14 @@ func (ex *Executioner) ExecPipe(
 		return err
 	}
 
+	loggedSource := spec.Source
+	if len(spec.DisplaySource) > 0 {
+		loggedSource = spec.DisplaySource
+	}
+
 	commandLog := ex.conf.PhaseLog.NewCommand(
 		ex.phaseXpath, description, statusIfRunning, statusIfFailed,
-		spec.Source, 0,
+		loggedSource, 0,
 	)
 	endLog := ex.startCommandLog(commandLog, description, statusIfRunning, commandLog.Command)
 
@@ -141,13 +156,15 @@ func validatePipeOptions(excOpt *ExecOptions) error {
 
 // pipeRun carries the state of one ExecPipe execution.
 type pipeRun struct {
-	ex        *Executioner
-	ctx       context.Context
-	spec      PipeSpec
-	source    *exec.Cmd
-	sourceOut io.ReadCloser
-	sourceErr *boundedCapture
-	writeArgv []string
+	ex          *Executioner
+	ctx         context.Context
+	spec        PipeSpec
+	source      *exec.Cmd
+	sourceOut   io.ReadCloser
+	sourceErr   *boundedCapture
+	writeArgv   []string
+	commitArgv  []string
+	cleanupArgv []string
 }
 
 // execute starts the source, then commits the payload as a skip, a buffered write or a stream.
@@ -164,8 +181,16 @@ func (run *pipeRun) execute() error {
 		return errors.Wrap(err, "failed to read source stdout")
 	}
 
-	// The write argv is routed exactly once; the probe routes itself.
+	// The destination argv is routed exactly once; the probe routes itself.
 	run.writeArgv = run.ex.routeDestination(run.spec.Write)
+
+	if len(run.spec.Commit) > 0 {
+		run.commitArgv = run.ex.routeDestination(run.spec.Commit)
+	}
+
+	if len(run.spec.Cleanup) > 0 {
+		run.cleanupArgv = run.ex.routeDestination(run.spec.Cleanup)
+	}
 
 	if len(buf) > pipeBufferLimit {
 		return run.stream(buf)
@@ -230,12 +255,14 @@ func (run *pipeRun) startDestination(argv []string, stdin io.Reader, stdout io.W
 func (run *pipeRun) commit(buf []byte) error {
 	err := run.source.Wait()
 	if err != nil {
+		// Write never started: there is no staged content to clean up.
 		return run.failure(err, nil, "")
 	}
 
 	sum := sha256.Sum256(buf)
 
 	if run.probeMatches(hex.EncodeToString(sum[:])) {
+		// Write never started, so nothing was staged for this run.
 		return nil
 	}
 
@@ -244,13 +271,21 @@ func (run *pipeRun) commit(buf []byte) error {
 		return err
 	}
 
-	return run.failure(nil, writeCmd.Wait(), writeStderr.String())
+	writeErr := writeCmd.Wait()
+	if writeErr != nil {
+		run.cleanup()
+
+		return run.failure(nil, writeErr, writeStderr.String())
+	}
+
+	return run.commitStaged()
 }
 
 // stream pipes content larger than the buffer straight through. The write is
 // waited first because its stdin copier must drain the source, and only then is
 // the read end closed, so an early write failure cannot stall the source until
-// the context timeout.
+// the context timeout. The write only stages the payload; commitStaged runs
+// after the source exit status proves the stream was complete.
 func (run *pipeRun) stream(buf []byte) error {
 	writeCmd, writeStderr, err := run.startDestination(run.writeArgv, io.MultiReader(bytes.NewReader(buf), run.sourceOut), nil)
 	if err != nil {
@@ -265,7 +300,53 @@ func (run *pipeRun) stream(buf []byte) error {
 
 	sourceErr := run.source.Wait()
 
-	return run.failure(sourceErr, writeErr, writeStderr.String())
+	if sourceErr != nil || writeErr != nil {
+		run.cleanup()
+
+		return run.failure(sourceErr, writeErr, writeStderr.String())
+	}
+
+	return run.commitStaged()
+}
+
+// commitStaged runs the optional Commit argv after Write and Source both
+// succeeded. A commit failure removes staged content and reports as a
+// destination failure.
+func (run *pipeRun) commitStaged() error {
+	if len(run.commitArgv) == 0 {
+		return nil
+	}
+
+	commitCmd, commitStderr, err := run.startDestination(run.commitArgv, nil, nil)
+	if err != nil {
+		run.cleanup()
+
+		return err
+	}
+
+	commitErr := commitCmd.Wait()
+	if commitErr != nil {
+		run.cleanup()
+
+		return run.failure(nil, commitErr, commitStderr.String())
+	}
+
+	return nil
+}
+
+// cleanup removes staged content when Write may already have created it. It is
+// best-effort: the original failure is more important than cleanup text.
+func (run *pipeRun) cleanup() {
+	if len(run.cleanupArgv) == 0 {
+		return
+	}
+
+	cleanupCmd, _, err := run.startDestination(run.cleanupArgv, nil, nil)
+	if err != nil {
+		return
+	}
+
+	_ = cleanupCmd.Wait()
 }
 
 // probeMatches reports whether the routed probe output carries wantHash; any

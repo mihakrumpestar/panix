@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
@@ -82,8 +83,13 @@ func buildWriter(logFile string, output flags.OutputMode, fileLogging, headless 
 }
 
 func openLogFile(logFile string) (io.Writer, string, error) {
-	path := getLogFilePath(logFile)
+	return openLogFilePath(getLogFilePath(logFile))
+}
 
+// openLogFilePath opens one resolved log path with private permissions and
+// O_NOFOLLOW, so a symlink planted at the predictable timestamped name cannot
+// redirect log writes into another file.
+func openLogFilePath(path string) (io.Writer, string, error) {
 	dir := filepath.Dir(path)
 	if dir != "." && dir != "" {
 		err := os.MkdirAll(dir, filepermissions.DefaultDirPermissions)
@@ -93,9 +99,22 @@ func openLogFile(logFile string) (io.Writer, string, error) {
 	}
 
 	//nolint:gosec // This is ok
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, filepermissions.DefaultFilePermissions)
+	file, err := os.OpenFile(
+		path,
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND|syscall.O_NOFOLLOW,
+		filepermissions.PrivateFilePermissions,
+	)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "failed to open log file")
+	}
+
+	// The open mode only applies to a new file; tighten an existing log that
+	// may have been created with broader permissions.
+	err = file.Chmod(filepermissions.PrivateFilePermissions)
+	if err != nil {
+		_ = file.Close()
+
+		return nil, "", errors.Wrap(err, "failed to secure log file")
 	}
 
 	return file, path, nil

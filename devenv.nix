@@ -113,9 +113,7 @@ in
       enable = true;
       # `task ci` needs the go tool group; where it is absent the hook is a
       # no-op so commits are never blocked by the gate.
-      entry = lib.mkDefault (
-        if config.panix.groups.go.enable then "task ci" else "true"
-      );
+      entry = lib.mkDefault (if config.panix.groups.go.enable then "task ci" else "true");
       language = "system";
       pass_filenames = false;
     };

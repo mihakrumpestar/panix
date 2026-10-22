@@ -2,6 +2,10 @@ package ssh
 
 import (
 	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,13 +123,191 @@ func TestMaybeSSHCommandArguments_DisableAutoAddHostKeyWithoutKnownHostsFile(t *
 	assertion.NotContains(args, "UserKnownHostsFile")
 }
 
-func TestKnownHostsFile_IsAuto(t *testing.T) {
+func TestMaybeSSHCommandArguments_AliasWithIdentityFileOmitsIdentitiesOnly(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "my-alias",
+		Port:            22,
+		Username:        "root",
+		IdentityFile:    "/home/user/.ssh/id_ed25519",
+		hostnameIsAlias: true,
+	}
+
+	args := client.MaybeSSHCommandArguments()
+
+	assertion := assert.New(t)
+	assertion.NotContains(args, "IdentitiesOnly=yes")
+	assertion.NotContains(args, "-i")
+}
+
+func TestMaybeNixSSHOpts_AliasWithIdentityFileOmitsIdentitiesOnly(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:        "my-alias",
+		Port:            22,
+		Username:        "root",
+		IdentityFile:    "/home/user/.ssh/id_ed25519",
+		hostnameIsAlias: true,
+	}
+
+	opts := strings.Join(client.MaybeNixSSHOpts(), " ")
+
+	assert.NotContains(t, opts, "IdentitiesOnly=yes")
+}
+
+func TestKnownHostsFile_IsTemporary(t *testing.T) {
 	t.Parallel()
 
 	assertion := assert.New(t)
-	assertion.False(KnownHostsFile("").IsAuto())
-	assertion.True(KnownHostsFile(os.TempDir() + "/panix-knownhosts-1234").IsAuto())
-	assertion.False(KnownHostsFile("/home/user/.ssh/known_hosts").IsAuto())
+	assertion.False(KnownHostsFile("").IsTemporary())
+	assertion.False(KnownHostsFile(os.TempDir()+"/panix-knownhosts-1234").IsTemporary(),
+		"a path that panix did not create must never be considered auto-owned")
+	assertion.False(KnownHostsFile("/home/user/.ssh/known_hosts").IsTemporary())
+}
+
+//nolint:paralleltest // t.Setenv forbids t.Parallel
+func TestControlSocketPath_PrivatePerUser(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+	t.Setenv("HOME", t.TempDir())
+
+	client := SSHClient{Hostname: "example.com", Port: 22, Username: "root"}
+
+	socketPath, ok := client.controlSocketPath()
+	require.True(t, ok)
+
+	dir := filepath.Dir(socketPath)
+
+	t.Cleanup(func() {
+		// The per-user directory lives in a t.TempDir and is removed with it.
+		// Remove a fallback directory too if the private cache path was
+		// unavailable for any reason.
+		if !strings.HasPrefix(dir, cacheRoot+string(os.PathSeparator)) {
+			_ = os.RemoveAll(dir)
+		}
+	})
+
+	assertion := assert.New(t)
+	assertion.Contains(socketPath, "%C", "control path must use OpenSSH's connection hash token")
+	assertion.True(strings.HasSuffix(dir, filepath.Join("panix", "ssh")),
+		"control socket must live in panix's private cache directory")
+	assertion.True(strings.HasPrefix(dir, cacheRoot+string(os.PathSeparator)),
+		"control socket must live under the test cache home, not the developer home")
+
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assertion.Equal(os.FileMode(0o700), info.Mode().Perm())
+}
+
+// resetFallbackControlSocketDir gives each test a fresh fallback directory and
+// restores the process-wide one afterwards.
+func resetFallbackControlSocketDir(t *testing.T) {
+	t.Helper()
+
+	previous := fallbackControlSocketDir
+	fallbackControlSocketDir = sync.OnceValues(createFallbackControlSocketDir)
+
+	t.Cleanup(func() {
+		fallbackControlSocketDir = previous
+	})
+}
+
+// prepareUnsecurableCacheDir makes the per-user control socket directory
+// impossible to create by placing a regular file where the "panix" directory
+// would be.
+func prepareUnsecurableCacheDir(t *testing.T) string {
+	t.Helper()
+
+	cacheRoot := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cacheRoot, "panix"), []byte("not a directory"), 0o600))
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+
+	return cacheRoot
+}
+
+//nolint:paralleltest // t.Setenv forbids t.Parallel
+func TestControlSocketPath_FallsBackToPrivateTempDir(t *testing.T) {
+	resetFallbackControlSocketDir(t)
+
+	cacheRoot := prepareUnsecurableCacheDir(t)
+	client := SSHClient{Hostname: "example.com", Port: 22, Username: "root"}
+
+	socketPath, ok := client.controlSocketPath()
+	require.True(t, ok)
+
+	dir := filepath.Dir(socketPath)
+
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	assertion := assert.New(t)
+	assertion.True(strings.HasSuffix(socketPath, "%C"), "fallback must keep the %C token")
+	assertion.True(strings.HasPrefix(filepath.Base(dir), "panix-ssh-"),
+		"fallback must use a private MkdirTemp directory")
+	assertion.NotEqual(cacheRoot, dir)
+
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assertion.Equal(os.FileMode(0o700), info.Mode().Perm(), "fallback directory must be private")
+}
+
+//nolint:paralleltest // t.Setenv forbids t.Parallel
+func TestControlMasterArgs_DisabledWhenNoPrivateDirAvailable(t *testing.T) {
+	resetFallbackControlSocketDir(t)
+
+	prepareUnsecurableCacheDir(t)
+
+	// Point TMPDIR at a missing directory so MkdirTemp fails as well.
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing"))
+
+	client := SSHClient{Hostname: "example.com", Port: 22, Username: "root"}
+
+	assert.Empty(t, client.controlMasterArgs(), "ControlMaster must be disabled rather than using an insecure path")
+
+	socketPath, ok := client.controlSocketPath()
+	assert.False(t, ok)
+	assert.Empty(t, socketPath)
+}
+
+func TestMaybeSSHCommandArguments_ExtraFlagsPrecedePanixOptions(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:   "example.com",
+		Port:       22,
+		Username:   "root",
+		ExtraFlags: []string{"-o", "StrictHostKeyChecking=yes"},
+	}
+
+	args := client.MaybeSSHCommandArguments()
+
+	userIdx := slices.Index(args, "StrictHostKeyChecking=yes")
+	panixIdx := slices.Index(args, "StrictHostKeyChecking=accept-new")
+
+	require.NotEqual(t, -1, userIdx, "user flag must be present")
+	require.NotEqual(t, -1, panixIdx, "panix default must be present")
+	assert.Less(t, userIdx, panixIdx, "user flag must come first so OpenSSH honours it")
+}
+
+func TestMaybeNixSSHOpts_ExtraFlagsPrecedePanixOptions(t *testing.T) {
+	t.Parallel()
+
+	client := SSHClient{
+		Hostname:   "example.com",
+		Port:       22,
+		Username:   "root",
+		ExtraFlags: []string{"-o", "StrictHostKeyChecking=yes"},
+	}
+
+	opts := strings.Join(client.MaybeNixSSHOpts(), " ")
+
+	userIdx := strings.Index(opts, "StrictHostKeyChecking=yes")
+	panixIdx := strings.Index(opts, "StrictHostKeyChecking=accept-new")
+
+	require.NotEqual(t, -1, userIdx, "user flag must be present in NIX_SSHOPTS")
+	require.NotEqual(t, -1, panixIdx, "panix default must be present in NIX_SSHOPTS")
+	assert.Less(t, userIdx, panixIdx, "user flag must come first in NIX_SSHOPTS")
 }
 
 func TestMaybeNixSSHOpts_Defaults(t *testing.T) {

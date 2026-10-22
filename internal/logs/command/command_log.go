@@ -5,6 +5,7 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/redact"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
@@ -64,11 +65,15 @@ func (cl *CommandLog) initDerivedXpaths() {
 // joinCommand renders argv as a space-joined line. The SSH transport
 // pre-quotes its elements (pkg/shellquote), so the log adds no quotes of its
 // own: re-quoting would double them and render ssh lines unparseable.
+//
+// Environment values are redacted for display only. joinCommand never changes
+// the argv used for execution; it is the single point where argv becomes the
+// log/display string, so zerolog and CommandLog both receive the redacted form.
 func joinCommand(cmd []string) *buffer.LineBuf {
 	lineBuf := buffer.NewLineBuf()
 
-	for i, arg := range cmd {
-		if i > 0 {
+	for index, arg := range redact.Argv(cmd) {
+		if index > 0 {
 			lineBuf.WriteByte(' ')
 		}
 

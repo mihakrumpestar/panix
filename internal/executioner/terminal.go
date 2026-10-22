@@ -12,16 +12,6 @@ import (
 var (
 	carriageReturn = []byte("\r")
 	tabToSpaces    = []byte("    ")
-	// nonPrintingSequences are ANSI escape sequences that control terminal
-	// behavior (erase, cursor visibility) but produce no visible output.
-	// They are stripped before processing so they don't pollute output lines.
-	// SGR sequences (\x1b[...m) are NOT stripped - they carry color/style
-	// information that is preserved for display.
-	nonPrintingSequences = [][]byte{
-		[]byte("\x1b[K"),    // erase to end of line
-		[]byte("\x1b[?25h"), // show cursor (DEC private mode)
-		[]byte("\x1b[?25l"), // hide cursor (DEC private mode)
-	}
 )
 
 const escByte = '\x1b'
@@ -59,7 +49,7 @@ type terminalProcessor struct {
 func (tp *terminalProcessor) process(buf []byte, exm *command.CommandLog) {
 	buf = tp.prependPending(buf)
 	buf = tp.stripPendingANSI(buf)
-	buf = stripNonPrinting(buf)
+	buf = style.SanitizeTerminalOutput(nil, buf)
 	buf = expandTabs(buf)
 
 	if len(buf) == 0 {
@@ -103,27 +93,18 @@ func (tp *terminalProcessor) prependPending(buf []byte) []byte {
 // the end of buf (split by a PTY read boundary) so it can be prepended to the
 // next read. Returns buf with the incomplete suffix removed.
 func (tp *terminalProcessor) stripPendingANSI(buf []byte) []byte {
-	tp.pending = trailingIncompleteANSI(buf)
-	if len(tp.pending) > 0 {
-		return buf[:len(buf)-len(tp.pending)]
-	}
+	pending := trailingIncompleteANSI(buf)
+	if len(pending) == 0 {
+		tp.pending = tp.pending[:0]
 
-	return buf
-}
-
-// stripNonPrinting removes ANSI escape sequences that control terminal
-// behavior (erase, cursor visibility) but produce no visible output.
-// SGR color sequences (\x1b[...m) are preserved for display.
-func stripNonPrinting(buf []byte) []byte {
-	if bytes.IndexByte(buf, escByte) < 0 {
 		return buf
 	}
 
-	for _, seq := range nonPrintingSequences {
-		buf = bytes.ReplaceAll(buf, seq, nil)
-	}
+	// Copy: callers reuse the read buffer, so a subslice would be overwritten
+	// before the next read is processed.
+	tp.pending = append(tp.pending[:0], pending...)
 
-	return buf
+	return buf[:len(buf)-len(pending)]
 }
 
 // expandTabs replaces \t with 4 spaces.
@@ -166,13 +147,22 @@ func (tp *terminalProcessor) setTrailingCursorState(
 // partial bytes to be prepended to the next read. This prevents partial
 // escape sequences from being processed as visible output.
 //
-// Handles CSI (\x1b[...<final>), OSC (\x1b]...<BEL/ST>), and bare ESC
-// (\x1b<0x40-0x5F>) sequences. SGR color sequences (\x1b[...m) are also
-// caught here when split across reads.
+// Handles CSI (\x1b[...<final>), OSC (\x1b]...<BEL/ST>), DCS-style strings
+// (DCS/SOS/PM/APC terminated by ST), and bare ESC sequences. SGR color
+// sequences (\x1b[...m) are also caught here when split across reads.
 func trailingIncompleteANSI(buf []byte) []byte {
 	escIdx := bytes.LastIndexByte(buf, escByte)
 	if escIdx < 0 {
 		return nil
+	}
+
+	if escIdx == len(buf)-1 {
+		return buf[escIdx:] // lone ESC, incomplete
+	}
+
+	switch buf[escIdx+1] {
+	case 'P', 'X', '^', '_':
+		return trailingIncompleteSTString(buf, escIdx)
 	}
 
 	end := style.SkipANSI(buf, escIdx)
@@ -180,13 +170,19 @@ func trailingIncompleteANSI(buf []byte) []byte {
 		return nil // complete sequence with content after it
 	}
 
-	// SkipANSI consumed to end of buffer. Determine if the sequence is
-	// actually complete or just ran off the end.
-	if escIdx == len(buf)-1 {
-		return buf[escIdx:] // lone ESC, incomplete
+	return trailingIncompleteByType(buf, escIdx)
+}
+
+// trailingIncompleteSTString returns buf[escIdx:] when the string sequence
+// starting at escIdx has no ST terminator before the end of the buffer.
+func trailingIncompleteSTString(buf []byte, escIdx int) []byte {
+	for pos := escIdx + 2; pos+1 < len(buf); pos++ {
+		if buf[pos] == escByte && buf[pos+1] == '\\' {
+			return nil // complete
+		}
 	}
 
-	return trailingIncompleteByType(buf, escIdx)
+	return buf[escIdx:] // incomplete
 }
 
 // trailingIncompleteByType checks whether the ANSI escape starting at escIdx

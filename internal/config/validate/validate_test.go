@@ -147,7 +147,7 @@ func TestHumanizeTagMessage_URLorFile(t *testing.T) {
 			require.Error(t, err)
 
 			msg := humanizeValidationErrors(err)
-			assert.Contains(t, msg, "must be an http(s) URL or a local path")
+			assert.Contains(t, msg, "must be an https URL or a local path")
 			assert.NotContains(t, msg, "failed validation")
 		})
 	}

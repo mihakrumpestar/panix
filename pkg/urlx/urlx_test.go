@@ -64,21 +64,21 @@ func TestValidateSource(t *testing.T) {
 	tests := []struct {
 		name       string
 		input      string
-		wantErr    bool
+		wantErr    error
 		wantScheme string
 	}{
-		{"https url", "https://host/x", false, ""},
-		{"http url", "http://host/x", false, ""},
-		{"http scheme without host", "http://", true, "http"},
-		{"ftp scheme", "ftp://host/x", true, "ftp"},
-		{"file scheme", "file:///x", true, "file"},
-		{"s3 scheme", "s3://bucket/key", true, "s3"},
-		{"scheme typo", "htps://host/x", true, "htps"},
-		{"colon in local name", "my:file.tar.gz", true, "my"},
-		{"absolute path", "/tmp/x.tar.gz", false, ""},
-		{"relative path", "./rel/x.tar.gz", false, ""},
-		{"bare name", "plain-name.tar.gz", false, ""},
-		{"empty string", "", false, ""},
+		{"https url", "https://host/x", nil, ""},
+		{"http url rejected as insecure", "http://host/x", ErrInsecureURLScheme, "http"},
+		{"http scheme without host rejected", "http://", ErrUnsupportedURLScheme, "http"},
+		{"ftp scheme", "ftp://host/x", ErrUnsupportedURLScheme, "ftp"},
+		{"file scheme", "file:///x", ErrUnsupportedURLScheme, "file"},
+		{"s3 scheme", "s3://bucket/key", ErrUnsupportedURLScheme, "s3"},
+		{"scheme typo", "htps://host/x", ErrUnsupportedURLScheme, "htps"},
+		{"colon in local name", "my:file.tar.gz", ErrUnsupportedURLScheme, "my"},
+		{"absolute path", "/tmp/x.tar.gz", nil, ""},
+		{"relative path", "./rel/x.tar.gz", nil, ""},
+		{"bare name", "plain-name.tar.gz", nil, ""},
+		{"empty string", "", nil, ""},
 	}
 
 	for _, tt := range tests {
@@ -87,13 +87,13 @@ func TestValidateSource(t *testing.T) {
 
 			err := ValidateSource(tt.input)
 
-			if !tt.wantErr {
+			if tt.wantErr == nil {
 				require.NoError(t, err)
 
 				return
 			}
 
-			require.ErrorIs(t, err, ErrUnsupportedURLScheme)
+			require.ErrorIs(t, err, tt.wantErr)
 			assert.Contains(t, err.Error(), `"`+tt.wantScheme+`"`)
 		})
 	}

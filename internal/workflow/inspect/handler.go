@@ -11,10 +11,21 @@ import (
 
 type Handler struct{}
 
-func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) error {
+func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf) (err error) {
 	machineI := fleetLeaf.Machine
 
-	err := runCommonChecks(exc, machineI)
+	// Mark the metadata as populated only after the whole phase succeeds.
+	// Activate refuses to install without this signal, so a skipped or failed
+	// inspect can never be mistaken for the atomicpointer.New zero value.
+	defer func() {
+		if err == nil {
+			machineI.MetaInspect.Update(func(mi *machine.MetaInspect) {
+				mi.Inspected = true
+			})
+		}
+	}()
+
+	err = runCommonChecks(exc, machineI)
 	if err != nil {
 		return err
 	}

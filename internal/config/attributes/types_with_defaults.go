@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/goccy/go-yaml/ast"
 	"github.com/pkg/errors"
 
+	"github.com/mihakrumpestar/panix/pkg/filemode"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 )
 
@@ -102,11 +104,42 @@ func (s SudoProgram) String() string {
 
 // FileMode
 
-const (
-	FileModeDefault FileMode = 0700
-)
+const FileModeDefault FileMode = 0o700
 
+// FileMode is an octal file mode written as exactly four octal digits, for
+// example 0700 or 1777. Other spellings are rejected so there is one style.
 type FileMode os.FileMode
+
+// IsFileMode marks FileMode for schema generation: its `default` struct tag is
+// an octal mode, not a decimal integer.
+func (FileMode) IsFileMode() {}
+
+// UnmarshalYAML reads the raw YAML scalar through the AST node so the lexical
+// form survives goccy's numeric conversion: unquoted 0600 would otherwise
+// arrive as the integer 384 and be indistinguishable from a decimal value.
+func (f *FileMode) UnmarshalYAML(unmarshal func(any) error) error {
+	var node ast.Node
+
+	err := unmarshal(&node)
+	if err != nil {
+		return err
+	}
+
+	if node == nil || node.GetToken() == nil {
+		*f = 0
+
+		return nil
+	}
+
+	mode, err := filemode.Parse(node.GetToken().Value)
+	if err != nil {
+		return errors.Wrap(err, "parse file mode")
+	}
+
+	*f = FileMode(mode)
+
+	return nil
+}
 
 func (f FileMode) Get() FileMode {
 	if f == 0 {
@@ -117,5 +150,10 @@ func (f FileMode) Get() FileMode {
 }
 
 func (f FileMode) String() string {
+	return filemode.Format(uint32(f.Get()))
+}
+
+// StatString returns the unpadded octal form emitted by stat -c %a.
+func (f FileMode) StatString() string {
 	return strconv.FormatUint(uint64(f.Get()), 8)
 }

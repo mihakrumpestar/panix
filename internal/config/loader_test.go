@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/gookit/goutil/dump"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,6 +24,46 @@ func testdataPath(t *testing.T, name string) string {
 	t.Helper()
 
 	return filepath.Join("testdata", name)
+}
+
+// TestDumpDebugOmitsFleet pins that --debug dumps flags only: the fleet carries
+// secret material and must never reach stdout.
+//
+//nolint:paralleltest // mutates the process-global dump configuration
+func TestDumpDebugOmitsFleet(t *testing.T) {
+	// Not parallel: this test mutates the process-global dump configuration.
+	var out bytes.Buffer
+
+	var previous dump.Options
+
+	dump.Config(func(options *dump.Options) {
+		previous = *options
+	})
+
+	dump.Config(func(options *dump.Options) {
+		options.Output = &out
+		options.NoColor = true
+	})
+
+	t.Cleanup(func() {
+		dump.Config(func(options *dump.Options) {
+			*options = previous
+		})
+	})
+
+	conf := &Config{
+		Fleet: &fleet.Fleet{
+			Flakes: atomicorderedmap.New[string, *flake.Flake](),
+		},
+	}
+	conf.Flags.LocalMachineHostname = "flags-marker"
+	conf.Fleet.Flakes.Set("leaky", &flake.Flake{URL: "fleet-secret-marker"})
+
+	dumpDebug(conf)
+
+	rendered := out.String()
+	assert.Contains(t, rendered, "flags-marker", "the flags dump must remain")
+	assert.NotContains(t, rendered, "fleet-secret-marker", "the fleet dump must be gone")
 }
 
 func TestDecodeConfigFileMinimalValid(t *testing.T) {
@@ -419,9 +461,9 @@ func TestFileModeDefaults(t *testing.T) {
 		input attributes.FileMode
 		want  string
 	}{
-		{"zero defaults to 0700", attributes.FileMode(0), "700"},
-		{"custom value preserved", attributes.FileMode(0o755), "755"},
-		{"0o644 preserved", attributes.FileMode(0o644), "644"},
+		{"zero defaults to 0700", attributes.FileMode(0), "0700"},
+		{"custom value preserved", attributes.FileMode(0o755), "0755"},
+		{"0644 preserved", attributes.FileMode(0o644), "0644"},
 	}
 
 	for _, tt := range tests {

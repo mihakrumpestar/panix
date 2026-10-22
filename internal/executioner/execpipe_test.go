@@ -22,6 +22,8 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -302,6 +304,53 @@ func TestExecPipe_BinaryExactRoundtrip(t *testing.T) {
 	assert.Equal(t, "sh -c "+printfScript(payload), last.Command.String(), "source argv is the logged command")
 }
 
+// TestExecPipe_DisplaySourceMasksSecretCommand pins the display-only label:
+// both the CommandLog and the zerolog stream show the opaque source, never the
+// raw command argv, while execution still uses Source.
+//
+//nolint:paralleltest // mutates the process-wide zerolog logger
+func TestExecPipe_DisplaySourceMasksSecretCommand(t *testing.T) {
+	var logBuffer bytes.Buffer
+
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logBuffer)
+
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	exc, phaseLog := newLocalExecutioner(t, newLocalExecMachine(t))
+
+	const (
+		rawCommand  = "printf super-secret-command-text"
+		opaqueLabel = "command source /var/secrets/key"
+	)
+
+	destinationPath := filepath.Join(t.TempDir(), "secret.bin")
+
+	err := exc.ExecPipe(
+		"stream secret",
+		"streaming secret",
+		"secret stream failed",
+		PipeSpec{
+			Source:        []string{"sh", "-u", "-c", rawCommand},
+			DisplaySource: []string{"command source", "/var/secrets/key"},
+			Probe:         hashProbeArgv(payloadSHA256([]byte("stale content"))),
+			Write:         writeToFileScript(destinationPath),
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "super-secret-command-text", string(readTestFile(t, destinationPath)),
+		"execution must still use Source")
+
+	last, ok := phaseLog.CommandLogs.Last()
+	require.True(t, ok)
+	assert.Equal(t, opaqueLabel, last.Command.String())
+	assert.NotContains(t, last.Command.String(), rawCommand)
+	assert.NotContains(t, last.Command.String(), "sh -u")
+
+	assert.Contains(t, logBuffer.String(), opaqueLabel)
+	assert.NotContains(t, logBuffer.String(), rawCommand, "the zerolog stream must never contain the command text")
+}
+
 func TestExecPipe_SourceFailureIncludesStderr(t *testing.T) {
 	t.Parallel()
 
@@ -328,6 +377,66 @@ func TestExecPipe_SourceFailureIncludesStderr(t *testing.T) {
 	require.ErrorContains(t, err, "source-boom")
 
 	assert.NoFileExists(t, destinationPath, "incomplete source content must never reach the write")
+}
+
+// TestExecPipe_SourceFailureSkipsCleanup pins that a source that fails before
+// Write ever starts does not spend a destination command (or sudo) on cleanup.
+func TestExecPipe_SourceFailureSkipsCleanup(t *testing.T) {
+	t.Parallel()
+
+	exc, _ := newLocalExecutioner(t, newLocalExecMachine(t))
+
+	destinationPath := filepath.Join(t.TempDir(), "secret.bin")
+	cleanupMarker := filepath.Join(t.TempDir(), "cleanup-ran")
+
+	err := exc.ExecPipe(
+		"stream secret",
+		"streaming secret",
+		"secret stream failed",
+		PipeSpec{
+			Source: []string{"sh", "-c", "printf partial; printf 'source-boom' >&2; exit 3"},
+			Probe:  hashProbeArgv(payloadSHA256([]byte("stale content"))),
+			Write:  writeToFileScript(destinationPath),
+			Cleanup: []string{
+				"sh", "-c", `printf cleaned > "$1"`, "--", cleanupMarker,
+			},
+		},
+	)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "source command failed")
+
+	assert.NoFileExists(t, destinationPath)
+	assert.NoFileExists(t, cleanupMarker, "a source failure before Write must not run Cleanup")
+}
+
+// TestExecPipe_ProbeMatchSkipsCleanup pins that an unchanged destination skips
+// both the write and the now-pointless cleanup command.
+func TestExecPipe_ProbeMatchSkipsCleanup(t *testing.T) {
+	t.Parallel()
+
+	exc, _ := newLocalExecutioner(t, newLocalExecMachine(t))
+
+	payload := []byte("unchanged")
+	destinationPath := filepath.Join(t.TempDir(), "secret.bin")
+	cleanupMarker := filepath.Join(t.TempDir(), "cleanup-ran")
+
+	err := exc.ExecPipe(
+		"stream secret",
+		"streaming secret",
+		"secret stream failed",
+		PipeSpec{
+			Source: []string{"sh", "-c", printfScript(payload)},
+			Probe:  hashProbeArgv(payloadSHA256(payload)),
+			Write:  writeToFileScript(destinationPath),
+			Cleanup: []string{
+				"sh", "-c", `printf cleaned > "$1"`, "--", cleanupMarker,
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, destinationPath, "a matching probe must skip the write")
+	assert.NoFileExists(t, cleanupMarker, "a matching probe must not run Cleanup")
 }
 
 func TestExecPipe_DestinationFailurePropagates(t *testing.T) {

@@ -409,15 +409,19 @@ func TestAppendSanitizedLine(t *testing.T) {
 		{"strips nested markers", open + open + "xy" + closeMarker + closeMarker, "xy"},
 		{"marker and CR mixed", open + "a\rb" + closeMarker, "ab"},
 		{"preserves SGR", "\x1b[31mred\x1b[0m", "\x1b[31mred\x1b[0m"},
-		{"preserves non-zone CSI", "\x1b[38;2;1;2;3m", "\x1b[38;2;1;2;3m"},
-		{"preserves truncated CSI", "\x1b[123", "\x1b[123"},
-		// The legacy (pre-fix) close form is not a valid marker; child
-		// content carrying it passes through untouched.
-		{"preserves legacy close form", "\x1b[/42z", "\x1b[/42z"},
+		{"preserves non-zone SGR", "\x1b[38;2;1;2;3m", "\x1b[38;2;1;2;3m"},
+		{"strips truncated CSI", "\x1b[123", ""},
+		// The legacy (pre-fix) close form is not a valid marker; the
+		// final frame guard strips it as a non-SGR CSI.
+		{"strips legacy close form", "\x1b[/42z", ""},
 		// Deliberate drop: digits-z CSI is not a standard command, and
 		// strict parsers would print it as text.
 		{"strips foreign digits-z CSI", "x\x1b[999zy", "xy"},
 		{"strips foreign digits-slash-z CSI", "x\x1b[999/zy", "xy"},
+		{"strips OSC 52", "a\x1b]52;c;c2VjcmV0\x07b", "ab"},
+		{"strips OSC 8", "a\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\b", "alinkb"},
+		{"strips DCS", "a\x1bPpayload\x1b\\b", "ab"},
+		{"strips cursor and erase CSI", "a\x1b[2J\x1b[1;1H\x1b[Kb", "ab"},
 	}
 
 	for _, tt := range tests {

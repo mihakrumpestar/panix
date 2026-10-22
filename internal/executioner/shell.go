@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -163,7 +164,7 @@ func validateExecOptions(excOpt *ExecOptions) error {
 func consolidateErrors(waitErr, readErr error) error {
 	switch {
 	case waitErr != nil && readErr != nil:
-		return errors.Wrapf(ErrWaitAndReadError, "wait=%v, read=%v", waitErr, readErr)
+		return fmt.Errorf("%w: wait=%w, read=%w", ErrWaitAndReadError, waitErr, readErr) //nolint:forbidigo // multiple %w preserves context.Canceled
 	case readErr != nil:
 		return readErr
 	default:

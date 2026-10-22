@@ -2,6 +2,7 @@ package zeroterm
 
 import (
 	"github.com/mihakrumpestar/panix/pkg/buffer"
+	"github.com/mihakrumpestar/panix/pkg/tui/style"
 )
 
 // RenderLines emits terminal bytes for changed lines. Returns the output
@@ -50,15 +51,18 @@ func RenderLines(buf []byte, diffs []int, cur *buffer.LinesBufDiff, prevLineCoun
 	return buf
 }
 
-// appendSanitizedLine appends line to buf with \r bytes and internal
-// zone hit-test markers removed, copying runs between stripped bytes.
+// appendSanitizedLine appends line to buf after stripping \r bytes, internal
+// zone hit-test markers, and every terminal control sequence except SGR.
 //
 // lipgloss and ANSI renderers may emit \r within a "line" (e.g. for
 // cursor repositioning within a styled region). Zone markers are
 // panix-internal state for mouse hit-testing (ZoneIDAtCol) and must
 // never reach the physical terminal: terminal parsers disagree on
 // unknown or malformed CSI sequences, and some print them as literal
-// text, corrupting the layout.
+// text, corrupting the layout. They are detected and skipped here (the
+// shared sanitizer would treat them as non-SGR CSI) while every text run
+// is passed through style.SanitizeTerminalOutput, the same filter used at
+// the target-output boundary.
 func appendSanitizedLine(buf []byte, line []byte) []byte {
 	start := 0
 
@@ -66,7 +70,7 @@ func appendSanitizedLine(buf []byte, line []byte) []byte {
 		byteI := line[pos]
 
 		if byteI == '\r' {
-			buf = append(buf, line[start:pos]...)
+			buf = style.SanitizeTerminalOutput(buf, line[start:pos])
 			start = pos + 1
 			pos++
 
@@ -75,7 +79,7 @@ func appendSanitizedLine(buf []byte, line []byte) []byte {
 
 		if byteI == '\x1b' && pos+1 < len(line) && line[pos+1] == '[' {
 			if end, _, _, ok := parseZoneBody(line, pos+2); ok {
-				buf = append(buf, line[start:pos]...)
+				buf = style.SanitizeTerminalOutput(buf, line[start:pos])
 				start = end
 				pos = end
 
@@ -86,5 +90,5 @@ func appendSanitizedLine(buf []byte, line []byte) []byte {
 		pos++
 	}
 
-	return append(buf, line[start:]...)
+	return style.SanitizeTerminalOutput(buf, line[start:])
 }

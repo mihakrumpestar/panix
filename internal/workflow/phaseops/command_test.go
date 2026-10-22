@@ -1,8 +1,10 @@
 package phaseops
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,28 +76,45 @@ func assertCommandTestMode(t *testing.T, path string, want os.FileMode) {
 	assert.Equal(t, want, info.Mode().Perm())
 }
 
-// TestTransferCommandScript pins the exact destination script: step order, the
-// configured ownership and mode, and shellquoting of space and quote bearing
-// paths.
-func TestTransferCommandScript(t *testing.T) {
-	t.Parallel()
+type transferCommandScriptCase struct {
+	name    string
+	staging string
+	source  attributes.TransferSource
+	want    string
+}
 
+//nolint:funlen // table fixture
+func transferCommandScriptCases() []transferCommandScriptCase {
 	uid := uint(1000)
 	gid := uint(100)
 
-	tests := []struct {
-		name   string
-		source attributes.TransferSource
-		want   string
-	}{
+	return []transferCommandScriptCase{
 		{
-			name:   "no ownership defaults to 0700",
-			source: attributes.TransferSource{RemotePath: "/var/secrets/key"},
+			name:    "no ownership defaults to 0700",
+			staging: "/var/secrets/.panix-secret.key.suffix.tmp",
+			source:  attributes.TransferSource{RemotePath: "/var/secrets/key"},
 			want: "set -e\numask 077\nmkdir -p -- '/var/secrets'\n" +
-				"cat > '/var/secrets/key'\nchmod 700 -- '/var/secrets/key'\n",
+				"if [ -L '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to write through symlink: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -d '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to write to directory: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"tmp='/var/secrets/.panix-secret.key.suffix.tmp'\n" +
+				"rm -f -- \"$tmp\"\n" +
+				"set -C\n" +
+				"cat > \"$tmp\"\n" +
+				"if [ ! -f \"$tmp\" ] || [ -L \"$tmp\" ]; then\n" +
+				"  echo 'refusing non-regular staged file: /var/secrets/.panix-secret.key.suffix.tmp' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"chmod -h 0700 -- \"$tmp\"\n",
 		},
 		{
-			name: "uid and gid chown between cat and chmod",
+			name:    "uid and gid chown between cat and chmod",
+			staging: "/var/secrets/.panix-secret.key.suffix.tmp",
 			source: attributes.TransferSource{
 				RemotePath:  "/var/secrets/key",
 				UID:         &uid,
@@ -103,21 +122,62 @@ func TestTransferCommandScript(t *testing.T) {
 				Permissions: attributes.FileMode(0o640),
 			},
 			want: "set -e\numask 077\nmkdir -p -- '/var/secrets'\n" +
-				"cat > '/var/secrets/key'\nchown 1000:100 -- '/var/secrets/key'\nchmod 640 -- '/var/secrets/key'\n",
+				"if [ -L '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to write through symlink: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -d '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to write to directory: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"tmp='/var/secrets/.panix-secret.key.suffix.tmp'\n" +
+				"rm -f -- \"$tmp\"\n" +
+				"set -C\n" +
+				"cat > \"$tmp\"\n" +
+				"if [ ! -f \"$tmp\" ] || [ -L \"$tmp\" ]; then\n" +
+				"  echo 'refusing non-regular staged file: /var/secrets/.panix-secret.key.suffix.tmp' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"chown -h 1000:100 -- \"$tmp\"\n" +
+				"chmod -h 0640 -- \"$tmp\"\n",
 		},
 		{
-			name:   "spaces and single quotes stay one shell word",
-			source: attributes.TransferSource{RemotePath: "/var/my secrets/it's a key"},
+			name:    "spaces and single quotes stay one shell word",
+			staging: "/var/my secrets/.panix-secret.it's a key.suffix.tmp",
+			source:  attributes.TransferSource{RemotePath: "/var/my secrets/it's a key"},
 			want: "set -e\numask 077\nmkdir -p -- '/var/my secrets'\n" +
-				"cat > '/var/my secrets/it'\\''s a key'\nchmod 700 -- '/var/my secrets/it'\\''s a key'\n",
+				"if [ -L " + quotedTrickyPath + " ]; then\n" +
+				"  echo 'refusing to write through symlink: /var/my secrets/it'\\''s a key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -d " + quotedTrickyPath + " ]; then\n" +
+				"  echo 'refusing to write to directory: /var/my secrets/it'\\''s a key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"tmp=" + quotedTrickyTemp + "\n" +
+				"rm -f -- \"$tmp\"\n" +
+				"set -C\n" +
+				"cat > \"$tmp\"\n" +
+				"if [ ! -f \"$tmp\" ] || [ -L \"$tmp\" ]; then\n" +
+				"  echo 'refusing non-regular staged file: /var/my secrets/.panix-secret.it'\\''s a key.suffix.tmp' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"chmod -h 0700 -- \"$tmp\"\n",
 		},
 	}
+}
 
-	for _, tt := range tests {
+// TestTransferCommandScript pins the exact destination script: step order, the
+// configured ownership and mode, noclobber staging, the post-write regular-file
+// check, and shellquoting of space and quote bearing paths.
+func TestTransferCommandScript(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range transferCommandScriptCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, transferCommandScript(tt.source.RemotePath, tt.source))
+			assert.Equal(t, tt.want, transferCommandScript(tt.source.RemotePath, tt.staging, tt.source))
 		})
 	}
 }
@@ -126,26 +186,35 @@ func TestTransferCommandScript(t *testing.T) {
 // and a single quote stay one literal shell word.
 const quotedTrickyPath = `'/var/my secrets/it'\''s a key'`
 
-// TestTransferCommandProbeScript pins the exact probe script: enforcement of
-// mode (and owner when set) on the existing target, the sha256sum output, the
-// optional owner line and shellquoting.
-func TestTransferCommandProbeScript(t *testing.T) {
-	t.Parallel()
+// quotedTrickyTemp is the matching staging path quote.
+const quotedTrickyTemp = `'/var/my secrets/.panix-secret.it'\''s a key.suffix.tmp'`
 
+type transferCommandProbeScriptCase struct {
+	name   string
+	source attributes.TransferSource
+	want   string
+}
+
+//nolint:funlen // table fixture
+func transferCommandProbeScriptCases() []transferCommandProbeScriptCase {
 	uid := uint(1000)
 	gid := uint(100)
 
-	tests := []struct {
-		name   string
-		source attributes.TransferSource
-		want   string
-	}{
+	return []transferCommandProbeScriptCase{
 		{
 			name:   "no ownership enforces the default mode only",
 			source: attributes.TransferSource{RemotePath: "/var/secrets/key"},
 			want: "set -e\n" +
-				"if [ -e '/var/secrets/key' ]; then\n" +
-				"  [ \"$(stat -c '%a' -- '/var/secrets/key')\" = '700' ] || chmod '700' -- '/var/secrets/key'\n" +
+				"if [ -L '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to read through symlink: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -d '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to read directory: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -f '/var/secrets/key' ] && [ ! -L '/var/secrets/key' ]; then\n" +
+				"  [ \"$(stat -c '%a' -- '/var/secrets/key')\" = '700' ] || exit 0\n" +
 				"  sha256sum -- '/var/secrets/key'\n" +
 				"fi\n",
 		},
@@ -158,9 +227,17 @@ func TestTransferCommandProbeScript(t *testing.T) {
 				Permissions: attributes.FileMode(0o640),
 			},
 			want: "set -e\n" +
-				"if [ -e '/var/secrets/key' ]; then\n" +
-				"  [ \"$(stat -c '%u:%g' -- '/var/secrets/key')\" = '1000:100' ] || chown '1000:100' -- '/var/secrets/key'\n" +
-				"  [ \"$(stat -c '%a' -- '/var/secrets/key')\" = '640' ] || chmod '640' -- '/var/secrets/key'\n" +
+				"if [ -L '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to read through symlink: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -d '/var/secrets/key' ]; then\n" +
+				"  echo 'refusing to read directory: /var/secrets/key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -f '/var/secrets/key' ] && [ ! -L '/var/secrets/key' ]; then\n" +
+				"  [ \"$(stat -c '%u:%g' -- '/var/secrets/key')\" = '1000:100' ] || exit 0\n" +
+				"  [ \"$(stat -c '%a' -- '/var/secrets/key')\" = '640' ] || exit 0\n" +
 				"  sha256sum -- '/var/secrets/key'\n" +
 				"fi\n",
 		},
@@ -168,20 +245,152 @@ func TestTransferCommandProbeScript(t *testing.T) {
 			name:   "spaces and single quotes stay one shell word",
 			source: attributes.TransferSource{RemotePath: "/var/my secrets/it's a key"},
 			want: "set -e\n" +
-				"if [ -e " + quotedTrickyPath + " ]; then\n" +
-				"  [ \"$(stat -c '%a' -- " + quotedTrickyPath + ")\" = '700' ] || chmod '700' -- " + quotedTrickyPath + "\n" +
+				"if [ -L " + quotedTrickyPath + " ]; then\n" +
+				"  echo 'refusing to read through symlink: /var/my secrets/it'\\''s a key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -d " + quotedTrickyPath + " ]; then\n" +
+				"  echo 'refusing to read directory: /var/my secrets/it'\\''s a key' >&2\n" +
+				"  exit 1\n" +
+				"fi\n" +
+				"if [ -f " + quotedTrickyPath + " ] && [ ! -L " + quotedTrickyPath + " ]; then\n" +
+				"  [ \"$(stat -c '%a' -- " + quotedTrickyPath + ")\" = '700' ] || exit 0\n" +
 				"  sha256sum -- " + quotedTrickyPath + "\n" +
 				"fi\n",
 		},
 	}
+}
 
-	for _, tt := range tests {
+// TestTransferCommandProbeScript pins the exact read-only probe script: symlink
+// and directory rejection, the owner/mode gates that print nothing on mismatch,
+// the sha256sum output, and shellquoting.
+func TestTransferCommandProbeScript(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range transferCommandProbeScriptCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tt.want, transferCommandProbeScript(tt.source.RemotePath, tt.source))
 		})
 	}
+}
+
+// TestTransferCommandCommitAndCleanupScript pins the commit script's atomic
+// rename, the GNU -T feature probe with its portable fallback, and the cleanup
+// script's per-spec staging path.
+func TestTransferCommandCommitAndCleanupScript(t *testing.T) {
+	t.Parallel()
+
+	const staging = "/var/secrets/.panix-secret.key.suffix.tmp"
+
+	wantCommit := "set -e\n" +
+		"tmp='" + staging + "'\n" +
+		"trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM\n" +
+		"if [ -L '/var/secrets/key' ]; then\n" +
+		"  echo 'refusing to replace symlink: /var/secrets/key' >&2\n" +
+		"  exit 1\n" +
+		"fi\n" +
+		"if [ -d '/var/secrets/key' ]; then\n" +
+		"  echo 'refusing to replace directory: /var/secrets/key' >&2\n" +
+		"  exit 1\n" +
+		"fi\n" +
+		"case \"$(mv --help 2>&1 || true)\" in\n" +
+		"  *-T*)\n" +
+		"    mv -T -- \"$tmp\" '/var/secrets/key'\n" +
+		"    ;;\n" +
+		"  *)\n" +
+		"    mv -f -- \"$tmp\" '/var/secrets/key'\n" +
+		"    ;;\n" +
+		"esac\n" +
+		"trap - EXIT HUP INT TERM\n"
+
+	assert.Equal(t, wantCommit, transferCommandCommitScript("/var/secrets/key", staging))
+	assert.Equal(t, "rm -f -- '"+staging+"'\n", transferCommandCleanupScript(staging))
+}
+
+// stagingPathFromScript extracts the shell-quoted tmp= assignment from a
+// rendered write or commit script. Scripts under test only use simple paths.
+func stagingPathFromScript(t *testing.T, script string) string {
+	t.Helper()
+
+	const prefix = "tmp='"
+
+	start := strings.Index(script, prefix)
+	require.NotEqual(t, -1, start, "script must assign tmp")
+
+	rest := script[start+len(prefix):]
+
+	end := strings.Index(rest, "'\n")
+	require.NotEqual(t, -1, end, "tmp assignment must be shell-quoted")
+
+	return rest[:end]
+}
+
+// runTransferCommandProbeScript runs a probe script directly, returning stdout
+// and the process error for assertions.
+func runTransferCommandProbeScript(t *testing.T, script string) (string, error) {
+	t.Helper()
+
+	output, err := exec.CommandContext(t.Context(), "sh", "-c", script).Output() //nolint:gosec // script is the unit under test
+	if err != nil {
+		return string(output), err
+	}
+
+	return string(output), nil
+}
+
+// TestTransferCommandProbeScript_IsReadOnly pins that a metadata mismatch
+// prints no hash and leaves the destination's content, mode and mtime intact:
+// repair belongs to the write+commit path.
+func TestTransferCommandProbeScript_IsReadOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key")
+	payload := []byte("existing-secret")
+	require.NoError(t, os.WriteFile(path, payload, 0o644)) //nolint:gosec // intentionally loose mode under test
+
+	backdated := time.Now().Add(-time.Hour).Truncate(time.Second)
+	require.NoError(t, os.Chtimes(path, backdated, backdated))
+
+	source := attributes.TransferSource{RemotePath: path, Permissions: attributes.FileMode(0o600)}
+
+	output, err := runTransferCommandProbeScript(t, transferCommandProbeScript(path, source))
+	require.NoError(t, err)
+	assert.Empty(t, output, "a metadata mismatch must print no hash so the write+commit repairs it")
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "the probe must not chmod the destination")
+	assert.Equal(t, backdated, info.ModTime(), "the probe must not touch the destination")
+	assert.Equal(t, payload, readCommandTestFile(t, path))
+}
+
+// TestTransferCommandProbeScript_RejectsSymlink pins that a symlink is rejected
+// before any stat/sha256sum, so the target is never read or modified even when
+// its metadata would otherwise match.
+func TestTransferCommandProbeScript_RejectsSymlink(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	payload := []byte("keep me")
+	require.NoError(t, os.WriteFile(victim, payload, 0o600))
+
+	destination := filepath.Join(dir, "key")
+	require.NoError(t, os.Symlink(victim, destination))
+
+	source := attributes.TransferSource{RemotePath: destination, Permissions: attributes.FileMode(0o600)}
+
+	output, err := runTransferCommandProbeScript(t, transferCommandProbeScript(destination, source))
+	require.Error(t, err)
+	assert.Empty(t, output, "a symlink must never be followed or hashed")
+
+	info, err := os.Stat(victim)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, payload, readCommandTestFile(t, victim))
 }
 
 // TestTransferCommandPipeSpecElevation pins elevation on the destination
@@ -210,9 +419,46 @@ func TestTransferCommandPipeSpecElevation(t *testing.T) {
 			assert.Equal(t, []string{"sh", "-u", "-c", "printf secret"}, plan.Source)
 
 			script := assertShScriptArgv(t, plan.Write, tt.wantSudo)
-			assert.Contains(t, script, "cat > '/var/secrets/key'")
+			staging := stagingPathFromScript(t, script)
+
+			assert.Contains(t, staging, "/var/secrets/.panix-secret.key.")
+			assert.True(t, strings.HasSuffix(staging, ".tmp"), "staging path must keep the tmp suffix")
+			assert.Contains(t, script, "set -C")
+			assert.Contains(t, script, "chmod -h 0700 -- \"$tmp\"")
+			assert.NotContains(t, script, "mv -f", "the write stages only; commit renames")
+
+			commitScript := assertShScriptArgv(t, plan.Commit, tt.wantSudo)
+			assert.Contains(t, commitScript, "tmp='"+staging+"'")
+			assert.Contains(t, commitScript, "mv -T -- \"$tmp\" '/var/secrets/key'")
+			assert.Contains(t, commitScript, "mv -f -- \"$tmp\" '/var/secrets/key'")
+
+			cleanupScript := assertShScriptArgv(t, plan.Cleanup, tt.wantSudo)
+			assert.Equal(t, "rm -f -- '"+staging+"'\n", cleanupScript)
 		})
 	}
+}
+
+// TestTransferCommandPipeSpec_UniqueStagingPath pins that every PipeSpec gets
+// its own staging name while Write, Commit and Cleanup within one spec agree.
+func TestTransferCommandPipeSpec_UniqueStagingPath(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	source := attributes.TransferSource{Command: "printf secret", RemotePath: "/var/secrets/key"}
+
+	first := transferCommandPipeSpec(mach, source, false)
+	second := transferCommandPipeSpec(mach, source, false)
+
+	firstStaging := stagingPathFromScript(t, assertShScriptArgv(t, first.Write, false))
+	secondStaging := stagingPathFromScript(t, assertShScriptArgv(t, second.Write, false))
+
+	assert.NotEqual(t, firstStaging, secondStaging,
+		"two transfers to the same destination must not share a staging path")
+
+	assert.Contains(t, assertShScriptArgv(t, first.Commit, false), "tmp='"+firstStaging+"'")
+	assert.Equal(t, "rm -f -- '"+firstStaging+"'\n", assertShScriptArgv(t, first.Cleanup, false))
+	assert.Contains(t, assertShScriptArgv(t, second.Commit, false), "tmp='"+secondStaging+"'")
+	assert.Equal(t, "rm -f -- '"+secondStaging+"'\n", assertShScriptArgv(t, second.Cleanup, false))
 }
 
 // TestTransferCommandPipeSpecBootstrapping pins the /mnt prefix on the
@@ -232,24 +478,24 @@ func TestTransferCommandPipeSpecBootstrapping(t *testing.T) {
 		{
 			name:            "nixos-bootstrapped content gets the bootstrapping prefix",
 			bootstrapsNixOS: true,
-			wantScript:      "cat > '/mnt/var/secrets/key'",
+			wantScript:      "mv -T -- \"$tmp\" '/mnt/var/secrets/key'",
 		},
 		{
 			name:            "nixos-bootstrapped content drops the prefix once bootstrapped",
 			bootstrapped:    true,
 			bootstrapsNixOS: true,
-			wantScript:      "cat > '/var/secrets/key'",
+			wantScript:      "mv -T -- \"$tmp\" '/var/secrets/key'",
 			wantNoScript:    "/mnt",
 		},
 		{
 			name:         "staging transfers never get the prefix",
-			wantScript:   "cat > '/var/secrets/key'",
+			wantScript:   "mv -T -- \"$tmp\" '/var/secrets/key'",
 			wantNoScript: "/mnt",
 		},
 		{
 			name:            "non-NixOS bootstrap modes never get the prefix",
 			bootstrapsNixOS: false,
-			wantScript:      "cat > '/var/secrets/key'",
+			wantScript:      "mv -T -- \"$tmp\" '/var/secrets/key'",
 			wantNoScript:    "/mnt",
 		},
 	}
@@ -264,7 +510,7 @@ func TestTransferCommandPipeSpecBootstrapping(t *testing.T) {
 			source := attributes.TransferSource{Command: "printf secret", RemotePath: "/var/secrets/key"}
 			plan := transferCommandPipeSpec(mach, source, tt.bootstrapsNixOS)
 
-			script := assertShScriptArgv(t, plan.Write, false)
+			script := assertShScriptArgv(t, plan.Commit, false)
 			assert.Contains(t, script, tt.wantScript)
 
 			if tt.wantNoScript != "" {
@@ -472,11 +718,13 @@ func TestTransferCommand_ConditionalWrite(t *testing.T) {
 	assert.Equal(t, payloadA, readCommandTestFile(t, destination))
 	assert.Equal(t, backdated, commandTestModTime(t, destination), "unchanged content must keep the mtime")
 
-	// Metadata-only change: no content rewrite, but the mode is enforced.
+	// Metadata-only change: the read-only probe prints no hash, so the
+	// write+commit path repairs the metadata.
 	source.Permissions = attributes.FileMode(0o640)
 	require.NoError(t, TransferCommand(exc, mach, source, "secrets", false))
 	assert.Equal(t, payloadA, readCommandTestFile(t, destination))
-	assert.Equal(t, backdated, commandTestModTime(t, destination), "metadata enforcement must not rewrite the file")
+	assert.True(t, commandTestModTime(t, destination).After(backdated),
+		"a metadata mismatch must be repaired by the write+commit path")
 	assertCommandTestMode(t, destination, 0o640)
 
 	// Changed content: the file is rewritten and keeps the enforced mode.
@@ -487,8 +735,241 @@ func TestTransferCommand_ConditionalWrite(t *testing.T) {
 	assertCommandTestMode(t, destination, 0o640)
 }
 
+// TestTransferCommand_RefusesSymlinkDestination pins that a symlink planted at
+// the destination is rejected by both the probe and the write script, so the
+// file it points at is never clobbered.
+func TestTransferCommand_RefusesSymlinkDestination(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim")
+	require.NoError(t, os.WriteFile(victim, []byte("keep me"), 0o600))
+
+	destination := filepath.Join(dir, "secret.bin")
+	require.NoError(t, os.Symlink(victim, destination))
+
+	source := attributes.TransferSource{
+		Command:     "printf replacement",
+		RemotePath:  destination,
+		Permissions: attributes.FileMode(0o600),
+	}
+
+	err := TransferCommand(exc, mach, source, "secrets", false)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "symlink")
+
+	assert.Equal(t, []byte("keep me"), readCommandTestFile(t, victim),
+		"the symlink target must never be written")
+	assertCommandTestMode(t, victim, 0o600)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 2, "the refused transfer must not leave a temp file behind")
+}
+
+// TestTransferCommand_CleansTempFileOnFailure pins the trap: a failure after
+// the payload is written removes the temp file and never creates the final
+// destination. An impossible numeric owner makes the failure deterministic.
+func TestTransferCommand_CleansTempFileOnFailure(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "secret.bin")
+	invalid := uint(4294967295)
+
+	source := attributes.TransferSource{
+		Command:    "printf secret",
+		RemotePath: destination,
+		UID:        &invalid,
+		GID:        &invalid,
+	}
+
+	err := TransferCommand(exc, mach, source, "secrets", false)
+	require.Error(t, err)
+
+	_, err = os.Stat(destination)
+	require.ErrorIs(t, err, os.ErrNotExist, "a failed transfer must not leave a final file")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the trap must remove the temp file")
+}
+
+// TestTransferCommand_StreamedPayloadLandsAtomically covers the >4 MiB stream
+// path: the payload still lands byte for byte, with the final mode, and only
+// the destination remains in the directory.
+func TestTransferCommand_StreamedPayloadLandsAtomically(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	const streamSize = (4 << 20) + 1024
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "secret.bin")
+
+	source := attributes.TransferSource{
+		Command:     fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'A'", streamSize),
+		RemotePath:  destination,
+		Permissions: attributes.FileMode(0o600),
+	}
+
+	require.NoError(t, TransferCommand(exc, mach, source, "secrets", false))
+
+	assert.Equal(t, bytes.Repeat([]byte("A"), streamSize), readCommandTestFile(t, destination))
+	assertCommandTestMode(t, destination, 0o600)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "the streamed write must leave only the final file")
+}
+
+// TestTransferCommand_StreamFailureLeavesNoPartialFile pins that the streamed
+// path also lands in the temp file: a post-stream failure leaves neither a
+// partial final file nor a temp file.
+func TestTransferCommand_StreamFailureLeavesNoPartialFile(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	const streamSize = (4 << 20) + 1024
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "secret.bin")
+	invalid := uint(4294967295)
+
+	source := attributes.TransferSource{
+		Command:    fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'A'", streamSize),
+		RemotePath: destination,
+		UID:        &invalid,
+		GID:        &invalid,
+	}
+
+	err := TransferCommand(exc, mach, source, "secrets", false)
+	require.Error(t, err)
+
+	_, err = os.Stat(destination)
+	require.ErrorIs(t, err, os.ErrNotExist, "the streamed write must not land a partial final file")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the trap must remove the streamed temp file")
+}
+
+// TestTransferCommand_RefusesDirectoryDestination pins that a directory at the
+// destination is rejected instead of having the secret moved inside it, and no
+// staged file remains.
+func TestTransferCommand_RefusesDirectoryDestination(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "secret.bin")
+	require.NoError(t, os.Mkdir(destination, 0o700))
+
+	source := attributes.TransferSource{
+		Command:     "printf secret",
+		RemotePath:  destination,
+		Permissions: attributes.FileMode(0o600),
+	}
+
+	err := TransferCommand(exc, mach, source, "secrets", false)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "directory")
+
+	entries, err := os.ReadDir(destination)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the secret must not be moved inside the directory")
+
+	assertNoStagedTransferFiles(t, dir)
+}
+
+// TestTransferCommand_RefusesSymlinkToDirectoryDestination pins that a symlink
+// to a directory is rejected and nothing lands inside the target directory.
+func TestTransferCommand_RefusesSymlinkToDirectoryDestination(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	dir := t.TempDir()
+	targetDir := filepath.Join(dir, "target")
+	require.NoError(t, os.Mkdir(targetDir, 0o700))
+
+	destination := filepath.Join(dir, "secret.bin")
+	require.NoError(t, os.Symlink(targetDir, destination))
+
+	source := attributes.TransferSource{
+		Command:     "printf secret",
+		RemotePath:  destination,
+		Permissions: attributes.FileMode(0o600),
+	}
+
+	err := TransferCommand(exc, mach, source, "secrets", false)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "symlink")
+
+	entries, err := os.ReadDir(targetDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the symlinked directory must stay empty")
+
+	assertNoStagedTransferFiles(t, dir)
+}
+
+// TestTransferCommand_StreamedSourceFailureLeavesNothing pins the >4 MiB path:
+// a source that emits its payload and then fails must not leave a partial file
+// at the destination or a staged file behind.
+func TestTransferCommand_StreamedSourceFailureLeavesNothing(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := realExecutionerFor(t, mach)
+
+	const streamSize = (4 << 20) + 1024
+
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "secret.bin")
+
+	source := attributes.TransferSource{
+		Command:     fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'A'; exit 9", streamSize),
+		RemotePath:  destination,
+		Permissions: attributes.FileMode(0o600),
+	}
+
+	err := TransferCommand(exc, mach, source, "secrets", false)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "source command failed")
+	require.ErrorContains(t, err, "exit status 9")
+
+	assert.NoFileExists(t, destination, "a failed source must never commit the staged payload")
+	assertNoStagedTransferFiles(t, dir)
+}
+
+// assertNoStagedTransferFiles pins that no per-spec staging file survived.
+func assertNoStagedTransferFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+
+	for _, entry := range entries {
+		assert.NotContains(t, entry.Name(), ".panix-secret.",
+			"a failed transfer must remove its staged file")
+	}
+}
+
 // TestTransferCommand_DryRunRecordsSourceAndSkipsExecution pins that dry-run
-// records the source command and starts neither process.
+// records an opaque label and starts neither process.
 func TestTransferCommand_DryRunRecordsSourceAndSkipsExecution(t *testing.T) {
 	t.Parallel()
 
@@ -500,10 +981,183 @@ func TestTransferCommand_DryRunRecordsSourceAndSkipsExecution(t *testing.T) {
 
 	require.NoError(t, TransferCommand(exc, mach, source, "secrets", false))
 
-	assert.Equal(t, "sh -u -c printf secret", testutil.LastCommandLine(t, phaseLog))
+	line := testutil.LastCommandLine(t, phaseLog)
+	assert.Equal(t, "command source "+destination, line)
+	assert.NotContains(t, line, "printf secret")
+	assert.NotContains(t, line, "sh -u")
 
 	_, err := os.Stat(destination)
 	require.ErrorIs(t, err, os.ErrNotExist, "dry run must not start the destination")
+}
+
+// TestTransferCommand_StagingSymlinkNeverWritesVictim simulates an attacker
+// winning the window between the stale rm and the write redirection. The rm
+// wrapper plants the hostile entry after removing the stale path, so the real
+// TransferCommand pipeline runs with a symlink already at the staging path;
+// noclobber must fail closed and the victim must never receive the payload.
+func TestTransferCommand_StagingSymlinkNeverWritesVictim(t *testing.T) {
+	tests := []struct {
+		name  string
+		plant string
+	}{
+		{name: "symlink to victim", plant: `ln -s "$PANIX_TEST_VICTIM" "$last"`},
+		{name: "symlink loop", plant: `ln -s "$last" "$last"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mach := newLocalTransferMachine(t, true)
+			exc, _ := realExecutionerFor(t, mach)
+
+			dir := t.TempDir()
+			victim := filepath.Join(dir, "victim")
+			require.NoError(t, os.WriteFile(victim, []byte("keep me"), 0o600))
+
+			destination := filepath.Join(dir, "secret.bin")
+
+			binDir := t.TempDir()
+			rmStub := filepath.Join(binDir, "rm")
+			rmPath, err := exec.LookPath("rm")
+			require.NoError(t, err)
+
+			wrapper := "#!/bin/sh\n" +
+				"last=\n" +
+				"for arg do last=$arg; done\n" +
+				"'" + rmPath + "' -f -- \"$last\"\n" +
+				"if [ ! -e \"$PANIX_TEST_RM_MARKER\" ]; then\n" +
+				"  : > \"$PANIX_TEST_RM_MARKER\"\n" +
+				"  " + tt.plant + "\n" +
+				"fi\n" +
+				"exit 0\n"
+			//nolint:gosec // the stub must be executable to be found on PATH
+			require.NoError(t, os.WriteFile(rmStub, []byte(wrapper), 0o700))
+
+			t.Setenv("PANIX_TEST_VICTIM", victim)
+			t.Setenv("PANIX_TEST_RM_MARKER", filepath.Join(binDir, "planted"))
+			t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+			source := attributes.TransferSource{
+				Command:     "printf 'PANIX-PAYLOAD'",
+				RemotePath:  destination,
+				Permissions: attributes.FileMode(0o600),
+			}
+
+			err = transferCommandWithStagingSuffix(exc, mach, source, "secrets", false, "race")
+			require.Error(t, err, "a planted staging symlink must fail the write closed")
+
+			assert.Equal(t, []byte("keep me"), readCommandTestFile(t, victim),
+				"the victim must never receive the payload")
+			assert.NoFileExists(t, destination)
+			assertNoStagedTransferFiles(t, dir)
+		})
+	}
+}
+
+// TestTransferCommand_CommitNeverMovesIntoSymlinkToDirectory carries the race
+// past the commit script's -L check: an mv wrapper plants a symlink-to-directory
+// at the destination immediately before the real mv runs. GNU mv -T must replace
+// the symlink instead of moving the payload inside the directory it points at.
+func TestTransferCommand_CommitNeverMovesIntoSymlinkToDirectory(t *testing.T) {
+	mvPath, err := exec.LookPath("mv")
+	require.NoError(t, err)
+
+	help, err := exec.CommandContext(t.Context(), mvPath, "--help").CombinedOutput() //nolint:gosec // mvPath comes from LookPath
+	if err != nil || !strings.Contains(string(help), "-T") {
+		t.Skip("mv -T is not supported on this platform")
+	}
+
+	dir := t.TempDir()
+	targetDir := filepath.Join(dir, "target")
+	require.NoError(t, os.Mkdir(targetDir, 0o700))
+
+	destination := filepath.Join(dir, "secret.bin")
+	staging := transferCommandTempPath(destination, "race")
+	require.NoError(t, os.WriteFile(staging, []byte("PANIX-PAYLOAD"), 0o600))
+
+	binDir := t.TempDir()
+	mvStub := filepath.Join(binDir, "mv")
+	wrapper := "#!/bin/sh\n" +
+		"case \" $* \" in\n" +
+		"  *\" --help \"*) exec '" + mvPath + "' \"$@\";;\n" +
+		"esac\n" +
+		"if [ ! -e \"$PANIX_TEST_DEST\" ] && [ ! -L \"$PANIX_TEST_DEST\" ]; then\n" +
+		"  ln -s \"$PANIX_TEST_TARGET\" \"$PANIX_TEST_DEST\"\n" +
+		"fi\n" +
+		"exec '" + mvPath + "' \"$@\"\n"
+	//nolint:gosec // the stub must be executable to be found on PATH
+	require.NoError(t, os.WriteFile(mvStub, []byte(wrapper), 0o700))
+
+	t.Setenv("PANIX_TEST_DEST", destination)
+	t.Setenv("PANIX_TEST_TARGET", targetDir)
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	err = exec.CommandContext(t.Context(), "sh", "-c", //nolint:gosec // script is the unit under test
+		transferCommandCommitScript(destination, staging)).Run()
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(targetDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the payload must never be moved inside the symlinked directory")
+
+	assert.Equal(t, []byte("PANIX-PAYLOAD"), readCommandTestFile(t, destination),
+		"mv -T must replace the symlink with the staged payload")
+	assert.NoFileExists(t, staging, "the commit trap must remove staged content")
+}
+
+// TestTransferCommand_PinnedStagingLeavesOnlyFinal pins the end states with a
+// known staging name: success leaves only the final file, while a streamed
+// failure leaves neither a partial final file nor a staged file.
+func TestTransferCommand_PinnedStagingLeavesOnlyFinal(t *testing.T) {
+	t.Parallel()
+
+	const streamSize = (4 << 20) + 1024
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+
+		mach := newLocalTransferMachine(t, true)
+		exc, _ := realExecutionerFor(t, mach)
+
+		dir := t.TempDir()
+		destination := filepath.Join(dir, "secret.bin")
+
+		source := attributes.TransferSource{
+			Command:     fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'A'", streamSize),
+			RemotePath:  destination,
+			Permissions: attributes.FileMode(0o600),
+		}
+
+		require.NoError(t, transferCommandWithStagingSuffix(exc, mach, source, "secrets", false, "race"))
+
+		assert.Len(t, readCommandTestFile(t, destination), streamSize)
+		assertNoStagedTransferFiles(t, dir)
+
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		assert.Len(t, entries, 1, "success must leave only the final file")
+	})
+
+	t.Run("streamed source failure", func(t *testing.T) {
+		t.Parallel()
+
+		mach := newLocalTransferMachine(t, true)
+		exc, _ := realExecutionerFor(t, mach)
+
+		dir := t.TempDir()
+		destination := filepath.Join(dir, "secret.bin")
+
+		source := attributes.TransferSource{
+			Command:     fmt.Sprintf("head -c %d /dev/zero | tr '\\0' 'A'; exit 9", streamSize),
+			RemotePath:  destination,
+			Permissions: attributes.FileMode(0o600),
+		}
+
+		err := transferCommandWithStagingSuffix(exc, mach, source, "secrets", false, "race")
+		require.Error(t, err)
+
+		assert.NoFileExists(t, destination, "a streamed failure must not land a partial final file")
+		assertNoStagedTransferFiles(t, dir)
+	})
 }
 
 // TestTransferSecret_DispatchesBySource pins the single decision point:
@@ -520,7 +1174,9 @@ func TestTransferSecret_DispatchesBySource(t *testing.T) {
 		source := attributes.TransferSource{Command: "printf secret", RemotePath: "/var/secrets/key"}
 		require.NoError(t, TransferSecret(exc, mach, source, "secrets", false))
 
-		assert.Equal(t, "sh -u -c printf secret", testutil.LastCommandLine(t, phaseLog))
+		line := testutil.LastCommandLine(t, phaseLog)
+		assert.Equal(t, "command source /var/secrets/key", line)
+		assert.NotContains(t, line, "printf secret")
 	})
 
 	t.Run("plain source rsyncs", func(t *testing.T) {

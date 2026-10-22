@@ -12,8 +12,8 @@ import (
 
 // Default base flags for non-nix commands.
 var (
-	DefaultRsyncFlags       = []string{"-rcPEx", "--mkpath"}
-	DefaultCurlFlags        = []string{"--fail", "-#", "-L", "-C", "-"}
+	DefaultRsyncFlags       = []string{"-rcEx", "--mkpath", "--perms"}
+	DefaultCurlFlags        = []string{"--fail", "-#", "-L"}
 	DefaultNixInstallerArgs = []string{"install", "--no-confirm"}
 )
 
@@ -28,7 +28,7 @@ type Attributes struct {
 	Disabled           bool        `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
 	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the elevation program used when the executing user (SSH or target user) is not root" default:"sudo"`
 	HardwareConfigPath string      `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake"`
-	RsyncDefaultFlags  []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync command (default: [-rcPEx, --mkpath])"`
+	RsyncDefaultFlags  []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"`
 	AutoRollback       bool        `yaml:"auto_rollback" json:"auto_rollback,omitempty" desc:"Automatically roll back to the pre-deploy generation when activation fails"`
 
 	ActivationHooks ActivationHooks `yaml:"activation_hooks" json:"activation_hooks" desc:"Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"`
@@ -72,9 +72,9 @@ type Bootstrap struct {
 
 //nolint:lll
 type NixConfig struct {
-	URL              string   `yaml:"url,omitempty" json:"url,omitempty" desc:"Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an http(s) URL or a local path" validate:"omitempty,url_or_file" default:"https://install.determinate.systems/nix"`
+	URL              string   `yaml:"url,omitempty" json:"url,omitempty" desc:"Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an https URL or a local path" validate:"omitempty,url_or_file" default:"https://install.determinate.systems/nix"`
 	Args             []string `yaml:"args,omitempty" json:"args,omitempty" desc:"Arguments passed to the installer after the installer path (default: [install, --no-confirm])"`
-	CurlDefaultFlags []string `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L, -C, -])"`
+	CurlDefaultFlags []string `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L])"`
 }
 
 // GetURL returns the configured installer URL or the default if not set (empty).
@@ -109,10 +109,10 @@ func (n *NixConfig) GetCurlDefaultFlags() []string {
 
 //nolint:lll
 type KexecConfig struct {
-	Image            KexecImage   `yaml:"image" json:"image,omitempty" desc:"URL or path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url_or_file" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"`
+	Image            KexecImage   `yaml:"image" json:"image,omitempty" desc:"https URL or local path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url_or_file" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"`
 	ExtraFlags       []string     `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
 	SSHPort          KexecSSHPort `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
-	CurlDefaultFlags []string     `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L, -C, -])"`
+	CurlDefaultFlags []string     `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L])"`
 }
 
 // HookCommand is one hook entry, shared by bootstrap and activation hooks: a

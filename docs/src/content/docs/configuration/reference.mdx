@@ -15,7 +15,7 @@ The same schema is available in the repository at [gen/panix-schema.yaml](https:
 # Only some options, read the YAML schema for all
 fleet:
   tags: [production]                   # Inherited by all descendants
-  rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override base rsync flags (default shown)
+  rsync_default_flags: ["-rcEx", "--mkpath", "--perms"]  # Override base rsync flags (default shown)
   auto_rollback: false                 # Roll back to pre-deploy generation on activation failure
   nix:
     extra_flags: ["--option", "sandbox", "false"]  # APPEND after default flags
@@ -27,7 +27,7 @@ fleet:
     infrastructure:
       url: path:../infra-flake
       tags: [critical]                 # Accumulated with fleet: [production, critical]
-      rsync_default_flags: ["-rcPEx", "--mkpath"]  # Inherited by installables/machines (override)
+      rsync_default_flags: ["-rcEx", "--mkpath", "--perms"]  # Inherited by installables/machines (override)
       nix:
         build_flags: ["--max-jobs", "8"]
       secrets:                         # APPENDED to fleet secrets (none inherited)
@@ -38,7 +38,7 @@ fleet:
         nixosConfigurations:             # System-level: activates as root
           webserver:
             tags: [web]                  # Accumulated: [production, critical, web]
-            rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override at installable level
+            rsync_default_flags: ["-rcEx", "--mkpath", "--perms"]  # Override at installable level
             nix:
               build_mode: remote          # Build on first machine instead of locally
             machines:
@@ -53,7 +53,7 @@ fleet:
                 ssh:
                   hostname: 10.0.1.50
                   identity_file: ./keys/db.key
-                rsync_default_flags: ["-rcPEx", "--mkpath"]  # Override at machine level
+                rsync_default_flags: ["-rcEx", "--mkpath", "--perms"]  # Override at machine level
                 bootstrap:
                   ssh:
                     hostname: 10.0.1.50
@@ -64,7 +64,7 @@ fleet:
                   post_bootstrap_hooks:
                     - systemd-cryptenroll --tpm2-device=auto /dev/sda2
                   kexec:
-                    curl_default_flags: ["--fail", "-#", "-L", "-C", "-"]  # Override base curl flags (default shown)
+                    curl_default_flags: ["--fail", "-#", "-L"]  # Override base curl flags (default shown)
 
         homeConfigurations:              # User-level: activates as SSH user
           admin:
@@ -363,7 +363,7 @@ properties:
                                 description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
                               rsync_default_flags:
                                 type: array
-                                description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                                description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
                                 items:
                                   type: string
                               secrets:
@@ -392,7 +392,7 @@ properties:
                       $ref: "#/definitions/Preset"
                     rsync_default_flags:
                       type: array
-                      description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+                      description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
                       items:
                         type: string
                     secrets:
@@ -423,7 +423,7 @@ properties:
               $ref: "#/definitions/nix_NixConfig"
             rsync_default_flags:
               type: array
-              description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+              description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
               items:
                 type: string
             secrets:
@@ -458,7 +458,7 @@ properties:
         $ref: "#/definitions/nix_NixConfig"
       rsync_default_flags:
         type: array
-        description: "List of base flags for rsync command (default: [-rcPEx, --mkpath])"
+        description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
         items:
           type: string
       secrets:
@@ -561,7 +561,7 @@ definitions:
     properties:
       curl_default_flags:
         type: array
-        description: "List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L, -C, -])"
+        description: "List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L])"
         items:
           type: string
       extra_flags:
@@ -571,7 +571,7 @@ definitions:
           type: string
       image:
         type: string
-        description: "URL or path to kexec tarball for bootstrapping non-NixOS machines (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz)"
+        description: "https URL or local path to kexec tarball for bootstrapping non-NixOS machines (default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz)"
         default: https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz
       ssh_port:
         type: integer
@@ -638,7 +638,7 @@ definitions:
         description: "Disable strict host key checking (default: false)"
       extra_flags:
         type: array
-        description: Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')
+        description: Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=yes')
         items:
           type: string
       hostname:
@@ -674,9 +674,10 @@ definitions:
         type: string
         description: Path to a local file or dir. At least one of local_path or command is required, when both are set the command receives the path as PANIX_SECRET_LOCAL_PATH
       permissions:
-        type: integer
+        type: string
         description: "File permissions (default: 0700)"
-        default: 700
+        default: "0700"
+        pattern: ^(?:[1-7][0-7]{3}|0[1-7][0-7]{2}|00[1-7][0-7]|000[1-7])$
       remote_path:
         type: string
         description: Absolute path on remote machine
@@ -708,12 +709,12 @@ definitions:
           type: string
       curl_default_flags:
         type: array
-        description: "List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L, -C, -])"
+        description: "List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L])"
         items:
           type: string
       url:
         type: string
-        description: "Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an http(s) URL or a local path (default: https://install.determinate.systems/nix)"
+        description: "Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an https URL or a local path (default: https://install.determinate.systems/nix)"
         default: https://install.determinate.systems/nix
     additionalProperties: false
   nix_NixConfig:

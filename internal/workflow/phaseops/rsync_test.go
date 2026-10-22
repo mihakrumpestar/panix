@@ -126,6 +126,53 @@ var transferElevationCases = []struct {
 	},
 }
 
+// TestRsyncChmodFlag pins the file/directory split: files keep the configured
+// mode while directories stay traversable, including for a 0600 secret.
+func TestRsyncChmodFlag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		perms attributes.FileMode
+		want  string
+	}{
+		{name: "0600 files keep private files and traversable directories", perms: 0o600, want: "D700,F600"},
+		{name: "0640 adds group traverse when group can read", perms: 0o640, want: "D750,F640"},
+		{name: "0644 adds group and other traverse", perms: 0o644, want: "D755,F644"},
+		{name: "zero uses the default 0700 file mode", perms: 0, want: "D700,F700"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, rsyncChmodFlag(tt.perms))
+		})
+	}
+}
+
+// TestTransferFile_ChmodKeepsDirectoriesTraversable pins the rendered rsync
+// argv: 0600 applies to files only, directories get an owner-traversable mode,
+// and --perms stays enabled.
+func TestTransferFile_ChmodKeepsDirectoriesTraversable(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Secrets)
+
+	source := attributes.TransferSource{
+		LocalPath:   "/tmp/src.key",
+		RemotePath:  "/var/secrets/key",
+		Permissions: attributes.FileMode(0o600),
+	}
+
+	require.NoError(t, TransferFile(exc, mach, source, "secret", false))
+
+	line := testutil.LastCommandLine(t, phaseLog)
+	assert.Contains(t, line, "--chmod=D700,F600")
+	assert.Contains(t, line, "--perms")
+}
+
 // TestTransferFile_Chown pins the uid/gid rendering: --chown is
 // receiver-side, so elevation is what makes it actually apply.
 func TestTransferFile_Chown(t *testing.T) {

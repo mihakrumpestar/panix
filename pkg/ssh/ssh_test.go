@@ -261,28 +261,94 @@ func TestKnownHostsFile_Create_Auto(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		knownHosts.RemoveIfAuto()
+		knownHosts.RemoveIfTemporary()
 	})
 
-	assert.True(t, knownHosts.IsAuto())
+	assert.True(t, knownHosts.IsTemporary())
 
 	info, statErr := os.Stat(string(knownHosts))
 	require.NoError(t, statErr)
 	assert.False(t, info.IsDir())
 }
 
-func TestKnownHostsFile_RemoveIfAuto_NotAuto(t *testing.T) {
+func TestKnownHostsFile_RemoveIfTemporary_NotAuto(t *testing.T) {
 	t.Parallel()
 
 	k := KnownHostsFile("/home/user/.ssh/known_hosts")
-	k.RemoveIfAuto() // should be a no-op
+	k.RemoveIfTemporary() // should be a no-op
 }
 
-func TestKnownHostsFile_RemoveIfAuto_Empty(t *testing.T) {
+func TestKnownHostsFile_RemoveIfTemporary_Empty(t *testing.T) {
 	t.Parallel()
 
 	var k KnownHostsFile
-	k.RemoveIfAuto() // should be a no-op
+	k.RemoveIfTemporary() // should be a no-op
+}
+
+func TestKnownHostsFile_UserPathUnderTempPrefixNotAuto(t *testing.T) {
+	t.Parallel()
+
+	// A user-supplied file under a temp-like directory must not be treated as
+	// auto-created: the old prefix check would delete it.
+	dir := t.TempDir()
+
+	path := filepath.Join(dir, "known_hosts")
+	require.NoError(t, os.WriteFile(path, []byte("example.com ssh-ed25519 AAAA\n"), 0o600))
+
+	k := KnownHostsFile(path)
+	require.False(t, k.IsTemporary(), "user-supplied file must not be auto-owned")
+
+	k.RemoveIfTemporary()
+	assert.FileExists(t, path, "user-supplied known_hosts file must never be deleted")
+
+	// The raw prefix case (/tmpfoo vs /tmp) must also not match.
+	assert.False(t, KnownHostsFile("/tmpfoo/known_hosts").IsTemporary())
+}
+
+func TestKnownHostsFile_CreateThenRemoveAuto(t *testing.T) {
+	t.Parallel()
+
+	var knownHosts KnownHostsFile
+
+	require.NoError(t, knownHosts.Create())
+	require.True(t, knownHosts.IsTemporary())
+
+	path := string(knownHosts)
+	knownHosts.RemoveIfTemporary()
+
+	assert.NoFileExists(t, path, "panix-created known_hosts file should be removed")
+	assert.False(t, knownHosts.IsTemporary())
+	assert.Empty(t, string(knownHosts), "removed auto file path must be forgotten for the next Create")
+}
+
+func TestKnownHostsFile_CreateAfterRemoveAutoRecreatesAndRecords(t *testing.T) {
+	t.Parallel()
+
+	var knownHosts KnownHostsFile
+
+	require.NoError(t, knownHosts.Create())
+	require.True(t, knownHosts.IsTemporary())
+
+	firstPath := string(knownHosts)
+	knownHosts.RemoveIfTemporary()
+	require.NoFileExists(t, firstPath)
+
+	// A workflow restart calls Create again after RemoveIfTemporary. It must create a
+	// fresh file that is recorded and therefore removable later.
+	require.NoError(t, knownHosts.Create())
+	assert.NotEmpty(t, string(knownHosts))
+	assert.NotEqual(t, firstPath, string(knownHosts))
+	assert.True(t, knownHosts.IsTemporary(), "second auto-created file must be recorded as panix-owned")
+
+	secondPath := string(knownHosts)
+
+	info, err := os.Stat(secondPath)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+
+	knownHosts.RemoveIfTemporary()
+	assert.NoFileExists(t, secondPath, "second auto-created file must be removable")
+	assert.False(t, knownHosts.IsTemporary())
 }
 
 func TestSSHConfig_RetrieveFullParamsFromSSHConfig(t *testing.T) {

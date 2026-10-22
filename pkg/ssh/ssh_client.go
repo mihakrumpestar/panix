@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -16,6 +18,8 @@ import (
 const (
 	SSHDefaultUsername = "root"
 	SSHDefaultPort     = 22
+
+	controlSocketDirPerm os.FileMode = 0o700
 )
 
 //nolint:lll,recvcheck
@@ -28,7 +32,7 @@ type SSHClient struct {
 	DisableStrictKeyChecking bool           `yaml:"disable_strict_key_checking,omitempty" json:"disable_strict_key_checking,omitempty" desc:"Disable strict host key checking (default: false)"`
 	DisableAutoAddHostKey    bool           `yaml:"disable_auto_add_host_key,omitempty" json:"disable_auto_add_host_key,omitempty" desc:"Disable automatically adding host key to known_hosts on first connection (default: false)"`
 	KnownHostsFile           KnownHostsFile `yaml:"known_hosts_file,omitempty" json:"known_hosts_file,omitempty" validate:"omitempty,filepath" desc:"Path to known_hosts file for SSH host key verification (default: user's ~/.ssh/known_hosts, bootstrap SSH uses a temporary file)"`
-	ExtraFlags               []string       `yaml:"extra_flags,omitempty" json:"extra_flags,omitempty" desc:"Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=no')"`
+	ExtraFlags               []string       `yaml:"extra_flags,omitempty" json:"extra_flags,omitempty" desc:"Extra flags passed to ssh (e.g. '-o', 'StrictHostKeyChecking=yes')"`
 
 	isLocal         bool
 	hostnameIsAlias bool
@@ -105,13 +109,20 @@ func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 		sshArgs = append(sshArgs, "-l", sC.Username, "-p", sC.PortString())
 
 		if sC.IdentityFile != "" {
-			sshArgs = append(sshArgs, "-i", sC.IdentityFile, "-o", "IdentitiesOnly=yes")
+			sshArgs = append(sshArgs, "-i", sC.IdentityFile)
 		}
+	}
+
+	// OpenSSH honours the first value for an option, so user flags must come
+	// before panix's own -o options to let users tighten them.
+	sshArgs = append(sshArgs, sC.ExtraFlags...)
+
+	if !sC.hostnameIsAlias && sC.IdentityFile != "" {
+		sshArgs = append(sshArgs, "-o", "IdentitiesOnly=yes")
 	}
 
 	sshArgs = append(sshArgs, sC.controlMasterArgs()...)
 	sshArgs = append(sshArgs, sC.hostKeySSHArgs()...)
-	sshArgs = append(sshArgs, sC.ExtraFlags...)
 
 	return sshArgs
 }
@@ -122,13 +133,16 @@ func (sC *SSHClient) MaybeSSHCommandArguments() []string {
 func (sC SSHClient) MaybeNixSSHOpts() []string {
 	var sshArgs []string
 
-	if sC.IdentityFile != "" {
+	// OpenSSH honours the first value for an option, so user flags must come
+	// before panix's own -o options to let users tighten them.
+	sshArgs = append(sshArgs, sC.ExtraFlags...)
+
+	if !sC.hostnameIsAlias && sC.IdentityFile != "" {
 		sshArgs = append(sshArgs, "-o", "IdentitiesOnly=yes")
 	}
 
 	sshArgs = append(sshArgs, sC.controlMasterArgs()...)
 	sshArgs = append(sshArgs, sC.hostKeySSHArgs()...)
-	sshArgs = append(sshArgs, sC.ExtraFlags...)
 
 	if len(sshArgs) == 0 {
 		return []string{"NIX_SSHOPTS="}
@@ -232,10 +246,29 @@ func (sC SSHClient) hostKeySSHArgs() []string {
 	return sshArgs
 }
 
+// fallbackControlSocketDir is created lazily once per process so every SSH
+// invocation shares the same private directory and can reuse ControlMaster
+// sessions.
+var fallbackControlSocketDir = sync.OnceValues(createFallbackControlSocketDir) //nolint:gochecknoglobals // process-wide fallback directory
+
+func createFallbackControlSocketDir() (string, error) {
+	dir, err := os.MkdirTemp("", "panix-ssh-")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create fallback SSH control socket directory")
+	}
+
+	return dir, nil
+}
+
 // controlMasterArgs returns SSH arguments for connection multiplexing.
 // Benchmarked: ~150ms without → ~11ms with per command on a QEMU VM.
+// ControlMaster is disabled when no private control socket directory can be
+// secured.
 func (sC SSHClient) controlMasterArgs() []string {
-	socketPath := sC.controlSocketPath()
+	socketPath, ok := sC.controlSocketPath()
+	if !ok {
+		return nil
+	}
 
 	return []string{
 		"-o", "ControlMaster=auto",
@@ -244,9 +277,109 @@ func (sC SSHClient) controlMasterArgs() []string {
 	}
 }
 
-// controlSocketPath returns a deterministic temp path for the SSH control socket.
-func (sC SSHClient) controlSocketPath() string {
-	return filepath.Join(os.TempDir(), "panix-ssh-"+sC.Hostname+"-"+sC.PortString())
+// controlSocketPath returns the SSH control socket path and whether
+// ControlMaster can safely be used. It lives in a private per-user directory
+// and uses OpenSSH's %C token so the connection hash covers the local host,
+// remote host, user, and port. This prevents two users on the same host/port
+// from sharing one authenticated master session.
+//
+// When the per-user directory cannot be verified as private, a fresh private
+// temporary directory is used. If that also fails, ControlMaster is disabled
+// rather than using an insecure path.
+func (sC SSHClient) controlSocketPath() (string, bool) {
+	dir := controlSocketDir()
+	if dir != "" {
+		err := ensurePrivateControlDir(dir)
+		if err == nil {
+			return filepath.Join(dir, "%C"), true
+		}
+
+		log.Warn().Err(err).Str("dir", dir).
+			Msg("failed to secure per-user SSH control socket directory, using a private temporary directory")
+	}
+
+	fallbackDir, fallbackErr := fallbackControlSocketDir()
+	if fallbackErr != nil {
+		log.Warn().Err(fallbackErr).Msg("failed to create fallback SSH control socket directory, disabling ControlMaster")
+
+		return "", false
+	}
+
+	return filepath.Join(fallbackDir, "%C"), true
+}
+
+// ensurePrivateControlDir creates dir if needed and verifies that it is a real
+// directory owned by the current user with mode 0700.
+func ensurePrivateControlDir(dir string) error {
+	err := os.MkdirAll(dir, controlSocketDirPerm)
+	if err != nil {
+		return errors.Wrap(err, "failed to create SSH control socket directory")
+	}
+
+	needsChmod, err := inspectPrivateControlDir(dir)
+	if err != nil {
+		return err
+	}
+
+	if !needsChmod {
+		return nil
+	}
+
+	// MkdirAll honours the umask and does not fix pre-existing modes.
+	chmodErr := os.Chmod(dir, controlSocketDirPerm)
+	if chmodErr != nil {
+		return errors.Wrap(chmodErr, "failed to secure SSH control socket directory")
+	}
+
+	needsChmod, err = inspectPrivateControlDir(dir)
+	if err != nil {
+		return err
+	}
+
+	if needsChmod {
+		return errors.Errorf("SSH control socket directory %q could not be secured", dir)
+	}
+
+	return nil
+}
+
+// inspectPrivateControlDir verifies that dir is a real directory owned by the
+// current user. It reports whether the mode still needs to be tightened.
+func inspectPrivateControlDir(dir string) (bool, error) {
+	// Lstat rejects a symlinked directory instead of following it.
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to inspect SSH control socket directory")
+	}
+
+	if !info.IsDir() {
+		return false, errors.Errorf("SSH control socket path %q is not a real directory", dir)
+	}
+
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || int(stat.Uid) != os.Getuid() {
+		return false, errors.Errorf("SSH control socket directory %q is not owned by the current user", dir)
+	}
+
+	return info.Mode().Perm() != controlSocketDirPerm, nil
+}
+
+// controlSocketDir returns panix's private per-user directory for SSH control
+// sockets. It deliberately avoids the shared temp directory.
+func controlSocketDir() string {
+	dir, err := os.UserCacheDir()
+	if err == nil && dir != "" {
+		return filepath.Join(dir, "panix", "ssh")
+	}
+
+	dir, err = os.UserHomeDir()
+	if err == nil && dir != "" {
+		return filepath.Join(dir, ".cache", "panix", "ssh")
+	}
+
+	// Never fall back to a shared or working directory: the caller uses a
+	// private temporary directory instead.
+	return ""
 }
 
 func resolveIdentityFile(path string) (string, error) {

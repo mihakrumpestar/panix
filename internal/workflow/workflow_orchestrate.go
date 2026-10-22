@@ -27,7 +27,7 @@ func (w *Workflow) StartWorkflow() error {
 	for _, fleetLeaf := range w.conf.Fleet.AllMachines() {
 		subPool.SubmitErr(func() error {
 			defer func() {
-				fleetLeaf.Machine.Bootstrap.SSH.KnownHostsFile.RemoveIfAuto()
+				fleetLeaf.Machine.Bootstrap.SSH.KnownHostsFile.RemoveIfTemporary()
 			}()
 
 			for _, phase := range w.conf.Phases {

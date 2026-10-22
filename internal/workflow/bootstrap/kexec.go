@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"fmt"
+	"path"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -10,11 +10,17 @@ import (
 	"github.com/mihakrumpestar/panix/internal/runtimevars"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
-	"github.com/mihakrumpestar/panix/pkg/shellquote"
 	"github.com/pkg/errors"
 )
 
 var ErrKexecBootFailed = errors.New("kexec did not boot into NixOS installer")
+
+const (
+	// kexecStagingPrefix names the per-run private staging directory.
+	kexecStagingPrefix = "panix-kexec"
+	// kexecTarballName is the downloaded tarball inside that directory.
+	kexecTarballName = "kexec.tar"
+)
 
 func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error {
 	kexecURL, err := resolveKexecURL(machineI)
@@ -22,23 +28,33 @@ func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error
 		return err
 	}
 
-	err = createKexecDirectory(exc, machineI)
+	stagingDir, err := createKexecDirectory(exc, machineI)
 	if err != nil {
 		return err
 	}
 
-	err = downloadOrTransferKexec(exc, machineI, kexecURL)
+	// Clean up only before kexec takes over: after the reboot the old
+	// staging filesystem is gone and cleanup is neither needed nor practical.
+	cleanup := func() { _ = removeStagingDir(exc, machineI, stagingDir) }
+
+	err = downloadOrTransferKexec(exc, machineI, kexecURL, stagingDir)
 	if err != nil {
+		cleanup()
+
 		return err
 	}
 
-	err = extractKexecTarball(exc, kexecURL)
+	err = extractKexecTarball(exc, kexecURL, stagingDir)
 	if err != nil {
+		cleanup()
+
 		return err
 	}
 
-	err = runKexecCommand(exc, machineI)
+	err = runKexecCommand(exc, machineI, stagingDir)
 	if err != nil {
+		cleanup()
+
 		return err
 	}
 
@@ -82,40 +98,33 @@ func resolveKexecURL(machineI *machine.Machine) (string, error) {
 	return kexecURL, nil
 }
 
-// createKexecDirectory resets and creates the staging dir in ONE elevated
-// command (rm + install -d -m 700 -o <sshuser>): SSH-user ownership keeps
-// un-elevated curl/rsync/tar working and closes the rm→mkdir TOCTOU window.
-func createKexecDirectory(exc *executioner.Executioner, machineI *machine.Machine) error {
-	// The machine is driven over the ACTIVE connection during kexec staging
-	// (bootstrap/kexec SSH), so that connection's user must own the staging
-	// dir, not the regular SSH user, which may differ.
-	sshUser := machineI.GetActiveSSH().Username
-	script := fmt.Sprintf(
-		"rm -rf %s && install -d -m 700 -o %s %s",
-		shellquote.Quote("/tmp/kexec"), shellquote.Quote(sshUser), shellquote.Quote("/tmp/kexec"),
-	)
-
-	err := exc.Exec(
-		"create kexec directory",
-		"creating kexec directory",
-		"failed to create kexec directory",
-		append(machineI.MaybeSudo(), "sh", "-c", script),
-	)
+// createKexecDirectory creates a unique per-run staging dir owned by the
+// ACTIVE connection's user (bootstrap during kexec staging), not the regular
+// SSH user, which may differ.
+func createKexecDirectory(exc *executioner.Executioner, machineI *machine.Machine) (string, error) {
+	stagingDir, err := newStagingDirPath(kexecStagingPrefix)
 	if err != nil {
-		return errors.Wrap(err, "failed to create kexec directory")
+		return "", err
 	}
 
-	return nil
+	err = createPrivateStagingDir(exc, machineI, stagingDir)
+	if err != nil {
+		return "", err
+	}
+
+	return stagingDir, nil
 }
 
-func downloadOrTransferKexec(exc *executioner.Executioner, machineI *machine.Machine, kexecURL string) error {
-	return downloadOrTransfer(exc, machineI, kexecURL, "/tmp/kexec/kexec.tar", "kexec tarball", machineI.Bootstrap.Kexec.GetCurlDefaultFlags())
+func downloadOrTransferKexec(exc *executioner.Executioner, machineI *machine.Machine, kexecURL, stagingDir string) error {
+	tarballPath := path.Join(stagingDir, kexecTarballName)
+
+	return downloadOrTransfer(exc, machineI, kexecURL, tarballPath, "kexec tarball", machineI.Bootstrap.Kexec.GetCurlDefaultFlags())
 }
 
-// extractKexecTarball extracts the kexec tarball to the temporary directory.
-func extractKexecTarball(exc *executioner.Executioner, kexecURL string) error {
-	tarArgs := getTarArgs(kexecURL)
-	tarArgs = append(tarArgs, "-C", "/tmp/kexec")
+// extractKexecTarball extracts the kexec tarball into the per-run staging dir.
+func extractKexecTarball(exc *executioner.Executioner, kexecURL, stagingDir string) error {
+	tarArgs := getTarArgs(kexecURL, path.Join(stagingDir, kexecTarballName))
+	tarArgs = append(tarArgs, "-C", stagingDir)
 
 	err := exc.Exec(
 		"extract kexec tarball",
@@ -131,22 +140,22 @@ func extractKexecTarball(exc *executioner.Executioner, kexecURL string) error {
 }
 
 // getTarArgs returns the appropriate tar extraction arguments based on file extension.
-func getTarArgs(kexecURL string) []string {
+func getTarArgs(kexecURL, tarballPath string) []string {
 	switch {
 	case strings.HasSuffix(kexecURL, ".tar.gz") || strings.HasSuffix(kexecURL, ".tgz"):
-		return []string{"-xzf", "/tmp/kexec/kexec.tar"}
+		return []string{"-xzf", tarballPath}
 	case strings.HasSuffix(kexecURL, ".tar.xz"):
-		return []string{"-xJf", "/tmp/kexec/kexec.tar"}
+		return []string{"-xJf", tarballPath}
 	case strings.HasSuffix(kexecURL, ".tar.zst"):
-		return []string{"--use-compress-program=zstd", "-xf", "/tmp/kexec/kexec.tar"}
+		return []string{"--use-compress-program=zstd", "-xf", tarballPath}
 	default:
-		return []string{"-xf", "/tmp/kexec/kexec.tar"}
+		return []string{"-xf", tarballPath}
 	}
 }
 
 // runKexecCommand executes the kexec script to boot into the NixOS installer.
-func runKexecCommand(exc *executioner.Executioner, machineI *machine.Machine) error {
-	kexecCmd := append(machineI.MaybeSudo(), []string{"/tmp/kexec/kexec/run"}...)
+func runKexecCommand(exc *executioner.Executioner, machineI *machine.Machine, stagingDir string) error {
+	kexecCmd := append(machineI.MaybeSudo(), path.Join(stagingDir, "kexec", "run"))
 
 	if len(machineI.Bootstrap.Kexec.ExtraFlags) != 0 {
 		extraFlags := append([]string{"--kexec-extra-flags"}, machineI.Bootstrap.Kexec.ExtraFlags...)

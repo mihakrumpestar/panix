@@ -105,15 +105,15 @@ Fragment: nest under `fleet.flakes.<flake>.installables.<type>.<name>.machines`.
 ```yaml
 bootstrap:
   nix:
-    url: https://install.determinate.systems/nix     # default; shell script or installer binary, http(s) URL or local path
+    url: https://install.determinate.systems/nix     # default; shell script or installer binary, https URL or local path
     args: ["install", "--no-confirm"]                # default; full replacement of the installer args
-    curl_default_flags: ["--fail", "-#", "-L", "-C", "-"]  # default; base curl flags for the download
+    curl_default_flags: ["--fail", "-#", "-L"]       # default; base curl flags for the download
   disable_nix_install: false                         # default; opt out of the automatic install
 ```
 
-- `nix.url`: installer source, a shell script or the `nix-installer` binary. An http(s) URL is downloaded on the target with `curl`; a local path is transferred with `rsync` (see [Requirements](/getting-started/requirements/)). Any other URL scheme is rejected.
+- `nix.url`: installer source, a shell script or the `nix-installer` binary. An https URL is downloaded on the target with `curl`; a local path is transferred with `rsync` (see [Requirements](/getting-started/requirements/)). Any other URL scheme is rejected.
 - `nix.args`: the argument list passed to the installer after its path. It is a full replacement of the default `["install", "--no-confirm"]`, not an append, so keep the subcommand and flags you want (for example `install --no-confirm`) in the value. An explicitly empty list (`[]`) runs the installer with no arguments.
-- `nix.curl_default_flags`: base flags for `curl` when `nix.url` is downloaded on the target. Default `["--fail", "-#", "-L", "-C", "-"]`; set to `[]` to clear them. Same semantics as [`bootstrap.kexec.curl_default_flags`](/configuration/nix-flags/).
+- `nix.curl_default_flags`: base flags for `curl` when `nix.url` is downloaded on the target. Default `["--fail", "-#", "-L"]`; set to `[]` to clear them. Same semantics as [`bootstrap.kexec.curl_default_flags`](/configuration/nix-flags/). Resume flags (`-C`, `-C-`, `--continue-at`) are always stripped from bootstrap artifact downloads, even when added back here: each run downloads into a fresh, private per-run staging path, and the root-executed artifact must never resume bytes left by an earlier run.
 - `disable_nix_install: true` opts out of the automatic install. A target without Nix then fails at Inspect with the `nix not found on remote machine` error, which mentions the opt-out. Install Nix manually, or unset the flag.
 
 For machines without internet access, stage the installer binary locally and point `nix.url` at its path; Panix transfers it with `rsync` and runs it directly. The `nix-installer` binary is self-contained (it bundles the Nix it installs), so nothing is downloaded on the target.

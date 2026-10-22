@@ -72,14 +72,20 @@ func LoadConfig(parsedFlags flags.Flags, explicit map[string]bool) (*Config, err
 	}
 
 	if conf.Flags.Logging.Debug {
-		dump.P(conf.Flags)
-		dump.P(conf.Fleet)
+		dumpDebug(conf)
 	}
 
 	conf.Snapshot.StartTime = time.Now()
 	conf.Snapshot.PanixVersion = gen.Version()
 
 	return conf, nil
+}
+
+// dumpDebug renders the resolved flags for --debug. The fleet is deliberately
+// omitted: it carries secret commands, paths and other material that must not
+// reach stdout.
+func dumpDebug(conf *Config) {
+	dump.P(conf.Flags)
 }
 
 // decodeConfigFile opens and decodes the YAML configuration file.

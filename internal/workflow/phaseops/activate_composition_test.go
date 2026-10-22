@@ -1,6 +1,7 @@
 package phaseops
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/config/nix"
@@ -48,6 +49,36 @@ func TestActivate_Composition(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestActivate_SuEnvRedactedInCommandLog pins the display redaction for the
+// real activatePackage shape: secret token values inside the joined `su -c`
+// string must never reach the command log.
+func TestActivate_SuEnvRedactedInCommandLog(t *testing.T) {
+	t.Parallel()
+
+	mach := newActivateCompositionMachine(t, true)
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
+
+	nixCfg := &nix.NixConfig{Env: map[string]string{"NIX_CONFIG": "access-tokens=SUPERSECRET"}}
+
+	// A package activation (no ActivationPath) is the real activatePackage
+	// shape: it injects the nix env pair before asUser joins the argv.
+	preset := installable.Preset{
+		ProfilePath:   "/nix/var/nix/profiles/system",
+		SetProfile:    new(true),
+		IsSystemLevel: new(true),
+	}
+
+	require.NoError(t, Activate(exc, mach, preset, "/nix/store/abc-closure", "switch", "bob", nixCfg, nixver.FlavorNix))
+
+	lines := testutil.CommandLines(t, phaseLog)
+	require.NotEmpty(t, lines)
+
+	joined := strings.Join(lines, "\n")
+	assert.NotContains(t, joined, "SUPERSECRET", "secret values inside su -c must be redacted")
+	assert.Contains(t, joined, "su -l bob -c")
+	assert.Contains(t, joined, "'env' 'NIX_CONFIG=access-tokens=***'")
 }
 
 // TestActivate_ProfileSkipModes pins maybeSetProfile's skip branch: modes

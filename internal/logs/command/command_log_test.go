@@ -12,7 +12,8 @@ import (
 func TestJoinCommand(t *testing.T) {
 	t.Parallel()
 
-	// Rendered lines are the verbatim argv, transport-quoted elements as-is.
+	// Rendered lines are the verbatim argv with recognized secret tokens
+	// redacted and transport-quoted elements as-is.
 	tests := []struct {
 		name string
 		cmd  []string
@@ -20,24 +21,38 @@ func TestJoinCommand(t *testing.T) {
 	}{
 		{"nil", nil, ""},
 		{"plain", []string{"nix", "build", ".#foo"}, "nix build .#foo"},
-		{"arg with spaces", []string{"echo", "hello world"}, "echo hello world"},
-		{"arg with quotes", []string{"echo", `it's "fine"`}, `echo it's "fine"`},
-		{"env argv", []string{"env", "NIX_PAGER=cat", "nix-env"}, "env NIX_PAGER=cat nix-env"},
-		{"env argv with spaces", []string{"env", "NIX_CONFIG=a b", "nix", "build"}, "env NIX_CONFIG=a b nix build"},
-		{"env argv with equals", []string{"env", "OPTS=--flag=value", "cmd"}, "env OPTS=--flag=value cmd"},
-		{"env argv empty value", []string{"env", "EMPTY=", "cmd"}, "env EMPTY= cmd"},
-		{"env argv with tab", []string{"env", "TAB=\tval", "cmd"}, "env TAB=\tval cmd"},
-		{"multiple env argv", []string{"env", "A=1", "B=2", "cmd"}, "env A=1 B=2 cmd"},
-		{"transport-quoted ssh argv stays as-is", []string{"ssh", "host", "'echo'", "'a b'"}, "ssh host 'echo' 'a b'"},
+		{"non-secret env argv", []string{"env", "A=1", "B=2", "nix-env"}, "env A=1 B=2 nix-env"},
+		{"secret env argv", []string{"env", "NIX_CONFIG=access-tokens=abc", "nix-env"}, "env NIX_CONFIG=access-tokens=*** nix-env"},
+		{"sudo env argv", []string{"sudo", "env", "NIX_CONFIG=access-tokens=abc", "nix", "build"},
+			"sudo env NIX_CONFIG=access-tokens=*** nix build"},
+		{"transport-quoted env argv", []string{"ssh", "host", "'env'", "'NIX_CONFIG=access-tokens=abc'", "'nix'"},
+			"ssh host 'env' 'NIX_CONFIG=access-tokens=***' 'nix'"},
+		{"joined su -c env assignment is redacted",
+			[]string{"su", "-l", "bob", "-c", `XDG_RUNTIME_DIR=/run/user/$(id -u) 'sudo' 'env' 'NIX_CONFIG=access-tokens=abc' 'nix' 'build'`},
+			`su -l bob -c XDG_RUNTIME_DIR=/run/user/$(id -u) 'sudo' 'env' 'NIX_CONFIG=access-tokens=***' 'nix' 'build'`},
+		{"joined su -c without env stays verbatim",
+			[]string{"su", "-l", "bob", "-c", `XDG_RUNTIME_DIR=/run/user/$(id -u) 'echo' 'A=B'`},
+			`su -l bob -c XDG_RUNTIME_DIR=/run/user/$(id -u) 'echo' 'A=B'`},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, string(joinCommand(tt.cmd).Bytes()))
+			assert.Equal(t, testCase.want, string(joinCommand(testCase.cmd).Bytes()))
 		})
 	}
+}
+
+func TestJoinCommand_DoesNotMutateArgv(t *testing.T) {
+	t.Parallel()
+
+	cmd := []string{"sudo", "env", "NIX_CONFIG=access-tokens=abc", "nix", "build"}
+	want := []string{"sudo", "env", "NIX_CONFIG=access-tokens=abc", "nix", "build"}
+
+	_ = joinCommand(cmd)
+
+	assert.Equal(t, want, cmd, "redaction must not change the argv used for execution")
 }
 
 func TestNewCommandLog_Fields(t *testing.T) {

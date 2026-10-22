@@ -30,17 +30,22 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 
 	systemClosure := fleetLeaf.Installable.MetaBuild.Closure
 
-	isBootstrapped := false
+	// Missing inspect data is unknown, not a fresh machine: the zero value
+	// must never decide that the target is unbootstrapped.
+	metaInspect := machine.MetaInspect.Load()
 
-	mi := machine.MetaInspect.Load()
-	if mi != nil {
-		isBootstrapped = mi.Bootstrapped
-	}
+	inspected := metaInspect != nil && metaInspect.Inspected
+	isBootstrapped := inspected && metaInspect.Bootstrapped
 
 	// Run the NixOS install path if not bootstrapped, or force bootstrap is set
 	shouldBootstrap := !isBootstrapped || machine.Bootstrap.ForceBootstrap
 
 	if fleetLeaf.Installable.Preset.BootstrapsNixOS() && shouldBootstrap {
+		err := validateNixOSInstallTarget(metaInspect)
+		if err != nil {
+			return err
+		}
+
 		return executeBootstrap(exc, machine, &fleetLeaf.Installable.Nix, systemClosure)
 	}
 
@@ -60,6 +65,25 @@ func (h Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLe
 	}
 
 	return executeActivation(exc, h.ActivationMode, h.NixFlavor, fleetLeaf, systemClosure, &fleetLeaf.Installable.Nix)
+}
+
+// validateNixOSInstallTarget fails closed before the destructive
+// nixos-install --root /mnt path: inspect must have succeeded, and a host that
+// still requires kexec is not a NixOS installer yet (bootstrap was skipped).
+func validateNixOSInstallTarget(metaInspect *machine.MetaInspect) error {
+	if metaInspect == nil || !metaInspect.Inspected {
+		// nixos-install --root /mnt followed by a reboot is destructive on
+		// a live host; require a successful inspect before any install.
+		return errors.New("inspect phase did not run; refusing to install to /mnt")
+	}
+
+	if metaInspect.RequiresKexec {
+		// A non-NixOS host must first kexec into the NixOS installer (and
+		// run disko); nixos-install cannot target the live host's /mnt.
+		return errors.New("target is not a NixOS installer (requires kexec); refusing to install to /mnt")
+	}
+
+	return nil
 }
 
 func executeActivation(

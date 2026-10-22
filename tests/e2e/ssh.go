@@ -950,8 +950,10 @@ func secretVerifyTargets() []secretVerifyTarget {
 
 // verifySecretsConditionalSkip proves the sha256 conditional write end to end:
 // a second Inspect+Secrets run with identical command output must skip every
-// write, so inode, mtime and content hash stay identical, while the probe
-// still enforces a tampered mode without rewriting the file.
+// write, so inode, mtime and content hash stay identical. The one exception is
+// the intentionally tampered secret: a mode mismatch forces a fresh staged
+// write, so its inode and mtime change while the content and repaired mode are
+// still verified.
 func verifySecretsConditionalSkip(configPath string, res *testResources) error {
 	printPhasef("Phase: Secrets conditional skip")
 
@@ -994,7 +996,7 @@ func verifySecretsConditionalSkip(configPath string, res *testResources) error {
 			return err
 		}
 
-		fmt.Printf("  %s: all command-sourced secrets skipped (inode, mtime and content unchanged)\n", target.label)
+		fmt.Printf("  %s: command-sourced secrets skipped; tampered mode repaired (inode may change)\n", target.label)
 	}
 
 	return nil
@@ -1036,13 +1038,18 @@ func verifyCommandSecretsUnchanged(target secretVerifyTarget, keyPath string, be
 			return statErr
 		}
 
-		if after.inode != previous.inode {
-			return errors.Errorf("secret %s on %s inode changed: %s -> %s", expected.name, target.label, previous.inode, after.inode)
-		}
+		// The tampered secret is expected to be rewritten: a mode mismatch
+		// forces a fresh staged write, so its inode and mtime legitimately
+		// change. Every other command secret must be skipped untouched.
+		if expected.name != tamperedSecretName {
+			if after.inode != previous.inode {
+				return errors.Errorf("secret %s on %s inode changed: %s -> %s", expected.name, target.label, previous.inode, after.inode)
+			}
 
-		if after.mtime != previous.mtime {
-			return errors.Errorf("secret %s on %s mtime changed: %s -> %s (write was not skipped)",
-				expected.name, target.label, previous.mtime, after.mtime)
+			if after.mtime != previous.mtime {
+				return errors.Errorf("secret %s on %s mtime changed: %s -> %s (write was not skipped)",
+					expected.name, target.label, previous.mtime, after.mtime)
+			}
 		}
 
 		if after.hash != previous.hash {

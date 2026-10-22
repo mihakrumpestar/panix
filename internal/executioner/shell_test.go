@@ -2,6 +2,7 @@ package executioner
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"testing"
 
@@ -144,6 +145,69 @@ func TestProcessTerminalOutput_ANSIOnly(t *testing.T) {
 
 			cmdLog := newTestCommandLog()
 			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
+		})
+	}
+}
+
+func TestProcessTerminalOutput_SanitizesControlSequences(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{"SGR kept", "\x1b[31mred\x1b[0m\r\n", []string{"\x1b[31mred\x1b[0m"}},
+		{"OSC 52 stripped", "ok\x1b]52;c;c2VjcmV0\x07done\r\n", []string{"okdone"}},
+		{"OSC 8 stripped", "\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\\r\n", []string{"link"}},
+		{"DCS stripped", "a\x1bPpayload\x1b\\b\r\n", []string{"ab"}},
+		{"CSI cursor and erase stripped", "a\x1b[2J\x1b[1;1H\x1b[Kb\r\n", []string{"ab"}},
+		{"DEC private mode stripped", "a\x1b[?25lb\x1b[?25h\r\n", []string{"ab"}},
+		{"plain text and newlines kept", "line1\nline2\r\n", []string{"line1", "line2"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmdLog := newTestCommandLog()
+			processTestData([]byte(test.input), cmdLog)
+			assertLines(t, cmdLog, test.want)
+		})
+	}
+}
+
+func TestProcessTerminalOutput_EscapeSplitAcrossReads(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		reads []string
+		want  []string
+	}{
+		{"SGR split", []string{"\x1b[3", "1mgreen\r\n"}, []string{"\x1b[31mgreen"}},
+		{"OSC split", []string{"a\x1b]52;c;c2Vj", "cmV0\x07b\r\n"}, []string{"ab"}},
+		{"DCS split", []string{"a\x1bPsecret", "\x1b\\b\r\n"}, []string{"ab"}},
+		{"CSI split", []string{"a\x1b[", "Kb\r\n"}, []string{"ab"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmdLog := newTestCommandLog()
+			proc := terminalProcessor{output: cmdLog.Output}
+
+			// Reuse one read buffer like readPTYOutput does, so a pending
+			// partial sequence must not alias buffer bytes overwritten by
+			// the next read.
+			readBuf := make([]byte, 64)
+			for _, read := range test.reads {
+				bytesRead := copy(readBuf, read)
+				proc.process(readBuf[:bytesRead], cmdLog)
+			}
+
 			assertLines(t, cmdLog, test.want)
 		})
 	}
@@ -694,6 +758,37 @@ func runReadPTYOutputCase(t *testing.T, test readPTYOutputTestCase) {
 	require.NoError(t, err)
 	assertLines(t, cmdLog, test.wantLines)
 	assert.NotContains(t, cmdLog.Output.String(), "PTY read error")
+}
+
+func TestConsolidateErrors_PreservesContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	canceled := errors.Wrap(context.Canceled, "context canceled")
+
+	tests := []struct {
+		name         string
+		waitErr      error
+		readErr      error
+		wantSentinel bool
+	}{
+		{"read only", nil, canceled, false},
+		{"wait and read", errors.New("exit status 137"), canceled, true},
+		{"wait only", canceled, nil, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := consolidateErrors(test.waitErr, test.readErr)
+			require.Error(t, err)
+			require.ErrorIs(t, err, context.Canceled)
+
+			if test.wantSentinel {
+				assert.ErrorIs(t, err, ErrWaitAndReadError)
+			}
+		})
+	}
 }
 
 // processTestData is a test helper that runs terminalProcessor.process on

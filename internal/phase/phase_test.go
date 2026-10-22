@@ -124,15 +124,15 @@ func TestValidFirstPhases(t *testing.T) {
 	assertion.Equal([]Phase{Inspect, Build}, validFirstPhases())
 }
 
-func TestValidatePhasesValidCases(t *testing.T) {
-	t.Parallel()
+type validatePhasesValidCase struct {
+	name       string
+	requested  []Phase
+	skip       []Phase
+	wantResult []Phase
+}
 
-	tests := []struct {
-		name       string
-		requested  []Phase
-		skip       []Phase
-		wantResult []Phase
-	}{
+func validatePhasesValidCases() []validatePhasesValidCase {
+	return []validatePhasesValidCase{
 		{
 			"normal deploy preserves order",
 			[]Phase{Inspect, Build, Activate}, nil,
@@ -149,9 +149,9 @@ func TestValidatePhasesValidCases(t *testing.T) {
 			[]Phase{Inspect},
 		},
 		{
-			"build as first phase valid",
-			[]Phase{Build, Activate}, nil,
-			[]Phase{Build, Activate},
+			"build-only without inspect",
+			[]Phase{Build}, nil,
+			[]Phase{Build},
 		},
 		{
 			"skip phases removes them",
@@ -170,9 +170,18 @@ func TestValidatePhasesValidCases(t *testing.T) {
 			[]Phase{Inspect, Activate}, []Phase{Bootstrap},
 			[]Phase{Inspect, Activate},
 		},
+		{
+			"skip inspect for a build-only workflow",
+			[]Phase{Inspect, Build}, []Phase{Inspect},
+			[]Phase{Build},
+		},
 	}
+}
 
-	for _, test := range tests {
+func TestValidatePhasesValidCases(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range validatePhasesValidCases() {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -185,15 +194,15 @@ func TestValidatePhasesValidCases(t *testing.T) {
 	}
 }
 
-func TestValidatePhasesErrorCases(t *testing.T) {
-	t.Parallel()
+type validatePhasesErrorCase struct {
+	name      string
+	requested []Phase
+	skip      []Phase
+	wantErrIs error
+}
 
-	tests := []struct {
-		name      string
-		requested []Phase
-		skip      []Phase
-		wantErrIs error
-	}{
+func validatePhasesErrorCases() []validatePhasesErrorCase {
+	return []validatePhasesErrorCase{
 		{"unknown phase returns error", []Phase{Inspect, Phase("invalid")}, nil, ErrUnknownPhase},
 		{"bootstrap first invalid", []Phase{Bootstrap}, nil, ErrInvalidFirstPhase},
 		{"transfer first invalid", []Phase{Transfer}, nil, ErrInvalidFirstPhase},
@@ -202,9 +211,59 @@ func TestValidatePhasesErrorCases(t *testing.T) {
 		{"rollback first invalid", []Phase{Rollback}, nil, ErrInvalidFirstPhase},
 		{"all phases skipped", []Phase{Inspect}, []Phase{Inspect}, ErrAllPhasesSkipped},
 		{"empty requested", []Phase{}, nil, ErrAllPhasesSkipped},
+		{
+			"skipping inspect with bootstrap remaining",
+			[]Phase{Inspect, Bootstrap}, []Phase{Inspect},
+			ErrInspectRequired,
+		},
+		{
+			"skipping inspect with transfer remaining",
+			[]Phase{Inspect, Build, Transfer}, []Phase{Inspect},
+			ErrInspectRequired,
+		},
+		{
+			"skipping inspect with secrets remaining",
+			[]Phase{Inspect, Build, Secrets}, []Phase{Inspect},
+			ErrInspectRequired,
+		},
+		{
+			"skipping inspect with activate remaining",
+			[]Phase{Inspect, Build, Activate}, []Phase{Inspect},
+			ErrInspectRequired,
+		},
+		{
+			"skipping inspect with rollback remaining",
+			[]Phase{Inspect, Build, Rollback}, []Phase{Inspect},
+			ErrInspectRequired,
+		},
+		{
+			"build with transfer but no inspect",
+			[]Phase{Build, Transfer}, nil,
+			ErrInspectRequired,
+		},
+		{
+			"build with activate but no inspect",
+			[]Phase{Build, Activate}, nil,
+			ErrInspectRequired,
+		},
+		{
+			"build with rollback but no inspect",
+			[]Phase{Build, Rollback}, nil,
+			ErrInspectRequired,
+		},
+		{
+			"skipping inspect and bootstrap still leaves activate without inspect",
+			[]Phase{Inspect, Bootstrap, Build, Transfer, Secrets, Activate},
+			[]Phase{Inspect, Bootstrap},
+			ErrInspectRequired,
+		},
 	}
+}
 
-	for _, tt := range tests {
+func TestValidatePhasesErrorCases(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range validatePhasesErrorCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

@@ -1,6 +1,7 @@
 package phaseops
 
 import (
+	"crypto/rand"
 	"fmt"
 	"path"
 	"slices"
@@ -14,11 +15,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TransferSecret sends a config-declared source: command sources stream, plain
-// sources rsync. bootstrapsNixOS is the preset's NixOS bootstrap
-// classification (Preset.BootstrapsNixOS): final-system content follows the
-// bootstrapping root while that bootstrap is in progress, staging content
-// (kexec tarball, disko keys) passes false and always targets the live root.
+// TransferSecret dispatches command sources to streaming and plain sources to
+// rsync. bootstrapsNixOS selects the bootstrapping root; staging content passes
+// false.
 func TransferSecret(
 	exc *executioner.Executioner,
 	mach *machine.Machine,
@@ -33,13 +32,9 @@ func TransferSecret(
 	return TransferFile(exc, mach, source, transferOfWhat, bootstrapsNixOS)
 }
 
-// TransferCommand streams source.Command's stdout into the final destination
-// path through ExecPipe: the probe skips the write when the content is
-// unchanged while still enforcing ownership and mode, so an unchanged secret
-// keeps its inode and mtime. sh -u -c makes unset variable references fail
-// loudly, LocalPath is exported as PANIX_SECRET_LOCAL_PATH only when set, and
-// bootstrapsNixOS routes the destination via the bootstrapping root. Elevation
-// rides on the destination argv for local and remote machines alike.
+// TransferCommand streams source.Command into the destination through ExecPipe.
+// The probe skips unchanged content; the write stages privately and commits only
+// after the source succeeds.
 func TransferCommand(
 	exc *executioner.Executioner,
 	mach *machine.Machine,
@@ -47,7 +42,21 @@ func TransferCommand(
 	transferOfWhat string,
 	bootstrapsNixOS bool,
 ) error {
-	spec := transferCommandPipeSpec(mach, source, bootstrapsNixOS)
+	return transferCommandWithStagingSuffix(
+		exc, mach, source, transferOfWhat, bootstrapsNixOS, rand.Text(),
+	)
+}
+
+// transferCommandWithStagingSuffix lets tests pin the staging suffix.
+func transferCommandWithStagingSuffix(
+	exc *executioner.Executioner,
+	mach *machine.Machine,
+	source attributes.TransferSource,
+	transferOfWhat string,
+	bootstrapsNixOS bool,
+	stagingSuffix string,
+) error {
+	spec := transferCommandPipeSpecWithStagingSuffix(mach, source, bootstrapsNixOS, stagingSuffix)
 
 	err := exc.ExecPipe(
 		"transfer of "+transferOfWhat,
@@ -62,30 +71,51 @@ func TransferCommand(
 	return nil
 }
 
-// transferCommandPipeSpec renders the source, probe and write argv for a
-// command-sourced transfer; the destination follows the same bootstrapping
-// root redirect as plain transfers.
+// transferCommandPipeSpec renders the source, probe, write, commit and cleanup
+// argv for a command-sourced transfer.
 func transferCommandPipeSpec(
 	mach *machine.Machine,
 	source attributes.TransferSource,
 	bootstrapsNixOS bool,
 ) executioner.PipeSpec {
+	return transferCommandPipeSpecWithStagingSuffix(mach, source, bootstrapsNixOS, rand.Text())
+}
+
+// One random suffix per spec gives concurrent transfers distinct staging paths
+// shared by Write, Commit and Cleanup.
+func transferCommandPipeSpecWithStagingSuffix(
+	mach *machine.Machine,
+	source attributes.TransferSource,
+	bootstrapsNixOS bool,
+	stagingSuffix string,
+) executioner.PipeSpec {
 	remotePath := mach.MaybeBootstrappingPath(source.RemotePath, bootstrapsNixOS)
+	stagingPath := transferCommandTempPath(remotePath, stagingSuffix)
 
 	return executioner.PipeSpec{
-		Source: transferCommandSourceArgv(source),
+		Source:        transferCommandSourceArgv(source),
+		DisplaySource: []string{"command source", remotePath},
 		Probe: slices.Concat(
 			mach.MaybeSudo(),
 			[]string{"sh", "-c", transferCommandProbeScript(remotePath, source)},
 		),
 		Write: slices.Concat(
 			mach.MaybeSudo(),
-			[]string{"sh", "-c", transferCommandScript(remotePath, source)},
+			[]string{"sh", "-c", transferCommandScript(remotePath, stagingPath, source)},
+		),
+		Commit: slices.Concat(
+			mach.MaybeSudo(),
+			[]string{"sh", "-c", transferCommandCommitScript(remotePath, stagingPath)},
+		),
+		Cleanup: slices.Concat(
+			mach.MaybeSudo(),
+			[]string{"sh", "-c", transferCommandCleanupScript(stagingPath)},
 		),
 	}
 }
 
-// transferCommandSourceArgv builds the control-host argv; the env pair survives sudo, su -l and ssh re-parsing.
+// transferCommandSourceArgv builds the control-host argv; the env pair survives
+// sudo, su -l and ssh re-parsing.
 func transferCommandSourceArgv(source attributes.TransferSource) []string {
 	command := []string{"sh", "-u", "-c", source.Command}
 	if source.LocalPath == "" {
@@ -95,50 +125,124 @@ func transferCommandSourceArgv(source attributes.TransferSource) []string {
 	return executioner.WithEnv([]string{runtimevars.SecretLocalPath + "=" + source.LocalPath}, command)
 }
 
-// transferCommandScript returns the destination sh script: set -e aborts on
-// the first failure, umask 077 keeps the streamed bytes private until chmod,
-// and chown runs before chmod because chown clears setuid/setgid bits.
-func transferCommandScript(remotePath string, source attributes.TransferSource) string {
-	var script strings.Builder
-
-	script.WriteString("set -e\n")
-	script.WriteString("umask 077\n")
-	// Remote paths are POSIX, so path.Dir is the right split on any control host.
-	script.WriteString("mkdir -p -- " + shellquote.Quote(path.Dir(remotePath)) + "\n")
-	script.WriteString("cat > " + shellquote.Quote(remotePath) + "\n")
-
-	if source.UID != nil && source.GID != nil {
-		fmt.Fprintf(&script, "chown %d:%d -- %s\n", *source.UID, *source.GID, shellquote.Quote(remotePath))
-	}
-
-	script.WriteString("chmod " + source.Permissions.String() + " -- " + shellquote.Quote(remotePath) + "\n")
-
-	return script.String()
+// transferCommandTempPath stages beside the destination with a per-transfer
+// suffix; the separate commit runs only after the source succeeds.
+func transferCommandTempPath(remotePath, stagingSuffix string) string {
+	return path.Join(path.Dir(remotePath), ".panix-secret."+path.Base(remotePath)+"."+stagingSuffix+".tmp")
 }
 
-// transferCommandProbeScript returns the probe sh script: the owner line runs
-// before the mode line for the same setuid/setgid reason; a missing file
-// prints nothing (update), and the sha256sum output drives the skip.
+// The write stages under a noclobber path, rejects symlink and directory
+// destinations, and keeps the bytes private until chown/chmod. The -h metadata
+// flags never follow a swapped symlink.
+func transferCommandScript(remotePath, stagingPath string, source attributes.TransferSource) string {
+	quotedPath := shellquote.Quote(remotePath)
+	// Remote paths are POSIX even when the control host is not.
+	quotedDir := shellquote.Quote(path.Dir(remotePath))
+	quotedTemp := shellquote.Quote(stagingPath)
+
+	lines := []string{
+		"set -e",
+		"umask 077",
+		"mkdir -p -- " + quotedDir,
+		"if [ -L " + quotedPath + " ]; then",
+		"  echo " + shellquote.Quote("refusing to write through symlink: "+remotePath) + " >&2",
+		"  exit 1",
+		"fi",
+		"if [ -d " + quotedPath + " ]; then",
+		"  echo " + shellquote.Quote("refusing to write to directory: "+remotePath) + " >&2",
+		"  exit 1",
+		"fi",
+		"tmp=" + quotedTemp,
+		"rm -f -- \"$tmp\"",
+		"set -C",
+		"cat > \"$tmp\"",
+		"if [ ! -f \"$tmp\" ] || [ -L \"$tmp\" ]; then",
+		"  echo " + shellquote.Quote("refusing non-regular staged file: "+stagingPath) + " >&2",
+		"  exit 1",
+		"fi",
+	}
+
+	// chown before chmod: chown clears setuid/setgid bits.
+	if source.UID != nil && source.GID != nil {
+		lines = append(lines, fmt.Sprintf("chown -h %d:%d -- \"$tmp\"", *source.UID, *source.GID))
+	}
+
+	lines = append(lines, "chmod -h "+source.Permissions.String()+" -- \"$tmp\"")
+
+	return shellScript(lines...)
+}
+
+// The commit renames the staged file into place, re-checks the destination, and
+// prefers mv -T so a symlink-to-directory cannot receive the payload.
+func transferCommandCommitScript(remotePath, stagingPath string) string {
+	quotedPath := shellquote.Quote(remotePath)
+	quotedTemp := shellquote.Quote(stagingPath)
+
+	return shellScript(
+		"set -e",
+		"tmp="+quotedTemp,
+		"trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM",
+		"if [ -L "+quotedPath+" ]; then",
+		"  echo "+shellquote.Quote("refusing to replace symlink: "+remotePath)+" >&2",
+		"  exit 1",
+		"fi",
+		"if [ -d "+quotedPath+" ]; then",
+		"  echo "+shellquote.Quote("refusing to replace directory: "+remotePath)+" >&2",
+		"  exit 1",
+		"fi",
+		"case \"$(mv --help 2>&1 || true)\" in",
+		"  *-T*)",
+		"    mv -T -- \"$tmp\" "+quotedPath,
+		"    ;;",
+		"  *)",
+		"    mv -f -- \"$tmp\" "+quotedPath,
+		"    ;;",
+		"esac",
+		"trap - EXIT HUP INT TERM",
+	)
+}
+
+// The cleanup removes only this transfer's staging path.
+func transferCommandCleanupScript(stagingPath string) string {
+	return shellScript("rm -f -- " + shellquote.Quote(stagingPath))
+}
+
+// The probe is read-only: it rejects symlinks and directories and prints a hash
+// only when the destination already has the configured owner and mode.
 func transferCommandProbeScript(remotePath string, source attributes.TransferSource) string {
 	quotedPath := shellquote.Quote(remotePath)
-	quotedPerm := shellquote.Quote(source.Permissions.String())
+	quotedPerm := shellquote.Quote(source.Permissions.StatString())
 
-	var script strings.Builder
-
-	script.WriteString("set -e\n")
-	script.WriteString("if [ -e " + quotedPath + " ]; then\n")
+	lines := []string{
+		"set -e",
+		"if [ -L " + quotedPath + " ]; then",
+		"  echo " + shellquote.Quote("refusing to read through symlink: "+remotePath) + " >&2",
+		"  exit 1",
+		"fi",
+		"if [ -d " + quotedPath + " ]; then",
+		"  echo " + shellquote.Quote("refusing to read directory: "+remotePath) + " >&2",
+		"  exit 1",
+		"fi",
+		"if [ -f " + quotedPath + " ] && [ ! -L " + quotedPath + " ]; then",
+	}
 
 	if source.UID != nil && source.GID != nil {
 		quotedOwner := shellquote.Quote(fmt.Sprintf("%d:%d", *source.UID, *source.GID))
-		fmt.Fprintf(&script, "  [ \"$(stat -c '%%u:%%g' -- %s)\" = %s ] || chown %s -- %s\n",
-			quotedPath, quotedOwner, quotedOwner, quotedPath)
+		lines = append(lines,
+			"  [ \"$(stat -c '%u:%g' -- "+quotedPath+")\" = "+quotedOwner+" ] || exit 0",
+		)
 	}
 
-	fmt.Fprintf(&script, "  [ \"$(stat -c '%%a' -- %s)\" = %s ] || chmod %s -- %s\n",
-		quotedPath, quotedPerm, quotedPerm, quotedPath)
+	lines = append(lines,
+		"  [ \"$(stat -c '%a' -- "+quotedPath+")\" = "+quotedPerm+" ] || exit 0",
+		"  sha256sum -- "+quotedPath,
+		"fi",
+	)
 
-	script.WriteString("  sha256sum -- " + quotedPath + "\n")
-	script.WriteString("fi\n")
+	return shellScript(lines...)
+}
 
-	return script.String()
+// shellScript joins lines with newlines and keeps the trailing newline.
+func shellScript(lines ...string) string {
+	return strings.Join(lines, "\n") + "\n"
 }

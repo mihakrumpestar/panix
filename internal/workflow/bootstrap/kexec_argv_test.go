@@ -48,17 +48,25 @@ func TestCreateKexecDirectory_BootstrapSSHUser(t *testing.T) {
 
 	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
-	require.NoError(t, createKexecDirectory(exc, mach))
+	stagingDir, err := createKexecDirectory(exc, mach)
+	require.NoError(t, err)
 
-	// Assert usernames: the remote transport quotes the line.
+	assert.True(t, strings.HasPrefix(stagingDir, "/tmp/panix-kexec-"), stagingDir)
+
+	// Assert usernames: the active connection's user owns the staging dir.
 	line := testutil.LastCommandLine(t, phaseLog)
+	assert.Contains(t, line, "install")
+	assert.Contains(t, line, "-d")
+	assert.Contains(t, line, "-m")
+	assert.Contains(t, line, "700")
 	assert.Contains(t, line, "bootstrap-admin")
+	assert.Contains(t, line, stagingDir)
 	assert.NotContains(t, line, "kexec-user")
+	assert.NotContains(t, line, "/tmp/kexec")
 }
 
-// ONE elevated command resets and creates the dir owned by the SSH user
-// (mode 700), closing the rm→mkdir TOCTOU window; only the kexec run
-// itself elevates.
+// Each run creates a fresh elevated dir owned by the SSH user (mode 700);
+// only the kexec run itself elevates beyond this.
 func TestCreateKexecDirectory_Elevation(t *testing.T) {
 	t.Parallel()
 
@@ -68,14 +76,14 @@ func TestCreateKexecDirectory_Elevation(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "non-root SSH user: elevated reset+install, SSH-user-owned, mode 700",
+			name:   "non-root SSH user: elevated install, SSH-user-owned, mode 700",
 			isRoot: false,
-			want:   "sudo sh -c rm -rf '/tmp/kexec' && install -d -m 700 -o 'kexec-user' '/tmp/kexec'",
+			want:   "sudo install -d -m 700 -o kexec-user ",
 		},
 		{
-			name:   "root SSH user: bare reset+install still owned by the SSH user",
+			name:   "root SSH user: bare install still owned by the SSH user",
 			isRoot: true,
-			want:   "sh -c rm -rf '/tmp/kexec' && install -d -m 700 -o 'kexec-user' '/tmp/kexec'",
+			want:   "install -d -m 700 -o kexec-user ",
 		},
 	}
 
@@ -86,13 +94,31 @@ func TestCreateKexecDirectory_Elevation(t *testing.T) {
 			mach := newKexecMachine(t, tt.isRoot)
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
-			require.NoError(t, createKexecDirectory(exc, mach))
+			stagingDir, err := createKexecDirectory(exc, mach)
+			require.NoError(t, err)
+			assert.True(t, strings.HasPrefix(stagingDir, "/tmp/panix-kexec-"), stagingDir)
 
 			lines := testutil.CommandLines(t, phaseLog)
 			require.Len(t, lines, 1)
-			assert.Equal(t, tt.want, lines[0])
+			assert.Equal(t, tt.want+stagingDir, lines[0])
+			assert.NotContains(t, lines[0], "/tmp/kexec")
 		})
 	}
+}
+
+// The tarball lands inside the per-run staging dir.
+func TestDownloadOrTransferKexec_UsesStagingDir(t *testing.T) {
+	t.Parallel()
+
+	mach := newKexecMachine(t, false)
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
+
+	const stagingDir = "/tmp/panix-kexec-test0123456789"
+
+	require.NoError(t, downloadOrTransferKexec(exc, mach, "https://example.com/file.tar.gz", stagingDir))
+
+	assert.Equal(t, "curl --fail -# -L --proto =https --proto-redir =https https://example.com/file.tar.gz -o "+stagingDir+"/kexec.tar",
+		testutil.LastCommandLine(t, phaseLog))
 }
 
 // No elevation: the staging dir is SSH-user-owned, so tar needs no prefix.
@@ -102,22 +128,28 @@ func TestExtractKexecTarball_NoElevation(t *testing.T) {
 	mach := newKexecMachine(t, false)
 	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
-	require.NoError(t, extractKexecTarball(exc, "https://example.com/file.tar.gz"))
+	const stagingDir = "/tmp/panix-kexec-test0123456789"
 
-	assert.Equal(t, "tar -xzf /tmp/kexec/kexec.tar -C /tmp/kexec", testutil.LastCommandLine(t, phaseLog))
+	require.NoError(t, extractKexecTarball(exc, "https://example.com/file.tar.gz", stagingDir))
+
+	assert.Equal(t,
+		"tar -xzf "+stagingDir+"/kexec.tar -C "+stagingDir,
+		testutil.LastCommandLine(t, phaseLog))
 }
 
 // The staged run script is the one elevated step: kexec needs root.
 func TestRunKexecCommand_Elevation(t *testing.T) {
 	t.Parallel()
 
+	const stagingDir = "/tmp/panix-kexec-test0123456789"
+
 	tests := []struct {
 		name   string
 		isRoot bool
 		want   string
 	}{
-		{"non-root SSH user: sudo prefix", false, "sudo /tmp/kexec/kexec/run"},
-		{"root SSH user: bare", true, "/tmp/kexec/kexec/run"},
+		{"non-root SSH user: sudo prefix", false, "sudo " + stagingDir + "/kexec/run"},
+		{"root SSH user: bare", true, stagingDir + "/kexec/run"},
 	}
 
 	for _, tt := range tests {
@@ -127,7 +159,7 @@ func TestRunKexecCommand_Elevation(t *testing.T) {
 			mach := newKexecMachine(t, tt.isRoot)
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
-			require.NoError(t, runKexecCommand(exc, mach))
+			require.NoError(t, runKexecCommand(exc, mach, stagingDir))
 
 			assert.Equal(t, tt.want, testutil.LastCommandLine(t, phaseLog))
 		})

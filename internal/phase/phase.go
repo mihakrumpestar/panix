@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrAllPhasesSkipped  = errors.New("all phases skipped")
+	ErrInspectRequired   = errors.New("inspect phase required")
 	ErrInvalidFirstPhase = errors.New("phase can't be first")
 	ErrUnknownPhase      = errors.New("unknown phase")
 )
@@ -122,6 +123,11 @@ func ValidatePhases(requestedPhases []Phase, skipPhases []Phase) ([]Phase, error
 		return nil, ErrAllPhasesSkipped
 	}
 
+	inspectErr := validateInspectSkip(skipPhases, result)
+	if inspectErr != nil {
+		return nil, inspectErr
+	}
+
 	firstPhase := result[0]
 
 	meta, ok := GetPhaseMetadata(firstPhase)
@@ -131,7 +137,46 @@ func ValidatePhases(requestedPhases []Phase, skipPhases []Phase) ([]Phase, error
 		return nil, errors.Wrapf(ErrInvalidFirstPhase, "%s (allowed: %v)", firstPhase, validFirst)
 	}
 
+	inspectErr = validateInspectRequirement(result)
+	if inspectErr != nil {
+		return nil, inspectErr
+	}
+
 	return result, nil
+}
+
+// validateInspectSkip fails closed when inspect is explicitly skipped: the
+// remaining phases cannot tell a fresh machine from an already-installed one,
+// and Activate would install to /mnt. It runs before the first-phase check, so
+// an explicit skip reports the missing inspect requirement.
+func validateInspectSkip(skipPhases, result []Phase) error {
+	if !slices.Contains(skipPhases, Inspect) {
+		return nil
+	}
+
+	return requireBuildOnly(result)
+}
+
+// validateInspectRequirement enforces the same invariant when inspect was never
+// requested. It runs after the first-phase check, so invalid first phases keep
+// their specific error. Build is the only phase that can run offline; every
+// other phase depends on inspect.
+func validateInspectRequirement(result []Phase) error {
+	if slices.Contains(result, Inspect) {
+		return nil
+	}
+
+	return requireBuildOnly(result)
+}
+
+func requireBuildOnly(result []Phase) error {
+	for _, phase := range result {
+		if phase != Build {
+			return errors.Wrapf(ErrInspectRequired, "cannot run %s without inspect", phase)
+		}
+	}
+
+	return nil
 }
 
 func validFirstPhases() []Phase {

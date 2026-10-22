@@ -167,15 +167,15 @@ Three ways to take a snapshot:
 Snapshot files are written to `--snapshot.dir` (default: current directory) with the naming format:
 
 ```text
-panix-snapshot-<start_epoch>-<snapshot_epoch>-<reason>.json
+panix-snapshot-<start_epoch>-<snapshot_epoch>-<reason>-<suffix>.json
 ```
 
-Where `<reason>` is `manual`, `retry`, or `exit`.
+Where `<reason>` is `manual`, `retry`, or `exit`, and `<suffix>` is a short random string so two snapshots taken in the same second do not collide.
 
 ## Replaying a Snapshot
 
 ```sh
-panix snapshot --path panix-snapshot-1776379281-1776379290-manual.json
+panix snapshot --path panix-snapshot-1776379281-1776379290-manual-x7k2m9.json
 ```
 
 Replay opens the familiar TUI view with all phase statuses, build logs, command outputs, and machine stats frozen at the time the snapshot was taken. Phases and commands that were running at capture time also appear as running (loading spinners). The `r` (retry) and `ctrl+r` (restart) keybinds are disabled since the workflow is not running.

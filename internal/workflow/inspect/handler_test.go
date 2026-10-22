@@ -83,3 +83,26 @@ func TestRunBootstrapModeInspect_Dispatch(t *testing.T) {
 		})
 	}
 }
+
+// A successful inspect marks the metadata as populated, which is the signal
+// Activate requires before it may install to /mnt.
+func TestRunPhase_MarksInspectPopulated(t *testing.T) {
+	t.Parallel()
+
+	mach := newSkipTestMachine(t, false, "")
+	bootstrapClient := &ssh.SSHClient{Hostname: "10.0.0.9", Port: 22, Username: "bootstrap-admin"}
+	require.NoError(t, bootstrapClient.Init("bootstrap-host", "", nixver.Info{}))
+	mach.Bootstrap.SSH = *bootstrapClient
+
+	leaf := &fleet.FleetLeaf{
+		Installable: &installable.Installable{Preset: installable.Preset{Bootstrap: installable.BootstrapNixOS}},
+		Machine:     mach,
+	}
+
+	exc, _ := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
+
+	require.NoError(t, Handler{}.RunPhase(exc, leaf))
+	require.NotNil(t, mach.MetaInspect.Load())
+	assert.True(t, mach.MetaInspect.Load().Inspected, "successful inspect must set the populated signal")
+	assert.False(t, mach.MetaInspect.Load().Bootstrapped, "dry-run installer is unbootstrapped")
+}

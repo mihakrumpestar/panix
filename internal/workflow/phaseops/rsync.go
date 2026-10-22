@@ -37,8 +37,7 @@ func TransferFile(
 		}
 	}
 
-	perms := source.Permissions.String()
-	commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chmod=D%s,F%s", perms, perms))
+	commandWithArgs = append(commandWithArgs, "--chmod="+rsyncChmodFlag(source.Permissions))
 
 	if source.UID != nil && source.GID != nil {
 		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chown=%d:%d", *source.UID, *source.GID))
@@ -72,4 +71,28 @@ func TransferFile(
 	}
 
 	return nil
+}
+
+// rsyncChmodFlag renders the --chmod value: files use the configured mode,
+// while directories stay traversable. Owner rwx is always set; group and other
+// execute follow the corresponding read bit, so a 0600 file mode yields D700
+// instead of the untraversable D600.
+func rsyncChmodFlag(perms attributes.FileMode) string {
+	const (
+		permissionBits = 0o777
+		ownerAccess    = 0o700
+	)
+
+	fileMode := perms.Get() & permissionBits
+
+	dirMode := fileMode | ownerAccess
+	if fileMode&0o040 != 0 {
+		dirMode |= 0o010
+	}
+
+	if fileMode&0o004 != 0 {
+		dirMode |= 0o001
+	}
+
+	return fmt.Sprintf("D%o,F%o", dirMode, fileMode)
 }

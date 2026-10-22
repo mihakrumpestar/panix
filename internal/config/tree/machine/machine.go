@@ -36,6 +36,7 @@ type Machine struct {
 }
 
 type MetaInspect struct {
+	Inspected      bool `yaml:"-" json:"inspected,omitempty"`
 	Reachable      bool `yaml:"-" json:"reachable,omitempty"`
 	SSHConnectable bool `yaml:"-" json:"ssh_connectable,omitempty"`
 	// Probed during the last RefreshSuperuser on the then-active SSH
