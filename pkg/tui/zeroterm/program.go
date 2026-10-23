@@ -185,21 +185,8 @@ func (p *Program) eventLoop(sigCh <-chan os.Signal) error {
 				return nil
 			}
 
-			batch, ok := msg.(batchMsg)
-			if ok {
-				for _, msg := range batch.msgs {
-					_, ok = msg.(QuitMsg)
-					if ok {
-						return nil
-					}
-
-					cmds := p.model.Update(p.enrichMouseMsg(msg))
-					p.processCmds(cmds)
-				}
-			} else {
-				cmds := p.model.Update(p.enrichMouseMsg(msg))
-				p.processCmds(cmds)
-			}
+			cmds := p.model.Update(p.enrichMouseMsg(msg))
+			p.processCmds(cmds)
 
 			p.renderFrame()
 
@@ -286,10 +273,28 @@ func (p *Program) processCmds(cmd Cmd) {
 		return
 	}
 
-	go func(c Cmd) {
-		msg := c()
-		p.msgCh <- msg
-	}(cmd)
+	go p.runCmd(cmd)
+}
+
+// runCmd executes a command and delivers its message. Batches expand into
+// concurrent commands, each delivered as soon as it finishes, so one slow
+// command cannot stall another timer's message.
+func (p *Program) runCmd(cmd Cmd) {
+	msg := cmd()
+
+	batch, ok := msg.(batchCmd)
+	if ok {
+		for _, child := range batch.cmds {
+			go p.runCmd(child)
+		}
+
+		return
+	}
+
+	select {
+	case p.msgCh <- msg:
+	case <-p.stopCh:
+	}
 }
 
 //nolint:cyclop
@@ -370,6 +375,9 @@ func TickCmd(d time.Duration, f func(time.Time) Msg) Cmd {
 	}
 }
 
+// BatchCmd groups commands so the program runs them concurrently and delivers
+// each message as soon as it is ready. Commands often sleep (tickers), so
+// running them in sequence would let one slow command stall every other timer.
 func BatchCmd(cmds ...Cmd) Cmd {
 	var nonNil []Cmd
 
@@ -387,17 +395,11 @@ func BatchCmd(cmds ...Cmd) Cmd {
 		return nonNil[0]
 	}
 
-	return func() Msg {
-		var batch batchMsg
-
-		for _, c := range nonNil {
-			batch.msgs = append(batch.msgs, c())
-		}
-
-		return batch
-	}
+	return func() Msg { return batchCmd{cmds: nonNil} }
 }
 
-type batchMsg struct {
-	msgs []Msg
+// batchCmd is the value a BatchCmd returns for the program to expand into
+// concurrent commands.
+type batchCmd struct {
+	cmds []Cmd
 }

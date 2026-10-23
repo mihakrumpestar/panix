@@ -2,12 +2,18 @@ package command
 
 import (
 	"strconv"
+	"sync/atomic"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomictimeandstate"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
 	"github.com/mihakrumpestar/panix/pkg/redact"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
+
+// commandEpoch identifies each CommandLog instance for display cache keys. It
+// never resets, so a retry that recreates a command at the same xpath cannot
+// alias the previous attempt and reuse its cached output.
+var commandEpoch atomic.Uint64
 
 type CommandLog struct {
 	Description     string          `yaml:"-" json:"description,omitempty"`
@@ -24,6 +30,8 @@ type CommandLog struct {
 	LabelXpath  xpath.Xpath `yaml:"-" json:"-"`
 	OutputXpath xpath.Xpath `yaml:"-" json:"-"`
 	ErrorXpath  xpath.Xpath `yaml:"-" json:"-"`
+
+	epoch uint64
 }
 
 // NewCommandLog builds a command log whose xpath is unique within its phase.
@@ -43,11 +51,18 @@ func NewCommandLog(phaseXpath xpath.Xpath, ordinal int, description, statusIfRun
 		TimeAndState: atomictimeandstate.New(),
 
 		Xpath: cmdXpath,
+		epoch: commandEpoch.Add(1),
 	}
 
 	commandLog.initDerivedXpaths()
 
 	return commandLog
+}
+
+// Epoch returns the instance identity of this command log. It is stable for the
+// life of the instance and unique across retries that reuse the same xpath.
+func (cl *CommandLog) Epoch() uint64 {
+	return cl.epoch
 }
 
 // PostUnmarshalInit recomputes the derived xpaths that json:"-" omits; call it

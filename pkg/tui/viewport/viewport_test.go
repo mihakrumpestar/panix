@@ -118,7 +118,7 @@ func TestScrollPercent(t *testing.T) {
 	mdl := New(WithWidth(80), WithHeight(3))
 	mdl.setLines(strLines("line1", "line2", "line3", "line4", "line5"))
 
-		assert.InDelta(t, float64(0), mdl.ScrollPercent(), 0.001, "ScrollPercent at top")
+	assert.InDelta(t, float64(0), mdl.ScrollPercent(), 0.001, "ScrollPercent at top")
 
 	mdl.GotoBottom()
 
@@ -1526,6 +1526,70 @@ func TestSyncAutoScrollToBottom(t *testing.T) {
 	require.NoError(t, err, "Sync should not error")
 
 	assert.InEpsilon(t, float64(1), mdl.ScrollPercent(), 0.001, "should stay at bottom after Sync, got %.2f", mdl.ScrollPercent())
+}
+
+func TestSyncAutoHeightHoldsShrinkUntilAllowed(t *testing.T) {
+	t.Parallel()
+
+	mdl := New(
+		WithWidth(20),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+		WithMaxHeight(5),
+		WithBorder(style.Color("")),
+	)
+
+	require.NoError(t, mdl.Sync(splitLines("line1\nline2\nline3"), 20, 0))
+	assert.Equal(t, 5, mdl.Height(), "3 content lines + border")
+	assert.False(t, mdl.PendingShrink(), "no shrink is pending while content fills the box")
+
+	require.NoError(t, mdl.Sync(splitLines("line1"), 20, 0))
+	assert.Equal(t, 5, mdl.Height(), "auto height must hold while a shrink is not allowed")
+	assert.True(t, mdl.PendingShrink(), "a smaller content must be reported as a pending shrink")
+
+	mdl.AllowShrink()
+	require.NoError(t, mdl.Sync(splitLines("line1"), 20, 0))
+	assert.Equal(t, 3, mdl.Height(), "1 content line + border after the shrink is allowed")
+	assert.False(t, mdl.PendingShrink(), "released height must no longer be pending")
+}
+
+func TestSyncAutoHeightPendingShrinkCancelledOnGrowth(t *testing.T) {
+	t.Parallel()
+
+	mdl := New(
+		WithWidth(20),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+		WithMaxHeight(5),
+		WithBorder(style.Color("")),
+	)
+
+	require.NoError(t, mdl.Sync(splitLines("line1\nline2\nline3"), 20, 0))
+	require.NoError(t, mdl.Sync(splitLines("line1"), 20, 0))
+	require.True(t, mdl.PendingShrink())
+
+	require.NoError(t, mdl.Sync(splitLines("line1\nline2\nline3"), 20, 0))
+	assert.Equal(t, 5, mdl.Height())
+	assert.False(t, mdl.PendingShrink(), "growing back to the held height must cancel the pending shrink")
+}
+
+func TestSyncExplicitHeightReleasesAutoHold(t *testing.T) {
+	t.Parallel()
+
+	mdl := New(
+		WithWidth(20),
+		WithScrollbar("█", "│", style.Color(""), style.Color("")),
+		WithMaxHeight(5),
+		WithBorder(style.Color("")),
+	)
+
+	require.NoError(t, mdl.Sync(splitLines("line1\nline2\nline3"), 20, 0))
+	require.NoError(t, mdl.Sync(splitLines("line1"), 20, 0))
+	require.True(t, mdl.PendingShrink())
+
+	require.NoError(t, mdl.Sync(splitLines("line1"), 20, 2))
+	assert.Equal(t, 2, mdl.Height(), "explicit height wins over the auto hold")
+
+	require.NoError(t, mdl.Sync(splitLines("line1"), 20, 0))
+	assert.Equal(t, 3, mdl.Height(), "auto height starts fresh after an explicit size")
 }
 
 func TestSyncMainNoAutoScroll(t *testing.T) {

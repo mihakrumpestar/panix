@@ -239,3 +239,47 @@ func TestStopChClosesOnExit(t *testing.T) {
 		assert.Fail(t, "stopCh should be closable")
 	}
 }
+
+//nolint:paralleltest // package-level globals not concurrency-safe
+func TestBatchCmdDeliversMessagesAsCommandsFinish(t *testing.T) {
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+
+	slow := func() Msg {
+		close(slowStarted)
+		<-releaseSlow
+
+		return KeyPressMsg{Key: "slow"}
+	}
+	fast := func() Msg { return KeyPressMsg{Key: "fast"} }
+
+	prog := NewProgram(&dummyModel{})
+
+	prog.processCmds(BatchCmd(slow, fast))
+
+	select {
+	case <-slowStarted:
+	case <-time.After(time.Second):
+		t.Fatal("slow command did not start")
+	}
+
+	select {
+	case msg := <-prog.msgCh:
+		key, ok := msg.(KeyPressMsg)
+		require.True(t, ok, "expected KeyPressMsg, got %T", msg)
+		assert.Equal(t, "fast", key.Key, "a fast command must not wait for a slow one")
+	case <-time.After(time.Second):
+		t.Fatal("fast command message was blocked by the slow command")
+	}
+
+	close(releaseSlow)
+
+	select {
+	case msg := <-prog.msgCh:
+		key, ok := msg.(KeyPressMsg)
+		require.True(t, ok, "expected KeyPressMsg, got %T", msg)
+		assert.Equal(t, "slow", key.Key)
+	case <-time.After(time.Second):
+		t.Fatal("slow command message was not delivered")
+	}
+}

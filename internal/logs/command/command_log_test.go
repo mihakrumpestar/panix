@@ -77,3 +77,14 @@ func TestNewCommandLog_NilCommand(t *testing.T) {
 	require.NotNil(t, cl)
 	assert.Empty(t, cl.Command.Bytes())
 }
+
+func TestCommandLogEpochIsUniquePerInstance(t *testing.T) {
+	t.Parallel()
+
+	first := NewCommandLog(xpath.New("test"), 0, "desc", "running", "failed", nil)
+	second := NewCommandLog(xpath.New("test"), 0, "desc", "running", "failed", nil)
+
+	assert.NotZero(t, first.Epoch(), "a command instance must have a non-zero epoch")
+	assert.NotEqual(t, first.Epoch(), second.Epoch(),
+		"commands recreated at the same xpath must get distinct epochs")
+}

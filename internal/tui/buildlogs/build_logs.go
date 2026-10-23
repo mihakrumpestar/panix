@@ -36,6 +36,11 @@ const (
 	timerLevelPhase   = 4
 	timerLevelCommand = 5
 
+	// outputVersionBits splits an output leaf version into the command instance
+	// epoch in the high bits and a per-attempt counter in the low bits.
+	outputVersionBits = 32
+	outputVersionMask = (1 << outputVersionBits) - 1
+
 	maxSpaces = 512
 )
 
@@ -559,7 +564,7 @@ func (b *BuildLogs) addCommand(parent *tree.Node, cmd *command.CommandLog, idx i
 	labelXpath := cmd.LabelXpath
 	labelContent, labelVersion := b.commandLabelContent(cmd)
 
-	displayVersion := entityVersion + cmd.TimeAndState.StateVersion()
+	displayVersion := commandVersion(cmd.Epoch(), entityVersion, cmd.TimeAndState.StateVersion())
 
 	cmdNode := parent.Child(cmdXpath, displayVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
 		tasCached := cmd.TimeAndState.Load()
@@ -617,6 +622,18 @@ func (b *BuildLogs) commandLabelContent(cmd *command.CommandLog) ([]byte, uint64
 	return []byte(cmd.Description), 0
 }
 
+// commandVersion is a tree cache key scoped to one command instance. The high
+// bits carry the instance epoch, so a retry cannot alias the previous attempt;
+// the low bits grow monotonically within an attempt. Masking the counter is
+// deliberate: command leaves do not need the widthOffset in entityVersion's
+// high bits because WindowSizeMsg invalidates the cached tree before the next
+// render.
+func commandVersion(epoch, counter, stateVersion uint64) uint64 {
+	total := counter + stateVersion
+
+	return epoch<<outputVersionBits | total&outputVersionMask
+}
+
 func (b *BuildLogs) addCommandChildren(
 	cmdNode *tree.Node, cmd *command.CommandLog,
 	tasCached *atomictimeandstate.TimeAndState,
@@ -626,8 +643,18 @@ func (b *BuildLogs) addCommandChildren(
 	outputXpath := cmd.OutputXpath
 
 	if output.Len() > 0 {
-		ver := output.Version()
+		// The epoch keeps the leaf key unique across retries; the counters grow
+		// monotonically within one attempt. Including the command state version
+		// recalculates the leaf when the command finishes, so its viewport can
+		// drop the height it held during live output even if the last output
+		// line did not change.
+		ver := commandVersion(cmd.Epoch(), output.Version(), tasCached.StateVersion())
+
 		cmdNode.Child(outputXpath, ver, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
+			if tasCached.IsFinished() {
+				b.viewports.AllowShrink(outputXpath)
+			}
+
 			snap := output.Snapshot()
 			outResult := b.viewports.RenderViewportVersioned(outputXpath, snap, ver, depthWidth)
 
@@ -642,7 +669,11 @@ func (b *BuildLogs) addCommandChildren(
 
 	err := tasCached.EndError
 	if err != nil {
-		cmdNode.Child(errXpath, entityVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
+		errVersion := commandVersion(cmd.Epoch(), entityVersion, tasCached.StateVersion())
+
+		cmdNode.Child(errXpath, errVersion, func(depthWidth int, old *buffer.LinesBuf) *buffer.LinesBuf {
+			b.viewports.AllowShrink(errXpath)
+
 			errMsg := buffer.NewLineBufPooled()
 			errMsg.Write(b.theme.Chars.ErrorIconBytes)
 			errMsg.WriteString(" Command failed: ")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -504,4 +505,302 @@ func TestMultipleViewports(t *testing.T) {
 	debug := buffer.LinesBufToStringForTests(debugBuf)
 	assert.Contains(t, debug, "Viewports: 3",
 		"should have 3 viewports")
+}
+
+// fireShrinkTick delivers the tick the scheduler currently has armed.
+func fireShrinkTick(viewports *Viewports) {
+	viewports.Update(shrinkTickMsg{generation: viewports.shrinkTickGeneration})
+}
+
+func TestAutoHeightShrinkDeferredUntilGracePeriod(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	now := time.Unix(1_700_000_000, 0)
+	viewports.now = func() time.Time { return now }
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+
+	itm, ok := viewports.items.Get(xpath_)
+	require.True(t, ok, "output viewport must exist")
+	require.Equal(t, 5, itm.model.Height(), "3 content lines + border")
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+	assert.Equal(t, 5, itm.model.Height(), "transient shrink must keep the height")
+	require.True(t, itm.model.PendingShrink(), "smaller content must be pending a shrink")
+
+	assert.NotNil(t, viewports.Update(zeroterm.PostRenderMsg{}),
+		"a pending shrink must schedule a release tick")
+	assert.Nil(t, viewports.Update(zeroterm.PostRenderMsg{}),
+		"the release tick must not be scheduled twice")
+
+	now = now.Add(autoShrinkDelay / 2)
+
+	fireShrinkTick(viewports)
+	assert.Equal(t, 5, itm.model.Height(), "height must hold before the grace period ends")
+	assert.False(t, viewports.ConsumeDirty(), "holding the height must not invalidate renders")
+
+	now = now.Add(autoShrinkDelay)
+
+	fireShrinkTick(viewports)
+	assert.True(t, viewports.ConsumeDirty(), "releasing a shrink must invalidate cached renders")
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+	assert.Equal(t, 3, itm.model.Height(), "viewport must shrink after the grace period")
+	assert.False(t, itm.model.PendingShrink(), "released height must no longer be pending")
+}
+
+func TestAutoHeightShrinkCancelledWhenContentGrowsBack(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	now := time.Unix(1_700_000_000, 0)
+	viewports.now = func() time.Time { return now }
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	itm, ok := viewports.items.Get(xpath_)
+	require.True(t, ok, "output viewport must exist")
+	require.NotNil(t, viewports.Update(zeroterm.PostRenderMsg{}))
+
+	now = now.Add(autoShrinkDelay / 2)
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 3, 0)
+	require.False(t, itm.model.PendingShrink(), "growing back must cancel the pending shrink")
+
+	now = now.Add(autoShrinkDelay)
+
+	fireShrinkTick(viewports)
+	assert.Equal(t, 5, itm.model.Height(), "cancelled shrink must not resize the viewport")
+	assert.False(t, viewports.ConsumeDirty(), "cancelled shrink must not invalidate renders")
+}
+
+func TestAllowShrinkReleasesHeightImmediately(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	viewports.AllowShrink(xpath_)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	itm, ok := viewports.items.Get(xpath_)
+	require.True(t, ok, "output viewport must exist")
+	assert.Equal(t, 3, itm.model.Height(), "AllowShrink must resize on the next render")
+}
+
+func TestAllowShrinkMissingViewportIsNoop(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	viewports.AllowShrink(xpath.New("missing"))
+}
+
+func TestAutoHeightShrinkRestartsGracePeriodOnActivity(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	now := time.Unix(1_700_000_000, 0)
+	viewports.now = func() time.Time { return now }
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	itm, ok := viewports.items.Get(xpath_)
+	require.True(t, ok, "output viewport must exist")
+
+	// A same-height update while the shrink is pending restarts the grace
+	// period, so live output keeps its box stable.
+	now = now.Add(autoShrinkDelay / 2)
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("uno"), 3, 0)
+
+	now = now.Add(autoShrinkDelay / 2)
+
+	fireShrinkTick(viewports)
+	assert.Equal(t, 5, itm.model.Height(), "recent output activity must extend the hold")
+	assert.False(t, viewports.ConsumeDirty(), "extended hold must not invalidate renders")
+
+	now = now.Add(autoShrinkDelay)
+
+	fireShrinkTick(viewports)
+	assert.True(t, viewports.ConsumeDirty(), "quiet output must release the hold")
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("uno"), 3, 0)
+	assert.Equal(t, 3, itm.model.Height(), "viewport must shrink after the quiet grace period")
+}
+
+func TestAutoHeightSnapshotRefreshKeepsGraceDeadline(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	now := time.Unix(1_700_000_000, 0)
+	viewports.now = func() time.Time { return now }
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	itm, ok := viewports.items.Get(xpath_)
+	require.True(t, ok, "output viewport must exist")
+	require.True(t, itm.model.PendingShrink())
+
+	// A global tree invalidation refreshes the snapshot pointer without changing
+	// the content version. That is not output activity and must not postpone the
+	// shrink.
+	now = now.Add(autoShrinkDelay - 100*time.Millisecond)
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	now = now.Add(100 * time.Millisecond)
+
+	fireShrinkTick(viewports)
+
+	assert.True(t, viewports.ConsumeDirty(), "the original deadline must still release the hold")
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+	assert.Equal(t, 3, itm.model.Height(), "viewport must shrink at the original deadline")
+}
+
+func TestStaleShrinkTickKeepsArmedTimer(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	now := time.Unix(1_700_000_000, 0)
+	viewports.now = func() time.Time { return now }
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	require.NotNil(t, viewports.Update(zeroterm.PostRenderMsg{}), "a tick must be armed")
+
+	viewports.Update(shrinkTickMsg{generation: viewports.shrinkTickGeneration - 1})
+	assert.False(t, viewports.shrinkTickAt.IsZero(), "a stale tick must not clear the armed timer")
+
+	now = now.Add(autoShrinkDelay)
+
+	fireShrinkTick(viewports)
+
+	itm, ok := viewports.items.Get(xpath_)
+	require.True(t, ok, "output viewport must exist")
+
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+	assert.Equal(t, 3, itm.model.Height(), "the armed tick must still release the hold")
+}
+
+func TestShrinkTickReleasesOnlyDueViewports(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	start := time.Unix(1_700_000_000, 0)
+	now := start
+	viewports.now = func() time.Time { return now }
+
+	firstXp := xpath.New("test", "first")
+	secondXp := xpath.New("test", "second")
+
+	viewports.RenderViewportVersioned(firstXp, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(firstXp, splitLines("one"), 2, 0)
+
+	now = start.Add(autoShrinkDelay / 2)
+
+	viewports.RenderViewportVersioned(secondXp, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(secondXp, splitLines("one"), 2, 0)
+
+	require.NotNil(t, viewports.Update(zeroterm.PostRenderMsg{}), "the earliest deadline must arm a tick")
+	assert.WithinDuration(t, start.Add(autoShrinkDelay), viewports.shrinkTickAt, time.Millisecond)
+
+	now = start.Add(autoShrinkDelay)
+
+	fireShrinkTick(viewports)
+
+	first, ok := viewports.items.Get(firstXp)
+	require.True(t, ok)
+	second, ok := viewports.items.Get(secondXp)
+	require.True(t, ok)
+
+	viewports.RenderViewportVersioned(firstXp, splitLines("one"), 2, 0)
+	viewports.RenderViewportVersioned(secondXp, splitLines("one"), 2, 0)
+
+	assert.Equal(t, 3, first.model.Height(), "the first viewport must shrink at its deadline")
+	assert.Equal(t, 5, second.model.Height(), "the second viewport must keep its hold until its own deadline")
+
+	require.NotNil(t, viewports.Update(zeroterm.PostRenderMsg{}), "the remaining deadline must arm a new tick")
+
+	now = start.Add(autoShrinkDelay / 2).Add(autoShrinkDelay)
+
+	fireShrinkTick(viewports)
+
+	viewports.RenderViewportVersioned(secondXp, splitLines("one"), 2, 0)
+	assert.Equal(t, 3, second.model.Height(), "the second viewport must shrink at its own deadline")
+}
+
+func TestResetClearsPendingShrinkState(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	xpath_ := xpath.New("test", "output")
+	viewports.RenderViewportVersioned(xpath_, splitLines("one\ntwo\nthree"), 1, 0)
+	viewports.RenderViewportVersioned(xpath_, splitLines("one"), 2, 0)
+
+	require.True(t, viewports.hasPendingShrink)
+	require.NotNil(t, viewports.Update(zeroterm.PostRenderMsg{}))
+
+	generation := viewports.shrinkTickGeneration
+	viewports.dirty = true
+
+	viewports.Reset()
+
+	assert.False(t, viewports.dirty, "reset must not leave a stale dirty flag")
+	assert.False(t, viewports.hasPendingShrink, "reset must drop pending holds")
+	assert.True(t, viewports.shrinkTickAt.IsZero(), "reset must disarm the tick")
+	assert.Greater(t, viewports.shrinkTickGeneration, generation, "reset must invalidate in-flight ticks")
+	assert.Equal(t, viewports.mainXpath, viewports.lastActiveXpath)
+	assert.Zero(t, viewports.lastActiveYOffset)
+}
+
+func TestMainAutoHeightFollowsContentWithoutHold(t *testing.T) {
+	t.Parallel()
+
+	dims := &Dimensions{Width: 100, Height: 50}
+	viewports := New(dims, 10, style.Style{}, style.Style{}, style.Style{})
+
+	first := viewports.RenderMainViewport(splitLines("one\ntwo\nthree"), 1, 0)
+	require.Equal(t, 3, first.Len())
+
+	second := viewports.RenderMainViewport(splitLines("one"), 2, 0)
+	assert.Equal(t, 1, second.Len(), "auto-height main viewport must follow content immediately")
+
+	// A negative height is auto-sized too (finalHeight treats only positive
+	// heights as explicit).
+	third := viewports.RenderMainViewport(splitLines("one\ntwo\nthree"), 3, -2)
+	require.Equal(t, 3, third.Len())
+
+	fourth := viewports.RenderMainViewport(splitLines("one"), 4, -2)
+	assert.Equal(t, 1, fourth.Len(), "negative explicit height must still follow content")
 }

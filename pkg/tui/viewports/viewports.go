@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/buffer"
@@ -12,6 +13,11 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/tui/zeroterm"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
+
+// autoShrinkDelay is how long an auto-sized viewport holds a larger height
+// after its content last changed. Output that briefly adds lines would
+// otherwise resize its box on every frame and shift the surrounding layout.
+const autoShrinkDelay = 2 * time.Second
 
 type Dimensions struct{ Width, Height int }
 
@@ -29,7 +35,13 @@ type Viewports struct {
 	highlightBuf                 *buffer.LinesBuf
 	lastActiveXpath              xpath.Xpath
 	lastActiveYOffset            int
-	dirty                        bool
+	now                          func() time.Time
+	shrinkTickAt                 time.Time
+	shrinkTickGeneration         uint64
+	// hasPendingShrink is set only by trackShrink; every other shrinkSince
+	// write is a clear. nextShrinkAt recomputes it from the source of truth.
+	hasPendingShrink bool
+	dirty            bool
 }
 
 type item struct {
@@ -38,6 +50,7 @@ type item struct {
 	contentVersion uint64
 	lastWidth      int
 	lastHeight     int
+	shrinkSince    time.Time // last content update while holding a larger height
 	zoneID         zeroterm.ZoneID
 	zonedOutput    *buffer.LinesBuf
 }
@@ -61,6 +74,19 @@ func (itm *item) invalidate() {
 	itm.model.InvalidateCache()
 }
 
+// releaseHeight drops the auto-height hold; the caller decides whether the
+// cached render must be invalidated as well.
+func (itm *item) releaseHeight() {
+	itm.model.AllowShrink()
+	itm.shrinkSince = time.Time{}
+}
+
+// releaseShrink drops the hold and forces the next render to re-sync it.
+func (itm *item) releaseShrink() {
+	itm.releaseHeight()
+	itm.invalidate()
+}
+
 func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHighlightBackground, selectionHighlightBorder style.Style) *Viewports {
 	mainXpath := xpath.New("main")
 
@@ -70,7 +96,9 @@ func New(dimensions *Dimensions, commandOutputMaxHeight int, border, selectionHi
 		commandOutputMaxHeight: commandOutputMaxHeight,
 		mainXpath:              mainXpath,
 		activeXpath:            mainXpath,
+		lastActiveXpath:        mainXpath,
 		highlightBuf:           buffer.NewLinesBuf(),
+		now:                    time.Now,
 	}
 	viewports.ApplyTheme(border, selectionHighlightBackground, selectionHighlightBorder, style.RoundedBorder())
 
@@ -168,6 +196,12 @@ func (v *Viewports) Reset() {
 
 	v.fullscreenXp = xpath.New()
 	v.activeXpath = v.mainXpath
+	v.lastActiveXpath = v.mainXpath
+	v.lastActiveYOffset = 0
+	v.shrinkTickAt = time.Time{}
+	v.shrinkTickGeneration++
+	v.hasPendingShrink = false
+	v.dirty = false
 }
 
 // RemoveIfExistsViewport removes a viewport by xpath.
@@ -187,9 +221,32 @@ func (v *Viewports) RemoveIfExistsViewport(xpath xpath.Xpath) {
 
 // Update
 
+// shrinkTickMsg fires when a held auto height may be released.
+type shrinkTickMsg struct {
+	generation uint64
+}
+
 func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	if v == nil {
 		return nil
+	}
+
+	switch msg := msg.(type) {
+	case shrinkTickMsg:
+		// A tick from a replaced timer must not disturb the armed one.
+		if msg.generation != v.shrinkTickGeneration {
+			return nil
+		}
+
+		// Clear the armed tick even when the deadline moved (content grew) or
+		// the timer fired a hair early, so the next post-render can rearm it.
+		v.shrinkTickAt = time.Time{}
+		v.releaseDueShrinks(v.now())
+		v.checkDirty()
+
+		return nil
+	case zeroterm.PostRenderMsg:
+		return v.scheduleShrinkTick()
 	}
 
 	click, ok := msg.(zeroterm.MouseClickMsg)
@@ -214,6 +271,22 @@ func (v *Viewports) Update(msg zeroterm.Msg) zeroterm.Cmd {
 	v.checkDirty()
 
 	return nil
+}
+
+// AllowShrink releases the auto-height hold on a viewport. The viewport resizes
+// on its next sync; callers use this when the content is final, such as when a
+// command finishes.
+func (v *Viewports) AllowShrink(xp xpath.Xpath) {
+	if v == nil {
+		return
+	}
+
+	itm, ok := v.items.Get(xp)
+	if !ok {
+		return
+	}
+
+	itm.releaseShrink()
 }
 
 // ConsumeDirty returns true if viewport state changed since last call, then resets the flag.
@@ -290,6 +363,77 @@ func (v *Viewports) checkDirty() {
 
 // Internal
 
+// scheduleShrinkTick arms a single tick for the earliest held height. It is
+// called after every render and only schedules once until that tick fires.
+func (v *Viewports) scheduleShrinkTick() zeroterm.Cmd {
+	next, ok := v.nextShrinkAt()
+	if !ok {
+		v.shrinkTickAt = time.Time{}
+
+		return nil
+	}
+
+	if !v.shrinkTickAt.IsZero() && !next.Before(v.shrinkTickAt) {
+		return nil
+	}
+
+	v.shrinkTickAt = next
+	v.shrinkTickGeneration++
+	generation := v.shrinkTickGeneration
+	delay := max(next.Sub(v.now()), 0)
+
+	return zeroterm.TickCmd(delay, func(time.Time) zeroterm.Msg {
+		return shrinkTickMsg{generation: generation}
+	})
+}
+
+func (v *Viewports) nextShrinkAt() (time.Time, bool) {
+	if !v.hasPendingShrink {
+		return time.Time{}, false
+	}
+
+	var next time.Time
+
+	v.items.ForEach(func(_ xpath.Xpath, itm *item) bool {
+		if itm.shrinkSince.IsZero() {
+			return true
+		}
+
+		deadline := itm.shrinkSince.Add(autoShrinkDelay)
+		if next.IsZero() || deadline.Before(next) {
+			next = deadline
+		}
+
+		return true
+	})
+
+	v.hasPendingShrink = !next.IsZero()
+
+	return next, v.hasPendingShrink
+}
+
+// releaseDueShrinks drops the height hold of every item whose grace period
+// expired, invalidating their cached renders so the next frame resizes them.
+func (v *Viewports) releaseDueShrinks(now time.Time) {
+	v.items.ForEach(func(_ xpath.Xpath, itm *item) bool {
+		if itm.shrinkSince.IsZero() || now.Before(itm.shrinkSince.Add(autoShrinkDelay)) {
+			return true
+		}
+
+		if !itm.model.PendingShrink() {
+			itm.shrinkSince = time.Time{}
+
+			return true
+		}
+
+		itm.releaseShrink()
+
+		v.dirty = true
+
+		return true
+	})
+}
+
 func (v *Viewports) render(
 	xpath xpath.Xpath,
 	contentBuf *buffer.LinesBuf,
@@ -300,7 +444,8 @@ func (v *Viewports) render(
 	active := xpath == v.activeXpath
 	itm := v.getOrCreateItem(xpath, indent, explicitHeight, bordered, scrollbar)
 
-	contentChanged := itm.contentVersion != version || itm.contentBuf != contentBuf
+	activity := itm.contentVersion != version
+	contentChanged := activity || itm.contentBuf != contentBuf
 	v.resolveContent(itm, version, contentBuf)
 
 	if bordered {
@@ -311,6 +456,8 @@ func (v *Viewports) render(
 	dimsChanged := width != itm.lastWidth || explicitHeight != itm.lastHeight
 
 	if contentChanged || dimsChanged {
+		releaseAutoHold(itm, width, explicitHeight, xpath == v.mainXpath)
+
 		itm.lastWidth = width
 		itm.lastHeight = explicitHeight
 
@@ -318,6 +465,8 @@ func (v *Viewports) render(
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "viewport: %v\n", err)
 		}
+
+		v.trackShrink(itm, activity)
 
 		if xpath == v.mainXpath {
 			itm.contentBuf = nil
@@ -336,6 +485,40 @@ func (v *Viewports) render(
 	itm.zoneID.MarkLines(rendered, itm.zonedOutput)
 
 	return itm.zonedOutput
+}
+
+// releaseAutoHold drops an auto-height hold after a width change reflowed the
+// content, so the height adapts immediately instead of on the shrink tick. The
+// main viewport is auto-sized for the one-shot final render (and when the
+// terminal is shorter than the header and footer) and has no grace-release
+// cycle, so it must follow content immediately.
+func releaseAutoHold(itm *item, width, explicitHeight int, isMain bool) {
+	if explicitHeight > 0 {
+		return
+	}
+
+	if isMain || width != itm.lastWidth {
+		itm.releaseHeight()
+	}
+}
+
+// trackShrink starts (or restarts) the grace period whenever a synced viewport
+// is holding more height than its content needs. Any content update while the
+// height is held counts as activity, so shrinking only happens once output has
+// been quiet for the whole grace period. Invalidations that only refresh a
+// cached snapshot keep the original deadline.
+func (v *Viewports) trackShrink(itm *item, active bool) {
+	if !itm.model.PendingShrink() {
+		itm.shrinkSince = time.Time{}
+
+		return
+	}
+
+	v.hasPendingShrink = true
+
+	if active || itm.shrinkSince.IsZero() {
+		itm.shrinkSince = v.now()
+	}
 }
 
 func (v *Viewports) viewWidth(indent, explicitWidth int) int {

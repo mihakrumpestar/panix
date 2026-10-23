@@ -2,6 +2,7 @@ package buildlogs
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"reflect"
 	"strings"
@@ -650,6 +651,53 @@ func TestAddCommandChildren_NoOutputNoError(t *testing.T) {
 		"addCommandChildren with no output and no error should add 0 children, got %d", cmdNode.Len())
 }
 
+func TestAddCommandChildren_FinishedOutputShrinksImmediately(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.contentWidth = 120
+	buildLogs.viewports = newTestViewports(conf)
+
+	cmd := command.NewCommandLog(xpath.New("test"), 0, "run", "running", "failed", []string{"echo"})
+	cmd.TimeAndState.StartTimer()
+	cmd.Output.Write([]byte("one"))
+	cmd.Output.Write([]byte("two"))
+	cmd.Output.Write([]byte("three"))
+
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
+	cmdXpath := xpath.New("cmd")
+	addNode := func() *tree.Node {
+		return root.Child(cmdXpath, 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
+			return lb("run")
+		})
+	}
+
+	cmdNode := addNode()
+	buildLogs.addCommandChildren(cmdNode, cmd, cmd.TimeAndState.Load(), 0)
+	require.Equal(t, 6, root.Render().Len(), "command label + 3-line output box")
+
+	// Output shrinks while the command is still running: the viewport keeps its
+	// height so the rest of the tree does not shift on every progress update.
+	root.BeginFrame()
+
+	cmdNode = addNode()
+
+	cmd.Output.RemoveLastLine()
+	cmd.Output.RemoveLastLine()
+	buildLogs.addCommandChildren(cmdNode, cmd, cmd.TimeAndState.Load(), 0)
+	require.Equal(t, 6, root.Render().Len(), "running command must hold its transient height")
+
+	// Finishing releases the hold: the same output now shrinks at once.
+	root.BeginFrame()
+
+	cmdNode = addNode()
+
+	cmd.TimeAndState.EndTimerWithError(nil)
+	buildLogs.addCommandChildren(cmdNode, cmd, cmd.TimeAndState.Load(), 0)
+	assert.Equal(t, 4, root.Render().Len(), "finished command must shrink its output immediately")
+}
+
 func TestEntityNode(t *testing.T) {
 	t.Parallel()
 
@@ -1143,4 +1191,143 @@ func getFirstOutput(conf *config.Config) *installable.Installable {
 	}
 
 	return nil
+}
+
+func TestAddCommandChildren_RetryDoesNotReuseStaleOutput(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.contentWidth = 120
+	buildLogs.viewports = newTestViewports(conf)
+
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
+	cmdXpath := xpath.New("cmd")
+	addNode := func() *tree.Node {
+		return root.Child(cmdXpath, 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
+			return lb("run")
+		})
+	}
+
+	newAttempt := func(line string) *command.CommandLog {
+		cmd := command.NewCommandLog(xpath.New("test"), 0, "run", "running", "failed", []string{"echo"})
+		cmd.TimeAndState.StartTimer()
+		cmd.Output.Write([]byte(line + " one"))
+		cmd.Output.Write([]byte(line + " two"))
+		cmd.Output.Write([]byte(line + " three"))
+		cmd.TimeAndState.EndTimerWithError(nil)
+
+		return cmd
+	}
+
+	first := newAttempt("old")
+	cmdNode := addNode()
+	buildLogs.addCommandChildren(cmdNode, first, first.TimeAndState.Load(), 0)
+	require.Contains(t, buffer.LinesBufToStringForTests(root.Render()), "old one")
+
+	root.BeginFrame()
+
+	cmdNode = addNode()
+	second := newAttempt("new")
+	buildLogs.addCommandChildren(cmdNode, second, second.TimeAndState.Load(), 0)
+
+	rendered := buffer.LinesBufToStringForTests(root.Render())
+	assert.Contains(t, rendered, "new one", "retry must render the new attempt output")
+	assert.NotContains(t, rendered, "old one", "retry must not reuse the previous attempt output")
+}
+
+func TestCommandVersionSeparatesEpochs(t *testing.T) {
+	t.Parallel()
+
+	assert.NotEqual(t, commandVersion(1, 3, 2), commandVersion(2, 3, 2),
+		"a new attempt must not alias the previous attempt's cache key")
+	assert.Greater(t, commandVersion(1, 4, 2), commandVersion(1, 3, 2),
+		"output growth must keep increasing the cache key")
+	assert.Greater(t, commandVersion(1, 3, 3), commandVersion(1, 3, 2),
+		"a state transition must keep increasing the cache key")
+}
+
+func TestAddCommandChildren_RetryReplacesErrorImmediately(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0)
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.contentWidth = 200
+	buildLogs.viewports = newTestViewports(conf)
+
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
+	cmdXpath := xpath.New("cmd")
+	addNode := func() *tree.Node {
+		return root.Child(cmdXpath, 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
+			return lb("run")
+		})
+	}
+
+	newAttempt := func(errText string) *command.CommandLog {
+		cmd := command.NewCommandLog(xpath.New("test"), 0, "run", "running", "failed", []string{"echo"})
+		cmd.TimeAndState.StartTimer()
+		cmd.TimeAndState.EndTimerWithError(errors.New(errText)) //nolint:err113 // test needs a dynamic error message
+
+		return cmd
+	}
+
+	longError := strings.Repeat("boom ", 120)
+	first := newAttempt(longError)
+	cmdNode := addNode()
+	buildLogs.addCommandChildren(cmdNode, first, first.TimeAndState.Load(), 0)
+
+	firstHeight := root.Render().Len()
+	require.Greater(t, firstHeight, 2, "precondition: the long error must wrap")
+
+	root.BeginFrame()
+
+	cmdNode = addNode()
+	second := newAttempt("short error")
+	buildLogs.addCommandChildren(cmdNode, second, second.TimeAndState.Load(), 0)
+
+	rendered := buffer.LinesBufToStringForTests(root.Render())
+	assert.Contains(t, rendered, "short error")
+	assert.NotContains(t, rendered, "boom", "the retried error must replace the cached text")
+	assert.Less(t, root.Render().Len(), firstHeight, "the retried error must shrink immediately")
+}
+
+func TestAddCommandChildren_RetryReplacesCommandLabel(t *testing.T) {
+	t.Parallel()
+
+	conf := makeTestConfig(0, 0, 0)
+	conf.Flags.Tui.ShowCommandsInLabels = true
+	buildLogs := New(conf, testTheme(), nil, nil)
+	buildLogs.contentWidth = 200
+	buildLogs.viewports = newTestViewports(conf)
+
+	root := tree.NewTree(testTreeStyle, TreeStep, tree.DefaultGlyphs())
+	parentXpath := xpath.New("phase")
+	addParent := func() *tree.Node {
+		return root.Child(parentXpath, 1, func(_ int, _ *buffer.LinesBuf) *buffer.LinesBuf {
+			return lb("phase")
+		})
+	}
+
+	newAttempt := func(arg string) *command.CommandLog {
+		cmd := command.NewCommandLog(xpath.New("test"), 0, "run", "running", "failed", []string{"echo", arg})
+		cmd.TimeAndState.StartTimer()
+		cmd.TimeAndState.EndTimerWithError(nil)
+
+		return cmd
+	}
+
+	first := newAttempt("old")
+	parent := addParent()
+	buildLogs.addCommand(parent, first, 0, 0)
+	require.Contains(t, buffer.LinesBufToStringForTests(root.Render()), "echo old")
+
+	root.BeginFrame()
+
+	parent = addParent()
+	second := newAttempt("new")
+	buildLogs.addCommand(parent, second, 0, 0)
+
+	rendered := buffer.LinesBufToStringForTests(root.Render())
+	assert.Contains(t, rendered, "echo new")
+	assert.NotContains(t, rendered, "echo old", "the retried command must replace the cached label")
 }

@@ -25,6 +25,7 @@ type Viewport struct {
 	lineWidths       []int
 	width            int
 	height           int
+	autoHeight       int // latched content height for auto-sized viewports
 	yOffset          int
 	scrollbar        bool
 	scrollbarReserve bool
@@ -234,6 +235,19 @@ func (m *Viewport) IsMain() bool {
 
 func (m *Viewport) HasScrollbarReserve() bool {
 	return m.scrollbarReserve
+}
+
+// PendingShrink reports whether an auto-sized viewport currently shows more
+// lines than its content needs. Callers poll it to schedule AllowShrink.
+func (m *Viewport) PendingShrink() bool {
+	return m.autoHeight > m.desiredContentHeight()
+}
+
+// AllowShrink releases the latched auto height so the next sync can reduce it.
+// Auto-sized viewports grow immediately but hold their height until this is
+// called, so live output that briefly adds lines cannot resize the layout.
+func (m *Viewport) AllowShrink() {
+	m.autoHeight = 0
 }
 
 // MaxLineWidth returns the widest visual line, computing widths on demand.
@@ -979,19 +993,32 @@ func (m *Viewport) preliminaryHeight(height int) int {
 
 func (m *Viewport) finalHeight(height int) int {
 	if height > 0 {
+		m.autoHeight = 0
+
 		return max(1, height)
 	}
 
-	contentH := max(1, m.linesLen)
-	if m.maxHeight > 0 && contentH > m.maxHeight {
-		contentH = m.maxHeight
+	if desired := m.desiredContentHeight(); desired > m.autoHeight {
+		m.autoHeight = desired
 	}
 
+	contentH := max(1, m.autoHeight)
 	if m.bordered {
 		contentH += borderOverhead
 	}
 
 	return max(1, contentH)
+}
+
+// desiredContentHeight is the content height an auto-sized viewport needs for
+// its current lines, capped by maxHeight.
+func (m *Viewport) desiredContentHeight() int {
+	contentH := max(1, m.linesLen)
+	if m.maxHeight > 0 && contentH > m.maxHeight {
+		contentH = m.maxHeight
+	}
+
+	return contentH
 }
 
 // line returns the i-th line from the owned linesBuf.
