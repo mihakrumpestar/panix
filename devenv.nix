@@ -102,18 +102,17 @@ in
     };
 
     # Git hooks are declared here and installed by devenv on shell entry.
-    # The `ci` hook stays registered in every profile so the generated
-    # .pre-commit-config.yaml always lists exactly one hook: the git-installed
-    # hook outlives any single shell entry, and pre-commit rejects both a
-    # missing and an empty config. What the hook runs varies per profile via
-    # `entry` (see the profiles below); by default it gates commits with
-    # `task ci`. The generated file is gitignored.
+    # .pre-commit-config.yaml and the .git/hooks scripts are shared by every
+    # profile and outlive a shell session, so the hook entry must not depend on
+    # the profile that last regenerated it. A profile-specific entry (e.g. the
+    # `ci` profile overriding it with `true`) silently disables the gate on the
+    # host as soon as that profile runs in the same working tree. The entry is
+    # therefore constant; slim profiles stay usable because they never commit.
+    # The generated file is gitignored.
     git-hooks.enable = true;
     git-hooks.hooks.ci = {
       enable = true;
-      # `task ci` needs the go tool group; where it is absent the hook is a
-      # no-op so commits are never blocked by the gate.
-      entry = lib.mkDefault (if config.panix.groups.go.enable then "task ci" else "true");
+      entry = "task ci";
       language = "system";
       pass_filenames = false;
     };
@@ -124,10 +123,6 @@ in
     # Usage: devenv --profile ci shell -- task ci
     profiles = {
       ci.module = {
-        # Jobs run `task ci` as their command; the hook entry is a no-op so
-        # `git-hooks:run` does not repeat the suite at shell entry. The hook
-        # itself stays registered so the generated config stays valid.
-        git-hooks.hooks.ci.entry = "true";
         panix.groups.docs.enable = false;
         panix.groups.e2e.enable = false;
         panix.groups.bench.enable = false;
