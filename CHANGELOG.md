@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.12.0](https://github.com/mihakrumpestar/panix/compare/v0.11.0..v0.12.0) - 2026-10-24
+
+The TUI is now fully themeable, and flags resolve consistently:
+
+- 34 embedded themes, each a partial over the full `panix` default. Select with `flags.tui.theme`, `--tui.theme`, or `PANIX_TUI_THEME`, browse live with `ctrl+t`, and add your own in `panix-themes.yml`.
+- Glyph widths are measured in the terminal before the first frame, so tables, borders, and spinners align with any font or emoji.
+- One precedence everywhere: CLI > `PANIX_*` env > config file > default.
+
+**Breaking:**
+
+- `--output` is now `--output-mode`, and `PANIX_OUTPUT` is now `PANIX_OUTPUT_MODE`.
+- `colorscheme` is now `theme`, and the theme schema drops `header.border`, `table.header`, and `table.row_alt`.
+
+**Security and reliability:**
+
+- Private SSH control sockets, with `extra_flags` able to override panix defaults.
+- Bootstrap downloads are https-only, and resume is stripped.
+- Inspect is required for every phase except Build.
+- Command secrets are staged and atomically renamed.
+- Token-aware log redaction, SGR-only terminal output, and four-digit octal `permissions`.
+- Internal zone markers no longer leak, rollback no longer overwrites activation output, and auto-sized viewports no longer jump while output streams.
+- `SECURITY.md` documents vulnerability reporting.
+
+### Bug Fixes
+
+- Never emit internal zone markers to the terminal ([#32](https://github.com/mihakrumpestar/panix/pull/32)) by @mihakrumpestar ([414806c](https://github.com/mihakrumpestar/panix/commit/414806c39076c6779c705bf8c5138dc2aa0a3cd1))
+- Unique command xpaths so rollback output doesn't overwrite activation output, fixes #33 by @mihakrumpestar ([4837aec](https://github.com/mihakrumpestar/panix/commit/4837aece035fbdd0d31ad01b136dae567ed8a0d1))
+- Tighten SSH, bootstrap, secret, and output handling by @mihakrumpestar ([ed7e164](https://github.com/mihakrumpestar/panix/commit/ed7e164bf0fd55bd40667a0d612f7d23c1be46ee))
+- Make pre-commit hook run properly by @mihakrumpestar ([4ae2f87](https://github.com/mihakrumpestar/panix/commit/4ae2f873b39c38879b32f403be824f16b16871f5))
+
+### Features
+
+- Custom themes, measured glyph widths, and standard flag precedence ([#34](https://github.com/mihakrumpestar/panix/pull/34)) by @mihakrumpestar ([0ee6ac9](https://github.com/mihakrumpestar/panix/commit/0ee6ac96ab7575a247734c23a6bd008f3bff494c))
+- Make viewport resizing more stable by @mihakrumpestar ([de11fcc](https://github.com/mihakrumpestar/panix/commit/de11fccd6d20fbb6059fc311586073e7571b76c7))
+
 ## [0.11.0](https://github.com/mihakrumpestar/panix/compare/v0.10.0..v0.11.0) - 2026-10-08
 
 Targets without Nix now bootstrap: non-NixOS built-in installable types (and custom types via `bootstrap_mode: nix-install | nixos` in `output_types`) get Nix installed automatically during Bootstrap when missing, before Build, Transfer, Secrets, and Activate. No opt-in needed, unlike the NixOS bootstrap; `disable_nix_install` opts out, `force_bootstrap` re-runs. Default is the zero-config Determinate installer (`install --no-confirm`); `bootstrap.nix.url` accepts a local path for offline machines.
