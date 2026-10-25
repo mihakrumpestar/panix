@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 import mdx from '@astrojs/mdx';
 
-import { REPO_URL } from './src/lib/repo';
+import { REPO_URL, SPONSORS_URL } from './src/lib/repo';
 
 export default defineConfig({
 	site: 'https://panix.xyz',
@@ -55,7 +55,7 @@ export default defineConfig({
 				{
 					icon: 'heart',
 					label: 'Fund me',
-					href: 'https://ko-fi.com/mihakrumpestar',
+					href: SPONSORS_URL,
 				},
 			],
 			editLink: {
