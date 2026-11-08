@@ -2,34 +2,40 @@ package nix
 
 import (
 	"maps"
-
 	"sort"
 
 	"dario.cat/mergo"
+	"github.com/mihakrumpestar/panix/internal/config/overrides"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/pkg/errors"
-)
-
-// Default base flags for nix commands. These are used when the user does not
-// override them via the corresponding NixConfig fields.
-var (
-	DefaultExperimentalFeatures = []string{"--extra-experimental-features", "nix-command flakes"}
-	DefaultBuildFlags           = []string{"--no-link", "--print-out-paths", "--keep-going"}
-	DefaultCopyFlags            = []string{"--no-check-sigs"}
-	DefaultNixosInstallFlags    = []string{"--no-root-passwd", "--no-channel-copy"}
-	// nix profile add has no built-in default flags.
 )
 
 //nolint:lll
 type NixConfig struct {
 	BuildMode BuildMode `yaml:"build_mode" json:"build_mode" desc:"Build mode: local or remote. In local mode, build runs on the local machine and the closure is copied to targets. In remote mode, build runs on the first target machine via --store ssh-ng://<target>. For single-machine installables, transfer is skipped (closure is already on target). For multi-machine installables, the closure is copied from the first machine to the rest." default:"local" validate:"omitempty,oneof=local remote"`
 
-	// DefaultFlags replace the built-in base flags for each command when set.
-	// Leave empty to use the built-in defaults.
-	ExperimentalFeatures     []string `yaml:"experimental_features" json:"experimental_features,omitempty" desc:"List of flags to enable nix experimental features (default: [--extra-experimental-features, nix-command flakes])"`
-	BuildDefaultFlags        []string `yaml:"build_default_flags" json:"build_default_flags,omitempty" desc:"List of base flags for 'nix build' command (default: [--no-link, --print-out-paths, --keep-going])"`
-	CopyDefaultFlags         []string `yaml:"copy_default_flags" json:"copy_default_flags,omitempty" desc:"List of base flags for 'nix copy' command (default: [--no-check-sigs])"`
-	NixosInstallDefaultFlags []string `yaml:"nixos_install_default_flags" json:"nixos_install_default_flags,omitempty" desc:"List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"`
-	ProfileAddDefaultFlags   []string `yaml:"profile_add_default_flags" json:"profile_add_default_flags,omitempty" desc:"List of base flags for 'nix profile add' command (default: [])"`
+	// Default flags replace the built-in base flags for each command when set.
+	// The lists carrying a value panix computes at run time (copy, nixos-install,
+	// profile add, both nix-env lists) may reference it as $PANIX_* (see
+	// runtimevars); the other lists are passed through verbatim.
+	ExperimentalFeatures              []string `yaml:"experimental_features" json:"experimental_features,omitempty" desc:"List of flags to enable nix experimental features, set to [] to pass none" default:"[--extra-experimental-features, nix-command flakes]"`
+	BuildDefaultFlags                 []string `yaml:"build_default_flags" json:"build_default_flags,omitempty" desc:"List of base flags for 'nix build', set to [] to pass none" default:"[--no-link, --print-out-paths, --keep-going]"`
+	CopyDefaultFlags                  []string `yaml:"copy_default_flags" json:"copy_default_flags,omitempty" desc:"Flags for 'nix copy', set to [] to pass none; $PANIX_STORE_URL is the destination store" default:"[--to, $PANIX_STORE_URL, --no-check-sigs]"`
+	NixosInstallDefaultFlags          []string `yaml:"nixos_install_default_flags" json:"nixos_install_default_flags,omitempty" desc:"Flags for 'nixos-install', set to [] to pass none; $PANIX_CLOSURE is the built system and /mnt the target root" default:"[--no-root-passwd, --no-channel-copy, --system, $PANIX_CLOSURE, --root, /mnt]"`
+	ProfileAddDefaultFlags            []string `yaml:"profile_add_default_flags" json:"profile_add_default_flags,omitempty" desc:"Flags and operands for 'nix profile add', $PANIX_CLOSURE is the package closure" default:"[$PANIX_CLOSURE]"`
+	NixEnvListGenerationsDefaultFlags []string `yaml:"nix_env_list_generations_default_flags" json:"nix_env_list_generations_default_flags,omitempty" desc:"Flags and operands for listing generations, $PANIX_PROFILE_PATH is the profile path" default:"[--profile, $PANIX_PROFILE_PATH, --list-generations]"`
+	NixEnvSetDefaultFlags             []string `yaml:"nix_env_set_default_flags" json:"nix_env_set_default_flags,omitempty" desc:"Flags and operands for setting the profile, $PANIX_PROFILE_PATH is the profile path and $PANIX_CLOSURE the closure" default:"[--profile, $PANIX_PROFILE_PATH, --set, $PANIX_CLOSURE]"`
+
+	// Command prefixes replace the executable and nix subcommand a step runs, so
+	// it can be delegated (e.g. 'nom build'); panix appends its flags after them.
+	// Leave empty for the built-in prefix.
+	BuildCommand         []string `yaml:"build_command" json:"build_command,omitempty" desc:"Command prefix for builds, e.g. [nom, build] to monitor build output" validate:"nonempty,dive,required" default:"[nix, build]"`
+	CopyCommand          []string `yaml:"copy_command" json:"copy_command,omitempty" desc:"Command prefix for closure copies, e.g. [nom, copy] to monitor transfers" validate:"nonempty,dive,required" default:"[nix, copy]"`
+	EvalCommand          []string `yaml:"eval_command" json:"eval_command,omitempty" desc:"Command prefix for flake validation evaluation" validate:"nonempty,dive,required" default:"[nix, eval]"`
+	FlakeMetadataCommand []string `yaml:"flake_metadata_command" json:"flake_metadata_command,omitempty" desc:"Command prefix for flake URL validation" validate:"nonempty,dive,required" default:"[nix, flake, metadata]"`
+	NixosInstallCommand  []string `yaml:"nixos_install_command" json:"nixos_install_command,omitempty" desc:"Command prefix for the NixOS install" validate:"nonempty,dive,required" default:"[nixos-install]"`
+	NixEnvCommand        []string `yaml:"nix_env_command" json:"nix_env_command,omitempty" desc:"Command prefix for profile reads and generation switches" validate:"nonempty,dive,required" default:"[nix-env]"`
+	ProfileAddCommand    []string `yaml:"profile_add_command" json:"profile_add_command,omitempty" desc:"Command prefix for package profile installs, leave unset for [nix, profile, add], or [nix, profile, install] on Lix" validate:"nonempty,dive,required"`
 
 	// Extra flags are appended after the default flags for each command.
 	ExtraFlags        []string `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"List of extra flags applied to both 'nix build' and 'nix copy'"`
@@ -54,53 +60,6 @@ type NixConfig struct {
 	CopyEnv         map[string]string `yaml:"copy_env" json:"copy_env,omitempty" desc:"Environment variables for 'nix copy' only (merged on top of env)"`
 	NixosInstallEnv map[string]string `yaml:"nixos_install_env" json:"nixos_install_env,omitempty" desc:"Environment variables for 'nixos-install' only (merged on top of env)"`
 	ProfileAddEnv   map[string]string `yaml:"profile_add_env" json:"profile_add_env,omitempty" desc:"Environment variables for 'nix profile add' only (merged on top of env)"`
-}
-
-// GetExperimentalFeatures returns the configured experimental features flags,
-// or the default if not set (nil). An explicitly empty slice ([]) clears the defaults.
-func (c *NixConfig) GetExperimentalFeatures() []string {
-	if c.ExperimentalFeatures != nil {
-		return c.ExperimentalFeatures
-	}
-
-	return DefaultExperimentalFeatures
-}
-
-// GetBuildDefaultFlags returns the configured build default flags,
-// or the default if not set (nil). An explicitly empty slice ([]) clears the defaults.
-func (c *NixConfig) GetBuildDefaultFlags() []string {
-	if c.BuildDefaultFlags != nil {
-		return c.BuildDefaultFlags
-	}
-
-	return DefaultBuildFlags
-}
-
-// GetCopyDefaultFlags returns the configured copy default flags,
-// or the default if not set (nil). An explicitly empty slice ([]) clears the defaults.
-func (c *NixConfig) GetCopyDefaultFlags() []string {
-	if c.CopyDefaultFlags != nil {
-		return c.CopyDefaultFlags
-	}
-
-	return DefaultCopyFlags
-}
-
-// GetNixosInstallDefaultFlags returns the configured nixos-install default flags,
-// or the default if not set (nil). An explicitly empty slice ([]) clears the defaults.
-func (c *NixConfig) GetNixosInstallDefaultFlags() []string {
-	if c.NixosInstallDefaultFlags != nil {
-		return c.NixosInstallDefaultFlags
-	}
-
-	return DefaultNixosInstallFlags
-}
-
-// GetProfileAddDefaultFlags returns the configured nix profile add
-// default flags. Returns nil if not set — nix profile add has no built-in
-// default flags.
-func (c *NixConfig) GetProfileAddDefaultFlags() []string {
-	return c.ProfileAddDefaultFlags
 }
 
 // GetBuildEnv returns env vars for `nix build`: the global env merged with
@@ -160,104 +119,72 @@ func mergeEnvToSlice(global, specific map[string]string) []string {
 	return result
 }
 
-// Init merges parent NixConfig into this one.
-//
-// "Extra" flag fields (ExtraFlags, BuildFlags, CopyFlags, NixosInstallFlags) use
-// append semantics: parent values are appended to the child's, so flags accumulate
-// down the hierarchy.
-//
-// "Default" flag fields (ExperimentalFeatures, BuildDefaultFlags, CopyDefaultFlags,
-// NixosInstallDefaultFlags, ProfileAddDefaultFlags) use override semantics: if
-// the child has a value, it is kept as-is; if the child is nil, it inherits the
-// parent's value. This prevents parent defaults from polluting a child's explicit
-// override.
+// Init merges the parent config into this one, then materializes the built-in
+// defaults, so every command and flag list is usable as-is. Extra flags
+// accumulate down the hierarchy; default flags and command prefixes override,
+// where a nil child inherits the parent and an explicit value wins.
 func (c *NixConfig) Init(parent *NixConfig) error {
 	if parent != nil {
 		c.mergeParent(parent)
 	}
 
 	if c.BuildMode == "" {
-		c.BuildMode = BuildModeLocal
+		c.BuildMode = BuildMode(structdefault.String[NixConfig]("BuildMode"))
 	}
+
+	structdefault.Apply(c)
 
 	return nil
 }
 
-// mergeParent merges parent NixConfig into this one. "Extra" flag fields use
-// append semantics (mergo.WithAppendSlice), while "default" flag fields use
-// override semantics (child's non-nil value is preserved after merge).
-// Env maps use merge semantics: parent entries are always inherited, child
-// keys override parent keys with the same name.
+// mergeParent merges the parent into this config, then restores the fields whose
+// mergo semantics differ: overridden slices keep the child value, and env maps
+// merge instead of being replaced.
 func (c *NixConfig) mergeParent(parent *NixConfig) {
-	// Save child's default-flag slices and env maps before merge so we can
-	// restore them. mergo.WithAppendSlice would incorrectly append parent
-	// defaults into child slices, and would pollute non-nil child maps with
-	// parent entries.
-	savedFlags := newNixDefaultFlagsSnapshot(c)
+	// mergo.WithAppendSlice would append parent values into child slices and
+	// pollute non-nil child maps, so capture both first and restore them after.
+	overridden := overrides.Capture(c.overrideFields()...)
 	savedEnv := newNixEnvSnapshot(c)
 
 	err := mergo.Merge(c, parent, mergo.WithAppendSlice)
 	if err != nil {
-		// mergo.Merge only returns errors for unsupported types, which won't
-		// happen here. Wrap for safety.
+		// mergo only errors on unsupported types, which cannot occur here.
 		panic(errors.Wrap(err, "failed to inherit nix config"))
 	}
 
-	savedFlags.restore(c)
+	overridden.Restore()
+	overrides.InheritEmpty(c.overrideFields(), parent.overrideFields())
 	savedEnv.restore(c)
 
-	// Now manually merge parent env entries into child. Parent entries are
-	// inherited; child keys override parent keys with the same name.
+	// Parent env entries are inherited; child keys win on conflict.
 	mergeEnvMaps(c, parent)
 }
 
-// nixDefaultFlagsSnapshot captures the "default" flag slices of a NixConfig
-// before a mergo merge, so they can be restored afterward (override semantics).
-type nixDefaultFlagsSnapshot struct {
-	experimentalFeatures     []string
-	buildDefaultFlags        []string
-	copyDefaultFlags         []string
-	nixosInstallDefaultFlags []string
-	profileAddDefaultFlags   []string
-}
-
-func newNixDefaultFlagsSnapshot(cfg *NixConfig) nixDefaultFlagsSnapshot {
-	return nixDefaultFlagsSnapshot{
-		experimentalFeatures:     cfg.ExperimentalFeatures,
-		buildDefaultFlags:        cfg.BuildDefaultFlags,
-		copyDefaultFlags:         cfg.CopyDefaultFlags,
-		nixosInstallDefaultFlags: cfg.NixosInstallDefaultFlags,
-		profileAddDefaultFlags:   cfg.ProfileAddDefaultFlags,
-	}
-}
-
-// restore writes back any non-nil saved slices, preserving the child's override.
-func (s nixDefaultFlagsSnapshot) restore(cfg *NixConfig) {
-	if s.experimentalFeatures != nil {
-		cfg.ExperimentalFeatures = s.experimentalFeatures
-	}
-
-	if s.buildDefaultFlags != nil {
-		cfg.BuildDefaultFlags = s.buildDefaultFlags
-	}
-
-	if s.copyDefaultFlags != nil {
-		cfg.CopyDefaultFlags = s.copyDefaultFlags
-	}
-
-	if s.nixosInstallDefaultFlags != nil {
-		cfg.NixosInstallDefaultFlags = s.nixosInstallDefaultFlags
-	}
-
-	if s.profileAddDefaultFlags != nil {
-		cfg.ProfileAddDefaultFlags = s.profileAddDefaultFlags
+// overrideFields lists the NixConfig slices whose child value must win over the
+// parent's during merge, rather than accumulate.
+func (c *NixConfig) overrideFields() []*[]string {
+	return []*[]string{
+		&c.ExperimentalFeatures,
+		&c.BuildDefaultFlags,
+		&c.CopyDefaultFlags,
+		&c.NixosInstallDefaultFlags,
+		&c.ProfileAddDefaultFlags,
+		&c.NixEnvListGenerationsDefaultFlags,
+		&c.NixEnvSetDefaultFlags,
+		&c.BuildCommand,
+		&c.CopyCommand,
+		&c.EvalCommand,
+		&c.FlakeMetadataCommand,
+		&c.NixosInstallCommand,
+		&c.NixEnvCommand,
+		&c.ProfileAddCommand,
 	}
 }
 
 // nixEnvSnapshot captures all env maps of a NixConfig before a mergo merge,
 // so they can be restored afterward. Unlike default-flag slices, env maps
 // use merge semantics (parent entries always inherited), so the snapshot
-// restores the child's original map reference — mergo would have polluted
+// restores the child's original map reference; mergo would have polluted
 // it with parent entries.
 type nixEnvSnapshot struct {
 	env             map[string]string
@@ -277,8 +204,7 @@ func newNixEnvSnapshot(cfg *NixConfig) nixEnvSnapshot {
 	}
 }
 
-// restore writes back all saved env maps, preserving the child's original
-// entries before mergo polluted them with parent data.
+// restore writes back the saved env maps, undoing mergo's pollution.
 func (s nixEnvSnapshot) restore(cfg *NixConfig) {
 	cfg.Env = s.env
 	cfg.BuildEnv = s.buildEnv
@@ -287,11 +213,10 @@ func (s nixEnvSnapshot) restore(cfg *NixConfig) {
 	cfg.ProfileAddEnv = s.profileAddEnv
 }
 
-// mergeEnvMaps inherits all env maps (global + command-specific) from parent
-// into child. For each map, parent entries are inherited and child keys
-// override parent keys with the same name. A nil child map inherits all
-// parent entries; a non-nil child map (even if empty) inherits parent entries
-// for keys it doesn't define — there are no built-in env defaults to "clear".
+// mergeEnvMaps inherits every env map (global and command-specific) from parent
+// into child, keeping the child's value where both define a key. There are no
+// built-in env defaults, so an empty child map still inherits all parent
+// entries.
 func mergeEnvMaps(child, parent *NixConfig) {
 	mergeEnvMap(&child.Env, parent.Env)
 	mergeEnvMap(&child.BuildEnv, parent.BuildEnv)

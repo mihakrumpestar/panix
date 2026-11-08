@@ -101,14 +101,15 @@ type rootWithDesc struct {
 	Debug   bool   `yaml:"debug" desc:"Enable debug mode" default:"false"`
 }
 
-// rootWithDefaultKinds mixes scalar fields carrying `default` tags with a
-// slice carrying one: the tag is for scalars only (list defaults live in Go
-// vars, documented in the field's desc text).
+// rootWithDefaultKinds mixes scalar fields carrying `default` tags with slices
+// carrying bracket lists, and a slice with a malformed tag that must be ignored.
 type rootWithDefaultKinds struct {
-	Items []string `yaml:"items" default:"[a,b]"`
-	Name  string   `yaml:"name" default:"panix"`
-	Count int      `yaml:"count" default:"3"`
-	Debug bool     `yaml:"debug" default:"true"`
+	Items   []string `yaml:"items" default:"[a, b]"`
+	Command []string `yaml:"command" default:"[nix, build]"`
+	Broken  []string `yaml:"broken" default:"not-a-list"`
+	Name    string   `yaml:"name" default:"panix"`
+	Count   int      `yaml:"count" default:"3"`
+	Debug   bool     `yaml:"debug" default:"true"`
 }
 
 type rootWithOmit struct {
@@ -421,11 +422,12 @@ func TestNewSchema_DefaultTag(t *testing.T) {
 	assert.Equal(t, false, debugDef.Default, "debug default mismatch")
 }
 
-// TestNewSchema_DefaultTagScalarKinds pins the `default`-tag convention: a
-// struct field of type []string WITH a default tag generates NO `default` key
-// (the raw tag string must never leak as the default of an array property),
-// while string/bool/int fields with default tags still generate theirs.
-func TestNewSchema_DefaultTagScalarKinds(t *testing.T) {
+// TestNewSchema_DefaultTagKinds pins how `default` and `default` tags become
+// schema defaults: a bracket list becomes an array of items, a malformed list
+// yields no default instead of leaking the raw tag text, and scalar tags keep
+// producing their typed default. Slice defaults are not appended to the
+// description, because the emitted array already carries them.
+func TestNewSchema_DefaultTagKinds(t *testing.T) {
 	t.Parallel()
 
 	schema := generate(t, reflect.TypeFor[rootWithDefaultKinds]())
@@ -434,7 +436,9 @@ func TestNewSchema_DefaultTagScalarKinds(t *testing.T) {
 		field   string
 		wantDef any // nil: the `default` key must be absent from the emitted schema
 	}{
-		{"items", nil},
+		{"items", []string{"a", "b"}},
+		{"command", []string{"nix", "build"}},
+		{"broken", nil},
 		{"name", "panix"},
 		{"count", 3},
 		{"debug", true},
@@ -447,7 +451,7 @@ func TestNewSchema_DefaultTagScalarKinds(t *testing.T) {
 			fieldDef := mustGetTypeDef(t, schema.Properties, tt.field)
 
 			if tt.wantDef == nil {
-				assert.Nil(t, fieldDef.Default, "%s: default tag must not produce a schema default", tt.field)
+				assert.Nil(t, fieldDef.Default, "%s: an unusable tag must not produce a schema default", tt.field)
 
 				out, err := yaml.Marshal(fieldDef)
 				require.NoError(t, err)
@@ -876,9 +880,25 @@ func TestParseDefaultValue_Duration(t *testing.T) {
 	assert.Equal(t, "30s", result)
 }
 
-// TestParseDefaultValue_NonScalar: the `default` tag is for scalars only, so
-// non-scalar kinds report ok=false and yield no default (list defaults live
-// in Go vars, documented in the field's desc text).
+// TestParseDefaultValue_Slice pins that a bracket list becomes a list of items,
+// while the kinds that cannot render a default report ok=false and yield none
+// (a map or pointer never carries a built-in value).
+func TestParseDefaultValue_Slice(t *testing.T) {
+	t.Parallel()
+
+	result, ok := parseDefaultValue("[a, b]", reflect.TypeFor[[]string]())
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, result)
+
+	result, ok = parseDefaultValue("[]", reflect.TypeFor[[]string]())
+	assert.True(t, ok)
+	assert.Equal(t, []string{}, result)
+
+	result, ok = parseDefaultValue("not-a-list", reflect.TypeFor[[]string]())
+	assert.False(t, ok, "an unusable tag must yield no default")
+	assert.Nil(t, result)
+}
+
 func TestParseDefaultValue_NonScalar(t *testing.T) {
 	t.Parallel()
 
@@ -886,7 +906,6 @@ func TestParseDefaultValue_NonScalar(t *testing.T) {
 		name string
 		typ  reflect.Type
 	}{
-		{"slice", reflect.TypeFor[[]string]()},
 		{"map", reflect.TypeFor[map[string]string]()},
 		{"struct", reflect.TypeFor[simpleRoot]()},
 		{"ptr", reflect.TypeFor[*string]()},
@@ -964,4 +983,24 @@ func TestDisambiguateDefNames_UniqueNameStaysBare(t *testing.T) {
 	disambiguateDefNames(defTypes)
 
 	assert.Equal(t, "sharedStruct", defTypes[typ])
+}
+
+// A `dive,required` tag constrains the elements of a slice, not the field: the
+// field stays optional in the schema, while a plain `required` (before any
+// dive) still marks it required. Regression: dive,required once marked the
+// whole field required, so an optional command prefix was rejected.
+func TestSchema_DiveRequiredDoesNotMarkFieldRequired(t *testing.T) {
+	t.Parallel()
+
+	type diveRequiredStruct struct {
+		Elements []string `yaml:"elements" validate:"dive,required"`
+		Whole    []string `yaml:"whole" validate:"required"`
+	}
+
+	schema, err := NewSchema(SchemaConfig{RootType: reflect.TypeFor[diveRequiredStruct]()}).Generate()
+	require.NoError(t, err)
+
+	assert.NotContains(t, schema.Required, "elements",
+		"dive,required constrains elements, so the field itself stays optional")
+	assert.Contains(t, schema.Required, "whole")
 }

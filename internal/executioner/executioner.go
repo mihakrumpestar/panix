@@ -54,6 +54,11 @@ func (ex *Executioner) SSHReachabilityTimeout() time.Duration {
 	return ex.conf.Timeouts.SSHReachability
 }
 
+// DryRun reports whether this executioner runs no commands.
+func (ex *Executioner) DryRun() bool {
+	return ex.conf.DryRun
+}
+
 // Exec
 
 type ExecOptions struct {

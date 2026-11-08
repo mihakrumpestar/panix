@@ -1,13 +1,13 @@
 ---
 title: Other Commands
-description: Reference for panix init, schema, template, eval, inspect, build, secrets, rollback, snapshot, and completion; secrets and rollback also run Inspect first.
+description: Reference for panix init, schema, template, eval, inspect, build, hardware-config, secrets, rollback, snapshot, and completion; secrets and rollback also run Inspect first.
 sidebar:
   order: 4
 ---
 
-Run every panix command besides deploy: scaffold config, validate it, run single phases, and roll back.
+Run every panix command besides deploy: scaffold config, validate it, run single phases, capture the hardware config, and roll back.
 
-inspect, build, secrets, and rollback accept the same flags as `panix deploy` (see [Deploy Flags](/cli/deploy/)); rollback additionally accepts `--gen`.
+inspect, build, hardware-config, secrets, and rollback accept the same flags as `panix deploy` (see [Deploy Flags](/cli/deploy/)); rollback additionally accepts `--gen`.
 
 ## init
 
@@ -93,6 +93,20 @@ panix build
 Runs only the Build phase. Useful for pre-building without deploying.
 
 Pass `--out-links` (or set `flags.out_links` in `panix.yml`) to also leave GC-rooted outlinks for the built installables, so they survive garbage collection and are easy to inspect on disk. See [Build Outlinks](/configuration/nix-flags/#build-outlinks) for details.
+
+## hardware-config
+
+Regenerate the hardware config, without a deploy:
+
+```sh
+panix hardware-config
+```
+
+Use it when switching generators or migrating to another tool: changing `hardware_config.generate` and re-running replaces the stored file without a build, transfer, or activation.
+
+It runs Inspect and then a hardware-config phase, so it has the usual TUI, console, and JSON output. The phase is not part of a deploy: Inspect already generates the file for a machine it finds in the NixOS installer, so this phase covers machines that are already installed. Machines without `hardware_config.path`, non-NixOS output types, and installer machines are skipped with the reason logged; a pre-kexec machine is an error, because the generator only exists inside the installer. Two machines may not share one path, and a run with no target fails instead of doing nothing.
+
+`--dry-run` previews the commands without executing any. A generator that writes instead of printing is refused before any machine is contacted. See [Other Hardware Config Generators](/configuration/nix-flags/#other-hardware-config-generators).
 
 ## secrets
 

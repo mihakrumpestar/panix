@@ -893,3 +893,62 @@ func TestHumanizeTagMessage_URIorDir(t *testing.T) {
 
 	assert.Contains(t, humanizeTagMessage(validationErrors[0]), "must be a valid URL or an existing local directory, got: ./does-not-exist")
 }
+
+// A command prefix must name an executable. Validation rejects an empty element
+// (which would reach exec as an empty argv entry) and an explicitly empty prefix,
+// which would leave no command at all; an unset prefix takes the built-in default.
+func TestValidateStructTags_CommandPrefixRejectsEmptyElement(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		nix     nix.NixConfig
+		wantErr bool
+	}{
+		{
+			name: "unset prefix is fine",
+			nix:  nix.NixConfig{},
+		},
+		{
+			name:    "explicitly empty prefix rejected",
+			nix:     nix.NixConfig{BuildCommand: []string{}},
+			wantErr: true,
+		},
+		{
+			name:    "empty executable rejected",
+			nix:     nix.NixConfig{BuildCommand: []string{""}},
+			wantErr: true,
+		},
+		{
+			name:    "empty trailing element rejected",
+			nix:     nix.NixConfig{CopyCommand: []string{"nix", ""}},
+			wantErr: true,
+		},
+		{
+			name: "well-formed prefix is fine",
+			nix:  nix.NixConfig{BuildCommand: []string{"nom", "build"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			conf := &struct {
+				Nix nix.NixConfig `yaml:"nix"`
+			}{Nix: tt.nix}
+
+			validate := validator.New()
+			registerPathValidators(validate)
+
+			err := validate.Struct(conf)
+			if tt.wantErr {
+				require.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}

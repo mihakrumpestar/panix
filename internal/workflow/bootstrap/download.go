@@ -24,14 +24,17 @@ const (
 	stagingSuffixBytes = 16
 )
 
-// downloadArgv returns the curl argv that fetches sourceURL to remotePath on
-// the target. Resume flags are stripped: each artifact is written to a fresh
-// per-run path, so resuming a stale or attacker-created file is never valid.
-// The protocol restrictions come last so an operator-supplied flag cannot
-// re-enable plain http or a redirect downgrade from https.
-func downloadArgv(curlFlags []string, sourceURL, remotePath string) []string {
+// downloadArgv returns the curl argv that fetches sourceURL to remotePath on the
+// target. command belongs to the caller that knows which download this is, so
+// there is no fallback here: a second default would hide an unwired call site.
+//
+// Resume flags are stripped: each artifact is written to a fresh per-run path,
+// so resuming a stale or attacker-created file is never valid. The protocol
+// restrictions come last so an operator-supplied flag cannot re-enable plain
+// http or a redirect downgrade from https.
+func downloadArgv(command, curlFlags []string, sourceURL, remotePath string) []string {
 	return slices.Concat(
-		[]string{"curl"},
+		command,
 		withoutResumeFlags(curlFlags),
 		[]string{"--proto", "=https", "--proto-redir", "=https", sourceURL, "-o", remotePath},
 	)
@@ -40,12 +43,13 @@ func downloadArgv(curlFlags []string, sourceURL, remotePath string) []string {
 // downloadOrTransfer stages source at remotePath on the target: an https URL
 // is downloaded with curl on the target itself, a local path is transferred
 // with rsync. Plain http and any other URL scheme are rejected before any
-// command runs. name labels the commands and error context.
+// command runs. name labels the commands and error context; curlCommand is the
+// configured download command for this artifact.
 func downloadOrTransfer(
 	exc *executioner.Executioner,
 	machineI *machine.Machine,
 	source, remotePath, name string,
-	curlFlags []string,
+	curlCommand, curlFlags []string,
 ) error {
 	err := urlx.ValidateSource(source)
 	if err != nil {
@@ -57,7 +61,7 @@ func downloadOrTransfer(
 			"download "+name,
 			"downloading "+name,
 			"failed to download "+name,
-			downloadArgv(curlFlags, source, remotePath),
+			downloadArgv(curlCommand, curlFlags, source, remotePath),
 		)
 	} else {
 		err = phaseops.TransferFile(exc, machineI, attributes.TransferSource{
@@ -69,15 +73,16 @@ func downloadOrTransfer(
 	return errors.Wrap(err, name+" transfer failed")
 }
 
-// newStagingDirPath returns a unique per-run staging directory under /tmp.
-// The random suffix prevents a predictable-path race and stale reuse.
-func newStagingDirPath(prefix string) (string, error) {
+// newStagingDirPath returns a unique per-run staging directory under /tmp,
+// named after the kind of artifact it stages. The random suffix prevents a
+// predictable-path race and stale reuse.
+func newStagingDirPath(name string) (string, error) {
 	suffix, err := randomStagingSuffix()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate staging directory name")
 	}
 
-	return path.Join(stagingBaseDir, prefix+"-"+suffix), nil
+	return path.Join(stagingBaseDir, name+"-"+suffix), nil
 }
 
 // createPrivateStagingDir creates stagingDir with mode 0700 owned by the

@@ -13,8 +13,8 @@ import (
 type Flake struct {
 	attributes.Attributes `yaml:",inline"`
 
-	Nix     nix.NixConfig   `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
-	URL     string          `yaml:"url" json:"url" validate:"omitempty,uri|dir" default:"." desc:"Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
+	Nix          nix.NixConfig                                                                                                    `yaml:"nix" json:"nix" desc:"Nix build and copy configuration"`
+	URL          string                                                                                                           `yaml:"url" json:"url" validate:"omitempty,uri|dir" default:"." desc:"Flake path (eg. './dir') or url (eg. 'path:...', 'ssh:...', 'github:...'), reference https://nix.dev/manual/nix/2.33/command-ref/new-cli/nix3-flake.html#url-like-syntax"`
 	Installables *atomicorderedmap.AtomicOrderedMap[string, *atomicorderedmap.AtomicOrderedMap[string, *installable.Installable]] `yaml:"installables,required" json:"installables" validate:"required" desc:"Installables (e.g. nixosConfigurations, homeConfigurations)"`
 
 	// Internal

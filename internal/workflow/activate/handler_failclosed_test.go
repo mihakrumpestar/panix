@@ -9,18 +9,22 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/testutil"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newBootstrapFleetLeaf(mach *machine.Machine) *fleet.FleetLeaf {
-	return &fleet.FleetLeaf{
+	leaf := &fleet.FleetLeaf{
 		Machine: mach,
 		Installable: &installable.Installable{
 			Preset:    installable.Preset{Bootstrap: installable.BootstrapNixOS},
 			MetaBuild: &installable.MetaBuild{Closure: "/nix/store/closure"},
 		},
 	}
+	structdefault.Apply(&leaf.Installable.Nix)
+
+	return leaf
 }
 
 // Unknown inspect metadata must never select the destructive NixOS install

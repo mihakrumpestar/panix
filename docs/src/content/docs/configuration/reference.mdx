@@ -54,6 +54,10 @@ fleet:
                   hostname: 10.0.1.50
                   identity_file: ./keys/db.key
                 rsync_default_flags: ["-rcEx", "--mkpath", "--perms"]  # Override at machine level
+                hardware_config:
+                  path: ./hosts/db-01/hardware-configuration.nix  # Enable hardware config generation during Inspect/Bootstrap
+                  generate:
+                    command: ["nixos-generate-config"]            # Optional generator prefix override
                 bootstrap:
                   ssh:
                     hostname: 10.0.1.50
@@ -82,7 +86,7 @@ fleet:
               prom-01:
 ```
 
-Global `flags` options (activation mode, output mode, TUI, logging, snapshots, profiling) and the nix default flags (`*_default_flags`, per-level `build_flags` / `copy_flags` / `nixos_install_flags`) are all listed in the full schema below; nix flags are also explained in [Nix Command Flags](/configuration/nix-flags/) and the TUI `theme` setting in [Themes](/configuration/themes/).
+Global `flags` options (activation mode, output mode, TUI, logging, snapshots, profiling) and the nix default flags and command prefixes (`*_default_flags`, `*_command`, per-level `build_flags` / `copy_flags` / `nixos_install_flags`) are all listed in the full schema below; nix flags and command overrides are also explained in [Nix Command Flags](/configuration/nix-flags/) and the TUI `theme` setting in [Themes](/configuration/themes/).
 
 The one used for testing to deploy [infrastructure](https://github.com/mihakrumpestar/infrastructure) is at [examples/panix.deploy.yml](https://github.com/mihakrumpestar/panix/blob/main/examples/panix.deploy.yml).
 
@@ -310,9 +314,9 @@ properties:
             disabled:
               type: boolean
               description: Disable this
-            hardware_config_path:
-              type: string
-              description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+            hardware_config:
+              description: Hardware config generation during Inspect, Bootstrap, and the hardware-config phase
+              $ref: "#/definitions/HardwareConfig"
             installables:
               type: object
               description: Installables (e.g. nixosConfigurations, homeConfigurations)
@@ -336,9 +340,9 @@ properties:
                     disabled:
                       type: boolean
                       description: Disable this
-                    hardware_config_path:
-                      type: string
-                      description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+                    hardware_config:
+                      description: Hardware config generation during Inspect, Bootstrap, and the hardware-config phase
+                      $ref: "#/definitions/HardwareConfig"
                     machines:
                       type: object
                       description: Machines configuration
@@ -358,12 +362,23 @@ properties:
                               disabled:
                                 type: boolean
                                 description: Disable this
-                              hardware_config_path:
-                                type: string
-                                description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+                              hardware_config:
+                                description: Hardware config generation during Inspect, Bootstrap, and the hardware-config phase
+                                $ref: "#/definitions/HardwareConfig"
+                              rsync_command:
+                                type: array
+                                description: Command prefix for file transfers
+                                default:
+                                  - rsync
+                                items:
+                                  type: string
                               rsync_default_flags:
                                 type: array
-                                description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
+                                description: List of base flags for rsync, set to [] to pass none
+                                default:
+                                  - -rcEx
+                                  - --mkpath
+                                  - --perms
                                 items:
                                   type: string
                               secrets:
@@ -390,9 +405,20 @@ properties:
                       $ref: "#/definitions/nix_NixConfig"
                     preset:
                       $ref: "#/definitions/Preset"
+                    rsync_command:
+                      type: array
+                      description: Command prefix for file transfers
+                      default:
+                        - rsync
+                      items:
+                        type: string
                     rsync_default_flags:
                       type: array
-                      description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
+                      description: List of base flags for rsync, set to [] to pass none
+                      default:
+                        - -rcEx
+                        - --mkpath
+                        - --perms
                       items:
                         type: string
                     secrets:
@@ -421,9 +447,20 @@ properties:
             nix:
               description: Nix build and copy configuration
               $ref: "#/definitions/nix_NixConfig"
+            rsync_command:
+              type: array
+              description: Command prefix for file transfers
+              default:
+                - rsync
+              items:
+                type: string
             rsync_default_flags:
               type: array
-              description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
+              description: List of base flags for rsync, set to [] to pass none
+              default:
+                - -rcEx
+                - --mkpath
+                - --perms
               items:
                 type: string
             secrets:
@@ -450,15 +487,26 @@ properties:
           required:
             - installables
           additionalProperties: false
-      hardware_config_path:
-        type: string
-        description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+      hardware_config:
+        description: Hardware config generation during Inspect, Bootstrap, and the hardware-config phase
+        $ref: "#/definitions/HardwareConfig"
       nix:
         description: Nix build and copy configuration
         $ref: "#/definitions/nix_NixConfig"
+      rsync_command:
+        type: array
+        description: Command prefix for file transfers
+        default:
+          - rsync
+        items:
+          type: string
       rsync_default_flags:
         type: array
-        description: "List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"
+        description: List of base flags for rsync, set to [] to pass none
+        default:
+          - -rcEx
+          - --mkpath
+          - --perms
         items:
           type: string
       secrets:
@@ -556,12 +604,52 @@ definitions:
         description: Bootstrap SSH configuration (used during initial provisioning)
         $ref: "#/definitions/SSHClient"
     additionalProperties: false
+  Generator:
+    type: object
+    properties:
+      args:
+        type: array
+        description: Arguments passed to the generator, set to [] for a tool that takes none
+        default:
+          - --show-hardware-config
+          - --no-filesystems
+        items:
+          type: string
+      command:
+        type: array
+        description: Command prefix for generating the hardware config on the target, e.g. [nixos-facter]
+        default:
+          - nixos-generate-config
+        items:
+          type: string
+    additionalProperties: false
+  HardwareConfig:
+    type: object
+    properties:
+      generate:
+        description: Command and flags that generate the hardware config on the target
+        $ref: "#/definitions/Generator"
+      path:
+        type: string
+        description: Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake
+    additionalProperties: false
   KexecConfig:
     type: object
     properties:
+      curl_command:
+        type: array
+        description: Command prefix for downloading the kexec tarball
+        default:
+          - curl
+        items:
+          type: string
       curl_default_flags:
         type: array
-        description: "List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L])"
+        description: List of base flags for curl, set to [] to pass none
+        default:
+          - --fail
+          - "-#"
+          - -L
         items:
           type: string
       extra_flags:
@@ -577,6 +665,13 @@ definitions:
         type: integer
         description: "SSH port for kexec installer (default: 22)"
         default: 22
+      tar_command:
+        type: array
+        description: Command prefix for extracting the kexec tarball
+        default:
+          - tar
+        items:
+          type: string
     additionalProperties: false
   Preset:
     type: object
@@ -704,12 +799,26 @@ definitions:
     properties:
       args:
         type: array
-        description: "Arguments passed to the installer after the installer path (default: [install, --no-confirm])"
+        description: Arguments passed to the installer after the installer path, set to [] to pass none
+        default:
+          - install
+          - --no-confirm
+        items:
+          type: string
+      curl_command:
+        type: array
+        description: Command prefix for downloading the Nix installer
+        default:
+          - curl
         items:
           type: string
       curl_default_flags:
         type: array
-        description: "List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L])"
+        description: List of base flags for curl, set to [] to pass none
+        default:
+          - --fail
+          - "-#"
+          - -L
         items:
           type: string
       url:
@@ -720,9 +829,21 @@ definitions:
   nix_NixConfig:
     type: object
     properties:
+      build_command:
+        type: array
+        description: Command prefix for builds, e.g. [nom, build] to monitor build output
+        default:
+          - nix
+          - build
+        items:
+          type: string
       build_default_flags:
         type: array
-        description: "List of base flags for 'nix build' command (default: [--no-link, --print-out-paths, --keep-going])"
+        description: List of base flags for 'nix build', set to [] to pass none
+        default:
+          - --no-link
+          - --print-out-paths
+          - --keep-going
         items:
           type: string
       build_env:
@@ -742,9 +863,21 @@ definitions:
         enum:
           - local
           - remote
+      copy_command:
+        type: array
+        description: Command prefix for closure copies, e.g. [nom, copy] to monitor transfers
+        default:
+          - nix
+          - copy
+        items:
+          type: string
       copy_default_flags:
         type: array
-        description: "List of base flags for 'nix copy' command (default: [--no-check-sigs])"
+        description: Flags for 'nix copy', set to [] to pass none; $PANIX_STORE_URL is the destination store
+        default:
+          - --to
+          - $PANIX_STORE_URL
+          - --no-check-sigs
         items:
           type: string
       copy_env:
@@ -762,9 +895,20 @@ definitions:
         description: Environment variables applied to all nix commands (e.g. NIX_USER_CONF_FILES, NIX_STORE_DIR). Command-specific env fields override these.
         additionalProperties:
           type: string
+      eval_command:
+        type: array
+        description: Command prefix for flake validation evaluation
+        default:
+          - nix
+          - eval
+        items:
+          type: string
       experimental_features:
         type: array
-        description: "List of flags to enable nix experimental features (default: [--extra-experimental-features, nix-command flakes])"
+        description: List of flags to enable nix experimental features, set to [] to pass none
+        default:
+          - --extra-experimental-features
+          - nix-command flakes
         items:
           type: string
       extra_flags:
@@ -772,9 +916,58 @@ definitions:
         description: List of extra flags applied to both 'nix build' and 'nix copy'
         items:
           type: string
+      flake_metadata_command:
+        type: array
+        description: Command prefix for flake URL validation
+        default:
+          - nix
+          - flake
+          - metadata
+        items:
+          type: string
+      nix_env_command:
+        type: array
+        description: Command prefix for profile reads and generation switches
+        default:
+          - nix-env
+        items:
+          type: string
+      nix_env_list_generations_default_flags:
+        type: array
+        description: Flags and operands for listing generations, $PANIX_PROFILE_PATH is the profile path
+        default:
+          - --profile
+          - $PANIX_PROFILE_PATH
+          - --list-generations
+        items:
+          type: string
+      nix_env_set_default_flags:
+        type: array
+        description: Flags and operands for setting the profile, $PANIX_PROFILE_PATH is the profile path and $PANIX_CLOSURE the closure
+        default:
+          - --profile
+          - $PANIX_PROFILE_PATH
+          - --set
+          - $PANIX_CLOSURE
+        items:
+          type: string
+      nixos_install_command:
+        type: array
+        description: Command prefix for the NixOS install
+        default:
+          - nixos-install
+        items:
+          type: string
       nixos_install_default_flags:
         type: array
-        description: "List of base flags for 'nixos-install' command (default: [--no-root-passwd, --no-channel-copy])"
+        description: Flags for 'nixos-install', set to [] to pass none; $PANIX_CLOSURE is the built system and /mnt the target root
+        default:
+          - --no-root-passwd
+          - --no-channel-copy
+          - --system
+          - $PANIX_CLOSURE
+          - --root
+          - /mnt
         items:
           type: string
       nixos_install_env:
@@ -787,9 +980,16 @@ definitions:
         description: List of extra flags for 'nixos-install' command (e.g. [--no-bootloader])
         items:
           type: string
+      profile_add_command:
+        type: array
+        description: Command prefix for package profile installs, leave unset for [nix, profile, add], or [nix, profile, install] on Lix
+        items:
+          type: string
       profile_add_default_flags:
         type: array
-        description: "List of base flags for 'nix profile add' command (default: [])"
+        description: Flags and operands for 'nix profile add', $PANIX_CLOSURE is the package closure
+        default:
+          - $PANIX_CLOSURE
         items:
           type: string
       profile_add_env:

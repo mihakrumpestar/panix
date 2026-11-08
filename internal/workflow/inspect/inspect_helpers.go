@@ -2,14 +2,18 @@ package inspect
 
 import (
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/runtimevars"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/mihakrumpestar/panix/pkg/argv"
 	"github.com/mihakrumpestar/panix/pkg/osrelease"
 	"github.com/mihakrumpestar/panix/pkg/stringbyte"
 	"github.com/pkg/errors"
@@ -373,18 +377,18 @@ func classifyBootstrapStatus(output string, machineI *machine.Machine) error {
 // handleUnbootstrapped generates the hardware config during Inspect, via
 // phaseops so Bootstrap runs the same step after kexec.
 func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machine) error {
-	if machineI.HardwareConfigPath == "" {
+	if machineI.HardwareConfig.Path == "" {
 		return nil
 	}
 
-	// nixos-generate-config exists only on NixOS: skip before kexec boots
+	// The generator normally exists only on NixOS: skip before kexec boots
 	// the installer; Bootstrap generates it afterwards.
 	mi := machineI.MetaInspect.Load()
 	if mi != nil && mi.RequiresKexec {
 		log.Info().
 			Str("xpath", machineI.Xpath.String()).
-			Str("hardware_config_path", machineI.HardwareConfigPath).
-			Msg("skipping hardware config generation before kexec (nixos-generate-config is unavailable on the current OS)")
+			Str("hardware_config_path", machineI.HardwareConfig.Path).
+			Msg("skipping hardware config generation before kexec (the generator is unavailable on the current OS)")
 
 		return nil
 	}
@@ -392,28 +396,80 @@ func handleUnbootstrapped(exc *executioner.Executioner, machineI *machine.Machin
 	return phaseops.GenerateHardwareConfig(exc, machineI) //nolint:wrapcheck // error is pre-annotated with its own context
 }
 
+// generationsArgv builds the privilege-wrapped generation listing command. The
+// env prefix stays inline (not WithEnv) so it sits inside the wrap regardless of
+// which user runs nix-env; NIX_PAGER=cat is required because panix runs on a PTY
+// and nix's pager would block forever (#14).
+func generationsArgv(
+	machineI *machine.Machine,
+	preset installable.Preset,
+	profilePath string,
+	targetUser string,
+	nixCfg *nix.NixConfig,
+) ([]string, error) {
+	flags, err := runtimevars.Vars{runtimevars.Profile: profilePath}.ExpandList(nixCfg.NixEnvListGenerationsDefaultFlags)
+	if err != nil {
+		return nil, errors.Wrap(err, "nix_env_list_generations_default_flags")
+	}
+
+	// A built-in nix-env without the profile reads the default profile, and one
+	// without the operation exits 1, which the caller treats as a fresh profile.
+	// Either way auto-rollback silently works off the wrong generations.
+	if phaseops.CommandInvokes(nixCfg.NixEnvCommand, "nix-env") {
+		err = phaseops.RequireExpandedOperand(
+			"nix_env_list_generations_default_flags", "$PANIX_PROFILE_PATH", flags, profilePath)
+		if err != nil {
+			return nil, err //nolint:wrapcheck // error already names the field
+		}
+
+		if !slices.Contains(flags, "--list-generations") && !slices.Contains(flags, "-G") {
+			return nil, errors.New("nix_env_list_generations_default_flags dropped --list-generations: " +
+				"the built-in nix-env then exits without a generation list, which disables auto-rollback")
+		}
+	}
+
+	return phaseops.WrapAsTargetUser(machineI, preset, targetUser,
+		slices.Concat(
+			[]string{"env", "NIX_PAGER=cat"},
+			argv.Argv(nixCfg.NixEnvCommand, nil, flags),
+		)), nil
+}
+
 // readGenerations works for any profile path (system, home-manager,
-// system-manager, ...). NIX_PAGER=cat: panix runs on a PTY and nix's pager
-// would block forever (#14).
+// system-manager, ...).
 func readGenerations(
 	exc *executioner.Executioner,
 	machineI *machine.Machine,
 	preset installable.Preset,
 	profilePath string,
 	targetUser string,
+	nixCfg *nix.NixConfig,
 ) error {
-	// The env prefix stays inline (not WithEnv) so it sits inside the
-	// privilege wrap regardless of which user runs nix-env.
-	args := phaseops.WrapAsTargetUser(machineI, preset, targetUser,
-		[]string{"env", "NIX_PAGER=cat", "nix-env", "--profile", profilePath, "--list-generations"})
+	args, err := generationsArgv(machineI, preset, profilePath, targetUser, nixCfg)
+	if err != nil {
+		return err
+	}
 
-	err := exc.Exec(
+	builtinNixEnv := phaseops.CommandInvokes(nixCfg.NixEnvCommand, "nix-env")
+
+	err = exc.Exec(
 		"list generations",
 		"listing generations",
 		"failed to list generations",
 		args,
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			genData, date := parseNixEnvGenerations(log.Output.String())
+
+			// Exit 0 with non-empty but unparseable output means the configured
+			// command is not a nix-env --list-generations drop-in. Silently
+			// storing nil would disable auto-rollback for the rest of the run.
+			// Empty output stays legitimate: it is a fresh profile.
+			if genData == nil && strings.TrimSpace(log.Output.String()) != "" {
+				return errors.Errorf(
+					"%s exited 0 but printed no parseable generations, so auto-rollback would be disabled: %s",
+					strings.Join(nixCfg.NixEnvCommand, " "), strconv.Quote(log.Output.String()),
+				)
+			}
 
 			machineI.MetaInspect.Update(func(metaInspect *machine.MetaInspect) {
 				metaInspect.Generations = genData
@@ -425,10 +481,10 @@ func readGenerations(
 			return nil
 		}),
 		executioner.OnFailure(func(_ *command.CommandLog, err error) error {
-			// Exit 1 (no profile yet) and 127 (nix-env not in PATH, e.g.
-			// kexec VM) are expected; anything else propagates.
+			// A missing profile (1) or a missing built-in nix-env (127, e.g. in
+			// the kexec VM) are expected; a replacement command must exit 0.
 			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
+			if builtinNixEnv && errors.As(err, &exitErr) {
 				code := exitErr.ExitCode()
 				if code == 1 || code == 127 {
 					return nil

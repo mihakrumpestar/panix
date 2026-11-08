@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gookit/goutil/dump"
@@ -106,10 +107,37 @@ func decodeConfigFile(configPath string) (*Config, error) {
 
 	err = yamlx.Decode(processedYAML, conf)
 	if err != nil {
+		hint := movedKeyHint(err)
+		if hint != "" {
+			return nil, errors.Wrapf(err, "failed to decode config (%s)", hint)
+		}
+
 		return nil, errors.Wrap(err, "failed to decode config")
 	}
 
 	return conf, nil
+}
+
+// movedKeyHints names replacements for keys that moved, so the strict-decode
+// error tells users where the setting went instead of only that it is unknown.
+// The map can be dropped once the moved keys are out of circulation.
+var movedKeyHints = map[string]string{
+	"hardware_config_path":    "hardware_config.path (the generator moved to hardware_config.generate)",
+	"generate_config_command": "hardware_config.generate.command",
+	"curl_command":            "bootstrap.nix.curl_command or bootstrap.kexec.curl_command",
+	"tar_command":             "bootstrap.kexec.tar_command",
+}
+
+// movedKeyHint returns a hint for the first moved key mentioned in a decode
+// error, or "" when the error is unrelated.
+func movedKeyHint(decodeErr error) string {
+	for key, replacement := range movedKeyHints {
+		if strings.Contains(decodeErr.Error(), strconv.Quote(key)) {
+			return key + " moved to " + replacement
+		}
+	}
+
+	return ""
 }
 
 // applyConfigDefaults resolves the effective flags from all sources (explicit CLI

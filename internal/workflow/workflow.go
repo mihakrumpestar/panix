@@ -8,6 +8,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/workflow/activate"
 	"github.com/mihakrumpestar/panix/internal/workflow/bootstrap"
 	"github.com/mihakrumpestar/panix/internal/workflow/build"
+	"github.com/mihakrumpestar/panix/internal/workflow/hardwareconfig"
 	"github.com/mihakrumpestar/panix/internal/workflow/inspect"
 	"github.com/mihakrumpestar/panix/internal/workflow/phasehandler"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
@@ -64,11 +65,12 @@ func NewWorkflow(ctx context.Context, conf *config.Config) (*Workflow, error) {
 		done:       make(chan struct{}),
 
 		handlers: map[phase.Phase]phasehandler.Handler{
-			phase.Inspect:   inspect.Handler{},
-			phase.Build:     build.Handler{OutLinks: outLinks},
-			phase.Bootstrap: bootstrap.Handler{OutLinks: outLinks},
-			phase.Transfer:  transfer.Handler{},
-			phase.Secrets:   secrets.Handler{},
+			phase.Inspect:        inspect.Handler{},
+			phase.HardwareConfig: hardwareconfig.Handler{},
+			phase.Build:          build.Handler{OutLinks: outLinks},
+			phase.Bootstrap:      bootstrap.Handler{OutLinks: outLinks},
+			phase.Transfer:       transfer.Handler{},
+			phase.Secrets:        secrets.Handler{},
 			phase.Activate: activate.Handler{
 				ActivationMode: conf.Flags.ActivationMode,
 				NixFlavor:      conf.Nix.GetFlavor(),

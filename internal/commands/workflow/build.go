@@ -13,5 +13,5 @@ func (c *BuildCmd) Run() error {
 	flags := flags.Flags{WorkflowFlags: c.WorkflowFlags}
 	commandPhases := []phase.Phase{phase.Build}
 
-	return runWorkflow(c, flags, commandPhases)
+	return runWorkflow(c, flags, commandPhases, nil)
 }

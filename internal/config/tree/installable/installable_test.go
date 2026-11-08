@@ -310,6 +310,7 @@ func assertCustomPresetDefaultsMerged(t *testing.T, customPresets CustomOutputTy
 // undeclared one stays BootstrapNone, and a per-installable preset value is
 // ignored in favor of the type declaration (for built-in types, in favor of
 // the built-in mode).
+//
 //nolint:funlen
 func TestInitBootstrapModeIsTypeLevel(t *testing.T) {
 	t.Parallel()

@@ -30,6 +30,8 @@ type cliCmd struct {
 	Secrets  commands_workflow.SecretsCmd  `cmd:"" help:"Deploy secrets to machines"`
 	Rollback commands_workflow.RollbackCmd `cmd:"" help:"Rollback to a previous generation, use optional --gen=NUMBER flag (default is -1)"`
 
+	HardwareConfig commands_workflow.HardwareConfigCmd `cmd:"" help:"Generate only the hardware config"`
+
 	Completion kongcompletion.Completion `cmd:"" help:"Print shell code for initializing tab completion (bash, zsh, fish)"`
 }
 

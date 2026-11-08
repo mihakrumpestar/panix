@@ -2,7 +2,6 @@ package attributes
 
 import (
 	"os"
-	"reflect"
 	"slices"
 	"strconv"
 
@@ -11,30 +10,8 @@ import (
 
 	"github.com/mihakrumpestar/panix/pkg/filemode"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 )
-
-// structDefault returns the "default" struct tag of the named field on T.
-// Scalar defaults live in that tag: the same tag drives schema generation
-// (pkg/yamlschema) and these runtime fallbacks. List defaults live in the
-// Default* vars of this package, documented in the field's desc text.
-func structDefault[T any](field string) string {
-	structField, ok := reflect.TypeFor[T]().FieldByName(field)
-	if !ok {
-		return ""
-	}
-
-	return structField.Tag.Get("default")
-}
-
-// orDefault returns configured when non-nil (an explicitly empty slice clears
-// the default), else def.
-func orDefault(configured, def []string) []string {
-	if configured != nil {
-		return configured
-	}
-
-	return def
-}
 
 // KexecImage
 
@@ -48,7 +25,7 @@ type KexecImage string
 // KexecConfig.Image "default" tag ($PANIX_ARCH is expanded at runtime).
 func (k KexecImage) Get() KexecImage {
 	if k == "" {
-		return KexecImage(structDefault[KexecConfig]("Image"))
+		return KexecImage(structdefault.String[KexecConfig]("Image"))
 	}
 
 	return k

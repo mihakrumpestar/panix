@@ -9,155 +9,212 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 )
 
-// --- GetRsyncDefaultFlags ---
+// newParentAttr builds a minimal parent Attributes suitable for Init: Xpath must
+// be set because passAttributesInto calls NewXpathWithAppend on it.
+func newParentAttr() *Attributes {
+	return &Attributes{Xpath: xpath.New("fleet").NewXpathWithAppend("my-flake")}
+}
 
-func Test_GetRsyncDefaultFlags(t *testing.T) {
+// Built-in defaults live in the struct tags and are materialized by Init, so they
+// are pinned literally here: a tag edit that changes a command or flag Panix
+// depends on must fail a test.
+func TestInit_MaterializesDefaults(t *testing.T) {
+	t.Parallel()
+
+	attrs := &Attributes{}
+
+	require.NoError(t, attrs.Init("test", newParentAttr()))
+
+	assert.Equal(t, []string{"rsync"}, attrs.RsyncCommand)
+	assert.Equal(t, []string{"-rcEx", "--mkpath", "--perms"}, attrs.RsyncDefaultFlags)
+	assert.Equal(t, []string{"nixos-generate-config"}, attrs.HardwareConfig.Generate.Command)
+	assert.Equal(t, []string{"--show-hardware-config", "--no-filesystems"}, attrs.HardwareConfig.Generate.Args)
+	assert.Equal(t, []string{"curl"}, attrs.Bootstrap.Nix.CurlCommand)
+	assert.Equal(t, []string{"--fail", "-#", "-L"}, attrs.Bootstrap.Nix.CurlDefaultFlags)
+	assert.Equal(t, []string{"install", "--no-confirm"}, attrs.Bootstrap.Nix.Args)
+	assert.Equal(t, []string{"curl"}, attrs.Bootstrap.Kexec.CurlCommand)
+	assert.Equal(t, []string{"--fail", "-#", "-L"}, attrs.Bootstrap.Kexec.CurlDefaultFlags)
+	assert.Equal(t, []string{"tar"}, attrs.Bootstrap.Kexec.TarCommand)
+}
+
+// An explicit [] is a value the operator chose: a flag list passes no flags, and
+// a command prefix stays empty. Validation rejects the empty prefix at load
+// time, so it never reaches a command.
+func TestInit_EmptyValues(t *testing.T) {
+	t.Parallel()
+
+	attrs := &Attributes{
+		RsyncDefaultFlags: []string{},
+		Bootstrap: Bootstrap{
+			Nix:   NixConfig{CurlDefaultFlags: []string{}},
+			Kexec: KexecConfig{CurlDefaultFlags: []string{}, TarCommand: []string{}},
+		},
+		HardwareConfig: HardwareConfig{Generate: Generator{Args: []string{}}},
+	}
+
+	require.NoError(t, attrs.Init("test", newParentAttr()))
+
+	assert.NotNil(t, attrs.RsyncDefaultFlags)
+	assert.Empty(t, attrs.RsyncDefaultFlags, "an explicitly empty flag list clears the default")
+	assert.NotNil(t, attrs.Bootstrap.Nix.CurlDefaultFlags)
+	assert.Empty(t, attrs.Bootstrap.Nix.CurlDefaultFlags)
+	assert.NotNil(t, attrs.Bootstrap.Kexec.CurlDefaultFlags)
+	assert.Empty(t, attrs.Bootstrap.Kexec.CurlDefaultFlags)
+	assert.NotNil(t, attrs.HardwareConfig.Generate.Args)
+	assert.Empty(t, attrs.HardwareConfig.Generate.Args, "[] runs a flag-less generator")
+
+	assert.Empty(t, attrs.Bootstrap.Kexec.TarCommand, "an explicitly empty prefix stays empty")
+}
+
+func TestInit_KeepsConfiguredValues(t *testing.T) {
+	t.Parallel()
+
+	attrs := &Attributes{
+		RsyncCommand: []string{"rsync-wrapper", "--quiet"},
+		HardwareConfig: HardwareConfig{
+			Generate: Generator{Command: []string{"/run/wrappers/bin/nixos-generate-config"}, Args: []string{"-o", "/tmp/x.json"}},
+		},
+		Bootstrap: Bootstrap{
+			Nix:   NixConfig{CurlCommand: []string{"aria2c"}, Args: []string{"install", "--extra"}},
+			Kexec: KexecConfig{CurlCommand: []string{"curl-kexec"}, TarCommand: []string{"bsdtar"}},
+		},
+	}
+
+	require.NoError(t, attrs.Init("test", newParentAttr()))
+
+	assert.Equal(t, []string{"rsync-wrapper", "--quiet"}, attrs.RsyncCommand)
+	assert.Equal(t, []string{"/run/wrappers/bin/nixos-generate-config"}, attrs.HardwareConfig.Generate.Command)
+	assert.Equal(t, []string{"-o", "/tmp/x.json"}, attrs.HardwareConfig.Generate.Args)
+	assert.Equal(t, []string{"aria2c"}, attrs.Bootstrap.Nix.CurlCommand)
+	assert.Equal(t, []string{"install", "--extra"}, attrs.Bootstrap.Nix.Args)
+	assert.Equal(t, []string{"curl-kexec"}, attrs.Bootstrap.Kexec.CurlCommand)
+	assert.Equal(t, []string{"bsdtar"}, attrs.Bootstrap.Kexec.TarCommand)
+}
+
+// --- RsyncDefaultFlags override semantics ---
+//
+// A child's non-nil flag list replaces the parent's; nil inherits it.
+
+func Test_Attributes_Init_RsyncDefaultFlagsOverrideSemantics(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		in   []string
-		want []string
+		name     string
+		parent   []string
+		child    []string
+		expected []string
 	}{
-		{
-			name: "nil returns default rsync flags",
-			in:   nil,
-			want: DefaultRsyncFlags,
-		},
-		{
-			name: "custom value returns custom",
-			in:   []string{"-avz", "--delete"},
-			want: []string{"-avz", "--delete"},
-		},
-		{
-			name: "explicitly empty clears defaults",
-			in:   []string{},
-			want: []string{},
-		},
+		{name: "child replaces parent", parent: []string{"--parent"}, child: []string{"--child"}, expected: []string{"--child"}},
+		{name: "nil child inherits parent", parent: []string{"--parent"}, child: nil, expected: []string{"--parent"}},
+		{name: "empty child clears parent", parent: []string{"--parent"}, child: []string{}, expected: []string{}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			a := &Attributes{RsyncDefaultFlags: tt.in}
+			parent := newParentAttr()
+			parent.RsyncDefaultFlags = tt.parent
 
-			assertion := assert.New(t)
-			got := a.GetRsyncDefaultFlags()
-			assertion.Equal(tt.want, got)
+			child := &Attributes{RsyncDefaultFlags: tt.child}
+
+			require.NoError(t, child.Init("child", parent))
+
+			assert.Equal(t, tt.expected, child.RsyncDefaultFlags)
 		})
 	}
 }
 
-// --- GetCurlDefaultFlags ---
-//
-// GetCurlDefaultFlags is a method on KexecConfig.
-
-func Test_GetCurlDefaultFlags(t *testing.T) {
+// A fleet-level [] must reach an unset child. mergo cannot append [] into nil, so
+// before overrides.InheritEmpty the fleet-level `args: []` was dropped and the
+// machine fell back to the built-in generator flags.
+func Test_Attributes_Init_EmptyParentValueReachesUnsetChild(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		in   []string
-		want []string
+		name       string
+		parentArgs []string
+		childArgs  []string
+		want       []string
 	}{
-		{
-			name: "nil returns default curl flags",
-			in:   nil,
-			want: DefaultCurlFlags,
-		},
-		{
-			name: "custom value returns custom",
-			in:   []string{"--silent", "--show-error"},
-			want: []string{"--silent", "--show-error"},
-		},
-		{
-			name: "explicitly empty clears defaults",
-			in:   []string{},
-			want: []string{},
-		},
+		{name: "fleet empty reaches unset machine", parentArgs: []string{}, childArgs: nil, want: []string{}},
+		{name: "fleet flags reach unset machine", parentArgs: []string{"--p"}, childArgs: nil, want: []string{"--p"}},
+		{name: "machine value wins", parentArgs: []string{"--p"}, childArgs: []string{"-o", "/tmp/x"}, want: []string{"-o", "/tmp/x"}},
+		{name: "machine empty wins", parentArgs: []string{"--p"}, childArgs: []string{}, want: []string{}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			k := &KexecConfig{CurlDefaultFlags: tt.in}
+			parent := newParentAttr()
+			parent.HardwareConfig.Generate.Args = tt.parentArgs
 
-			assertion := assert.New(t)
-			got := k.GetCurlDefaultFlags()
-			assertion.Equal(tt.want, got)
+			child := &Attributes{HardwareConfig: HardwareConfig{Generate: Generator{Args: tt.childArgs}}}
+
+			require.NoError(t, child.Init("c", parent))
+			assert.Equal(t, tt.want, child.HardwareConfig.Generate.Args)
 		})
 	}
 }
 
-// --- Attributes.Init rsync override semantics ---
-//
-// "Default" flag fields (RsyncDefaultFlags) use override semantics: a child's
-// non-nil value is kept; a nil child inherits the parent's value.
-
-func Test_Attributes_Init_RsyncOverrideSemantics(t *testing.T) {
+// A machine-level prefix overrides the fleet's instead of accumulating it: the
+// nested fields ride the same override path as the top-level ones.
+func TestAttributes_Init_CommandPrefixOverrideSemantics(t *testing.T) {
 	t.Parallel()
 
-	// newParentAttr builds a minimal parent Attributes suitable for Init:
-	// Xpath must be set because passAttributesInto calls NewXpathWithAppend on it.
-	newParentAttr := func(rsyncFlags []string) *Attributes {
-		return &Attributes{
-			RsyncDefaultFlags: rsyncFlags,
-			Xpath:             xpath.New("fleet").NewXpathWithAppend("my-flake"),
-		}
+	parent := &Attributes{
+		RsyncCommand: []string{"parent-rsync"},
+		HardwareConfig: HardwareConfig{
+			Generate: Generator{Command: []string{"parent-generate"}, Args: []string{"parent-generate-args"}},
+		},
+		Bootstrap: Bootstrap{
+			Kexec: KexecConfig{
+				CurlDefaultFlags: []string{"--parent-kexec-curl"},
+				CurlCommand:      []string{"parent-kexec-curl"},
+				TarCommand:       []string{"parent-tar"},
+			},
+			Nix: NixConfig{
+				Args:             []string{"parent-args"},
+				CurlDefaultFlags: []string{"--parent-nix-curl"},
+				CurlCommand:      []string{"parent-nix-curl"},
+			},
+		},
+		Xpath: xpath.New("fleet").NewXpathWithAppend("my-flake"),
+	}
+	child := &Attributes{
+		RsyncCommand: []string{"child-rsync"},
+		Bootstrap:    Bootstrap{Nix: NixConfig{Args: []string{"child-args"}}},
 	}
 
-	t.Run("RsyncDefaultFlags child overrides parent", func(t *testing.T) {
-		t.Parallel()
+	require.NoError(t, child.Init("child", parent))
 
-		parent := newParentAttr([]string{"--parent-rsync"})
-		child := &Attributes{
-			RsyncDefaultFlags: []string{"--child-rsync"},
-		}
+	assert.Equal(t, []string{"child-rsync"}, child.RsyncCommand, "child prefix wins")
+	assert.Equal(t, []string{"parent-generate"}, child.HardwareConfig.Generate.Command, "nil child prefix inherits the parent")
+	assert.Equal(t, []string{"parent-nix-curl"}, child.Bootstrap.Nix.CurlCommand, "nil child prefix inherits the parent")
+	assert.Equal(t, []string{"parent-kexec-curl"}, child.Bootstrap.Kexec.CurlCommand, "nil child prefix inherits the parent")
+	assert.Equal(t, []string{"parent-tar"}, child.Bootstrap.Kexec.TarCommand, "nil child prefix inherits the parent")
 
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		assertion := assert.New(t)
-		assertion.Equal([]string{"--child-rsync"}, child.RsyncDefaultFlags,
-			"child's RsyncDefaultFlags should override parent, not append")
-	})
-
-	t.Run("RsyncDefaultFlags nil child inherits parent", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr([]string{"--parent"})
-		child := &Attributes{}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		assertion := assert.New(t)
-		assertion.Equal([]string{"--parent"}, child.RsyncDefaultFlags,
-			"nil child RsyncDefaultFlags should inherit parent value")
-	})
+	// The bootstrap flag lists ride the same override path.
+	assert.Equal(t, []string{"--parent-kexec-curl"}, child.Bootstrap.Kexec.CurlDefaultFlags)
+	assert.Equal(t, []string{"child-args"}, child.Bootstrap.Nix.Args, "child args win")
+	assert.Equal(t, []string{"--parent-nix-curl"}, child.Bootstrap.Nix.CurlDefaultFlags)
+	assert.Equal(t, []string{"parent-generate-args"}, child.HardwareConfig.Generate.Args,
+		"a nil child generator args list inherits the parent")
 }
 
-// --- NixConfig.GetURL / GetArgs / GetCurlDefaultFlags ---
-//
-// Scalar defaults come from the struct tags (shared with schema generation),
-// list defaults from the Default* vars; a nil receiver (unset bootstrap.nix)
-// behaves like an empty config.
+// --- Scalar defaults ---
 
 func Test_NixConfig_GetURL(t *testing.T) {
 	t.Parallel()
 
-	defaultURL := "https://install.determinate.systems/nix"
-
 	tests := []struct {
 		name string
-		in   *NixConfig
+		in   NixConfig
 		want string
 	}{
-		{"nil defaults to the tagged default", nil, defaultURL},
-		{"empty defaults to the tagged default", &NixConfig{}, defaultURL},
-		{"custom url preserved", &NixConfig{URL: "https://example.com/installer"}, "https://example.com/installer"},
+		{"empty defaults to the tagged default", NixConfig{}, "https://install.determinate.systems/nix"},
+		{"custom url preserved", NixConfig{URL: "https://example.com/installer"}, "https://example.com/installer"},
 	}
 
 	for _, tt := range tests {
@@ -167,175 +224,4 @@ func Test_NixConfig_GetURL(t *testing.T) {
 			assert.Equal(t, tt.want, tt.in.GetURL())
 		})
 	}
-}
-
-func Test_NixConfig_GetArgs(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		in   *NixConfig
-		want []string
-	}{
-		{"nil defaults to DefaultNixInstallerArgs", nil, DefaultNixInstallerArgs},
-		{"nil args default to DefaultNixInstallerArgs", &NixConfig{URL: "https://example.com/i"}, DefaultNixInstallerArgs},
-		{"custom args preserved", &NixConfig{Args: []string{"install", "--extra"}}, []string{"install", "--extra"}},
-		{"explicit empty args clear the default", &NixConfig{Args: []string{}}, []string{}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.want, tt.in.GetArgs())
-		})
-	}
-}
-
-func Test_NixConfig_GetCurlDefaultFlags(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		in   *NixConfig
-		want []string
-	}{
-		{"nil returns default curl flags", nil, DefaultCurlFlags},
-		{"nil flags return default curl flags", &NixConfig{}, DefaultCurlFlags},
-		{"custom value returns custom", &NixConfig{CurlDefaultFlags: []string{"-fsSL"}}, []string{"-fsSL"}},
-		{"explicitly empty clears defaults", &NixConfig{CurlDefaultFlags: []string{}}, []string{}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tt.want, tt.in.GetCurlDefaultFlags())
-		})
-	}
-}
-
-// --- Attributes.Init bootstrap.nix override semantics ---
-//
-// Bootstrap.Nix.Args is a "default" flag-style field: a child's non-nil value
-// fully replaces the parent's; a nil child inherits it.
-
-func Test_Attributes_Init_NixArgsOverrideSemantics(t *testing.T) {
-	t.Parallel()
-
-	// newParentAttr builds a minimal parent Attributes suitable for Init:
-	// Xpath must be set because passAttributesInto calls NewXpathWithAppend on it.
-	newParentAttr := func(nixCfg *NixConfig) *Attributes {
-		return &Attributes{
-			Bootstrap: Bootstrap{Nix: nixCfg},
-			Xpath:     xpath.New("fleet").NewXpathWithAppend("my-flake"),
-		}
-	}
-
-	t.Run("child args override parent args", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr(&NixConfig{URL: "https://parent.example.com/i", Args: []string{"parent"}})
-		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{Args: []string{"child"}}}}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		require.NotNil(t, child.Bootstrap.Nix)
-		assert.Equal(t, []string{"child"}, child.Bootstrap.Nix.Args,
-			"child's Args should replace parent's, not append")
-		assert.Equal(t, "https://parent.example.com/i", child.Bootstrap.Nix.URL,
-			"unset fields still cascade from the parent")
-	})
-
-	t.Run("nil child Nix inherits parent", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr(&NixConfig{URL: "https://parent.example.com/i", Args: []string{"parent"}})
-		child := &Attributes{}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		require.NotNil(t, child.Bootstrap.Nix)
-		assert.Equal(t, "https://parent.example.com/i", child.Bootstrap.Nix.GetURL())
-		assert.Equal(t, []string{"parent"}, child.Bootstrap.Nix.GetArgs())
-	})
-
-	t.Run("nil child args inherit parent args", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr(&NixConfig{Args: []string{"parent"}})
-		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{URL: "https://child.example.com/i"}}}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		require.NotNil(t, child.Bootstrap.Nix)
-		assert.Equal(t, []string{"parent"}, child.Bootstrap.Nix.Args,
-			"nil child Args should inherit parent value")
-	})
-}
-
-// --- Attributes.Init bootstrap.nix curl override semantics ---
-//
-// Bootstrap.Nix.CurlDefaultFlags is a "default" flag-style field like Args:
-// a child's non-nil value fully replaces the parent's, nil inherits it, and an
-// explicitly empty slice clears it.
-
-func Test_Attributes_Init_NixCurlDefaultFlagsOverrideSemantics(t *testing.T) {
-	t.Parallel()
-
-	// newParentAttr builds a minimal parent Attributes suitable for Init:
-	// Xpath must be set because passAttributesInto calls NewXpathWithAppend on it.
-	newParentAttr := func(nixCfg *NixConfig) *Attributes {
-		return &Attributes{
-			Bootstrap: Bootstrap{Nix: nixCfg},
-			Xpath:     xpath.New("fleet").NewXpathWithAppend("my-flake"),
-		}
-	}
-
-	t.Run("child curl flags override parent curl flags", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr(&NixConfig{URL: "https://parent.example.com/i", CurlDefaultFlags: []string{"-PARENT"}})
-		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{CurlDefaultFlags: []string{"-CHILD"}}}}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		require.NotNil(t, child.Bootstrap.Nix)
-		assert.Equal(t, []string{"-CHILD"}, child.Bootstrap.Nix.CurlDefaultFlags,
-			"child's CurlDefaultFlags should replace parent's, not append")
-		assert.Equal(t, "https://parent.example.com/i", child.Bootstrap.Nix.URL,
-			"unset fields still cascade from the parent")
-	})
-
-	t.Run("nil child curl flags inherit parent curl flags", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr(&NixConfig{CurlDefaultFlags: []string{"-PARENT"}})
-		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{URL: "https://child.example.com/i"}}}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		require.NotNil(t, child.Bootstrap.Nix)
-		assert.Equal(t, []string{"-PARENT"}, child.Bootstrap.Nix.CurlDefaultFlags,
-			"nil child CurlDefaultFlags should inherit parent value")
-	})
-
-	t.Run("explicit empty curl flags stay empty", func(t *testing.T) {
-		t.Parallel()
-
-		parent := newParentAttr(&NixConfig{CurlDefaultFlags: []string{"-PARENT"}})
-		child := &Attributes{Bootstrap: Bootstrap{Nix: &NixConfig{CurlDefaultFlags: []string{}}}}
-
-		err := child.Init("child", parent)
-		require.NoError(t, err)
-
-		require.NotNil(t, child.Bootstrap.Nix)
-		assert.Equal(t, []string{}, child.Bootstrap.Nix.CurlDefaultFlags,
-			"explicitly empty CurlDefaultFlags must clear the parent value, not inherit it")
-	})
 }

@@ -58,7 +58,7 @@
       # imports the hardware config panix generates right after kexec and
       # before the bootstrap build. Scope: only this configuration imports
       # it; the other machines in this flake do not set
-      # hardware_config_path, so the file is never generated for them.
+      # hardware_config.path, so the file is never generated for them.
       generatedHardwareConfigModule = {
         imports = [ ./hardware-configuration.nix ];
       };
@@ -333,7 +333,7 @@
           let
             hostPlatform = pkgs.stdenv.hostPlatform.system;
             hashes = {
-              x86_64-linux = "sha256-xBoeap+7VX8WsN5fr382HwNRstBybn1WwuLtf099B14=";
+              x86_64-linux = "sha256-Iu0U7hsk0QDTiPH8JF4wYr1ZgkM9FZz/pt7DTA6xXas=";
               aarch64-linux = "sha256-r2UmroyBZU+JWzooYvZkhH8NPD+3v+w+b/KVnVNzj80=";
             };
             # Release assets are named nix-installer-<system>; only the host
@@ -358,7 +358,7 @@
         # derivation failure reports the new hash.
         debian-cloud-image = pkgs.fetchurl {
           url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2";
-          hash = "sha256-qzcXDC76pF9hsC0tsrtC3aC7tUa58utCJxErhcWNr3I=";
+          hash = "sha256-skKsovbdL7pyyFbt8dmw33KpzQk1YFNRQvHpycgSj4A=";
         };
 
         # Cloud-init NoCloud seed ISOs, built via genisoimage (pkgs.cdrkit).

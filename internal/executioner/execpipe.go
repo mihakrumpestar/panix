@@ -65,22 +65,12 @@ func (ex *Executioner) ExecPipe(
 	spec PipeSpec,
 	opts ...ExecOption,
 ) error {
-	err := validatePipeSpec(spec)
-	if err != nil {
-		return err
-	}
-
 	excOpt := &ExecOptions{}
 	for _, opt := range opts {
 		opt(excOpt)
 	}
 
-	err = validatePipeOptions(excOpt)
-	if err != nil {
-		return err
-	}
-
-	err = validateExecOptions(excOpt)
+	err := validatePipeCall(spec, excOpt)
 	if err != nil {
 		return err
 	}
@@ -121,6 +111,22 @@ func (ex *Executioner) ExecPipe(
 	}
 
 	return nil
+}
+
+// validatePipeCall rejects everything ExecPipe cannot honour before any process
+// starts: an incomplete spec and an unsupported option.
+func validatePipeCall(spec PipeSpec, excOpt *ExecOptions) error {
+	err := validatePipeSpec(spec)
+	if err != nil {
+		return err
+	}
+
+	err = validatePipeOptions(excOpt)
+	if err != nil {
+		return err
+	}
+
+	return validateExecOptions(excOpt)
 }
 
 // validatePipeSpec rejects empty argv before prepareCommand can index them.

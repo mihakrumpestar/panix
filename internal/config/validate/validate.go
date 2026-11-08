@@ -142,6 +142,8 @@ func humanizeTagMessage(fieldError validator.FieldError) string {
 		return fmt.Sprintf("must be one of [%s], got: %v", fieldError.Param(), fieldError.Value())
 	case "dive":
 		return "contains invalid elements"
+	case "nonempty":
+		return "must not be empty, leave it unset for the built-in command"
 	default:
 		return fmt.Sprintf("failed validation '%s' (value: %v)", fieldError.Tag(), fieldError.Value())
 	}

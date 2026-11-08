@@ -13,6 +13,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 )
 
 const (
@@ -47,6 +48,7 @@ func (f *Faker) Machine() *machine.Machine {
 	}
 	mach.SSH = f.SSHClient()
 	mach.SudoProgram = attributes.SudoProgram("sudo")
+	structdefault.Apply(&mach.Attributes)
 
 	return mach
 }
@@ -87,6 +89,10 @@ func (f *Faker) Installable(machines ...*machine.Machine) *installable.Installab
 	// key, so mirror the preset defaults production Init applies for that
 	// type (BootstrapNixOS) instead of leaving BootstrapNone.
 	out.Preset = installable.Preset{Bootstrap: installable.BootstrapNixOS}
+
+	// Production Init materializes the nix defaults too, so a test building an
+	// argv from this installable gets the same command line as a real run.
+	structdefault.Apply(&out.Nix)
 
 	for _, mach := range machines {
 		out.Machines.Set(f.nextID(), mach)

@@ -3,9 +3,9 @@ package phaseops
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
@@ -14,6 +14,7 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/pkg/argv"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/tui/style"
 	"github.com/pkg/errors"
@@ -21,7 +22,13 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-var ErrNoBuildOutputs = errors.New("invalid build output: no outputs")
+// ErrNoBuildOutputs reports a build whose last output line was not a store path.
+// The message names the contract because an overridden build command is the
+// usual cause and the flag validator was deliberately not added.
+var ErrNoBuildOutputs = errors.New(
+	"invalid build output: no outputs (the build command must print the store path as its last line, " +
+		"which the built-in --print-out-paths does)",
+)
 
 // BuildInstallable builds the installables with 'nix build' and returns the
 // printed store path. A non-empty outLink is passed as '--out-link <path>',
@@ -55,7 +62,7 @@ func BuildInstallable(
 		executioner.OnSuccess(func(log *command.CommandLog) error {
 			storePath = string(style.StripANSI(log.Output.LastLine()))
 
-			if storePath == "" || !strings.HasPrefix(storePath, "/nix/store/") {
+			if !isStorePath(storePath) {
 				return errors.Wrapf(ErrNoBuildOutputs, "%s/%s: %s", fleetLeaf.Flake.Name, installable.Name, strconv.Quote(storePath))
 			}
 
@@ -94,31 +101,42 @@ func remoteBuilderSSH(installable *installable.Installable) ssh.SSHClient {
 }
 
 func nixBuildCommand(installable *installable.Installable, installables []string, outLink string) []string {
-	baseArgs := []string{"nix"}
-	baseArgs = append(baseArgs, installable.Nix.GetExperimentalFeatures()...)
-	baseArgs = append(baseArgs, "build")
+	nixCfg := &installable.Nix
 
-	if installable.Nix.BuildMode == nix.BuildModeRemote {
+	var remoteFlags []string
+
+	if nixCfg.BuildMode == nix.BuildModeRemote {
 		// The builder is pinned to the first declared machine, so the command
 		// is identical regardless of which machine's goroutine executes it.
 		storeURL := remoteBuilderSSH(installable).NixStoreURL()
-		baseArgs = append(baseArgs,
-			"--eval-store", "auto", "--store", storeURL, "--option", "builders", "")
+		remoteFlags = []string{"--eval-store", "auto", "--store", storeURL, "--option", "builders", ""}
 	}
 
-	baseArgs = append(baseArgs, combineBuildFlags(&installable.Nix, outLink)...)
-
-	return slices.Concat(
-		baseArgs,
-		slices.Concat(installable.Nix.ExtraFlags, installable.Nix.BuildFlags),
+	return argv.Argv(
+		nixCfg.BuildCommand,
+		nixCfg.ExperimentalFeatures,
+		remoteFlags,
+		combineBuildFlags(nixCfg, outLink),
+		nixCfg.ExtraFlags,
+		nixCfg.BuildFlags,
 		installables,
 	)
 }
 
+// isStorePath reports whether s is a full store path, not merely a string that
+// starts like one: a build command must print the path as its last line, and a
+// banner, progress line or truncated capture would otherwise pass.
+func isStorePath(s string) bool {
+	return storePathPattern.MatchString(s)
+}
+
+var storePathPattern = regexp.MustCompile(`^/nix/store/[0-9a-df-np-sv-z]{32}-.+$`)
+
 // combineBuildFlags returns the 'nix build' base flags, swapping --no-link for
-// '--out-link <path>' when an outlink is requested.
+// '--out-link <path>' when an outlink is requested. The configured slice is
+// never modified: the returned slice is either that slice itself or a fresh one.
 func combineBuildFlags(cfg *nix.NixConfig, outLink string) []string {
-	flags := cfg.GetBuildDefaultFlags()
+	flags := cfg.BuildDefaultFlags
 
 	if outLink == "" {
 		return flags

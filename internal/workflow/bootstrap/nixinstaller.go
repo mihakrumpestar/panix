@@ -59,7 +59,8 @@ func fetchNixInstaller(exc *executioner.Executioner, machineI *machine.Machine, 
 
 	installerPath := path.Join(stagingDir, installerFileName)
 
-	err = downloadOrTransfer(exc, machineI, source, installerPath, "nix installer", machineI.Bootstrap.Nix.GetCurlDefaultFlags())
+	err = downloadOrTransfer(exc, machineI, source, installerPath, "nix installer",
+		machineI.Bootstrap.Nix.CurlCommand, machineI.Bootstrap.Nix.CurlDefaultFlags)
 	if err != nil {
 		cleanup()
 
@@ -91,7 +92,7 @@ func nixInstallerRunArgv(machineI *machine.Machine, installerPath string) []stri
 	return slices.Concat(
 		machineI.MaybeSudo(),
 		[]string{installerPath},
-		machineI.Bootstrap.Nix.GetArgs(),
+		machineI.Bootstrap.Nix.Args,
 	)
 }
 

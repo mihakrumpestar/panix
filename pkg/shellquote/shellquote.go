@@ -18,26 +18,47 @@ func Quote(s string) string {
 // (quoting it would resolve a literal ~ against the working directory). Tilde
 // paths with shell-active characters are quoted and fail loudly instead.
 func QuoteWord(s string) string {
-	if strings.HasPrefix(s, "~") && tildePathIsSafe(s[1:]) {
+	if strings.HasPrefix(s, "~") && isInertWord(s[1:]) {
 		return s
 	}
 
 	return Quote(s)
 }
 
-// tildePathIsSafe reports whether every character after a leading ~ is
-// inert in a POSIX shell word, so the whole ~/. (or ~user/) form can stay
-// unquoted.
-func tildePathIsSafe(s string) bool {
+// QuoteIfNeeded single-quotes s only when it is not already one inert word.
+// Use it where a string is re-tokenized by something that splits on whitespace
+// (e.g. rsync's --rsync-path, which the remote rsync parses itself): the common
+// simple form stays readable and unchanged, while a value with spaces or quotes
+// cannot split into extra arguments.
+func QuoteIfNeeded(s string) string {
+	if s != "" && isInertWord(s) {
+		return s
+	}
+
+	return Quote(s)
+}
+
+// isInertWord reports whether s contains only characters that are inert in a
+// POSIX shell word: no whitespace, quoting, expansion or redirection.
+func isInertWord(s string) bool {
 	for i := range len(s) {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		case strings.ContainsRune("_-./,:@+=", rune(c)):
-		default:
+		if !isInertRune(s[i]) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isInertRune is the single inert-character set shared by every quoting rule
+// in this package.
+func isInertRune(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	case strings.ContainsRune("_-./,:@+=", rune(c)):
+		return true
+	default:
+		return false
+	}
 }

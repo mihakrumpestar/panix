@@ -1,6 +1,7 @@
 package runtimevars
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -166,4 +167,78 @@ func TestExpand_ByteFaithfulnessNoReference(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, input, got)
+}
+
+// ExpandList expands one entry at a time, so an embedded reference next to
+// other text works, while a nil list stays nil and an error yields no result.
+func TestExpandList(t *testing.T) {
+	t.Parallel()
+
+	vars := Vars{Profile: "/nix/var/nix/profiles/system", Closure: "/nix/store/abc-closure"}
+
+	tests := []struct {
+		name    string
+		vars    Vars
+		list    []string
+		want    []string
+		wantErr string
+	}{
+		{
+			name: "nil stays nil",
+			vars: vars,
+			list: nil,
+			want: nil,
+		},
+		{
+			name: "every entry expanded",
+			vars: vars,
+			list: []string{"--profile", "$PANIX_PROFILE_PATH", "--set", "${PANIX_CLOSURE}"},
+			want: []string{"--profile", "/nix/var/nix/profiles/system", "--set", "/nix/store/abc-closure"},
+		},
+		{
+			name: "reference inside a longer entry",
+			vars: Vars{Closure: "/nix/store/abc-closure"},
+			list: []string{"--out-link=$PANIX_CLOSURE"},
+			want: []string{"--out-link=/nix/store/abc-closure"},
+		},
+		{
+			name:    "absent value fails the whole list",
+			vars:    Vars{Profile: "/nix/var/nix/profiles/system"},
+			list:    []string{"--set", "$PANIX_CLOSURE"},
+			wantErr: "panix runtime variable PANIX_CLOSURE is not available in this context",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tt.vars.ExpandList(tt.list)
+
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				assert.Nil(t, got)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// The input list belongs to the config and is shared through inheritance, so
+// expansion must never write into it.
+func TestExpandList_LeavesInputUntouched(t *testing.T) {
+	t.Parallel()
+
+	list := []string{"--profile", "$PANIX_PROFILE_PATH"}
+	before := slices.Clone(list)
+
+	got, err := Vars{Profile: "/nix/var/nix/profiles/system"}.ExpandList(list)
+	require.NoError(t, err)
+
+	assert.Equal(t, before, list, "the configured list must stay unexpanded")
+	assert.Equal(t, []string{"--profile", "/nix/var/nix/profiles/system"}, got)
 }

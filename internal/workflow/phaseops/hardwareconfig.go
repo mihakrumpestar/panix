@@ -2,11 +2,15 @@ package phaseops
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/filepermissions"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
@@ -16,31 +20,52 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// GenerateHardwareConfig writes the target's nixos-generate-config output to
-// machineI.HardwareConfigPath, a path on the machine running panix. No-op when
-// that path is empty; the target must already run the installer.
+// ErrWriteModeGenerator reports a nixos-generate-config generator that mutates
+// the target instead of printing a config panix can capture.
+var ErrWriteModeGenerator = errors.New(
+	"nixos-generate-config runs without --show-hardware-config, so it writes the target's " +
+		"/etc/nixos files instead of printing the config; add the flag to hardware_config.generate " +
+		"or configure a different generator",
+)
+
+// stageMu serializes the git index operations: machines run concurrently and git
+// takes .git/index.lock, so parallel staging would fail all but one.
+var stageMu sync.Mutex
+
+// GenerateHardwareConfig writes the target's generated hardware config to
+// HardwareConfig.Path, a path on the machine running panix. No-op when that path
+// is empty; the target must already run the installer.
 func GenerateHardwareConfig(exc *executioner.Executioner, machineI *machine.Machine) error {
-	if machineI.HardwareConfigPath == "" {
+	if machineI.HardwareConfig.Path == "" {
 		return nil
 	}
+
+	// The single choke point for every caller: a write-mode generator rewrites
+	// the target's /etc/nixos as root and prints nothing panix can capture.
+	if IsWriteModeGenerator(machineI.HardwareConfig.Generate) {
+		return ErrWriteModeGenerator
+	}
+
+	argv := append(machineI.MaybeSudo(), machineI.HardwareConfig.Generate.Command...)
+	argv = append(argv, machineI.HardwareConfig.Generate.Args...)
 
 	err := exc.Exec(
 		"generate config",
 		"generating hardware config",
-		"nixos-generate-config failed",
-		append(machineI.MaybeSudo(), "nixos-generate-config", "--show-hardware-config", "--no-filesystems"),
+		strings.Join(machineI.HardwareConfig.Generate.Command, " ")+" failed",
+		argv,
 		executioner.OnSuccess(func(commandLog *command.CommandLog) error {
-			writeErr := writeHardwareConfig(machineI.HardwareConfigPath, commandLog.Output.String())
+			writeErr := writeHardwareConfig(machineI.HardwareConfig.Path, commandLog.Output.String())
 			if writeErr != nil {
 				return writeErr
 			}
 
 			log.Info().
 				Str("xpath", machineI.Xpath.String()).
-				Str("hardware_config_path", machineI.HardwareConfigPath).
+				Str("hardware_config_path", machineI.HardwareConfig.Path).
 				Msg("wrote hardware config locally")
 
-			stageHardwareConfig(machineI.HardwareConfigPath)
+			stageHardwareConfig(machineI.HardwareConfig.Path)
 
 			return nil
 		}),
@@ -80,6 +105,9 @@ func writeHardwareConfig(path, output string) error {
 // that follows evaluates the file: Nix snapshots only git-visible paths.
 // Best effort by design so staging never fails a deploy.
 func stageHardwareConfig(path string) {
+	stageMu.Lock()
+	defer stageMu.Unlock()
+
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return
@@ -138,35 +166,90 @@ func gitRun(dir string, args ...string) error {
 	return nil
 }
 
+// IsWriteModeGenerator reports the generator shape that mutates the target
+// instead of printing a config: nixos-generate-config only prints when asked.
+// The command is compared by base name at any position, so a wrapper or an
+// absolute path is caught too, and the flag may sit in the command or the args.
+func IsWriteModeGenerator(generator attributes.Generator) bool {
+	if !CommandInvokes(generator.Command, "nixos-generate-config") {
+		return false
+	}
+
+	return !slices.Contains(slices.Concat(generator.Command, generator.Args), "--show-hardware-config")
+}
+
 // hardwareConfigFromOutput validates captured output before it is written: the
 // executioner merges stderr into the same PTY stream, so only a recognized
-// nixos-generate-config result may pass. Any mismatch returns an actionable
-// error and nothing is written; the content ends with exactly one newline.
+// generator result may pass. Accepted shapes are a NixOS module
+// (nixos-generate-config) and a JSON object (nixos-facter); anything else is
+// captured stderr noise. The content ends with exactly one newline.
 func hardwareConfigFromOutput(output string) ([]byte, error) {
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" {
-		return nil, errors.New("nixos-generate-config produced no output, stderr is merged into the captured PTY stream, " +
+		return nil, errors.New("hardware config generator produced no output, stderr is merged into the captured PTY stream, " +
 			"so a warning or error may be all that was captured")
 	}
 
 	firstLine, _, _ := strings.Cut(trimmed, "\n")
 
-	// Generated output starts with the "Do not modify this file!" header or
-	// the attribute set; anything else is captured stderr noise.
-	if !strings.HasPrefix(firstLine, "#") && !strings.HasPrefix(firstLine, "{") {
-		return nil, errors.Errorf("unexpected nixos-generate-config output (first line %q), stderr is merged into the "+
+	switch {
+	case strings.HasPrefix(trimmed, "{"):
+		// A module can also start with `{`, so a JSON parse failure falls
+		// through to the module checks instead of rejecting it here.
+		err := validateJSONReport(trimmed, firstLine)
+		if err == nil {
+			return []byte(trimmed + "\n"), nil
+		}
+
+		err = validateNixModule(trimmed, firstLine)
+		if err != nil {
+			return nil, errors.Errorf("unexpected hardware config output (first line %q), it is neither a JSON report "+
+				"nor a NixOS module, so the captured PTY stream was cut off or polluted by stderr", firstLine)
+		}
+	case strings.HasPrefix(firstLine, "#"):
+		err := validateNixModule(trimmed, firstLine)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.Errorf("unexpected hardware config output (first line %q), stderr is merged into the "+
 			"captured PTY stream, so the target printed a warning or error instead of the config", firstLine)
 	}
 
+	return []byte(trimmed + "\n"), nil
+}
+
+// validateJSONReport accepts a JSON object emitted by a report generator such as
+// nixos-facter. Parsing is the check: a truncated or stderr-polluted capture
+// fails it.
+func validateJSONReport(trimmed, firstLine string) error {
+	var report map[string]any
+
+	err := json.Unmarshal([]byte(trimmed), &report)
+	if err != nil {
+		return errors.Errorf("unexpected hardware config output (first line %q), it starts like a JSON report "+
+			"but does not parse, so the captured PTY stream was cut off or polluted by stderr: %v", firstLine, err)
+	}
+
+	if len(report) == 0 {
+		return errors.Errorf("unexpected hardware config output (first line %q), the JSON report is empty", firstLine)
+	}
+
+	return nil
+}
+
+// validateNixModule accepts nixos-generate-config's --show-hardware-config
+// output.
+func validateNixModule(trimmed, firstLine string) error {
 	if !strings.Contains(trimmed, "modulesPath") || !strings.Contains(trimmed, "config,") {
-		return nil, errors.Errorf("unexpected nixos-generate-config output (first line %q), the captured output is not "+
+		return errors.Errorf("unexpected hardware config output (first line %q), the captured output is not "+
 			"a hardware config", firstLine)
 	}
 
 	if !strings.HasSuffix(trimmed, "}") {
-		return nil, errors.Errorf("truncated nixos-generate-config output (first line %q), the captured PTY stream was "+
+		return errors.Errorf("truncated hardware config output (first line %q), the captured PTY stream was "+
 			"cut off before the closing brace", firstLine)
 	}
 
-	return []byte(trimmed + "\n"), nil
+	return nil
 }

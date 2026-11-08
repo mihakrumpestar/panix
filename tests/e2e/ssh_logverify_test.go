@@ -14,8 +14,8 @@ const (
 	notJSONLine = `bootstrap output that is not JSON and must be ignored`
 
 	// kexecSkipLine is the unrelated info entry logged before the kexec boot
-	// when nixos-generate-config is still unavailable.
-	kexecSkipLine = `{"level":"info","xpath":"test/nixosConfigurations/test-vm-kexec/kexec-vm","hardware_config_path":"tests/e2e/testflakes/hardware-configuration.nix","time":"2026-09-18T23:15:29+02:00","message":"skipping hardware config generation before kexec (nixos-generate-config is unavailable on the current OS)"}` //nolint:lll // raw log fixture mirrors the real bootstrap line
+	// when the hardware generator is still unavailable.
+	kexecSkipLine = `{"level":"info","xpath":"test/nixosConfigurations/test-vm-kexec/kexec-vm","hardware_config_path":"tests/e2e/testflakes/hardware-configuration.nix","time":"2026-09-18T23:15:29+02:00","message":"skipping hardware config generation before kexec (the generator is unavailable on the current OS)"}` //nolint:lll // raw log fixture mirrors the real bootstrap line
 
 	isoGenerateStartLine = `{"level":"info","xpath":"test/nixosConfigurations/test-vm/nixos-iso-vm","phase":"inspect","description":"generate config","command":"ssh -o LogLevel=ERROR -l root -p 10022 -i /tmp/ssh.key 127.0.0.1 'nixos-generate-config' '--show-hardware-config' '--no-filesystems'","event":"command_start","status_running":"generating hardware config","time":"2026-09-18T23:15:29+02:00","message":"command started"}` //nolint:lll // raw log fixture mirrors the real bootstrap line
 

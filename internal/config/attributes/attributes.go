@@ -2,19 +2,14 @@ package attributes
 
 import (
 	"dario.cat/mergo"
+	"github.com/mihakrumpestar/panix/internal/config/overrides"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/stringbyte"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/pkg/errors"
-)
-
-// Default base flags for non-nix commands.
-var (
-	DefaultRsyncFlags       = []string{"-rcEx", "--mkpath", "--perms"}
-	DefaultCurlFlags        = []string{"--fail", "-#", "-L"}
-	DefaultNixInstallerArgs = []string{"install", "--no-confirm"}
 )
 
 // Flake, Installable, and Machine Attributes
@@ -25,11 +20,13 @@ type Attributes struct {
 	Tags    []string         `yaml:"tags" json:"tags,omitempty" desc:"Tags for filtering (flakes, configs and machines are already registered as tags)"`
 	Secrets []TransferSource `yaml:"secrets" json:"secrets,omitempty" desc:"Files or directories to transfer to the remote machine" validate:"dive"`
 
-	Disabled           bool        `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
-	SudoProgram        SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the elevation program used when the executing user (SSH or target user) is not root" default:"sudo"`
-	HardwareConfigPath string      `yaml:"hardware_config_path" json:"hardware_config_path,omitempty" desc:"Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake"`
-	RsyncDefaultFlags  []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync command (default: [-rcEx, --mkpath, --perms])"`
-	AutoRollback       bool        `yaml:"auto_rollback" json:"auto_rollback,omitempty" desc:"Automatically roll back to the pre-deploy generation when activation fails"`
+	Disabled          bool        `yaml:"disabled" json:"disabled,omitempty" desc:"Disable this"`
+	SudoProgram       SudoProgram `yaml:"sudo_program" json:"sudo_program,omitempty" desc:"Override the elevation program used when the executing user (SSH or target user) is not root" default:"sudo"`
+	RsyncDefaultFlags []string    `yaml:"rsync_default_flags" json:"rsync_default_flags,omitempty" desc:"List of base flags for rsync, set to [] to pass none" default:"[-rcEx, --mkpath, --perms]"`
+	RsyncCommand      []string    `yaml:"rsync_command" json:"rsync_command,omitempty" desc:"Command prefix for file transfers" validate:"nonempty,dive,required" default:"[rsync]"`
+	AutoRollback      bool        `yaml:"auto_rollback" json:"auto_rollback,omitempty" desc:"Automatically roll back to the pre-deploy generation when activation fails"`
+
+	HardwareConfig HardwareConfig `yaml:"hardware_config" json:"hardware_config" desc:"Hardware config generation during Inspect, Bootstrap, and the hardware-config phase"`
 
 	ActivationHooks ActivationHooks `yaml:"activation_hooks" json:"activation_hooks" desc:"Hooks around the activation step: pre hooks run before activation, post hooks after a mutating activation succeeds"`
 
@@ -61,7 +58,7 @@ type Bootstrap struct {
 	PostBootstrapInstallHooks     []HookCommand    `yaml:"post_bootstrap_install_hooks" json:"post_bootstrap_install_hooks,omitempty" desc:"Commands to run after nixos-install (before reboot)"`
 	PostBootstrapProvisionedHooks []HookCommand    `yaml:"post_bootstrap_provisioned_hooks" json:"post_bootstrap_provisioned_hooks,omitempty" desc:"Commands to run after reboot (uses regular SSH)"`
 	Kexec                         KexecConfig      `yaml:"kexec" json:"kexec" desc:"Kexec configuration for bootstrapping non-NixOS machines or reinstalling a live NixOS installation"`
-	Nix                           *NixConfig       `yaml:"nix,omitempty" json:"nix,omitempty" desc:"Nix installer configuration used when the target lacks Nix"`
+	Nix                           NixConfig        `yaml:"nix" json:"nix" desc:"Nix installer configuration used when the target lacks Nix"`
 	DisableNixInstall             bool             `yaml:"disable_nix_install" json:"disable_nix_install,omitempty" desc:"Skip installing Nix on targets that lack it" default:"false"`
 	DisableDisko                  bool             `yaml:"disable_disko" json:"disable_disko,omitempty" desc:"Disables building, transfer and execution of disko tool"`
 	DisableAutomaticReboot        bool             `yaml:"disable_automatic_reboot" json:"disable_automatic_reboot,omitempty" desc:"Disable automatic reboot after nixos-install (useful for manual inspection or custom reboot handling)"`
@@ -73,38 +70,19 @@ type Bootstrap struct {
 //nolint:lll
 type NixConfig struct {
 	URL              string   `yaml:"url,omitempty" json:"url,omitempty" desc:"Installer used to install Nix when the target lacks it (a shell script or an installer binary, e.g. the nix-installer release binary), as an https URL or a local path" validate:"omitempty,url_or_file" default:"https://install.determinate.systems/nix"`
-	Args             []string `yaml:"args,omitempty" json:"args,omitempty" desc:"Arguments passed to the installer after the installer path (default: [install, --no-confirm])"`
-	CurlDefaultFlags []string `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading the Nix installer (default: [--fail, -#, -L])"`
+	Args             []string `yaml:"args,omitempty" json:"args,omitempty" desc:"Arguments passed to the installer after the installer path, set to [] to pass none" default:"[install, --no-confirm]"`
+	CurlDefaultFlags []string `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl, set to [] to pass none" default:"[--fail, -#, -L]"`
+	CurlCommand      []string `yaml:"curl_command" json:"curl_command,omitempty" desc:"Command prefix for downloading the Nix installer" validate:"nonempty,dive,required" default:"[curl]"`
 }
 
-// GetURL returns the configured installer URL or the default if not set (empty).
-func (n *NixConfig) GetURL() string {
-	if n != nil && n.URL != "" {
+// GetURL returns the configured installer URL, or the built-in one from the
+// field's default tag.
+func (n NixConfig) GetURL() string {
+	if n.URL != "" {
 		return n.URL
 	}
 
-	return structDefault[NixConfig]("URL")
-}
-
-// GetArgs returns the configured installer arguments or DefaultNixInstallerArgs
-// if not set (nil). An explicitly empty slice ([]) runs the installer without
-// arguments.
-func (n *NixConfig) GetArgs() []string {
-	if n == nil {
-		return DefaultNixInstallerArgs
-	}
-
-	return orDefault(n.Args, DefaultNixInstallerArgs)
-}
-
-// GetCurlDefaultFlags falls back to DefaultCurlFlags when unset (nil); an
-// explicitly empty slice clears them.
-func (n *NixConfig) GetCurlDefaultFlags() []string {
-	if n == nil {
-		return DefaultCurlFlags
-	}
-
-	return orDefault(n.CurlDefaultFlags, DefaultCurlFlags)
+	return structdefault.String[NixConfig]("URL")
 }
 
 //nolint:lll
@@ -112,7 +90,27 @@ type KexecConfig struct {
 	Image            KexecImage   `yaml:"image" json:"image,omitempty" desc:"https URL or local path to kexec tarball for bootstrapping non-NixOS machines" validate:"omitempty,url_or_file" default:"https://github.com/nix-community/nixos-images/releases/latest/download/nixos-kexec-installer-noninteractive-$PANIX_ARCH-linux.tar.gz"`
 	ExtraFlags       []string     `yaml:"extra_flags" json:"extra_flags,omitempty" desc:"Extra flags to pass to kexec (e.g. '--no-sync')"`
 	SSHPort          KexecSSHPort `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty" desc:"SSH port for kexec installer" default:"22"`
-	CurlDefaultFlags []string     `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl when downloading kexec tarball (default: [--fail, -#, -L])"`
+	CurlDefaultFlags []string     `yaml:"curl_default_flags" json:"curl_default_flags,omitempty" desc:"List of base flags for curl, set to [] to pass none" default:"[--fail, -#, -L]"`
+	CurlCommand      []string     `yaml:"curl_command" json:"curl_command,omitempty" desc:"Command prefix for downloading the kexec tarball" validate:"nonempty,dive,required" default:"[curl]"`
+	TarCommand       []string     `yaml:"tar_command" json:"tar_command,omitempty" desc:"Command prefix for extracting the kexec tarball" validate:"nonempty,dive,required" default:"[tar]"`
+}
+
+// HardwareConfig configures hardware config generation: the generator runs on the
+// target and its output is written to Path on the machine running panix.
+//
+//nolint:lll
+type HardwareConfig struct {
+	Path     string    `yaml:"path" json:"path,omitempty" desc:"Local path for the target's generated hardware config, written once the target runs the NixOS installer. Keep it inside your flake"`
+	Generate Generator `yaml:"generate" json:"generate" desc:"Command and flags that generate the hardware config on the target"`
+}
+
+// Generator pairs a generator's command prefix with the flags it needs: a
+// replacement tool and its arguments are configured in one place.
+//
+//nolint:lll
+type Generator struct {
+	Command []string `yaml:"command" json:"command,omitempty" desc:"Command prefix for generating the hardware config on the target, e.g. [nixos-facter]" validate:"nonempty,dive,required" default:"[nixos-generate-config]"`
+	Args    []string `yaml:"args" json:"args,omitempty" desc:"Arguments passed to the generator, set to [] for a tool that takes none" default:"[--show-hardware-config, --no-filesystems]"`
 }
 
 // HookCommand is one hook entry, shared by bootstrap and activation hooks: a
@@ -137,23 +135,13 @@ func New() *Attributes {
 	return &Attributes{}
 }
 
-// GetRsyncDefaultFlags falls back to DefaultRsyncFlags when unset (nil); an
-// explicitly empty slice clears them.
-func (a *Attributes) GetRsyncDefaultFlags() []string {
-	return orDefault(a.RsyncDefaultFlags, DefaultRsyncFlags)
-}
-
-// GetCurlDefaultFlags falls back to DefaultCurlFlags when unset (nil); an
-// explicitly empty slice clears them.
-func (k *KexecConfig) GetCurlDefaultFlags() []string {
-	return orDefault(k.CurlDefaultFlags, DefaultCurlFlags)
-}
-
 func (a *Attributes) Init(name string, parentAttr *Attributes) error {
 	err := a.passAttributesInto(name, parentAttr)
 	if err != nil {
 		return err
 	}
+
+	structdefault.Apply(a)
 
 	return nil
 }
@@ -179,45 +167,23 @@ func (a *Attributes) InitSSH(localMachineHostname string, nixInfo nixver.Info) e
 
 // passAttributesInto merges parent attributes into the child without
 // overriding set fields, and must run before the rest of Init. mergo fills
-// unset fields from the parent (Bootstrap.Nix is merged field by field) and
-// appends parent slices onto child slices.
+// unset fields from the parent and appends parent slices onto child slices.
 //
-// The default-flag slices cannot append (they are full argv lists):
-// RsyncDefaultFlags, Bootstrap.Kexec.CurlDefaultFlags, Bootstrap.Nix.Args and
-// Bootstrap.Nix.CurlDefaultFlags are saved around the merge and restored so a
-// child value overrides the parent, nil inherits it, and an explicitly empty
-// slice clears it.
+// The default-flag and command-prefix slices cannot append (they are full argv
+// lists): see overrideFields for the list. They are saved around the merge and
+// restored so a child value overrides the parent, nil inherits it, and an
+// explicitly empty slice clears it.
 func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) error {
-	childRsyncDefault := a.RsyncDefaultFlags
-	childCurlDefault := a.Bootstrap.Kexec.CurlDefaultFlags
-
-	var childNixArgs, childNixCurlDefault []string
-	if a.Bootstrap.Nix != nil {
-		childNixArgs = a.Bootstrap.Nix.Args
-		childNixCurlDefault = a.Bootstrap.Nix.CurlDefaultFlags
-	}
+	overridden := overrides.Capture(a.overrideFields()...)
 
 	err := mergo.Merge(a, parentAttr, mergo.WithAppendSlice)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge attributes")
 	}
 
-	// Restore child's default-flag slices (override, not append).
-	if childRsyncDefault != nil {
-		a.RsyncDefaultFlags = childRsyncDefault
-	}
-
-	if childCurlDefault != nil {
-		a.Bootstrap.Kexec.CurlDefaultFlags = childCurlDefault
-	}
-
-	if childNixArgs != nil {
-		a.Bootstrap.Nix.Args = childNixArgs
-	}
-
-	if childNixCurlDefault != nil {
-		a.Bootstrap.Nix.CurlDefaultFlags = childNixCurlDefault
-	}
+	// Restore child's override-semantics slices (override, not append).
+	overridden.Restore()
+	overrides.InheritEmpty(a.overrideFields(), parentAttr.overrideFields())
 
 	// Custom set/merge
 	if name != "" {
@@ -226,7 +192,7 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 		a.Xpath = parentAttr.Xpath.NewXpathWithAppend(name)
 	}
 
-	// Pre-compute phase xpaths for this entity, used by TUI rendering.
+	// Pre-compute phase xpaths for this entity, used for TUI rendering.
 	a.PhaseXpaths = make(map[phase.Phase]xpath.Xpath, len(phase.PhaseRegistry))
 
 	for _, pm := range phase.PhaseRegistry {
@@ -234,4 +200,21 @@ func (a *Attributes) passAttributesInto(name string, parentAttr *Attributes) err
 	}
 
 	return nil
+}
+
+// overrideFields lists the Attributes slices whose child value must win over
+// the parent's during merge, rather than accumulate.
+func (a *Attributes) overrideFields() []*[]string {
+	return []*[]string{
+		&a.RsyncDefaultFlags,
+		&a.RsyncCommand,
+		&a.HardwareConfig.Generate.Command,
+		&a.HardwareConfig.Generate.Args,
+		&a.Bootstrap.Kexec.CurlDefaultFlags,
+		&a.Bootstrap.Kexec.CurlCommand,
+		&a.Bootstrap.Kexec.TarCommand,
+		&a.Bootstrap.Nix.Args,
+		&a.Bootstrap.Nix.CurlDefaultFlags,
+		&a.Bootstrap.Nix.CurlCommand,
+	}
 }

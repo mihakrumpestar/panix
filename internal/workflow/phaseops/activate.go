@@ -8,8 +8,11 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/runtimevars"
+	"github.com/mihakrumpestar/panix/pkg/argv"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/shellquote"
+	"github.com/pkg/errors"
 )
 
 // SetProfile sets the profile to closure, wrapped as the installable's target
@@ -21,12 +24,38 @@ func SetProfile(
 	profilePath string,
 	closure string,
 	targetUser string,
+	nixCfg *nix.NixConfig,
 ) error {
+	flags, err := runtimevars.Vars{
+		runtimevars.Profile: profilePath,
+		runtimevars.Closure: closure,
+	}.ExpandList(nixCfg.NixEnvSetDefaultFlags)
+	if err != nil {
+		return errors.Wrap(err, "nix_env_set_default_flags")
+	}
+
+	// Without the profile, nix-env --set rewrites the default profile; without
+	// the closure it sets the profile to nothing. Both succeed silently, so the
+	// built-in command refuses the list instead.
+	if CommandInvokes(nixCfg.NixEnvCommand, "nix-env") {
+		err = RequireExpandedOperand("nix_env_set_default_flags", "$PANIX_PROFILE_PATH", flags, profilePath)
+		if err != nil {
+			return err
+		}
+
+		err = RequireExpandedOperand("nix_env_set_default_flags", "$PANIX_CLOSURE", flags, closure)
+		if err != nil {
+			return err
+		}
+	}
+
+	cmd := argv.Argv(nixCfg.NixEnvCommand, nil, flags)
+
 	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"set profile",
 		"setting profile: "+profilePath,
 		"failed to set profile",
-		WrapAsTargetUser(mach, preset, targetUser, []string{"nix-env", "--profile", profilePath, "--set", closure}),
+		WrapAsTargetUser(mach, preset, targetUser, cmd),
 		executioner.Trim(),
 	)
 }
@@ -44,7 +73,7 @@ func Activate(
 	nixCfg *nix.NixConfig,
 	nixFlavor nixver.Flavor,
 ) error {
-	err := maybeSetProfile(exc, mach, preset, closure, mode, targetUser)
+	err := maybeSetProfile(exc, mach, preset, closure, mode, targetUser, nixCfg)
 	if err != nil {
 		return err
 	}
@@ -63,6 +92,7 @@ func maybeSetProfile(
 	closure string,
 	mode string,
 	targetUser string,
+	nixCfg *nix.NixConfig,
 ) error {
 	if preset.ProfilePath == "" || preset.SetProfile == nil || !*preset.SetProfile {
 		return nil
@@ -76,7 +106,7 @@ func maybeSetProfile(
 	}
 
 	// No wrap: the executioner prefixes errors with the command's statusIfFailed.
-	return SetProfile(exc, mach, preset, preset.ProfilePath, closure, targetUser)
+	return SetProfile(exc, mach, preset, preset.ProfilePath, closure, targetUser, nixCfg)
 }
 
 func activatePackage(
@@ -88,19 +118,39 @@ func activatePackage(
 	nixCfg *nix.NixConfig,
 	nixFlavor nixver.Flavor,
 ) error {
-	profileSubcmd := profileSubcmdForFlavor(nixFlavor)
+	// The default subcommand is flavor dependent, so ProfileAddCommand has no
+	// struct-tag default: fall back to the flavor's built-in command.
+	builtinCommand := len(nixCfg.ProfileAddCommand) == 0
 
-	args := slices.Concat(
-		executioner.WithEnv(nixCfg.GetProfileAddEnv(), []string{"nix"}),
-		nixCfg.GetExperimentalFeatures(),
-		[]string{"profile", profileSubcmd},
-		nixCfg.GetProfileAddDefaultFlags(),
-		[]string{closure},
+	command := nixCfg.ProfileAddCommand
+	if builtinCommand {
+		command = []string{"nix", "profile", profileSubcmdForFlavor(nixFlavor)}
+	}
+
+	flags, err := runtimevars.Vars{runtimevars.Closure: closure}.ExpandList(nixCfg.ProfileAddDefaultFlags)
+	if err != nil {
+		return errors.Wrap(err, "profile_add_default_flags")
+	}
+
+	// Without the closure the built-in command installs the default package of
+	// the working directory and exits 0, so it refuses the list instead.
+	if builtinCommand {
+		err = RequireExpandedOperand("profile_add_default_flags", "$PANIX_CLOSURE", flags, closure)
+		if err != nil {
+			return err
+		}
+	}
+
+	args := argv.Argv(
+		command,
+		nixCfg.ExperimentalFeatures,
+		flags,
 	)
 
 	// Wrap the full argv: system-level package types (custom presets) own
-	// root-owned profiles, so MaybeSudo applies with no target user.
-	args = WrapAsTargetUser(mach, preset, targetUser, args)
+	// root-owned profiles, so MaybeSudo applies with no target user. The env
+	// prefix stays inside the wrap so the variables survive sudo's env_reset.
+	args = WrapAsTargetUser(mach, preset, targetUser, executioner.WithEnv(nixCfg.GetProfileAddEnv(), args))
 
 	return exc.Exec( //nolint:wrapcheck // error is pre-annotated with statusIfFailed
 		"activate", "installing package", "package installation failed",

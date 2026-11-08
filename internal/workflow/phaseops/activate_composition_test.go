@@ -39,7 +39,10 @@ func TestActivate_Composition(t *testing.T) {
 			mach := newActivateCompositionMachine(t, tt.isRoot)
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
 
-			require.NoError(t, Activate(exc, mach, tt.preset, "/nix/store/abc-closure", "switch", tt.targetUser, &nix.NixConfig{}, nixver.FlavorNix))
+			nixCfg := &nix.NixConfig{}
+			require.NoError(t, nixCfg.Init(nil))
+
+			require.NoError(t, Activate(exc, mach, tt.preset, "/nix/store/abc-closure", "switch", tt.targetUser, nixCfg, nixver.FlavorNix))
 
 			lines := testutil.CommandLines(t, phaseLog)
 			require.Len(t, lines, len(tt.wantLines))
@@ -61,6 +64,7 @@ func TestActivate_SuEnvRedactedInCommandLog(t *testing.T) {
 	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
 
 	nixCfg := &nix.NixConfig{Env: map[string]string{"NIX_CONFIG": "access-tokens=SUPERSECRET"}}
+	require.NoError(t, nixCfg.Init(nil))
 
 	// A package activation (no ActivationPath) is the real activatePackage
 	// shape: it injects the nix env pair before asUser joins the argv.
@@ -100,7 +104,10 @@ func TestActivate_ProfileSkipModes(t *testing.T) {
 		NonMutatingModes: []string{"dry-activate"},
 	}
 
-	require.NoError(t, Activate(exc, mach, preset, "/nix/store/abc-closure", "test", "", &nix.NixConfig{}, nixver.FlavorNix))
+	nixCfg := &nix.NixConfig{}
+	require.NoError(t, nixCfg.Init(nil))
+
+	require.NoError(t, Activate(exc, mach, preset, "/nix/store/abc-closure", "test", "", nixCfg, nixver.FlavorNix))
 
 	lines := testutil.CommandLines(t, phaseLog)
 	require.Len(t, lines, 1, "profile set must be skipped for test mode")
@@ -165,4 +172,193 @@ func homeCompositionPreset() installable.Preset {
 		IsSystemLevel:  new(false),
 		ActivationPath: "activate",
 	}
+}
+
+// TestActivate_CommandOverrides verifies the activation-side nix invocations
+// honor their command prefixes: profile set (nix-env) and package install
+// (nix profile add).
+func TestActivate_CommandOverrides(t *testing.T) {
+	t.Parallel()
+
+	preset := installable.Preset{
+		ProfilePath:   "/nix/var/nix/profiles/system",
+		SetProfile:    new(true),
+		IsSystemLevel: new(true),
+	}
+
+	mach := newLocalTransferMachine(t, true)
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
+
+	nixCfg := &nix.NixConfig{
+		NixEnvCommand:     []string{"/run/wrappers/bin/nix-env"},
+		ProfileAddCommand: []string{"/run/wrappers/bin/nix", "profile", "add"},
+	}
+	require.NoError(t, nixCfg.Init(nil))
+
+	require.NoError(t, Activate(exc, mach, preset, "/nix/store/abc-closure", "switch", "", nixCfg, nixver.FlavorNix))
+
+	assert.Equal(t, []string{
+		"/run/wrappers/bin/nix-env --profile /nix/var/nix/profiles/system --set /nix/store/abc-closure",
+		"/run/wrappers/bin/nix profile add --extra-experimental-features nix-command flakes /nix/store/abc-closure",
+	}, testutil.CommandLines(t, phaseLog))
+}
+
+// TestActivate_DefaultFlagOverrides pins that the operands panix would otherwise
+// hardcode come from the configured flag lists: a replacement tool can reorder
+// or decorate them, while $PANIX_PROFILE_PATH and $PANIX_CLOSURE still carry the
+// values.
+func TestActivate_DefaultFlagOverrides(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		preset    installable.Preset
+		nix       nix.NixConfig
+		wantLines []string
+	}{
+		{
+			name:   "profile set reordered with an extra flag",
+			preset: nixosCompositionPreset(),
+			nix: nix.NixConfig{
+				NixEnvSetDefaultFlags: []string{"--set", "$PANIX_CLOSURE", "--profile", "$PANIX_PROFILE_PATH", "--keep-going"},
+			},
+			wantLines: []string{
+				"nix-env --set /nix/store/abc-closure --profile /nix/var/nix/profiles/system --keep-going",
+				"/nix/store/abc-closure/bin/switch-to-configuration switch",
+			},
+		},
+		{
+			name: "package install keeps the closure with a priority operand",
+			preset: installable.Preset{
+				IsSystemLevel: new(true),
+			},
+			nix: nix.NixConfig{
+				ProfileAddDefaultFlags: []string{"--priority", "10", "${PANIX_CLOSURE}"},
+			},
+			wantLines: []string{
+				"nix profile add --extra-experimental-features nix-command flakes --priority 10 /nix/store/abc-closure",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mach := newLocalTransferMachine(t, true)
+			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
+
+			nixCfg := tt.nix
+			require.NoError(t, nixCfg.Init(nil))
+
+			require.NoError(t, Activate(
+				exc, mach, tt.preset, "/nix/store/abc-closure", "switch", "", &nixCfg, nixver.FlavorNix))
+
+			assert.Equal(t, tt.wantLines, testutil.CommandLines(t, phaseLog))
+		})
+	}
+}
+
+// An explicit [] is taken as written, and the built-in commands refuse a list
+// that dropped an operand they need instead of acting on a default profile or
+// installing the working directory's package.
+func TestActivate_DroppedOperandsFail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		preset  installable.Preset
+		nix     nix.NixConfig
+		wantErr string
+	}{
+		{
+			name: "nix-env set without the profile",
+			preset: installable.Preset{
+				ProfilePath: "/nix/var/nix/profiles/system",
+				SetProfile:  new(true),
+			},
+			nix:     nix.NixConfig{NixEnvSetDefaultFlags: []string{"--set", "$PANIX_CLOSURE"}},
+			wantErr: "nix_env_set_default_flags dropped $PANIX_PROFILE_PATH",
+		},
+		{
+			name: "nix-env set without the closure",
+			preset: installable.Preset{
+				ProfilePath: "/nix/var/nix/profiles/system",
+				SetProfile:  new(true),
+			},
+			nix:     nix.NixConfig{NixEnvSetDefaultFlags: []string{"--profile", "$PANIX_PROFILE_PATH"}},
+			wantErr: "nix_env_set_default_flags dropped $PANIX_CLOSURE",
+		},
+		{
+			name:    "package install without the closure",
+			preset:  installable.Preset{IsSystemLevel: new(true)},
+			nix:     nix.NixConfig{ProfileAddDefaultFlags: []string{"--priority", "10"}},
+			wantErr: "profile_add_default_flags dropped $PANIX_CLOSURE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mach := newLocalTransferMachine(t, true)
+			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
+
+			nixCfg := tt.nix
+			require.NoError(t, nixCfg.Init(nil))
+
+			err := Activate(exc, mach, tt.preset, "/nix/store/abc-closure", "switch", "", &nixCfg, nixver.FlavorNix)
+
+			require.ErrorContains(t, err, tt.wantErr)
+			assert.Empty(t, testutil.CommandLines(t, phaseLog), "the refused step must not run")
+		})
+	}
+}
+
+// An explicit [] stays valid for a replacement command: panix does not inject
+// operands into a tool it did not choose.
+func TestActivate_EmptyFlagListRunsReplacementCommand(t *testing.T) {
+	t.Parallel()
+
+	preset := installable.Preset{
+		ProfilePath:   "/nix/var/nix/profiles/system",
+		SetProfile:    new(true),
+		IsSystemLevel: new(true),
+	}
+
+	mach := newLocalTransferMachine(t, true)
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
+
+	nixCfg := &nix.NixConfig{NixEnvCommand: []string{"my-nix-env"}, NixEnvSetDefaultFlags: []string{}}
+	require.NoError(t, nixCfg.Init(nil))
+
+	require.NoError(t, Activate(exc, mach, preset, "/nix/store/abc-closure", "switch", "", nixCfg, nixver.FlavorNix))
+
+	lines := testutil.CommandLines(t, phaseLog)
+	require.NotEmpty(t, lines)
+	assert.Equal(t, "my-nix-env", lines[0], "an explicit [] must not be replaced by the built-in operands")
+}
+
+// A flag list referencing a value the step does not supply fails the step with
+// an error naming the field, rather than running a partially expanded command.
+func TestActivate_UnavailableRuntimeVariableFails(t *testing.T) {
+	t.Parallel()
+
+	preset := installable.Preset{
+		ProfilePath:   "/nix/var/nix/profiles/system",
+		SetProfile:    new(true),
+		IsSystemLevel: new(true),
+	}
+
+	mach := newLocalTransferMachine(t, true)
+	exc, _ := testutil.NewDryRunExecutioner(t, mach, phase.Activate)
+
+	nixCfg := &nix.NixConfig{NixEnvSetDefaultFlags: []string{"--set", "$PANIX_STORE_URL"}}
+	require.NoError(t, nixCfg.Init(nil))
+
+	err := Activate(exc, mach, preset, "/nix/store/abc-closure", "switch", "", nixCfg, nixver.FlavorNix)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nix_env_set_default_flags")
+	assert.Contains(t, err.Error(), "PANIX_STORE_URL")
 }

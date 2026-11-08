@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/fleet"
 	installablepkg "github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/pkg/argv"
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicorderedmap"
 	"github.com/pkg/errors"
 )
@@ -22,10 +23,10 @@ func validateFlakes(fleet *fleet.Fleet, timeout time.Duration) error {
 		errs []string
 	)
 
-	// Use the fleet-level experimental features config for validation commands.
-	// Per-installable overrides don't apply here because validation runs before
-	// per-installable config is fully exercised.
-	experimentalFeatures := fleet.Nix.GetExperimentalFeatures()
+	// Use the fleet-level nix config for validation commands. Per-installable
+	// overrides don't apply here because validation runs before per-installable
+	// config is fully exercised.
+	nixCfg := &fleet.Nix
 
 	var waitGroup sync.WaitGroup
 
@@ -38,15 +39,23 @@ func validateFlakes(fleet *fleet.Fleet, timeout time.Duration) error {
 		flakeName := flakePair.Key
 
 		waitGroup.Go(func() {
-			if !checkFlakeURLExists(flakeURL, timeout, experimentalFeatures) {
-				mu.Lock()
-
-				errs = append(errs, fmt.Sprintf("  - flake URL '%s' does not exist or is unreachable (%s)", flakeName, flakeURL))
-				mu.Unlock()
+			err := checkFlakeURLExists(flakeURL, timeout, nixCfg)
+			if err == nil {
+				return
 			}
+
+			mu.Lock()
+
+			if errors.Is(err, errProbeNegative) {
+				errs = append(errs, fmt.Sprintf("  - flake URL '%s' does not exist or is unreachable (%s)", flakeName, flakeURL))
+			} else {
+				errs = append(errs, "  - "+err.Error())
+			}
+
+			mu.Unlock()
 		})
 
-		validateInstallablesExist(&waitGroup, &mu, &errs, flakePair.Value.Installables, flakeURL, flakeName, timeout, experimentalFeatures)
+		validateInstallablesExist(&waitGroup, &mu, &errs, flakePair.Value.Installables, flakeURL, flakeName, timeout, nixCfg)
 	}
 
 	waitGroup.Wait()
@@ -67,7 +76,7 @@ func validateInstallablesExist(
 	installables *atomicorderedmap.AtomicOrderedMap[string, *atomicorderedmap.AtomicOrderedMap[string, *installablepkg.Installable]],
 	flakeURL, flakeName string,
 	timeout time.Duration,
-	experimentalFeatures []string,
+	nixCfg *nix.NixConfig,
 ) {
 	for _, typePair := range installables.Pairs() {
 		typeKey := typePair.Key
@@ -97,10 +106,16 @@ func validateInstallablesExist(
 			go func(outputName, inst string) {
 				defer waitGroup.Done()
 
-				if !checkInstallableExists(inst, timeout, experimentalFeatures) {
+				err := checkInstallableExists(inst, timeout, nixCfg)
+				if err != nil && errors.Is(err, errProbeNegative) {
 					mu.Lock()
 
 					*errs = append(*errs, fmt.Sprintf("  - output '%s' not found in flake '%s' (%s)", outputName, flakeName, inst))
+					mu.Unlock()
+				} else if err != nil {
+					mu.Lock()
+
+					*errs = append(*errs, "  - "+err.Error())
 					mu.Unlock()
 				}
 			}(nameKey, installablePath)
@@ -108,42 +123,87 @@ func validateInstallablesExist(
 	}
 }
 
-func checkFlakeURLExists(url string, timeout time.Duration, experimentalFeatures []string) bool {
+func checkFlakeURLExists(url string, timeout time.Duration, nixCfg *nix.NixConfig) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	argv := flakeMetadataArgv(nixCfg, url)
+
 	//nolint:gosec
-	cmd := exec.CommandContext(ctx, "nix",
-		slices.Concat(
-			experimentalFeatures,
-			[]string{"flake", "metadata", "--json", url},
-		)...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 
 	output, err := cmd.Output()
 	if err != nil {
-		return false
+		return probeError(err, argv)
 	}
 
 	var metadata json.RawMessage
 
-	return json.Unmarshal(output, &metadata) == nil
+	err = json.Unmarshal(output, &metadata)
+	if err != nil {
+		return errors.Errorf("flake metadata is not JSON (is %q the right command?): %v", argv[0], err)
+	}
+
+	return nil
 }
 
-func checkInstallableExists(installable string, timeout time.Duration, experimentalFeatures []string) bool {
+// probeError separates a broken probe from a negative answer: a missing or
+// unrunnable configured command would otherwise surface as "flake does not
+// exist", blaming the flake for a bad prefix.
+func probeError(err error, argv []string) error {
+	var execErr *exec.Error
+	if errors.As(err, &execErr) {
+		return errors.Errorf("cannot run configured command %q: %v (check the *_command setting)", argv[0], err)
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 127 {
+		return errors.Errorf("configured command %q is missing on PATH: %v", argv[0], err)
+	}
+
+	return errProbeNegative
+}
+
+var errProbeNegative = errors.New("probe returned a negative answer")
+
+// flakeMetadataArgv is the flake-existence probe argv: the configured command
+// prefix, the experimental features, then the JSON request for url.
+func flakeMetadataArgv(nixCfg *nix.NixConfig, url string) []string {
+	return argv.Argv(
+		nixCfg.FlakeMetadataCommand,
+		nixCfg.ExperimentalFeatures,
+		[]string{"--json", url},
+	)
+}
+
+func checkInstallableExists(installable string, timeout time.Duration, nixCfg *nix.NixConfig) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	argv := installableEvalArgv(nixCfg, installable)
+
 	//nolint:gosec
-	cmd := exec.CommandContext(ctx, "nix",
-		slices.Concat(
-			experimentalFeatures,
-			[]string{"eval", installable, "--apply", "x: true", "--json"},
-		)...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 
 	output, err := cmd.Output()
 	if err != nil {
-		return false
+		return probeError(err, argv)
 	}
 
-	return strings.TrimSpace(string(output)) == "true"
+	if strings.TrimSpace(string(output)) != "true" {
+		return errProbeNegative
+	}
+
+	return nil
+}
+
+// installableEvalArgv is the installable-existence probe argv: the configured
+// command prefix, the experimental features, then an eval that reduces the
+// installable to true.
+func installableEvalArgv(nixCfg *nix.NixConfig, installable string) []string {
+	return argv.Argv(
+		nixCfg.EvalCommand,
+		nixCfg.ExperimentalFeatures,
+		[]string{installable, "--apply", "x: true", "--json"},
+	)
 }

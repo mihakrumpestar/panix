@@ -9,8 +9,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/logs"
 	"github.com/mihakrumpestar/panix/internal/config/nix"
 	"github.com/mihakrumpestar/panix/internal/config/tree/flake"
-	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
 	"github.com/mihakrumpestar/panix/internal/logs/phaselogs"
 	"github.com/mihakrumpestar/panix/internal/logs/stats"
@@ -52,15 +52,15 @@ type MachineInfo struct {
 
 	// Pre-converted []byte cells for the stats table renderer.
 	// StringByte provides zero-copy Bytes() access.
-	MachineName       stringbyte.StringByte
-	FlakeName         stringbyte.StringByte
-	OutputType        stringbyte.StringByte
-	OutputName        stringbyte.StringByte
-	Architecture      stringbyte.StringByte
-	Date              stringbyte.StringByte
-	OSVersion         stringbyte.StringByte
-	Kernel            stringbyte.StringByte
-	StatusMsgBytes    stringbyte.StringByte
+	MachineName    stringbyte.StringByte
+	FlakeName      stringbyte.StringByte
+	OutputType     stringbyte.StringByte
+	OutputName     stringbyte.StringByte
+	Architecture   stringbyte.StringByte
+	Date           stringbyte.StringByte
+	OSVersion      stringbyte.StringByte
+	Kernel         stringbyte.StringByte
+	StatusMsgBytes stringbyte.StringByte
 }
 
 func (f *Fleet) Init() error {

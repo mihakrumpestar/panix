@@ -24,6 +24,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/stringbyte"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,6 +59,7 @@ func newHookTestMachine(t *testing.T) *machine.Machine {
 
 	mach.SSH = *client
 	mach.Name = stringbyte.StringByte("my-machine")
+	structdefault.Apply(&mach.Attributes)
 	mach.MetaInspect.Store(&machine.MetaInspect{
 		IsRoot:      true,
 		Generations: &machine.Generations{Current: 42, Available: []uint{41, 42}},
@@ -103,6 +105,8 @@ func newHookTestFleetLeaf(t *testing.T, profilePath string) *fleet.FleetLeaf {
 		Name:     "my-installable",
 		Machines: atomicorderedmap.New[string, *machine.Machine](),
 	}
+
+	structdefault.Apply(&inst.Nix)
 
 	return &fleet.FleetLeaf{Installable: inst, Machine: newHookTestMachine(t)}
 }

@@ -1,81 +1,125 @@
 ---
-title: Nix Command Flags
-description: Control the flags Panix passes to nix build, nix copy, nixos-install, and nix profile add.
+title: Nix Command Flags and Overrides
+description: Control the flags Panix passes to nix build, nix copy, nixos-install, and nix profile add, and replace any command Panix runs.
 sidebar:
   order: 5
 ---
 
-Control the exact flags Panix passes to `nix build`, `nix copy`, `nixos-install`, and `nix profile add`.
+Panix builds every nix command line from three parts: the command, a set of base flags, and optional extra flags. This page documents how those parts combine, and how to replace the command Panix calls.
 
-## Default Flags vs Extra Flags
+## Default Flags and Extra Flags
+
+Panix splits the flags it passes to each command into two categories.
 
 | Category | Fields | Behavior |
 |----------|--------|----------|
-| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_add_default_flags` | **Replace** the built-in base flags when set. Leave unset for built-in defaults, set to `[]` to clear them. |
-| **Extra flags** | `extra_flags` (applies to `nix build` and `nix copy` only), `build_flags`, `copy_flags`, `nixos_install_flags` | **Append** after the default flags. Accumulate through inheritance. |
+| **Default flags** | `experimental_features`, `build_default_flags`, `copy_default_flags`, `nixos_install_default_flags`, `profile_add_default_flags`, `nix_env_list_generations_default_flags`, `nix_env_set_default_flags` | **Replace** the built-in base flags when set. Leave a field unset to use the built-in defaults, or set it to `[]` to clear them. |
+| **Extra flags** | `extra_flags` (applies to `nix build` and `nix copy` only), `build_flags`, `copy_flags`, `nixos_install_flags` | **Append** after the default flags. They accumulate through inheritance. |
 
-The final command is assembled as `default flags + extra flags`.
+Panix assembles each command as the default flags followed by the extra flags.
 
-### Built-in defaults
+### Built-in Defaults
 
-Used when the matching `*_default_flags` field is unset:
+These values are used when the matching `*_default_flags` field is unset.
 
 | Field | Built-in default |
 |-------|-----------------|
 | `experimental_features` | `["--extra-experimental-features", "nix-command flakes"]` |
 | `build_default_flags` | `["--no-link", "--print-out-paths", "--keep-going"]` |
-| `copy_default_flags` | `["--no-check-sigs"]` |
-| `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy"]` |
-| `profile_add_default_flags` | `[]` (none) |
+| `copy_default_flags` | `["--to", "$PANIX_STORE_URL", "--no-check-sigs"]` |
+| `nixos_install_default_flags` | `["--no-root-passwd", "--no-channel-copy", "--system", "$PANIX_CLOSURE", "--root", "/mnt"]` |
+| `profile_add_default_flags` | `["$PANIX_CLOSURE"]` |
+| `nix_env_list_generations_default_flags` | `["--profile", "$PANIX_PROFILE_PATH", "--list-generations"]` |
+| `nix_env_set_default_flags` | `["--profile", "$PANIX_PROFILE_PATH", "--set", "$PANIX_CLOSURE"]` |
+
+The `$PANIX_*` references are placeholders for values Panix supplies per step; see [Runtime Variables](#runtime-variables).
 
 :::caution
-Panix reads the output path from `--print-out-paths`; without it, builds fail.
+Panix reads the store path from the build output. Removing `--print-out-paths` from `build_default_flags` breaks every build unless the build command prints the store path itself. See [Build command](#build-command).
 :::
 
-### Example
+### Runtime Variables
+
+Five default flag lists carry a value Panix supplies per step: `copy_default_flags`, `nixos_install_default_flags`, `profile_add_default_flags`, `nix_env_list_generations_default_flags` and `nix_env_set_default_flags`. They may reference that value with a placeholder, which Panix expands itself, so it works in an argv that no shell ever sees.
+
+| Variable | Value | Expanded in |
+|----------|-------|-------------|
+| `$PANIX_PROFILE_PATH` | Profile path the step reads or sets, the same name activation hooks receive. | `nix_env_list_generations_default_flags`, `nix_env_set_default_flags` |
+| `$PANIX_CLOSURE` | Store path the step installs or activates. | `nixos_install_default_flags`, `profile_add_default_flags`, `nix_env_set_default_flags` |
+| `$PANIX_STORE_URL` | Destination store URL of a closure copy. | `copy_default_flags` |
+
+Both `$NAME` and `${NAME}` forms work, and an item may embed a reference in a longer string, such as `/var/backups/$PANIX_CLOSURE`. Keep a nix flag and its value in separate items, because nix rejects the `--flag=value` form. Keep the profile path in its own item when it starts with `~`: Panix passes each item separately, so the login shell can still expand the tilde, which one joined word would suppress. Any other `$` reference (`$HOME`, `$USER`) passes through untouched. An unknown `PANIX_*` name, or a value the step does not supply, fails the run with an error naming the field.
+
+This is how a replacement tool stays usable: `nix_env_set_default_flags` can order or extend the operands however the tool expects, while Panix still supplies the profile and closure:
 
 ```yaml
 fleet:
   nix:
-    # Default flags REPLACE the built-in base flags
-    build_default_flags: ["--no-link", "--print-out-paths"]  # overrides build defaults
-    copy_default_flags: []                                   # clears copy defaults
+    nix_env_set_default_flags: ["--set", "$PANIX_CLOSURE", "--profile", "$PANIX_PROFILE_PATH"]
+```
 
-    # Extra flags APPEND after the default flags
-    extra_flags: ["--option", "sandbox", "false"]  # build and copy
-    build_flags: ["--max-jobs", "8"]               # nix build only
+:::caution
+A default flag list replaces the built-in one in full, operands included. When you override `copy_default_flags`, `nixos_install_default_flags`, `profile_add_default_flags` or `nix_env_*_default_flags`, keep the operand carrying the value (the profile, the closure, or the store URL), or the built-in step refuses to run.
+
+```yaml
+fleet:
+  nix:
+    profile_add_default_flags: ["--priority", "10", "$PANIX_CLOSURE"]
+```
+
+The built-in `nixos-install` requires `$PANIX_CLOSURE`, `nix-env --set` requires both operands, and `nix-env --list-generations` requires the profile and the operation. Without them the step would install the target's `/etc/nixos`, write the default profile, or silently disable auto-rollback, so Panix refuses it instead of running. A replacement command is left alone.
+:::
+
+### Example
+
+The configuration below replaces two default flag lists and adds extra flags at two levels:
+
+```yaml
+fleet:
+  nix:
+    # Replaces the built-in build base flags.
+    build_default_flags: ["--no-link", "--print-out-paths"]
+    # Replaces the copy flags: keep the destination operand, then add
+    # progress output.
+    copy_default_flags: ["--to", "$PANIX_STORE_URL", "--no-check-sigs", "--verbose"]
+    # Appended to both nix build and nix copy.
+    extra_flags: ["--option", "sandbox", "false"]
+    # Appended to nix build only.
+    build_flags: ["--max-jobs", "8"]
   flakes:
     my-flake:
       installables:
         nixosConfigurations:
           webserver:
             nix:
-              copy_flags: ["--compress"]  # nix copy only
+              # Appended to nix copy only.
+              copy_flags: ["--compress"]
             machines:
               web-01:
 ```
 
-The effective `nix build` flags are:
-`["--no-link", "--print-out-paths"]` (defaults) + `["--option", "sandbox", "false"]` + `["--max-jobs", "8"]` (extra, accumulated).
+The resulting `nix build` flags are `["--no-link", "--print-out-paths"]`, then `["--option", "sandbox", "false"]`, then `["--max-jobs", "8"]`. `nix copy` runs with `--to <store URL> --no-check-sigs --verbose`, then the extra flags.
 
-### Non-nix commands
+### Non-Nix Commands
 
-The same pattern applies to non-nix commands:
+The same two categories apply to the other tools Panix runs:
 
-- `rsync_default_flags` (fleet/flake/installable/machine), default `["-rcEx", "--mkpath", "--perms"]`
-- `curl_default_flags` (under `bootstrap.kexec` and `bootstrap.nix`), default `["--fail", "-#", "-L"]`
+| Field | Levels | Built-in default |
+|-------|--------|------------------|
+| `rsync_default_flags` | fleet, flake, installable, machine | `["-rcEx", "--mkpath", "--perms"]` |
+| `curl_default_flags` | `bootstrap.kexec`, `bootstrap.nix` | `["--fail", "-#", "-L"]` |
 
-The `rsync_default_flags` defaults assume a modern rsync: `--mkpath` requires rsync 3.2.3 or newer on both ends (see [Requirements](/getting-started/requirements/)).
+The `rsync_default_flags` defaults assume a modern rsync. `--mkpath` requires rsync 3.2.3 or newer on both ends; see [Requirements](/getting-started/requirements/).
 
 ## Build Outlinks
 
-Enable `out_links` to leave a GC-rooted symlink per built installable, so closures survive garbage collection:
+Set `out_links` to leave a GC-rooted symlink per built installable, so built closures survive garbage collection. Enable it on the command line:
 
 ```sh
 panix build --out-links
 ```
 
-or:
+Or in the configuration file:
 
 ```yaml
 flags:
@@ -83,7 +127,7 @@ flags:
   out_links_dir: .panix  # default
 ```
 
-Each outlink is `<out_links_dir>/<flake>/<output_type>/<name>`, following the installable xpath:
+Each outlink is placed at `<out_links_dir>/<flake>/<output_type>/<name>`, following the installable xpath:
 
 ```sh
 $ tree .panix
@@ -97,12 +141,12 @@ $ tree .panix
 
 Bootstrapped installables also get a `<name>-disko` outlink for their disko script, so it cannot collide with the closure outlink.
 
-With outlinks enabled, the Build phase drops `--no-link` from the built-in build defaults and passes `--out-link <path>` instead, keeping `--print-out-paths` so later phases still receive the store path. `nix build` creates the symlink (including parent directories) and registers it as an indirect GC root under `/nix/var/nix/gcroots/auto/`.
+With outlinks enabled, the Build phase drops `--no-link` from the built-in build defaults and passes `--out-link <path>` instead. `--print-out-paths` is kept, so later phases still receive the store path. `nix build` creates the symlink, including its parent directories, and registers it as an indirect GC root under `/nix/var/nix/gcroots/auto/`.
 
-A literal `--no-link` in user-configured default flags is dropped, since it would contradict the outlink request; one in extra flags is never touched, and nix evaluates repeated flags last-wins, so it still disables outlink creation.
+A literal `--no-link` in configured default flags is dropped, because it contradicts the outlink request. The same flag in extra flags is left untouched: nix treats repeated flags as last-wins, so it still disables outlink creation.
 
 :::note
-In [remote build mode](/configuration/build-modes/) the closure is built into the remote store and gets no outlink; `nix build` only creates outlinks for local stores.
+In [remote build mode](/configuration/build-modes/) the closure is built into the remote store and gets no outlink. `nix build` only creates outlinks for local stores.
 :::
 
 To release a built closure, remove its outlink and garbage-collect:
@@ -114,22 +158,122 @@ nix store gc
 
 ## Inheritance
 
-- **Extra flags** accumulate through inheritance (fleet, flake, installable): slices are appended, not replaced.
-- **Default flags** use override semantics: a child value is kept as-is; an unset (`nil`) field inherits the parent's value.
-- **Env vars** merge through inheritance: parent entries are inherited, child keys override parent keys with the same name.
+Settings are inherited from fleet to flake to installable, with these rules.
+
+- **Extra flags** accumulate. Slices are appended rather than replaced.
+- **Default flags** use override semantics. A child value is kept as-is, and an unset (`nil`) field inherits the parent value. An explicit `[]` is a value: a child inheriting it passes no flags instead of falling back to the built-in list.
+- **Environment variables** merge. Parent entries are inherited, and a child key overrides the parent key of the same name.
 
 :::note
-`nix` config settings cannot be set at the `machine` level.
+`nix` settings cannot be set at the `machine` level.
 :::
+
+## Command Overrides
+
+Every `*_command` field replaces the executable and subcommand Panix runs for one step; Panix appends its own flags after it. Operands that would otherwise be hardcoded (the profile, the closure, the store URL) live in the matching default flag list, so they are configurable too; see [Runtime Variables](#runtime-variables).
+
+The available fields are:
+
+| Field | Step | Runs on | Default |
+|---|---|---|---|
+| `nix.build_command` | Build phase, disko script build | control host | `["nix", "build"]` |
+| `nix.copy_command` | Closure copy | control host | `["nix", "copy"]` |
+| `nix.eval_command` | Flake validation | control host | `["nix", "eval"]` |
+| `nix.flake_metadata_command` | Flake URL validation | control host | `["nix", "flake", "metadata"]` |
+| `nix.profile_add_command` | Package profile install | target | `["nix", "profile", "add"]` (`install` on Lix) |
+| `nix.nix_env_command` | Generations, profile set, rollback | target | `["nix-env"]` |
+| `nix.nixos_install_command` | NixOS install during bootstrap | target | `["nixos-install"]` |
+| `rsync_command` | All file transfers | both ends | `["rsync"]` |
+| `bootstrap.nix.curl_command` | Nix installer download | target | `["curl"]` |
+| `bootstrap.kexec.curl_command` | Kexec tarball download | target | `["curl"]` |
+| `bootstrap.kexec.tar_command` | Kexec tarball extraction | target | `["tar"]` |
+| `hardware_config.generate.command` | Hardware config generation | target | `["nixos-generate-config"]` |
+| `hardware_config.generate.args` | Hardware config generator flags | target | `["--show-hardware-config", "--no-filesystems"]` |
+
+For example, `build_command` replaces `nix build` with `nom build`, and `tar_command` replaces `tar` with `bsdtar`:
+
+```yaml
+fleet:
+  nix:
+    build_command: ["nom", "build"]
+  bootstrap:
+    kexec:
+      tar_command: ["bsdtar"]
+```
+
+### Where Overrides Can Be Set
+
+The `nix.*` overrides sit under `fleet.nix`, `flakes.<flake>.nix` and `installables.<type>.<name>.nix`. All other overrides are attribute fields and can also be set per machine.
+
+A child value replaces the parent value, and an unset field inherits it. An explicit `[]` is taken as written: a flag list then passes no flags, and a `*_command` stays empty, which validation rejects because a command must name an executable.
+
+Control-flow probes (`uname`, `id -u`, `nix --version`, `cat`, `readlink`, `sh -c`), the SSH transport, git staging, and the reboot are not overridable.
+
+### Build Command
+
+Panix reads the store path from the **last line** of the build command's output. The built-in `build_default_flags` prints it with `--print-out-paths`, which is why `["nom", "build"]` works as shown above.
+
+If `build_default_flags` is overridden, keep a flag that prints the path, or confirm that the replacement tool prints it anyway. Panix cannot validate this at config load, because a replacement tool may print the path by default or may use a different flag.
+
+When the last line is not a full store path (`/nix/store/<32-char-hash>-<name>`), the build itself succeeds and the Build phase then fails with `invalid build output: no outputs`.
+
+:::note
+Panix places its global flags after the whole command, which is the only order that works for both kinds of tools. [`nom`](https://github.com/maralorn/nix-output-monitor) requires its subcommand first, and nix accepts the flags anywhere after its own subcommand. nom draws its tree on stderr, so the Panix log shows the finished tree rather than live progress.
+:::
+
+### Command Availability
+
+A command must exist in the `PATH` of every host that runs it. A wrapper installed only on the control host fails at Build or on the target, never at config load.
+
+`eval_command` and `flake_metadata_command` are the exception: they run as config-load probes, so a command that is missing or unrunnable is reported against the command itself, while one that answers negatively is reported as a missing flake or output. Both fields always use the fleet-level setting, since validation runs before per-installable config is exercised.
+
+### Command Contracts
+
+Some steps rely on the shape of their command's output or on its exit status.
+
+| Step | Contract |
+|------|----------|
+| `bootstrap.nix.curl_command`, `bootstrap.kexec.curl_command` | Must stay curl-compatible. Panix appends `--proto =https --proto-redir =https` to block a protocol downgrade. |
+| `bootstrap.kexec.tar_command` | Must accept GNU tar extract flags (`-xzf`, `-xJf`, `--use-compress-program=…`, `-xf`). libarchive `bsdtar` reads the archives but ignores `-z`/`-J` on extract, so verify it against your tarball before relying on it. |
+| `rsync_command` | Also becomes the remote `--rsync-path`, so it must work on both ends. |
+| `nix_env_command` | Must print a `nix-env --list-generations` list wherever Panix reads generations. With the built-in `nix-env`, Panix requires the profile operand and the listing operation, and tolerates exit 1 and 127 (no profile yet, tool absent). Exit status 0 with output Panix cannot parse is an error, because accepting it silently would disable auto-rollback for the rest of the run. |
+| `nixos_install_command` | Judged by exit status, then checked before an automatic reboot: Panix reads `/mnt/nix/var/nix/profiles/system` back with `readlink -f` and requires it to equal the built closure, so an install that did not take effect fails instead of rebooting. That path is hardcoded, so `--root` must stay `/mnt`. Skipped with `disable_automatic_reboot`, since Panix then never reboots. |
+| `profile_add_command`, `nix_env_command` (profile set) | Judged by exit status alone. A wrapper that exits 0 without doing the work reports success. The built-in commands instead require their profile and closure operands. |
+
+## Other Hardware Config Generators
+
+`hardware_config.generate.command` and `hardware_config.generate.args` replace `nixos-generate-config`. [`nixos-facter`](https://github.com/nix-community/nixos-facter) is one such replacement: it takes no flags and prints a JSON report, which Panix accepts in place of a NixOS module.
+
+```yaml
+hardware_config:
+  path: ./hosts/webserver/facter.json   # local path, written by Panix
+  generate:
+    command: ["nixos-facter"]
+    args: []                            # nixos-facter takes no flags, it writes JSON to stdout
+```
+
+Reference the report from the configuration instead of importing it as a module:
+
+```nix
+hardware.facter.reportPath = ./facter.json;
+```
+
+`reportPath` is a path, so a relative literal resolves against the module file and lands in the flake source. Keep the report inside the flake.
+
+nixos-facter needs root, which Panix already provides; use an absolute path if the tool is not on root's `PATH`. The report contains hardware identifiers, so review it before committing. The capture must be a single JSON object: Panix merges stderr into the same stream, so one warning line from the tool or the target fails it.
+
+`args: []` means "run with no flags" and never falls back to the `nixos-generate-config` flags, so set it only together with a `command` that takes none. Leaving `command` unset keeps `nixos-generate-config`, which then runs in write mode: it rewrites `/etc/nixos/*.nix` on the target as root and prints nothing Panix can read. Panix refuses that combination instead of running it.
+
+To capture the config again after changing the generator, without a deploy, run [`panix hardware-config`](/cli/other-commands/#hardware-config). It runs Inspect and then the hardware-config phase, which regenerates the local file for every installed machine that sets `hardware_config.path` and stages it in git (best effort). A machine still in the installer already gets its config from Inspect, and a pre-kexec machine needs a deploy.
 
 ## Environment Variables
 
-Some nix settings are only available via environment variables, with no CLI flag or `nix.conf` equivalent (e.g. `NIX_USER_CONF_FILES`, `NIX_CONF_DIR`):
+Some nix settings are only available as environment variables, with no CLI flag or `nix.conf` equivalent, such as `NIX_USER_CONF_FILES` and `NIX_CONF_DIR`.
 
 | Field | Scope | Behavior |
 |-------|-------|----------|
-| `env` | All nix commands | Global env applied to build, copy, nixos-install, and profile add |
-| `build_env` | `nix build` only | Merged on top of `env`, specific keys override global |
+| `env` | Build, copy, nixos-install, profile add | Global env merged under each command-specific `*_env`; the nix-env calls and config-load probes do not use it |
+| `build_env` | `nix build` only | Merged on top of `env`; specific keys override global ones |
 | `copy_env` | `nix copy` only | Merged on top of `env` |
 | `nixos_install_env` | `nixos-install` only | Merged on top of `env` |
 | `profile_add_env` | `nix profile add` only | Merged on top of `env` |
@@ -153,5 +297,5 @@ fleet:
 ```
 
 :::note
-Panix-internal env vars (`XDG_CACHE_HOME` for eval cache isolation, `NIX_SSHOPTS` for SSH) take precedence over user-configured keys. To change SSH options for nix commands, set the machine's `ssh.extra_flags` instead; Panix assembles `NIX_SSHOPTS` from the machine's SSH settings. See the [SSH config guide](/guides/ssh-config/).
+Panix-internal environment variables take precedence over user-configured keys. This covers `XDG_CACHE_HOME` for eval cache isolation and `NIX_SSHOPTS` for SSH. To change SSH options for nix commands, set the machine's `ssh.extra_flags` instead; Panix assembles `NIX_SSHOPTS` from the machine's SSH settings. See the [SSH config guide](/guides/ssh-config/).
 :::

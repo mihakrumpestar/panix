@@ -16,6 +16,7 @@ func TestPhaseString(t *testing.T) {
 		want  string
 	}{
 		{Inspect, "inspect"},
+		{HardwareConfig, "hardware-config"},
 		{Build, "build"},
 		{Bootstrap, "bootstrap"},
 		{Transfer, "transfer"},
@@ -45,6 +46,7 @@ func TestGetPhaseMetadata(t *testing.T) {
 		wantValidFirst bool
 	}{
 		{"inspect", Inspect, true, ScopeMachine, true},
+		{"hardware-config", HardwareConfig, true, ScopeMachine, false},
 		{"build", Build, true, ScopeInstallable, true},
 		{"bootstrap", Bootstrap, true, ScopeMachine, false},
 		{"transfer", Transfer, true, ScopeMachine, false},
@@ -87,6 +89,7 @@ func TestShouldRunOnce(t *testing.T) {
 		want  bool
 	}{
 		{Inspect, false},
+		{HardwareConfig, false},
 		{Build, true},
 		{Bootstrap, false},
 		{Transfer, false},
@@ -111,7 +114,7 @@ func TestPhasesInOrder(t *testing.T) {
 
 	assertion := assert.New(t)
 
-	expected := []Phase{Inspect, Bootstrap, Build, Transfer, Secrets, Activate, Rollback}
+	expected := []Phase{Inspect, HardwareConfig, Bootstrap, Build, Transfer, Secrets, Activate, Rollback}
 	result := PhasesInOrder()
 	assertion.Equal(expected, result)
 	assertion.Len(result, len(PhaseRegistry))

@@ -16,13 +16,14 @@ var (
 type Phase string
 
 const (
-	Inspect   Phase = "inspect"
-	Build     Phase = "build"
-	Bootstrap Phase = "bootstrap"
-	Transfer  Phase = "transfer"
-	Secrets   Phase = "secrets"
-	Activate  Phase = "activate"
-	Rollback  Phase = "rollback"
+	Inspect        Phase = "inspect"
+	HardwareConfig Phase = "hardware-config"
+	Build          Phase = "build"
+	Bootstrap      Phase = "bootstrap"
+	Transfer       Phase = "transfer"
+	Secrets        Phase = "secrets"
+	Activate       Phase = "activate"
+	Rollback       Phase = "rollback"
 )
 
 func (p Phase) String() string {
@@ -66,6 +67,7 @@ type PhaseMetadata struct {
 // PhaseRegistry contains metadata for all phases, they are defined in execution order (but not all phases are all orders).
 var PhaseRegistry = []PhaseMetadata{
 	{Phase: Inspect, Scope: ScopeMachine, ValidFirst: true},
+	{Phase: HardwareConfig, Scope: ScopeMachine},
 	{Phase: Bootstrap, Scope: ScopeMachine},
 	{Phase: Build, Scope: ScopeInstallable, ValidFirst: true},
 	{Phase: Transfer, Scope: ScopeMachine},

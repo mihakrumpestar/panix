@@ -119,11 +119,11 @@ const (
 	debianNonixVMPort   = 10028
 )
 
-// e2eHardwareConfigPath mirrors the ISO VM machine's hardware_config_path in
+// e2eHardwareConfigPath mirrors the ISO VM machine's hardware_config.path in
 // panix.yml: a path on the machine running panix, not on the target.
 const e2eHardwareConfigPath = "/tmp/e2e-hardware-config.nix"
 
-// e2eKexecHardwareConfigPath mirrors the kexec machine's hardware_config_path
+// e2eKexecHardwareConfigPath mirrors the kexec machine's hardware_config.path
 // in panix.yml and lives inside the testflakes source tree: the flake imports
 // it, and flakes cannot import absolute paths outside their source. Set by initDirs.
 var e2eKexecHardwareConfigPath string
@@ -1017,7 +1017,7 @@ func verifyAll(keyPath string) error {
 			return verifyNixOSInstallation(kexecVMPort, keyPath)
 		})
 		// The kexec bootstrap path carries a shell-string hook and its own
-		// hardware_config_path; test-vm-kexec imports the generated file, so
+		// hardware_config; test-vm-kexec imports the generated file, so
 		// generation must run right after kexec or the disko build fails.
 		parGroup.Go("Verify bootstrap hook and hardware config on kexec VM", func() error {
 			return verifyKexecBootstrapArtifacts(kexecVMPort, nixosISOPort, keyPath)

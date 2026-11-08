@@ -16,6 +16,13 @@ const (
 	Arch = "PANIX_ARCH"
 	// SecretLocalPath is the local path a command-sourced secret was staged to.
 	SecretLocalPath = "PANIX_SECRET_LOCAL_PATH" //nolint:gosec // variable name, not a credential
+	// Profile is the profile path the current step reads or sets; the same
+	// name activation hooks receive as PANIX_PROFILE_PATH.
+	Profile = "PANIX_PROFILE_PATH"
+	// Closure is the store path the current step installs or activates.
+	Closure = "PANIX_CLOSURE"
+	// StoreURL is the destination store URL of a closure copy.
+	StoreURL = "PANIX_STORE_URL"
 )
 
 // panixPrefix marks PANIX_* names owned by panix; anything else is a typo and a hard error.
@@ -51,7 +58,7 @@ func (v Vars) Expand(input string) (string, error) {
 		}
 
 		switch name {
-		case Arch, SecretLocalPath:
+		case Arch, SecretLocalPath, Profile, Closure, StoreURL:
 			value, present := v[name]
 			if !present {
 				return "", errors.Errorf("panix runtime variable %s is not available in this context", name)
@@ -70,6 +77,27 @@ func (v Vars) Expand(input string) (string, error) {
 	}
 
 	return out.String(), nil
+}
+
+// ExpandList expands every element of list, returning a new slice; the input is
+// never modified.
+func (v Vars) ExpandList(list []string) ([]string, error) {
+	if len(list) == 0 {
+		return list, nil
+	}
+
+	out := make([]string, len(list))
+
+	for index, item := range list {
+		expanded, err := v.Expand(item)
+		if err != nil {
+			return nil, err
+		}
+
+		out[index] = expanded
+	}
+
+	return out, nil
 }
 
 // reference parses a $NAME or ${NAME} reference at the start of input,

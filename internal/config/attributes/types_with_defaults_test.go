@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mihakrumpestar/panix/pkg/filemode"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 )
 
 type fileModeWrapper struct {
@@ -117,24 +118,36 @@ func TestFileMode_DefaultMatchesCanonical(t *testing.T) {
 	assert.Equal(t, filemode.Default, filemode.Format(uint32(FileModeDefault)))
 }
 
+// TestDefaultRsyncFlags_EnforcePermissions pins the built-in rsync flags: the
+// transferred tree must carry its permissions, and a partial transfer must never
+// be a default, because a resumed file would land with content from two sources.
 func TestDefaultRsyncFlags_EnforcePermissions(t *testing.T) {
 	t.Parallel()
 
-	assert.Contains(t, DefaultRsyncFlags, "--perms")
+	flags := structdefault.List[Attributes]("RsyncDefaultFlags")
 
-	for _, flag := range DefaultRsyncFlags {
+	require.Equal(t, []string{"-rcEx", "--mkpath", "--perms"}, flags)
+	assert.Contains(t, flags, "--perms")
+
+	for _, flag := range flags {
 		assert.NotEqual(t, "-P", flag, "partial-transfer flag must not be a default")
 		assert.NotEqual(t, "--partial", flag, "partial-transfer flag must not be a default")
 		assert.NotContains(t, flag, "P", "combined flags must not enable partial transfers: %q", flag)
 	}
 }
 
+// TestDefaultCurlFlags_DoNotResume pins the built-in curl flags: redirects must be
+// followed, and a resumed download must never be a default, because an installer
+// fetched with a resume would append to a truncated file.
 func TestDefaultCurlFlags_DoNotResume(t *testing.T) {
 	t.Parallel()
 
-	assert.Contains(t, DefaultCurlFlags, "-L", "curl must keep following redirects")
+	flags := structdefault.List[NixConfig]("CurlDefaultFlags")
 
-	for _, flag := range DefaultCurlFlags {
+	require.Equal(t, []string{"--fail", "-#", "-L"}, flags)
+	assert.Contains(t, flags, "-L", "curl must keep following redirects")
+
+	for _, flag := range flags {
 		assert.NotContains(t, flag, "-C", "resume flag must not be a default: %q", flag)
 		assert.NotEqual(t, "--continue", flag, "resume flag must not be a default")
 		assert.NotEqual(t, "--continue-at", flag, "resume flag must not be a default")

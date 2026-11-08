@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
+	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/testutil"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/mihakrumpestar/panix/pkg/urlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +21,16 @@ type fetchNixInstallerCase struct {
 	source    string
 	wantXfer  string
 	wantErrIs error
+}
+
+// applyNixDefaults materializes attr defaults on a table entry's bootstrap.nix
+// config, as config init does; a nil entry starts from an empty config.
+func applyNixDefaults(mach *machine.Machine, cfg *attributes.NixConfig) {
+	if cfg != nil {
+		mach.Bootstrap.Nix = *cfg
+	}
+
+	structdefault.Apply(&mach.Bootstrap.Nix)
 }
 
 // The staged fetch creates a unique private directory, transfers into it,
@@ -75,7 +87,8 @@ func assertFetchNixInstallerArgv(t *testing.T, tt fetchNixInstallerCase) {
 	t.Helper()
 
 	mach := newKexecMachine(t, true)
-	mach.Bootstrap.Nix = tt.nixCfg
+	applyNixDefaults(mach, tt.nixCfg)
+
 	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
 	installerPath, err := fetchNixInstaller(exc, mach, tt.source)
@@ -149,7 +162,8 @@ func TestRunNixInstaller_Argv(t *testing.T) {
 			t.Parallel()
 
 			mach := newKexecMachine(t, tt.isRoot)
-			mach.Bootstrap.Nix = tt.nixCfg
+			applyNixDefaults(mach, tt.nixCfg)
+
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
 			require.NoError(t, runNixInstaller(exc, mach, installerPath))
@@ -180,7 +194,8 @@ func TestInstallNix_SourceKindDoesNotChangeRunArgv(t *testing.T) {
 			t.Parallel()
 
 			mach := newKexecMachine(t, true)
-			mach.Bootstrap.Nix = &attributes.NixConfig{URL: tt.source}
+			mach.Bootstrap.Nix = attributes.NixConfig{URL: tt.source}
+			structdefault.Apply(&mach.Bootstrap.Nix)
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
 
 			require.NoError(t, installNix(exc, mach))

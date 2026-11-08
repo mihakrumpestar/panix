@@ -8,6 +8,9 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/pkg/shellquote"
+	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/pkg/errors"
 )
 
@@ -23,26 +26,7 @@ func TransferFile(
 ) error {
 	activeSSH := machine.GetActiveSSH()
 
-	commandWithArgs := slices.Concat([]string{"rsync"}, machine.GetRsyncDefaultFlags())
-
-	// Elevation: remotely the receiving rsync writes the files, so sudo rides
-	// along via --rsync-path; locally rsync ignores --rsync-path, so the whole
-	// command is prefixed instead.
-	maybeSudo := machine.MaybeSudo()
-	if len(maybeSudo) != 0 {
-		if activeSSH.IsLocal() {
-			commandWithArgs = slices.Concat(maybeSudo, commandWithArgs)
-		} else {
-			commandWithArgs = append(commandWithArgs, fmt.Sprintf("--rsync-path=%s rsync", strings.Join(maybeSudo, " ")))
-		}
-	}
-
-	commandWithArgs = append(commandWithArgs, "--chmod="+rsyncChmodFlag(source.Permissions))
-
-	if source.UID != nil && source.GID != nil {
-		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chown=%d:%d", *source.UID, *source.GID))
-	}
-
+	commandWithArgs := rsyncCommandArgs(machine, activeSSH, source)
 	commandWithArgs = append(commandWithArgs, source.LocalPath)
 
 	secretRemotePath := machine.MaybeBootstrappingPath(source.RemotePath, bootstrapsNixOS)
@@ -71,6 +55,57 @@ func TransferFile(
 	}
 
 	return nil
+}
+
+// rsyncCommandArgs assembles the leading argv: the configured command, default
+// flags, elevation and --chmod/--chown.
+//
+// Remotely the receiving rsync writes the files, so sudo rides along via
+// --rsync-path; locally the whole command is elevated instead. --rsync-path is
+// also the only channel a configured command reaches the remote side on, so it
+// is emitted whenever the command is not the built-in one.
+func rsyncCommandArgs(machine *machine.Machine, activeSSH ssh.SSHClient, source attributes.TransferSource) []string {
+	commandWithArgs := slices.Concat(machine.RsyncCommand, machine.RsyncDefaultFlags)
+	maybeSudo := machine.MaybeSudo()
+
+	switch {
+	case activeSSH.IsLocal() && len(maybeSudo) != 0:
+		commandWithArgs = slices.Concat(maybeSudo, commandWithArgs)
+	case !activeSSH.IsLocal() && (len(maybeSudo) != 0 || !isBuiltinRsyncCommand(machine.RsyncCommand)):
+		commandWithArgs = append(commandWithArgs, "--rsync-path="+remoteRsyncPath(maybeSudo, machine.RsyncCommand))
+	}
+
+	commandWithArgs = append(commandWithArgs, "--chmod="+rsyncChmodFlag(source.Permissions))
+
+	if source.UID != nil && source.GID != nil {
+		commandWithArgs = append(commandWithArgs, fmt.Sprintf("--chown=%d:%d", *source.UID, *source.GID))
+	}
+
+	return commandWithArgs
+}
+
+// isBuiltinRsyncCommand reports whether the command is still the built-in one,
+// which needs no --rsync-path.
+func isBuiltinRsyncCommand(command []string) bool {
+	return slices.Equal(command, structdefault.List[attributes.Attributes]("RsyncCommand"))
+}
+
+// remoteRsyncPath renders the --rsync-path value: the elevation command followed
+// by the configured rsync command.
+//
+// The remote rsync tokenizes this string itself (g_subprocess_argv_parse), so
+// an element containing whitespace or quotes would split or corrupt the remote
+// invocation. Elements are quoted only when they are not already one inert
+// word, keeping the common `sudo rsync` form unchanged.
+func remoteRsyncPath(maybeSudo, rsyncCommand []string) string {
+	parts := slices.Concat(maybeSudo, rsyncCommand)
+
+	quoted := make([]string, len(parts))
+	for i, part := range parts {
+		quoted[i] = shellquote.QuoteIfNeeded(part)
+	}
+
+	return strings.Join(quoted, " ")
 }
 
 // rsyncChmodFlag renders the --chmod value: files use the configured mode,

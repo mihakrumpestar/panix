@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
@@ -44,7 +45,7 @@ func executeKexec(exc *executioner.Executioner, machineI *machine.Machine) error
 		return err
 	}
 
-	err = extractKexecTarball(exc, kexecURL, stagingDir)
+	err = extractKexecTarball(exc, machineI, kexecURL, stagingDir)
 	if err != nil {
 		cleanup()
 
@@ -118,11 +119,14 @@ func createKexecDirectory(exc *executioner.Executioner, machineI *machine.Machin
 func downloadOrTransferKexec(exc *executioner.Executioner, machineI *machine.Machine, kexecURL, stagingDir string) error {
 	tarballPath := path.Join(stagingDir, kexecTarballName)
 
-	return downloadOrTransfer(exc, machineI, kexecURL, tarballPath, "kexec tarball", machineI.Bootstrap.Kexec.GetCurlDefaultFlags())
+	kexecCfg := &machineI.Bootstrap.Kexec
+
+	return downloadOrTransfer(exc, machineI, kexecURL, tarballPath, "kexec tarball",
+		kexecCfg.CurlCommand, kexecCfg.CurlDefaultFlags)
 }
 
 // extractKexecTarball extracts the kexec tarball into the per-run staging dir.
-func extractKexecTarball(exc *executioner.Executioner, kexecURL, stagingDir string) error {
+func extractKexecTarball(exc *executioner.Executioner, machineI *machine.Machine, kexecURL, stagingDir string) error {
 	tarArgs := getTarArgs(kexecURL, path.Join(stagingDir, kexecTarballName))
 	tarArgs = append(tarArgs, "-C", stagingDir)
 
@@ -130,7 +134,7 @@ func extractKexecTarball(exc *executioner.Executioner, kexecURL, stagingDir stri
 		"extract kexec tarball",
 		"extracting kexec tarball",
 		"failed to extract kexec tarball",
-		append([]string{"tar"}, tarArgs...),
+		slices.Concat(machineI.Bootstrap.Kexec.TarCommand, tarArgs),
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to extract kexec tarball")

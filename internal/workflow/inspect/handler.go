@@ -57,6 +57,7 @@ func (Handler) RunPhase(exc *executioner.Executioner, fleetLeaf *fleet.FleetLeaf
 			fleetLeaf.Installable.Preset,
 			fleetLeaf.Installable.Preset.ProfilePath,
 			fleetLeaf.Installable.User,
+			&fleetLeaf.Installable.Nix,
 		)
 	}
 

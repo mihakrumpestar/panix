@@ -687,3 +687,81 @@ func TestOutputTypeAttrOverrideResolvesAttrpath(t *testing.T) {
 		"resolved attrpath should use output_type_attr instead of the type key",
 	)
 }
+
+// Command prefixes are scoped to the step that owns them, so the file layout is
+// part of the contract: bootstrap downloads take their own prefixes and the
+// hardware config step is one block.
+func TestDecodeConfigFile_CommandPrefixScoping(t *testing.T) {
+	t.Parallel()
+
+	const scoped = `
+fleet:
+  rsync_command: ["rsync-wrapper"]
+  hardware_config:
+    path: ./h.nix
+    generate:
+      command: ["nixos-generate-config"]
+      args: ["--show-hardware-config"]
+  bootstrap:
+    nix:
+      curl_command: ["curl-nix"]
+    kexec:
+      curl_command: ["curl-kexec"]
+      tar_command: ["bsdtar"]
+  nix:
+    build_command: ["nom", "build"]
+  flakes:
+    f:
+      installables:
+        nixosConfigurations:
+          x:
+            machines:
+              m: {}
+`
+
+	conf := decodeTestConfig(t, scoped)
+
+	assert.Equal(t, []string{"rsync-wrapper"}, conf.Fleet.RsyncCommand)
+	assert.Equal(t, "./h.nix", conf.Fleet.HardwareConfig.Path)
+	assert.Equal(t, []string{"nixos-generate-config"}, conf.Fleet.HardwareConfig.Generate.Command)
+	assert.Equal(t, []string{"--show-hardware-config"}, conf.Fleet.HardwareConfig.Generate.Args)
+	assert.Equal(t, []string{"curl-nix"}, conf.Fleet.Bootstrap.Nix.CurlCommand)
+	assert.Equal(t, []string{"curl-kexec"}, conf.Fleet.Bootstrap.Kexec.CurlCommand)
+	assert.Equal(t, []string{"bsdtar"}, conf.Fleet.Bootstrap.Kexec.TarCommand)
+	assert.Equal(t, []string{"nom", "build"}, conf.Fleet.Nix.BuildCommand)
+}
+
+// The moved keys are a hard break: strict decoding rejects a leftover
+// top-level key instead of silently ignoring it, so a stale config fails at
+// load with the offending name rather than deploying with the wrong tool.
+func TestDecodeConfigFile_RejectsUnscopedCommandKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"hardware_config_path", "curl_command", "tar_command", "generate_config_command"} {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), "panix.yml")
+			require.NoError(t, os.WriteFile(path, []byte("fleet:\n  "+key+": x\n"), 0o600))
+
+			_, err := decodeConfigFile(path)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), key)
+			assert.Contains(t, err.Error(), "moved to",
+				"the error must name the replacement, not just the unknown key")
+		})
+	}
+}
+
+// decodeTestConfig writes yaml to a temp config file and decodes it.
+func decodeTestConfig(t *testing.T, yaml string) *Config {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "panix.yml")
+	require.NoError(t, os.WriteFile(path, []byte(yaml), 0o600))
+
+	conf, err := decodeConfigFile(path)
+	require.NoError(t, err)
+
+	return conf
+}

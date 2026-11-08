@@ -11,10 +11,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-func runWorkflow(cmd any, f flags.Flags, commandPhases []phase.Phase) error {
+func runWorkflow(cmd any, f flags.Flags, commandPhases []phase.Phase, prepare func(*config.Config) error) error {
 	conf, err := config.LoadConfig(f, flags.ExplicitMask(os.Args[1:], cmd))
 	if err != nil {
 		return errors.Wrap(err, "failed to load config")
+	}
+
+	if prepare != nil {
+		err = prepare(conf)
+		if err != nil {
+			return err
+		}
 	}
 
 	conf.Phases, err = phase.ValidatePhases(commandPhases, conf.Flags.SkipPhases)

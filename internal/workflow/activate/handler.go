@@ -3,6 +3,7 @@ package activate
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,9 +15,12 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
 	"github.com/mihakrumpestar/panix/internal/logs/command"
+	"github.com/mihakrumpestar/panix/internal/runtimevars"
 	"github.com/mihakrumpestar/panix/internal/workflow/phaseops"
+	"github.com/mihakrumpestar/panix/pkg/argv"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/shellquote"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/pkg/errors"
 )
 
@@ -255,9 +259,9 @@ func autoRollbackToPreviousGeneration(
 
 func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, nixCfg *nix.NixConfig, systemClosure string) error {
 	// nixos-install writes to /mnt and installs the bootloader, so it must
-	// run elevated, with the env(1) argv inside the sudo prefix to survive
+	// run elevated, with the env(1) argv inside the sudo wrapper to survive
 	// env_reset. The binary must be resolved before elevation.
-	nixosInstall, err := resolveCommandPath(exc, "nixos-install")
+	installArgv, installLabel, err := nixosInstallArgv(exc, nixCfg, systemClosure)
 	if err != nil {
 		return err
 	}
@@ -265,17 +269,12 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	err = exc.Exec(
 		"nixos-install",
 		"installing NixOS",
-		"nixos-install failed",
-		append(machine.MaybeSudo(), executioner.WithEnv(nixCfg.GetNixosInstallEnv(), slices.Concat(
-			[]string{nixosInstall},
-			nixCfg.GetNixosInstallDefaultFlags(),
-			[]string{"--system", systemClosure, "--root", "/mnt"},
-			nixCfg.NixosInstallFlags,
-		))...),
+		installLabel+" failed",
+		append(machine.MaybeSudo(), installArgv...),
 		executioner.Trim(),
 	)
 	if err != nil {
-		return errors.Wrap(err, "nixos-install failed")
+		return errors.Wrap(err, installLabel+" failed")
 	}
 
 	if len(machine.Bootstrap.PostBootstrapInstallHooks) > 0 {
@@ -286,6 +285,11 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	}
 
 	if !machine.Bootstrap.DisableAutomaticReboot {
+		err = verifyInstalledSystem(exc, machine, installedSystemProfile, systemClosure)
+		if err != nil {
+			return err
+		}
+
 		err = performReboot(exc, machine)
 		if err != nil {
 			return err
@@ -300,6 +304,104 @@ func executeBootstrap(exc *executioner.Executioner, machine *machine.Machine, ni
 	}
 
 	return nil
+}
+
+// installedSystemProfile is the profile nixos-install writes under --root /mnt
+// (nixos-install runs `nix-env --profile <root>/nix/var/nix/profiles/system
+// --set <system>`).
+const installedSystemProfile = "/mnt/nix/var/nix/profiles/system"
+
+// verifyInstalledSystem resolves the installed system profile and requires it to
+// be the closure that was built.
+//
+// nixos-install is judged by exit status, so an overridden command that exits 0
+// without installing would otherwise reach the irreversible reboot with no system
+// on disk. readlink -f is not overridable, so this checks the install's effect
+// rather than the tool's claim: without -f it returns only the generation link
+// name (system-1-link), not the closure.
+func verifyInstalledSystem(exc *executioner.Executioner, machine *machine.Machine, profilePath, systemClosure string) error {
+	err := exc.Exec(
+		"verify installed system",
+		"verifying the installed system profile",
+		"installed system profile does not resolve to the built closure",
+		append(machine.MaybeSudo(), "readlink", "-f", profilePath),
+		executioner.Trim(),
+		executioner.OnSuccess(func(log *command.CommandLog) error {
+			return requireInstalledClosure(profilePath, string(log.Output.LastLine()), systemClosure)
+		}),
+		executioner.OnDryRun(func() {}),
+	)
+
+	return err //nolint:wrapcheck // error is pre-annotated with statusIfFailed
+}
+
+// requireInstalledClosure compares the profile readback with the built closure,
+// so an installer that exited 0 without installing fails before the reboot.
+func requireInstalledClosure(profilePath, installed, systemClosure string) error {
+	if installed != systemClosure {
+		return errors.Errorf(
+			"%s resolves to %q, not the built closure %q: refusing to reboot, the install did not take effect",
+			profilePath, installed, systemClosure,
+		)
+	}
+
+	return nil
+}
+
+// nixosInstallArgv builds the un-elevated nixos-install argv and the label the
+// step reports: the configured command with its executable resolved on PATH, the
+// env(1) prefix, the default flags (which carry the system closure and the
+// target root), then the extra flags.
+func nixosInstallArgv(
+	exc *executioner.Executioner,
+	nixCfg *nix.NixConfig,
+	systemClosure string,
+) ([]string, string, error) {
+	command := nixCfg.NixosInstallCommand
+	if len(command) == 0 {
+		command = structdefault.List[nix.NixConfig]("NixosInstallCommand")
+	}
+
+	flags, err := runtimevars.Vars{runtimevars.Closure: systemClosure}.ExpandList(nixCfg.NixosInstallDefaultFlags)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "nixos_install_default_flags")
+	}
+
+	// Without the closure the built-in installer installs whatever it finds in the
+	// target's /etc/nixos instead of the system that was built, and the mistake
+	// would only surface after the disk was written. Extra flags count too, so a
+	// user can move the operand there. Any prefix element is checked, because a
+	// wrapper such as ["env", "X=1", "nixos-install"] still runs the installer.
+	if phaseops.CommandInvokes(command, "nixos-install") &&
+		!slices.Contains(slices.Concat(flags, nixCfg.NixosInstallFlags), systemClosure) {
+		return nil, "", errors.New(
+			"nixos_install_default_flags dropped the built closure: the built-in nixos-install needs $PANIX_CLOSURE",
+		)
+	}
+
+	resolved, err := resolveCommandPath(exc, command[0])
+	if err != nil {
+		return nil, "", err
+	}
+
+	installArgv := executioner.WithEnv(nixCfg.GetNixosInstallEnv(), argv.Argv(
+		slices.Concat([]string{resolved}, command[1:]),
+		nil,
+		flags,
+		nixCfg.NixosInstallFlags,
+	))
+
+	return installArgv, strings.Join(command, " "), nil
+}
+
+// isSSHDisconnect reports ssh's connection-lost exit status (255), which a
+// command that takes the host down returns instead of a remote exit code.
+func isSSHDisconnect(err error) bool {
+	const sshConnectionLostStatus = 255
+
+	var exitErr *exec.ExitError
+
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == sshConnectionLostStatus
 }
 
 // resolveCommandPath resolves commands un-elevated, because sudo's
@@ -344,13 +446,24 @@ func resolveCommandPath(exc *executioner.Executioner, cmdName string) (string, e
 // Helpers
 
 func performReboot(exc *executioner.Executioner, machineI *machine.Machine) error {
-	// Elevated: reboot needs root (a no-op prefix when the SSH user is
+	// Elevated: reboot needs root (a no-op wrapper when the SSH user is
 	// already root, e.g. inside the kexec installer).
 	err := exc.Exec(
 		"reboot",
 		"rebooting",
 		"reboot failed",
 		append(machineI.MaybeSudo(), "reboot"),
+		executioner.OnFailure(func(_ *command.CommandLog, err error) error {
+			// The host can go down before ssh delivers reboot's exit status,
+			// which surfaces as ssh's connection-lost status (255). That is the
+			// expected outcome here, not a failed reboot. A local machine has no
+			// ssh wrapper, so its status is authoritative.
+			if !machineI.GetActiveSSH().IsLocal() && isSSHDisconnect(err) {
+				return nil
+			}
+
+			return err
+		}),
 	)
 	if err != nil {
 		return errors.Wrap(err, "reboot failed")

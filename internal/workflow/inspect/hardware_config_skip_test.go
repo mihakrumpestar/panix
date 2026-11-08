@@ -10,6 +10,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,12 +24,13 @@ func newSkipTestMachine(t *testing.T, requiresKexec bool, hardwarePath string) *
 		State:       atomicpointer.New[machine.State](),
 		MetaInspect: atomicpointer.New[machine.MetaInspect](),
 	}
-	mach.HardwareConfigPath = hardwarePath
+	mach.HardwareConfig.Path = hardwarePath
 	client := &ssh.SSHClient{Hostname: "local-test"}
 	require.NoError(t, client.Init("local-test", "local-test", nixver.Info{}))
 
 	mach.SSH = *client
 	mach.SudoProgram = attributes.SudoProgram("sudo")
+	structdefault.Apply(&mach.Attributes)
 	mach.MetaInspect.Store(&machine.MetaInspect{IsRoot: false, RequiresKexec: requiresKexec})
 
 	return mach

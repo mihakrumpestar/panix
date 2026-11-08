@@ -8,6 +8,8 @@ import (
 	"github.com/mihakrumpestar/panix/internal/config/tree/installable"
 	"github.com/mihakrumpestar/panix/internal/config/tree/machine"
 	"github.com/mihakrumpestar/panix/internal/executioner"
+	"github.com/mihakrumpestar/panix/internal/runtimevars"
+	"github.com/mihakrumpestar/panix/pkg/argv"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -26,7 +28,11 @@ func CopyClosure(
 	toURL := nixCopyToURL(activeSSH, machineI, installable.Preset, transferClosure)
 	sshOpts := activeSSH.MaybeNixSSHOpts()
 
-	baseArgs := nixCopyBaseArgs(installable, toURL)
+	baseArgs, err := nixCopyBaseArgs(installable, toURL)
+	if err != nil {
+		return err
+	}
+
 	// User env first so panix-internal NIX_SSHOPTS takes precedence on conflict.
 	env := slices.Concat(installable.Nix.GetCopyEnv(), sshOpts)
 	commandWithArgs := executioner.WithEnv(env, slices.Concat(
@@ -35,7 +41,7 @@ func CopyClosure(
 		toTransfer,
 	))
 
-	err := exc.Exec("nix copy",
+	err = exc.Exec("nix copy",
 		"copying closure",
 		"closure copy failed",
 		commandWithArgs,
@@ -69,21 +75,28 @@ func nixCopyToURL(activeSSH ssh.SSHClient, machineI *machine.Machine, preset ins
 	return activeSSH.NixStoreURLWithParams(storeURLParams...)
 }
 
-func nixCopyBaseArgs(installable *installable.Installable, toURL string) []string {
-	baseArgs := []string{"nix"}
-	baseArgs = append(baseArgs, installable.Nix.GetExperimentalFeatures()...)
-	baseArgs = append(baseArgs, "copy")
+func nixCopyBaseArgs(installable *installable.Installable, toURL string) ([]string, error) {
+	nixCfg := &installable.Nix
 
-	if installable.Nix.BuildMode == nix.BuildModeRemote {
+	var remoteFlags []string
+
+	if nixCfg.BuildMode == nix.BuildModeRemote {
 		// Copy from the pinned builder machine: the same first declared
 		// machine the build phase built on (see remoteBuilderSSH in build.go).
 		// GetActiveSSH panics on uninitialized clients, so no fallback exists:
 		// remote transfer without a valid builder is a hard failure.
-		baseArgs = append(baseArgs, "--from", remoteBuilderSSH(installable).NixStoreURL())
+		remoteFlags = []string{"--from", remoteBuilderSSH(installable).NixStoreURL()}
 	}
 
-	baseArgs = append(baseArgs, "--to", toURL)
-	baseArgs = append(baseArgs, installable.Nix.GetCopyDefaultFlags()...)
+	flags, err := runtimevars.Vars{runtimevars.StoreURL: toURL}.ExpandList(nixCfg.CopyDefaultFlags)
+	if err != nil {
+		return nil, errors.Wrap(err, "copy_default_flags")
+	}
 
-	return baseArgs
+	return argv.Argv(
+		nixCfg.CopyCommand,
+		nixCfg.ExperimentalFeatures,
+		remoteFlags,
+		flags,
+	), nil
 }

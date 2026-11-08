@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/mihakrumpestar/panix/internal/config/attributes"
 	"github.com/mihakrumpestar/panix/internal/phase"
 	"github.com/mihakrumpestar/panix/internal/testutil"
 	"github.com/rs/zerolog/log"
@@ -66,12 +67,12 @@ var hardwareConfigWriteCases = []hardwareConfigWriteCase{
 	{
 		name:    "stderr warning before the config",
 		output:  "warning: Git tree '/repo' is dirty\n" + validHardwareConfigOutput,
-		wantErr: "unexpected nixos-generate-config output",
+		wantErr: "unexpected hardware config output",
 	},
 	{
 		name:    "truncated config",
 		output:  truncatedHardwareConfigOutput,
-		wantErr: "truncated nixos-generate-config output",
+		wantErr: "truncated hardware config output",
 	},
 }
 
@@ -119,7 +120,7 @@ func TestGenerateHardwareConfig_Argv(t *testing.T) {
 			t.Parallel()
 
 			mach := newLocalTransferMachine(t, tt.isRoot)
-			mach.HardwareConfigPath = "/tmp/hardware-configuration.nix"
+			mach.HardwareConfig.Path = "/tmp/hardware-configuration.nix"
 			exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
 
 			require.NoError(t, GenerateHardwareConfig(exc, mach))
@@ -140,7 +141,7 @@ func TestGenerateHardwareConfig_LocalWrite(t *testing.T) {
 	repo := initTestRepo(t)
 	path := filepath.Join(repo, "my hardware", "nix", "hardware-configuration.nix")
 	mach := newLocalTransferMachine(t, true)
-	mach.HardwareConfigPath = path
+	mach.HardwareConfig.Path = path
 
 	exc, _ := realExecutionerFor(t, mach)
 
@@ -160,7 +161,7 @@ func TestGenerateHardwareConfig_DryRunNoWrite(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "nested", "hardware-configuration.nix")
 	mach := newLocalTransferMachine(t, false)
-	mach.HardwareConfigPath = path
+	mach.HardwareConfig.Path = path
 	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
 
 	require.NoError(t, GenerateHardwareConfig(exc, mach))
@@ -178,6 +179,66 @@ func TestGenerateHardwareConfig_NoPathNoop(t *testing.T) {
 	require.NoError(t, GenerateHardwareConfig(exc, mach))
 
 	assert.Empty(t, testutil.CommandLines(t, phaseLog))
+}
+
+// TestIsWriteModeGenerator pins the generator shape panix can never capture:
+// the flag may sit in the command or the args, and a wrapper still invokes the
+// built-in generator.
+func TestIsWriteModeGenerator(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		generator attributes.Generator
+		want      bool
+	}{
+		{
+			name:      "write-mode nixos-generate-config",
+			generator: attributes.Generator{Command: []string{"nixos-generate-config"}, Args: []string{"--no-filesystems"}},
+			want:      true,
+		},
+		{
+			name:      "printing nixos-generate-config",
+			generator: attributes.Generator{Command: []string{"nixos-generate-config"}, Args: []string{"--show-hardware-config"}},
+		},
+		{
+			name:      "flag in the command",
+			generator: attributes.Generator{Command: []string{"nixos-generate-config", "--show-hardware-config"}, Args: []string{}},
+		},
+		{
+			name:      "wrapped write-mode generator",
+			generator: attributes.Generator{Command: []string{"env", "FOO=1", "/run/current-system/sw/bin/nixos-generate-config"}, Args: []string{}},
+			want:      true,
+		},
+		{
+			name:      "another generator",
+			generator: attributes.Generator{Command: []string{"nixos-facter"}, Args: []string{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, IsWriteModeGenerator(tt.generator))
+		})
+	}
+}
+
+// TestGenerateHardwareConfig_RefusesWriteMode pins the choke point every caller
+// shares: a write-mode generator is refused before it can rewrite /etc/nixos.
+func TestGenerateHardwareConfig_RefusesWriteMode(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	mach.HardwareConfig.Path = "/tmp/hardware-configuration.nix"
+	mach.HardwareConfig.Generate = attributes.Generator{Command: []string{"nixos-generate-config"}, Args: []string{}}
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
+
+	err := GenerateHardwareConfig(exc, mach)
+
+	require.ErrorIs(t, err, ErrWriteModeGenerator)
+	assert.Empty(t, testutil.CommandLines(t, phaseLog), "the refused generator must not run")
 }
 
 // TestWriteHardwareConfig pins that only a recognized nixos-generate-config
@@ -359,4 +420,186 @@ func TestStageHardwareConfig_FailureWarns(t *testing.T) {
 
 	_, err := execGitIn(t, repo, "ls-files", "--error-unmatch", "hardware-configuration.nix")
 	assert.Error(t, err, "nothing may be staged when both add attempts fail")
+}
+
+// A configured prefix replaces the generator binary while panix's own flags
+// stay appended.
+func TestGenerateHardwareConfig_CommandOverride(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	mach.HardwareConfig.Path = "/tmp/hardware-configuration.nix"
+	mach.HardwareConfig.Generate.Command = []string{"/run/wrappers/bin/nixos-generate-config", "--impure"}
+
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
+	require.NoError(t, GenerateHardwareConfig(exc, mach))
+
+	assert.Equal(t,
+		"/run/wrappers/bin/nixos-generate-config --impure --show-hardware-config --no-filesystems",
+		testutil.LastCommandLine(t, phaseLog))
+}
+
+// A report generator such as nixos-facter (JSON, no flags) is a supported
+// hardware_config.generate.command: its report is written as-is, while a truncated or
+// stderr-polluted capture is still rejected.
+func TestHardwareConfigFromOutput_JSONReport(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		output  string
+		wantErr string
+	}{
+		{
+			name:   "single-line report",
+			output: `{"version":1,"hardware":{"cpu":[]}}`,
+		},
+		{
+			name:   "pretty-printed report",
+			output: "{\n  \"version\": 1,\n  \"hardware\": {}\n}",
+		},
+		{
+			name:    "truncated report",
+			output:  `{"version":1,"hardware":`,
+			wantErr: "neither a JSON report",
+		},
+		{
+			name:    "stderr noise before the report",
+			output:  "warning: Git tree is dirty\n{\"version\":1}",
+			wantErr: "unexpected hardware config output",
+		},
+		{
+			// `{}` is empty JSON and not a module, so it is rejected either way.
+			name:    "empty report",
+			output:  `{}`,
+			wantErr: "neither a JSON report",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := hardwareConfigFromOutput(tt.output)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.output+"\n", string(got))
+		})
+	}
+}
+
+// A flag-less generator runs with exactly the configured args: no
+// nixos-generate-config flags leak in.
+func TestGenerateHardwareConfig_CustomArgs(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	mach.HardwareConfig.Path = "/tmp/facter.json"
+	mach.HardwareConfig.Generate.Command = []string{"nixos-facter"}
+	mach.HardwareConfig.Generate.Args = []string{}
+
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
+	require.NoError(t, GenerateHardwareConfig(exc, mach))
+
+	assert.Equal(t, "nixos-facter", testutil.LastCommandLine(t, phaseLog))
+}
+
+// Defaults are unchanged: without a configured args list the generator still
+// receives the stdout-mode flags.
+func TestGenerateHardwareConfig_DefaultArgs(t *testing.T) {
+	t.Parallel()
+
+	mach := newLocalTransferMachine(t, true)
+	mach.HardwareConfig.Path = "/tmp/hardware-configuration.nix"
+
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Inspect)
+	require.NoError(t, GenerateHardwareConfig(exc, mach))
+
+	assert.Equal(t,
+		"nixos-generate-config --show-hardware-config --no-filesystems",
+		testutil.LastCommandLine(t, phaseLog))
+}
+
+// End-to-end through a real executable: a JSON-emitting generator (as
+// nixos-facter is) writes its report to the configured local path, with no
+// nixos-generate-config flags appended.
+func TestGenerateHardwareConfig_JSONGeneratorEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "facter-stub")
+
+	script := "#!/bin/sh\necho '{\"version\":1,\"hardware\":{\"cpu\":[\"fake\"]}}'\n"
+	//nolint:gosec // the stub must be executable for the PTY transport to run it
+	require.NoError(t, os.WriteFile(binPath, []byte(script), 0o755))
+
+	mach := newLocalTransferMachine(t, true)
+	mach.HardwareConfig.Path = filepath.Join(t.TempDir(), "out", "facter.json")
+	mach.HardwareConfig.Generate.Command = []string{binPath}
+	mach.HardwareConfig.Generate.Args = []string{}
+
+	exc, _ := realExecutionerFor(t, mach)
+	require.NoError(t, GenerateHardwareConfig(exc, mach))
+
+	written, err := os.ReadFile(mach.HardwareConfig.Path)
+	require.NoError(t, err)
+	assert.JSONEq(t, "{\"version\":1,\"hardware\":{\"cpu\":[\"fake\"]}}\n", string(written))
+}
+
+// The noise guard still bites for a JSON generator: a tool that prints a warning
+// before its report must fail rather than write the warning into the flake.
+func TestGenerateHardwareConfig_JSONGeneratorRejectsNoise(t *testing.T) {
+	t.Parallel()
+
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "noisy-stub")
+
+	script := "#!/bin/sh\necho 'warning: something looked off' >&2\necho '{\"version\":1}'\n"
+	//nolint:gosec // the stub must be executable for the PTY transport to run it
+	require.NoError(t, os.WriteFile(binPath, []byte(script), 0o755))
+
+	mach := newLocalTransferMachine(t, true)
+	mach.HardwareConfig.Path = filepath.Join(t.TempDir(), "facter.json")
+	mach.HardwareConfig.Generate.Command = []string{binPath}
+	mach.HardwareConfig.Generate.Args = []string{}
+
+	exc, _ := realExecutionerFor(t, mach)
+
+	err := GenerateHardwareConfig(exc, mach)
+	require.Error(t, err, "stderr merged into the PTY stream must not be written as the config")
+
+	_, statErr := os.Stat(mach.HardwareConfig.Path)
+	assert.True(t, os.IsNotExist(statErr), "nothing may be written on a rejected capture")
+}
+
+// A nixos-generate-config module can start with `{` when it carries no
+// "Do not modify this file!" header, so a leading brace must not be taken as
+// JSON-only. Regression: the JSON branch rejected such modules outright.
+func TestHardwareConfigFromOutput_BraceFirstModule(t *testing.T) {
+	t.Parallel()
+
+	module := `{ config, lib, pkgs, modulesPath, ... }: {
+  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+  config = { };
+}`
+
+	got, err := hardwareConfigFromOutput(module)
+	require.NoError(t, err)
+	assert.Equal(t, module+"\n", string(got))
+}
+
+// A brace-first capture that is neither valid JSON nor a module is still
+// rejected, so the fallback does not become a blanket accept.
+func TestHardwareConfigFromOutput_BraceFirstNeither(t *testing.T) {
+	t.Parallel()
+
+	_, err := hardwareConfigFromOutput(`{ "truncated": `)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "neither a JSON report")
 }

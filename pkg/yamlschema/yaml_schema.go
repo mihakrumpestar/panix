@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/mihakrumpestar/panix/pkg/filemode"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 )
 
 type generator struct {
@@ -780,16 +781,17 @@ func (g *generator) setFieldDescription(prop any, field reflect.StructField) {
 		desc = field.Tag.Get("help")
 	}
 
-	// The `default` tag is for scalars only: list defaults live in Go vars and
-	// are documented in the field's desc text (internal/config/attributes),
-	// so a tag on any other kind is ignored entirely (no schema `default`,
-	// no desc suffix).
+	// `default` declares the built-in default of any field: a bracket list for
+	// slices, the scalar form otherwise. structdefault reads the same tag at
+	// runtime, so the built-in value is declared once in the struct tag.
 	defaultVal := field.Tag.Get("default")
+
 	if defaultVal != "" {
-		if def, scalar := parseDefaultValue(defaultVal, field.Type); scalar {
+		def, parsed := parseDefaultValue(defaultVal, field.Type)
+		if parsed {
 			typeDef.Default = def
 
-			if desc != "" {
+			if desc != "" && field.Type.Kind() != reflect.Slice {
 				desc += " (default: " + defaultVal + ")"
 			}
 		}
@@ -800,13 +802,23 @@ func (g *generator) setFieldDescription(prop any, field reflect.StructField) {
 	}
 }
 
+// isFieldRequired reports whether the field itself must be present in the YAML.
+//
+// A `required` that appears after `dive` applies to each ELEMENT of a slice or
+// map, leaving the field optional, so it must not mark the field required: the
+// validator enforces the element rule independently. Only a `required` that
+// precedes any `dive` (or a bare `yaml:",required"`) marks the field itself.
 func isFieldRequired(field reflect.StructField, yamlTag string) bool {
 	if strings.Contains(yamlTag, ",required") {
 		return true
 	}
 
 	for t := range strings.SplitSeq(field.Tag.Get("validate"), ",") {
-		if strings.TrimSpace(t) == "required" {
+		switch strings.TrimSpace(t) {
+		case "dive":
+			// Everything after dive constrains elements, not the field.
+			return false
+		case "required":
 			return true
 		}
 	}
@@ -849,9 +861,9 @@ func isDurationType(typ reflect.Type) bool {
 }
 
 // parseDefaultValue converts a `default` struct-tag value into the schema
-// default for scalar-ish kinds (bool, the int/uint family, string, and
-// durations). Any other kind (slice, map, struct, pointer, ...) reports
-// ok=false and no default: the `default` tag is for scalars only.
+// default: a bracket list for slices, and the scalar form for bool, the int/uint
+// family, string, and durations. Any other kind (map, struct, pointer, ...)
+// reports ok=false and no default.
 func parseDefaultValue(val string, typ reflect.Type) (any, bool) {
 	if isDurationType(typ) {
 		return val, true
@@ -879,6 +891,13 @@ func parseDefaultValue(val string, typ reflect.Type) (any, bool) {
 		return val, true
 	case reflect.String:
 		return val, true
+	case reflect.Slice:
+		items, ok := structdefault.ParseList(val)
+		if !ok {
+			return nil, false
+		}
+
+		return items, true
 	}
 
 	return nil, false

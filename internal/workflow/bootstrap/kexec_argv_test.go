@@ -12,6 +12,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
 	"github.com/mihakrumpestar/panix/pkg/stringbyte"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,7 @@ func newKexecMachine(t *testing.T, isRoot bool) *machine.Machine {
 	require.NoError(t, client.Init("local-test", "local-test", nixver.Info{}))
 
 	mach.SSH = *client
+	structdefault.Apply(&mach.Attributes)
 	mach.MetaInspect.Store(&machine.MetaInspect{IsRoot: isRoot})
 
 	return mach
@@ -130,10 +132,29 @@ func TestExtractKexecTarball_NoElevation(t *testing.T) {
 
 	const stagingDir = "/tmp/panix-kexec-test0123456789"
 
-	require.NoError(t, extractKexecTarball(exc, "https://example.com/file.tar.gz", stagingDir))
+	require.NoError(t, extractKexecTarball(exc, mach, "https://example.com/file.tar.gz", stagingDir))
 
 	assert.Equal(t,
 		"tar -xzf "+stagingDir+"/kexec.tar -C "+stagingDir,
+		testutil.LastCommandLine(t, phaseLog))
+}
+
+// A configured tar prefix replaces the extractor; the archive path and the
+// staging destination stay appended.
+func TestExtractKexecTarball_CommandOverride(t *testing.T) {
+	t.Parallel()
+
+	mach := newKexecMachine(t, false)
+	mach.Bootstrap.Kexec.TarCommand = []string{"bsdtar", "--no-same-owner"}
+
+	exc, phaseLog := testutil.NewDryRunExecutioner(t, mach, phase.Bootstrap)
+
+	const stagingDir = "/tmp/panix-kexec-test0123456789"
+
+	require.NoError(t, extractKexecTarball(exc, mach, "https://example.com/file.tar.gz", stagingDir))
+
+	assert.Equal(t,
+		"bsdtar --no-same-owner -xzf "+stagingDir+"/kexec.tar -C "+stagingDir,
 		testutil.LastCommandLine(t, phaseLog))
 }
 

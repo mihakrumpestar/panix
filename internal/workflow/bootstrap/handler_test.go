@@ -25,7 +25,7 @@ func TestRunPhase_KexecThenHardwareConfigThenDisko(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
 	leaf := newDiskoLeaf(t, true)
-	leaf.Machine.HardwareConfigPath = filepath.Join(t.TempDir(), "hardware-configuration.nix")
+	leaf.Machine.HardwareConfig.Path = filepath.Join(t.TempDir(), "hardware-configuration.nix")
 	leaf.Machine.Bootstrap.Kexec.Image = "https://example.com/kexec.tar.gz"
 	leaf.Machine.MetaInspect.Store(&machine.MetaInspect{IsRoot: true, RequiresKexec: true})
 

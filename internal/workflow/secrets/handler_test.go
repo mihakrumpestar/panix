@@ -15,6 +15,7 @@ import (
 	"github.com/mihakrumpestar/panix/pkg/atomic/atomicpointer"
 	"github.com/mihakrumpestar/panix/pkg/nixver"
 	"github.com/mihakrumpestar/panix/pkg/ssh"
+	"github.com/mihakrumpestar/panix/pkg/structdefault"
 	"github.com/mihakrumpestar/panix/pkg/xpath"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,6 +98,7 @@ func newSecretTestMachine(t *testing.T) *machine.Machine {
 
 	mach.SSH = *client
 	mach.SudoProgram = attributes.SudoProgram("sudo")
+	structdefault.Apply(&mach.Attributes)
 	mach.MetaInspect.Store(&machine.MetaInspect{IsRoot: true})
 
 	return mach

@@ -1,6 +1,6 @@
 ---
 title: Phase Pipeline
-description: The six deployment phases, their scopes, and how the pipeline executes.
+description: The deployment phases, their scopes, and how the pipeline executes.
 sidebar:
   order: 3
 ---
@@ -113,6 +113,7 @@ flowchart LR
 
 | Phase | Scope | Purpose |
 |-------|-------|---------|
+| **Hardware-config** | Per-machine | Run the hardware config generator on an installed machine and write its output to the local `hardware_config.path`, staging it for the flake. Run by `panix hardware-config`, after Inspect; see [Other Commands](/cli/other-commands/#hardware-config) |
 | **Rollback** | Per-machine | Switch to a previous generation via the type's activation mechanism, for any type with a profile path |
 
 Rollback also runs automatically during Activate when activation fails and the machine has `auto_rollback: true`: see [Auto Rollback](/guides/auto-rollback/).
