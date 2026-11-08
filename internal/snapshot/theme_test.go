@@ -231,7 +231,7 @@ func TestWriteDoesNotPersistTheme(t *testing.T) {
 func TestReadTrackedExampleSnapshot(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("..", "..", "examples", "panix-snapshot-1786805167-1786805230-manual.json")
+	path := filepath.Join("..", "..", "examples", "panix-snapshot-1786805167-1786805230-manual-x7k2m9.json")
 
 	conf, err := Read(path)
 	require.NoError(t, err, "the tracked example snapshot must keep opening")

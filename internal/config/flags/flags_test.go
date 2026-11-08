@@ -293,12 +293,14 @@ func TestExplicitMask(t *testing.T) {
 }
 
 // Command scope fixtures mirror the real command layouts: the eval command
-// declares only ConfigFlags, EvalFlags, a prefixed Runtime and its local output
-// file flag (not a Flags leaf); workflow commands declare WorkflowFlags and
-// rollback adds RollbackFlags.
+// declares ConfigFlags, EvalFlags, Logging, a prefixed Tui and Runtime, and its
+// local output file flag (not a Flags leaf); workflow commands declare
+// WorkflowFlags and rollback adds RollbackFlags.
 type evalScopeCmd struct {
 	ConfigFlags
 	EvalFlags
+	Logging
+	Tui     `embed:"" prefix:"tui."`
 	Runtime `embed:"" prefix:"runtime."`
 
 	OutputFile string `name:"output" short:"o" help:"Output file path"`
@@ -325,6 +327,7 @@ func TestExplicitMaskCommandScope(t *testing.T) {
 	t.Setenv("PANIX_RUNTIME_MAX_CONCURRENCY", "3")
 	t.Setenv("PANIX_OUTPUT_MODE", "json")
 	t.Setenv("PANIX_TUI_THEME", "rose-pine-dawn")
+	t.Setenv("PANIX_LOG_FILE", "env.log")
 	t.Setenv("PANIX_DRY_RUN", "true")
 	t.Setenv("PANIX_GEN", "3")
 
@@ -337,8 +340,8 @@ func TestExplicitMaskCommandScope(t *testing.T) {
 		{
 			name:     "eval command owns only its declared leaves",
 			cmd:      evalScopeCmd{},
-			contains: []string{"config", "timeout", "runtime.max-concurrency"},
-			excludes: []string{"tui.theme", "dry-run", "gen", "output-mode"},
+			contains: []string{"config", "timeout", "runtime.max-concurrency", "tui.theme", "log-file"},
+			excludes: []string{"dry-run", "gen", "output-mode"},
 		},
 		{
 			name:     "workflow command owns the workflow leaves",
@@ -542,6 +545,9 @@ func TestExplicitMaskMatchesKongTrace(t *testing.T) {
 				{"--activation-mode", "test"},
 				{"--output", "out.yml"},
 				{"-o", "out.yml"},
+				{"--tui.theme=rose-pine"},
+				{"--log-file=x.log"},
+				{"-d"},
 			},
 		},
 	}

@@ -14,6 +14,8 @@ type EvalCmd struct {
 
 	flags.ConfigFlags
 	flags.EvalFlags
+	flags.Logging
+	flags.Tui     `embed:"" prefix:"tui."`
 	flags.Runtime `embed:"" prefix:"runtime."`
 }
 
@@ -22,6 +24,8 @@ func (c *EvalCmd) Run() error {
 		WorkflowFlags: flags.WorkflowFlags{
 			ConfigFlags: c.ConfigFlags,
 			EvalFlags:   c.EvalFlags,
+			Logging:     c.Logging,
+			Tui:         c.Tui,
 			Runtime:     c.Runtime,
 		},
 	}

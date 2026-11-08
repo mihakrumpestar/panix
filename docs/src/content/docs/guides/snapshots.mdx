@@ -11,37 +11,37 @@ A snapshot is a self-contained JSON file containing machine states, phase result
 
 ```json
 {
-  "nix": "nix (Nix) 2.35.1",
+  "nix": "nix (Nix) 2.35.3",
   "snapshot": {
-    "panix_version": "0.9.1",
+    "panix_version": "0.12.0",
     "start_time": "2026-08-15T16:46:07.799909311+02:00",
     "reason": "manual",
     "snapshot_time": "2026-08-15T16:47:10.796833231+02:00"
   },
   "phases": ["inspect", "build", "transfer", "activate"],
   "flags": {
-    "config": "examples/panix.deploy.yml",
-    "tags": ["personal-workstation"],
+    "config": "panix.yml",
+    "tags": ["workstation"],
     "output": "tui"
   },
   "fleet": {
     "flakes": [
       {
-        "key": "infrastructure",
+        "key": "infra",
         "value": {
-          "url": "../infrastructure",
+          "url": "../infra",
           "installables": [
             {
               "key": "nixosConfigurations",
               "value": [
                 {
-                  "key": "personal-workstation",
+                  "key": "workstation",
                   "value": {
                     "machines": [
                       {
-                        "key": "personal-workstation",
+                        "key": "workstation",
                         "value": {
-                          "ssh": { "hostname": "10.0.200.48", "port": 22222, "username": "root" },
+                          "ssh": { "hostname": "192.0.2.48", "port": 2222, "username": "root" },
                           "meta_inspect": {
                             "reachable": true,
                             "is_root": true,
@@ -59,7 +59,7 @@ A snapshot is a self-contained JSON file containing machine states, phase result
                                   "command_logs": [
                                     {
                                       "description": "bootstrap detection",
-                                      "command": "ssh ... personal-workstation 'cat' '/etc/os-release'",
+                                      "command": "ssh ... workstation 'cat' '/etc/os-release'",
                                       "output": ["ID=nixos", "PRETTY_NAME=\"NixOS 26.11 (Zokor)\"", "VERSION=\"26.11 (Zokor)\""],
                                       "time_and_state": { "duration": 11652245 }
                                     }
@@ -72,7 +72,7 @@ A snapshot is a self-contained JSON file containing machine states, phase result
                                   "command_logs": [
                                     {
                                       "description": "activate",
-                                      "command": "ssh ... personal-workstation '/nix/store/.../bin/switch-to-configuration' 'switch'",
+                                      "command": "ssh ... workstation '/nix/store/.../bin/switch-to-configuration' 'switch'",
                                       "output": [
                                         "activating the configuration...",
                                         "setting up /etc...",
@@ -90,9 +90,9 @@ A snapshot is a self-contained JSON file containing machine states, phase result
                         }
                       },
                       {
-                        "key": "fake",
+                        "key": "offline-host",
                         "value": {
-                          "ssh": { "hostname": "fake", "port": 22, "username": "root" },
+                          "ssh": { "hostname": "offline-host", "port": 22, "username": "root" },
                           "meta_inspect": {},
                           "logs": {
                             "phase_logs": [
@@ -121,7 +121,7 @@ A snapshot is a self-contained JSON file containing machine states, phase result
                       }
                     ],
                     "meta_build": {
-                      "closure": "/nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-personal-workstation-26.11.20260802.6438090"
+                      "closure": "/nix/store/bh3m91dqz2390fwgmvda408f2dnl8p0s-nixos-system-workstation-26.11.20260802.6438090"
                     },
                     "logs": {
                       "phase_logs": [
@@ -131,8 +131,8 @@ A snapshot is a self-contained JSON file containing machine states, phase result
                             "command_logs": [
                               {
                                 "description": "build system closure",
-                                "command": "nix ... build --no-link --print-out-paths ../infrastructure#nixosConfigurations.personal-workstation.config.system.build.toplevel",
-                                "output": ["/nix/store/...-nixos-system-personal-workstation-..."],
+                                "command": "nix ... build --no-link --print-out-paths ../infra#nixosConfigurations.workstation.config.system.build.toplevel",
+                                "output": ["/nix/store/...-nixos-system-workstation-..."],
                                 "time_and_state": { "duration": 51724055792 }
                               }
                             ]
@@ -152,7 +152,7 @@ A snapshot is a self-contained JSON file containing machine states, phase result
 }
 ```
 
-Each machine carries `meta_inspect` (reachability, OS, architecture, generations), `machine_state` (status, phase, error), and `logs.phase_logs` with full command outputs; the flake level adds `meta_build.closure` with the built store path.
+Each machine carries `meta_inspect` (reachability, OS, architecture, generations), `machine_state` (status, phase, error), and `logs.phase_logs` with full command outputs; the installable adds `meta_build.closure` with the built store path.
 
 ## Taking Snapshots
 
